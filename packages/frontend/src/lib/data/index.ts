@@ -1,0 +1,56 @@
+// The data layer's one entry point (A2): reads, writes, drafts, sync state and
+// write errors. Import from "lib/data", never from a file inside it.
+
+export { createAutosave } from "./autosave";
+export type { AutosaveStatus } from "./autosave";
+export { backgroundWrite, runBackgroundWrite } from "./backgroundWrite";
+export { backupRestore } from "./backupRestore";
+export { backupLimits, sizeLabel } from "./backupLimits";
+export type { UploadedBackup } from "./backupRestore";
+export { importCanvasFile } from "./canvasImport";
+export { bindDomainLifecycle, blockChildWriter, blockLinkWriter, canvasWriter, historyWriter, nodeActions, nodeMutations, onlineOperation, graphPositionWriter, noteWriter, propertyWriter, relationWriter, tagConfigWriter, tagSchemaWriter, tagWriter, taskWriter, focusWriter, viewWriter, workspaceWriter, writersFor } from "./domainWriters";
+export type { WriterOptions } from "./domainWriters";
+export type { BlockChildOutcome, UnwritableReferences } from "./blockChildWriter";
+export type { BoundPartLink, PartToLink } from "./blockLinkWriter";
+export { retryLocalCopySave } from "./deviceStatus";
+export { drafts } from "./drafts";
+export type { ReloadGate } from "./draftActions";
+export { saveInk, type InkSaveDoc, type InkSaveOptions } from "./inkWriter";
+export { savePageImages } from "./pageImagesWriter";
+export { savePageText } from "./pageTextWriter";
+export { uploadMedia } from "./media";
+export type { MembershipPage, MembershipProjection } from "./membershipReconcile";
+export type { CreateNote } from "./noteWriter";
+export { NOTE_ACTION_PALETTE_LABELS, NOTE_HEADER_ACTIONS, noteActionList, noteActionsFor, noteActionView } from "./noteActionList";
+export type { NoteAction, NoteActionContext, NoteActionFacts, NoteActionId, NoteActionView } from "./noteActionList";
+export { noteMarkActions } from "./noteMarkActions";
+export { notePurge } from "./notePurge";
+export { canPlaceUnder, placementCandidates, placementRefusal } from "./placement";
+export type { PlacementChild, PlacementContext, PlacementRefusal } from "./placement";
+export { PURGE_BATCH_MAX } from "./notePurge";
+// After domainWriters: dayNotes reads lib/spaces, which imports this entry.
+export { dayNoteParentPref, dayNoteParentStore, parseDayNoteParent, useDayNoteParent } from "./dayNoteParentStore";
+export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError } from "./dayNotes";
+export type { DayNoteSeed, OpenedDayNote } from "./dayNotes";
+export { sendWrite } from "./onlineWrite";
+export { isBrowserOnline, prefersSavedData } from "../browserNetwork";
+export { dedupedGet, invalidateQueries, latestOnly } from "./queryCache";
+export { reads } from "./reads";
+export type { InkVersion, NoteSearchOutcome, NoteSearchRow, NoteVersion } from "./reads";
+export { usePendingWrites, usePendingStuck, usePendingRetry } from "./syncStatus";
+export type { SendFailureReason, SendRetry } from "./syncStatus";
+export { useIncomingProblem } from "./incomingStatus";
+export type { StuckWrites } from "./syncStatus";
+export { mergeTag } from "./tagMerge";
+export { findTagIdByPath, resolveTagPaths, tagPath } from "./tagPaths";
+export type { Agenda, AgendaTask } from "./taskAgenda";
+export type { TaskPatch } from "./taskWriter";
+export type { EndFocusInput, FocusWritten } from "./focusWriter";
+export { WriteActionError } from "./writeErrors";
+export { noteStructure, pins, writeErrors } from "./groups";
+export { sendOrQueue, moveStuckWritesToRecovery, flushPendingWrites } from "./writeQueue";
+export { dataSync, localCopy, recovery } from "./sync";
+export type { OfflineQueueFailedDetail } from "./writeQueue";
+export type { LostWrite } from "./writeRecovery";
+export type { ViewChanges, ViewInput } from "./viewWriter";
+export type { ViewOwner } from "./viewOwner";

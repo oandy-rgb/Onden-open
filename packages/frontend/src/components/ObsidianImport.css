@@ -1,0 +1,660 @@
+/* ObsidianImport — Day 2 inline → class migration. */
+@import "../styles/previewTable.css";
+
+.obsidian-import-modal {
+  max-width: 420px;
+}
+
+.obsidian-import-btn--block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.obsidian-import-file-input { display: none; }
+
+.obsidian-import-result-list {
+  font-size: var(--ac-fs-small);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.obsidian-import-btn--done {
+  width: 100%;
+  padding: 7px 20px;
+}
+
+.obsidian-import-btn--retry {
+  width: auto;
+  padding: 7px 20px;
+}
+
+/* Obsidian-style page/group surfaces — used by import dialog + workspace
+ * preview + sandbox + tags panel where obsidian visual idiom carries over.
+ * Extracted from global.css 2026-06-04 (Pass 1 / batch 3.2).
+ * Consumers: ObsidianImport.tsx (primary) + 4 others.
+ */
+
+.obsidian-workspace {
+  display: grid;
+  /* Inspector column was a hard 240px — narrower than its content (Publish
+     chip / version rows need ~300px), so the right edge clipped
+     at laptop widths (audit ⑧ punch #3). minmax matches the other lenses'
+     inspector (340–420) scaled for the denser notes pane. */
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(0, 1fr) var(--onden-inspector-width, 300px);
+  /* The inspector toggle snaps the track instantly. Animating
+     grid-template-columns runs on the main thread + forces layout every frame
+     (the compositor can't touch it), and the during-animation reflow against
+     the ellipsis-clamped inspector rows was the 1280px truncation flicker. The
+     felt transition belongs on a compositor-only transform of the pane content
+     (a future motion pass), never on the grid track. */
+}
+/* #24/#23: the topbar inspector toggle hides the notes-mode supporting pane too
+   (not just the other-lens InspectorPanel) — retract its column and drop the
+   aside so the editor reclaims the width. Default is open (see useInspectorOpen). */
+.obsidian-workspace.inspector-hidden {
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(0, 1fr) 0;
+}
+.obsidian-workspace.inspector-hidden .overview-activity,
+.obsidian-workspace.inspector-hidden .ov-activity-pane--collapsed {
+  display: none;
+}
+
+/* ── Focus / distraction-free writing mode ──────────────────────────────────
+   The novelist/journaler/ADHD "clean page": collapse BOTH rails (left card
+   list + right inspector), centre + narrow the prose column to a comfortable
+   ~680px measure (overriding .obsidian-main's wide 1200px max), and swap the
+   editor body off monospace onto the editorial display serif (Fraunces).
+   Toggled by ⌘\ and the command palette (see useWorkspacePanes). */
+/* Mobile owns a list/edit/info switch, so a saved desktop preference must
+   never hide its active pane. Hidden rails also release their grid tracks. */
+@media (width > 900px) {
+.workspace-grid.inspector-collapsed .obsidian-workspace:not(.focus-mode) {
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(0, 1fr) 0;
+}
+.overview-workspace > .obsidian-sidebar {
+  /* Keep the divider on the actual grid edge, including when rails hide. */
+  border-inline-end: 1px solid var(--ac-line);
+}
+.obsidian-workspace.focus-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+.obsidian-workspace.focus-mode .obsidian-sidebar,
+.obsidian-workspace.focus-mode .overview-activity,
+.obsidian-workspace.focus-mode .ov-activity-pane--collapsed {
+  display: none;
+}
+/* The measure: a comfortable reading/writing column, not the wide editor max. */
+.obsidian-workspace.focus-mode .obsidian-main {
+  max-width: 680px;
+  padding-top: clamp(28px, 6vh, 72px);
+}
+/* Prose font: switch the CodeMirror body off monospace onto the display serif.
+   MarkdownEditor's inline EditorView.theme sets `&`/.cm-content to monospace;
+   these selectors outrank it (the theme uses a generated class, ours is a
+   workspace-scoped descendant). Code spans keep their own mono via the syntax
+   highlighter, so fenced/inline code still reads as code. */
+.obsidian-workspace.focus-mode .cm-editor,
+.obsidian-workspace.focus-mode .cm-content {
+  font-family: var(--onden-font-display);
+  font-size: var(--ac-fs-prose);
+}
+}
+.obsidian-sidebar {
+  position: relative; /* anchors the PaneResizer */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 12px;
+  height: calc(100dvh - 48px);
+  min-height: 0;
+  /* Was hardcoded rgba(255,255,255,.78) — never flipped in dark mode, so the
+     sidebar stayed near-white while text went light = invisible. Use the
+     theme surface token. */
+  background: var(--ac-surface);
+  overflow: hidden;
+}
+.obsidian-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.obsidian-page-row,
+.obsidian-group {
+  position: relative;
+  cursor: grab;
+  user-select: none;
+  /* No system callout / text selection under a long press: the hold lifts the row itself. */
+  -webkit-touch-callout: none;
+  /* pan-y, NOT none: the rows fill the whole list, so `none` made the browser
+   * refuse to scroll anywhere a finger lands — taps worked, drag-to-scroll
+   * didn't ("只能直接點擊"). The drag handler (useSidebarDrag) is already
+   * touch-aware: it long-presses to start a drag and preventDefaults touchmove
+   * only after activation, so vertical scrolling still reaches the browser
+   * before a drag begins. touch-action only affects touch/pen — desktop
+   * mouse-drag is unaffected. */
+  touch-action: pan-y;
+}
+.obsidian-page-row:active,
+.obsidian-group:active { cursor: grabbing; }
+.sidebar-search-toggle {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.sidebar-search-toggle:hover,
+.sidebar-search-toggle[aria-expanded="true"] { color: var(--ac-ink); background: var(--ac-raised); }
+.sidebar-search-toggle:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+@media (max-width: 900px), (pointer: coarse) {
+  .sidebar-search-toggle { width: 44px; height: 44px; }
+}
+.obsidian-search-count {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  text-align: right;
+  padding: 2px 2px 3px;
+  /* "7 results" was clipping to "7 resu" — let the count size to its content
+     and never wrap/clip. */
+  white-space: nowrap;
+  overflow: visible;
+  width: auto;
+}
+.obsidian-search-empty {
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  text-align: center;
+  padding: 8px 0;
+}
+.obsidian-search-snippet {
+  display: block;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-weight: 400;
+}
+.obsidian-search-row .obsidian-page-button {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.obsidian-page-row--pointer .obsidian-page-button {
+  font-style: italic;
+  color: var(--ac-muted);
+}
+.obsidian-pointer-icon {
+  margin-right: 4px;
+  font-size: 0.9em;
+  opacity: 0.7;
+}
+.obsidian-page-list {
+  display: grid;
+  /* One column no wider than the rail. An implicit auto column takes the
+     longest title's full width (a group header cannot shrink below it), so
+     the list panned sideways and cut titles on the left. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  align-content: start;
+  grid-auto-rows: max-content;
+  /* Size to content (don't grow): a short note list shouldn't balloon to fill
+     the rail and strand the #TAGS footer at the far bottom with a big empty gap
+     between them. flex-grow 0 → list sits at its natural height, TAGS flows
+     directly beneath it, empty space falls at the very bottom (end-of-content,
+     not a hole). Still shrinks + scrolls when the list is long. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Deep indents can exceed the rail width; never pan horizontally for them
+     (scrollIntoView/focus would knock every title out of left alignment). */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 2px 2px 10px;
+  margin: 0 -2px;
+}
+.obsidian-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* same rail bound as the list */
+  gap: 2px;
+  align-content: start;
+  border-radius: var(--ac-radius-md);
+}
+.obsidian-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 36px;
+  padding: 0;
+  border-radius: var(--ac-radius-md);
+  border: 1px solid transparent;
+}
+.obsidian-group-header:hover {
+  background: var(--ac-overlay-hover);
+  border-color: var(--ac-line);
+}
+.obsidian-group-header:hover .obsidian-delete-btn { opacity: 1; }
+.obsidian-group-toggle {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 20px;
+  background: transparent;
+  border: none;
+  color: var(--ac-muted);
+  cursor: pointer;
+  font-size: var(--ac-fs-xs);
+  padding: 0;
+  line-height: 1;
+  /* Pressable inherits the row's left alignment; the ▸ sits in the middle of
+     its column, clear of the selected bar at the row's edge. */
+  text-align: center;
+  border-radius: var(--ac-radius-md) 0 0 var(--ac-radius-md);
+}
+.obsidian-group-toggle:hover {
+  background: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  color: var(--ac-accent);
+}
+.obsidian-group-title {
+  font-weight: 600;
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  min-width: 0;
+}
+.obsidian-page-row--child,
+.obsidian-group-header--indented {
+  padding-left: var(--sb-indent, 0);
+}
+.sb-group-children > .obsidian-group,
+.sb-group-children > .obsidian-page-row {
+  position: relative;
+  z-index: var(--z-base);
+}
+.obsidian-page-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 34px;
+  border-radius: var(--ac-radius-md);
+  border: 1px solid transparent;
+  gap: 0;
+}
+.obsidian-page-row:hover {
+  border-color: var(--ac-line);
+  background: var(--ac-overlay-hover);
+}
+.obsidian-page-row:hover .obsidian-delete-btn {
+  opacity: 1;
+}
+.obsidian-page-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  padding: 6px 8px;
+  text-align: left;
+  color: var(--ac-ink);
+  overflow: hidden;
+}
+.obsidian-page-row:has(.obsidian-page-button.active),
+.obsidian-group-header:has(.obsidian-page-button.active) {
+  border-color: color-mix(in srgb, var(--ac-accent) 24%, var(--ac-line));
+  /* A flat surface-strong tint was indistinguishable from hover in dark mode:
+     the dedicated selected overlay plus a short accent bar inside the left edge
+     keeps the selected row >=3:1 against the rail. A bar, not a 2px left border:
+     the border bent round the corners like a bracket hugging the ▸ (2026-11-02). */
+  background:
+    linear-gradient(var(--ac-accent), var(--ac-accent)) left 2px center / 3px 55% no-repeat,
+    var(--ac-overlay-selected);
+}
+.obsidian-page-button:hover { color: var(--ac-ink); }
+.obsidian-page-button.active { color: var(--ac-ink); }
+.obsidian-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 26px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+  cursor: pointer;
+}
+/* Keyboard focus must reveal the button it landed on. */
+.obsidian-delete-btn:focus-visible { opacity: 1; }
+.obsidian-delete-btn:hover {
+  background: var(--ac-danger-soft);
+  color: var(--ac-danger);
+}
+.obsidian-main {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 3vw, 40px) 72px;
+  min-width: 0;
+  /* Cap to the viewport (minus topbar) and scroll INTERNALLY — same as the
+     right inspector (.overview-activity). Without this the editor + "on this
+     day" strip grew the whole grid row past the screen, the page scrolled, and
+     the fixed-height sidebar (calc(100dvh-48px)) stopped short — leaving an
+     empty block below the sidebar (the "左下空一塊"). Capping here keeps the
+     row at viewport height so every pane fills it. */
+  height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The scrollbar's room is kept even when nothing scrolls: otherwise a note
+     growing past the screen (or a hover, a tag card) narrows the column by the
+     bar's width, and its lines and the handwriting page reflow. */
+  scrollbar-gutter: stable;
+}
+/* #24: a note's own tags, inline under the title — plain #tag pills, ordinary
+   metadata (not a schema editor). Sits under the title (NoteMetaLine), the
+   Notion/Obsidian "title → properties → body" order. */
+.obsidian-prop-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 16px;
+}
+.obsidian-prop-strip .prop-tag {
+  font-size: var(--ac-fs-caption);
+  line-height: 1;
+  color: var(--ac-accent);
+  background: var(--ac-accent-tint-3);
+  border: 1px solid var(--ac-accent-soft);
+  border-radius: var(--ac-radius-full);
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.obsidian-prop-strip .prop-tag:hover {
+  background: var(--ac-accent-tint-7);
+  border-color: var(--ac-accent-tint-38);
+}
+.obsidian-title-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  /* The document title is where the editorial serif earns its keep. */
+  font-family: var(--onden-font-display);
+  font-size: var(--ac-fs-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--ac-ink);
+  padding: 2px 0;
+}
+.obsidian-title-input:hover,
+.obsidian-title-input:focus {
+  outline: none;
+}
+.obsidian-title-input::placeholder {
+  color: var(--ac-muted);
+  font-weight: 400;
+}
+.obsidian-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.obsidian-save-button {
+  width: 64px;
+  height: 30px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  padding: 0;
+  font-size: var(--ac-fs-caption);
+  font-weight: 500;
+  cursor: default;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s;
+}
+.obsidian-save-button.saving {
+  opacity: 0.45;
+}
+.obsidian-save-button.unsaved {
+  border-color: var(--ac-accent);
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  cursor: pointer;
+}
+.obsidian-save-button.unsaved:hover {
+  background: var(--ac-accent-hover);
+}
+/* The server refused the write (4xx). Loud, clickable retry — never reads as
+   "saved". Uses the oxblood accent as a danger cue. */
+.obsidian-save-button.rejected {
+  border-color: var(--ac-accent);
+  background: transparent;
+  color: var(--ac-accent);
+  cursor: pointer;
+}
+.obsidian-save-button.rejected:hover {
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+}
+.obsidian-transition-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-caption);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.obsidian-transition-btn:hover { background: var(--ac-overlay-hover); border-color: var(--ac-accent); }
+.obsidian-transition-btn:disabled { opacity: 0.4; cursor: default; }
+.obsidian-history-button {
+  padding: 4px 10px; font-size: var(--ac-fs-caption); border-radius: var(--ac-radius-md);
+  border: 1px solid var(--ac-line); background: var(--ac-surface); color: var(--ac-ink);
+  cursor: pointer; opacity: 0.75; transition: opacity 0.15s;
+}
+.obsidian-history-button:hover:not(:disabled) { opacity: 1; }
+.obsidian-history-button:disabled { opacity: 0.4; cursor: not-allowed; }
+.obsidian-editor {
+  width: 100%;
+  flex: 1;
+  min-height: calc(100dvh - 280px);
+  border: none;
+  border-top: 1px solid var(--ac-line);
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0 0;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-ui-touch);
+  line-height: 1.75;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+}
+.obsidian-editor:focus {
+  border-top-color: var(--ac-accent);
+}
+.obsidian-tiptap-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: min(590px, calc(100dvh - 238px));
+  overflow: hidden;
+  /* A sheet of paper on the desk, not a boxed widget: no border, the near-white
+     surface reads against the greige page, lifted by a soft warm shadow. */
+  border: none;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-sm);
+}
+.obsidian-preview {
+  flex: 1;
+  min-height: min(520px, calc(100dvh - 304px));
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 26px 30px 70px;
+  overflow-y: auto;
+}
+/* 「被引用 N 次」: the number is drawn from data-cited (OverviewPreview sets it); a tap in the
+   44px at the paragraph's right edge opens the list of citing notes. */
+.obsidian-preview [data-cited] { position: relative; padding-right: 28px; }
+.obsidian-preview [data-cited]::after {
+  content: attr(data-cited);
+  position: absolute; right: 0; top: 0.15em;
+  min-width: 1.5em; padding: 0 4px; box-sizing: border-box;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg);
+  color: var(--ac-muted); font-size: 0.75em; line-height: 1.4; text-align: center; cursor: pointer;
+}
+.obsidian-preview h1,
+.obsidian-preview h2,
+.obsidian-preview h3 {
+  margin: 0 0 12px;
+  line-height: 1.2;
+}
+.obsidian-preview p,
+.obsidian-preview li {
+  margin: 0 0 10px;
+  line-height: 1.7;
+}
+.obsidian-preview--md h4 { font-size: 1em; font-weight: 700; margin: 0 0 8px; }
+.obsidian-preview--md h5 { font-size: 0.9em; font-weight: 700; margin: 0 0 6px; }
+.obsidian-preview--md h6 { font-size: 0.85em; font-weight: 600; color: var(--ac-muted); margin: 0 0 6px; }
+.obsidian-preview--md strong { font-weight: 700; }
+.obsidian-preview--md em { font-style: italic; }
+.obsidian-preview--md del { text-decoration: line-through; color: var(--ac-muted); }
+.obsidian-preview--md u { text-decoration: underline; }
+.obsidian-preview--md mark { background: var(--ac-warning-soft); color: var(--ac-ink); border-radius: var(--ac-radius-xs); padding: 0 2px; }
+.obsidian-preview--md code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  padding: 1px 5px;
+}
+.obsidian-preview--md pre {
+  font-size: var(--ac-fs-ui);
+  line-height: 1.7;
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0 0 14px;
+}
+.obsidian-preview--md pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  line-height: 1.6;
+}
+.obsidian-preview--md blockquote {
+  border-left: 3px solid var(--ac-accent);
+  margin: 0 0 14px;
+  padding: 6px 14px;
+  color: var(--ac-muted);
+  background: var(--ac-raised);
+  border-radius: 0 var(--ac-radius-md) var(--ac-radius-md) 0;
+}
+.obsidian-preview--md blockquote p { margin: 0; }
+.obsidian-preview--md ul,
+.obsidian-preview--md ol {
+  margin: 0 0 12px;
+  padding-left: 1.5em;
+}
+.obsidian-preview--md ul { list-style: disc; }
+.obsidian-preview--md ol { list-style: decimal; }
+.obsidian-preview--md li { margin: 0 0 4px; }
+.obsidian-preview--md li > ul,
+.obsidian-preview--md li > ol { margin: 4px 0 0; }
+.obsidian-preview--md ul.contains-task-list { list-style: none; padding-left: 0.25em; }
+.obsidian-preview--md .task-list-item { display: flex; align-items: baseline; gap: 7px; }
+.obsidian-preview--md hr { border: none; border-top: 1px solid var(--ac-line); margin: 20px 0; }
+.wikilink-token.known {
+  border-color: color-mix(in srgb, var(--ac-accent) 28%, transparent);
+  background: var(--ac-accent-soft);
+}
+.obsidian-empty {
+  display: grid;
+  gap: 14px;
+  max-width: 360px;
+  margin-top: 80px;
+}
+
+/* Tags under the title (TitleTagRow): applied tags carry a remove button;
+   #words from the body are lighter; "+ Tag" opens a find-or-create input. */
+.obsidian-prop-strip.title-tag-row { align-items: center; position: relative; margin-bottom: 8px; }
+.obsidian-prop-strip .prop-tag--applied {
+  display: inline-flex; align-items: center; gap: 2px; padding: 0 4px 0 0; cursor: default;
+}
+.prop-tag--applied .prop-tag-name {
+  font: inherit; color: inherit; background: none; border: 0; padding: 4px 2px 4px 9px; cursor: pointer;
+}
+.prop-tag--applied .prop-tag-remove {
+  display: inline-flex; color: inherit; background: none; border: 0; border-radius: var(--ac-radius-full);
+  padding: 2px; cursor: pointer; opacity: 0.55;
+}
+.prop-tag--applied .prop-tag-remove:hover { opacity: 1; background: var(--ac-accent-soft); }
+.obsidian-prop-strip .prop-tag--add {
+  display: inline-flex; align-items: center; gap: 4px; color: var(--ac-ink);
+  background: transparent; border: 1px dashed var(--ac-line);
+}
+[data-theme="dark"] .obsidian-prop-strip .prop-tag--add { color: var(--ac-ink-2); }
+[data-theme="dark"] .title-tag-options { background: var(--ac-bg); }
+.title-tag-add { position: relative; display: inline-block; }
+.title-tag-input {
+  font-size: var(--ac-fs-caption); padding: 4px 9px; border-radius: var(--ac-radius-full); width: 160px;
+  border: 1px solid var(--ac-accent-tint-38); background: var(--ac-accent-tint-3); color: inherit; outline: none;
+}
+.ui-popover.title-tag-popover { min-width: 200px; max-height: 240px; padding: 4px; font-size: var(--ac-fs-small); }
+.title-tag-options { margin: 0; padding: 0; list-style: none; }
+.title-tag-options li { padding: 6px 8px; border-radius: var(--ac-radius-md); cursor: pointer; }
+.title-tag-options li.active, .title-tag-options li:hover { background: var(--ac-accent-tint-7); }
+.title-tag-options .title-tag-create { color: var(--ac-accent); }
+.title-tag-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--ac-fs-caption); }
+.title-tag-confirm button {
+  font: inherit; font-size: var(--ac-fs-caption); color: inherit; background: transparent; cursor: pointer;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); padding: 3px 9px;
+}
+.title-tag-confirm button:first-of-type { color: var(--ac-accent); border-color: var(--ac-accent-tint-38); }
+
+/* Save feedback appears only for problems (queued / rejected / stalled). The live
+   region stays mounted but empty otherwise; empty, it leaves the flex flow (no
+   gap, no width) so the action row keeps its width while typing. */
+.obsidian-save-notice { display: inline-flex; align-items: center; }
+.obsidian-save-notice:empty { position: absolute; }
+.obsidian-save-state {
+  display: inline-flex; align-items: center; padding: 0 6px;
+  font-size: var(--ac-fs-caption); color: var(--ac-muted); white-space: nowrap;
+}
+.search-offline-notice {
+  margin: 0;
+  padding: 0 2px 3px;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}

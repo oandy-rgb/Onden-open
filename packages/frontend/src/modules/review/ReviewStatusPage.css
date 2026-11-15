@@ -1,0 +1,79 @@
+/* Review status: today, overdue, the week ahead, often-forgotten cards, stopped cards. */
+.review-status {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 10px 14px 24px;
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+.review-status section { display: flex; flex-direction: column; gap: 8px; }
+.review-status h3 { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-ink); }
+.review-status p, .review-status ul { margin: 0; }
+.review-status-note { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.review-status-today { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.review-status-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.review-status-figure strong { font-size: var(--ac-fs-lg); line-height: 1.2; color: var(--ac-ink); }
+.review-status-figure span { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.review-status-figure[data-kind="overdue"] strong { color: var(--ac-danger); }
+.review-status-figure[data-kind="overdue"][data-zero="true"] strong { color: var(--ac-ink); }
+
+.review-status-week { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.review-status-day { display: grid; grid-template-columns: 6.5rem 1fr 2.5rem; align-items: center; gap: 8px; font-size: var(--ac-fs-caption); }
+.review-status-day-name { color: var(--ac-muted); }
+.review-status-day-bar { height: 8px; border-radius: var(--ac-radius-sm); background: var(--ac-overlay-subtle); overflow: hidden; }
+.review-status-day-bar > span { display: block; height: 100%; width: calc(var(--share, 0) * 100%); background: var(--ac-accent); border-radius: inherit; }
+.review-status-day-count { text-align: right; color: var(--ac-ink); font-variant-numeric: tabular-nums; }
+
+.review-status-cap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.review-status-cap input { width: 7rem; }
+
+.review-status-cards { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.review-status-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.review-status-card-title { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--ac-fs-caption); color: var(--ac-ink); }
+.review-status-card-meta { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.review-status-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.review-status-card-actions .ui-btn { min-height: 44px; }
+
+/* 分組: one row per tag or note; a row with nothing to do is listed last and quieter. */
+.review-groups-switch { align-self: flex-start; }
+.review-groups { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.review-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name act" "counts act";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.review-group[data-quiet="true"] { background: transparent; }
+.review-group[data-quiet="true"] .review-group-name { color: var(--ac-muted); }
+.review-group-name { grid-area: name; min-width: 0; overflow-wrap: anywhere; font-size: var(--ac-fs-caption); color: var(--ac-ink); }
+.review-group-counts { grid-area: counts; font-size: var(--ac-fs-xs); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.review-group-practise { grid-area: act; min-height: 44px; }

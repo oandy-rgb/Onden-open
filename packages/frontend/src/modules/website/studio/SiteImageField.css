@@ -1,0 +1,11 @@
+.hs-image { margin-top: 8px; }
+.hs-image__label { display: block; margin: 8px 0 4px; font-size: var(--ac-fs-caption); color: var(--ac-muted); font-weight: 600; }
+.hs-image__hint { margin: 0 0 4px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.hs-image__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hs-image__thumb {
+  box-sizing: border-box; width: 44px; height: 44px; object-fit: contain; padding: 2px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+}
+/* Look comes from ui/Button; this only keeps the touch target. */
+.hs-image__button { min-height: 44px; min-width: 44px; }

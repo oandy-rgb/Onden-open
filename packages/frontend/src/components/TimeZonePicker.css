@@ -1,0 +1,41 @@
+/* Time zone picker (TimeZonePicker.tsx): a field that opens an inline list under it. */
+.time-zone-picker { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.time-zone-field { width: 100%; box-sizing: border-box; padding-right: 30px; text-overflow: ellipsis; }
+.time-zone-field:not(:disabled) { cursor: pointer; }
+.time-zone-chevron { position: absolute; right: 10px; top: 12px; color: var(--ac-muted); pointer-events: none; }
+
+.time-zone-options {
+  max-height: min(50dvh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 4px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface);
+}
+.time-zone-heading {
+  padding: 8px 8px 4px; font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-muted);
+}
+.time-zone-option {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--ac-radius-md); cursor: pointer;
+  font-size: var(--ac-fs-small);
+}
+.time-zone-option.active { background: var(--ac-overlay-hover); }
+.time-zone-option.in-use .time-zone-option-label { font-weight: 600; }
+.time-zone-option-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.time-zone-option-label, .time-zone-option-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time-zone-option-detail { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.time-zone-option-tag {
+  flex: none; padding: 1px 6px; border-radius: var(--ac-radius-full); font-size: var(--ac-fs-xs);
+  background: var(--ac-overlay-selected); color: var(--ac-accent);
+}
+.time-zone-more {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: var(--ac-fs-xs); color: var(--ac-muted);
+}
+.time-zone-more button {
+  flex: none; padding: 4px 8px; border: 0; border-radius: var(--ac-radius-md); background: transparent;
+  color: var(--ac-accent); font: inherit; cursor: pointer;
+}
+.time-zone-more button:hover { background: var(--ac-overlay-hover); }
+
+@media (max-width: 900px), (pointer: coarse) {
+  .time-zone-chevron { top: 15px; }
+  .time-zone-option { min-height: 44px; padding: 8px 10px; font-size: var(--ac-fs-ui-touch); }
+  .time-zone-more button { min-height: 44px; padding: 0 12px; }
+}

@@ -1,0 +1,33 @@
+/* Between the top-left controls (‹ undo redo) and 「顯示」: what is left of the row, centred, cut with … */
+.board-note-title {
+  position: absolute;
+  top: 12px;
+  left: 152px;
+  right: 104px;
+  z-index: var(--board-chrome-z, 12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+}
+.board-note-title__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-note-title svg { flex: 0 0 auto; color: var(--ac-muted); }
+
+.board-note-sheet__body { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; }
+.board-note-sheet__tabs { overflow-x: auto; }
+.board-note-sheet__actions { display: flex; align-items: center; gap: 8px; }
+/* The note's ⊟ ⋯ (NoteTabActions) sit in the sheet's flow here, not fixed at the screen's corner. */
+body .board-note-sheet__actions .note-tab-actions { position: static; height: auto; }
+/* The locked board hides the screen-corner ⊟ ⋯ (CanvasMode.css body.onden-board-locked); that rule reached this
+   sheet's copy too (the sheet is portaled under body), so the title sheet had only the tabs. Show them here. */
+body.onden-board-locked .board-note-sheet__actions .note-tab-actions { display: flex; }
+.board-note-sheet__header { padding: 4px 16px 8px; }

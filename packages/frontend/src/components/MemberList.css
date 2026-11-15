@@ -1,0 +1,39 @@
+/* A set of notes listed (a tag page's 「全部」, a note's sub-notes): MemberList. */
+/* Members compared field by field. Scrolls inside its box on narrow screens. */
+.tag-member-table-wrap { margin: 12px 0; max-height: 420px; overflow: auto; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+.tag-member-table { border-collapse: collapse; width: 100%; font-size: var(--ac-fs-small); }
+.tag-member-table th, .tag-member-table td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--ac-line); }
+.tag-member-table thead th { position: sticky; top: 0; background: var(--ac-surface); font-weight: 600; white-space: nowrap; z-index: var(--z-local-1); }
+.tag-member-table td { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-ink); }
+.tag-member-table tbody th { min-width: 160px; font-weight: 500; }
+.tag-member-table tbody th button { background: none; border: 0; padding: 0; font: inherit; color: var(--ac-ink); text-align: left; cursor: pointer; }
+.tag-member-table tbody th button:hover { text-decoration: underline; }
+.tag-member-list { list-style: none; padding: 0; margin: 12px 0; max-height: 360px; overflow-y: auto; }
+.tag-member-list li + li { border-top: 1px solid var(--ac-line); }
+.tag-member-list button { width: 100%; background: none; border: 0; color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-ui); padding: 12px 4px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.tag-member-list button:hover { color: var(--ac-accent); }
+/* A note's sub-notes (flat): 40px rows, no dividers, no inset. The rows touch,
+   so a hit area taller than the row would cover the next row's edge: on a
+   touch screen the row itself is --onden-tap tall instead. */
+.tag-member-list--flat { margin: 4px 0; max-height: none; }
+.tag-member-list--flat li + li { border-top: 0; }
+.tag-member-list--flat button { min-height: 40px; padding: 0; display: flex; align-items: center; }
+@media (pointer: coarse) {
+  .tag-member-list--flat button { min-height: var(--onden-tap, 44px); }
+}
+
+/* The phone's member row: title, then the values it has on one faint line. */
+.tag-member-list button:has(.tag-member-values) { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding-block: 8px; }
+.tag-member-list .tag-member-title { max-width: 100%; }
+.tag-member-values { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+
+/* The wide titles-only list: title, then date and the body's first line, no
+   divider lines — the rows' own padding spaces them. */
+.tag-member-list--rich li + li { border-top: 0; }
+.tag-member-list--rich button { padding: 8px 4px; }
+.tag-member-list--rich button:has(.tag-member-values) { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+
+/* A tag page's paragraphs, after its notes: the paragraph's words, then its note. */
+.tag-member-blocks-title { margin-top: 16px; }
+.tag-member-list--blocks .tag-member-title { overflow-wrap: anywhere; }
+.tag-member-more { background: none; border: 0; padding: 6px 4px; color: var(--ac-accent); font: inherit; font-size: var(--ac-fs-ui); cursor: pointer; }

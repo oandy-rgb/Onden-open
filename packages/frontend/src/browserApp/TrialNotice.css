@@ -1,0 +1,21 @@
+.trial-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 20px;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+}
+.trial-dialog p { margin: 0; line-height: 1.6; }
+.trial-dialog-title { margin: 0; font-size: var(--ac-fs-lg); }
+.trial-dialog-status { color: var(--ac-ink-2); }
+.trial-dialog-status--attention { color: var(--ac-danger); }
+.trial-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trial-dialog-note { font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.trial-dialog-line { color: var(--ac-ink-2); }
+.trial-help { max-height: min(80dvh, 640px); overflow-y: auto; }
+.trial-help h4 { margin: 0 0 4px; font-size: var(--ac-fs-base); font-weight: 600; }
+.trial-help section { display: flex; flex-direction: column; gap: 4px; }

@@ -1,0 +1,64 @@
+/* This note's relationships, under the note body (NoteRelations.tsx). */
+.note-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 40px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ac-line);
+}
+/* Nothing related (no sub-notes, mentions, canvases or links): no divider
+   with an empty area under the note. */
+.note-relations:empty { display: none; }
+.note-relations-section { display: flex; flex-direction: column; gap: 6px; }
+.note-relations-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  color: var(--ac-muted);
+}
+.note-relations-heading .ov-panel-count { margin-left: 0; }
+.note-relations-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.note-relations-toggle:hover { color: var(--ac-ink); }
+.note-relations-body { display: flex; flex-direction: column; gap: 6px; }
+.note-relations-subheading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  color: var(--ac-muted);
+}
+.note-relations-subheading .ov-panel-count { margin-left: 0; }
+.note-relations-more {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.note-relations-more:hover { color: var(--ac-ink); border-color: var(--ac-accent); }
+
+@media (max-width: 900px) {
+  .note-relations { margin-top: 28px; }
+  .note-relations-toggle,
+  .note-relations-more { min-height: 44px; }
+}

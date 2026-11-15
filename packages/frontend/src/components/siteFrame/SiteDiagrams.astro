@@ -1,0 +1,27 @@
+---
+// Draws ```mermaid fences as diagrams. Rendered only on a site whose notes use
+// one (usesDiagrams), so every other site ships none of mermaid. The server
+// leaves a fence readable code (siteMarkdown.tsx); this replaces it in the
+// browser, and a diagram with a syntax error simply stays code.
+---
+
+<script>
+  const blocks = document.querySelectorAll<HTMLElement>("pre > code.language-mermaid");
+  if (blocks.length > 0) {
+    const mermaid = (await import("mermaid")).default;
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    let n = 0;
+    for (const code of blocks) {
+      const holder = code.closest(".md-codeblock") ?? code.parentElement;
+      try {
+        const { svg } = await mermaid.render(`s-mermaid-${n++}`, (code.textContent ?? "").replace(/\n$/, ""));
+        const figure = document.createElement("div");
+        figure.className = "md-mermaid";
+        figure.innerHTML = svg;
+        holder?.replaceWith(figure);
+      } catch {
+        // the fence stays as code
+      }
+    }
+  }
+</script>

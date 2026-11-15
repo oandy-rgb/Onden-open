@@ -1,0 +1,5 @@
+---
+date: 2026-10-30
+zh-TW: 用字統一：「復原」只用在回到操作之前，「還原」用在回到舊版本，一律寫「儲存」「發布」，收回存取金鑰改稱「作廢」。提示框（callout）照 Obsidian 顯示：認得的類型與別名、「> [!tip] 我的標題」用你寫的標題，加「-」預設收起、加「+」預設展開，點標題可切換；不認得的類型當一般提示。排隊中的訂閱和「加到筆記」會說明連上伺服器後才會完成。網站的自訂樣式若引入外部樣式表，會提示不支援，舊的背景色（短寫法或帶透明度）照常套用。連結可以用電話連結，編輯器、閱讀和發布的網站結果一致；字數和閱讀時間用同一種算法。
+en: Wording is now consistent. "Undo" only means stepping back one action, "restore" means going back to an older version, and revoking a key is "作廢". Callouts follow Obsidian. They know its types and aliases, use the title you write ("> [!tip] My title"), start folded with "-" or open with "+", and an unknown type shows as a plain note callout. A queued feed subscription or "add to note" says it finishes once the server is reachable. The site's custom CSS box warns that importing an external stylesheet is not supported, and older background colours in short or transparent form still apply. Phone links work the same in the editor, reading view and published site, and the word count and reading time use one rule.
+---

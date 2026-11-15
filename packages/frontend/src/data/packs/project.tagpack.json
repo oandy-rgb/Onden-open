@@ -1,0 +1,22 @@
+{
+  "_format": "onden.tagpack/v1",
+  "name": "project",
+  "color": "#c5705d",
+  "description": "Active project — status, owner and deadline.",
+  "version": "1.0.0",
+  "fields": [
+    { "name": "status",     "label": "Status",      "type": "select", "options": ["proposed", "active", "paused", "shipped", "abandoned"], "required": true },
+    { "name": "owner",      "label": "Owner",       "type": "text" },
+    { "name": "started_at", "label": "Started",     "type": "date" },
+    { "name": "deadline",   "label": "Deadline",    "type": "date" },
+    { "name": "north_star", "label": "North star",  "type": "textarea" }
+  ],
+  "behaviour": {
+    "schema_org": "https://schema.org/Project",
+    "field_mappings": {
+      "status":     "schema:status",
+      "started_at": "schema:startDate",
+      "deadline":   "schema:endDate"
+    }
+  }
+}

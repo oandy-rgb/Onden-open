@@ -1,0 +1,22 @@
+{
+  "_format": "onden.tagpack/v1",
+  "name": "meeting",
+  "color": "#7ba05b",
+  "description": "Meeting notes — apply on any node turning it into a meeting record.",
+  "version": "1.0.0",
+  "fields": [
+    { "name": "meeting_date", "label": "Date",        "type": "date", "required": true },
+    { "name": "duration_min", "label": "Duration (min)", "type": "number" },
+    { "name": "attendees",    "label": "Attendees",    "type": "textarea" },
+    { "name": "location",     "label": "Location",     "type": "text" },
+    { "name": "kind",         "label": "Kind",         "type": "select", "options": ["1:1", "team", "review meeting", "interview", "external"] }
+  ],
+  "behaviour": {
+    "schema_org": "https://schema.org/Event",
+    "field_mappings": {
+      "meeting_date": "schema:startDate",
+      "attendees":    "schema:attendee",
+      "location":     "schema:location"
+    }
+  }
+}

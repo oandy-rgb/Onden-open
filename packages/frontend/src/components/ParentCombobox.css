@@ -1,0 +1,23 @@
+/* Parent picker: type to filter, arrows + Enter to choose. */
+.parent-picker { position: relative; max-width: 360px; }
+/* In a phone sheet it takes the sheet's width (360px left a gap on the right). */
+.ui-menu--sheet .parent-picker { max-width: none; }
+.parent-picker-options {
+  margin: 4px 0 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  list-style: none;
+  font-size: var(--ac-fs-small);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.parent-picker-options li { padding: 6px 8px; border-radius: var(--ac-radius-md); cursor: pointer; }
+.parent-picker-options li.active,
+.parent-picker-options li:hover { background: var(--ac-accent-tint-7); }
+.parent-picker-empty, .parent-picker-more { margin: 4px 0 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+@media (max-width: 900px) {
+  .parent-picker-options li { padding: 12px 8px; }
+}

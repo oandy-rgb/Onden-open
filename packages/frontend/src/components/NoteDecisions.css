@@ -1,0 +1,19 @@
+.note-decisions { margin: 0 0 6px; font-size: var(--ac-fs-caption); }
+.note-decisions-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.note-decisions-line:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.note-decisions-chev { transition: transform 0.12s; transform: rotate(-90deg); }
+.note-decisions-chev.open { transform: none; }
+.note-decisions-panel { margin-top: 4px; }

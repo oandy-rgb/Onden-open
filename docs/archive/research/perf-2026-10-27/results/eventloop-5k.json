@@ -1,0 +1,212 @@
+[
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 1,
+  "status": 200,
+  "results": 2,
+  "searchMs": 64,
+  "pingMaxMs": 19,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 2,
+  "status": 200,
+  "results": 2,
+  "searchMs": 38,
+  "pingMaxMs": 10,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 3,
+  "status": 200,
+  "results": 2,
+  "searchMs": 21,
+  "pingMaxMs": 13,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 4,
+  "status": 200,
+  "results": 2,
+  "searchMs": 16,
+  "pingMaxMs": 9,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 5,
+  "status": 200,
+  "results": 2,
+  "searchMs": 17,
+  "pingMaxMs": 8,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 6,
+  "status": 200,
+  "results": 2,
+  "searchMs": 16,
+  "pingMaxMs": 7,
+  "stallMs": 0
+ },
+ {
+  "label": "title",
+  "q": "筆記 777",
+  "round": 7,
+  "status": 200,
+  "results": 2,
+  "searchMs": 14,
+  "pingMaxMs": 7,
+  "stallMs": 0
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 1,
+  "status": 200,
+  "results": 30,
+  "searchMs": 156,
+  "pingMaxMs": 100,
+  "stallMs": 100
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 2,
+  "status": 200,
+  "results": 30,
+  "searchMs": 151,
+  "pingMaxMs": 102,
+  "stallMs": 102
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 3,
+  "status": 200,
+  "results": 30,
+  "searchMs": 149,
+  "pingMaxMs": 101,
+  "stallMs": 101
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 4,
+  "status": 200,
+  "results": 30,
+  "searchMs": 130,
+  "pingMaxMs": 104,
+  "stallMs": 104
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 5,
+  "status": 200,
+  "results": 30,
+  "searchMs": 127,
+  "pingMaxMs": 77,
+  "stallMs": 0
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 6,
+  "status": 200,
+  "results": 30,
+  "searchMs": 135,
+  "pingMaxMs": 87,
+  "stallMs": 0
+ },
+ {
+  "label": "common",
+  "q": "演算法 期中",
+  "round": 7,
+  "status": 200,
+  "results": 30,
+  "searchMs": 139,
+  "pingMaxMs": 109,
+  "stallMs": 109
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 1,
+  "status": 200,
+  "results": 1,
+  "searchMs": 10,
+  "pingMaxMs": 6,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 2,
+  "status": 200,
+  "results": 1,
+  "searchMs": 10,
+  "pingMaxMs": 6,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 3,
+  "status": 200,
+  "results": 1,
+  "searchMs": 17,
+  "pingMaxMs": 13,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 4,
+  "status": 200,
+  "results": 1,
+  "searchMs": 11,
+  "pingMaxMs": 7,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 5,
+  "status": 200,
+  "results": 1,
+  "searchMs": 13,
+  "pingMaxMs": 10,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 6,
+  "status": 200,
+  "results": 1,
+  "searchMs": 10,
+  "pingMaxMs": 6,
+  "stallMs": 0
+ },
+ {
+  "label": "rare",
+  "q": "夸克螺旋",
+  "round": 7,
+  "status": 200,
+  "results": 1,
+  "searchMs": 10,
+  "pingMaxMs": 6,
+  "stallMs": 0
+ }
+]

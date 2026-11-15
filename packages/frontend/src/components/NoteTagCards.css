@@ -1,0 +1,111 @@
+/* This note's tags and what they bring (NoteTagCards / NoteTagsBlock). The
+ * cards reuse NodeAttributesPanel's rows; here the panel's single box becomes
+ * one card per tag. */
+.note-tag-cards { display: flex; flex-direction: column; gap: 8px; }
+.note-tag-cards .ov-panel-empty { margin: 0; }
+.note-tag-cards .attr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.note-tag-cards .attr-panel-section.tag-card {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ac-line);
+  border-left: 3px solid var(--tag-color, var(--ac-line));
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+}
+.note-tag-cards .tag-card--other { border-left-width: 1px; }
+.note-tag-cards .tag-card .attr-panel-section {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--ac-line);
+}
+.tag-card-top { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.tag-card-top-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tag-card-count, .tag-card-brings { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tag-card-brings { margin: 0; }
+.tag-card-page {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-accent);
+  cursor: pointer;
+}
+.tag-card-page:hover { text-decoration: underline; }
+.tag-card-name {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  color: var(--tag-color, var(--ac-ink));
+  cursor: pointer;
+  text-align: left;
+}
+.tag-card-name:hover { text-decoration: underline; }
+.tag-card-origin { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tag-card-parent {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.tag-card-parent:hover { text-decoration: underline; }
+/* 「編輯 #X 的欄位 →」 at a card's end (the owner only). */
+.tag-card-edit-fields {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.tag-card-edit-fields:hover { color: var(--ac-ink); text-decoration: underline; }
+/* Full-width line under a row: "also used by". */
+.attr-row .attr-shared {
+  grid-column: 1 / -1;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+.attr-value--readonly { color: var(--ac-ink); overflow-wrap: anywhere; }
+
+/* The card of the chip that is open (NoteMetaLine), below the grey line at the full width. */
+.note-meta-cards { min-width: 0; }
+.prop-tag-name[aria-expanded="true"] { text-decoration: underline; }
+/* Chips keep their drawn size; the name and "+ Tag" are .tap-target (global.css)
+ * for a --onden-tap hit area. The remove x sits right against the name, so its
+ * area grows only up and down: sideways it would cover the end of the name and
+ * a tap meant to open the card could remove the tag. */
+@media (pointer: coarse) {
+  .note-meta .prop-tag-remove { position: relative; padding-inline: 6px; }
+  .note-meta .prop-tag-remove::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--onden-tap);
+    transform: translateY(-50%);
+  }
+}
+@media (max-width: 900px) {
+  .note-tag-cards .tag-card-name,
+  .note-tag-cards .tag-card-edit-fields { min-height: 44px; }
+  .note-tag-cards .attr-row--custom { grid-template-columns: minmax(90px, 35%) 1fr auto; }
+}

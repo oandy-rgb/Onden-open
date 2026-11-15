@@ -1,0 +1,30 @@
+.ui-popover.hashtag-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 16px);
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-small);
+  box-shadow: var(--ac-shadow-float);
+  animation: bubble-in 0.1s ease;
+}
+.hashtag-hint button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-accent);
+  font: inherit;
+  cursor: pointer;
+}
+.hashtag-hint button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+@media (pointer: coarse) {
+  .hashtag-hint button { min-height: var(--onden-tap, 44px); min-width: var(--onden-tap, 44px); }
+}
+.hashtag-hint-body { display: flex; flex-direction: column; gap: 1px; padding: 2px 0; }
+.hashtag-hint-tip { font-size: var(--ac-fs-xs); color: var(--ac-muted); }

@@ -1,0 +1,53 @@
+{
+  "comment": "One written-tag-name fixture, evaluated by both ends: the frontend's offline lookup lib/data/tagPaths.ts findTagIdByPath (src/test/writtenTagNameParity.test.ts) and the backend's tagHierarchy.tagIdForWrittenName (packages/backend/src/test/writtenTagNameParity.integration.test.ts), which quick capture, frontmatter/import tags and block-node {tags} all resolve through (D63). A path is walked from the root, so a bare name is a ROOT tag; under each parent the tag titled exactly so wins, else the ONE whose title matches case-insensitively, else nothing (null: with create, a new tag). Each case is its own workspace; `resolve` maps a written name to the tag key it names, or null.",
+  "cases": [
+    {
+      "title": "a bare name is the root tag, never a nested one",
+      "tags": [
+        { "key": "course", "name": "課程" },
+        { "key": "courseBook", "name": "book", "parent": "course" }
+      ],
+      "resolve": { "book": null, "課程/book": "courseBook", "課程/Book": "courseBook", "課程": "course" }
+    },
+    {
+      "title": "one case-insensitive match is that tag",
+      "tags": [{ "key": "Book", "name": "Book" }],
+      "resolve": { "book": "Book", "BOOK": "Book", "Book": "Book" }
+    },
+    {
+      "title": "the exact title wins over another case",
+      "tags": [
+        { "key": "Book", "name": "Book" },
+        { "key": "book", "name": "book" }
+      ],
+      "resolve": { "book": "book", "Book": "Book", "BOOK": null }
+    },
+    {
+      "title": "path segments fold case one level at a time",
+      "tags": [
+        { "key": "course", "name": "Course" },
+        { "key": "week1", "name": "Week1", "parent": "course" },
+        { "key": "rootWeek1", "name": "week1" }
+      ],
+      "resolve": { "course/WEEK1": "week1", "COURSE/week1": "week1", "week1": "rootWeek1", "Week1": "rootWeek1", "course/week2": null }
+    },
+    {
+      "title": "segments are trimmed and empty ones dropped",
+      "tags": [
+        { "key": "research", "name": "研究" },
+        { "key": "method", "name": "方法", "parent": "research" },
+        { "key": "rootMethod", "name": "方法" }
+      ],
+      "resolve": { " 方法 ": "rootMethod", "研究//方法/": "method", "研究/新": null, "/": null }
+    },
+    {
+      "title": "a name matches in either Unicode form (NFC, D58)",
+      "tags": [
+        { "key": "cafe", "name": "Cafe\u0301" },
+        { "key": "hindi", "name": "हिंदी" },
+        { "key": "lesson", "name": "Le\u0301çon", "parent": "hindi" }
+      ],
+      "resolve": { "Café": "cafe", "café": "cafe", "Cafe\u0301": "cafe", "हिंदी/Léçon": "lesson", "हिंदी/léçon": "lesson", "हिंदी/Leçon": null }
+    }
+  ]
+}

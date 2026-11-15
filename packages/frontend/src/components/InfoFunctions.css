@@ -1,0 +1,27 @@
+/* The 「功能」 tab (InfoFunctions): expandable cards, then the 「還能用在這則」 line. */
+.info-fn { display: flex; flex-direction: column; gap: 8px; }
+.info-fn-title { margin: 0; padding: 2px 4px 4px; font-size: var(--ac-fs-caption); font-weight: 400; color: var(--ac-muted); }
+.info-fn-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.info-fn-card { border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-raised); }
+.info-fn-head {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px;
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.info-fn-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--ac-radius-md); background: var(--ac-overlay-hover); color: var(--ac-muted); }
+.info-fn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.info-fn-name { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.info-fn-status { font-size: var(--ac-fs-small); color: var(--ac-ink); line-height: 1.5; }
+.info-fn-count { flex-shrink: 0; }
+.info-fn-chevron { flex-shrink: 0; margin-top: 6px; color: var(--ac-muted); transition: transform 0.15s; }
+.info-fn-card.is-open .info-fn-chevron { transform: rotate(90deg); }
+.info-fn-body { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px 50px; }
+.info-fn-detail { margin: 0; padding: 6px 10px; border-radius: var(--ac-radius-md); background: var(--ac-overlay-hover); font-size: var(--ac-fs-caption); line-height: 1.5; color: var(--ac-ink); }
+.info-fn-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.info-fn-more {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px dashed var(--ac-line);
+  border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-muted); font: inherit; font-size: var(--ac-fs-caption); text-align: left; cursor: pointer;
+}
+.info-fn-more-text { flex: 1; min-width: 0; }
+.info-fn-idle { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: var(--ac-radius-md); background: var(--ac-overlay-hover); }
+.info-fn-idle-name { font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-ink); }
+.info-fn-idle .info-fn-status { font-size: var(--ac-fs-caption); color: var(--ac-muted); }

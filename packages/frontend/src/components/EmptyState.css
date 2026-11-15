@@ -1,0 +1,96 @@
+/* EmptyState — guided launchpad for empty / no-results / not-found surfaces.
+ * Centered, calm, token-driven (AA in both themes). Two sizes: "panel" sits
+ * inside a sidebar slot; "page" fills a full editor pane. */
+
+.onden-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  color: var(--ac-muted);
+  margin: 0 auto;
+}
+
+.onden-empty-state--panel {
+  padding: 32px 18px;
+  max-width: 240px;
+}
+
+.onden-empty-state--page {
+  padding: 48px 24px;
+  max-width: 360px;
+  min-height: 60%;
+}
+
+/* One line, no icon: the "nothing here" / "Loading…" text of a list, menu or table. */
+.onden-empty-state--inline {
+  display: block;
+  padding: 16px 12px;
+  font-size: var(--ac-fs-small);
+  line-height: var(--onden-leading-normal);
+  list-style: none;
+}
+
+.onden-empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-overlay-subtle);
+  color: var(--ac-muted);
+  margin-bottom: 2px;
+}
+
+.onden-empty-state-title {
+  margin: 0;
+  font-family: var(--onden-font-display);
+  font-size: var(--ac-fs-ui-touch);
+  font-weight: var(--onden-weight-semibold);
+  color: var(--ac-ink);
+  line-height: var(--onden-leading-snug);
+}
+
+.onden-empty-state--page .onden-empty-state-title {
+  font-size: var(--ac-fs-h3);
+}
+
+.onden-empty-state-desc {
+  margin: 0;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  line-height: var(--onden-leading-normal);
+}
+
+.onden-empty-state-cta {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  font-size: var(--ac-fs-small);
+  font-weight: var(--onden-weight-medium);
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  cursor: pointer;
+  transition: background var(--onden-motion-fast) var(--onden-motion-ease);
+}
+
+.onden-empty-state-cta:hover:not(:disabled) {
+  background: var(--ac-accent-hover);
+}
+
+.onden-empty-state-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--onden-focus-ring);
+}
+
+.onden-empty-state-cta:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

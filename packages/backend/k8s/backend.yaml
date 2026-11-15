@@ -1,0 +1,89 @@
+# ⚠️ STUB MANIFEST — not a supported deployment path.
+# The image below (ghcr.io/your-org/…) is a PLACEHOLDER: no such image is
+# published. The supported way to run onden is `docker compose up` at the repo
+# root (compose.yaml); these manifests only sketch what a k8s deployment would
+# look like. Before using: build/push your own image (packages/backend/docker/
+# Dockerfile), replace the image ref, and create the referenced secrets
+# (onden-postgres-app, onden-auth).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onden-backend
+  namespace: onden
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onden-backend
+  template:
+    metadata:
+      labels:
+        app: onden-backend
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/onden-backend:latest # PLACEHOLDER — build + push your own
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8787
+          env:
+            - name: PORT
+              value: "8787"
+            - name: CORS_ORIGIN
+              value: "https://onden.example.com,http://localhost:4321"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: onden-postgres-app
+                  key: uri
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: onden-auth
+                  key: secret
+            - name: BETTER_AUTH_URL
+              value: "https://onden.example.com"
+          volumeMounts:
+            - name: content
+              mountPath: /app/content
+          # Modest defaults for a single-user instance; tune for real load.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8787
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Liveness mirrors readiness but with a longer grace: the server only
+          # listens after migrate() finishes, so give first boot room before
+          # the kubelet starts restarting it.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8787
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: content
+          persistentVolumeClaim:
+            claimName: onden-content
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onden-backend
+  namespace: onden
+spec:
+  selector:
+    app: onden-backend
+  ports:
+    - name: http
+      port: 8787
+      targetPort: 8787

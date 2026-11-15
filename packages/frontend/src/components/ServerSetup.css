@@ -1,0 +1,52 @@
+.server-setup-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 320px;
+  padding: 28px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+}
+
+.server-setup-desc {
+  font-size: var(--ac-fs-small);
+  color: var(--ac-muted);
+  margin: 0;
+}
+
+.server-setup-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: var(--ac-fs-small);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+  outline: none;
+  box-sizing: border-box;
+}
+.server-setup-input:focus {
+  border-color: var(--ac-accent);
+}
+
+.server-setup-error {
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-danger);
+  margin: 0;
+  text-align: center;
+}
+
+.server-setup-advanced {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.server-setup-advanced:hover {
+  color: var(--ac-ink);
+}

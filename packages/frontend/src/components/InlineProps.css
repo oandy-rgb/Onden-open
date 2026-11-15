@@ -1,0 +1,38 @@
+/* Inline metadata strip — the note's own plain properties surfaced at the top
+   of the body, reading as ordinary `label: value` metadata (Gallery: thin,
+   muted, no chrome). Sits below the schema FeaturedFields, above the editor. */
+
+.inline-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+}
+
+.inline-prop {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.4;
+}
+
+.inline-prop-label {
+  flex: 0 0 auto;
+  color: var(--ac-muted);
+}
+.inline-prop-label::after {
+  content: ":";
+  margin-left: 1px;
+}
+
+.inline-prop-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ac-muted);
+  font-weight: 500;
+}

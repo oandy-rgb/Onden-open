@@ -1,0 +1,1899 @@
+# 唯一入口清單
+
+<!-- 由 npm run catalog 從 scripts/entrypoints.catalog.json 產生，不要手改。 -->
+
+寫新的元件或共用邏輯之前，先在這裡依「需求」查；已有入口就用它。真的要新增共用入口，把它加進 `scripts/entrypoints.catalog.json` 再跑 `npm run catalog`。
+同一份資料也是白名單守門的規則與錯誤訊息的來源（`scripts/entrypointsCatalog.mjs`）：守門擋下時印出的「需求／請用／寫法」就是下面的內容。
+
+- 「寫法」的 import 路徑從該套件的 `src/` 起算（前端 `./lib/…`、後端 `./….js`）；在別的資料夾請改成相對路徑。
+- 「守門」：`fe-`／`be-` 開頭是白名單規則（現況違規次數記在 `scripts/allowlist-baseline.json`，只准減少）；`guard:名稱` 是 `src/test/guards/名稱.guard.test.ts`。
+- 「為什麼」只在有人寫了才顯示：為什麼只能有一個、什麼時候用。
+
+## 介面零件（48）
+
+### 要讓使用者從一串選項裡選一個換成它，並在原位看到結果再決定存不存（換版型、換區塊樣式）
+
+- 入口：`frontend/src/components/ReplaceWith.tsx`（`ReplaceWith`）　項目 `replace-with`
+- 寫法：`import { ReplaceWith } from "./components/ReplaceWith";`
+- 取代：自己做的「選項縮圖牆，點下去就存」選單
+- 為什麼：「換成…」的共用操作：游標停在選項（手機點一下）就用真實內容在原位預覽，按「套用」才存；桌機是頁面旁的欄，手機是不蓋住內容的底部面板。簡報換版型用它，網站換區塊樣式也重用這個，不要再寫第二套。它的樣式不進 components/ui 的 index（會被打進啟動 JS），在用到才載入的畫面 import。
+
+### 要放按鈕
+
+- 入口：`frontend/src/components/ui/index.ts`（`Button`、`buttonClass`）　項目 `ui-button`
+- 寫法：`import { Button } from "./components/ui";`
+- 取代：原生 &lt;button>
+- 守門：`fe-native-element:button`
+- 為什麼：所有按鈕都用它。它統一了點擊範圍（手機至少 44px）、焦點框、停用樣式；原生 <button> 各自長得不一樣，也常漏掉鍵盤焦點。
+
+### 要放關閉（×）按鈕
+
+- 入口：`frontend/src/components/ui/index.ts`（`CloseButton`）　項目 `ui-close-button`
+- 寫法：`import { CloseButton } from "./components/ui";`
+- 取代：各處手寫的關閉按鈕
+- 守門：`guard:dup-b2-ui`、`guard:sheetHeader`
+- 為什麼：關閉浮層、對話框、面板一律用它。位置、大小、無障礙名稱都一樣，使用者不用每次找 × 在哪。
+
+### 要放底部面板／對話框的標題列（標題、文字動作、關閉）
+
+- 入口：`frontend/src/components/ui/index.ts`（`SheetHeader`）　項目 `ui-sheet-header`
+- 寫法：`import { SheetHeader } from "./components/ui";`
+- 取代：各處手拼的 header ＋ Button ＋ CloseButton
+- 守門：`guard:sheetHeader`
+- 為什麼：標題列裡的文字動作鈕（例如「編輯」）和 × 一樣高、同一種外框，手機上可點範圍都是 44px，標題垂直置中；各處自己拼會高度不一。
+
+### 要放標籤／徽章小膠囊
+
+- 入口：`frontend/src/components/ui/index.ts`（`Chip`）　項目 `ui-chip`
+- 寫法：`import { Chip } from "./components/ui";`
+- 取代：手寫的 chip／badge 樣式
+- 守門：`guard:dup-b2-ui`
+- 為什麼：標籤、狀態、小計數都用它。顏色與圓角跟著主題 token 走，深色模式不會只有某處沒變。
+
+### 要讓使用者選日期
+
+- 入口：`frontend/src/components/ui/index.ts`（`DatePicker`）　項目 `ui-date-picker`
+- 寫法：`import { DatePicker } from "./components/ui";`
+- 取代：原生 &lt;input type="date">
+- 守門：`guard:tasks-time`
+- 為什麼：選日期一律用它：可打字也有月曆，手機是底部面板，「今天」用工作區時區。原生日期框在各瀏覽器長得不同，也會用裝置時區算錯日。
+
+### 要畫一個月的日期格子讓人點選某一天
+
+- 入口：`frontend/src/components/ui/index.ts`（`MonthGrid`、`MonthDayCell`、`MONDAY_FIRST_WEEKDAYS`）　項目 `ui-month-grid`
+- 寫法：`import { MonthGrid } from "./components/ui";`
+- 取代：自己用 buildMonthGrid 畫的月曆格子
+- 守門：`guard:tasks-time`
+- 為什麼：日期選擇器和日記的月曆都用它：七欄平均分配寬度、數字置中、44px 好點，有東西的日子底下有點（實心＝寫了、空心＝排了任務），鍵盤可用方向鍵移動。日記的一週列畫同一個格子（MonthDayCell），選中的日子兩邊同樣是實心圓。各畫各的會歪（2026-11-01 日記月曆數字靠左、固定 308px）。月曆檢視那種每格放筆記的大月曆是另一件事，不用它。
+
+### 要在滑鼠移過時換底色或顏色（hover）
+
+- 入口：`frontend/scripts/hoverWithPointer.mjs`　項目 `css-hover-with-pointer`
+- 寫法：`.my-row:hover { background: var(--ac-overlay-hover); }`
+- 取代：手寫 @media (hover: hover) 包住 :hover，或什麼都沒包讓手機上黏住
+- 守門：`guard:hover-with-pointer`
+- 為什麼：直接寫 :hover 就好：建置時這個 postcss 外掛會把換色的 :hover 搬進 @media (hover: hover)，手機點過不會留下一塊色（2026-11-01 側欄選取列左邊的深色塊）。會顯示或藏起東西的 :hover（opacity、display…）照原樣留著，因為手機是靠點一下讓它出現。
+
+### 要彈出對話框（含確認對話框）
+
+- 入口：`frontend/src/components/ui/index.ts`（`Modal`）　項目 `ui-modal`
+- 寫法：`import { Modal } from "./components/ui";`
+- 取代：原生 &lt;dialog>、手寫 role="alertdialog"
+- 守門：`fe-native-element:dialog`、`fe-css-position-fixed`、`guard:interactionOwners`
+- 為什麼：要使用者停下來回應的都用它（含確認）。它處理焦點鎖定、Esc、疊層與返回鍵；手寫的對話框常讓焦點跑到後面的頁面。
+
+### 要放手機從底部升起的面板
+
+- 入口：`frontend/src/components/ui/index.ts`（`Sheet`）　項目 `ui-sheet`
+- 寫法：`import { Sheet } from "./components/ui";`
+- 取代：自己貼在畫面底邊的卡片
+- 守門：`fe-css-position-fixed`、`guard:sheet`
+- 為什麼：手機從底部升起的面板用它。它處理鍵盤彈出時的高度、拖曳收起與安全區；自己貼底的卡片會被鍵盤蓋住。
+
+### 要放一個不擋住頁面的手機底部面板（一列、半版、全版三種高度）
+
+- 入口：`frontend/src/components/ui/index.ts`（`DockedSheet`）　項目 `ui-docked-sheet`
+- 寫法：`import { DockedSheet } from "./components/ui";`
+- 取代：自己做的非 modal 底部面板
+- 守門：`fe-css-position-fixed`、`guard:sheet`
+- 為什麼：它是 Sheet 的非 modal 版本：頁面照樣可以捲動與打字，面板自己會貼在底部導覽或鍵盤上方，三種高度的拖曳也在裡面。Esc 與返回由呼叫者走 useDismiss。
+
+### 要讓使用者拖曳調整面板寬度
+
+- 入口：`frontend/src/components/ui/index.ts`（`PaneResizer`、`ColumnResizer`）　項目 `ui-pane-resizer`
+- 寫法：`import { ColumnResizer, PaneResizer } from "./components/ui";`
+- 為什麼：能拖寬窄的側欄都用它（外殼的側欄用 PaneResizer，頁面裡的列表欄用 ColumnResizer），寬度會記住、雙擊恢復預設；自己寫的拖曳常在觸控上失效。
+
+### 要放浮出的選單或小面板
+
+- 入口：`frontend/src/components/ui/index.ts`（`Popover`、`Menu`、`MenuItem`、`MenuSeparator`、`MenuLabel`、`MenuHeading`、`usePopover`、`useInlinePopover`）　項目 `ui-popover-menu`
+- 寫法：`import { Menu, MenuItem } from "./components/ui";`
+- 取代：手寫的下拉選單、右鍵選單、position: fixed 的浮層，以及自己算「不超出視窗」（innerWidth - width）
+- 守門：`fe-css-position-fixed`、`guard:ui-owners`、`fe-floating-clamp`
+- 為什麼：浮出的選單、右鍵選單、小面板都用它。它算位置（不超出畫面）、處理點外面關閉與鍵盤上下選；手寫浮層在手機上常跑出畫面。
+
+### 要控制浮出選單開在哪、何時關
+
+- 入口：`frontend/src/components/ui/index.ts`（`usePopover`）　項目 `ui-popover-state`
+- 寫法：`import { usePopover } from "./components/ui";`
+- 為什麼：要控制 Popover 開在哪、何時關時用它，跟 Popover 配對使用；不要自己存座標。
+
+### 要放分頁列（tab bar）
+
+- 入口：`frontend/src/components/ui/index.ts`（`Tab`、`TabList`、`TabPanel`）　項目 `ui-tabs`
+- 寫法：`import { Tab, TabList, TabPanel } from "./components/ui";`
+- 取代：手寫的 role="tab" 按鈕列
+- 守門：`guard:nav-ui`
+- 為什麼：分頁列用它。方向鍵切換、選中狀態、無障礙角色都處理好；手寫的 tab 按鈕常漏掉鍵盤操作。
+
+### 要把浮層掛到最上層，或知道目前最上面的對話框
+
+- 入口：`frontend/src/components/ui/index.ts`（`surfaceHost`、`useTopModalLayer`）　項目 `ui-surface-host`
+- 寫法：`import { surfaceHost } from "./components/ui";`
+- 取代：自己 appendChild 到 document.body 的容器
+- 守門：`guard:ui-owners`
+- 為什麼：浮層要掛到最上層、或要知道最上面是哪個對話框時用它。自己 appendChild 到 body 會讓 Esc 和返回鍵關錯層。
+
+### 要把元件畫在所有內容之上
+
+- 入口：`frontend/src/components/ui/index.ts`（`TopLayerPortal`）　項目 `ui-top-layer-portal`
+- 寫法：`import { TopLayerPortal } from "./components/ui";`
+- 取代：自己用 position: fixed 疊在畫面上
+- 守門：`fe-css-position-fixed`
+- 為什麼：要蓋在所有內容之上（拖曳中的影子、全螢幕播放）時用它；自己 position: fixed 會被對話框或捲動容器擋住。
+
+### 要讓一個元素釘在視窗上（角落通知、底部列、全頁覆蓋）
+
+- 入口：`frontend/src/components/ui/index.ts`（`layerClass`）　項目 `ui-fixed-layer`
+- 寫法：`import { layerClass } from "./components/ui";`
+- 取代：自己在樣式表寫 position: fixed
+- 守門：`fe-css-position-fixed`
+- 為什麼：元素要釘在視窗（不隨頁面捲動）時加這個 class；自己的樣式表只留位置與 z-index。position: fixed 只准出現在 components/ui，才不會有人又做出一個蓋不住對話框或被捲動容器切掉的浮層。
+
+### 要在欄位下顯示錯誤文字
+
+- 入口：`frontend/src/components/ui/index.ts`（`FieldError`）　項目 `ui-field-error`
+- 寫法：`import { FieldError } from "./components/ui";`
+- 取代：各處手寫的行內紅字
+- 守門：`guard:ui-owners`
+- 為什麼：表單欄位的錯誤說明用它，會跟欄位綁在一起讓讀屏器讀到；手寫紅字樣式和位置各不相同。
+
+### 讀取失敗要顯示「無法載入」加「重試」（不能讓失敗看起來像空的）
+
+- 入口：`frontend/src/components/ui/index.ts`（`LoadError`）　項目 `ui-load-error`
+- 寫法：`import { LoadError } from "./components/ui";`
+- 取代：各處手寫的「錯誤文字＋再試一次」
+- 守門：`guard:ui-owners`
+- 為什麼：讀取失敗時用它：離線說連不上伺服器、線上說哪一項沒載入，並附重試；不顯示原始錯誤，也不把失敗畫成空清單。
+
+### 要放開關（on／off）
+
+- 入口：`frontend/src/components/ui/index.ts`（`Switch`）　項目 `ui-switch`
+- 寫法：`import { Switch } from "./components/ui";`
+- 取代：role="switch" 手寫開關
+- 守門：`guard:ui-owners`
+- 為什麼：開關（on／off）用它；手寫的 role="switch" 常漏掉鍵盤空白鍵與狀態朗讀。
+
+### 要放輸入框（單行文字、核取方塊、單選、滑桿、顏色、檔案）
+
+- 入口：`frontend/src/components/ui/index.ts`（`TextField`、`Checkbox`、`Radio`、`RangeInput`、`ColorInput`、`FileInput`）　項目 `ui-text-field`
+- 寫法：`import { TextField } from "./components/ui";`
+- 取代：原生 &lt;input>
+- 守門：`fe-native-element:input`、`guard:input-font`
+- 為什麼：單行輸入框用它。字級固定 16px 以上，iPhone 才不會自動放大畫面；輸入法組字也處理好了。
+
+### 要放搜尋或篩選輸入框（筆記、標籤、設定、選位置、指令面板）
+
+- 入口：`frontend/src/components/ui/index.ts`（`SearchField`）　項目 `ui-search-field`
+- 寫法：`import { SearchField } from "./components/ui";
+export const searchBox = SearchField; // <SearchField label={t("Search notes…")} value={q} onValueChange={setQ} />`
+- 取代：用 TextField 自己組放大鏡、清除鈕、方向鍵與 Enter 的搜尋框
+- 守門：`fe-search-input`
+- 為什麼：全部搜尋框共用一個：放大鏡、清除鈕、手機鍵盤的搜尋鍵、44px 點擊高度、聚焦樣式都一樣；上下鍵／Enter／Esc 在注音等輸入法組字中不會誤動；快捷鍵提示只在有滑鼠鍵盤的裝置顯示。
+
+### 要放勾選框（帶一行文字）
+
+- 入口：`frontend/src/components/ui/index.ts`（`Checkbox`）　項目 `ui-checkbox`
+- 寫法：`import { Checkbox } from "./components/ui";`
+- 取代：原生 &lt;input type="checkbox"> 加旁邊的文字
+- 守門：`fe-native-element:input`
+- 為什麼：帶文字的勾選框用它，整行都可以點（手機好按），勾選狀態也會被讀屏器讀到；原生勾選框只有那個小方框能點。
+
+### 要放下拉選單或多行輸入
+
+- 入口：`frontend/src/components/ui/index.ts`（`Select`、`TextArea`）　項目 `ui-select-textarea`
+- 寫法：`import { Select, TextArea } from "./components/ui";`
+- 取代：原生 &lt;select>、&lt;textarea>
+- 守門：`fe-native-element:select`、`fe-native-element:textarea`
+- 為什麼：下拉選單和多行輸入用它。現在只是原樣轉給原生元素，好處是全 app 都經過這一處：之後要統一手機字級、輸入法或焦點框，改這裡就全部生效，不用一個檔一個檔找。
+
+### 要放連結或圖片
+
+- 入口：`frontend/src/components/ui/index.ts`（`Link`、`Img`）　項目 `ui-link-img`
+- 寫法：`import { Link, Img } from "./components/ui";`
+- 取代：原生 &lt;a>、&lt;img>
+- 守門：`fe-native-element:a`、`fe-native-element:img`
+- 為什麼：連結和圖片用它。另開分頁的連結會自動加上 noopener，開出去的網頁就碰不到 Onden；圖片預設延後載入、一定要寫替代文字（裝飾圖寫空字串），長頁面不會一次載完所有圖，讀屏器也念得出來。
+
+### 要放可點的區塊（清單列、卡片、色票），外觀自己畫
+
+- 入口：`frontend/src/components/ui/index.ts`（`Pressable`）　項目 `ui-pressable`
+- 寫法：`import { Pressable } from "./components/ui";`
+- 取代：為了自己畫外觀而寫的原生 &lt;button>
+- 守門：`fe-native-element:button`
+- 為什麼：整塊可點、但外觀要自己畫的東西（清單列、卡片、色票、日曆格）用它。它把瀏覽器替按鈕加的邊框、底色、字型全部歸零，又保留鍵盤焦點框，也預設不會誤送出表單。看起來就是按鈕的，用 Button。
+
+### 要用顏色（或定義設計 token）
+
+- 入口：`frontend/src/styles/tokens.css`；`frontend/src/styles/theme-tokens.css`　項目 `css-color-token`
+- 寫法：`color: var(--ac-muted);`
+- 取代：寫死的 #hex、rgb()、顏色名稱，以及舊的顏色別名（var(--accent)、--muted、--onden-text-muted…）
+- 守門：`fe-css-color`、`fe-css-legacy-token`
+- 為什麼：顏色一律用 --ac-* token。寫死的顏色在深色模式和自訂主題下會不見或刺眼。
+
+### 要設圓角
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-radius-token`
+- 寫法：`border-radius: var(--ac-radius-md);`
+- 取代：寫死的 border-radius 數值
+- 守門：`fe-css-radius`
+- 為什麼：圓角用 token，整個 app 的圓潤程度才一致，改設計時改一處就好。
+
+### 要設陰影
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-shadow-token`
+- 寫法：`box-shadow: var(--ac-shadow-float);`
+- 取代：寫死的 box-shadow
+- 守門：`fe-css-shadow`
+- 為什麼：陰影用 token；寫死的陰影在深色模式下常變成一圈髒灰。
+
+### 要決定誰疊在誰上面（z-index）
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-z-index-token`
+- 寫法：`z-index: var(--z-dropdown);`
+- 取代：寫死的 z-index 數字
+- 守門：`fe-css-z-index`、`guard:dup-b2-ui`
+- 為什麼：疊層高低用 token 的層級名稱。亂寫數字會讓選單鑽到對話框底下，或提示蓋住鍵盤。
+
+### 要設字級
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-font-size-token`
+- 寫法：`font-size: var(--ac-fs-small);`
+- 取代：寫死的 font-size 數值
+- 守門：`fe-css-font-size`
+- 為什麼：字級用 token，使用者調字體大小時才會一起變；寫死的數字會留下一塊不跟著變的字。
+
+### 要依螢幕寬度切換版面（手機／平板／桌面）
+
+- 入口：`frontend/src/lib/mediaQuery.ts`（`BREAKPOINT_PX`、`MOBILE_QUERY`、`COARSE_POINTER_QUERY`、`isMobileLayout`、`isCoarsePointer`、`matchesMedia`、`mediaQueryList`）；`frontend/src/hooks/useIsMobile.ts`（`useMediaQuery`、`useIsMobile`）　項目 `breakpoints`
+- 寫法：`import { useIsMobile } from "./hooks/useIsMobile";`
+- 取代：CSS 只准 600／900／1280px 三個斷點；JS 不直接呼叫 window.matchMedia
+- 守門：`fe-css-media-width`、`fe-platform-global:matchMedia`、`guard:dup-b2-interaction-a`
+- 為什麼：版面依寬度切換只用這三個斷點（600／900／1280），JS 用 useIsMobile 判斷。各處自訂寬度會讓同一個寬度下一半是手機版一半是桌面版。
+
+### 要知道這台裝置有沒有某個字型、或列出已安裝的字型（字型設定）
+
+- 入口：`frontend/src/lib/localFonts.ts`（`hasFont`、`canListInstalledFonts`、`installedFonts`）；`frontend/src/lib/fontApply.ts`（`fontStack`、`applyFontChoices`、`isMissingHere`）；`frontend/src/lib/fontPrefs.ts`（`fontsPref`、`cleanFontName`）；`frontend/src/lib/fontStacks.ts`（`applyFontVars`、`readFontStacks`）　項目 `local-fonts`
+- 寫法：`import { hasFont } from "./lib/localFonts";`
+- 取代：document.fonts.check（對沒聽過的字型也回 true）、window.queryLocalFonts 直接呼叫；各處自己拼字型堆疊
+- 為什麼：裝置有沒有字型、中文備援堆疊、介面字型與內文字型的 CSS 變數都由這三個檔決定；各自判斷會讓有的畫面套了自訂字型、有的退回預設，也會讓缺字變成方框。
+
+### 要讓使用者確認把筆記搬到別的空間（誰會多看到／少看到）
+
+- 入口：`frontend/src/components/MoveToSpaceConfirm.tsx`（`default`）　項目 `move-to-space-confirm`
+- 寫法：`import MoveToSpaceConfirm from "./components/MoveToSpaceConfirm";`
+- 取代：各畫面自己做搬移確認
+- 為什麼：搬移前的確認畫面：先問 previewMove 看誰會多看到、少看到（MovePreviewSummary），按「移動」才用 moveToSpace 搬。「移動到…」、空間標籤、側欄拖到別的空間、白板放上別人看不到的筆記都用它；要多一個選項、標題或預覽用它的可選 props，不要複製一份。
+
+### 要讓使用者選一個位置（移到…、新筆記放哪）
+
+- 入口：`frontend/src/components/PlacePicker.tsx`（`PlacePicker`）；`frontend/src/lib/placeGroups.ts`（`movePlaceGroups`、`newNotePlaceGroups`）　項目 `place-picker`
+- 寫法：`import { PlacePicker } from "./components/PlacePicker";`
+- 為什麼：讓使用者選位置（移到…、新筆記放哪）用它，選單內容和誰看得到的提示才一致。
+
+### 要把一頁 PDF 畫在頁面本子的一頁上（畫面、可選取的文字、連結），只畫畫面附近的頁
+
+- 入口：`frontend/src/components/pdf/index.ts`（`PdfPageBackground`）　項目 `pdf-page-background`
+- 寫法：`import { PdfPageBackground } from "./components/pdf";
+// <PageBook background={(page, { box, near }) => <PdfPageBackground pdf={pdf} pageNumber={n} box={box} near={near} onGoToPage={goTo} />} … />
+export const Background = PdfPageBackground;`
+- 取代：自己用 pdf.js 的 PDFViewer 排版，或在別處另寫 page.render／TextLayer
+- 為什麼：本子不認得 PDF，PDF 頁的畫面是外殼傳進去的背景：pdf.js 畫布（縮放後等新解析度畫好才換，不閃白）、文字層、連結，遠的頁放掉畫布像素。文字層與連結用百分比排版，縮放不必重畫。
+
+### 要打開一份 PDF，並在畫出來之前就知道每一頁的大小（含頁面旋轉）
+
+- 入口：`frontend/src/components/pdf/index.ts`（`usePdfDocument`、`usePdfPageShapes`）　項目 `pdf-document`
+- 寫法：`import { usePdfDocument, usePdfPageShapes } from "./components/pdf";
+export function usePdfBook(url: string) {
+  const { pdf, error } = usePdfDocument(url);
+  return { pdf, error, shapes: usePdfPageShapes(pdf?.doc ?? null) }; // shapes.ratio(n) = page n's height / width
+}`
+- 取代：各處自己 getDocument、自己逐頁讀 viewport
+- 為什麼：第一頁讀完就先用它的比例排好所有頁，其餘頁在背景分批讀，比例不同才更正（本子會讓畫面上那一點不動），所以 300 頁的 PDF 不會卡在開啟、一般 PDF 也不會重排。
+
+### 不確定一個檔案能 import 哪一層
+
+- 入口：`frontend/src/../eslint.boundaries.config.js`　項目 `import-boundaries`
+- 取代：跨層 import（lib 引用 components、模組引用另一個模組）
+- 守門：`fe-import-boundaries`
+- 為什麼：不確定能不能 import 某一層時看這份設定；lib 不能引用 components、模組之間不能互相引用，違反時 lint 會擋。
+
+### 要改已發布網站的外觀（凍結樣式，不跟 App 主題）
+
+- 入口：`frontend/src/styles/site-tokens.css`；`frontend/src/styles/published-site.css`；`frontend/src/components/siteFrame/`　項目 `published-site-style`
+- 取代：把發布網站的色彩、大小混進 App 樣式；或在 App 樣式裡引用發布網站的變數
+- 守門：`fe-css-color`、`fe-css-radius`、`fe-css-shadow`、`fe-css-z-index`、`fe-css-font-size`、`fe-css-media-width`、`fe-css-position-fixed`、`fe-css-legacy-token`
+- 為什麼：已發布的網站有自己固定的外觀，不隨使用者的 App 主題變。它的樣式只放在這些檔案，App 其他樣式照 --ac-* token 寫。
+
+### 要改匯出 PDF 的列印樣式（白紙、pt 字級）
+
+- 入口：`frontend/src/styles/print-export.css`　項目 `print-export-style`
+- 取代：把列印用的固定顏色、pt 字級寫進 App 樣式
+- 守門：`fe-css-color`、`fe-css-radius`、`fe-css-shadow`、`fe-css-z-index`、`fe-css-font-size`、`fe-css-media-width`、`fe-css-position-fixed`
+- 為什麼：匯出 PDF 的列印視窗是白底固定色與 pt 字級，不是 App 主題，也不會被 App 載入；它的樣式只放這個檔案。
+
+### 要改「資料本身就是顏色」的色票（事件種類、程式碼高亮、任務狀態）
+
+- 入口：`frontend/src/styles/event-kinds.css`；`frontend/src/styles/syntax-highlight.css`；`frontend/src/modules/tasks/tasks.css`　項目 `data-color-palette`
+- 取代：在其他樣式裡寫死事件種類、語法高亮、任務狀態的色相
+- 守門：`fe-css-color`
+- 為什麼：這些檔案的色值就是資料（每種事件、每種語法、逾期／今天／即將的色相，淺色與深色各一組）。其他樣式要用這些顏色時引用它們定義的變數，不另外寫色值。
+
+### 要並排或單欄比較兩個版本的文字（歷史、待審修改、AI 建議、之後的衝突）
+
+- 入口：`frontend/src/components/compare/index.ts`（`TextCompare`、`placeTouches`）　項目 `text-compare`
+- 寫法：`import { createElement } from "react";
+import { TextCompare } from "./components/compare";
+export const view = createElement(TextCompare, { before: "舊", after: "新", beforeLabel: "當時", afterLabel: "現在" });`
+- 取代：自己寫行差異、段落配對或「舊／新」兩段文字的比較畫面；直接 import @codemirror/merge
+- 守門：`guard:text-compare`
+- 為什麼：一個元件負責顯示（桌機左右、窄螢幕單欄、沒改的收起、上一處／下一處、太長只給總結）；每一處的接受／拒絕由呼叫者決定，元件只回報是哪一處，不改文件。@codemirror/merge 只在 TextCompareView 載入，開機不載。契約與範例見 components/compare/comparePlaces.ts。
+
+### 要讓使用者在 5 個以內、看得到結果的選項中挑一個（色塊、用該字體寫的字、圖示＋字）
+
+- 入口：`frontend/src/components/ui/index.ts`（`ChoiceCards`）　項目 `ui-choice-cards`
+- 寫法：`import { ChoiceCards } from "./components/ui";
+export const props = { label: "Font", value: "serif", options: [{ value: "serif", label: "Serif", sample: "永 Ag" }] };
+export const Cards = ChoiceCards;`
+- 取代：用文字下拉選單挑主題、字體、啟動位置
+- 為什麼：設定的「展示方式」：選項畫出結果，選取框用 aria-checked 的 radio 群組，主題、字體、啟動位置共用同一個外觀。
+
+### 要讓使用者在 5 個以內的短詞或圖示中挑一個（小／標準／大、1 天｜3 天｜週、編輯｜並排｜預覽）
+
+- 入口：`frontend/src/components/ui/index.ts`（`Segmented`）　項目 `ui-segmented`
+- 寫法：`import { Segmented } from "./components/ui";
+export const props = { label: "UI size", value: "normal", options: [{ value: "small", label: "Small" }, { value: "normal", label: "Standard" }] };
+export const Control = Segmented;`
+- 取代：選項少於等於 5 個的原生 &lt;select>；role="group" 裡手寫一排 aria-pressed 按鈕（選項數量不固定、要捲動的篩選列用 FilterChips）
+- 為什麼：分段按鈕一眼看到全部選項與目前值，是 radio 群組，鍵盤與讀屏行為一致；選項可帶 Icon（圖示用 label 當名字和提示）。
+
+### 要放一排可以點的篩選標籤，挑清單要看哪些（全部／每個來源、標籤、人），數量不固定、要能橫向捲動
+
+- 入口：`frontend/src/components/ui/index.ts`（`FilterChips`）　項目 `ui-filter-chips`
+- 寫法：`import { FilterChips } from "./components/ui";
+export const props = { label: "Feeds", value: "", options: [{ value: "", label: "All", count: 3 }, { value: "f1", label: "Feed" }] };
+export const Row = FilterChips;`
+- 取代：手寫一排 aria-pressed 膠囊按鈕加 overflow-x 捲動（閱讀器來源列的 .rss-tag）
+- 為什麼：捲動、兩端淡出（看得出還有）、選中樣式、數字、手機 44px 點擊高度都在這裡，尾端可以放一個不跟著捲的按鈕。5 個以內的固定選項用 Segmented。
+
+### 要在設定頁放該頁唯一的即時預覽框
+
+- 入口：`frontend/src/components/ui/index.ts`（`PreviewBlock`）　項目 `ui-preview-block`
+- 寫法：`import { PreviewBlock } from "./components/ui";
+export const Frame = PreviewBlock;`
+- 取代：各頁自己畫一個有邊框的預覽卡
+- 為什麼：每個設定頁只有一個預覽；框的邊線、圓角、底色與讀屏名稱統一。
+
+### 要讓一個區塊（側欄、主內容、資訊面板、模組畫面、某個檢視分頁）出錯時只在那一塊顯示訊息，不拖垮整個 App
+
+- 入口：`frontend/src/components/RegionErrorBoundary.tsx`（`default`）　項目 `region-error-boundary`
+- 寫法：`import RegionErrorBoundary from "./components/RegionErrorBoundary";`
+- 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
+- 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
+
+## 共用邏輯（106）
+
+### 要畫一頁簡報（視角的大圖、縮圖、播放）
+
+- 入口：`frontend/src/modules/slides/SlideView.tsx`（`default`）；`markdown/src/slidePages.ts`（`pagesOf`、`autoLayoutOf`）　項目 `slides-slide`
+- 寫法：`import { pagesOf } from "@onden/markdown";
+export const layouts = pagesOf("## A\n- x").map((page) => page.autoLayout);`
+- 取代：在播放器或別處另寫一套 Markdown → 投影片的渲染
+- 為什麼：視角、縮圖與全螢幕播放畫同一個組件，看到的就是播的；頁的切分、講稿、自動版型、頁的鍵都在 `@onden/markdown` 的 slidePages.ts 一處（伺服器的 getSlides 工具讀同一份）。
+
+### 要用網站的式樣公式畫網站頁面以外的東西（簡報）
+
+- 入口：`frontend/src/modules/slides/theme.ts`（`useDeckLook`、`themeStyle`）；`site/src/look.ts`（`deckVars`、`DECK_CANVAS`、`DeckStyle`）　項目 `slides-look`
+- 寫法：`import { themeStyle } from "./modules/slides/theme";
+export const style = themeStyle("paper", null, "light");`
+- 取代：自己寫一套字級、間距與配色公式，或 import @onden/site 的其他部分
+- 為什麼：外觀只有一套公式：簡報與網站共用 @onden/site 的風格與配色，所以長得一家人，網站輸出也不會因此改變（金色測試）。簡報只准從 @onden/site/look 取用。
+
+### 要碰瀏覽器的 window／document（事件、捲動、焦點）
+
+- 入口：`frontend/src/hooks/`；`frontend/src/lib/`；`frontend/src/components/ui/`　項目 `platform-window-document`
+- 取代：畫面元件直接用 window、document（只准 lib/、hooks/、components/ui/）
+- 守門：`fe-platform-global:window`、`fe-platform-global:document`
+- 為什麼：畫面元件不直接碰 window／document，透過 lib/、hooks/ 的入口。直接碰會在 SSR、測試和離開頁面時出錯，也很難找到誰掛了監聽沒拿掉。
+
+### 要讓 Esc 離開一個浮層或模式
+
+- 入口：`frontend/src/hooks/useEscapeKey.ts`（`useEscapeKey`、`useDismiss`）　項目 `escape-key`
+- 寫法：`import { useDismiss } from "./hooks/useEscapeKey";`
+- 取代：自己在 window／document 掛 keydown 聽 Esc、為面板另推一筆歷史紀錄讓「返回」能關它
+- 守門：`guard:dup-b2-interaction-a`
+- 為什麼：Esc 或「返回」（Android 返回鍵）要離開浮層、面板或模式，用 useDismiss（開著時註冊，只讓最上層那個回應；選單與 Popover 已由 usePopover 註冊）。useEscapeKey 只給拖曳之類只聽 Esc 的手勢。各自聽 keydown 會一次關掉好幾層，「返回」則會直接退出頁面。
+
+### 要知道現在有沒有網路、何時恢復連線
+
+- 入口：`frontend/src/lib/data/connectivity.ts`（`attachConnectivity`、`RECONNECT_RETRY_MS`）；`frontend/src/lib/browserNetwork.ts`（`isBrowserOnline`、`prefersSavedData`）　項目 `connectivity`
+- 寫法：`import { attachConnectivity } from "./lib/data/connectivity";
+// 只問瀏覽器現在有沒有網路／是否開省流量：
+import { isBrowserOnline } from "./lib/browserNetwork";`
+- 取代：navigator.onLine、navigator.connection、online／offline 事件
+- 守門：`fe-platform-global:navigator`、`guard:dup-b2-interaction-a`
+- 為什麼：連線狀態只由這裡維護；畫面要知道在不在線，讀 app 狀態的 online（useAppSelector((s) => s.online)）。自己讀瀏覽器狀態會跟同步狀態不一致：畫面說在線，存檔卻排進離線佇列。
+
+### 要把筆記、視角或功能頁開在右邊（並排），或關掉右邊
+
+- 入口：`frontend/src/lib/splitViewStore.ts`（`requestSplitOpen`、`requestSplitClose`）　項目 `split-open`
+- 寫法：`import { requestSplitOpen } from "./lib/splitViewStore";`
+- 取代：直接呼叫 setRight、自己做一份並排預覽
+- 守門：`guard:interactionOwners`
+- 為什麼：開在右邊會經過並排的規則（同一個視角不開兩次、網址、⇄、手機切換）；直接 setRight 會繞過它們。
+
+### 要複製文字到剪貼簿
+
+- 入口：`frontend/src/lib/clipboard.ts`（`copyText`、`writeClipboard`、`writeClipboardLater`、`ClipboardRefused`）　項目 `clipboard`
+- 寫法：`import { copyText } from "./lib/clipboard";`
+- 取代：navigator.clipboard、ClipboardItem
+- 守門：`fe-platform-global:navigator`、`guard:interactionOwners`、`guard:dup-b2-wording`
+- 為什麼：複製文字用它。它處理權限、舊瀏覽器退回與失敗提示；直接用 navigator.clipboard 在手機和非 HTTPS 常默默失敗。
+
+### 要判斷裝置有沒有觸控螢幕、或讓手機輕震一下
+
+- 入口：`frontend/src/lib/ink/touch.ts`（`deviceHasTouch`）；`frontend/src/lib/haptics.ts`（`vibrate`）　項目 `touch-detect`
+- 寫法：`import { deviceHasTouch } from "./lib/ink/touch";`
+- 取代：navigator.maxTouchPoints、navigator.vibrate
+- 守門：`fe-platform-global:navigator`、`guard:dup-b2-interaction-a`
+- 為什麼：判斷是不是觸控裝置用它。手寫和長按都依賴同一個判斷，各寫一份會讓平板一半當觸控一半當滑鼠。
+
+### 要登記或比對鍵盤快捷鍵、顯示平台對應的按鍵提示
+
+- 入口：`frontend/src/lib/shortcuts.ts`（`SHORTCUTS`、`matchShortcut`、`kbdHint`、`formatChord`）　項目 `keyboard-shortcuts`
+- 寫法：`import { matchShortcut } from "./lib/shortcuts";`
+- 取代：自己判斷 navigator.platform／metaKey 與寫死的快捷鍵
+- 守門：`fe-platform-global:navigator`、`guard:dup-b2-interaction-a`
+- 為什麼：快捷鍵在這裡登記與比對，也從這裡取按鍵提示（Mac 顯示 ⌘）。自己判斷平台會讓提示和實際按鍵對不上，也會跟其他快捷鍵撞在一起。
+
+### 要讀或改網址列（目前在哪個畫面、哪則筆記；外部帶進來的一次性參數）
+
+- 入口：`frontend/src/hooks/useUrlLocation.ts`（`readLocation`、`parseLocation`、`locationToSearch`、`useUrlSync`、`navigate`、`goBackInApp`、`canGoBackInApp`）；`frontend/src/hooks/useHistoryEntry.ts`（`useHistoryEntry`）；`frontend/src/lib/pageUrl.ts`（`readUrlParams`、`stripUrlParams`、`pageOrigin`）　項目 `url-location`
+- 寫法：`import { readLocation } from "./hooks/useUrlLocation";`
+- 取代：history.pushState、popstate、window.location、window.history.replaceState；這次導向留不留歷史（navigate）、詳細畫面讓返回鍵回到列表（useHistoryEntry）、手機 ‹ 與返回鍵一致（goBackInApp）
+- 守門：`fe-platform-global:history`、`fe-platform-global:location`、`guard:dup-b2-interaction-a`、`guard:nav-ui`
+- 為什麼：讀寫網址（現在在哪個畫面、哪則筆記）用它。自己 pushState 會讓返回鍵和重新整理回到錯的地方。
+
+### 要知道伺服器位址或呼叫伺服器 API
+
+- 入口：`frontend/src/lib/api.ts`（`getApiBase`、`apiFetch`、`api`）　項目 `api-base`
+- 寫法：`import { getApiBase } from "./lib/api";`
+- 取代：自己用 location 算伺服器位址、直接 fetch
+- 守門：`fe-platform-global:location`
+- 為什麼：呼叫伺服器一律用它。它處理伺服器位址、登入狀態、逾時與錯誤格式；自己 fetch 會漏掉其中之一。
+
+### 要產生新的 UUID（用戶端建立的 id）
+
+- 入口：`frontend/src/lib/uuid.ts`（`randomUUID`、`nameBasedUUID`）　項目 `client-id`
+- 寫法：`import { randomUUID } from "./lib/uuid";`
+- 取代：crypto.randomUUID()
+- 守門：`fe-platform-global:crypto`、`guard:dup-b2-logic`
+- 為什麼：在裝置上產生新 id 用它。有些瀏覽器（非 HTTPS、舊 WebView）沒有 crypto.randomUUID，直接用會當掉。
+
+### 要把位元組轉 hex，或算 SHA-256
+
+- 入口：`frontend/src/lib/hex.ts`（`bytesToHex`、`webCryptoSha256`）　項目 `hex-sha256`
+- 寫法：`import { bytesToHex } from "./lib/hex";`
+- 取代：手寫的 toString(16) 迴圈、crypto.subtle.digest
+- 守門：`fe-platform-global:crypto`、`guard:shared-helpers`
+- 為什麼：位元組轉 hex 或算 SHA-256 用它；手寫的轉換常出錯（補零、大小寫），導致前後端雜湊對不上。
+
+### 要記住一個本機偏好設定（帳號分區）
+
+- 入口：`frontend/src/lib/prefs.ts`（`PREFS`、`getPref`、`setPref`、`usePersistedFlag`、`usePersistedChoice`）　項目 `local-prefs`
+- 寫法：`import { getPref } from "./lib/prefs";`
+- 取代：localStorage
+- 守門：`fe-platform-global:localStorage`
+- 為什麼：只存在這台裝置的偏好用它，會依帳號分開。直接用 localStorage 會讓換帳號的人看到前一個人的設定。
+
+### 要記住只在這個分頁有效的暫存狀態
+
+- 入口：`frontend/src/lib/sessionPrefs.ts`（`readSession`、`writeSession`、`removeSession`、`SESSION_KEYS`）　項目 `session-prefs`
+- 寫法：`import { readSession } from "./lib/sessionPrefs";`
+- 取代：sessionStorage
+- 守門：`fe-platform-global:sessionStorage`、`guard:interactionOwners`
+- 為什麼：只在這個分頁有效的暫存用它；直接用 sessionStorage 在私密模式或被封鎖時會丟例外。
+
+### 要知道手機螢幕鍵盤有沒有開、占了多少高度
+
+- 入口：`frontend/src/hooks/useVirtualKeyboard.ts`（`useVirtualKeyboard`、`visibleViewportBottom`）　項目 `virtual-keyboard`
+- 寫法：`import { useVirtualKeyboard } from "./hooks/useVirtualKeyboard";`
+- 取代：window.visualViewport
+- 守門：`fe-platform-global:visualViewport`、`guard:dup-b2-interaction-a`、`fe-floating-clamp`
+- 為什麼：要知道手機鍵盤開了沒、占多高用它，底部面板和工具列靠它避開鍵盤。 它也是唯一量「螢幕鍵盤蓋住視窗多少」的地方，其他浮層用 Popover 擺位置。
+
+### 要在元素大小改變時得到通知
+
+- 入口：`frontend/src/lib/observeSize.ts`（`observeSize`）　項目 `observe-size`
+- 寫法：`import { observeSize } from "./lib/observeSize";`
+- 取代：new ResizeObserver
+- 守門：`fe-platform-global:ResizeObserver`、`guard:dup-b2-interaction-b`
+- 為什麼：元素大小改變要通知時用它，一頁共用一個觀察器；每個元件各開一個會拖慢長清單。
+
+### 要在元素進入或離開可視範圍時得到通知
+
+- 入口：`frontend/src/lib/noteTitleVisibility.ts`（`useNoteTitleScrolledPast`、`trackNoteTitle`）；`frontend/src/lib/embedDom.ts`（`mountEmbed`）　項目 `observe-visibility`
+- 寫法：`import { useNoteTitleScrolledPast } from "./lib/noteTitleVisibility";`
+- 取代：new IntersectionObserver
+- 守門：`fe-platform-global:IntersectionObserver`
+- 為什麼：元素進出畫面要通知時用它；各開各的 IntersectionObserver 很難保證都有拿掉。
+
+### 要在拖曳時鎖住指標（pointer capture）與判斷拖曳門檻
+
+- 入口：`frontend/src/lib/pointerDrag.ts`（`capturePointer`、`DRAG_SLOP_PX`）；`frontend/src/lib/pointerDragSession.ts`（`trackPointerDrag`、`closestAtPoint`）　項目 `pointer-drag`
+- 寫法：`import { capturePointer } from "./lib/pointerDrag";`
+- 取代：element.setPointerCapture、各自寫的拖曳門檻數字
+- 守門：`fe-platform-global:setPointerCapture`、`guard:dup-b2-interaction-b`
+- 為什麼：拖曳時鎖住指標、判斷拖曳門檻用它。門檻數字不一樣，同一個手勢在某處是點擊、在另一處變成拖曳。 移動、拉長一個東西（時間軸區塊、週看板卡片）整段手勢用 trackPointerDrag：滑鼠超過門檻才算拖、手指先長按、靠近邊緣自動捲動、Esc 由呼叫者的 useEscapeKey 取消。
+
+### 要在使用者離開頁面前存檔，或問一句「還有沒存的東西，確定要離開？」
+
+- 入口：`frontend/src/lib/pageHide.ts`（`onPageHide`、`warnBeforeLeaving`）　項目 `page-hide`
+- 寫法：`import { onPageHide, warnBeforeLeaving } from "./lib/pageHide";`
+- 取代：pagehide、beforeunload、visibilitychange 監聽
+- 守門：`guard:interactionOwners`、`guard:shared-helpers`
+- 為什麼：離開頁面前要存東西用它。各瀏覽器離開時的事件不同，手機切 App 也算離開；只聽 beforeunload 會在手機上掉資料。 要用瀏覽器自己的離開提醒（有沒存的東西才問）用 warnBeforeLeaving，不自己聽 beforeunload。
+
+### 一個輸入框的字要在失焦、Enter 時存，但使用者沒失焦就離開（關分頁、手機殺掉 App、切筆記、元件卸載）也不能丟
+
+- 入口：`frontend/src/hooks/useFieldDraft.ts`（`useFieldDraft`）　項目 `field-draft`
+- 寫法：`import { useFieldDraft } from "./hooks/useFieldDraft";`
+- 取代：輸入框自己的 useState 草稿加 onBlur 存檔
+- 守門：`guard:fieldDraft`
+- 為什麼：失焦與 Enter 照舊存，同時在卸載與頁面隱藏時存，且一律存到打字當下的對象（筆記、列、群組），不是「現在這一個」。 沿用 useCardDraft 的寫入交接與失敗保留，自動儲存關閉；Esc 用 discard。
+
+### 要知道這個瀏覽器版頁面是不是「暫時使用」（什麼都不留在這台電腦），或讓它不留東西
+
+- 入口：`frontend/src/lib/temporarySession.ts`（`isTemporarySession`）；`frontend/src/lib/temporaryStorage.ts`（`beginTemporarySessionIfAsked`）　項目 `temporary-session`
+- 寫法：`import { isTemporarySession } from "./lib/temporarySession";
+if (isTemporarySession()) { /* 不寫任何持久儲存 */ }`
+- 取代：在各處自己看網址參數、自己判斷要不要寫 localStorage／IndexedDB
+- 為什麼：暫時使用（?temp=1）在任何模組載入前（browserApp/temporaryEntry.ts）把頁面的 localStorage 與每個分頁的暫存換成記憶體，把 indexedDB、caches、OPFS 設為不存在；頁面本機副本的 worker 也收到同一個旗標。新程式要持久化東西時先問 isTemporarySession，不另寫第二套判斷。
+
+### 要在使用者回到 App 時重新檢查狀態
+
+- 入口：`frontend/src/lib/appResume.ts`（`onAppResume`）　項目 `app-resume`
+- 寫法：`import { onAppResume } from "./lib/appResume";`
+- 取代：自己聽 visibilitychange、focus、online
+- 守門：`guard:interactionOwners`、`guard:dup-b2-interaction-a`
+- 為什麼：使用者回到 App 時要重新檢查（同步、日期換了沒）用它，避免每個畫面各聽一次、同時發一堆請求。
+
+### 要讓一個旗標（已複製、錯誤提示）幾秒後自己復原
+
+- 入口：`frontend/src/hooks/useTransientFlag.ts`（`useTransientFlag`、`useAutoReset`）　項目 `transient-flag`
+- 寫法：`import { useTransientFlag } from "./hooks/useTransientFlag";`
+- 取代：setTimeout(() => setX(false), …)
+- 守門：`guard:interactionOwners`
+- 為什麼：「已複製」之類幾秒後自己消失的狀態用它；自己 setTimeout 在元件關掉後還會觸發，React 會報錯。
+
+### 要支援長按（含觸覺回饋與移動門檻）
+
+- 入口：`frontend/src/hooks/useLongPress.ts`（`useLongPress`）；`frontend/src/lib/touchHold.ts`（`LONG_PRESS_MS`、`createLongPress`）；`frontend/src/lib/haptics.ts`（`vibrate`）　項目 `long-press`
+- 寫法：`import { useLongPress } from "./hooks/useLongPress";`
+- 取代：自己寫的長按計時、navigator.vibrate
+- 守門：`guard:dup-b2-interaction-b`
+- 為什麼：長按用它。它統一了時間長短、手指移動多少算取消、觸覺回饋；各寫各的會讓長按一處靈一處不靈。
+
+### 要讓拖著東西停在收合的列上一下就自動展開（側欄的筆記與標籤）
+
+- 入口：`frontend/src/lib/springOpen.ts`（`SPRING_OPEN_MS`、`SPRING_OPEN_TOUCH_MS`、`createSpringOpen`）　項目 `spring-open`
+- 寫法：`import { createSpringOpen, SPRING_OPEN_MS } from "./lib/springOpen";`
+- 取代：自己在拖曳裡寫 setTimeout 展開資料夾
+- 守門：`guard:springOpen`
+- 為什麼：停留時間（滑鼠 0.7 秒、手機 0.9 秒）、同一列不重新計時、到期時重新確認游標底下是哪一列，都在這裡；暫時展開的狀態不寫進偏好，由 hooks/useSidebarDrag 擁有。
+
+### 要讓白板的空白處照手指操作（單指拖曳移動、兩指縮放、長按再拖才框選）
+
+- 入口：`frontend/src/hooks/useBoardTouchGestures.ts`（`useBoardTouchGestures`）；`frontend/src/lib/boardTouchGestures.ts`（`attachBoardTouchGestures`）　項目 `board-touch-gestures`
+- 寫法：`import { useBoardTouchGestures } from "./hooks/useBoardTouchGestures";`
+- 取代：在白板另寫 pointerdown／長按計時，或用 selectionOnDrag 讓第一根手指直接框選
+- 為什麼：React Flow 在第一根手指落下就開始框選，雙指縮放會變成框選；這裡先扣住第一次落下，長按夠久才補送，第二根手指一來就取消。 長按時間與移動門檻是 lib/touchHold 的 BOX_SELECT_HOLD_MS、HOLD_SLOP。
+
+### 要讓輸入框用方向鍵移動清單的選中項
+
+- 入口：`frontend/src/lib/listNav.ts`（`stepActive`、`isListNavKey`）　項目 `list-keyboard-nav`
+- 寫法：`import { stepActive } from "./lib/listNav";`
+- 取代：各清單自己寫的 ArrowDown／ArrowUp 計算
+- 守門：`guard:dup-b2-interaction-b`
+- 為什麼：輸入框配清單用方向鍵選時用它（搜尋、指令面板、`((`），上下到底的行為才一致。
+
+### 要在輸入停下來後自動存檔
+
+- 入口：`frontend/src/lib/persistScheduler.ts`（`createSaveDebounce`、`SAVE_DEBOUNCE_MS`）　項目 `autosave-debounce`
+- 寫法：`import { createSaveDebounce } from "./lib/persistScheduler";`
+- 取代：自己寫的存檔 debounce 與延遲數字
+- 守門：`guard:dup-b2-interaction-b`
+- 為什麼：打字停下來後自動存檔用它。存檔間隔只有一個數字，改一處全部跟著改；各寫各的延遲會讓某些地方存太頻繁。
+
+### 要把內容存成檔案讓使用者下載
+
+- 入口：`frontend/src/lib/download.ts`（`downloadBlob`）　項目 `save-file-download`
+- 寫法：`import { downloadBlob } from "./lib/download";`
+- 取代：自己建 &lt;a download> 並點擊
+- 守門：`guard:shared-helpers`
+- 為什麼：讓使用者下載檔案用它。它處理 iOS 不支援 download 屬性、檔名編碼與釋放暫存網址。
+
+### 要把數字限制在 0 到 1
+
+- 入口：`frontend/src/lib/ink/color.ts`（`clamp01`）　項目 `clamp01`
+- 寫法：`import { clamp01 } from "./lib/ink/color";`
+- 取代：Math.min(1, Math.max(0, x))
+- 守門：`guard:shared-helpers`
+- 為什麼：把數字限制在 0～1 用它；這是很小的函式，但重寫了很多次，統一一個。
+
+### 要顯示筆記標題（沒有標題時顯示「未命名」）
+
+- 入口：`frontend/src/lib/noteLabel.ts`（`displayTitle`、`untitledTitle`、`noteLabel`）　項目 `note-title`
+- 寫法：`import { displayTitle } from "./lib/noteLabel";`
+- 取代：title || "未命名"、t("Untitled")
+- 守門：`guard:dup-owners`、`guard:dup-b2-logic`
+- 為什麼：顯示筆記標題一律用它，空標題時顯示「未命名」；自己寫 title || … 會出現空白列或各處不同的預設字。
+
+### 要把同一層的子筆記排序
+
+- 入口：`frontend/src/lib/childOrder.ts`（`compareChildren`、`sortChildren`、`planSiblingOrder`）　項目 `child-order`
+- 寫法：`import { sortChildren } from "./lib/childOrder";`
+- 取代：手寫 a.sort_order - b.sort_order 或 localeCompare
+- 守門：`guard:dup-owners`
+- 為什麼：同一層子筆記排序用它，跟側欄、子筆記清單、匯出的順序才會一樣。
+
+### 要依標題篩選或排序比對筆記
+
+- 入口：`frontend/src/lib/noteSearch.ts`（`matchTitle`、`containsTitle`、`rankByTitle`）　項目 `title-match`
+- 寫法：`import { containsTitle } from "./lib/noteSearch";`
+- 取代：title.toLowerCase().includes(q)
+- 守門：`guard:dup-owners`
+- 為什麼：依標題比對或篩選用它。它處理大小寫、全形半形和中文；各寫各的 includes 會讓同一個字在一處找得到、另一處找不到。
+
+### 要搜尋筆記（側欄、指令面板、`((`）
+
+- 入口：`frontend/src/lib/data/noteSearch.ts`（`searchNotes`）；`frontend/src/lib/data/reads.ts`（`reads`）　項目 `note-search`
+- 寫法：`import { reads } from "./lib/data";`
+- 取代：直接呼叫 /api/nodes/search 或本機索引搜尋
+- 守門：`guard:noteSearch`
+- 為什麼：搜尋筆記一律用它（側欄、指令面板、`((`）。它決定線上用伺服器、離線用本機索引，結果和順序才一致。
+
+### 要問「這則筆記有沒有某個標籤」
+
+- 入口：`frontend/src/lib/nodeTags.ts`（`nodeHasTag`、`nodeTagIds`、`isShownNote`、`listsAsNote`）　項目 `note-tags`
+- 寫法：`import { nodeHasTag } from "./lib/nodeTags";`
+- 取代：class_tag_ids／label_tag_ids 自己 includes、自己建 Set
+- 守門：`guard:dup-owners`、`guard:dup-b2-logic`
+- 為什麼：問「這則筆記有沒有某個標籤」用它；標籤分兩個欄位存，只查一個會漏掉一半。
+
+### 要處理標籤名稱（去掉 #、查詢字串）
+
+- 入口：`frontend/src/lib/hashtags.ts`（`tagName`、`tagQuery`、`stripHashtagMarks`）　項目 `tag-name`
+- 寫法：`import { tagName } from "./lib/hashtags";`
+- 取代：手寫 replace(/^#/, "")
+- 守門：`guard:dup-owners`
+- 為什麼：處理標籤名稱（去掉 #、轉成查詢字串）用它，避免「#讀書」和「讀書」被當成兩個標籤。
+
+### 要知道工作區的今天、現在是哪一天
+
+- 入口：`frontend/src/lib/localDate.ts`（`todayId`、`dateIdAt`、`monthId`、`addDays`、`daysBetween`）；`frontend/src/hooks/useToday.ts`（`useToday`）　項目 `workspace-today`
+- 寫法：`import { todayId } from "./lib/localDate";`
+- 取代：new Date().toISOString().slice(0, 10)、裝置日期
+- 守門：`guard:dup-b2-logic`、`guard:shared-helpers`、`guard:tasks-time`
+- 為什麼：「今天」一律用工作區的今天（依設定的時區和換日時間）。用裝置時間或 toISOString 會在晚上 8 點後跳到明天。
+
+### 要把筆記依最近更新排序
+
+- 入口：`frontend/src/lib/noteOrder.ts`（`byUpdatedDesc`、`byUpdatedAsc`）　項目 `updated-order`
+- 寫法：`import { byUpdatedDesc } from "./lib/noteOrder";`
+- 取代：手寫 updated_at localeCompare
+- 守門：`guard:shared-helpers`
+- 為什麼：依最近更新排序用它，最近清單和側欄的順序才一樣。
+
+### 要沿著 parent_id 走（祖先、子樹）
+
+- 入口：`frontend/src/lib/treeWalk.ts`（`ancestorsOf`、`isUnder`、`subtreeIdsOf`、`indexById`）　項目 `tree-walk`
+- 寫法：`import { ancestorsOf } from "./lib/treeWalk";`
+- 取代：自己寫的 parent_id 迴圈
+- 守門：`guard:dup-b2-logic`
+- 為什麼：沿著父筆記往上或往下走用它。它擋住循環的資料；自己寫迴圈遇到壞資料會卡死畫面。
+
+### 要問「這則筆記有沒有白板」
+
+- 入口：`frontend/src/lib/whiteboardNote.ts`（`isWhiteboardNote`、`ownsBoard`、`whiteboardTabIn`）　項目 `whiteboard-note`
+- 寫法：`import { isWhiteboardNote } from "./lib/whiteboardNote";`
+- 取代：自己判斷 layout 或白板分頁
+- 守門：`guard:dup-b2-logic`
+- 為什麼：問「這則筆記有沒有白板」用它；白板的判斷條件改過好幾次，自己判斷很容易用到舊的規則。
+
+### 要在句子裡放數量（「3 則筆記」）
+
+- 入口：`frontend/src/lib/i18n.ts`（`tn`、`t`）　項目 `count-sentence`
+- 寫法：`import { tn } from "./lib/i18n";`
+- 取代：手寫的單複數字串拼接
+- 守門：`guard:dup-b2-logic`、`guard:dup-b2-wording`
+- 為什麼：句子裡帶數量（「3 則筆記」）用 tn。英文單複數不同、中文要加量詞，手寫拼接會出現「1 notes」。
+
+### 要判斷目前使用者能不能做某件事（管理空間、編輯、審閱）
+
+- 入口：`frontend/src/lib/capabilities.ts`（`useCapabilities`、`capabilitiesFor`、`useIsOwner`、`useCanReview`）　項目 `capabilities`
+- 寫法：`import { useCapabilities } from "./lib/capabilities";`
+- 取代：UI 自己用角色名稱判斷（授權仍以後端為準）
+- 守門：`guard:dup-b2-logic`
+- 為什麼：畫面要決定能不能顯示某個按鈕（編輯、管理空間）用它。它跟後端用同一套規則；自己用角色名稱判斷會顯示了按下去卻被拒絕。
+
+### 要把筆記移到另一個空間
+
+- 入口：`frontend/src/lib/moveToSpace.ts`（`moveToSpace`）　項目 `move-to-space`
+- 寫法：`import { moveToSpace } from "./lib/moveToSpace";`
+- 取代：各畫面自己組搬移請求
+- 守門：`guard:nav-ui`
+- 為什麼：把筆記搬到另一個空間用它。它處理誰看得到的確認、子筆記一起搬與離線；各畫面自己組請求會漏掉其中一步。
+
+### 頁面要能只看某個空間的內容（任務、歷史…），手機不能多占一整列
+
+- 入口：`frontend/src/components/SpaceFilter.tsx`（`SpaceFilterButton`、`usePhoneSpaceFilter`、`SpaceFilterNote`）　項目 `page-space-filter`
+- 寫法：`import { SpaceFilterButton, SpaceFilterNote, usePhoneSpaceFilter } from "./components/SpaceFilter";`
+- 取代：各頁面自己畫「全部空間 ▾」按鈕與選單
+- 為什麼：電腦版是標題列裡的按鈕；手機版是頂列的「空間」圖示，篩選時才在清單上方顯示「只看：○○ ✕」，沒篩選時不占高度。各頁面自己畫會又多出一整列。
+
+### 要知道一則筆記的連結、反向連結與關聯
+
+- 入口：`frontend/src/lib/noteNeighborhood.ts`（`noteNeighborhood`、`noteLinks`、`graphRoles`）　項目 `note-neighborhood`
+- 寫法：`import { noteNeighborhood } from "./lib/noteNeighborhood";`
+- 取代：各畫面自己掃 edges
+- 守門：`guard:nav-ui`
+- 為什麼：要知道一則筆記的連結、反向連結、關聯用它，資訊欄、關係圖、單天頁的「提到這天的」才會一致。
+
+### 要開關右側資訊面板
+
+- 入口：`frontend/src/hooks/useWorkspacePanes.ts`（`useWorkspacePanes`）　項目 `workspace-panes`
+- 寫法：`import { useWorkspacePanes } from "./hooks/useWorkspacePanes";`
+- 取代：各畫面自己管面板開關狀態
+- 守門：`guard:nav-ui`
+- 為什麼：開關右側資訊面板用它，狀態只有一份，按鈕和快捷鍵才不會互相打架。
+
+### 要在「新增」清單加入一種內建新增項目
+
+- 入口：`frontend/src/lib/createKinds.ts`（`BUILTIN_CREATE_KINDS`、`createKindsFor`）　項目 `create-kinds`
+- 寫法：`import { BUILTIN_CREATE_KINDS } from "./lib/createKinds";`
+- 取代：模組自己在新增清單加一列（模組改用 dialogEntry）
+- 守門：`guard:createList`
+- 為什麼：內建的「新增」項目（筆記、手寫、書籤…）在這裡登記，所有新增入口都讀同一份清單。模組自己的新增改用 dialogEntry。
+
+### 要存一個跟著帳號走的偏好（換裝置也在）
+
+- 入口：`frontend/src/lib/accountPrefStore.ts`（`createAccountPref`）　項目 `account-pref`
+- 寫法：`import { createAccountPref } from "./lib/accountPrefStore";`
+- 為什麼：要跟著帳號走、換裝置也在的偏好用它；只存在本機的話，使用者換手機設定就不見了。
+
+### 要只顯示一次的提示
+
+- 入口：`frontend/src/hooks/useHintOnce.ts`（`useHintOnce`）　項目 `hint-once`
+- 寫法：`import { useHintOnce } from "./hooks/useHintOnce";`
+- 為什麼：只出現一次的提示用它，看過就記在帳號裡，不會每台裝置再出現一次。
+
+### 要顯示「這次更新」或更新紀錄
+
+- 入口：`frontend/src/lib/whatsNew.ts`（`CHANGES`、`unseenChanges`、`changeText`）；`frontend/src/lib/changesSeenStore.ts`（`changesSeenStore`）　項目 `whats-new`
+- 寫法：`import { unseenChanges } from "./lib/whatsNew";`
+- 為什麼：「這次更新了什麼」從這裡讀（changes/ 檔案），卡片和設定裡的更新紀錄才是同一份。
+
+### 要做手寫輸入
+
+- 入口：`frontend/src/lib/ink/index.ts`（`InkEngine`）　項目 `ink-engine`
+- 寫法：`import { InkEngine } from "./lib/ink";`
+- 守門：`guard:ink`
+- 為什麼：手寫輸入一律用它（筆記手寫、PDF、白板）。筆壓、橡皮擦、存檔格式都在裡面，另寫一份會讓同一筆在不同地方長得不一樣。
+
+### 要把一個畫面的手寫存進筆記的屬性（手寫頁、PDF、手寫分頁）
+
+- 入口：`frontend/src/lib/ink/index.ts`（`useInkSurfaceSaver`）　項目 `ink-surface-saver`
+- 寫法：`import { useInkSurfaceSaver } from "./lib/ink";
+export const useSaver = () => useInkSurfaceSaver("note_ink");`
+- 取代：各畫面自己記「這次存檔是從哪一版畫的」與伺服器確認過的那一版
+- 為什麼：存檔的 base／已接受記帳只有一份：被拒絕的存檔不能成為下一次的 base，否則合併會把對方的筆畫當成被刪掉。
+
+### 要把很多頁疊在一個捲動畫面裡，每頁自己能手寫、能放背景（手寫筆記、PDF、之後的簡報）
+
+- 入口：`frontend/src/pagebook/index.ts`（`PageBook`、`PageContext`、`PageInkSurface`、`PageInkSvg`）　項目 `page-book`
+- 寫法：`import { PageBook } from "./pagebook";
+// <PageBook pages={pages} session={session} tool={inkTool /* null = no ink surface */} pen={pen} background={(page, { box, near }) => <Paper/>} layers={(page, host, { box, near }) => <Layers/>} onAddPage={addPage} t={t} />
+export const Book = PageBook;`
+- 取代：各畫面自己排頁、自己做捲動與縮放，或在每頁自己建 InkEngine 與畫布
+- 為什麼：頁面本子只認得頁面信封（InkPages），背景（PDF 頁的畫面、空白紙）、文字框與圖片層、存檔、翻譯、裝置設定都由外殼用 props／插槽傳入，所以手寫筆記、PDF 與之後的簡報用同一份：原生捲動、縮放（0.5×–4×）、兩指縮放、只有畫面附近的頁才建引擎，頁的大小改變時畫面上那一點不動。頁框（[data-page-key]）沒有邊框與內距，就是頁面框。PDF 與手寫的縮放、捲動、兩指、甩動只能有這一份。邊界守門：eslint.boundaries.config.js 的 pagebook。
+
+### 要在一本多頁的畫面裡管各頁引擎的編輯（誰改了哪一頁、復原到哪一頁、離開時寫回）
+
+- 入口：`frontend/src/lib/ink/index.ts`（`InkPageSession`）　項目 `ink-page-session`
+- 寫法：`import { InkPageSession } from "./lib/ink";
+import { withPageDoc, type InkPages } from "@onden/markdown/ink";
+export const session = new InkPageSession<InkPages>((pages, key, doc) => withPageDoc(pages, key, doc));
+export const edited = (pages: InkPages) => session.apply(pages);`
+- 取代：每個畫面自己記哪些頁面的引擎有未存的修改、復原要找哪一頁
+- 為什麼：每頁一個引擎，頁面捲遠了引擎會被收掉：session 記著每個引擎的修改，被收掉時先交回信封，復原作用在最後畫的那一頁。PDF 與手寫筆記共用；怎麼把一頁寫進自己的信封由外殼提供。
+
+### 要用墨水顏色與筆的預設
+
+- 入口：`frontend/src/lib/ink/palette.ts`（`INK_PALETTE`、`withRecentColor`）；`frontend/src/lib/inkPrefs.ts`（`inkPalettePref`）　項目 `ink-palette`
+- 寫法：`import { INK_PALETTE } from "./lib/ink/palette";`
+- 守門：`guard:color-swatches`
+- 為什麼：墨水顏色與筆的預設用它，最近用過的顏色才會在各處一致。
+
+### 要寫入筆記、標籤、屬性、關聯、任務等伺服器資料
+
+- 入口：`frontend/src/lib/data/index.ts`（`noteWriter`、`tagWriter`、`propertyWriter`、`relationWriter`、`taskWriter`、`workspaceWriter`、`writersFor`）　項目 `domain-writers`
+- 寫法：`import { noteWriter } from "./lib/data";`
+- 取代：元件自己 fetch、自己組權限／離線佇列／回復流程
+- 守門：`guard:history`、`fe-literal-api-write`
+- 為什麼：寫入筆記、標籤、屬性、關聯、任務一律透過這些 writer。它們處理權限、離線排隊、失敗回復和畫面立即更新；元件自己 fetch 會漏掉，離線時就直接掉資料。
+
+### 要送出寫入並在離線時排隊
+
+- 入口：`frontend/src/lib/data/writeQueue.ts`（`sendOrQueue`、`queueWrite`、`submitWrite`、`flushPendingWrites`、`hasPendingWrite`）　項目 `write-queue`
+- 寫法：`import { sendOrQueue } from "./lib/data/writeQueue";`
+- 為什麼：送出寫入、離線時排隊用它；只有它知道怎麼在恢復連線後照順序重送且不重複。
+
+### 要把寫入失敗變成使用者看得懂的一句話
+
+- 入口：`frontend/src/lib/data/writeErrors.ts`（`classifyWriteFailure`、`writeFailureMessage`、`queuedWriteMessage`、`reportWriteFailure`）；`frontend/src/lib/serverErrors.ts`（`serverErrorMessage`）　項目 `write-errors`
+- 寫法：`import { writeFailureMessage } from "./lib/data/writeErrors";`
+- 取代：直接顯示 error.message、自己分類 HTTP 錯誤
+- 守門：`guard:wording`
+- 為什麼：寫入失敗要告訴使用者時用它，把錯誤變成看得懂的一句話；直接顯示 error.message 會出現英文代碼。
+
+### 要處理一次寫入的樂觀更新、確認與回復
+
+- 入口：`frontend/src/lib/data/writeLifecycle.ts`（`makeWriteLifecycle`、`inWriteOrder`）　項目 `write-lifecycle`
+- 寫法：`import { makeWriteLifecycle } from "./lib/data/writeLifecycle";`
+- 為什麼：樂觀更新、確認、失敗回復的流程用它，畫面先變、失敗時退回的行為才一致。
+
+### 要取得或建立某一天的日記
+
+- 入口：`frontend/src/lib/data/dayNotes.ts`（`dayNotes`、`dayNoteId`、`isDayNoteDate`、`dayNoteParentSetting`）；`frontend/src/lib/dayNode.ts`（`findDayNode`、`dailyNotesEnabled`）　項目 `day-notes`
+- 寫法：`import { findDayNode } from "./lib/dayNode";`
+- 取代：自己用標題或日期搜尋日記
+- 守門：`guard:history`
+- 為什麼：取得或建立某一天的日記一律用它。它保證同一天只有一篇（兩台裝置離線也一樣），也照「新日記放在哪裡」的設定；自己用標題找會建出重複的日記。
+
+### 要把一段文字解析成某一天
+
+- 入口：`markdown/src/dateParse.ts`（`parseDateText`）　項目 `date-parse`
+- 寫法：`import { parseDateText } from "@onden/markdown";`
+- 取代：各處自己的日期正規式
+- 守門：`guard:tasks-time`
+- 為什麼：把文字解析成日期（「明天」「下週五」「10/31」）用它；之前有 5 套各自的解析，同一句話在不同地方得到不同的日子。
+
+### 要做日期加減、算相差幾天、判斷是不是日曆日
+
+- 入口：`markdown/src/calendar.ts`（`addDays`、`daysBetween`、`addMonths`）；`markdown/src/attributeValue.ts`（`isCalendarDay`）　項目 `date-math`
+- 寫法：`import { addDays } from "@onden/markdown";`
+- 取代：手寫的 Date 加減與日期正規式
+- 守門：`guard:tasks-time`
+- 為什麼：日期加減、相差幾天用它。它用「日曆日」計算，不會因為時區或夏令時間差一天。
+
+### 要畫月曆格或切換月份
+
+- 入口：`markdown/src/calendar.ts`（`buildMonthGrid`、`stepMonth`）　項目 `month-grid`
+- 寫法：`import { buildMonthGrid } from "@onden/markdown";`
+- 取代：自己算每月的格子與週起點
+- 守門：`guard:tasks-time`
+- 為什麼：畫月曆格、切換月份用它，每個月曆的週起點和格子才一樣。
+
+### 要判斷一則筆記是不是日記、是哪一天
+
+- 入口：`markdown/src/dayNote.ts`（`dayNoteDate`）　項目 `day-note-date`
+- 寫法：`import { dayNoteDate } from "@onden/markdown";`
+- 取代：用標題格式自己猜日記
+- 守門：`guard:tasks-time`
+- 為什麼：判斷一則筆記是不是日記、是哪天用它；之前有 4 處各自用標題猜，結果不一致。
+
+### 要知道任務落在逾期、今天、即將或某天
+
+- 入口：`markdown/src/taskBucket.ts`（`taskBucket`、`taskHome`、`dayBucket`）　項目 `task-bucket`
+- 寫法：`import { taskBucket } from "@onden/markdown";`
+- 取代：各畫面自己比日期分組（後端 agenda SQL 是同一規則的 SQL 寫法）
+- 守門：`guard:tasks-time`
+- 為什麼：任務分到逾期、今天、即將、某天用它，任務頁、日記、提醒才會分得一樣（後端 SQL 用同一規則）。
+
+### 要判斷一個字串是不是 UUID
+
+- 入口：`markdown/src/uuid.ts`（`isUuid`、`UUID_SOURCE`）　項目 `uuid-check`
+- 寫法：`import { isUuid } from "@onden/markdown";`
+- 取代：自己寫的 UUID 正規式
+- 守門：`guard:crossPackage`
+- 為什麼：判斷字串是不是 UUID 用它；各寫各的正規式有的分大小寫、有的不分，前後端判斷會不同。
+
+### 要判斷或正規化 #RRGGBB 顏色字串
+
+- 入口：`markdown/src/color.ts`（`isHexColor`、`normalizeHexColor`）　項目 `hex-color-check`
+- 寫法：`import { isHexColor } from "@onden/markdown";`
+- 取代：自己寫的 hex 顏色正規式
+- 守門：`guard:crossPackage`
+- 為什麼：判斷或正規化 #RRGGBB 顏色用它，前後端對顏色字串的接受範圍才一樣。
+
+### 要產生或辨認區塊 id
+
+- 入口：`markdown/src/blockId.ts`（`newBlockId`、`BLOCK_ID_PATTERN`、`BLOCK_ID_CHARS`）　項目 `block-id`
+- 寫法：`import { newBlockId } from "@onden/markdown";`
+- 取代：自己的區塊 id 字元與長度
+- 守門：`guard:crossPackage`
+- 為什麼：產生或辨認區塊 id（^id）用它，前後端對區塊 id 的格式才一致，連結不會斷。
+
+### 要用前後端必須一致的常數（任務模組 id、發布邊類型、密碼長度、名稱長度上限）
+
+- 入口：`markdown/src/sharedContract.ts`（`TASKS_MODULE_ID`、`TASK_ATTR`、`PUBLISHED_EDGE_TYPES`、`PASSWORD_MIN_LENGTH`、`TAG_NAME_MAX`、`BUILT_IN_FIELD_NAMES`、`FILTER_OP_NAMES`）　項目 `shared-contract`
+- 寫法：`import { PASSWORD_MIN_LENGTH } from "@onden/markdown";`
+- 取代：兩邊各寫一份的常數
+- 守門：`guard:crossPackage`
+- 為什麼：前後端必須一樣的常數（模組 id、欄位名、長度上限）只放這裡；兩邊各寫一份，改一邊就壞。
+
+### 要知道文字裡有哪些標題與它們的錨點
+
+- 入口：`markdown/src/headingAnchors.ts`（`headingAnchors`、`headingAnchorLines`、`headingSections`）　項目 `heading-anchors`
+- 寫法：`import { headingAnchors } from "@onden/markdown";`
+- 取代：自己用 /^#+ / 掃標題
+- 守門：`guard:nav-ui`
+- 為什麼：取得標題與錨點用它，目錄、段落連結、發布網站的錨點才會一樣。
+
+### 要解析搜尋查詢語法
+
+- 入口：`markdown/src/searchQuery.ts`（`parseSearchQuery`）　項目 `search-query`
+- 寫法：`import { parseSearchQuery } from "@onden/markdown";`
+- 取代：自己拆搜尋字串
+- 守門：`guard:noteSearch`
+- 為什麼：解析搜尋語法（引號、#標籤、排除）用它，前端顯示和後端查詢才是同一個意思。
+
+### 要算字數或閱讀時間
+
+- 入口：`markdown/src/readingTime.ts`（`countWords`、`readingMinutes`）　項目 `reading-time`
+- 寫法：`import { readingMinutes } from "@onden/markdown";`
+- 為什麼：算字數和閱讀時間用它，資訊欄和發布網站顯示的數字才一樣（中文以字計）。
+
+### 要在時間軸或週看板顯示訂閱的外部行事曆行程
+
+- 入口：`frontend/src/hooks/useExternalEvents.ts`（`useExternalEvents`）；`frontend/src/lib/externalCalendars.ts`（`eventsOnDay`、`eventNoteId`）　項目 `fe-external-events`
+- 寫法：`import { useExternalEvents } from "./hooks/useExternalEvents"; const useWeek = () => useExternalEvents("2026-10-26", "2026-11-01");`
+- 取代：自己 fetch 行程、自己判斷功能有沒有開、自己把行程變成筆記
+- 為什麼：功能關掉時回傳空陣列、不發請求；伺服器連不上時退回這台裝置上次收到的行程。行程唯讀、不是筆記；「記筆記」用 eventNoteId 得到固定的筆記 id，同一行程永遠對到同一篇。
+
+### 要把整個 App 掛到網頁上（只有開機那一處）
+
+- 入口：`frontend/src/main.tsx`　項目 `app-mount`
+- 取代：在別處直接 document.getElementById("root") 或再掛一次 React
+- 守門：`fe-platform-global:window`、`fe-platform-global:document`
+- 為什麼：App 只在 main.tsx 掛一次。其他地方不自己找根節點，也不另外掛一棵 React，否則會有兩份狀態與兩套同步。
+
+### 要請瀏覽器把本機資料標成「不要自動清掉」，或問 service worker 狀態
+
+- 入口：`frontend/src/lib/storagePersist.ts`（`requestPersistentStorage`、`serviceWorkerContainer`）　項目 `persist-storage`
+- 寫法：`import { requestPersistentStorage } from "./lib/storagePersist";`
+- 取代：navigator.storage.persist()、navigator.serviceWorker
+- 守門：`fe-platform-global:navigator`
+- 為什麼：離線編輯只存在這台裝置時，瀏覽器空間不足會先清掉它。要求持久儲存與讀 service worker 都在這一處，其他地方自己問會各問各的、結果不一致。
+
+### 要判斷瀏覽器能不能收推播（Brave、iOS 的特例）
+
+- 入口：`frontend/src/lib/pushBrowser.ts`（`isBrave`、`isIos`）　項目 `push-browser`
+- 寫法：`import { isIos } from "./lib/pushBrowser";`
+- 取代：navigator.userAgent、navigator.brave
+- 守門：`fe-platform-global:navigator`
+- 為什麼：推播能不能用取決於瀏覽器的怪癖（Brave 預設關、iOS 要加到主畫面）。判斷集中在這裡，設定畫面才不會在不同地方給出互相矛盾的說明。
+
+### 要知道裝置的語言
+
+- 入口：`frontend/src/lib/i18n.ts`（`systemLanguageTag`）　項目 `device-language`
+- 寫法：`import { systemLanguageTag } from "./lib/i18n";`
+- 取代：navigator.language
+- 守門：`fe-platform-global:navigator`
+- 為什麼：介面語言「跟隨系統」時只在這裡讀裝置語言，換語言後全畫面才會一起變。
+
+### 要讓同一個動作在多個分頁裡不同時執行
+
+- 入口：`frontend/src/lib/webLock.ts`（`withTabLock`）　項目 `tab-lock`
+- 寫法：`import { withTabLock } from "./lib/webLock";`
+- 取代：navigator.locks
+- 守門：`fe-platform-global:navigator`
+- 為什麼：兩個分頁同時送出離線佇列會重複寫入。需要跨分頁互斥時用它；瀏覽器不支援時退回單分頁直接執行。
+
+### 要存「某帳號在這台裝置上」的本機資料（含舊版資料的認領）
+
+- 入口：`frontend/src/lib/accountStorage.ts`（`bindAccountStorage`、`accountStorageKey`、`getAccountStorageScope`）　項目 `account-storage`
+- 寫法：`import { bindAccountStorage } from "./lib/accountStorage";`
+- 取代：直接用 localStorage 存帳號相關的資料
+- 守門：`fe-platform-global:localStorage`
+- 為什麼：本機副本依帳號分區，換帳號不會看到前一個人的資料。分區與舊資料認領的規則都在這一處，自己寫 localStorage 會漏掉帳號隔離。
+
+### 要套用外觀（淺色／深色／跟隨系統）並隨系統即時切換
+
+- 入口：`frontend/src/settings/appearance.ts`（`applyThemeMode`、`applyPersistedSettings`）　項目 `color-scheme`
+- 寫法：`import { applyThemeMode } from "./settings/appearance";`
+- 取代：window.matchMedia("(prefers-color-scheme: dark)")
+- 守門：`fe-platform-global:matchMedia`
+- 為什麼：外觀設定與系統深色偏好的監聽只在這裡掛，其他地方各自監聽會讓主題切換時有的元件變了、有的沒變。
+
+### 要新增或查網站頁面能放的零件（自我介紹、最近更新、目錄…）
+
+- 入口：`site/src/index.ts`（`WIDGETS`、`createWidgetRegistry`、`BOX_SPECS`、`defaultBoxes`、`validateDesign`）　項目 `site-widgets`
+- 取代：在頁面元件裡直接判斷「這一格放什麼」
+- 為什麼：每一格盒子接受哪一類零件、有幾種樣式、需要什麼資料才畫，都只在這份註冊表定義；功能模組以後把自己的零件交給 createWidgetRegistry，不改頁面。 用法：createWidgetRegistry([...自己的零件])；盒子與零件都從 @onden/site 匯入。
+
+### 要把網站的某一頁畫出來（線上、靜態副本、預覽、設定畫面）
+
+- 入口：`frontend/src/components/siteFrame/index.ts`（`HomeBody`、`ArticleFrame`、`TagFrame`、`SiteHeader`、`SiteFoot`、`Box`、`boxContext`）　項目 `site-render-page`
+- 寫法：`import { ArticleFrame, SiteHeader, SiteFoot } from "./components/siteFrame";`
+- 取代：各處自己排版的首頁、筆記頁、標籤頁
+- 為什麼：首頁、筆記頁、標籤頁、頁首與頁尾都由這一套盒子畫法畫出；線上網站、靜態副本、匯出與發布預覽走同一份輸出，不會各畫各的。
+
+### 要畫 YouTube／Vimeo 嵌入或音檔速度按鈕
+
+- 入口：`markdown/src/liteEmbed.ts`（`liteEmbedOf`、`liteEmbedHast`、`liteEmbedFrameHtml`）；`markdown/src/mediaMarkup.ts`（`nextAudioSpeed`、`litePlaySrc`）　項目 `media-embed-lite`
+- 寫法：`import { liteEmbedOf } from "@onden/markdown";`
+- 取代：各處自己組 &lt;iframe>、自己寫的播放速度清單
+- 為什麼：app 預覽、發布網站與匯出共用同一份「點了才載入」的畫法，網站頁面的互動由 @onden/markdown/media-enhance 負責；iframe 的白名單與沙盒只在算出畫法時套用一次。
+
+### 要讓瀏覽器版（試用版）的頁面打 /api 時改由頁面裡的 worker 回答，或把 /api 的檔案存成下載
+
+- 入口：`frontend/src/lib/browserAppWorker.ts`（`startWorkerClient`）；`frontend/src/lib/browserAppBridge.ts`（`installFetchBridge`、`saveBridgedFile`）　項目 `fe-browser-app-bridge`
+- 寫法：`import { startWorkerClient } from "./lib/browserAppWorker";
+import { installFetchBridge } from "./lib/browserAppBridge";
+const client = startWorkerClient(new URL("worker.js", document.baseURI));
+await client.ready;
+installFetchBridge(client); // 之後 fetch("/api/…") 與 EventSource 都走 worker`
+- 取代：在前端各處判斷「現在是不是試用版」再換網址
+- 守門：`guard:browserApp`
+- 為什麼：橋只有頁面的 fetch 層一處：前端所有讀寫本來就走它，所以不用改任何呼叫端；它看不到瀏覽器自己發的請求（<img src="/api/media/…">），那幾個 GET 由 lib/browserAppMedia.ts 的 Service Worker 轉回橋。選擇與理由：docs/architecture/browser-app.md §2、§14。
+
+### 要讓瀏覽器版（試用版）的 <img>、<audio>、<video> 顯示上傳的檔案（瀏覽器自己發的 GET /api/media/*）
+
+- 入口：`frontend/src/lib/browserAppMedia.ts`（`registerMediaServiceWorker`、`waitForMediaServing`、`answerMediaRequests`）　項目 `fe-browser-app-media`
+- 寫法：`import { answerMediaRequests, registerMediaServiceWorker, waitForMediaServing } from "./lib/browserAppMedia";
+import { startWorkerClient } from "./lib/browserAppWorker";
+const client = startWorkerClient(new URL("worker.js", document.baseURI));
+const worker = registerMediaServiceWorker();
+const stop = answerMediaRequests(client);
+await waitForMediaServing(worker); // 這一頁已由 Service Worker 接管，才掛上 App`
+- 取代：自己用 blob: 網址換掉每個 &lt;img> 的 src，或在元件裡判斷是不是試用版
+- 為什麼：Service Worker 只攔 GET /api/media/<id>，其他請求一律不碰；它不存任何東西，只把請求交給頁面、頁面交給握著檔案的 worker，所以圖片、音檔（含 Range 拖曳）、CSS 背景、PDF 都走同一條路。啟動時先等它接管再掛 App，第一次開啟的第一張圖就能顯示。選擇與理由：docs/architecture/browser-app.md §14。
+
+### 要讓只把筆記存在這台裝置的版本（瀏覽器試用版）在 App 平常顯示同步狀態的地方說明資料在哪、出問題時亮提示
+
+- 入口：`frontend/src/lib/localOnlyStatus.ts`（`setLocalOnlyStatus`、`useLocalOnlyStatus`）　項目 `fe-local-only-status`
+- 寫法：`import { setLocalOnlyStatus } from "./lib/localOnlyStatus";
+const openPanel = () => {};
+setLocalOnlyStatus({ label: "只存在這個瀏覽器 · 已存好", trouble: null, open: openPanel });`
+- 取代：自己在畫面角落加一個常駐的提示按鈕，或讓 SyncStatus 直接 import 試用版的程式
+- 為什麼：同步狀態那一行（帳號選單、手機選單）與頭像上的問題標記是 App 說「存檔狀況」的唯一地方；試用版只把自己的說法填進來，核心元件不 import 試用版程式，開機 JS 也不變大。
+
+### 要在瀏覽器版（試用版）提醒使用者備份、把備份寫到使用者選的資料夾，或組出可貼進問題回報的診斷文字
+
+- 入口：`frontend/src/lib/browserAppBackup.ts`（`backupDue`、`makeBackupBlob`、`writeBackupToFolder`、`chooseBackupFolder`）；`frontend/src/lib/browserAppDiagnostics.ts`（`diagnosticsReport`、`recordIssue`）　項目 `fe-browser-app-backup`
+- 寫法：`import { backupDue, readBackupHabit, makeBackupBlob } from "./lib/browserAppBackup";
+const { due } = backupDue(readBackupHabit(), Date.now());
+const zip: Blob | null = due ? await makeBackupBlob() : null; // 就是設定裡的完整備份，不另做格式`
+- 取代：在試用版畫面各處自己算「多久沒備份」、自己呼叫 showDirectoryPicker、自己拼診斷文字
+- 守門：`guard:browserApp`
+- 為什麼：試用版沒有伺服器副本，備份是唯一的保險；提醒條件、資料夾權限與診斷內容不含筆記的規則放一處，才不會各畫面各算各的。設計：docs/architecture/browser-app.md §12。
+
+### 要列出標籤能有的功能（名稱、圖示、一句話說明、還沒開時的範例）
+
+- 入口：`frontend/src/lib/tagFunctions.ts`（`functionCatalog`、`functionsOfModuleTag`、`tagDisplayName`、`blockFunctions`）　項目 `tag-function-catalog`
+- 寫法：`import { functionCatalog } from "./lib/tagFunctions";`
+- 取代：各畫面自己列一份功能、自己寫說明文字
+- 守門：`guard:tag-function-catalog`
+- 為什麼：標籤頁的「功能」列、段落的「試試功能」、資訊欄的「還能用在這則」和段落工具都讀這一份清單，名稱和說明只會有一個來源；每個自帶標籤的模組都要登記，沒登記的守門測試會失敗。
+
+### 要判斷一個標籤是自己的、功能的還是系統的
+
+- 入口：`frontend/src/lib/nodeTags.ts`（`tagKind`）　項目 `tag-kind`
+- 寫法：`import { tagKind } from "./lib/nodeTags";`
+- 取代：各清單自己判斷 schema_module、reserved_key、檢視模組
+- 守門：`guard:tag-function-catalog`
+- 為什麼：標籤樹、「#」補全、段落標籤選擇器共用這一個分類；功能的標籤用功能名稱顯示、系統的標籤不出現在任何加標籤清單。
+
+### 要檢查畫面版面有沒有壞（被蓋住、重疊、截斷、捲不到底、hover 位移、橫向捲軸、手機點擊目標、對齊）
+
+- 入口：`frontend/e2e/layout-audit/run.mjs`；`frontend/e2e/layout-audit/baseline.json`　項目 `layout-audit`
+- 取代：在各個 e2e 測試裡各寫一段量位置的程式，或只在 1280×800 看「按了會不會動」；改 UI 的 PR 以截圖肉眼檢查版面
+- 為什麼：跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run layout:audit`（約 10 分鐘）。用程式量元素位置（不存基準截圖），在多個寬度與深色模式檢查通用規則。基準 baseline.json 只准變少：新違規失敗、修好的要從基準刪掉。規則定義與誤報處理見 e2e/layout-audit/README.md。改 UI 的 PR 要跑。
+
+### 要在沒有 docker 的環境（雲端、CI 容器）起一整套全端 e2e 堆疊（後端＋前端 SSR＋同源轉發）並跑 Playwright
+
+- 入口：`frontend/e2e/fullstack/cloud-stack.mjs`（`startCloudStack`）　項目 `e2e-cloud-stack`
+- 寫法：`// 一個指令：起整套、跑後面的指令、收掉全部程序與暫存資料（在 packages/frontend）
+// npm run e2e:cloud-stack -- --run bash -c 'cd e2e && npx playwright test --project=chromium'
+// 程式裡要自己起停：import { startCloudStack } from "../e2e/fullstack/cloud-stack.mjs"; → { base, stop }
+export {};`
+- 取代：在雲端自己拼 node 後端＋Astro＋轉發的啟動腳本，或要求 docker 才能跑全端 e2e
+- 為什麼：後端用 PGlite（ONDEN_DB_DRIVER=pglite）、前端用 Astro node 伺服器、Node 內建 http 取代 compose.e2e.yaml 的 nginx，聽 :5099，E2E_BASE 原樣可用；時區寫死（後端 UTC、瀏覽器 Asia/Taipei）。需要真 Postgres 或 docker 的 spec 仍留給筆電的 fullstack/run.sh，分類見 docs/agents/testing.md。
+
+### 要讓拖動的畫面在手指放開後順勢滑行（手寫頁、白板）
+
+- 入口：`frontend/src/lib/ink/glide.ts`（`startGlide`、`flingVelocity`、`pushFlingSample`）　項目 `glide-fling`
+- 寫法：`import { flingVelocity, pushFlingSample, startGlide, type FlingSample } from "./lib/ink";
+const samples: FlingSample[] = [];
+pushFlingSample(samples, 0, 0, 0);
+pushFlingSample(samples, 16, 40, 0);
+const velocity = flingVelocity(samples, 16);
+export const stop = velocity ? startGlide(velocity.vx, velocity.vy, () => true, () => {}) : null;`
+- 取代：自己算放開時的速度、自己寫逐格減速與「減少動態」判斷
+- 守門：`guard:ink`
+- 為什麼：手寫頁與白板的滑行手感、停止速度、減少動態時不滑行，都在這一處；新的滑行來源會讓同樣的甩動在不同畫面手感不同。
+
+### 要讓被拖動的白板卡片浮起來（陰影、微放大，從按住的那一點長出）
+
+- 入口：`frontend/src/lib/cardLift.ts`（`holdCardsAt`、`releaseCards`）　項目 `card-lift`
+- 寫法：`import { holdCardsAt, releaseCards } from "./lib/cardLift";
+export function pickUp(board: HTMLElement, press: MouseEvent) { holdCardsAt(board, press, ["card-1"]); }
+export function putDown(board: HTMLElement) { releaseCards(board); }`
+- 取代：在元件裡自己量按住的位置、自己設 transform-origin
+- 為什麼：浮起的樣式在 CardNode.css 的 `.react-flow__node.dragging`；放大的原點要在卡片自己的像素座標裡，這一處換算縮放，樣式才不會讓卡片從手指下滑開。
+
+### 要在發布的網站上畫 mermaid 流程圖／狀態圖（發布時排好版、伺服器用範本畫，不在讀者的瀏覽器現場畫）
+
+- 入口：`markdown/src/diagramLayout.ts`（`validateDiagramLayout`、`mermaidSources`、`diagramsBySource`、`DIAGRAM_LIMITS`）；`markdown/src/diagramSvg.ts`（`diagramSvgTree`、`diagramHast`、`DIAGRAM_CSS`）；`frontend/src/lib/diagramPrecompile.ts`（`precompileDiagrams`）　項目 `precompiled-diagrams`
+- 寫法：`import { validateDiagramLayout, diagramSvgTree } from "@onden/markdown";
+const check = validateDiagramLayout(JSON.parse("{}"), "flowchart TD\n  A --> B");
+const svg = check.ok ? diagramSvgTree(check.layout) : null;`
+- 取代：收下作者畫好的 SVG、自己清洗；或在伺服器執行 mermaid／無頭瀏覽器；或在別處另寫一份圖表資料格式與驗證
+- 為什麼：上傳的排版是不可信的資料：驗證與範本只有一份（markdown 套件），前端排版、後端收件、網站重畫共用；SVG 由範本產生，作者的值只進屬性值或跳脫過的文字。見 docs/architecture/precompiled-diagrams.md。
+
+### 要讀、寫或播放筆記裡的逐步圖（```steps 區塊）：分步、行對應、播放器與程式碼過場、匯出展開
+
+- 入口：`markdown/src/stepsBlocks.ts`（`parseSteps`、`usesSteps`、`expandSteps`、`STEPS_TEMPLATE`）；`markdown/src/lineAlign.ts`（`alignLines`）；`markdown/src/stepsNav.ts`（`stepForKey`、`swipeStep`）；`markdown/src/stepsEnhance.ts`（`installStepsPlayer`、`installStepsPlayers`、`flipCode`、`splitCodeLines`）　項目 `steps-block`
+- 寫法：`import { parseSteps, alignLines } from "@onden/markdown";
+const { steps } = parseSteps("## A\nx\n\n## B\ny");
+const { from } = alignLines(["a"], ["a", "b"]);`
+- 取代：在別處另寫分步的語法解析、行差異比對、或另一套逐步播放
+- 為什麼：App、發布網站與匯出讀同一份語法與同一份行對應；播放器只有一份（stepsEnhance.ts），App 的 StepsFigure 與網站的 SiteSteps.astro 都是把它接上。
+
+### 要在畫面上讀或改一個標籤的功能（拿掉功能、開啟已掛著的功能、看來源）
+
+- 入口：`frontend/src/hooks/useFunctions.ts`（`useFunctions`、`functionsOfTag`）　項目 `function-refs-frontend`
+- 寫法：`import { useFunctions } from "./hooks/useFunctions";
+export function useAddReview(tagId: string) {
+  const fns = useFunctions({ kind: "node", id: tagId }, { online: true });
+  return () => fns.add("review");
+}`
+- 取代：自己拼 schema_extends／schema_behaviour 判斷標籤有哪些功能，或直接呼叫 tagConfigWriter
+- 為什麼：標籤頁的「功能」列與結構編輯共用同一個讀寫；保存確認、錯誤通知、模組開啟與復原提示只在這裡。
+
+### 要讀懂 [[筆記/段落開頭]]：它指到哪一段、現在顯示什麼字、找不到時是什麼狀態
+
+- 入口：`markdown/src/blockLink.ts`（`readBlockLink`、`blockLinkShown`、`matchParts`、`linkPathReadings`）；`frontend/src/lib/blockLinks.ts`（`readPartLink`、`partLinkWords`、`partLinkEnv`）　項目 `part-link-read`
+- 寫法：`import { partLinkWords } from "./lib/blockLinks";
+export const words = partLinkWords("筆記/開頭", { nodes: [], from: null });`
+- 取代：在編輯器、閱讀檢視、反向連結、嵌入、發布網站各自解析 `/`、比對段落開頭或另寫「已刪除」判斷
+- 為什麼：連結綁的是錨點（旁邊的表），文字只給人看；各處共用一個讀法才會同時顯示「筆記 › 開頭」、可能在這裡、已刪除、無權限。伺服器端建立與確認在 services/blockLinks.ts。
+
+### 用 id 找一個筆記／節點（某份 AppData 的全部節點：store、DataCtx 的 ctx.data、預覽或網站快照的 data）
+
+- 入口：`frontend/src/lib/appStore.ts`（`getNode`、`useNode`）；`frontend/src/lib/nodeIndex.ts`（`nodeOf`）　項目 `store-node-by-id`
+- 寫法：`import type { Bootstrap } from "./lib/api";
+import { getNode } from "./lib/appStore";
+import { nodeOf } from "./lib/nodeIndex";
+const title = (id: string) => getNode(id)?.title; // 元件內改用 useNode(id)
+const titleIn = (data: Bootstrap, id: string) => nodeOf(data, id)?.title; // ctx.data、預覽或網站快照
+void title;
+void titleIn;`
+- 取代：`getAppState().data.nodes.find((n) => n.id === id)`、`ctx.data.nodes.find(...)`、`data.nodes.find(...)`、`useAppSelector((s) => s.data.nodes.find(...))` 與對應的 `.some(...)` 存在檢查
+- 守門：`fe-store-node-find`
+- 為什麼：appStore 內部維護 id→節點的索引（隨 nodes 陣列整批換新時重建），查找是 O(1)；逐筆掃描在節點多時每次操作都變慢。只有 appStore 維護這份索引，別處不要各自建 Map。
+
+### 手機上寫筆記時，焦點、游標與捲動都歸編輯器：游標停在螢幕鍵盤與格式工具列上方（最後一行下方的空間）、點選單邊緣不讓鍵盤收起、點不在文字上的地方游標只落一次
+
+- 入口：`frontend/src/lib/editorKeyboard.ts`（`editorKeyboard`、`typewriterScroll`）；`frontend/src/lib/editorTouch.ts`（`editorTouch`）；`frontend/src/components/ui/index.ts`（`keepFocus`）；`frontend/src/hooks/useEditorKeyboard.ts`（`useEditorKeyboard`）　項目 `editor-keyboard`
+- 寫法：`import { editorKeyboard } from "./lib/editorKeyboard";
+import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
+// 編輯器 extensions 放 editorKeyboard()；元件用 useEditorKeyboard({ viewRef, barRef, barUp, writing, onKeyboardClosed })，工具列 style 用 --kb-inset: kb.barInset
+void editorKeyboard;
+void useEditorKeyboard;`
+- 取代：編輯器自己讀 useVirtualKeyboard、自己設 `EditorView.scrollMargins`、在鍵盤高度改變時呼叫 scrollIntoView
+- 守門：`fe-keyboard-state`、`fe-editor-scroll-margin`、`fe-focus-steal-guard`
+- 為什麼：焦點：編輯器旁的浮層（`/` 選單、標籤候選、選取工具列、段落選單、連結晶片、手機工具列）按下去都不搶焦點，一律用 `components/ui` 的 `keepFocus`，或 `useInlinePopover` 整個浮層自動帶；不要手寫 `onMouseDown preventDefault`（`fe-focus-steal-guard`）。游標：手指點在不是文字的地方（最後一行下方的空間、邊界、區塊元件旁）由 CodeMirror 對應到最近的行並只送出一次選取、擋掉原生預設（`lib/editorTouch.ts`，輸入法組字中不動）。捲動：游標只由人造成的交易（打字、移動、工具列、貼上、輸入法確定）用 CodeMirror 自己的 scrollIntoView 帶進畫面；視窗縮放、鍵盤高度變化、visual viewport 平移一律不捲動，否則瀏覽器平移與程式捲動互相回授，手機上捲動會抖（2026-11-09 實機量測）。
+
+### 要知道筆記（節點）在伺服器與 App 之間長什麼樣子：伺服器送出的欄位，或建立／修改時送出的內容
+
+- 入口：`contract/src/node.ts`（`ServerNode`、`ServerNodeRow`、`DraftNode`）　項目 `contract-node`
+- 寫法：`import { DraftNode, ServerNode } from "@onden/contract";
+export const draft = DraftNode.parse({ title: "計畫" });
+export const isServerNode = (value: unknown): value is ServerNode => ServerNode.strict().safeParse(value).success;`
+- 取代：在前端或後端另寫一份節點欄位的手寫型別，或在路由裡另寫一份建立／修改筆記的 zod 欄位
+- 為什麼：節點的形狀只定義在 @onden/contract 一處：後端的節點資料列用它當型別、請求用 DraftNode 驗證，前端的 ContentNode 由它推導（只用 import type，zod 不進開機包）。nodeContract.integration.test.ts 用 .strict() 解析真實回應，欄位多了或少了就失敗，前後端不會悄悄漂移。其他形狀（標籤、白板、任務）還沒收進來。
+
+### 元件或程式要讀 appStore 裡的狀態（筆記、標籤、上線狀態、選取中的筆記…）
+
+- 入口：`frontend/src/lib/appStore.ts`（`useNode`、`getNode`）　項目 `store-read-named-hook`
+- 寫法：`import { getNode, useNode } from "./lib/appStore";
+export const useTitle = (id: string) => useNode(id)?.title; // 元件內用具名 hook
+export const titleOf = (id: string) => getNode(id)?.title; // 事件處理、非 React 程式用具名讀取
+// 沒有適合的具名入口：在 lib/appStore.ts 加一個具名窄 hook（例如 useSelectedId()），不要在新檔案寫 useAppSelector((s) => …)`
+- 取代：`useAppSelector((s) => s.…)`、`getAppState().…`、`setAppState`、`setData`、`subscribeApp`（整個 store 狀態的寬入口）；寫入走 lib/data 的領域 writer
+- 守門：`fe-app-store-reach`、`fe-store-inline-selector`、`fe-store-write`
+- 為什麼：直接讀整個狀態的檔案，會在 `data.nodes` 之類的形狀改變時全部要改；具名 hook／selector 把形狀集中在 appStore 一處。既有檔案記在 scripts/allowlist-baseline.json（只准減不准增），新檔案不能出現。addToast、setSelectedId 等單一用途動作與具名 selector 是窄入口，不受限。
+
+### 要改三個入口頁（網頁版 index.astro、Android 的 index.html、試用版 browser.html）共用的 <head>：viewport、說明、圖示、manifest、theme-color、apple-* meta
+
+- 入口：`frontend/src/appShell/head.ts`（`appHeadEntries`、`renderAppHead`、`viewportContent`）　項目 `app-shell-head`
+- 寫法：`import { viewportContent } from "./appShell/head";
+export const phoneViewport = viewportContent("web"); // 各入口頁的差異（viewport-fit、圖示、manifest…）是 head.ts 裡該入口的選項，並寫明理由`
+- 取代：在 index.astro、index.html、browser.html 各自手寫 &lt;meta name="viewport">、icon、manifest、theme-color、apple-* meta
+- 為什麼：三份手寫入口頁曾漂移：#1400 只改了 index.html，手機拿不到 interactive-widget=resizes-content，直到 #1412。共用部分只寫一處（資料），入口頁只放位置（index.astro 用 AppHead.astro，其餘由 Vite 外掛 appHeadPlugin 取代 <!-- app-head -->）。守門：appShell.guard.test.ts。
+
+### 清單依篩選或來源重新讀取時，慢回來的舊回應不能蓋掉新回應
+
+- 入口：`frontend/src/lib/data/queryCache.ts`（`latestOnly`）　項目 `latest-read-only`
+- 寫法：`import { latestOnly } from "./lib/data";
+const read = latestOnly();
+export async function load(fetchList: () => Promise<string[]>, show: (rows: string[]) => void) {
+  const isCurrent = read.begin();
+  const rows = await fetchList();
+  if (!isCurrent()) return;
+  show(rows);
+}`
+- 取代：在 useEffect 裡 fetch 後直接 setState、或各自寫 `let cancelled` 旗標
+- 為什麼：每次 begin() 讓較早的請求作廢；清單只顯示最新問題的答案，失敗也一樣。
+
+### 要把一台不可信電腦上寫的東西加密傳到手機（配對、確認碼、清單與檔案分塊加解密）
+
+- 入口：`pairing/src/index.ts`（`createInvite`、`acceptInvite`、`completeOnPage`、`completeOnPhone`、`ManifestWriter`、`FinalManifest`、`encryptFileChunks`、`decryptFile`）　項目 `send-to-phone-pairing`
+- 取代：自己組 X25519、HKDF、AEAD 或分塊加密，或在別處再導一次權杖與檔案金鑰
+- 為什麼：配對與加密只在 @onden/pairing 一處：只用 @noble 的 X25519、HKDF-SHA256、ChaCha20-Poly1305，金鑰與權杖都由同一把共用金鑰按用途導出；解密端拒絕亂序、重放、缺塊、截斷、別的工作階段或檔案的塊與不在最終清單上的項目。上線前需要人工安全審查；威脅模型見 docs/architecture/send-to-phone-crypto.md。只在使用者進入這個功能時才載入，不進開機路徑。
+
+### 模組的整頁要把「頁裡的位置」放進網址（複習頁的哪一組），讓重新載入與返回都留在那裡
+
+- 入口：`frontend/src/lib/moduleAddress.ts`（`setModuleAddress`、`useModuleAddress`、`getModuleAddress`）　項目 `module-page-address`
+- 寫法：`import { setModuleAddress } from "./lib/moduleAddress";
+import { navigate } from "./lib/historyIntent";
+navigate(() => setModuleAddress("tag.<id>"), { history: "push" });`
+- 取代：在模組畫面用 useState 記頁裡的位置（重新載入就掉）、自己 pushState、為這個位置另加一個網址參數
+- 為什麼：網址的 `m=` 由 useUrlLocation 寫入與還原，意義由該頁（lazy chunk）自己定義，開機程式不認識任何模組的頁。換位置要不要新增一筆歷史，由呼叫處用 navigate 說明（進入某一組＝push，Back 回上一頁）。
+
+## 功能模組接口（26）
+
+### 要在筆記的分頁列加一個「只畫這篇筆記本身」的視角（簡報）
+
+- 入口：`frontend/src/modules/types.ts`（`NoteViewSpec`、`NoteViewPaneProps`）　項目 `module-slot:noteView`
+- 寫法：`import type { NoteViewSpec } from "./modules/types";
+import { lazyWithReload } from "./lib/lazyWithReload";
+export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./modules/slides/SlidesPane")) };`
+- 取代：在 OwnerViewPane／ViewTabs／useAddView 裡指名某個模組的視角
+- 為什麼：分頁是已存視角，layout 就是模組 id：模組關掉分頁就藏起來（後端也拒絕新增）。它不是檢視模組，不產生標籤、標籤頁不列出。畫面、版型、式樣用 lazyWithReload 到用時才載。
+
+### 要宣告一個功能模組（id 與後端模組同名）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:id`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["id"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：新功能模組從宣告 FrontendModule 開始，id 與後端模組同名；殼層只透過 modules/index 讀它，不指名模組，模組才能整個關掉或拿掉。
+
+### 要讓殼層的某個功能（白板、日記）跟著模組開關
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:shellFeature`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["shellFeature"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：殼層的某個功能要跟著模組開關（白板、日記）時用它，模組關掉時入口一起消失。
+
+### 要在筆記標題列加一個控制鈕
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:noteHeaderAction`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["noteHeaderAction"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在筆記標題列放一個控制鈕時用它；不要改殼層元件。
+
+### 要在筆記資訊面板加「當成某功能」的開關
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:noteSwitch`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["noteSwitch"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：「這篇是不是某功能」的開關用它：開著時在資訊欄顯示，關著時從筆記選單打開。
+
+### 要在標籤頁加一個區塊
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:tagPageSection`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["tagPageSection"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在標籤頁加區塊時用它。
+
+### 要在筆記資訊面板的「功能」分頁加一到數列（任務、白板、日記、網站…）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:noteFunctionRows`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["noteFunctionRows"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在資訊欄「功能」加列時用它：回傳 NoteFunctionRow（狀態、細節、動作、跳轉、是否已有關係）；只放跟這篇內容或狀態有關、而且現在能做事的東西。
+
+### 要提供「第一次建立網站」的流程
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:sitePublisher`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["sitePublisher"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：提供「第一次建立網站」的流程時用它。
+
+### 要宣告模組會產生「建議連結」邊
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:suggestsLinks`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["suggestsLinks"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組會產生「建議連結」時宣告它，關係圖才知道要畫。
+
+### 要宣告模組自動建立的筆記類型（側欄會收起來）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:generatedSourceTypes`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["generatedSourceTypes"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組自動建立的筆記類型在這裡宣告，側欄才知道要把它們收起來，不淹沒使用者的筆記。
+
+### 要讓標籤擁有模組能力（例如複習、任務）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:tagFunction`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["tagFunction"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：讓標籤擁有某種能力（複習、任務、論文、技能）時用它；能力是組合上去的，不靠標籤的繼承。名稱、說明、範例與「把這段做成複習卡」這類段落動作都登記在 TagFunctionSpec，標籤頁、段落工具、資訊欄共用同一份（lib/tagFunctions）。
+
+### 要新增標籤的檢視版面（表格、看板、日曆）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:view`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["view"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：新增一種檢視版面（表格、看板、月曆）時用它，筆記子頁與標籤成員共用同一套檢視。
+
+### 要新增一個整頁畫面（?view=模組id）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:screen`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["screen"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組要有整頁畫面（?view=模組id）時用它；導覽列和「更多」會自動列出。
+
+### 要在閱讀頁加一個區塊
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:readingSections`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["readingSections"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在閱讀頁加區塊時用它。
+
+### 要在導覽入口後面放小圓點或計數
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:NavIndicator`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["NavIndicator"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在導覽入口後面放小圓點或數字時用它。
+
+### 要在指令面板加「開啟這個模組畫面」
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:openCommand`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["openCommand"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在指令面板加「開啟這個畫面」時用它。
+
+### 要在編輯器 `/` 選單加插入項目
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:slashInserts`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["slashInserts"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在編輯器 `/` 選單加插入項目時用它。
+
+### 要加一個模組自己的新增對話框（不放進新增清單）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:dialogEntry`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["dialogEntry"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組自己的新增對話框（例如匯入）用它，不放進共用的新增清單。
+
+### 要在首頁加一個區塊
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:HomeSection`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["HomeSection"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在首頁加區塊時用它。
+
+### 要在「日子」頁的時間線放項目
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:dayItems`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["dayItems"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在某一天放項目（任務、記錄、到期）時用它，日記和時間軸都從這裡讀。
+
+### 要加一個對筆記的動作（資訊面板與指令面板）
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:noteCommands`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["noteCommands"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：對筆記的動作用它：放在 ⌘K；有 row 時在資訊欄「功能」顯示，有 inNoteMenu 時也在筆記選單。
+
+### 要加模組的設定項
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:settings`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["settings"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組的設定項用它，設定頁和設定搜尋都會自動列出。
+
+### 要在模組設定頁頂端放示意圖
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:SettingsPreview`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["SettingsPreview"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：要在模組設定頁頂端放示意圖時用它。
+
+### 要在模組庫放模組卡片、說明與匯入確認內容
+
+- 入口：`frontend/src/modules/types.ts`（`FrontendModule`）　項目 `module-slot:library`
+- 寫法：`import type { FrontendModule } from "./modules/types"; export type Slot = FrontendModule["library"];`
+- 取代：在殼層元件裡指名這個模組（殼層只經 modules/index 讀模組貢獻的東西）
+- 為什麼：模組在功能清單裡的名稱、說明、開啟前的確認內容都寫在這裡。
+
+### 要加一個永遠開啟的內建模組（沒有開關）
+
+- 入口：`frontend/src/modules/types.ts`（`BuiltInModule`）　項目 `module-built-in`
+- 寫法：`import type { BuiltInModule } from "./modules/types";`
+- 為什麼：永遠開啟、沒有開關的內建模組用它（例如捕捉）。
+
+### 要讓殼層讀到模組貢獻的東西（不指名模組）
+
+- 入口：`frontend/src/modules/index.ts`（`MODULES`、`BUILT_IN_MODULES`）　項目 `module-registry`
+- 寫法：`import { MODULES } from "./modules";`
+- 取代：殼層 import 具體模組目錄
+- 守門：`fe-import-boundaries`
+- 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
+
+## 後端（52）
+
+### 要寫日誌
+
+- 入口：`backend/src/logger.ts`（`log`、`createLogger`）　項目 `be-logger`
+- 寫法：`import { log } from "./logger.js"; log.info("topic", "message");`
+- 取代：console.log／console.error
+- 守門：`be-console`、`guard:dup-b2-infra`、`be-route-imports`
+- 為什麼：寫日誌用它，格式統一、可以依層級過濾；console.log 會混進正式環境的輸出且無法關掉。
+
+### 要寫一個在容器內執行的管理指令，把結果印給操作者
+
+- 入口：`backend/src/admin.ts`（`run`、`HELP`）　項目 `be-admin-cli`
+- 取代：console.log／console.error（命令列輸出）
+- 守門：`be-console`
+- 為什麼：管理指令的輸出就是給操作者看的文字，不是伺服器日誌，所以不經過 logger；新指令加在 admin.ts，邏輯放 services/adminAccounts.ts；在容器內以 docker compose exec backend node dist/admin.js <指令> 執行。
+
+### 要讀環境變數
+
+- 入口：`backend/src/config.ts`（`config`、`processEnv`、`isProduction`、`setEnvironment`）　項目 `be-config`
+- 寫法：`import { config } from "./config.js";`
+- 取代：process.env
+- 守門：`be-process-env`、`guard:dup-b2-infra`
+- 為什麼：讀環境變數只在這裡，其他地方從 config 拿。散在各處的 process.env 讓人不知道部署要設哪些變數，也沒有預設值檢查。
+
+### 要排定週期性工作
+
+- 入口：`backend/src/backgroundJobs.ts`（`startPeriodicJob`、`useJobRunner`）；`backend/src/ticker.ts`（`startTicker`）　項目 `be-periodic-job`
+- 寫法：`import { startPeriodicJob } from "./backgroundJobs.js";`
+- 取代：setInterval
+- 守門：`be-set-interval`、`guard:dup-b2-infra`
+- 為什麼：週期性工作用它，關機時會停、出錯會記錄、不會重疊執行；裸 setInterval 做不到。　連線中的串流（例如即時通知的心跳）用 startTicker：跟著連線開關、不用命名也不搶鎖。
+
+### 路由要寫入資料或取得資料
+
+- 入口：`backend/src/spine/mutate.ts`（`mutate`）；`backend/src/services/`　項目 `be-route-layers`
+- 寫法：`import { mutate } from "./spine/mutate.js";`
+- 取代：路由直接 import db、modules，或組合權限與事件
+- 守門：`be-route-imports`
+- 為什麼：路由只負責收參數和回應；寫入透過 mutate，讀取透過服務層。路由自己開交易、寫事件、判斷權限，很容易漏掉其中一個。
+
+### 路由要讀資料列（含可見範圍）
+
+- 入口：`backend/src/services/readPolicy.ts`（`canReadNode`、`readableScopeSql`、`readableAmong`）　項目 `be-route-reads`
+- 寫法：`import { canReadNode } from "./services/readPolicy.js";`
+- 取代：路由裡的 pool.query、自己寫的可見性 SQL
+- 守門：`be-route-pool-query`、`guard:dup-b2-responses`
+- 為什麼：路由要讀資料列時透過讀取政策，它負責「這個人看得到哪些」；路由裡直接寫 SQL 曾經讓別人的私人筆記露出。
+
+### 要回傳 4xx／5xx 錯誤
+
+- 入口：`backend/src/statusError.ts`（`StatusError`、`CodedStatusError`）；`backend/src/httpError.ts`（`apiOnError`）　項目 `be-status-error`
+- 寫法：`import { StatusError } from "./statusError.js";`
+- 取代：手寫 { error } 回應本文、extends Error 的拒絕類別
+- 守門：`guard:dup-b2-responses`、`be-route-imports`
+- 為什麼：回 4xx／5xx 一律丟 StatusError 或 CodedStatusError，回應格式才一致，前端才能翻成看得懂的話。
+
+### 要把變數放進 SQL 文字（LIMIT 數字、動態表名／欄位名）
+
+- 入口：`backend/src/sqlText.ts`（`sqlInt`、`sqlIdentifier`）　項目 `be-sql-text`
+- 寫法：`import { sqlInt, sqlIdentifier } from "./sqlText.js";
+// `LIMIT ${sqlInt(n)}`、`FROM ${sqlIdentifier(table)}`；值一律走 $n 參數，SQL 片段用 allowlist/owners.ts 的 SQL_FRAGMENT_HELPERS 登記的 helper 或全大寫常數。`
+- 取代：在 q()／pool.query 的樣板字串裡直接 ${變數}
+- 守門：`be-sql-interpolation`
+- 為什麼：SQL 文字不能是資料：樣板字串裡的 ${} 只准常數、登記過的片段 helper，或經 sqlInt／sqlIdentifier 驗證的數字與名稱，否則使用者輸入有機會變成 SQL。
+
+### 要做一個會寫入並留下事件的領域操作
+
+- 入口：`backend/src/spine/mutate.ts`（`mutate`、`runCascade`、`requireActor`）；`backend/src/spine/authority.ts`（`assertAuthority`、`requirePerson`）　項目 `be-write-spine`
+- 寫法：`import { mutate } from "./spine/mutate.js";`
+- 取代：路由自己開交易、自己寫事件、自己判斷權限
+- 守門：`guard:dup-b2-responses`、`guard:dupPatterns`
+- 為什麼：會寫入並留下事件的操作都經過 mutate：交易、權限、事件、歷史、復原一次到位。自己寫的話，歷史和復原就會漏掉這筆。
+
+### 要寫一個人自己的資料或設定（偏好、複習進度、已讀、訂閱設定、行事曆），不留歷史事件
+
+- 入口：`backend/src/spine/mutate.ts`（`mutatePersonal`）　項目 `be-write-personal`
+- 寫法：`import { mutatePersonal } from "./spine/mutate.js";`
+- 取代：withEventTransaction 加 resolveCurrentActor 自己拼；直接 q() 寫個人資料表
+- 守門：`guard:stampedWrites`
+- 為什麼：和 mutate 同一個入口：工作區寫入鎖、鎖後重讀操作者、交易、冪等、來源標記一次到位，只是不寫 domain_event（個人資料高頻、沒有可復原的歷史）。測試中 q() 在這個入口之外寫入已標記的個人資料表會直接丟錯；例外要寫 allowUnstampedWrite 並計入守門清單。 用法：mutatePersonal({ actor, workspaceId, apply: async ({ actor }) => { …用 q() 寫… } })，apply 拿到的是鎖後重讀的操作者。
+
+### 要在鎖內取得目前的操作者
+
+- 入口：`backend/src/spine/currentActor.ts`（`resolveCurrentActor`）　項目 `be-current-actor`
+- 寫法：`import { resolveCurrentActor } from "./spine/currentActor.js";`
+- 取代：沿用等待前的 role／scope 快照
+- 守門：`guard:systemActor`
+- 為什麼：在鎖裡面要用目前的操作者時用它；用鎖之前拿到的權限快照，可能已經被改過了。
+
+### 要在交易提交後或回滾後做事
+
+- 入口：`backend/src/spine/txHooks.ts`（`afterCommit`、`afterRollback`、`withTxHookScope`）　項目 `be-tx-hooks`
+- 寫法：`import { afterCommit } from "./spine/txHooks.js";`
+- 為什麼：交易提交或回滾後才要做的事（通知、清快取）用它；在交易裡直接做，回滾時通知已經送出去了。
+
+### 要取得工作區的事件附加鎖
+
+- 入口：`backend/src/spine/eventLock.ts`（`EVENT_APPEND_LOCK_SQL`、`eventAppendLockKey`）　項目 `be-event-lock`
+- 寫法：`import { eventAppendLockKey } from "./spine/eventLock.js";`
+- 取代：各處自己拼 advisory lock 鍵
+- 守門：`guard:dupSweep`
+- 為什麼：要取得工作區事件附加鎖時用它，鎖的鍵只有一種算法，不會兩邊各鎖各的。
+
+### 要改一則筆記（REST PATCH 與 agent 共用）
+
+- 入口：`backend/src/services/nodeUpdate.ts`（`updateNode`）　項目 `be-update-node`
+- 寫法：`import { updateNode } from "./services/nodeUpdate.js";`
+- 為什麼：改一則筆記（REST 和 AI 共用）一律用它；合併衝突、區塊同步、歷史都在裡面。
+
+### 要對筆記套用或移除標籤
+
+- 入口：`backend/src/services/tagMembershipWrites.ts`（`applyTagToNode`、`removeTagFromNode`、`attachTagInTx`）　項目 `be-tag-membership`
+- 寫法：`import { applyTagToNode } from "./services/tagMembershipWrites.js";`
+- 為什麼：對筆記套用或移除標籤用它，標籤功能的連帶效果（例如變成任務）才會觸發。
+
+### 要檢查標籤名稱可不可用、建立標籤
+
+- 入口：`backend/src/services/tagHierarchy.ts`（`assertTagNameAvailable`、`createTag`、`resolveOrCreateTagPath`）　項目 `be-tag-name`
+- 寫法：`import { assertTagNameAvailable } from "./services/tagHierarchy.js";`
+- 為什麼：檢查標籤名稱、建立標籤用它，避免同名標籤與不合法的名稱。
+
+### 要復原一個事件
+
+- 入口：`backend/src/services/eventRestore/restore.ts`（`restoreEvent`、`previewEventRestore`）；`backend/src/services/eventRestore/refusals.ts`（`historyIncomplete`、`stateConflict`）　項目 `be-restore`
+- 寫法：`import { restoreEvent } from "./services/eventRestore/restore.js";`
+- 取代：繞過 restoreEvent 的復原旁路、自己拼 history_incomplete／state_conflict 拒絕
+- 守門：`guard:dupSweep`、`guard:history`
+- 為什麼：復原一個事件只能用它；繞過去的復原會讓歷史對不起來，之後就無法再復原。
+
+### 要問「哪些事件算儲存」
+
+- 入口：`backend/src/services/history/bodyEvents.ts`（`bodyEventSql`、`saveOnDaySql`）　項目 `be-history-events`
+- 寫法：`import { bodyEventSql } from "./services/history/bodyEvents.js";`
+- 取代：手寫的事件種類判斷
+- 守門：`guard:dupSweep`、`guard:history`
+- 為什麼：要問「哪些事件算一次儲存」用它，歷史頁、某天修改了什麼、單天頁的計數才一樣。
+
+### 要算 SHA-256 十六進位摘要
+
+- 入口：`backend/src/utils.ts`（`sha256Hex`）　項目 `be-sha256`
+- 寫法：`import { sha256Hex } from "./utils.js";`
+- 取代：各處 createHash("sha256")
+- 守門：`guard:dupSweep`、`be-route-imports`
+- 為什麼：後端算 SHA-256 hex 用它。
+
+### 要把使用者輸入放進 LIKE／ILIKE
+
+- 入口：`backend/src/utils.ts`（`escapeLike`、`containsPattern`）　項目 `be-like-pattern`
+- 寫法：`import { escapeLike } from "./utils.js";`
+- 取代：未跳脫的 LIKE 樣式
+- 守門：`guard:dupPatterns`
+- 為什麼：把使用者輸入放進 LIKE／ILIKE 前一定要經過它；沒跳脫的話，輸入 % 或 _ 會搜出所有東西。
+
+### 要解析路徑裡的 bigint id
+
+- 入口：`backend/src/routes/params.ts`（`parseBigintId`、`uuidParam`、`parseBody`）　項目 `be-bigint-id`
+- 寫法：`import { parseBigintId } from "./routes/params.js";`
+- 取代：各路由自己 Number()／BigInt()
+- 守門：`guard:dupSweep`、`guard:dup-b2-input`、`be-route-imports`
+- 為什麼：解析路徑裡的 id 用它，不合法的 id 回 400 而不是 500。
+
+### 要同步區塊節點（區塊 id 是錨點 id，由存檔替帶 {…} 的區塊建立）
+
+- 入口：`backend/src/services/blockNodes.ts`（`syncBlockNodes`）　項目 `be-block-id`
+- 寫法：`import { syncBlockNodes } from "./services/blockNodes.js";`
+- 取代：自己產生區塊 id、或在正文寫 ^id
+- 守門：`guard:dupSweep`、`guard:blockRef`
+- 為什麼：產生區塊 id、同步區塊節點用它，前後端的區塊 id 才對得上。
+
+### 要決定新筆記預設落在哪個空間
+
+- 入口：`backend/src/services/spaces.ts`（`newNoteSpace`、`spacesForActor`）　項目 `be-new-note-space`
+- 寫法：`import { newNoteSpace } from "./services/spaces.js";`
+- 取代：自己查個人空間
+- 守門：`guard:dupSweep`
+- 為什麼：決定新筆記預設放在哪個空間用它；自己查個人空間會忽略使用者的預設空間設定。
+
+### 要知道工作區的「今天」或做日期運算
+
+- 入口：`backend/src/localDay.ts`（`localDayId`、`sqlLocalDay`、`dayClock`）　項目 `be-local-day`
+- 寫法：`import { localDayId } from "./localDay.js";`
+- 取代：new Date() 或資料庫 CURRENT_DATE
+- 守門：`guard:tasks-time`、`be-route-imports`
+- 為什麼：後端的「今天」與日期運算用它（工作區時區與換日時間）；new Date() 或資料庫 CURRENT_DATE 用的是伺服器時區。
+
+### 要回傳下載檔案的標頭
+
+- 入口：`backend/src/downloadHeaders.ts`（`attachmentHeaders`）　項目 `be-download-header`
+- 寫法：`import { attachmentHeaders } from "./downloadHeaders.js";`
+- 取代：手寫 Content-Disposition
+- 守門：`guard:dupPatterns`、`be-route-imports`
+- 為什麼：回傳下載檔案用它，中文檔名在各瀏覽器才不會亂碼。
+
+### 要排序或讀取標籤的已存檢視
+
+- 入口：`backend/src/services/tagViews.ts`（`byPinThenName`、`listTagViews`、`executeTagView`）　項目 `be-tag-views`
+- 寫法：`import { byPinThenName } from "./services/tagViews.js";`
+- 取代：各處自己排序檢視
+- 守門：`guard:dupSweep`
+- 為什麼：排序或讀取標籤已存的檢視用它，各畫面的檢視順序才一致。
+
+### 核心要取用網站模組發布的內容
+
+- 入口：`backend/src/services/publicSite.ts`（`publicSite`、`registerPublicSite`）　項目 `be-public-site`
+- 寫法：`import { publicSite } from "./services/publicSite.js";`
+- 取代：核心 import modules/website
+- 守門：`guard:site`
+- 為什麼：核心要讀網站模組發布的內容時透過它，核心不直接 import 網站模組；網站模組關掉時核心才不會壞。
+
+### 要查任務列、任務所屬 bucket（SQL）
+
+- 入口：`backend/src/services/tasksStore.ts`（`taskBucketCaseSql`、`taskRowById`、`TASK_JOIN_SQL`）　項目 `be-tasks-store`
+- 寫法：`import { taskRowById } from "./services/tasksStore.js";`
+- 守門：`guard:tasks-time`
+- 為什麼：查任務列、任務分組（SQL）用它，跟前端 task-bucket 是同一個規則。
+
+### 要呼叫某種 AI API 格式
+
+- 入口：`backend/src/services/agentRuntime/api/protocols/index.ts`（`protocolClient`、`detectProtocol`）　項目 `ai-protocol-client`
+- 寫法：`import { protocolClient } from "./services/agentRuntime/api/protocols/index.js"; const client = protocolClient("v1_chat_completions", { baseUrl: "https://ai.example.com", apiKey: "k" }); void client.listModels();`
+- 取代：各處自己 fetch 某家 AI 服務、import 其 SDK，或用模型名稱判斷能力與價格
+- 守門：`guard:aiVendorNames`
+- 為什麼：Onden 的 AI 是中立的：任何服務都能接，介面與文件不出現商家或產品名。各種 API 格式（/v1/messages、/v1/chat/completions）的差異只留在這個資料夾，對外是同一組「送一輪訊息、工具呼叫、用量、錯誤碼」；這裡是唯一允許出現商家格式名的地方，要接新格式就在這裡加一個轉接檔。
+
+### 要由伺服器抓使用者給的網址（行事曆、摘要、網頁預覽）
+
+- 入口：`backend/src/services/safeFetch.ts`（`safeFetch`、`SafeFetchError`）　項目 `be-safe-fetch`
+- 寫法：`import { safeFetch } from "./services/safeFetch.js"; const read = (url: string) => safeFetch(url, { maxBytes: 1_000_000, timeoutMs: 10_000 });`
+- 取代：直接用 fetch／http.request 抓使用者給的網址
+- 為什麼：所有對外抓取一律走它：只允許 http／https，連線當下檢查解析出的位址，拒絕私有、本機、連結本地位址（含重新導向），並有超時與大小上限。自己 fetch 會漏掉其中一項，伺服器就可能被當成跳板（SSRF）。
+
+### 要在伺服器上加密保存使用者的秘密（行事曆網址這類帶金鑰的網址）
+
+- 入口：`backend/src/services/aiCredentials.ts`（`sealText`、`openText`、`secretKeyConfigured`）　項目 `be-seal-text`
+- 寫法：`import { sealText } from "./services/aiCredentials.js"; const seal = (secret: string, rowId: string) => sealText(secret, rowId);`
+- 取代：自己用 crypto 加密、或把秘密明文放進資料表／事件
+- 為什麼：用部署時的 ONDEN_SECRET_KEY 加密（AES-256-GCM，列 id 當附加資料，密文貼到別列解不開）。沒設金鑰時 secretKeyConfigured 為 false，功能要明說不提供。讀回介面只給遮罩後的資訊（網域、末四碼），不回明文、不寫進事件或日誌。
+
+### 要用操作者、權限範圍這類共用型別（route 與 service 之間傳的 ActorCtx 等）
+
+- 入口：`backend/src/types.ts`（`ActorCtx`、`ActorType`）　項目 `be-actor-types`
+- 寫法：`import type { ActorCtx } from "./types.js";`
+- 取代：在 route 裡自己宣告操作者或權限的形狀
+- 守門：`be-route-imports`
+- 為什麼：操作者的身分、類型與 token 範圍只有一份型別。route 自己宣告會和 service 對不上，授權判斷就可能漏欄位。
+
+### 要用 SSE 把事件持續推給前端
+
+- 入口：`backend/src/routes/sseStream.ts`（`holdOpenStream`）　項目 `be-sse-stream`
+- 取代：在每個 route 各自寫 SSE 標頭、心跳與斷線清理
+- 守門：`be-route-imports`
+- 為什麼：SSE 的標頭、心跳與連線結束時的清理只寫一次；各 route 自己寫容易漏掉斷線清理，留下殘留連線。
+
+### 要讓交易、權限或鏈上資訊跟著 await 一路傳下去（原本用 AsyncLocalStorage）
+
+- 入口：`backend/src/requestContext.ts`（`createContextSlot`、`useContextProvider`、`createSerialContextProvider`）　項目 `be-request-context`
+- 寫法：`import { createContextSlot } from "./requestContext.js";
+type Tx = { id: string };
+const slot = createContextSlot<Tx>();
+await slot.run({ id: "tx-1" }, async () => slot.getStore()); // 裡面任何 await 之後 getStore() 都還是這個 tx`
+- 取代：直接 new AsyncLocalStorage／import node:async_hooks
+- 守門：`be-async-hooks`、`be-route-imports`
+- 為什麼：請求上下文只有這一個入口。Node 預設用 AsyncLocalStorage；瀏覽器版（一次只跑一個流程）在載入 app 前用 useContextProvider(createSerialContextProvider()) 換掉，不必 zone.js。各用處不自己碰 node:async_hooks，換環境只換這一處。
+
+### 要查資料庫、開交易、搶跨實例的鎖，或知道目前是真 Postgres 還是 PGlite
+
+- 入口：`backend/src/db.ts`（`pool`、`q`、`withTransaction`、`withSavepoint`、`withReadSnapshot`、`withLeaderLock`、`dbDriver`、`useDatabaseSnapshot`）；`backend/src/dbPglite.ts`（`PglitePool`）　項目 `be-db`
+- 寫法：`import { withLeaderLock } from "./db.js";
+await withLeaderLock({ key: 4_242_044_044 }, async () => { /* 同時只有一個實例跑的工作 */ });`
+- 取代：import pg、自己 pool.connect() 搶 pg_try_advisory_lock
+- 守門：`be-pg-driver`
+- 為什麼：db.ts 是唯一 import pg 的地方，底下可換「真 Postgres（pg Pool）」或「PGlite」（ONDEN_DB_DRIVER=pglite；單一連線，交易中的 pool.query 沿用該交易的連線）。跨實例的領導者鎖用 withLeaderLock：Postgres 用 session advisory lock，PGlite 因為只有一個程序直接執行。
+
+### 要查詢資料庫（讀或寫資料表的資料列）
+
+- 入口：`backend/src/dbKysely.ts`（`db`）；`backend/src/db.ts`（`q`、`withTransaction`）；`backend/src/dbPglite.ts`（`PglitePool`）　項目 `be-typed-query`
+- 寫法：`import { db } from "./dbKysely.js";
+const row = await db.selectFrom("workspaces").select(["time_zone", "day_start_hour"]).where("slug", "=", "default").executeTakeFirst();`
+- 取代：手寫 q() / client.query 的 SQL 字串與手寫的結果型別泛型
+- 守門：`be-raw-sql`
+- 為什麼：欄位名稱與型別由遷移產生（npm run db:types），欄位改名或改型別時編譯器會直接指出哪裡要改；db 走 q()，所以交易、PGlite 與其他檢查都跟 q() 一樣。手寫 SQL 的檔案逐檔只減不增（新檔案不准有）；權限判斷用的 SQL（readPolicy）先不搬。
+
+### 要比對筆記文字、排序並取摘要關鍵字（搜尋）
+
+- 入口：`backend/src/services/textSearch.ts`（`textSearchEngine`、`pgroongaEngine`、`portableEngine`、`parsePortableQuery`）　項目 `be-text-search`
+- 寫法：`import { textSearchEngine } from "./services/textSearch.js";
+const params: unknown[] = ["workspace-id"];
+const { match, order, keywords } = (await textSearchEngine()).build("n", "死結 OR 排程", params);`
+- 取代：在 SQL 裡直接寫 &@~、pgroonga_score、pgroonga_query_extract_keywords
+- 守門：`guard:portableBackend`
+- 為什麼：只有 nodeSearch 用的文字比對一處決定怎麼寫：資料庫裝了 pgroonga 就用它（正式伺服器，行為不變），沒有就用可攜版（ILIKE＋pg_trgm，桌面／瀏覽器／PGlite 測試）。權限範圍 readableScopeSql 仍在同一條 SQL。
+
+### 要換遷移檔的來源（沒有檔案系統的環境）或讓遷移能在沒有 age／pgroonga 的資料庫上跑
+
+- 入口：`backend/src/dbMigrations.ts`（`listMigrations`、`useMigrationSource`、`portableMigrationSql`）　項目 `be-migration-source`
+- 寫法：`import { useMigrationSource } from "./dbMigrations.js";
+const sql = "CREATE TABLE example (id int)";
+useMigrationSource(async () => [{ version: "001_baseline", sql }]);`
+- 取代：在 db.ts 直接讀 node:fs
+- 守門：`guard:portableBackend`
+- 為什麼：遷移檔預設從 db/migrations 讀；瀏覽器版在建置時把 SQL 內嵌後用 useMigrationSource 注入。portableMigrationSql 去掉 PGlite 沒有的擴充（age、pgroonga、pg_stat_statements）。
+
+### 要用只有 Node 才有的內建模組，又不想讓瀏覽器打包解析不到
+
+- 入口：`backend/src/nodeBuiltins.ts`（`nodeBuiltin`）　項目 `be-node-builtin`
+- 寫法：`import { nodeBuiltin } from "./nodeBuiltins.js";
+const fs = nodeBuiltin<typeof import("node:fs/promises")>("node:fs/promises");
+if (!fs) throw new Error("需要檔案系統");`
+- 取代：只在特定路徑用到的靜態 import "node:…"
+- 守門：`guard:portableBackend`
+- 為什麼：用 process.getBuiltinModule 在呼叫時才找，找不到回 undefined，由呼叫者說明要換成什麼；打包瀏覽器版時不必 alias。
+
+### 要把整個後端（Hono app）放進別的環境（桌面殼、瀏覽器 worker、測試）
+
+- 入口：`backend/src/app.ts`（`app`）　項目 `be-app`
+- 寫法：`import { app } from "./app.js";
+const res = await app.fetch(new Request("http://x/api/bootstrap"));`
+- 取代：import index.ts（已拆開）、為了拿 app 而啟動 Node 伺服器
+- 守門：`guard:portableBackend`
+- 為什麼：app.ts 只組裝路由與中介層，沒有 top-level await、不監聽埠、不跑遷移與背景工作；server.ts 才是 Node 開機（npm start／dev）。別的環境自己決定怎麼開機。
+
+### 要讀、寫、列出、刪除上傳的媒體檔案（圖片、音檔、PDF…）的位元組，或知道還剩多少空間
+
+- 入口：`backend/src/services/mediaFiles.ts`（`mediaFiles`、`useMediaFiles`、`diskMediaFiles`、`MediaStorageFull`）　項目 `be-media-files`
+- 寫法：`import { mediaFiles, MediaStorageFull } from "./services/mediaFiles.js";
+const name = "0123456789abcdef0123456789abcdef.png";
+const bytes = Buffer.from([1, 2, 3]);
+try {
+  await mediaFiles().write(name, bytes); // 回來時已落盤
+} catch (error) {
+  if (error instanceof MediaStorageFull) console.warn("空間不夠"); // 空間不夠：什麼都沒存
+}
+const file = await mediaFiles().info(name); // 沒有就是 null`
+- 取代：直接 join(MEDIA_DIR, …) 用 node:fs 讀寫，或在各處判斷是不是瀏覽器版
+- 為什麼：媒體位元組放哪裡只在這個介面決定：伺服器是磁碟上的檔案（預設），瀏覽器版在開機時用 useMediaFiles 換成 OPFS／IndexedDB（browser/mediaStorage.ts）。上傳、備份還原、匯出、清理、網站發布都經它，沒有任何一處問「是不是試用版」。
+
+### 要知道一個圖檔真正是什麼格式，或把上傳的圖縮小、轉成 WebP（sharp 的工作）
+
+- 入口：`backend/src/services/imageCodec.ts`（`imageCodec`、`useImageCodec`）　項目 `be-image-codec`
+- 寫法：`import { imageCodec } from "./services/imageCodec.js";
+const bytes = Buffer.from([1, 2, 3]);
+const info = await imageCodec().inspect(bytes); // { format, compression? }
+const small = await imageCodec().reencode(bytes, 2400); // { bytes, ext }`
+- 取代：在 services 裡直接 import sharp
+- 為什麼：伺服器用 sharp（預設）；瀏覽器沒有 sharp，開機時用 useImageCodec 換成 createImageBitmap＋OffscreenCanvas（browser/imageCodec.ts，並套用相機的 EXIF 旋轉）。回傳的 ext 說明實際寫出的格式。
+
+### 要把後端跑在瀏覽器的 Web Worker 裡：一次只跑一個流程的佇列、把資料庫副本存到 OPFS／IndexedDB、替單一使用者登入
+
+- 入口：`backend/src/browser/queue.ts`（`createSerialQueue`）；`backend/src/browser/saveLoop.ts`（`createSaveLoop`）；`backend/src/browser/snapshotStore.ts`（`openSnapshotStore`）；`backend/src/browser/localSession.ts`（`createLocalSession`）　項目 `be-browser-host`
+- 寫法：`import { createSerialQueue } from "./browser/queue.js";
+import { app } from "./app.js";
+const request = new Request("http://localhost/api/bootstrap");
+const queue = createSerialQueue();
+await queue.run(async () => app.fetch(request)); // 請求、週期工作、存檔都排進同一個佇列`
+- 取代：在 worker 裡自己排隊、自己寫 OPFS／IndexedDB、自己組 cookie
+- 為什麼：瀏覽器版的後端（src/browser/worker.ts）只有這幾個零件：串行佇列是可攜後端 §3「串行堆疊 context provider 夠用」的前提，所有請求與背景工作都得經它；存檔判斷（何時存、能丟多少）與儲存空間（OPFS 優先、IndexedDB 退路、兩者都沒有時直說）各自一處，介面才說得出「已保存」的真實意思。設計與取捨：docs/architecture/browser-app.md。
+
+### 改了筆記內文之後，要讓段落錨點（連結、任務、複習認的位置）跟著文字搬
+
+- 入口：`backend/src/services/bodySideEffects.ts`（`applyBodyChange`）；`backend/src/services/blockAnchors/index.ts`（`moveAnchorsForBodyChange`、`ensureBlockAnchor`、`listNoteAnchors`）；`frontend/src/lib/blockAnchorStore.ts`（`anchorsOf`、`applyAnchorsOfDelta`、`replaceAllAnchors`）　項目 `block-anchors`
+- 寫法：`import { applyBodyChange } from "./services/bodySideEffects.js";
+export const writeBody = applyBodyChange;`
+- 取代：在各個寫內文的入口自己搬位置、自己讀寫 block_anchors，或在正文放 ^id 當身分
+- 為什麼：錨點位置與內文同一交易更新；只有 blockAnchors/ 動這張表，bodyAnchors.guard.test.ts 擋繞過共用入口的寫法。影子模式的 ONDEN_BLOCK_ANCHORS 開關已退休（身分在錨點，關掉區塊會對不上）。前端讀錨點只走 blockAnchorStore（本機資料庫的 note_anchors 是它重開機後的來源，localDbPersist.ts 寫、隨筆記清除）。
+
+### 要問或改「這個標籤有什麼功能」（複習、任務、文獻引用…）
+
+- 入口：`backend/src/services/functionRefs.ts`（`functionsOf`、`functionIndex`、`addFunction`、`removeFunction`、`setFunctionConfig`）　項目 `function-refs-backend`
+- 寫法：`import { addFunction, functionsOf } from "./services/functionRefs.js";
+import type { ActorCtx } from "./types.js";
+export async function give(actor: ActorCtx, workspaceId: string, tagId: string) {
+  await addFunction({ actor, workspaceId, holder: { kind: "node", id: tagId }, functionId: "review" });
+  return functionsOf(actor, { kind: "node", id: tagId });
+}`
+- 取代：讀 tag_schema.module／extends／behaviour.modules 自己算有效功能，或另寫 setTagModules 式的寫入
+- 為什麼：功能只存在 function_refs 一處；讀寫、事件（FUNCTION_REF_*）、復原、權限（標籤層 principal_admin）都在這個入口，呼叫者不各算一次。
+
+### 要讀或寫標籤、筆記的已存檢視（新增、改名、刪除、排序、釘選、白板分頁）
+
+- 入口：`backend/src/services/functionRefs.ts`（`viewRecordsOf`、`viewRecordsOfMany`、`viewRecordById`、`viewNameTaken`、`insertView`、`patchView`、`removeView`）；`backend/src/services/functionRefSql.ts`（`holderViewsSql`）　項目 `function-refs-views-backend`
+- 寫法：`import { insertView, viewRecordsOf } from "./services/functionRefs.js";
+export async function addMonth(workspaceId: string, noteId: string, viewId: string) {
+  await insertView({ workspaceId, holderId: noteId, viewId, layout: "calendar", element: { name: "Month", layout_config: { date_field: "due" } } });
+  return viewRecordsOf("note", workspaceId, noteId);
+}`
+- 取代：直接讀寫 content_nodes.collection_views（遷移 188 起凍結），或在每個路由各算一次檢視的名字重複、排序與版面
+- 為什麼：已存檢視是功能引用表的一列（function_id＝版面、instance＝檢視 id、config＝設定），標籤與筆記共用同一組函式；節點列給客戶端的 collection_views 由 holderViewsSql 從引用組回舊形狀。
+
+### 後端測試要用原始 SQL 直接建立或改動核心資料表的資料列（測試世界的起點）
+
+- 入口：`backend/src/test/helpers/seedQ.ts`（`seedQ`）　項目 `be-test-seed-sql`
+- 寫法：`import { seedQ } from "./test/helpers/seedQ.js";
+declare const id: string;
+await seedQ("UPDATE content_nodes SET title = $2 WHERE id = $1", [id, "起點"]);`
+- 取代：在測試裡對 content_nodes／node_attributes／node_tags／node_edges／block_nodes 直接 q("INSERT/UPDATE/DELETE …")（q() 在交易外會丟錯）
+- 為什麼：q() 在交易外寫核心資料表會丟錯，逼正式程式改走 mutate()／withEventTransaction()；測試建資料沒有事件可發，用 seedQ 開一個單句交易。被測的程式碼仍須走自己的真入口。
+
+### 要讓多個節點（裝置、伺服器）不經單一裁決者同步筆記（分散式同步，beta，預設關閉）
+
+- 入口：`backend/src/distributedSync/index.ts`（`openSyncNode`、`materialize`、`spaceDigest`、`DistributedSyncOff`）　項目 `be-distributed-sync`
+- 寫法：`import { openSyncNode, type SyncDb } from "./distributedSync/index.js";
+export async function rename(db: SyncDb, spaceId: string, noteId: string) {
+  const node = await openSyncNode(db, { nodeId: "phone", actors: ["alice"], directory: {}, now: Date.now });
+  return node.submit("alice", spaceId, { kind: "note.title", note: noteId, title: "新標題" });
+}`
+- 取代：另寫一套節點間同步、合併或權限重驗證；把 domain_events 的游標當成跨節點的順序
+- 為什麼：狀態是「有效操作集合」的純函式（materialize.ts），所以任意順序、重送都收斂；權限在每個節點依自己的成員資料重驗，不信任送來的人。設計與限制見 docs/architecture/distributed-sync.md。
+
+### 要讓一個真的工作區（content_nodes、space_members、domain_events）成為分散式同步的節點：創世匯入、擷取本機寫入、把遠端操作投影回資料表（分散式同步 2a，beta，預設關閉）
+
+- 入口：`backend/src/distributedSync/bridge/index.ts`（`Replica`、`planGenesis`、`captureLocalWrites`、`projectChange`、`worldView`、`dbView`、`viewDifferences`）　項目 `be-distributed-sync-bridge`
+- 寫法：`import { Replica } from "./distributedSync/bridge/index.js";
+import type { SyncMessage } from "./distributedSync/index.js";
+export async function syncOnce(workspaceId: string, msg: SyncMessage) {
+  const replica = await Replica.open({ workspaceId, nodeId: "vps" });
+  return replica.handle(msg); // 先擷取本機寫入，再收遠端操作，並在同一交易投影回資料表
+}`
+- 取代：直接 UPDATE content_nodes／space_members 來套用遠端變更、另寫一套從 domain_events 轉操作的程式、把遠端寫入包成 open／cascade 授權
+- 為什麼：遠端操作走既有的 createNote、updateNode、applyTagToNode、trashNode、setMember，所以閘門、事件鎖、事件與狀態同一交易、membership epoch 都照舊；事件帶 tx_meta.ds_op_id，擷取看到就不回送。權限對齊與唯一性規則見 docs/architecture/distributed-sync.md §4.4、§5、§12。
+
+### 要改碰面點服務（放密文塊的小型 HTTP 服務）的規則、上限或部署方式
+
+- 入口：`relay/src/handler.ts`（`createRelayHandler`）　項目 `send-to-phone-relay`
+- 取代：在 Worker 或另一個伺服器裡再寫一份權杖、上限、到期與速率限制的判斷
+- 為什麼：碰面點的規則（只驗權杖、200 MB 與每塊上限、2 小時到期、速率限制、只收 octet-stream、錯誤不洩漏工作階段是否存在）寫在平台無關的 sessionCore／limiterCore／handler；worker.ts 只把它們放到 Durable Object 上，memory.ts 用同一份規則跑測試。不碰任何 Onden 資料庫。
+
+### 要把筆記的版本歷史寫進備份、算出它有多大，或把備份裡的版本歷史帶進新工作區
+
+- 入口：`backend/src/services/backupHistory.ts`（`measureHistory`、`writeHistoryFile`、`importNoteHistory`）；`backend/src/spine/importedHistory.ts`（`appendImportedVersions`）　項目 `be-backup-history`
+- 寫法：`import { importNoteHistory } from "./services/backupHistory.js";
+import type { BackupReader } from "./services/backupFile.js";
+import type { ActorCtx } from "./types.js";
+declare const actor: ActorCtx, workspaceId: string, newNoteId: string, backupNoteId: string, reader: BackupReader;
+// 備份還原的「搬整個工作區」流程內，擁有者、新工作區、該筆記是這次還原建的：
+await importNoteHistory(actor, workspaceId, newNoteId, () => reader.openHistory(backupNoteId)!);`
+- 取代：自己 INSERT domain_events 補歷史，或在備份格式裡另外塞一份版本表
+- 為什麼：版本歷史就是帶 body_hash 的事件加上 blobs；用原本的時間寫進去只有 spine/importedHistory.ts 一處：驗擁有者、驗雜湊、依來源事件 id 去重、標成不可作為事件復原。格式 3 才有這一段，舊伺服器看到會整份拒絕。設計：docs/architecture/backup-move.md。
+
+### 要替系統自己建立的東西（收件匣／技能標籤、網站設定的標籤與筆記、系統空間、下一次的重複任務、RSS 文章）取 id
+
+- 入口：`backend/src/services/derivedIds.ts`（`derivedId`、`newIdFor`）；`markdown/src/sharedContract.ts`（`DERIVED_ID_NAMESPACE`、`derivedIdName`）　項目 `derived-ids`
+- 寫法：`import { derivedIdName } from "@onden/markdown";
+import { newIdFor } from "./services/derivedIds.js";
+export const captureTagId = (workspaceId: string) => newIdFor("content_nodes", derivedIdName.moduleTag(workspaceId, "capture"));`
+- 取代：在建立處用 randomUUID()／gen_random_uuid() 給一個「每個工作區只該有一個」的東西 id（兩台離線裝置各建一個）
+- 為什麼：id 由用途算出（與日記同一個 v5 做法），兩個建立者得到同一筆；名字串只在 `derivedIdName` 一處，migration 201 的 SQL（`onden_uuid5`）與它一致（derivedIdsMigration 測試對照）。算出的 id 已被別的資料列用掉時 `newIdFor` 退回隨機 id，建立不會因此失敗。

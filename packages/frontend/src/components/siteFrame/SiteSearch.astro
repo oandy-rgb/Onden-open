@@ -1,0 +1,107 @@
+---
+// The header search of every published page: Pagefind (pagefind.app) over the
+// notes' text. The index is made with the static copy and served from the same
+// folder on the live site (lib/siteSearch.ts), so the box finds the same notes
+// live, in a zip and on a static host. It is hidden until the index answers
+// and stays hidden when it cannot be reached — opened straight from disk
+// (file://), before the live site has its index, or without script — so a page
+// never shows a box that does nothing. No framework; the Pagefind files load on
+// the first search.
+// The box itself is drawn with the header (SiteHeader in SiteFrames.tsx); this is its behaviour.
+---
+
+<script>
+  import { excerptParts, hitHref, indexFolder, markTypedText, siteRoot } from "../../lib/siteSearch";
+
+  type Pagefind = {
+    options(o: { basePath: string }): Promise<void>;
+    debouncedSearch(q: string, o: object, ms: number): Promise<{ results: Array<{ data(): Promise<{ url: string; meta: { title?: string }; excerpt: string }> }> } | null>;
+  };
+
+  const box = document.querySelector<HTMLElement>("[data-s-search]");
+  const link = document.querySelector<HTMLLinkElement>('link[rel="x-site-search"]');
+  if (box && link && location.protocol !== "file:") {
+    const folder = indexFolder(link.href);
+    const root = siteRoot(folder);
+    const input = box.querySelector("input")!;
+    const list = box.querySelector<HTMLElement>(".s-search__results")!;
+    let active = -1;
+    let engine: Promise<Pagefind> | null = null;
+
+    // Show the box only when the index is there.
+    fetch(new URL("pagefind-entry.json", folder), { cache: "no-cache" })
+      .then((res) => { if (res.ok) box.hidden = false; })
+      .catch(() => {});
+
+    const load = () => engine ??= (async () => {
+      const pagefind = (await import(/* @vite-ignore */ new URL("pagefind.js", folder).href)) as Pagefind;
+      await pagefind.options({ basePath: folder });
+      return pagefind;
+    })();
+
+    const links = () => [...list.querySelectorAll<HTMLAnchorElement>("a.s-search__hit")];
+    const mark = (i: number) => {
+      links().forEach((a, n) => (n === i ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current")));
+      active = i;
+    };
+    const close = () => { list.hidden = true; list.replaceChildren(); active = -1; };
+    const marked = (parent: HTMLElement, parts: ReturnType<typeof excerptParts>) => {
+      for (const part of parts) {
+        if (part.mark) {
+          const el = document.createElement("mark");
+          el.className = "s-search__mark";
+          el.textContent = part.text;
+          parent.append(el);
+        } else parent.append(part.text);
+      }
+    };
+
+    input.addEventListener("input", async () => {
+      const q = input.value.trim();
+      if (!q) return close();
+      try {
+        const found = await (await load()).debouncedSearch(q, {}, 150);
+        if (!found || input.value.trim() !== q) return; // a newer search took over
+        const hits = await Promise.all(found.results.slice(0, 10).map((r) => r.data()));
+        list.replaceChildren();
+        if (hits.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "s-search__empty";
+          empty.textContent = `${box.dataset.noResults} 「${q}」`;
+          list.append(empty);
+        }
+        for (const hit of hits) {
+          const a = document.createElement("a");
+          a.className = "s-search__hit";
+          a.href = hitHref(root, hit.url);
+          const title = document.createElement("strong");
+          title.textContent = hit.meta.title ?? "";
+          const excerpt = document.createElement("span");
+          excerpt.className = "s-search__snippet";
+          marked(excerpt, markTypedText(excerptParts(hit.excerpt), q));
+          a.append(title, excerpt);
+          a.addEventListener("mouseenter", () => mark(links().indexOf(a)));
+          list.append(a);
+        }
+        list.hidden = false;
+        mark(hits.length > 0 ? 0 : -1);
+      } catch {
+        // The index went away (a takedown rebuilt it): hide the box until the next page.
+        box.hidden = true;
+        close();
+      }
+    });
+
+    input.addEventListener("keydown", (e) => {
+      const hits = links();
+      if (e.key === "ArrowDown") { e.preventDefault(); mark(Math.min(active + 1, hits.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); mark(Math.max(active - 1, 0)); }
+      else if (e.key === "Enter" && !e.isComposing && hits[active]) location.assign(hits[active]!.href);
+      else if (e.key === "Escape") { input.value = ""; close(); }
+    });
+    window.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k" && !box.hidden) { e.preventDefault(); input.focus(); }
+    });
+    document.addEventListener("click", (e) => { if (!box.contains(e.target as Node)) close(); });
+  }
+</script>

@@ -1,0 +1,7 @@
+{
+  "process-env": {},
+  "console": {
+    "src/admin.ts": "命令列工具：輸出給操作者看，不是伺服器日誌"
+  },
+  "set-interval": {}
+}

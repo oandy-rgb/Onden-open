@@ -1,0 +1,33 @@
+/* The board's tool bar: bottom, centred. The pen's toolbar docks right above
+   it (--board-toolbar-clearance, read by CanvasInkLayer.css). */
+.graph-panel { --board-toolbar-clearance: 76px; --board-chrome-z: 12; overscroll-behavior: none; }
+
+.board-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: var(--board-chrome-z);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 24px);
+  padding: 6px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-sm);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.board-toolbar > * { flex: 0 0 auto; }
+.board-toolbar .board-tool { width: 40px; height: 40px; color: var(--ac-muted); }
+.board-toolbar .board-tool.board-tool--lit, .board-toolbar .board-tool.board-tool--lit:hover { border-color: var(--ac-accent); background: var(--ac-accent); color: var(--ac-accent-ink); }
+.board-tool[aria-disabled="true"] { opacity: 0.35; cursor: default; }
+.board-toolbar-sep { flex: 0 0 1px; width: 1px; height: 24px; margin: 0 4px; background: var(--ac-line); }
+
+/* A phone: the bar stays one row, scrolling sideways if it must; targets stay 44px. */
+@media (max-width: 600px) {
+  .board-toolbar { bottom: 10px; }
+  .board-toolbar .board-tool { width: 44px; height: 44px; }
+}

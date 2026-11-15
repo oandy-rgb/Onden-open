@@ -1,0 +1,91 @@
+/* Module library in Settings › Features (ModuleLibrary.tsx): one titled list per group,
+   one rounded block per group, thin lines between the rows. */
+.module-library { margin: 0 0 28px; }
+.module-library-note, .module-library-hint {
+  margin: 0 0 14px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-small);
+  line-height: 1.6;
+}
+.module-group { margin: 0 0 22px; }
+.module-group-title { margin: 0 0 8px 4px; color: var(--ac-muted); font-size: var(--ac-fs-small); font-weight: 600; }
+.module-group-list {
+  margin: 0;
+  padding: 0 16px;
+  list-style: none;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-overlay-subtle);
+}
+.module-group-list + * { margin-top: 12px; }
+.module-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.module-row + .module-row { border-top: 1px solid var(--ac-line); }
+.module-row-head { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+/* The whole name side of the row opens the feature's page. */
+.module-row-open {
+  display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 48px; padding: 0;
+  border: 0; background: none; color: var(--ac-ink); font: inherit; text-align: left; cursor: pointer;
+  font-size: var(--ac-fs-prose);
+}
+.module-row-open:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); border-radius: var(--ac-radius-md); }
+.module-row-icon, .module-row-chevron { flex-shrink: 0; color: var(--ac-muted); }
+.module-row-chevron.is-none { visibility: hidden; }
+.module-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.module-row-blurb { color: var(--ac-muted); font-size: var(--ac-fs-small); line-height: 1.4; }
+/* A feature under another (skills under AI, external calendars under the journal and tasks). */
+.module-row.is-sub .module-row-open { padding-left: 28px; font-size: var(--ac-fs-small); }
+/* Off features stay in their group, quieter. */
+.module-row.is-off .module-row-open, .module-row.is-waiting .module-row-open { opacity: 0.55; }
+.module-page-head { display: flex; align-items: center; gap: 12px; }
+.module-page-head .settings-module-title { flex: 1; min-width: 0; margin: 0; font-size: var(--ac-fs-h3); }
+.module-page-icon { flex-shrink: 0; color: var(--ac-accent); }
+/* Settings › Features › <feature>: a small drawing of the feature. */
+.feature-preview { padding: 12px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface); color: var(--ac-muted); }
+.feature-preview--week { display: flex; justify-content: space-between; gap: 4px; }
+.feature-preview-day { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; padding: 6px 0; border-radius: var(--ac-radius-lg); }
+.feature-preview-day small { font-size: var(--ac-fs-xs); }
+.feature-preview-day b { font-weight: 600; color: var(--ac-ink); }
+.feature-preview-day.is-today { background: var(--ac-accent); color: var(--ac-accent-ink); }
+.feature-preview-day.is-today b { color: inherit; }
+.feature-preview--articles { display: flex; flex-direction: column; gap: 10px; }
+.feature-preview-article { display: flex; align-items: center; gap: 10px; }
+.feature-preview-lines { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.feature-preview-lines i { display: block; height: 7px; border-radius: var(--ac-radius-sm); background: var(--ac-line); }
+.feature-preview-lines i:first-child { width: 72%; background: var(--ac-muted); opacity: 0.6; }
+/* The note ModuleSettingsPage puts above a module's settings. */
+.module-card-hint {
+  margin: 0;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.5;
+  color: var(--ac-muted);
+}
+/* Turning a function off asks first. */
+.module-card-confirm {
+  display: grid;
+  gap: 8px;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.5;
+}
+.module-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.module-card-actions button {
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  padding: 4px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.module-card-actions button:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 600px) {
+  .module-card-actions button { min-height: 44px; }
+}
+
+/* A module screen opened while its module is not imported (ModuleNotImported). */
+.module-not-imported {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+}

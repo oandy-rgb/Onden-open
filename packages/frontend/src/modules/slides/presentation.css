@@ -1,0 +1,46 @@
+/* Full-screen slides: the 16:9 slide (SlideView) as large as the screen allows,
+   a phone (320px) and a projector alike; the page's own colours stay behind it. */
+.ui-modal.presentation-layer { padding: 0; }
+.ui-modal.presentation-layer::backdrop { background: var(--ac-bg); }
+.presentation {
+  position: relative; width: 100vw; height: 100dvh; height: 100dvh; box-sizing: border-box;
+  display: flex; flex-direction: column;
+  background: var(--ac-bg); color: var(--ac-ink);
+  touch-action: pan-y; outline: none;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+}
+.presentation-stage {
+  flex: 1 1 auto; min-height: 0; display: grid; place-items: center;
+}
+.presentation-stage .sv-frame {
+  width: min(100%, calc((100dvh - 150px) * 16 / 9));
+  border-radius: var(--ac-radius-md); box-shadow: var(--ac-shadow-float);
+}
+.presentation-sources {
+  margin: 8px auto 0; width: min(1000px, 100%);
+  font-size: var(--ac-fs-caption); color: var(--ac-muted);
+  overflow-wrap: anywhere;
+}
+.presentation-sources button {
+  border: 0; background: none; padding: 2px 0; color: inherit; font: inherit;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.presentation-bar {
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;
+}
+.presentation-bar button {
+  display: inline-grid; place-items: center; min-width: 44px; min-height: 44px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: transparent; color: inherit; cursor: pointer;
+}
+.presentation-bar button:disabled { opacity: 0.35; cursor: default; }
+.presentation-bar button:focus-visible, .presentation-sources button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.presentation-count { min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; color: var(--ac-muted); }
+.presentation-exit { margin-left: auto; position: absolute; right: 16px; }
+
+/* Portrait phone: the 16:9 slide is ~360px wide, its words too small to read; the player asks for landscape.
+   The hint uses main's slide-body size so it is readable where the slide's own text is not. */
+.presentation-rotate {
+  margin: 8px auto 0; text-align: center; color: var(--ac-muted);
+  font-size: var(--ac-fs-slide-body); line-height: 1.3;
+}

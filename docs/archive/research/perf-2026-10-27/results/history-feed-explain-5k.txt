@@ -1,0 +1,6 @@
+                                                                    ->  Seq Scan on actors (actual time=0.011..0.012 rows=1 loops=1)
+                          ->  CTE Scan on edits ed (actual time=18.262..38.448 rows=5407 loops=1)
+        SubPlan 8
+                            ->  CTE Scan on edits ed2 (actual time=0.370..0.762 rows=1 loops=5106)
+                            ->  Seq Scan on actors a (actual time=0.001..0.001 rows=2 loops=5407)
+Execution Time: 4033.220 ms

@@ -1,0 +1,22 @@
+/* ReplaceWith: the 「換成…」 list. On a desktop it is a column beside the content; on a phone the same list in a
+   short bottom sheet whose backdrop does not dim what is being previewed above it. */
+.ui-replace { display: flex; flex-direction: column; gap: var(--ac-space-2); min-width: 0; }
+.ui-replace-title { margin: 0; font-size: var(--ac-fs-ui); font-weight: 600; }
+.ui-replace-list { display: flex; flex-direction: column; gap: var(--ac-space-1); overflow-y: auto; max-height: 62dvh; }
+.ui-replace-item {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--ac-space-2); align-items: center; text-align: left;
+  padding: var(--ac-space-1); border: 1px solid transparent; border-radius: var(--ac-radius-md);
+}
+.ui-replace-item:not(:has(.ui-replace-thumb)) { grid-template-columns: minmax(0, 1fr); padding: var(--ac-space-2); }
+.ui-replace-item:hover { background: var(--ac-hover); }
+.ui-replace-item.is-shown { border-color: var(--ac-accent); background: var(--ac-selected); }
+.ui-replace-thumb { display: block; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-xs); overflow: hidden; pointer-events: none; }
+.ui-replace-name { display: inline-flex; gap: var(--ac-space-1); align-items: center; font-size: var(--ac-fs-small); }
+.ui-replace-actions { display: flex; gap: var(--ac-space-2); justify-content: flex-end; }
+
+.ui-replace--sheet { padding: var(--ac-space-1) var(--ac-space-3) var(--ac-space-2); }
+.ui-replace--sheet .ui-replace-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; padding-bottom: var(--ac-space-1); }
+.ui-replace--sheet .ui-replace-item { flex: none; width: 128px; grid-template-columns: minmax(0, 1fr); text-align: center; }
+.ui-replace--sheet .ui-replace-actions .ui-btn { min-height: 44px; }
+.ui-modal.ui-replace-layer { --ui-sheet-max-height: 46dvh; }
+.ui-modal.ui-replace-layer::backdrop { background: transparent; }

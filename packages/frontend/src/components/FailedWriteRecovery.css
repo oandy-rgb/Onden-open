@@ -1,0 +1,122 @@
+/* Failed-write recovery banner — persistent (unlike a toast) because the
+ * content it holds is unsaved and would otherwise be lost. Calm + on-brand
+ * (Gallery surface card, oxblood accent only on the primary action). It sits in
+ * the bottom-right corner (bottom, above the phone's tab bar) so it never covers
+ * a page title or header action; the container ignores pointer events and only
+ * the cards and the minimize button take them, so nothing outside their boxes
+ * is blocked. */
+
+.failed-write-recovery {
+  bottom: max(16px, env(safe-area-inset-bottom));
+  right: 16px;
+  pointer-events: none;
+  z-index: var(--z-notice-top); /* above toasts when no modal is open; under a modal it is portaled into the dialog (TopLayerPortal) */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(440px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(45dvh, calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  align-items: stretch;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.fwr-card, .fwr-collapse, .fwr-collapsed > button {
+  pointer-events: auto;
+}
+
+.fwr-card {
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-left: 3px solid var(--ac-accent);
+  border-radius: var(--ac-radius-lg);
+  padding: 12px 14px;
+  box-shadow: var(--ac-shadow-modal);
+}
+
+.fwr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fwr-title {
+  overflow-wrap: anywhere;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  color: var(--ac-ink);
+}
+
+.fwr-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--ac-ink);
+  cursor: pointer;
+  padding: 2px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--ac-radius-sm);
+  opacity: 0.7;
+}
+.fwr-dismiss:hover { opacity: 1; background: var(--ac-overlay-hover); }
+
+.fwr-note {
+  overflow-wrap: anywhere;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.fwr-content {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+.fwr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.fwr-collapse { align-self: flex-end; flex-shrink: 0; }
+.failed-write-recovery.fwr-collapsed {
+  width: auto;
+}
+
+@media (max-width: 600px) {
+  .failed-write-recovery .ui-btn, .fwr-dismiss { min-height: 44px; }
+  .fwr-dismiss { min-width: 44px; }
+  .fwr-title { font-size: var(--ac-fs-ui); }
+  .fwr-note { font-size: var(--ac-fs-small); }
+  .fwr-content { font-size: var(--ac-fs-ui); line-height: 1.6; }
+}
+
+@media (max-width: 900px) {
+  .failed-write-recovery {
+    bottom: calc(var(--mobile-bottom-clearance, 70px) + 8px + env(safe-area-inset-bottom));
+    right: 12px;
+    max-height: 40dvh;
+  }
+}

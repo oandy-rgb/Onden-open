@@ -1,0 +1,210 @@
+/* The desktop bar is the same on every page: the wordmark, then the
+   destinations with search, then the account with the layout switch. Its
+   segments are only as wide as their own content, so dragging the notes list's
+   or the info panel's edge never moves anything in it (the owner: the bar does
+   not go along with the drags, and matches the pages without columns).
+   Controls are one height (34px) with no frame at rest; hover and "in use"
+   (open, pressed, current page) share one soft fill. */
+.app-topbar { --topbar-tint: var(--ac-overlay-hover); }
+.app-topbar .app-topbar-left {
+  min-width: 0;
+}
+.app-topbar .app-logo { flex-shrink: 0; }
+.app-topbar .app-topbar-right { flex-shrink: 0; gap: 8px; }
+.app-topbar .app-topbar-center { display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (width > 900px) {
+  /* `header.app-topbar`: outranks global.css's .app-topbar (a flex row) whichever stylesheet loads last. */
+  header.app-topbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0;
+    padding: 0;
+  }
+  .app-topbar .app-topbar-left,
+  .app-topbar .app-topbar-center,
+  .app-topbar .app-topbar-right { box-sizing: border-box; height: 100%; }
+  .app-topbar .app-topbar-left { flex: none; padding-inline: 16px; }
+  .app-topbar .app-topbar-center { padding-inline: 12px 16px; }
+  .app-topbar .app-topbar-right { justify-content: flex-end; padding-inline: 12px; }
+}
+/* The two-cell layout switch [◧｜◨]: one 56x34 group, each cell a column's switch. */
+.app-topbar .topbar-pane-switch { display: inline-flex; align-items: center; flex-shrink: 0; }
+.app-topbar .app-primary-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  flex-shrink: 0;
+  position: relative;
+}
+/* The hidden copy AppNavigation measures: zero-sized and clipped, so it never
+   widens the page; its row lays out at full width inside. */
+.app-primary-nav-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+.app-primary-nav-measure-row {
+  display: flex;
+  width: max-content;
+  gap: inherit;
+}
+.app-topbar .topbar-mode-btn { white-space: nowrap; flex-shrink: 0; }
+.topbar-more-btn > svg:last-child { opacity: 0.7; }
+.topbar-more-item[aria-current="page"] { font-weight: 600; background: var(--ac-overlay-selected); }
+.topbar-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--ac-radius-md);
+  color: var(--ac-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.topbar-mode-btn:hover,
+.topbar-mode-btn.active {
+  color: var(--ac-ink);
+  background: var(--topbar-tint);
+}
+.app-topbar .user-name { max-width: 96px; font-size: var(--ac-fs-small); }
+/* One control height across the bar: destinations, search, avatar and the
+   switch cells are all 34px on desktop widths (the phone bar is unchanged); the
+   switch is two 28x34 cells (56x34), the icons 16px. A touch screen keeps its
+   reach through the .tap-target ::after (global.css), not through a taller
+   drawn button. None has a frame at rest: hover and "in use" share the tint. */
+@media (width > 900px) {
+  .app-topbar .palette-trigger { height: 34px; box-sizing: border-box; padding-block: 0; margin-left: auto; border-color: transparent; background: transparent; }
+  .app-topbar .palette-trigger:hover { border-color: transparent; background: var(--topbar-tint); }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm { width: 28px; height: 34px; border-radius: 0; border-color: transparent; background: transparent; color: var(--ac-muted); }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:first-child { border-radius: var(--ac-radius-md) 0 0 var(--ac-radius-md); }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:last-child { border-radius: 0 var(--ac-radius-md) var(--ac-radius-md) 0; }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:first-child { border-inline-end: 1px solid var(--ac-line); }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:hover:not(:disabled),
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm[aria-pressed="true"] { color: var(--ac-ink); background: var(--topbar-tint); border-color: transparent; }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:first-child { border-inline-end-color: var(--ac-line); }
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm:disabled { opacity: 0.35; }
+  .app-topbar .topbar-settings.ui-btn--icon.ui-btn--sm { width: 34px; height: 34px; border-color: transparent; background: transparent; color: var(--ac-muted); }
+  .app-topbar .topbar-settings.ui-btn--icon.ui-btn--sm:hover { color: var(--ac-ink); background: var(--topbar-tint); }
+  .app-topbar .ui-btn--icon.ui-btn--sm svg { width: 16px; height: 16px; }
+  .app-topbar .user-chip { height: 34px; box-sizing: border-box; position: relative; border-color: transparent; background: transparent; }
+  .app-topbar .user-chip:hover,
+  .app-topbar .user-chip[aria-expanded="true"] { background: var(--topbar-tint); }
+}
+
+/* Compact row below 1280px: English labels ("Create new note") with the four
+   destinations and the right-hand controls need about 1160px plus the account
+   name, so the full row overlapped at 1151px. */
+@media (width > 900px) and (width < 1280px) {
+  .app-topbar .app-primary-nav { margin: 0 8px; gap: 4px; }
+  .app-topbar .topbar-mode-btn { padding-inline: 7px; }
+  .app-topbar .topbar-mode-btn > svg:first-child { display: none; }
+  /* The preview in Settings › 導覽列 is drawn the same way (AppNavigationPreview). */
+  .app-primary-nav--preview { gap: 4px; }
+  .app-primary-nav--preview .topbar-mode-btn { padding-inline: 7px; }
+  .app-primary-nav--preview .topbar-mode-btn > svg:first-child { display: none; }
+  .app-topbar .palette-trigger { min-width: 34px; width: 34px; padding: 8px; }
+  .app-topbar .palette-trigger span,
+  .app-topbar .palette-trigger kbd,
+  .app-topbar .user-name,
+  .app-topbar .sync-status-label { display: none; }
+  .app-topbar .user-chip { padding: 3px; gap: 0; }
+}
+
+@media (max-width: 900px) {
+  .app-topbar .app-primary-nav,
+  .app-topbar .app-topbar-center { display: none; }
+}
+
+/* Trouble (offline / waiting / refused input) is a small badge on the avatar's
+   corner, on desktop and phone; the badge carries an aria-label. The accent
+   kind is the waiting-to-sync one. */
+.app-topbar .user-avatar { position: relative; }
+.app-topbar .user-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ac-radius-full);
+  border: 2px solid var(--ac-surface);
+  box-sizing: content-box;
+  background: var(--ac-accent);
+}
+.app-topbar .user-badge--offline { background: var(--ac-muted); }
+.app-topbar .user-badge--error { background: var(--ac-danger); }
+
+/* Phone: the avatar is drawn at its own size (no ring, no hover fill); the
+   44px touch area is an invisible ::after (the .tap-target pattern, as in
+   EditorLinkChip.css). Trouble (offline / waiting / refused input) is a small
+   badge on the avatar's corner; the badge carries an aria-label. */
+@media (max-width: 900px) {
+  .app-topbar .user-chip {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--ac-radius-full);
+    background: none;
+  }
+  .app-topbar .user-chip:hover,
+  .app-topbar .user-chip:active { background: none; }
+  /* The reach grows to the left only: the action to the avatar's right keeps its own
+     8px reach into the 8px gap, so neither covers the other. */
+  .app-topbar .user-chip::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: var(--onden-tap);
+    height: max(100%, var(--onden-tap));
+    transform: translateY(-50%);
+  }
+  .app-topbar .user-chip:focus-visible { outline: 2px solid var(--ac-focus); outline-offset: 2px; }
+  .app-topbar .user-badge { top: -2px; right: -2px; width: 10px; height: 10px; }
+  /* The avatar's 44px touch area reaches 8px past its 28px circle, the 40px search button's 2px past its edge:
+     10px apart keeps the two areas from overlapping (the layout audit measured 43px wide for search at 8px). */
+  .app-topbar .app-topbar-right { gap: 10px; }
+  /* The ui-btn display rule is defined after .topbar-desktop-only and wins by
+     order; desktop-only controls must stay hidden on a phone. */
+  .app-topbar .topbar-desktop-only { display: none; }
+}
+
+/* 「接下來」: the next timed thing today; one quiet line, shortened before it crowds the bar. */
+.topbar-next-up { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; min-height: 28px; padding: 0 10px; border: 0; border-radius: var(--ac-radius-lg); background: var(--ac-overlay-subtle); color: var(--ac-muted); font: inherit; font-size: var(--ac-fs-caption); cursor: pointer; }
+.topbar-next-up:hover { color: var(--ac-ink); }
+.topbar-next-up-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Phone: the page's name sits where the wordmark is, small, in the bar's own height. */
+.app-topbar .app-page-name {
+  font-family: inherit;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  letter-spacing: normal;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-topbar .topbar-phone-action { flex-shrink: 0; }
+/* A page's phone action that is "on" (a narrowed list): a small dot on the icon. */
+.app-topbar .topbar-phone-action { position: relative; }
+.app-topbar .topbar-action-dot {
+  position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; box-sizing: content-box;
+  border-radius: var(--ac-radius-full); border: 2px solid var(--ac-surface); background: var(--ac-accent);
+}

@@ -1,0 +1,192 @@
+services:
+  postgres:
+    # Self-hosting: `docker compose pull` fetches the published image for
+    # ONDEN_VERSION (default latest = newest release, not main). From source:
+    # `docker compose up -d --build` builds the `build:` below instead.
+    image: ${ONDEN_IMAGE:-ghcr.io/oandy-rgb/onden}-postgres:${ONDEN_VERSION:-latest}
+    build:
+      context: docker/postgres
+    command: postgres -c shared_preload_libraries='pg_stat_statements'
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: onden
+      POSTGRES_USER: onden
+      # No insecure default: the password initialises the DB superuser and
+      # gates DATABASE_URL below, so a built-in literal (the old "onden")
+      # meant any careless deploy was trivially DB-accessible. Fail fast and
+      # loud if unset — same convention as BETTER_AUTH_SECRET. For local dev
+      # copy .env.example (POSTGRES_PASSWORD=onden is fine on a localhost-only
+      # box, but it must be a deliberate choice, never a silent fallback).
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example; generate with: openssl rand -hex 32)}"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./packages/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onden -d onden"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    image: ${ONDEN_IMAGE:-ghcr.io/oandy-rgb/onden}-backend:${ONDEN_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: packages/backend/docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://onden:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/onden
+      PORT: 8787
+      # Default to the app's own origin (same as BETTER_AUTH_URL), NOT a
+      # wildcard: the API serves credentialed requests, and "*" reflects any
+      # origin back — browsers refuse that pair, but non-browser clients (curl,
+      # native, sloppy SDKs) will still send the cookie/token, leaking session
+      # credentials to any origin. Set CORS_ORIGIN explicitly (comma-separated)
+      # only if the frontend is served from a different origin than APP_URL.
+      CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost}}
+      # Leave unset for zero-config boot: the backend auto-generates a strong
+      # random secret on first start and persists it to the content volume
+      # (survives restarts). Set it explicitly (openssl rand -hex 32) to pin
+      # the secret across hosts / share sessions between replicas.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${APP_URL:-http://localhost}
+      # Who may create an account: first-only (default; the first account is
+      # the owner, later sign-ups are refused) or open.
+      ONDEN_SIGNUP: ${ONDEN_SIGNUP:-first-only}
+      ONDEN_MAX_BACKUP_MB: ${ONDEN_MAX_BACKUP_MB:-16384}
+      # The default time zone for "today" (an IANA zone such as Asia/Taipei) of
+      # a workspace whose owner never chose one in Settings › Time; once chosen,
+      # that setting wins. Unset and never chosen: UTC.
+      ONDEN_TIMEZONE: ${ONDEN_TIMEZONE:-}
+      # Encrypts the API keys people paste in Settings › 空間與成員
+      # (32 bytes: openssl rand -hex 32). Unset: the API way of running AI does
+      # not appear at all. Keep a copy apart from the backups: losing it makes
+      # the stored keys unreadable (docs/agents/deploy.md).
+      ONDEN_SECRET_KEY: ${ONDEN_SECRET_KEY:-}
+      # Web Push for task reminders on a locked phone (docs/agents/deploy.md).
+      # All three set: the app offers "lock-screen reminders" and the server
+      # sends them. Any one unset: the feature does not appear. The private key
+      # is a secret: .env only, never in the image, logs or backups.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # Sent as X-Onden-Build so an open page built from another revision offers
+      # a reload. A deploy passes the git sha (ONDEN_BUILD_ID=$(cat REVISION)), the
+      # same value the frontend image is built with. Empty: a release image uses
+      # the version baked into it (its CMD); a source build sends no header.
+      ONDEN_BUILD_ID: ${ONDEN_BUILD_ID:-}
+      # The frontend server the zip download and the GitHub Pages push ask for
+      # every site page (the static copy is that server's own HTML). The
+      # compose service name and its PORT; change only if the frontend is
+      # reached some other way.
+      SITE_SSR_URL: ${SITE_SSR_URL:-http://frontend}
+      # OAuth social login (optional). A provider turns ON only when BOTH its id
+      # and secret are set; unset = the login UI shows email/password only.
+      # Callback URL to register: ${APP_URL}/api/auth/callback/{github|google}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_PAGES_REPO: ${GITHUB_PAGES_REPO:-}
+      GITHUB_PAGES_BRANCH: ${GITHUB_PAGES_BRANCH:-gh-pages}
+    volumes:
+      - content_data:/app/packages/backend/content
+      # MB8: multilingual-e5-small weights download on first embed — persist
+      # the transformers cache so image rebuilds don't re-download ~120MB.
+      - hf_cache:/app/node_modules/@huggingface/transformers/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: ${ONDEN_IMAGE:-ghcr.io/oandy-rgb/onden}-frontend:${ONDEN_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: packages/frontend/docker/Dockerfile
+      args:
+        # Empty string is correct: callers across the frontend write
+        # absolute paths like "/api/bootstrap" themselves. Baking "/api"
+        # here produced "/api/api/bootstrap" through every getApiBase()
+        # concat site. Same-origin via nginx is the intended setup.
+        PUBLIC_API_BASE_URL: ""
+        # The build id the stale-chunk reload guard compares (lazyWithReload).
+        # A deploy passes the git sha (ONDEN_BUILD_ID=$(cat REVISION)); empty
+        # falls back to the build time inside astro.config.mjs.
+        ONDEN_BUILD_ID: ${ONDEN_BUILD_ID:-}
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 80
+      SSR_API_URL: http://backend:8787
+      # The public address readers use: canonical URLs and the sitemap.
+      APP_URL: ${APP_URL:-http://localhost}
+    depends_on:
+      - backend
+
+  # Daily database + content backup into ${ONDEN_BACKUP_DIR:-./backups}, in the
+  # same format scripts/backup.sh writes (restore with scripts/restore.sh).
+  # Reuses the Postgres image so pg_dump matches the server version. A backup
+  # on the same disk survives mistakes and a broken database, not a lost
+  # disk: copy the directory off the host as well.
+  backup:
+    image: ${ONDEN_IMAGE:-ghcr.io/oandy-rgb/onden}-postgres:${ONDEN_VERSION:-latest}
+    build:
+      context: docker/postgres
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup/run.sh"]
+    environment:
+      PGPASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+    volumes:
+      - ./docker/backup/run.sh:/backup/run.sh:ro
+      - content_data:/content-src/content:ro
+      - ${ONDEN_BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    # Pinned to the mainline minor the stack already runs (was the floating
+    # `alpine`, which tracks whatever mainline is current).
+    image: nginx:1.31-alpine
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+  # Optional HTTPS with an automatic Let's Encrypt certificate:
+  #   docker compose --profile https up -d
+  # Needs ONDEN_DOMAIN, ONDEN_ACME_EMAIL and APP_URL=https://<domain> in .env,
+  # and APP_PORT moved off 80 (Caddy takes 80/443). Without the profile this
+  # service does not exist. Steps: docs/self-host/https.md
+  caddy:
+    profiles: ["https"]
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ONDEN_DOMAIN: ${ONDEN_DOMAIN:-}
+      ONDEN_ACME_EMAIL: ${ONDEN_ACME_EMAIL:-}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Issued certificates and the ACME account: keep, or every restart asks
+      # Let's Encrypt again and can hit its rate limit.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nginx
+
+volumes:
+  postgres_data:
+  content_data:
+  hf_cache:
+  caddy_data:
+  caddy_config:

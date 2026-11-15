@@ -1,0 +1,94 @@
+/* A PDF page as the page book's background: canvas, selectable text, links. It fills the sheet, which
+   has no border and no padding (pagebook/PageBook.css), so its box is the page's box. */
+
+.pdf-page-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  /* A PDF page is white in the dark theme too: the picture is drawn for white paper. */
+  background: var(--ac-pure-white);
+  /* The text layer positions glyphs through these (pdf.js sets the layer's size from them). */
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  --user-unit: 1;
+  --total-scale-factor: var(--pdf-scale);
+}
+
+.pdf-page-canvas { position: absolute; inset: 0; }
+.pdf-page-canvas > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The text layer is pdf.js's (TextLayer): invisible glyph spans over the picture, there to be
+   selected. The rules are the part of pdfjs-dist's pdf_viewer.css that layer needs. */
+.pdf-text-layer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: var(--z-base);
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  /* Above .endOfContent (z-index base), which covers the whole layer while a selection is being
+     made: without this a drag lands on it and selects nothing (pdf_viewer.css gives the runs 1). */
+  z-index: var(--z-local-1);
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  /* pdf.js sets --font-height per glyph run in PDF units; the size on screen follows the zoom. */
+  --pdf-glyph-size: calc(var(--text-scale-factor) * var(--font-height));
+  font-size: var(--pdf-glyph-size);
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.pdf-text-layer .markedContent { display: contents; }
+.pdf-text-layer span[role="img"] { user-select: none; cursor: default; }
+.pdf-text-layer ::selection { background: color-mix(in srgb, var(--ac-accent) 35%, transparent); color: transparent; }
+.pdf-text-layer br::selection { background: transparent; }
+.pdf-text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: var(--z-base);
+  cursor: default;
+  user-select: none;
+}
+.pdf-text-layer.selecting .endOfContent { top: 0; }
+
+/* A page with /Rotate: pdf.js lays the layer out unrotated and turns it. */
+.pdf-text-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.pdf-text-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.pdf-text-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+
+.pdf-link-layer { position: absolute; inset: 0; z-index: var(--z-local-1); pointer-events: none; }
+.pdf-link {
+  position: absolute;
+  left: var(--pdf-link-left);
+  top: var(--pdf-link-top);
+  width: var(--pdf-link-width);
+  height: var(--pdf-link-height);
+  pointer-events: auto;
+  cursor: pointer;
+}

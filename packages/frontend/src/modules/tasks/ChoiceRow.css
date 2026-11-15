@@ -1,0 +1,7 @@
+/* One setting as a line: grey while nothing is set, in ink once something is; its choices open under it. */
+.setting-row { border-bottom: 1px solid var(--ac-line); }
+.setting-row-head { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 2px; border: 0; background: none; font: inherit; color: var(--ac-muted); text-align: left; cursor: pointer; }
+.setting-row-label { flex: none; min-width: 3em; font-weight: 600; font-size: var(--ac-fs-caption); color: var(--ac-ink); }
+.setting-row-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setting-row-value.is-set { color: var(--ac-accent); font-weight: 600; }
+.setting-row-body { padding: 0 0 12px; }

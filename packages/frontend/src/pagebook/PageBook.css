@@ -1,0 +1,103 @@
+/* The page book: one native scroll container with the sheets stacked in it. Sizes of the sheets are
+   set by PageBook.tsx (fit width × zoom); the ink of a sheet is PageInk.css. */
+
+.pagebook {
+  position: relative;
+  flex: 1;
+  /* In a row flex host (the PDF note's content) a flex item is at least as wide as its content, and
+     the sheets are as wide as the zoom: without this a zoom widens the book, the wider view widens
+     the fit, and so on until the browser's size limit. */
+  min-width: 0;
+  min-height: 320px;
+  display: flex;
+}
+
+.pagebook-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  /* The vertical scrollbar never comes and goes with the number of pages (that would change the
+     fit width and loop the layout). */
+  scrollbar-gutter: stable;
+  /* Fingers scroll natively; two fingers zoom the pages, not the app (lib/ink/touchSplit.ts). */
+  touch-action: pan-x pan-y;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+}
+
+/* As wide as the widest sheet (so a zoomed-in book scrolls to its left edge too), at least the view. */
+.pagebook-pages {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pagebook-gutter);
+  width: max-content;
+  min-width: 100%;
+  padding: var(--pagebook-gutter);
+}
+
+/* During a pinch the sheets are scaled as a picture (cheap, follows the fingers); the real zoom
+   lays them out once the fingers lift. */
+.pagebook-pages.is-pinching { will-change: transform; }
+
+.pagebook-page {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--pagebook-w);
+  height: var(--pagebook-h);
+  background: var(--ac-surface);
+  /* A page's own stacking context: its layers (z-index 5, 6) never reach another page, and a
+     multiply-blended highlight sees the page's picture under it, not the whole book. */
+  isolation: isolate;
+  border-radius: var(--ac-radius-sm);
+  /* The paper's edge must read in light AND dark themes (the dark paper and its backdrop are almost
+     the same colour): an edge tinted from the text colour, so it contrasts in whichever theme is active.
+     An edge drawn outside the box (::after), not a border: the sheet has no border and no padding, so its box is exactly the page's box
+     and positions measured against it (a PDF highlight, lib/pdf/coords.ts) need no correction. */
+  box-shadow: var(--ac-shadow-sm);
+}
+.pagebook-page::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 1px solid color-mix(in srgb, var(--ac-ink) 32%, var(--ac-bg));
+  border-radius: var(--ac-radius-sm);
+  pointer-events: none;
+}
+
+.pagebook-add {
+  flex: none;
+  margin: 4px 0 var(--pagebook-gutter);
+  padding: 8px 18px;
+  min-height: 44px;
+  border: 1px dashed var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-small);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pagebook-add:hover { color: var(--ac-ink); border-color: var(--ac-ink); }
+
+/* Zoom chip: shows the zoom, tap = fit width. */
+.pagebook-zoom {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  z-index: var(--z-local-7);
+  min-width: 44px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--ac-shadow-sm);
+  cursor: pointer;
+  touch-action: manipulation; /* no iOS double-tap zoom on the chip */
+}

@@ -1,0 +1,7 @@
+---
+// The web page's shared <head> entries (appShell/head.ts); pages/index.astro adds its own boot script after it.
+import { appHeadEntries } from "./head";
+import { THEME_COLORS } from "../settings/themeColor";
+const entries = appHeadEntries("web", THEME_COLORS.light);
+---
+{entries.map((e) => (e.tag === "title" ? <title>{e.text}</title> : e.tag === "meta" ? <meta {...e.attrs} /> : <link {...e.attrs} />))}

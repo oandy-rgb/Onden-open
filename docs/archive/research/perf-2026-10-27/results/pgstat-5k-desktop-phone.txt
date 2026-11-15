@@ -1,0 +1,12 @@
+5|4086.7|20434|WITH saves AS ( SELECT e.id, e.target_id, e.actor_id, e.actor_type, e.event_type, e.created_at FROM domain_events e JOIN content_nodes n ON n.id::text = e.target_id AND n.workspace_id = e.workspace_id
+5|1541.7|7709|SELECT x.node_id, x.day, (SELECT p.payload->>$4 FROM domain_events p WHERE p.workspace_id = $1 AND p.target_id = x.node_id AND p.event_type IN ($5,$6,$7) AND p.payload ? $8 AND p.created_at < ((x.day:
+1296|4.4|5724|SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.deleted_at IS NULL AND (n.parent_id IS NULL OR NOT EXISTS ( SELECT $3 FROM node_tags scope_nt JOIN content_nodes scope_tag ON scope_tag
+20|86.9|1737|WITH evt_meta AS ( SELECT m.node_id AS target_id, (array_agg(m.actor_id ORDER BY m.last_event_at DESC))[$3] AS last_actor, to_char(max(m.last_event_at) AT TIME ZONE $4, $5) AS last_modified_at, array_
+51|15.4|783|SELECT n.id, n.title, n.slug, n.node_type, NOT NOT EXISTS ( SELECT $5 FROM node_tags xnt JOIN content_nodes xtg ON xtg.id = xnt.tag_id AND (xtg.node_type = $6 AND xtg.deleted_at IS NULL AND xtg.tag_sc
+230|2.3|524|SELECT e.id::text, e.actor_type, e.actor_id, a.name AS actor_name, e.event_type, e.target_type, e.target_id, e.payload, e.created_at, e.tx_meta, e.external, e.triggered_by_event_id::text FROM domain_e
+236|2.2|523|SELECT id, actor_type, actor_id, event_type, target_type, target_id, CASE WHEN event_type = $6 AND payload->>$7 = $8 THEN payload - $9 - $10 ELSE payload END AS payload, created_at, tx_meta, external,
+520|0.8|436|SELECT n.id, n.markdown, n.updated_at FROM content_nodes n WHERE n.workspace_id = $1 AND n.id = ANY($2::uuid[]) AND n.deleted_at IS NULL AND NOT EXISTS ( SELECT $3 FROM node_tags xnt JOIN content_node
+25|14.6|365|UPDATE content_nodes SET markdown = $3, updated_at = now() WHERE workspace_id = $1 AND id = $2 RETURNING *
+62|5.0|310|SELECT n.id, n.title AS name, n.reserved_key, n.tag_color AS color, -- Hidden by the owner (「隱藏標籤」, D104): still applied and working, -- only left out of tag lists, chips, suggestions and the site. n.
+120|2.3|271|SELECT id, actor_type, actor_id, event_type, target_type, target_id, CASE WHEN event_type = $5 AND payload->>$6 = $7 THEN payload - $8 - $9 ELSE payload END AS payload, created_at, tx_meta, external, 
+30|8.7|262|SELECT n.id, n.title, n.created_at AS at FROM content_nodes n WHERE n.workspace_id = $1 AND n.created_at >= (($2::date)::timestamp + interval $4) AT TIME ZONE $5 AND n.created_at < (($2::date + $6)::t

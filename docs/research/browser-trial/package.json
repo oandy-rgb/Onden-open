@@ -1,0 +1,1 @@
+{"name":"browser-trial-experiments","private":true,"type":"module","version":"0.0.0","description":"可丟棄的技術實驗（不屬於 workspace，不影響建置）","dependencies":{"@electric-sql/pglite":"0.5.14","@electric-sql/pglite-pgvector":"0.0.15","@noble/hashes":"^2.4.0","buffer":"^6.0.3","events":"^3.3.0","fflate":"^0.8.3","path-browserify":"^1.0.1","zone.js":"^0.16.3"}}

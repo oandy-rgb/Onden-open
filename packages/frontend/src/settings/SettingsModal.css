@@ -1,0 +1,227 @@
+/* SettingsModal — Day 2 inline → class migration.
+ * Pattern reference: memory/feedback_eventlogpanel_migration_pattern.md
+ */
+
+.settings-content,
+.settings-input { min-width: 0; }
+
+/* Sidebar: search, then the LIST_SECTIONS groups, all open. */
+/* Scrolls on its own when the tabs (and module pages) outgrow the modal. */
+.settings-modal .settings-sidebar { width: 288px; gap: 2px; overflow-y: auto; min-height: 0; }
+.settings-search { margin-bottom: 6px; }
+/* The list's blocks have no names: a gap sets one off from the next. */
+.settings-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav-group + .settings-nav-group { margin-top: 8px; }
+.settings-modal .settings-nav-item { padding-top: 6px; padding-bottom: 6px; }
+.settings-nav-item .settings-list-icon { flex: 0 0 18px; }
+.settings-nav-item .settings-list-icon svg { width: 16px; height: 16px; }
+.settings-nav-item .settings-avatar { width: 22px; height: 22px; font-size: var(--ac-fs-xs); }
+.settings-row-title { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-ink); }
+.settings-advanced-toggle { align-self: flex-start; }
+.settings-search-group { display: flex; flex-direction: column; gap: 12px; }
+.settings-search-tab {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 0;
+  border: 0; background: none; cursor: pointer; font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-ink);
+}
+.settings-search-tab:hover { color: var(--ac-accent); text-decoration: underline; }
+.settings-inline-link { display: inline; font-weight: 500; color: var(--ac-accent); }
+
+/* A module's own page (listed under 「功能」). */
+.settings-module-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--ac-fs-ui-touch); font-weight: 600; color: var(--ac-ink); }
+
+/* Keyboard shortcuts */
+.settings-shortcuts { display: flex; flex-direction: column; gap: 14px; }
+.settings-shortcuts-group { display: flex; flex-direction: column; gap: 6px; }
+.settings-shortcut-row { flex-wrap: wrap; }
+.settings-shortcut-label { flex: 1 1 180px; color: var(--ac-ink); }
+.settings-shortcut-kbd {
+  min-width: 72px; padding: 3px 8px; text-align: center; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface); font-family: ui-monospace, Menlo, monospace; font-size: var(--ac-fs-caption); color: var(--ac-ink);
+}
+.settings-shortcut-kbd.is-recording { border-color: var(--ac-accent); color: var(--ac-accent); }
+.settings-shortcut-row .ui-error { flex-basis: 100%; }
+
+/* Danger zone */
+.settings-danger-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.settings-danger-item {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--ac-radius-md);
+  border: 1px solid color-mix(in srgb, var(--ac-danger) 35%, var(--ac-line));
+}
+.settings-danger-icon { flex: 0 0 auto; margin-top: 3px; color: var(--ac-danger); }
+.settings-danger-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-danger-text strong { font-size: var(--ac-fs-small); color: var(--ac-ink); }
+
+/* Phone (useIsMobile, ≤900px): full screen, two levels — the category list,
+   then one category. Only the phone markup carries these classes. */
+.ui-modal.settings-overlay--phone { padding: 0; align-items: stretch; }
+.settings-modal.settings-modal--phone {
+  box-sizing: border-box; width: 100%; height: 100%; max-height: none;
+  border: 0; border-radius: 0; box-shadow: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.settings-modal--phone .settings-header { gap: 8px; min-height: 52px; padding: 4px 4px 4px 16px; }
+.settings-modal--phone .settings-title {
+  margin: 0; min-width: 0; font-size: var(--ac-fs-lg); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A plain icon (no box), with a 44px touch target, as the app's other phone
+   headers (command palette, account sheet) close. */
+.settings-header-icon, .settings-back {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: var(--ac-radius-md);
+  background: transparent; color: var(--ac-muted);
+}
+.settings-header-icon:active, .settings-back:active { background: var(--ac-overlay-hover); }
+.settings-header-icon:focus-visible, .settings-back:focus-visible { outline: 2px solid var(--ac-focus); outline-offset: -2px; }
+/* Level 2: back (‹ 設定) | title, centred | close. */
+.settings-modal--phone .settings-header--phone-category {
+  display: grid; grid-template-columns: 1fr minmax(0, auto) 1fr; padding-left: 4px;
+}
+.settings-header--phone-category .settings-title { text-align: center; }
+.settings-header--phone-category .settings-header-icon { justify-self: end; }
+.settings-back {
+  justify-self: start; gap: 0; padding-right: 8px; color: var(--ac-accent);
+  font: inherit; font-size: var(--ac-fs-ui);
+}
+.settings-phone-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 8px;
+}
+.settings-modal--phone .settings-search { margin: 0 0 8px; }
+.settings-list {
+  list-style: none; margin: 0 0 4px; padding: 0; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface); overflow: hidden;
+  /* The phone page scrolls; a card must not be squeezed by its flex column (it clips its last row). */
+  flex: none;
+}
+.settings-list[hidden] { display: none; }
+/* Standard settings rows: 20px icons on one column, 16px text, a chevron,
+   and hairline separators that start where the text does. */
+.settings-list-row {
+  position: relative; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 48px;
+  padding: 10px 12px 10px 16px; border: 0; background: none; color: var(--ac-ink);
+  font: inherit; font-size: var(--ac-fs-prose); line-height: 1.35; text-align: left; cursor: pointer;
+}
+.settings-list > li + li > .settings-list-row::before {
+  content: ""; position: absolute; top: 0; right: 0; left: 52px; border-top: 1px solid var(--ac-line);
+}
+.settings-list-row:active { background: var(--ac-raised); }
+.settings-list-row:focus-visible { outline: 2px solid var(--ac-focus); outline-offset: -2px; }
+.settings-list-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; color: var(--ac-muted); }
+.settings-list-icon svg { width: 20px; height: 20px; }
+.settings-list-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-list-label, .settings-list-detail { overflow-wrap: anywhere; }
+.settings-list-detail { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.settings-list-chevron { flex-shrink: 0; color: var(--ac-muted); }
+/* The right-hand column of a list row: the page's current value, the phone mark of a
+   device-only page, the 「新」 of unread updates. */
+.settings-list-value { flex: 0 1 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.settings-device-mark { flex-shrink: 0; color: var(--ac-muted); }
+.settings-new { flex-shrink: 0; }
+.settings-list-row--account { min-height: 64px; }
+.settings-list-row--account .settings-list-label { font-weight: 600; }
+.settings-list-label { flex: 1; min-width: 0; }
+.settings-nav-item .settings-list-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-nav-item .settings-list-value { max-width: 62%; }
+.settings-modal--phone .settings-content { padding: 16px 16px 24px; overflow-x: hidden; }
+.settings-modal--phone .settings-hint { overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .settings-danger-item { flex-wrap: wrap; }
+  .settings-input { min-height: 44px; }
+  .settings-modal .ui-btn { min-height: 44px; white-space: normal; }
+  .settings-row { flex-wrap: wrap; }
+}
+
+.settings-hint--with-margin { margin-bottom: 12px; }
+.settings-hint.settings-storage-notice { font-size: var(--ac-fs-ui); line-height: 1.65; overflow-wrap: anywhere; color: var(--ac-warning); }
+.settings-hint--checkbox { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* Hint doubling as a checkbox label (e.g. Obsidian-import upsert toggle). */
+.settings-hint--checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.settings-import-result-list {
+  font-size: var(--ac-fs-small);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-import-warning { color: var(--ac-muted); }
+
+.settings-folder-import .settings-hint,
+.settings-folder-import .settings-import-result-list {
+  font-size: var(--ac-fs-small);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.settings-folder-import .settings-row { flex-wrap: wrap; }
+.settings-folder-import .settings-hint--checkbox {
+  min-height: 44px;
+  width: auto;
+  flex: 1 1 220px;
+}
+/* The settings form's generic input width also matches checkboxes. Keep the
+   control small while its label provides the full touch target. */
+.settings-folder-import input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+}
+
+.settings-btn--inline-action {
+  width: fit-content;
+}
+.settings-btn--inline-action.settings-btn--with-top-margin { margin-top: 8px; }
+
+.settings-import-error-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-text-danger { color: var(--ac-danger); }
+
+/* Tag packs widget: install results. */
+.settings-tagpack-results { margin-top: 12px; }
+
+.settings-import-review { display: grid; gap: 12px; min-width: 0; }
+.settings-import-field { display: grid; gap: 6px; font-size: var(--ac-fs-ui); min-width: 0; }
+.settings-import-field input, .settings-import-field select { width: 100%; min-width: 0; min-height: 44px; font: inherit; }
+.settings-import-conflicts { font-size: var(--ac-fs-ui); line-height: 1.65; }
+.settings-import-conflicts summary { cursor: pointer; padding: 10px 0; }
+.settings-import-conflicts ul { margin: 4px 0; padding-left: 20px; }
+.settings-import-conflicts li { margin: 8px 0; overflow-wrap: anywhere; }
+.settings-import-conflicts li span { display: block; }
+
+/* System status (owner only): failed background jobs, by kind. */
+.settings-system-list, .settings-system-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.settings-system-group {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--ac-radius-md);
+  border: 1px solid color-mix(in srgb, var(--ac-danger) 35%, var(--ac-line));
+}
+.settings-system-group-head { display: flex; align-items: center; gap: 8px; }
+.settings-system-kind { font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.settings-system-count {
+  min-width: 20px; padding: 0 6px; border-radius: var(--ac-radius-lg); line-height: 20px; text-align: center;
+  font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-ink);
+  background: color-mix(in srgb, var(--ac-danger) 18%, transparent);
+}
+.settings-system-error {
+  margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.settings-system-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.settings-system-chev { transition: transform 0.15s; }
+.settings-system-chev.open { transform: rotate(180deg); }
+.settings-system-rows { gap: 6px; margin-top: 6px; }
+.settings-system-row { display: flex; align-items: flex-start; gap: 8px; padding-top: 6px; border-top: 1px solid var(--ac-line); }
+.settings-system-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-system-ok { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--ac-fs-small); color: var(--ac-muted); }

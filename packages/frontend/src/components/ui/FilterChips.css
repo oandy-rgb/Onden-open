@@ -1,0 +1,24 @@
+/* FilterChips (components/ui/FilterChips.tsx): one scrolling row of filter tags. */
+.ui-filter-chips { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ui-filter-chips__row {
+  display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none;
+  --chips-fade: 24px;
+}
+.ui-filter-chips__row::-webkit-scrollbar { display: none; }
+/* More behind an edge: that edge fades out, so a cut tag reads as "scroll for more". */
+.ui-filter-chips__row[data-fade="end"] { mask-image: linear-gradient(to right, var(--ac-ink) calc(100% - var(--chips-fade)), transparent); }
+.ui-filter-chips__row[data-fade="start"] { mask-image: linear-gradient(to left, var(--ac-ink) calc(100% - var(--chips-fade)), transparent); }
+.ui-filter-chips__row[data-fade="both"] {
+  mask-image: linear-gradient(to right, transparent, var(--ac-ink) var(--chips-fade), var(--ac-ink) calc(100% - var(--chips-fade)), transparent);
+}
+.ui-filter-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 14em; min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: transparent; color: var(--ac-muted);
+  font-size: var(--ac-fs-caption); white-space: nowrap; cursor: pointer;
+}
+.ui-filter-chip__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-filter-chip[aria-pressed="true"] { background: var(--ac-ink); border-color: var(--ac-ink); color: var(--ac-surface); }
+.ui-filter-chip__count { font-size: var(--ac-fs-xs); font-variant-numeric: tabular-nums; opacity: 0.8; }
+@media (max-width: 900px) {
+  .ui-filter-chip { min-height: 44px; }
+}

@@ -1,0 +1,147 @@
+/* KnowledgeWorkspace — Day 2 inline → class migration. */
+
+.kw-toggle-sidebar-btn {
+  margin-left: auto;
+}
+
+.kw-graph-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ac-muted);
+}
+
+.kw-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  /* The board takes every gesture itself (React Flow pans and zooms it). Left to the browser, a drag that
+     starts on the board also scrolls or pulls the whole page, which slid the board under the bottom bar. */
+  touch-action: none;
+  overscroll-behavior: none;
+  --xy-controls-button-background-color: var(--ac-surface);
+  --xy-controls-button-background-color-hover: var(--ac-surface);
+  --xy-controls-button-color: var(--ac-ink);
+  --xy-controls-button-color-hover: var(--ac-ink);
+  --xy-controls-button-border-color: var(--ac-line);
+}
+
+.kw-canvas-empty { display: grid; place-items: center; height: 100%; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+
+/* Bird's-eye MiniMap — palette-token chrome so it reads as part of the board
+   surface, not React Flow's default white card. */
+.kw-canvas-minimap {
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  overflow: hidden;
+  box-shadow: var(--ac-shadow-float);
+}
+
+@media (max-width: 900px) {
+  /* The default 200×150 minimap covers half a phone's board. Keep navigation
+   * available without hiding the note the user is trying to read. */
+  .kw-canvas-minimap .react-flow__minimap-svg {
+    width: 104px;
+    height: 78px;
+  }
+}
+
+/* Why the selected arrow's buttons are off (an arrow from a [[link]]). */
+.canvas-edge-locked {
+  align-self: center;
+  max-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+}
+/* GAP-174: a selected arrow reads as selected on both themes — KW draws it
+   thicker; the halo is the accent token. */
+.kw-canvas-wrap .react-flow__edge.selected .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ac-accent) 75%, transparent));
+}
+
+.canvas-tree-note {
+  position: absolute;
+  left: 50%;
+  /* Above the tool bar (and the pen's bar above that), never under it. */
+  bottom: calc(var(--board-toolbar-clearance, 76px) + 12px);
+  transform: translateX(-50%);
+  z-index: var(--z-local-5);
+  max-width: calc(100% - 96px);
+  padding: 8px 14px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  text-align: center;
+  pointer-events: none;
+}
+
+.graph-panel--pen-mode .canvas-tree-note { bottom: calc(var(--board-toolbar-clearance, 76px) + 76px); }
+
+/* A phone: the hint sits under the top buttons and leaves after 5s (CHILDLESS_NOTE_MS in the component). */
+@media (max-width: 900px) {
+  .canvas-tree-note, .graph-panel--pen-mode .canvas-tree-note { top: 64px; bottom: auto; max-width: calc(100% - 32px); }
+  .canvas-tree-note--fading { animation: canvas-tree-note-out 400ms ease 4600ms forwards; }
+}
+@keyframes canvas-tree-note-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .canvas-tree-note--fading { animation: none; }
+}
+
+/* The way back after centring the tree on another note: root › … › centre. */
+.canvas-tree-path {
+  position: absolute;
+  top: 12px;
+  left: 76px;
+  right: 520px;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+}
+.canvas-tree-crumb { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--ac-muted); }
+.canvas-tree-crumb button {
+  min-height: 44px;
+  max-width: 180px;
+  padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-caption);
+  cursor: pointer;
+}
+.canvas-tree-crumb button:disabled { border-color: var(--ac-accent); color: var(--ac-accent); cursor: default; }
+@media (max-width: 900px) {
+  .canvas-tree-path { top: 128px; left: 12px; right: 12px; }
+}
+
+/* A held finger on the bare pane has become a selection box: the board shows it took hold. */
+.kw-canvas-wrap--armed { user-select: none; -webkit-user-select: none; }
+.kw-canvas-wrap--armed .react-flow__selection {
+  border-color: var(--ac-accent);
+  background: color-mix(in srgb, var(--ac-accent) 14%, transparent);
+}
+.kw-canvas-wrap--armed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-local-5);
+  pointer-events: none;
+  border: 2px solid color-mix(in srgb, var(--ac-accent) 55%, transparent);
+}
+
+/* Far zoom (titles only): lines keep a readable thickness on screen whatever the zoom. */
+.kw-canvas-wrap--far .react-flow__edge:not(.selected) .react-flow__edge-path {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.5px !important;
+}

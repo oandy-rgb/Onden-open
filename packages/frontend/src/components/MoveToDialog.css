@@ -1,0 +1,79 @@
+/* "Move to…" and the pin picker: the card's content and its desktop look. On a
+ * phone the card is ui/Sheet (steady): the list takes the rest and scrolls. */
+.move-to-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(440px, 95vw);
+  max-height: min(560px, 80dvh);
+  box-sizing: border-box;
+  padding: 14px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-modal);
+}
+.move-to-heading {
+  flex: none;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  color: var(--ac-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The board reminder's title is a whole sentence (components/BoardCardAudienceConfirm). */
+.move-to-heading-wrap {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.move-to-picker { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
+.move-to-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1;
+}
+.move-to-options [role="option"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-ui);
+}
+.move-to-options [role="option"].active { background: var(--ac-overlay-hover); }
+.move-to-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-to-hint {
+  flex-shrink: 1;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+}
+.move-to-current {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--ac-radius-full);
+  border: 1px solid var(--ac-line);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+}
+.move-to-confirm { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+.move-to-destination { margin: 0; font-size: var(--ac-fs-ui); color: var(--ac-ink); font-weight: 600; overflow-wrap: anywhere; }
+.move-to-hint-line { margin: 0; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.move-to-empty, .move-to-more { margin: 0; padding: 6px 10px; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+
+@media (max-width: 600px) {
+  .move-to-options [role="option"] { min-height: 44px; font-size: var(--ac-fs-ui-touch); }
+}

@@ -1,0 +1,312 @@
+[
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 1,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": {
+   "error": "TimeoutError: locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-search-row .obsidian-page-button').filter({ has: locat"
+  },
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 43,
+   "p95Ms": 56,
+   "maxMs": 81,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 80,
+   "lt": {
+    "n": 1,
+    "sum": 68,
+    "max": 68
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 3030,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 14,
+    "sum": 3106,
+    "max": 877
+   },
+   "paneDrag": {
+    "frames": 351,
+    "avgFps": 21,
+    "p95FrameMs": 99.9,
+    "maxFrameMs": 616.7,
+    "over50": 35
+   },
+   "cardDrag": {
+    "frames": 269,
+    "avgFps": 43,
+    "p95FrameMs": 33.4,
+    "maxFrameMs": 600,
+    "over50": 6
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1906,
+   "scroll": {
+    "frames": 78,
+    "avgFps": 26,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 15,
+    "canvasesAfter": 9,
+    "scrolledPx": 3160
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 2,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": {
+   "error": "TimeoutError: locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-search-row .obsidian-page-button').filter({ has: locat"
+  },
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 39,
+   "p95Ms": 60,
+   "maxMs": 65,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 64,
+   "lt": {
+    "n": 1,
+    "sum": 50,
+    "max": 50
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1527,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 11,
+    "sum": 2781,
+    "max": 781
+   },
+   "paneDrag": {
+    "frames": 349,
+    "avgFps": 23,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 649.9,
+    "over50": 26
+   },
+   "cardDrag": {
+    "frames": 273,
+    "avgFps": 43,
+    "p95FrameMs": 33.4,
+    "maxFrameMs": 766.5,
+    "over50": 7
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2008,
+   "scroll": {
+    "frames": 79,
+    "avgFps": 26,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 14,
+    "canvasesAfter": 9,
+    "scrolledPx": 3200
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 3,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": {
+   "error": "TimeoutError: locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-search-row .obsidian-page-button').filter({ has: locat"
+  },
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 45,
+   "p95Ms": 62,
+   "maxMs": 64,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 56,
+   "lt": {
+    "n": 1,
+    "sum": 51,
+    "max": 51
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 2913,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 9,
+    "sum": 2450,
+    "max": 743
+   },
+   "paneDrag": {
+    "frames": 335,
+    "avgFps": 22,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 733.3,
+    "over50": 23
+   },
+   "cardDrag": {
+    "frames": 265,
+    "avgFps": 39,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 533.3,
+    "over50": 21
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2177,
+   "scroll": {
+    "frames": 82,
+    "avgFps": 27,
+    "p95FrameMs": 83.4,
+    "maxFrameMs": 100.1,
+    "over50": 13,
+    "canvasesAfter": 9,
+    "scrolledPx": 3320
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 4,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": {
+   "error": "TimeoutError: locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-search-row .obsidian-page-button').filter({ has: locat"
+  },
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 41,
+   "p95Ms": 60,
+   "maxMs": 67,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 56,
+   "lt": {
+    "n": 1,
+    "sum": 50,
+    "max": 50
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 2872,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 7,
+    "sum": 2508,
+    "max": 775
+   },
+   "paneDrag": {
+    "frames": 344,
+    "avgFps": 24,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 566.6,
+    "over50": 24
+   },
+   "cardDrag": {
+    "frames": 292,
+    "avgFps": 30,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 816.7,
+    "over50": 38
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1869,
+   "scroll": {
+    "frames": 82,
+    "avgFps": 27,
+    "p95FrameMs": 83.4,
+    "maxFrameMs": 116.7,
+    "over50": 12,
+    "canvasesAfter": 9,
+    "scrolledPx": 3320
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 5,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": {
+   "error": "TimeoutError: locator.waitFor: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-search-row .obsidian-page-button').filter({ has: locat"
+  },
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 43,
+   "p95Ms": 59,
+   "maxMs": 70,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 64,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1719,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 8,
+    "sum": 2460,
+    "max": 690
+   },
+   "paneDrag": {
+    "frames": 337,
+    "avgFps": 34,
+    "p95FrameMs": 49.9,
+    "maxFrameMs": 483.4,
+    "over50": 9
+   },
+   "cardDrag": {
+    "frames": 240,
+    "avgFps": 56,
+    "p95FrameMs": 33.3,
+    "maxFrameMs": 66.7,
+    "over50": 1
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1902,
+   "scroll": {
+    "frames": 78,
+    "avgFps": 26,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.6,
+    "over50": 13,
+    "canvasesAfter": 9,
+    "scrolledPx": 3160
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ }
+]

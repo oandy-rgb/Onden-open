@@ -1,0 +1,25 @@
+/* Where there is no title strip (a phone): the board's top-right corner. In the strip it is just a group. */
+.board-view-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: var(--board-chrome-z, 12);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-view-controls .ui-btn { background: var(--ac-surface); }
+
+.board-view-panel { display: flex; flex-direction: column; gap: 4px; min-width: 260px; padding: 10px 12px; }
+.board-view-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 40px; font-size: var(--ac-fs-small); }
+.board-view-levels { display: flex; gap: 4px; }
+.board-view-levels .ui-btn { min-width: 36px; }
+.board-view-hint { margin: -2px 0 6px; color: var(--ac-muted); font-size: var(--ac-fs-xs); line-height: 1.5; }
+/* On a phone the panel is a bottom sheet: finger-sized rows and level buttons. */
+.board-view-panel.ui-menu--sheet { gap: 0; padding-inline: 16px; }
+.board-view-panel.ui-menu--sheet .board-view-row { min-height: 56px; font-size: var(--ac-fs-ui-touch); }
+.board-view-panel.ui-menu--sheet .board-view-row + .board-view-row { border-top: 1px solid var(--ac-line); }
+.board-view-panel.ui-menu--sheet .board-view-levels { gap: 6px; }
+.board-view-panel.ui-menu--sheet .board-view-levels .ui-btn { min-width: 44px; min-height: 40px; }
+
+.board-view-controls--strip { position: static; }

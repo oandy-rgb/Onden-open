@@ -1,0 +1,25 @@
+/* One colour per event kind (lib/eventKinds.ts), for every event view: the
+   event log, a note's history, the inbox. Hues stay muted (Gallery palette)
+   but each kind is unmistakable: create=verdigris, edit=ochre,
+   delete=oxblood, tag=slate-blue, attr=plum, edge=steel-teal, publish=olive,
+   version=rose. */
+.event-kind-create  { --event-color: #4a7c59; }
+.event-kind-edit    { --event-color: #a5762a; }
+.event-kind-delete  { --event-color: #7c2d2d; }
+.event-kind-tag     { --event-color: #44608f; }
+.event-kind-attr    { --event-color: #6d4a7c; }
+.event-kind-edge    { --event-color: #3d6f80; }
+.event-kind-publish { --event-color: #5d7a2a; }
+.event-kind-version { --event-color: #9a4a6a; }
+.event-kind-other   { --event-color: var(--ac-muted); }
+
+/* Dark theme: the same hues, lighter, so a kind used as text (the event
+   log's type label, the inbox verb) reads at ≥ 4.5:1 on gray-1 (#16130d). */
+[data-theme="dark"] .event-kind-create  { --event-color: #7fb58f; }
+[data-theme="dark"] .event-kind-edit    { --event-color: #d4a85a; }
+[data-theme="dark"] .event-kind-delete  { --event-color: #e08a80; }
+[data-theme="dark"] .event-kind-tag     { --event-color: #8ea9d6; }
+[data-theme="dark"] .event-kind-attr    { --event-color: #b896c8; }
+[data-theme="dark"] .event-kind-edge    { --event-color: #7fb3c4; }
+[data-theme="dark"] .event-kind-publish { --event-color: #a3c06a; }
+[data-theme="dark"] .event-kind-version { --event-color: #d68aa8; }

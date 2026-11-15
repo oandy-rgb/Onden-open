@@ -1,0 +1,45 @@
+/* `.ui-search`: the one look of every search / filter box — magnifier left, clear button right, border shows focus. */
+.ui-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--ac-space-4);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-overlay-subtle);
+  color: var(--ac-muted);
+  transition: border-color 0.15s;
+}
+.ui-search:focus-within { border-color: var(--ac-accent); }
+.ui-search--large { min-height: var(--ac-tap); padding: 0 var(--ac-space-5); }
+.ui-search__icon { flex: none; }
+.ui-search__input {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--ac-fs-ui);
+  outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ui-search--large .ui-search__input { font-size: var(--ac-fs-ui-touch); }
+/* The box shows focus (its border); the input inside draws no second ring. */
+.ui-search__input:focus-visible { outline: none; box-shadow: none; }
+.ui-search__input::placeholder { color: var(--ac-muted); }
+.ui-search__input::-webkit-search-cancel-button,
+.ui-search__input::-webkit-search-decoration { display: none; -webkit-appearance: none; }
+.ui-search__clear { flex: none; margin-right: calc(var(--ac-space-3) * -1); }
+@media (max-width: 900px), (pointer: coarse) {
+  .ui-search { min-height: var(--ac-tap); }
+  .ui-search__clear { min-width: var(--ac-tap); min-height: var(--ac-tap); margin-right: calc(var(--ac-space-4) * -1); }
+}

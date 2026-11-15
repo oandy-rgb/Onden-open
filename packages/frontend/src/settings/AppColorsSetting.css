@@ -1,0 +1,29 @@
+.app-colors { display: flex; flex-direction: column; gap: var(--ac-space-5); }
+.app-colors__swatches { display: flex; flex-wrap: wrap; gap: var(--ac-space-4); }
+.app-colors__swatch {
+  display: flex; flex-direction: column; align-items: center; gap: var(--ac-space-2);
+  min-width: 64px; padding: var(--ac-space-3);
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: transparent; color: var(--ac-ink-2); font: inherit; font-size: var(--ac-fs-caption); cursor: pointer;
+}
+.app-colors__swatch:hover { background: var(--ac-overlay-hover); }
+.app-colors__swatch[aria-pressed="true"] { border-color: var(--ac-accent); background: var(--ac-selected); color: var(--ac-ink); }
+.app-colors__swatch:focus-visible { outline: none; box-shadow: var(--ac-focus-ring); }
+/* The chip shows the preset's own paper with its accent as a dot, whatever theme the app is in. */
+.app-colors__chip {
+  position: relative; width: 36px; height: 36px; border-radius: var(--ac-radius-full);
+  background: var(--chip-paper); border: 1px solid var(--ac-line);
+}
+.app-colors__chip::after {
+  content: ""; position: absolute; inset: 9px; border-radius: var(--ac-radius-full); background: var(--chip-accent);
+}
+.app-colors__custom { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ac-space-6); }
+.app-colors__pick { display: flex; align-items: center; gap: var(--ac-space-3); font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.app-colors__pick input[type="color"] {
+  width: 40px; height: 32px; padding: 0; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-sm);
+  background: transparent; cursor: pointer;
+}
+@media (max-width: 600px) {
+  .app-colors__swatch { min-width: 72px; min-height: var(--ac-tap); }
+  .app-colors__pick input[type="color"] { width: 48px; height: var(--ac-tap); }
+}

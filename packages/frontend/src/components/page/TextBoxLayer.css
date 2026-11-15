@@ -1,0 +1,153 @@
+/* TextBoxLayer — the text boxes over one page (PDF page, handwriting page).
+   Everything is sized in px from the page's current scale (custom properties
+   set by the component), so zoom and full screen carry the text with the page. */
+
+.page-text-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-local-6); /* over the ink canvases and a PDF page's draw surface */
+  pointer-events: none;
+}
+
+/* PDF page: under the boxes, catches the tap that adds one. One finger still
+   scrolls the page natively and two zoom it (touch-action), so only a tap lands. */
+.page-text-capture {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: pan-x pan-y pinch-zoom;
+  cursor: text;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.page-text-box {
+  position: absolute;
+  left: var(--ptb-left);
+  top: var(--ptb-top);
+  width: var(--ptb-width);
+  box-sizing: border-box;
+  padding: 0.12em 0.2em;
+  border: 1px solid transparent;
+  border-radius: var(--ac-radius-sm);
+  color: var(--ptb-color);
+  font-size: var(--ptb-size);
+  line-height: 1.35;
+  text-align: var(--ptb-align);
+  outline: none;
+  pointer-events: none;
+}
+
+.page-text-box--live {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.page-text-box--live:hover { border-color: color-mix(in srgb, var(--ac-ink) 22%, transparent); }
+.page-text-box--selected,
+.page-text-box--live:focus-visible {
+  border-color: var(--ac-focus);
+  background: color-mix(in srgb, var(--ac-surface) 55%, transparent);
+}
+.page-text-box--editing { cursor: text; -webkit-user-select: text; user-select: text; }
+
+.page-text-content,
+.page-text-input {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.page-text-input {
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* Right edge: drag to set the width. A wide invisible hit area, a thin visible bar. */
+.page-text-resize {
+  position: absolute;
+  top: 0;
+  right: -9px;
+  bottom: 0;
+  width: 18px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.page-text-resize::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  width: 6px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-focus);
+}
+
+/* Top-left grip: moves a box whose text is being edited (a drag on the text selects). */
+.page-text-grip {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-focus);
+  cursor: move;
+  touch-action: none;
+}
+.page-text-grip::before { content: ""; position: absolute; inset: -8px; }
+
+.page-text-bar {
+  position: absolute;
+  /* Keep the whole bar on the page when the box sits near the right edge. */
+  left: clamp(0px, var(--ptb-left), calc(100% - 320px));
+  top: var(--ptb-top);
+  z-index: var(--z-local-3);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 8px);
+  padding: 4px 6px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-elevated);
+  box-shadow: var(--ac-shadow-sm);
+  pointer-events: auto;
+  touch-action: manipulation;
+  font-size: var(--ac-fs-ui);
+  line-height: 1;
+}
+.page-text-bar-sep { width: 1px; height: 18px; background: var(--ac-line); }
+
+.page-text-size,
+.page-text-delete {
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.page-text-size--small { font-size: var(--ac-fs-caption); }
+.page-text-size--medium { font-size: var(--ac-fs-prose); }
+.page-text-size--large { font-size: var(--ac-fs-h3); }
+.page-text-size.active { background: var(--ac-accent-soft); color: var(--ac-link); }
+.page-text-delete:hover { background: var(--ac-accent-soft); }

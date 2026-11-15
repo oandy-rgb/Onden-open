@@ -1,0 +1,44 @@
+/* The import confirmation (ModuleImportConfirm.tsx): the card. The layer and
+   backdrop are ui/Modal. */
+.module-import-layer { padding: 16px; }
+.module-import-confirm {
+  box-sizing: border-box;
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-modal);
+}
+.module-import-title { margin: 0 0 6px; font-size: var(--ac-fs-lg); font-weight: 600; }
+.module-import-lead { margin: 0 0 14px; color: var(--ac-muted); font-size: var(--ac-fs-caption); line-height: 1.55; }
+.module-import-heading {
+  margin: 14px 0 6px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.module-import-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.module-import-row { display: grid; grid-template-columns: 4.5em 1fr; gap: 10px; align-items: baseline; }
+.module-import-row { font-size: var(--ac-fs-caption); line-height: 1.5; }
+.module-import-kind { color: var(--ac-muted); }
+.module-import-pin { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: var(--ac-fs-caption); cursor: pointer; }
+.module-import-pin input { margin-top: 3px; }
+.module-import-pin-hint { display: block; margin-top: 2px; color: var(--ac-muted); font-size: var(--ac-fs-xs); }
+.module-import-denied { margin: 14px 0 0; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.module-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
+.module-import-spacer { flex: 1; }
+.module-import-manage {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ac-accent);
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  cursor: pointer;
+}
+.module-import-manage:hover { text-decoration: underline; }

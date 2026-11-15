@@ -1,0 +1,86 @@
+/* The task page: rows, chips, the settings sheet. Targets are >= 44px;
+   every state differs in lightness as well as hue (framed vs solid), so it
+   survives colour-blindness and both themes. */
+
+.tk-row { display: flex; align-items: stretch; gap: 2px; list-style: none; border-bottom: 1px solid var(--ac-line); }
+.tk-box {
+  flex: 0 0 auto; width: 44px; min-height: 44px; padding: 0; border: 0; background: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.tk-box-mark {
+  width: 22px; height: 22px; border-radius: var(--ac-radius-full); display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--ac-muted); color: var(--ac-accent-ink); box-sizing: border-box;
+}
+.tk-box--someday .tk-box-mark { border-style: dashed; }
+.tk-box--checked .tk-box-mark { background: var(--ac-accent); border-color: var(--ac-accent); border-style: solid; }
+.tk-box--none { cursor: default; }
+.tk-dot { width: 8px; height: 8px; border-radius: var(--ac-radius-full); background: var(--ac-muted); }
+.tk-box:focus-visible, .tk-main:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: -2px; }
+.tk-main {
+  flex: 1; min-width: 0; min-height: 44px; padding: 8px 8px 8px 2px; border: 0; background: none; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px; color: var(--ac-ink); font: inherit;
+}
+.tk-title { overflow-wrap: anywhere; }
+.tk-row--done .tk-title { text-decoration: line-through; color: var(--ac-muted); }
+.tk-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-chip {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: var(--ac-radius-full); box-sizing: border-box;
+  font-size: var(--ac-fs-xs); border: 1px solid var(--ac-line); color: var(--ac-muted); font-variant-numeric: tabular-nums;
+}
+.tk-chip--deadline { border-color: var(--task-orange); color: var(--task-orange); }
+.tk-chip--overdue { border-color: var(--task-orange); color: var(--task-orange); }
+.tk-chip--deadline-soon { background: var(--task-orange-solid); border-color: var(--task-orange-solid); color: var(--task-orange-on); }
+.tk-chip--recur { border-color: var(--task-blue); color: var(--task-blue); }
+.tk-focused { display: inline-flex; align-items: center; gap: 3px; }
+.tk-chip--evening { border-color: var(--task-purple); color: var(--task-purple); }
+.tk-note { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+:root { --task-orange: #b45309; --task-orange-solid: #b45309; --task-orange-on: #fff; --task-blue: #1d4ed8; --task-purple: #7e22ce; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --task-orange: #fdba74; --task-orange-solid: #fb923c; --task-orange-on: #1c1917; --task-blue: #93c5fd; --task-purple: #d8b4fe; }
+}
+:root[data-theme="dark"] { --task-orange: #fdba74; --task-orange-solid: #fb923c; --task-orange-on: #1c1917; --task-blue: #93c5fd; --task-purple: #d8b4fe; }
+
+/* The settings sheet: ui/Sheet on the phone, a centred card on desktop. */
+.tk-sheet { width: min(560px, 100%); box-sizing: border-box; padding: 16px; }
+@media (width > 600px) {
+  .tk-sheet-layer.ui-modal[open] { padding: 12px; }
+  .tk-sheet {
+    max-height: 88vh; overflow-y: auto;
+    background: var(--ac-surface); color: var(--ac-ink);
+    border: 1px solid var(--ac-line); border-radius: var(--ac-radius-xl);
+  }
+}
+.tk-sheet-top { display: flex; gap: 8px; align-items: center; }
+.tk-sheet-title { flex: 1; min-width: 0; min-height: 44px; font: inherit; --onden-input-size: 1.1em; font-size: var(--onden-input-size); font-weight: 600; padding: 0 8px; border: 1px solid transparent; border-radius: var(--ac-radius-md); background: none; color: inherit; }
+.tk-sheet-title:focus { border-color: var(--ac-accent); outline: none; }
+.tk-sheet-title--static { display: flex; align-items: center; overflow-wrap: anywhere; }
+/* Where a note's task was written: a link to that line. */
+.tk-sheet-from { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; margin: 0 8px 4px; padding: 0; border: 0; background: none; font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-accent); cursor: pointer; }
+.tk-sheet-source { margin: 4px 8px 12px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tk-sheet-group { margin: 10px 0 4px; }
+.tk-sheet-label { font-weight: 600; font-size: var(--ac-fs-caption); margin: 0 0 4px 2px; }
+.tk-sheet-label small { font-weight: 400; margin-left: 8px; color: var(--ac-muted); }
+.tk-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.tk-pill {
+  min-height: 44px; padding: 0 14px; border-radius: var(--ac-radius-full); font: inherit; cursor: pointer; box-sizing: border-box;
+  border: 1px solid var(--ac-line); background: none; color: var(--ac-ink);
+}
+.tk-sheet-loose { align-items: center; margin-top: 6px; }
+.tk-sheet-loose-label { margin: 0 2px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+/* A setting as one line: grey while nothing is set, in ink once something is; its choices open under it. */
+.tk-sheet-rows { margin-top: 12px; border-top: 1px solid var(--ac-line); }
+.tk-sheet-rows + .tk-sheet-rows { margin-top: 0; border-top: 0; }
+.tk-sheet-rows > .tk-sheet-example { margin: 12px 2px; }
+.tk-pill--on { background: var(--ac-accent); border-color: var(--ac-accent); color: var(--ac-accent-ink); }
+.tk-sheet-input { min-height: 44px; padding: 0 10px; margin: 6px 0; font: inherit; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: inherit; box-sizing: border-box; }
+.tk-sheet-input--n { width: 72px; }
+.tk-sheet-custom { display: flex; align-items: center; gap: 8px; }
+.tk-sheet-example { margin: 4px 8px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+/* What can be done with the task, one per line with what it does; deleting is last and apart. */
+.tk-sheet-foot { display: flex; flex-direction: column; margin-top: 8px; }
+.tk-sheet-foot button { display: flex; align-items: center; flex-wrap: wrap; column-gap: 10px; min-height: 44px; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tk-sheet-foot button small { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tk-sheet-foot .tk-sheet-delete { margin-top: 4px; border-top: 1px solid var(--ac-line); color: var(--task-orange); }
+.tk-sheet-notes ul { margin: 0; padding: 0; list-style: none; }
+.tk-sheet-notes li button { width: 100%; min-height: 44px; text-align: left; border: 0; border-bottom: 1px solid var(--ac-line); background: none; color: inherit; font: inherit; cursor: pointer; }

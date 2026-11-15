@@ -1,0 +1,20 @@
+210 js files, total 8951 KB raw / 2816 KB gz
+   598 KB raw   142 KB gz  wardley-L42UT6IY.jwIjNpBb.js
+   561 KB raw   161 KB gz  index.Bwy9piYY.js
+   559 KB raw   130 KB gz  mermaid.core.QasNDLpP.js
+   555 KB raw   193 KB gz  BuilderWorkspace.TeoGmSqE.js
+   487 KB raw   169 KB gz  selectionBubble.DUO5jFK_.js
+   477 KB raw   145 KB gz  pdf.DlDyyR6N.js
+   433 KB raw   139 KB gz  cytoscape.esm.D3_iZ_3b.js
+   292 KB raw    96 KB gz  groups.7i8Ow0tH.js
+   288 KB raw   105 KB gz  AppRoot.BRCB4HYC.js
+   271 KB raw    84 KB gz  index.SepWG5WR.js
+   255 KB raw    76 KB gz  katex.HP8lGamR.js
+   254 KB raw    76 KB gz  katex.DnlPpQZa.js
+   224 KB raw    70 KB gz  pixiCommitted.CTdRtRlB.js
+   224 KB raw    86 KB gz  fonts-noto.CbYsivwy.js
+   208 KB raw    65 KB gz  pdf_viewer.BZ_7Kd6f.js
+worker/sql: 95 KB raw 32 KB gz localDbWorker-BTXdJba6.js
+worker/sql: 15 KB raw 5 KB gz webworkerAll.D-dM9s1Q.js
+worker/sql: 6 KB raw 2 KB gz sql.BC88IN-V.js
+worker/sql: 2 KB raw 1 KB gz wasm.FmSvnV9S.js

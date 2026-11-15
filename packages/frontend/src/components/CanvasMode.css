@@ -1,0 +1,329 @@
+/* Canvas mode — grouped card sandbox view.
+ * Extracted from global.css 2026-06-04 (Pass 1 / batch 2.3).
+ * Consumers: CanvasMode.tsx (primary), CardNode.tsx, KnowledgeWorkspace.tsx,
+ * OverviewSidebar.tsx, OverviewActivityPane.tsx.
+ */
+
+.canvas-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.canvas-back-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-right: 6px;
+  background: color-mix(in srgb, var(--ac-accent) 12%, var(--ac-surface));
+  border: 1px solid color-mix(in srgb, var(--ac-accent) 28%, var(--ac-line));
+  border-radius: var(--ac-radius-full);
+  color: var(--ac-accent);
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-back-pill:hover { background: color-mix(in srgb, var(--ac-accent) 18%, var(--ac-surface)); }
+.canvas-search-bar {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-raised);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ac-surface);
+  border-radius: var(--ac-radius-md);
+  box-shadow: var(--ac-shadow-float);
+  min-width: 260px;
+}
+.canvas-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: var(--z-sticky);
+}
+.canvas-empty-hint span {
+  font-size: var(--ac-fs-small);
+  color: var(--ac-muted);
+}
+.canvas-empty-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  font-size: var(--ac-fs-xs);
+  font-family: inherit;
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+}
+.canvas-empty-add {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 14px;
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+  color: var(--ac-ink);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+}
+.canvas-empty-add:hover { border-color: var(--ac-accent); color: var(--ac-accent); }
+.canvas-mode { display: flex; height: 100%; overflow: hidden; }
+.canvas-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.canvas-title-input {
+  font-size: var(--ac-fs-ui); font-weight: 600; color: var(--ac-ink); background: transparent;
+  border: none; outline: none; flex: 1; min-width: 0;
+}
+.canvas-title-input:focus { background: var(--ac-raised); border-radius: var(--ac-radius-md); padding: 2px 6px; }
+.canvas-action-btn {
+  display: flex; align-items: center; gap: 5px; padding: 5px 10px;
+  font-size: var(--ac-fs-caption); border-radius: var(--ac-radius-md); border: 1px solid var(--ac-line);
+  background: var(--ac-surface); color: var(--ac-ink); cursor: pointer; transition: background 0.15s;
+}
+.canvas-action-btn:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.canvas-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.canvas-empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; color: var(--ac-muted); font-size: var(--ac-fs-ui);
+}
+
+/* Soft-cap nudge banner (KnowledgeWorkspace): a thin, dismissible notice that a
+   board has grown large enough to consider splitting into sub-canvases. */
+.canvas-cap-banner {
+  position: absolute;
+  top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: var(--z-local-5);
+  max-width: min(620px, 88%);
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px 7px 14px;
+  font-size: var(--ac-fs-caption); line-height: 1.45; color: var(--ac-ink);
+  background: color-mix(in srgb, var(--ac-accent) 10%, var(--ac-surface));
+  border: 1px solid color-mix(in srgb, var(--ac-accent) 35%, var(--ac-line));
+  border-radius: var(--ac-radius-sm);
+  box-shadow: var(--ac-shadow-float);
+}
+.canvas-cap-dismiss {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border: none; background: transparent; color: var(--ac-muted);
+  border-radius: var(--ac-radius-xs); cursor: pointer;
+}
+.canvas-cap-dismiss:hover { background: color-mix(in srgb, var(--ac-ink) 8%, transparent); color: var(--ac-ink); }
+.canvas-toolbar-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--ac-radius-md); border: 1px solid var(--ac-line);
+  background: var(--ac-surface); cursor: pointer; color: var(--ac-ink); transition: background 0.1s;
+}
+.canvas-toolbar-btn:hover { background: var(--ac-overlay-hover); }
+.canvas-toolbar-btn--danger:hover { background: var(--ac-danger-soft); color: var(--ac-danger); border-color: var(--ac-danger); }
+
+/* ⑦ add-existing-note picker — a ui/Modal card, centred (bottom-docked on a phone) */
+.canvas-add-popover {
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(480px, calc(100dvh - 48px));
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-float);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.canvas-add-popover > .ui-sheet-header { flex-shrink: 0; }
+.canvas-add-popover input {
+  min-width: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 6px 8px;
+  font-size: var(--ac-fs-small);
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+}
+.canvas-add-results { display: flex; flex-direction: column; min-height: 0; max-height: 280px; overflow-y: auto; }
+.canvas-add-item {
+  flex-shrink: 0;
+  min-height: 34px;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 7px 8px;
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-add-item:hover { background: var(--ac-overlay-hover); }
+.canvas-add-item:disabled { opacity: 0.6; cursor: wait; }
+.canvas-add-popover button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-inset); }
+.canvas-add-status { font-size: var(--ac-fs-caption); color: var(--ac-muted); padding: 8px; }
+
+/* ⑦ align/distribute bar — appears with a multi-selection */
+.canvas-align-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-dropdown);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  box-shadow: var(--ac-shadow-float);
+  padding: 4px;
+}
+.canvas-align-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.canvas-align-bar button:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.canvas-align-bar button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-inset); }
+.canvas-align-count { padding: 0 8px; color: var(--ac-muted); font-size: var(--ac-fs-caption); white-space: nowrap; }
+.canvas-align-sep { width: 1px; height: 16px; background: var(--ac-line); margin: 0 3px; }
+/* Batch colour swatches — a small circle each; override the 28×28 icon button. */
+.canvas-align-bar button.canvas-color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ac-radius-full);
+  background: var(--swatch-bg, var(--ac-surface));
+  border: 1px solid color-mix(in srgb, var(--ac-pure-black) 18%, transparent);
+  box-shadow: var(--ac-shadow-swatch-gloss);
+}
+.canvas-align-bar button.canvas-color-swatch:hover { transform: scale(1.15); background: var(--swatch-bg, var(--ac-surface)); }
+.canvas-align-bar button.canvas-color-swatch--clear {
+  background: var(--ac-surface);
+  background-image: linear-gradient(45deg, transparent 45%, var(--ac-danger) 45%, var(--ac-danger) 55%, transparent 55%);
+}
+
+.canvas-import-input { display: none; }
+
+/* Full screen (hooks/useBoardFullscreen): the app's top bar and the side lists step aside; the page's title strip
+   stays (its 「顯示」 and the way out of full screen are there). */
+body.onden-board-fullscreen .app-topbar,
+body.onden-board-fullscreen .overview-mobile-tabs { display: none; }
+@media (width > 900px) {
+  body.onden-board-fullscreen .obsidian-workspace { --onden-sidebar-track: 0px; }
+  body.onden-board-fullscreen .obsidian-workspace > .obsidian-sidebar { visibility: hidden; overflow: hidden; min-width: 0; padding-inline: 0; border-inline-end: 0; }
+}
+
+/* A phone's board is full screen for good (hooks/useBoardFullscreen `always`; docs/agents/decisions-canvas.md):
+   the page is exactly the screen — the bottom bar and the note's ⊟ ⋯ step aside (the board carries ‹ and the
+   title sheet, components/BoardPhoneNav), no bar or padding is left over, and no gesture can scroll the document. */
+html:has(body.onden-board-locked) { overflow: hidden; overscroll-behavior: none; }
+body.onden-board-locked { overflow: hidden; height: 100dvh; overscroll-behavior: none; }
+body.onden-board-locked :is(.mobile-bottom-nav, .mobile-sync-strip, .note-tab-actions) { display: none; }
+body.onden-board-locked .app-shell { height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
+body.onden-board-locked :is(.workspace-grid, .overview-workspace) { height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
+/* The board's own height assumed the top bar and the bottom bar above (global.css): with both gone it is the screen. */
+body.onden-board-locked .graph-panel { height: 100dvh; border-width: 0; }
+body.onden-board-locked .notes-center-wrap { height: 100dvh; }
+body.onden-board-locked .board-toolbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+
+/* The hand tool drags the board. */
+.graph-panel--hand-mode .react-flow__pane { cursor: grab; }
+.graph-panel--hand-mode .react-flow__pane.dragging { cursor: grabbing; }
+
+/* A selected arrow's actions, top centre (touch has no right-click). */
+.canvas-edge-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--board-chrome-z, 12);
+  display: flex;
+  gap: 6px;
+  max-width: calc(100% - 200px);
+}
+.canvas-edge-bar button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  cursor: pointer;
+  font-size: var(--ac-fs-caption);
+}
+.canvas-edge-bar button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.canvas-edge-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* A phone: the align bar takes the full width under the top buttons. */
+@media (max-width: 900px) {
+  /* The same row for the other bars, so none of them sits under the undo / 「顯示」 buttons or the tool bar. */
+  .canvas-edge-bar { top: 64px; left: 12px; right: 12px; transform: none; max-width: none; flex-wrap: wrap; }
+  .canvas-cap-banner { top: 64px; max-width: calc(100% - 24px); }
+  /* Centred in what is left between the top buttons and the tool bar. */
+  .canvas-empty-hint { padding: 64px 16px 96px; text-align: center; }
+  .canvas-align-bar {
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .canvas-align-bar button { flex: 0 0 44px; width: 44px; height: 44px; }
+  .canvas-align-sep { flex: 0 0 1px; }
+  .canvas-align-bar button.canvas-color-swatch {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--ac-radius-md);
+    border: none;
+    box-shadow: none;
+    background: transparent;
+  }
+  .canvas-align-bar button.canvas-color-swatch::before {
+    content: "";
+    width: 20px;
+    height: 20px;
+    border-radius: var(--ac-radius-full);
+    background: var(--swatch-bg, var(--ac-surface));
+    border: 1px solid var(--ac-line);
+  }
+  .canvas-align-bar button.canvas-color-swatch--clear::before {
+    background-image: linear-gradient(45deg, transparent 45%, var(--ac-danger) 45%, var(--ac-danger) 55%, transparent 55%);
+  }
+  .canvas-align-bar button.canvas-color-swatch:hover { transform: none; background: var(--ac-overlay-hover); }
+  .canvas-add-popover { width: calc(100vw - 24px); max-height: calc(100dvh - 96px); }
+  .canvas-add-popover input { min-height: 44px; }
+  .canvas-add-item { min-height: 44px; font-size: var(--ac-fs-ui); white-space: normal; overflow-wrap: anywhere; }
+}
+
+@media (hover: none) {
+  .canvas-add-item { min-height: 44px; }
+}

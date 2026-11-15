@@ -1,0 +1,1 @@
+export default globalThis.process ?? { env: {}, cwd: () => "/", argv: [], platform: "browser", versions: {}, nextTick: (f, ...a) => queueMicrotask(() => f(...a)), on() {}, emitWarning() {}, memoryUsage: () => ({}) };

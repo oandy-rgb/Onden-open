@@ -1,0 +1,52 @@
+/* The page the print window (PDF export) puts around the exported HTML. Only
+   lib/noteExportPrint.ts adds it, to the window that prints; the downloaded
+   HTML file is left as the site's style makes it, because a file read on a
+   screen should not be cut into A4 pages. */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm;
+  /* Page number, in browsers that draw margin boxes (Chromium 131+). Others skip this rule and print no number. */
+  @bottom-center { content: counter(page); font: 9pt/1 "Noto Sans TC", "Microsoft JhengHei", sans-serif; color: #6b7280; }
+}
+
+html, body { background: #fff !important; }
+body.site-root { color: #111827; }
+
+.note-export { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+.note-export .markdown-body {
+  font-family: "Noto Serif TC Variable", "Noto Serif TC", "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", "PMingLiU", Georgia, "Times New Roman", serif;
+  font-size: 11pt;
+  line-height: 1.85; /* Chinese text needs more air between lines than Latin */
+  orphans: 3;
+  widows: 3;
+  overflow-wrap: anywhere;
+}
+
+/* Headings stay with what follows them. */
+.note-export h1, .note-export h2, .note-export h3,
+.note-export h4, .note-export h5, .note-export h6 { break-after: avoid; break-inside: avoid; line-height: 1.4; }
+
+/* Things that read badly cut in two. */
+.note-export pre, .note-export blockquote, .note-export .callout,
+.note-export img, .note-export figure, .note-export tr, .note-export li > img { break-inside: avoid; }
+.note-export pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A long table repeats its header on each page. */
+.note-export thead { display: table-header-group; }
+.note-export tfoot { display: table-footer-group; }
+.note-export table { width: 100%; border-collapse: collapse; }
+
+.note-export img, .note-export svg, .note-export video { max-width: 100% !important; height: auto; }
+
+/* Links are underlined so they show on paper. The address is not printed after
+   them: most links are a word in a sentence and a bracketed URL after each one
+   makes the page hard to read. */
+.note-export a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Backgrounds that carry meaning keep their colour in print. */
+.note-export pre, .note-export code, .note-export blockquote,
+.note-export .callout, .note-export th {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}

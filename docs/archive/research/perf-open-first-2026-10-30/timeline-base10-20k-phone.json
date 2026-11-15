@@ -1,0 +1,1539 @@
+[
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 1,
+  "cold": {
+   "label": "cold",
+   "wallToUsableMs": 16125,
+   "typing": {
+    "n": 40,
+    "medianMs": 49,
+    "p95Ms": 68,
+    "maxMs": 114,
+    "fromMs": 16385
+   },
+   "marks": {
+    "shell": 1509,
+    "workerCreated": 1962,
+    "editorTypable": 11995,
+    "typableLast": 13598,
+    "dataShown": 12535,
+    "usable": 12535,
+    "gateUp": 12650,
+    "gateDown": 13583
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 7523,
+     "endMs": 8939
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1962:735",
+    "persistBootstrap@7523:1416",
+    "getPendingWrites@7942:997",
+    "getRejectedWrites@9887:559",
+    "getStoredBody@10290:177",
+    "catchUpWithOtherTabs@10519:329",
+    "getPendingWrites@10849:106",
+    "getPendingWrites@10955:137",
+    "getLastEventId@11092:937",
+    "storeDownloadedBodies@11094:944",
+    "getPendingWrites@11898:148",
+    "getLastEventId@12595:118",
+    "getAllMembershipIds@12716:152",
+    "missingBodyIds@12785:208",
+    "storeDownloadedBodies@13633:113",
+    "storeDownloadedBodies@16374:125"
+   ],
+   "rpcAll": [
+    "initLocalDb@1962+735",
+    "getLastEventId@2698+13",
+    "getPendingWrites@2711+3",
+    "loadBootstrapList@2711+4",
+    "getPendingWrites@2715+5",
+    "persistBootstrap@7523+1416",
+    "getPendingWrites@7942+997",
+    "getRejectedWrites@9887+559",
+    "getStoredBody@10290+177",
+    "loadCanvases@10395+78",
+    "missingBodyIds@10396+82",
+    "catchUpWithOtherTabs@10519+329",
+    "getPendingWrites@10849+106",
+    "getPendingWrites@10955+137",
+    "persistRemoteNode@11091+6",
+    "getLastEventId@11092+937",
+    "storeDownloadedBodies@11094+944",
+    "getPendingWrites@11898+148",
+    "getMembershipEpoch@12563+24",
+    "getLastEventId@12595+118",
+    "getAllMembershipIds@12716+152",
+    "missingBodyIds@12785+208",
+    "applySync@13013+2",
+    "setMembershipEpoch@13517+16",
+    "storeDownloadedBodies@13633+113",
+    "missingBodyIds@13801+37",
+    "planDrawings@13827+16",
+    "storeDownloadedBodies@14059+57"
+   ],
+   "longTasksList": [
+    "907+120",
+    "1158+201",
+    "1953+158",
+    "2111+56",
+    "2497+166",
+    "5607+918",
+    "6528+1414",
+    "8603+335",
+    "8939+1460",
+    "10551+249",
+    "10858+87",
+    "10986+103",
+    "11097+897",
+    "12119+235",
+    "12430+106",
+    "12587+109",
+    "12865+124",
+    "13015+502",
+    "13533+65"
+   ],
+   "longTasksToTypable": {
+    "n": 19,
+    "sum": 7305,
+    "max": 1460
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1971,
+     "endMs": 2223
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1975,
+     "endMs": 2246
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 2481,
+     "endMs": 2643
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 2483,
+     "endMs": 2661
+    },
+    {
+     "path": "/api/bootstrap?bodies=none",
+     "startMs": 2722,
+     "endMs": 5604
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 9862,
+     "endMs": 10171
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 9867,
+     "endMs": 10213
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 10480,
+     "endMs": 10674
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 12030,
+     "endMs": 12192
+    },
+    {
+     "path": "/api/sync/membership/digest?expected_epoch=0",
+     "startMs": 12719,
+     "endMs": 12881
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 12994,
+     "endMs": 13189
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 13641,
+     "endMs": 13805
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13840,
+     "endMs": 14031
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14149,
+     "endMs": 14345
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14493,
+     "endMs": 14684
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14836,
+     "endMs": 15031
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15140,
+     "endMs": 15334
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15467,
+     "endMs": 15658
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15787,
+     "endMs": 15984
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 16116,
+     "endMs": 16307
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 19562,
+     "endMs": 19757
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 22898,
+     "endMs": 23090
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 12339,
+   "longTasksTotal": {
+    "n": 28,
+    "sum": 9669,
+    "max": 1460
+   }
+  },
+  "warm": {
+   "label": "warm",
+   "wallToUsableMs": 9880,
+   "typing": {
+    "n": 20,
+    "medianMs": 41,
+    "p95Ms": 99,
+    "maxMs": 99,
+    "fromMs": 10186
+   },
+   "marks": {
+    "shell": 624,
+    "workerCreated": 1154,
+    "gateUp": 3524,
+    "gateDown": 7359,
+    "editorTypable": 7360,
+    "typableLast": 7360,
+    "dataShown": 7811,
+    "usable": 7811
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 8234,
+     "endMs": 8289
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1154:595",
+    "loadBootstrapList@1763:918",
+    "catchUpWithOtherTabs@1778:1822",
+    "getPendingWrites@2721:879",
+    "getRejectedWrites@3468:278",
+    "getPendingWrites@3601:179",
+    "missingBodyIds@3604:176",
+    "storeDownloadedBodies@4658:515",
+    "setLastEventId@4726:447",
+    "loadBootstrapRelations@5295:345",
+    "missingBodyIds@5296:600",
+    "getMembershipEpoch@5349:555",
+    "loadAttributePage@5729:176",
+    "getLastEventId@5904:460",
+    "storeDownloadedBodies@6393:137",
+    "missingBodyIds@6530:303",
+    "getPendingWrites@7237:187",
+    "storeDownloadedBodies@7488:330",
+    "missingBodyIds@8280:651",
+    "loadCanvases@8328:608",
+    "storeDownloadedBodies@10056:120"
+   ],
+   "rpcAll": [
+    "initLocalDb@1154+595",
+    "getLastEventId@1750+6",
+    "getPendingWrites@1763+9",
+    "loadBootstrapList@1763+918",
+    "catchUpWithOtherTabs@1778+1822",
+    "getPendingWrites@2721+879",
+    "getRejectedWrites@3468+278",
+    "getPendingWrites@3601+179",
+    "missingBodyIds@3604+176",
+    "getPendingWrites@3779+48",
+    "getLastEventId@3828+23",
+    "getPendingWrites@4133+70",
+    "applySync@4658+56",
+    "storeDownloadedBodies@4658+515",
+    "setLastEventId@4726+447",
+    "loadBootstrapRelations@5295+345",
+    "missingBodyIds@5296+600",
+    "getMembershipEpoch@5349+555",
+    "loadAttributePage@5729+176",
+    "getLastEventId@5904+460",
+    "getAllMembershipIds@6366+60",
+    "storeDownloadedBodies@6393+137",
+    "applySync@6529+3",
+    "missingBodyIds@6530+303",
+    "setMembershipEpoch@6832+11",
+    "getPendingWrites@7237+187",
+    "storeDownloadedBodies@7488+330"
+   ],
+   "longTasksList": [
+    "148+58",
+    "341+120",
+    "771+66",
+    "917+66",
+    "1146+55",
+    "1437+114",
+    "2386+1140",
+    "3601+128",
+    "3915+225",
+    "4306+344",
+    "4712+444",
+    "5544+350",
+    "5904+459",
+    "6423+107",
+    "6533+299",
+    "6843+518",
+    "7503+217",
+    "7728+82"
+   ],
+   "longTasksToTypable": {
+    "n": 16,
+    "sum": 4493,
+    "max": 1140
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1163,
+     "endMs": 1366
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1166,
+     "endMs": 1331
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1582,
+     "endMs": 1737
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1585,
+     "endMs": 1750
+    },
+    {
+     "path": "/api/sync/membership/digest",
+     "startMs": 1761,
+     "endMs": 1922
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 3451,
+     "endMs": 3750
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 3453,
+     "endMs": 3750
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 3786,
+     "endMs": 4088
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 3854,
+     "endMs": 4063
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 5176,
+     "endMs": 5337
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 5899,
+     "endMs": 6093
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 6835,
+     "endMs": 7033
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 7986,
+     "endMs": 8182
+    },
+    {
+     "path": "/api/bootstrap?nodes=none",
+     "startMs": 7993,
+     "endMs": 8215
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 8926,
+     "endMs": 9082
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 8933,
+     "endMs": 9128
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9268,
+     "endMs": 9466
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9560,
+     "endMs": 9752
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9836,
+     "endMs": 10029
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13218,
+     "endMs": 13412
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 9387,
+   "longTasksTotal": {
+    "n": 27,
+    "sum": 7628,
+    "max": 1140
+   }
+  },
+  "offline": {
+   "label": "offline",
+   "wallToUsableMs": 7282,
+   "typing": {
+    "n": 3,
+    "medianMs": 58,
+    "p95Ms": 79,
+    "maxMs": 79,
+    "fromMs": 7474
+   },
+   "marks": {
+    "shell": 577,
+    "workerCreated": 1005,
+    "gateUp": 3102,
+    "gateDown": 4057,
+    "editorTypable": 4751,
+    "typableLast": 4751
+   },
+   "persistBootstrap": [],
+   "rpcOver100": [
+    "initLocalDb@1005:446",
+    "loadBootstrapList@1462:781",
+    "getPendingWrites@2286:909",
+    "getRejectedWrites@3046:235",
+    "missingBodyIds@3199:126",
+    "getPendingWrites@3354:151",
+    "getPendingWrites@3792:306",
+    "getPendingWrites@4662:138",
+    "loadBootstrapRelations@4902:238",
+    "loadAttributePage@5210:133"
+   ],
+   "rpcAll": [
+    "initLocalDb@1005+446",
+    "getLastEventId@1451+4",
+    "getPendingWrites@1462+6",
+    "loadBootstrapList@1462+781",
+    "getPendingWrites@2286+909",
+    "getRejectedWrites@3046+235",
+    "missingBodyIds@3199+126",
+    "catchUpWithOtherTabs@3346+8",
+    "getPendingWrites@3354+151",
+    "getPendingWrites@3504+9",
+    "getLastEventId@3514+11",
+    "getPendingWrites@3792+306",
+    "getStoredBody@4048+58",
+    "getPendingWrites@4662+138",
+    "getNodeAttribute@4800+7",
+    "getNodeAttribute@4800+7",
+    "getNodeAttribute@4800+15",
+    "getNodeAttribute@4800+15",
+    "getNodeAttribute@4800+15",
+    "getNodeAttribute@4816+8",
+    "getNodeAttribute@4816+8",
+    "getNodeAttribute@4816+8",
+    "getNodeAttribute@4816+8",
+    "getNodeAttribute@4816+8",
+    "loadBootstrapRelations@4902+238",
+    "loadAttributePage@5210+133"
+   ],
+   "longTasksList": [
+    "224+78",
+    "333+144",
+    "992+104",
+    "1218+89",
+    "2060+1044",
+    "3124+70",
+    "3194+77",
+    "3355+144",
+    "3535+524",
+    "4105+645",
+    "5087+253"
+   ],
+   "longTasksToTypable": {
+    "n": 10,
+    "sum": 2919,
+    "max": 1044
+   },
+   "api": [],
+   "mirrorSettledAfterUsableMs": 6804,
+   "longTasksTotal": {
+    "n": 18,
+    "sum": 5157,
+    "max": 1044
+   }
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 2,
+  "cold": {
+   "label": "cold",
+   "wallToUsableMs": 15514,
+   "typing": {
+    "n": 40,
+    "medianMs": 46,
+    "p95Ms": 76,
+    "maxMs": 133,
+    "fromMs": 15782
+   },
+   "marks": {
+    "shell": 1265,
+    "workerCreated": 1759,
+    "editorTypable": 11426,
+    "typableLast": 12928,
+    "gateUp": 11917,
+    "dataShown": 12120,
+    "gateDown": 12911,
+    "usable": 12928
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 6871,
+     "endMs": 8315
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1759:602",
+    "persistBootstrap@6871:1444",
+    "getPendingWrites@7290:1026",
+    "getRejectedWrites@9158:510",
+    "getStoredBody@9493:204",
+    "loadCanvases@9608:104",
+    "missingBodyIds@9608:106",
+    "catchUpWithOtherTabs@9776:288",
+    "getPendingWrites@10090:122",
+    "getLastEventId@10213:121",
+    "storeDownloadedBodies@10329:1150",
+    "getPendingWrites@11342:149",
+    "getLastEventId@11831:142",
+    "getAllMembershipIds@11978:204",
+    "missingBodyIds@12954:101",
+    "missingBodyIds@15645:117"
+   ],
+   "rpcAll": [
+    "initLocalDb@1759+602",
+    "getLastEventId@2362+13",
+    "getPendingWrites@2375+7",
+    "loadBootstrapList@2375+8",
+    "getPendingWrites@2383+6",
+    "persistBootstrap@6871+1444",
+    "getPendingWrites@7290+1026",
+    "getRejectedWrites@9158+510",
+    "getStoredBody@9493+204",
+    "loadCanvases@9608+104",
+    "missingBodyIds@9608+106",
+    "catchUpWithOtherTabs@9776+288",
+    "getPendingWrites@10064+26",
+    "getPendingWrites@10090+122",
+    "getLastEventId@10213+121",
+    "persistRemoteNode@10328+13",
+    "storeDownloadedBodies@10329+1150",
+    "getPendingWrites@11342+149",
+    "getMembershipEpoch@11793+28",
+    "getLastEventId@11831+142",
+    "getAllMembershipIds@11978+204",
+    "applySync@12382+12",
+    "setMembershipEpoch@12855+9",
+    "missingBodyIds@12954+101",
+    "planDrawings@13161+19",
+    "storeDownloadedBodies@13338+64",
+    "missingBodyIds@13402+53"
+   ],
+   "longTasksList": [
+    "903+83",
+    "1083+112",
+    "1524+58",
+    "1746+63",
+    "2186+144",
+    "5426+816",
+    "6244+1046",
+    "7945+370",
+    "8316+1295",
+    "9816+219",
+    "10091+83",
+    "10214+110",
+    "10341+1085",
+    "11512+52",
+    "11565+206",
+    "11820+129",
+    "11983+137",
+    "12177+175",
+    "12393+462",
+    "12863+65",
+    "13274+60"
+   ],
+   "longTasksToTypable": {
+    "n": 20,
+    "sum": 6710,
+    "max": 1295
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1776,
+     "endMs": 1932
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1779,
+     "endMs": 1957
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 2161,
+     "endMs": 2350
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 2163,
+     "endMs": 2350
+    },
+    {
+     "path": "/api/bootstrap?bodies=none",
+     "startMs": 2393,
+     "endMs": 5425
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 9137,
+     "endMs": 9433
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 9141,
+     "endMs": 9434
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9718,
+     "endMs": 9912
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 10336,
+     "endMs": 10520
+    },
+    {
+     "path": "/api/sync/membership/digest?expected_epoch=0",
+     "startMs": 11981,
+     "endMs": 12142
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 12959,
+     "endMs": 13124
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13058,
+     "endMs": 13250
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13459,
+     "endMs": 13652
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13773,
+     "endMs": 13967
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14151,
+     "endMs": 14344
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14446,
+     "endMs": 14637
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14757,
+     "endMs": 14954
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15076,
+     "endMs": 15269
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15386,
+     "endMs": 15578
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15765,
+     "endMs": 15956
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 19125,
+     "endMs": 19316
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 22459,
+     "endMs": 22651
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 12506,
+   "longTasksTotal": {
+    "n": 33,
+    "sum": 9690,
+    "max": 1295
+   }
+  },
+  "warm": {
+   "label": "warm",
+   "wallToUsableMs": 9852,
+   "typing": {
+    "n": 20,
+    "medianMs": 40,
+    "p95Ms": 103,
+    "maxMs": 103,
+    "fromMs": 10093
+   },
+   "marks": {
+    "shell": 560,
+    "workerCreated": 1089,
+    "gateUp": 3418,
+    "gateDown": 7333,
+    "editorTypable": 7336,
+    "typableLast": 7337,
+    "dataShown": 7846,
+    "usable": 7846
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 8347,
+     "endMs": 8374
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1090:559",
+    "loadBootstrapList@1667:827",
+    "catchUpWithOtherTabs@1677:1806",
+    "getPendingWrites@2528:954",
+    "getRejectedWrites@3349:302",
+    "getPendingWrites@3483:207",
+    "missingBodyIds@3483:209",
+    "storeDownloadedBodies@4516:537",
+    "setLastEventId@4581:472",
+    "loadBootstrapRelations@5160:235",
+    "missingBodyIds@5161:418",
+    "getMembershipEpoch@5222:364",
+    "loadAttributePage@5455:131",
+    "getLastEventId@5586:550",
+    "storeDownloadedBodies@6170:154",
+    "getPendingWrites@7217:207",
+    "loadCanvases@8402:497"
+   ],
+   "rpcAll": [
+    "initLocalDb@1090+559",
+    "getLastEventId@1649+6",
+    "getPendingWrites@1666+10",
+    "loadBootstrapList@1667+827",
+    "catchUpWithOtherTabs@1677+1806",
+    "getPendingWrites@2528+954",
+    "getRejectedWrites@3349+302",
+    "getPendingWrites@3483+207",
+    "missingBodyIds@3483+209",
+    "getPendingWrites@3690+46",
+    "getLastEventId@3738+30",
+    "getPendingWrites@4039+65",
+    "applySync@4516+39",
+    "storeDownloadedBodies@4516+537",
+    "setLastEventId@4581+472",
+    "loadBootstrapRelations@5160+235",
+    "missingBodyIds@5161+418",
+    "getMembershipEpoch@5222+364",
+    "loadAttributePage@5455+131",
+    "getLastEventId@5586+550",
+    "getAllMembershipIds@6140+68",
+    "storeDownloadedBodies@6170+154",
+    "applySync@6321+5",
+    "setMembershipEpoch@6776+8",
+    "getPendingWrites@7217+207"
+   ],
+   "longTasksList": [
+    "162+70",
+    "314+97",
+    "1081+145",
+    "1227+59",
+    "1443+86",
+    "1555+60",
+    "2328+1092",
+    "3483+139",
+    "3809+237",
+    "4175+172",
+    "4370+135",
+    "4554+480",
+    "5347+231",
+    "5586+548",
+    "6204+117",
+    "6325+450",
+    "6784+553",
+    "7486+280",
+    "7770+76"
+   ],
+   "longTasksToTypable": {
+    "n": 17,
+    "sum": 4671,
+    "max": 1092
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1107,
+     "endMs": 1279
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1110,
+     "endMs": 1311
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1549,
+     "endMs": 1733
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1550,
+     "endMs": 1749
+    },
+    {
+     "path": "/api/sync/membership/digest",
+     "startMs": 1660,
+     "endMs": 1819
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 3327,
+     "endMs": 3627
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 3331,
+     "endMs": 3628
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 3697,
+     "endMs": 3973
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 3772,
+     "endMs": 3941
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 5054,
+     "endMs": 5214
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 5582,
+     "endMs": 5776
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 8024,
+     "endMs": 8222
+    },
+    {
+     "path": "/api/bootstrap?nodes=none",
+     "startMs": 8030,
+     "endMs": 8335
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 8362,
+     "endMs": 8555
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 8893,
+     "endMs": 9048
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9016,
+     "endMs": 9218
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9340,
+     "endMs": 9538
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9631,
+     "endMs": 9825
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9958,
+     "endMs": 10152
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13327,
+     "endMs": 13520
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 9349,
+   "longTasksTotal": {
+    "n": 29,
+    "sum": 7818,
+    "max": 1092
+   }
+  },
+  "offline": {
+   "label": "offline",
+   "wallToUsableMs": 7606,
+   "typing": {
+    "n": 3,
+    "medianMs": 63,
+    "p95Ms": 77,
+    "maxMs": 77,
+    "fromMs": 7826
+   },
+   "marks": {
+    "shell": 633,
+    "workerCreated": 1050,
+    "gateUp": 3452,
+    "gateDown": 4432,
+    "editorTypable": 5096,
+    "typableLast": 5096
+   },
+   "persistBootstrap": [],
+   "rpcOver100": [
+    "initLocalDb@1051:603",
+    "loadBootstrapList@1666:744",
+    "getPendingWrites@2449:1099",
+    "getRejectedWrites@3361:294",
+    "missingBodyIds@3551:136",
+    "getPendingWrites@4169:303",
+    "getPendingWrites@5024:117",
+    "loadBootstrapRelations@5237:295",
+    "loadAttributePage@5605:143"
+   ],
+   "rpcAll": [
+    "initLocalDb@1051+603",
+    "getLastEventId@1655+1",
+    "getPendingWrites@1666+3",
+    "loadBootstrapList@1666+744",
+    "getPendingWrites@2449+1099",
+    "getRejectedWrites@3361+294",
+    "missingBodyIds@3551+136",
+    "catchUpWithOtherTabs@3703+6",
+    "getPendingWrites@3709+24",
+    "getPendingWrites@3732+19",
+    "getLastEventId@3752+9",
+    "getPendingWrites@4169+303",
+    "getStoredBody@4421+69",
+    "getPendingWrites@5024+117",
+    "getNodeAttribute@5140+8",
+    "getNodeAttribute@5140+8",
+    "getNodeAttribute@5140+8",
+    "getNodeAttribute@5140+8",
+    "getNodeAttribute@5140+8",
+    "getNodeAttribute@5150+7",
+    "getNodeAttribute@5150+7",
+    "getNodeAttribute@5150+7",
+    "getNodeAttribute@5150+7",
+    "getNodeAttribute@5150+7",
+    "loadBootstrapRelations@5237+295"
+   ],
+   "longTasksList": [
+    "151+87",
+    "313+161",
+    "827+62",
+    "1040+120",
+    "1343+142",
+    "2217+1236",
+    "3469+78",
+    "3547+90",
+    "3778+656",
+    "4489+606",
+    "5487+259"
+   ],
+   "longTasksToTypable": {
+    "n": 10,
+    "sum": 3238,
+    "max": 1236
+   },
+   "api": [],
+   "mirrorSettledAfterUsableMs": 6814,
+   "longTasksTotal": {
+    "n": 19,
+    "sum": 5290,
+    "max": 1236
+   }
+  }
+ },
+ {
+  "tier": "20k",
+  "device": "phone",
+  "run": 3,
+  "cold": {
+   "label": "cold",
+   "wallToUsableMs": 15592,
+   "typing": {
+    "n": 40,
+    "medianMs": 43,
+    "p95Ms": 83,
+    "maxMs": 85,
+    "fromMs": 15802
+   },
+   "marks": {
+    "shell": 1322,
+    "workerCreated": 1809,
+    "editorTypable": 11566,
+    "typableLast": 12996,
+    "dataShown": 12049,
+    "usable": 12049,
+    "gateUp": 12164,
+    "gateDown": 12982
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 7056,
+     "endMs": 8615
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1809:645",
+    "persistBootstrap@7056:1559",
+    "getPendingWrites@7494:1123",
+    "getRejectedWrites@9499:636",
+    "getStoredBody@9921:239",
+    "catchUpWithOtherTabs@10236:282",
+    "getPendingWrites@10517:105",
+    "storeDownloadedBodies@10657:985",
+    "getPendingWrites@11468:189",
+    "getMembershipEpoch@11948:154",
+    "getLastEventId@12104:118",
+    "getAllMembershipIds@12226:106",
+    "missingBodyIds@13025:101"
+   ],
+   "rpcAll": [
+    "initLocalDb@1809+645",
+    "getLastEventId@2454+7",
+    "getPendingWrites@2462+1",
+    "loadBootstrapList@2462+4",
+    "getPendingWrites@2466+2",
+    "persistBootstrap@7056+1559",
+    "getPendingWrites@7494+1123",
+    "getRejectedWrites@9499+636",
+    "getStoredBody@9921+239",
+    "loadCanvases@10080+89",
+    "missingBodyIds@10085+88",
+    "catchUpWithOtherTabs@10236+282",
+    "getPendingWrites@10517+105",
+    "getPendingWrites@10622+33",
+    "getLastEventId@10655+6",
+    "persistRemoteNode@10657+9",
+    "storeDownloadedBodies@10657+985",
+    "getPendingWrites@11468+189",
+    "getMembershipEpoch@11948+154",
+    "getLastEventId@12104+118",
+    "getAllMembershipIds@12226+106",
+    "applySync@12461+10",
+    "setMembershipEpoch@12890+29",
+    "missingBodyIds@13025+101",
+    "planDrawings@13189+2",
+    "storeDownloadedBodies@13349+84",
+    "missingBodyIds@13437+31"
+   ],
+   "longTasksList": [
+    "913+79",
+    "1082+152",
+    "1802+66",
+    "2249+169",
+    "4963+84",
+    "5548+877",
+    "6427+1067",
+    "8175+440",
+    "8616+1472",
+    "10270+216",
+    "10517+97",
+    "10666+900",
+    "11582+54",
+    "11696+234",
+    "11954+95",
+    "12102+92",
+    "12328+105",
+    "12470+420",
+    "12919+77",
+    "13353+77"
+   ],
+   "longTasksToTypable": {
+    "n": 19,
+    "sum": 6696,
+    "max": 1472
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1818,
+     "endMs": 2139
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1821,
+     "endMs": 2128
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 2441,
+     "endMs": 2595
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 2443,
+     "endMs": 2599
+    },
+    {
+     "path": "/api/bootstrap?bodies=none",
+     "startMs": 2470,
+     "endMs": 5546
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 9476,
+     "endMs": 9785
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 9481,
+     "endMs": 9783
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 10175,
+     "endMs": 10366
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 10663,
+     "endMs": 10822
+    },
+    {
+     "path": "/api/sync/membership/digest?expected_epoch=0",
+     "startMs": 12227,
+     "endMs": 12388
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 13026,
+     "endMs": 13184
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13128,
+     "endMs": 13322
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13471,
+     "endMs": 13667
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13792,
+     "endMs": 13984
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14139,
+     "endMs": 14332
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14456,
+     "endMs": 14648
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 14748,
+     "endMs": 14941
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15027,
+     "endMs": 15220
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15370,
+     "endMs": 15564
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 15708,
+     "endMs": 15900
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 19020,
+     "endMs": 19214
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 22323,
+     "endMs": 22517
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 12442,
+   "longTasksTotal": {
+    "n": 31,
+    "sum": 9542,
+    "max": 1472
+   }
+  },
+  "warm": {
+   "label": "warm",
+   "wallToUsableMs": 10105,
+   "typing": {
+    "n": 20,
+    "medianMs": 45,
+    "p95Ms": 96,
+    "maxMs": 96,
+    "fromMs": 10370
+   },
+   "marks": {
+    "shell": 734,
+    "workerCreated": 1324,
+    "gateUp": 3674,
+    "gateDown": 6708,
+    "editorTypable": 7516,
+    "typableLast": 7516,
+    "dataShown": 8401,
+    "usable": 8401
+   },
+   "persistBootstrap": [
+    {
+     "startMs": 8870,
+     "endMs": 8885
+    }
+   ],
+   "rpcOver100": [
+    "initLocalDb@1324:509",
+    "loadBootstrapList@1841:862",
+    "catchUpWithOtherTabs@1885:1861",
+    "getPendingWrites@2739:1006",
+    "getRejectedWrites@3610:175",
+    "storeDownloadedBodies@4638:124",
+    "loadBootstrapRelations@4799:296",
+    "missingBodyIds@4799:496",
+    "applySync@4907:393",
+    "loadAttributePage@5188:630",
+    "setMembershipEpoch@5816:564",
+    "getPendingWrites@7430:147",
+    "storeDownloadedBodies@7567:255",
+    "persistRemoteNode@7608:215",
+    "loadCanvases@8911:431",
+    "storeDownloadedBodies@10366:103"
+   ],
+   "rpcAll": [
+    "initLocalDb@1324+509",
+    "getLastEventId@1834+1",
+    "getPendingWrites@1840+34",
+    "loadBootstrapList@1841+862",
+    "catchUpWithOtherTabs@1885+1861",
+    "getPendingWrites@2739+1006",
+    "getRejectedWrites@3610+175",
+    "getPendingWrites@3745+58",
+    "missingBodyIds@3748+87",
+    "getPendingWrites@3804+33",
+    "getLastEventId@3837+30",
+    "getPendingWrites@4187+73",
+    "getMembershipEpoch@4637+30",
+    "storeDownloadedBodies@4638+124",
+    "getLastEventId@4666+96",
+    "getAllMembershipIds@4767+71",
+    "loadBootstrapRelations@4799+296",
+    "missingBodyIds@4799+496",
+    "applySync@4907+393",
+    "loadAttributePage@5188+630",
+    "setMembershipEpoch@5816+564",
+    "getStoredBody@6697+80",
+    "getPendingWrites@7430+147",
+    "storeDownloadedBodies@7567+255",
+    "persistRemoteNode@7608+215"
+   ],
+   "longTasksList": [
+    "212+64",
+    "386+145",
+    "900+77",
+    "1021+53",
+    "1097+94",
+    "1311+160",
+    "1660+82",
+    "2525+1150",
+    "4025+167",
+    "4333+162",
+    "4515+116",
+    "4834+73",
+    "5028+264",
+    "5298+518",
+    "5816+550",
+    "6380+334",
+    "6776+739",
+    "7609+192",
+    "7822+490"
+   ],
+   "longTasksToTypable": {
+    "n": 17,
+    "sum": 4748,
+    "max": 1150
+   },
+   "api": [
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1343,
+     "endMs": 1514
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1348,
+     "endMs": 1560
+    },
+    {
+     "path": "/api/events?event_type=NOTIFICATION&limit",
+     "startMs": 1761,
+     "endMs": 1962
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 1762,
+     "endMs": 1921
+    },
+    {
+     "path": "/api/sync/membership/digest",
+     "startMs": 1840,
+     "endMs": 2031
+    },
+    {
+     "path": "/api/events?event_type=ATTRIBUTE_CONFLICT",
+     "startMs": 3596,
+     "endMs": 3909
+    },
+    {
+     "path": "/api/events?event_type=BODY_CONFLICT&limi",
+     "startMs": 3597,
+     "endMs": 3913
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 3835,
+     "endMs": 4249
+    },
+    {
+     "path": "/api/sync",
+     "startMs": 3870,
+     "endMs": 4220
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 5296,
+     "endMs": 5488
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 8562,
+     "endMs": 8755
+    },
+    {
+     "path": "/api/bootstrap?nodes=none",
+     "startMs": 8567,
+     "endMs": 8859
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 8875,
+     "endMs": 9069
+    },
+    {
+     "path": "/api/sync/drawings",
+     "startMs": 9337,
+     "endMs": 9494
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9456,
+     "endMs": 9647
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 9776,
+     "endMs": 9969
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 10105,
+     "endMs": 10300
+    },
+    {
+     "path": "/api/sync/bodies",
+     "startMs": 13517,
+     "endMs": 13709
+    }
+   ],
+   "mirrorSettledAfterUsableMs": 9482,
+   "longTasksTotal": {
+    "n": 32,
+    "sum": 8396,
+    "max": 1150
+   }
+  },
+  "offline": {
+   "label": "offline",
+   "wallToUsableMs": 7660,
+   "typing": {
+    "n": 3,
+    "medianMs": 50,
+    "p95Ms": 100,
+    "maxMs": 100,
+    "fromMs": 7881
+   },
+   "marks": {
+    "shell": 663,
+    "workerCreated": 1073,
+    "gateUp": 3383,
+    "gateDown": 4432,
+    "editorTypable": 5120,
+    "typableLast": 5120
+   },
+   "persistBootstrap": [],
+   "rpcOver100": [
+    "initLocalDb@1073:544",
+    "loadBootstrapList@1625:717",
+    "getPendingWrites@2380:1079",
+    "getRejectedWrites@3280:246",
+    "missingBodyIds@3462:120",
+    "catchUpWithOtherTabs@3600:173",
+    "getPendingWrites@4088:393",
+    "getPendingWrites@5040:127",
+    "loadBootstrapRelations@5272:229",
+    "loadAttributePage@5588:111"
+   ],
+   "rpcAll": [
+    "initLocalDb@1073+544",
+    "getLastEventId@1618+1",
+    "getPendingWrites@1624+2",
+    "loadBootstrapList@1625+717",
+    "getPendingWrites@2380+1079",
+    "getRejectedWrites@3280+246",
+    "missingBodyIds@3462+120",
+    "catchUpWithOtherTabs@3600+173",
+    "getPendingWrites@3773+10",
+    "getPendingWrites@3783+7",
+    "getLastEventId@3791+19",
+    "getPendingWrites@4088+393",
+    "getStoredBody@4420+69",
+    "getPendingWrites@5040+127",
+    "getNodeAttribute@5166+10",
+    "getNodeAttribute@5166+11",
+    "getNodeAttribute@5166+11",
+    "getNodeAttribute@5166+11",
+    "getNodeAttribute@5167+10",
+    "getNodeAttribute@5183+14",
+    "getNodeAttribute@5188+10",
+    "getNodeAttribute@5188+10",
+    "getNodeAttribute@5188+10",
+    "getNodeAttribute@5189+10",
+    "loadBootstrapRelations@5272+229",
+    "loadAttributePage@5588+111"
+   ],
+   "longTasksList": [
+    "181+94",
+    "357+154",
+    "1064+102",
+    "1317+123",
+    "2144+1242",
+    "3459+51",
+    "3609+159",
+    "3825+610",
+    "4489+630",
+    "5436+261"
+   ],
+   "longTasksToTypable": {
+    "n": 9,
+    "sum": 3165,
+    "max": 1242
+   },
+   "api": [],
+   "mirrorSettledAfterUsableMs": 6938,
+   "longTasksTotal": {
+    "n": 17,
+    "sum": 5460,
+    "max": 1242
+   }
+  }
+ }
+]

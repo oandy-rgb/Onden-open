@@ -1,0 +1,138 @@
+/* One slide: a 1920×1080 canvas, scaled by transform to its frame. Sizes and
+   colours are the deck's own --s-* variables (deckVars, from the site's style
+   formulas), not the app's tokens: a slide wears the theme, not the app. */
+.sv-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; container-type: normal; }
+.sv-canvas {
+  position: absolute; inset: 0 auto auto 0; width: 1920px; height: 1080px; box-sizing: border-box;
+  transform: scale(var(--sv-scale, 0.25)); transform-origin: top left; overflow: hidden;
+  padding: 96px 120px; display: flex; flex-direction: column;
+  background: var(--s-bg); color: var(--s-text);
+  font-family: var(--s-font-b); font-size: var(--s-base); line-height: var(--s-leading);
+  --sv-size-cover: calc(var(--s-step3) * 1.25); --sv-size-statement: calc(var(--s-step3) * 1.3); --sv-size-figure: calc(var(--s-step3) * 1.9);
+  --sv-title-gap: var(--s-space-4); gap: var(--sv-title-gap); /* the one title → content distance, every layout */
+  --sv-size-pre: 0.7em; --sv-size-code: 0.9em;
+  font-weight: 400; white-space: normal; text-align: left; /* a slide inside a button (a thumbnail) does not inherit the button's */
+}
+.sv-canvas.sv-shrunk { font-size: var(--s-step-1); }
+.sv-canvas.sv-shrunk-2 { font-size: var(--sv-min-body); } /* a table's last step: the smallest readable body size */
+.sv-canvas p, .sv-canvas ul, .sv-canvas ol, .sv-canvas pre, .sv-canvas blockquote, .sv-canvas table, .sv-canvas figure { margin: 0 0 var(--s-space-3); }
+.sv-canvas ul { list-style: disc; padding-left: 1.3em; }
+.sv-canvas ol { list-style: decimal; padding-left: 1.5em; }
+/* A task line is a list item whose bullet is its box: readable, not a disc beside a tiny checkbox. */
+.sv-canvas li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.3em; }
+.sv-canvas li > input[type="checkbox"] { width: 0.8em; height: 0.8em; margin: 0 0.4em 0 0; vertical-align: -0.05em; accent-color: var(--s-accent); }
+.sv-canvas li + li { margin-top: var(--s-space-2); }
+.sv-canvas h1, .sv-canvas h2, .sv-canvas h3, .sv-canvas h4 { font-family: var(--s-font-h); font-weight: var(--s-weight-h); line-height: 1.2; margin: 0 0 var(--s-space-3); }
+.sv-canvas h3, .sv-canvas h4 { font-size: var(--s-step1); }
+.sv-canvas a { color: var(--s-link); }
+.sv-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--s-radius); }
+.sv-canvas pre, .sv-canvas code { font-family: var(--ac-font-mono, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace); }
+.sv-canvas pre { font-size: var(--sv-size-pre); padding: var(--s-space-3); background: var(--s-surface); border: 1px solid var(--s-border); border-radius: var(--s-radius); overflow: hidden; }
+.sv-canvas blockquote { margin-left: 0; padding-left: var(--s-space-3); border-left: 6px solid var(--s-accent); color: var(--s-muted); }
+/* A table: the whole width of the content area, snug cells, a header that reads as one. Its size is the page's (the ladder
+   in SlideView shrinks the whole table, text and padding together, since the padding is in em). A short cell never wraps
+   (sv-nowrap, set by SlideView); a column that cannot fit then makes the page step down instead of breaking a word apart. */
+.sv-canvas table { border-collapse: collapse; width: 100%; line-height: 1.2; }
+.sv-canvas th, .sv-canvas td { padding: var(--sv-cell-pad, 0.25em) 0.7em; border: 1px solid var(--s-border); text-align: left; }
+.sv-canvas th { background: var(--s-surface); font-weight: var(--s-weight-h); border-bottom: 2px solid var(--s-accent); }
+/* The cell padding steps down with the font, so a long table gives its rows back to its words. */
+.sv-canvas.sv-shrunk { --sv-cell-pad: 0.18em; }
+.sv-canvas.sv-shrunk-2 { --sv-cell-pad: 0.12em; }
+.sv-canvas .sv-nowrap { white-space: nowrap; }
+.sv-canvas th, .sv-canvas td { overflow-wrap: break-word; }
+/* A word with no break point (an address) sets its column's minimum width; only when the table is still too wide at the smallest size (SlideView, relax 2) may it break anywhere. */
+.sv-canvas[data-relax="2"] th, .sv-canvas[data-relax="2"] td { overflow-wrap: anywhere; }
+.sv-canvas table:last-child { margin-bottom: 0; } /* its own bottom margin would count as running past the page */
+
+.sv-title { font-size: var(--s-step2); flex: none; }
+/* The gap under a title is the canvas's --sv-title-gap alone (the heading's own bottom margin would double it). */
+.sv-canvas > .sv-title { margin-bottom: 0; }
+.sv-body, .sv-cols, .sv-cards, .sv-stats, .sv-steps, .sv-code, .sv-media { flex: 1 1 auto; min-height: 0; }
+.sv-fit { overflow: hidden; }
+.sv-measure { max-width: var(--s-measure); }
+.sv-two { column-count: 2; column-gap: var(--s-space-5); }
+.sv-two li { break-inside: avoid; }
+
+/* 條列 and 段落 look different at a glance. Sizes are in em so the ladder (grow, shrunk) still moves them.
+   條列: every item is its own accent-marked line, a little larger, with room between items.
+   段落: continuous running text, a narrower line, no markers; a list on a text page reads as plain lines. */
+.sv-canvas.sv-l-bullets .sv-body ul { list-style: disc; padding-left: 1.2em; margin-bottom: 0; }
+.sv-canvas.sv-l-bullets .sv-body li { font-size: 1.12em; line-height: 1.3; }
+.sv-canvas.sv-l-bullets .sv-body li li { font-size: 0.9em; }
+.sv-canvas.sv-l-bullets .sv-body li + li { margin-top: var(--s-space-3); }
+.sv-canvas.sv-l-bullets .sv-body li::marker { color: var(--s-accent); }
+.sv-canvas.sv-l-text .sv-body { line-height: 1.6; }
+.sv-canvas.sv-l-text .sv-body p { margin-bottom: var(--s-space-4); }
+.sv-canvas.sv-l-text .sv-body ul, .sv-canvas.sv-l-text .sv-body ol { list-style: none; padding-left: 0; }
+.sv-canvas.sv-l-text .sv-body li + li { margin-top: 0; }
+.sv-canvas.sv-l-text .sv-body.sv-measure { max-width: min(var(--s-measure), 30em); }
+
+/* A slide with little on it (growLevel): the words one or two steps up the deck's own scale, up the page
+   right under the title, not hung in the middle of the page with a gap above it. */
+.sv-grow { display: flex; flex-direction: column; justify-content: flex-start; }
+.sv-grow-1 { font-size: var(--s-step1); }
+.sv-grow-2 { font-size: var(--s-step2); }
+.sv-canvas .sv-grow li + li { margin-top: var(--s-space-3); }
+.sv-cols.sv-grow, .sv-cards.sv-grow { display: grid; align-content: start; align-items: start; }
+
+/* 封面、章節: the accent behind with its own label colour on it; on a dark deck a deep accent with the deck's light text (--s-cover, from deckVars, contrast held by look.test.ts). */
+.sv-l-cover, .sv-l-section { background: var(--s-cover); color: var(--s-cover-text); }
+.sv-l-cover a, .sv-l-section a { color: inherit; }
+.sv-center { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--s-space-3); }
+.sv-l-cover .sv-title { font-size: var(--sv-size-cover); }
+.sv-l-section .sv-title { font-size: var(--s-step3); }
+.sv-sub { font-size: var(--s-step1); opacity: 0.9; }
+/* A cover or section line too long for the page steps down once with the rest (SlideView measures .sv-center). */
+.sv-canvas.sv-shrunk .sv-sub { font-size: var(--s-base); }
+.sv-canvas.sv-shrunk .sv-statement { font-size: var(--s-step2); }
+.sv-canvas.sv-shrunk.sv-l-cover .sv-title { font-size: var(--s-step3); }
+.sv-sub p, .sv-statement p { margin: 0; }
+.sv-l-quote .sv-kicker { color: var(--s-muted); }
+.sv-canvas .sv-kicker { font-family: var(--s-font-b); font-weight: 400; font-size: var(--s-step1); opacity: 0.85; margin: 0; }
+.sv-statement { font-family: var(--s-font-h); font-weight: var(--s-weight-h); font-size: var(--sv-size-statement); line-height: 1.25; }
+
+/* One row as tall as the area: a row sized by its content would let a long text or table run past the page without the body measuring as overflowing. */
+.sv-media { display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-space-5); align-items: center; }
+.sv-media > .sv-body { max-height: 100%; } /* centred in its row it would size to its content and run past the row unnoticed */
+.sv-media-alone { grid-template-columns: minmax(0, 1fr); }
+.sv-figure { height: 100%; display: flex; align-items: center; justify-content: center; margin: 0; }
+.sv-figure p { margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
+.sv-figure img { max-height: 100%; }
+
+.sv-l-fullImage { padding: 0; justify-content: flex-end; background: var(--s-surface); }
+.sv-bleed { position: absolute; inset: 0; }
+.sv-bleed p { margin: 0; height: 100%; }
+.sv-bleed img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; max-height: none; }
+.sv-over { position: relative; padding: 160px 120px 96px; color: var(--s-cover-text); background: linear-gradient(to top, color-mix(in srgb, var(--s-cover) 92%, transparent) 55%, transparent); }
+.sv-over .sv-title { margin: 0; font-size: var(--s-step3); }
+.sv-over .sv-sub p { margin: 0; }
+
+.sv-l-quote .sv-quote-text { font-family: var(--s-font-h); font-size: var(--s-step3); line-height: 1.3; }
+.sv-l-quote .sv-quote-text blockquote { border-left-width: 10px; color: var(--s-text); margin: 0; }
+.sv-l-quote .sv-quote-text p { margin: 0; }
+.sv-attribution { font-size: var(--s-base); color: var(--s-muted); padding-left: var(--s-space-3); }
+
+/* One row as tall as the area, boxes that count their border in it: a row sized by its content (the default) can be one pixel taller than the area,
+   which the 1px measuring tolerance lets pass and the clipped area cuts through the column's bottom border. */
+.sv-cols { display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-space-5); }
+.sv-col { box-sizing: border-box; min-height: 0; padding: var(--s-space-4); border: 1px solid var(--s-border); border-radius: var(--s-radius); }
+.sv-col > :last-child { margin-bottom: 0; }
+
+.sv-cards, .sv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column; gap: var(--s-space-4); align-content: start; }
+.sv-card { font-size: 1.25em; padding: var(--s-space-3); border-radius: var(--s-radius); background: var(--s-surface); border: 1px solid var(--s-border); }
+.sv-card p { margin: 0; }
+.sv-card-n { font-size: 0.8em; display: inline-grid; place-items: center; width: 2em; height: 2em; margin-bottom: var(--s-space-2); border-radius: var(--ac-radius-full); background: var(--s-button); color: var(--s-button-text); font-weight: var(--s-weight-h); }
+.sv-stat { padding: var(--s-space-4); text-align: center; }
+.sv-figure-big { white-space: nowrap; font-family: var(--s-font-h); font-weight: var(--s-weight-h); font-size: var(--sv-size-figure); line-height: 1.1; color: var(--s-accent); }
+.sv-stat-caption { margin-top: var(--s-space-3); color: var(--s-muted); font-size: 1.25em; line-height: 1.3; }
+.sv-stat-solo { align-self: center; }
+.sv-stat-solo .sv-stat-caption { margin: 0; color: var(--s-text); font-size: 1.4em; }
+
+.sv-canvas .sv-steps { list-style: none; padding: 0; display: flex; flex-direction: column; gap: var(--s-space-1); justify-content: center; border-left: 4px solid var(--s-border); padding-left: var(--s-space-4); }
+.sv-canvas .sv-steps li { font-size: 1.25em; margin: 0; display: flex; gap: var(--s-space-4); align-items: baseline; }
+.sv-when { flex: none; min-width: 5.5em; font-weight: var(--s-weight-h); color: var(--s-accent); font-family: var(--s-font-h); }
+
+.sv-code { display: flex; flex-direction: column; justify-content: center; }
+.sv-canvas .sv-code pre { font-size: var(--sv-size-code); }
+.sv-caption { color: var(--s-muted); flex: none; }
+.sv-caption p { margin: 0; }

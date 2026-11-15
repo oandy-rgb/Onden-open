@@ -1,0 +1,4363 @@
+[
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 1,
+  "cold": {
+   "label": "cold",
+   "wall": 5235,
+   "marks": {
+    "shell": 1117,
+    "workerCreated": 1621,
+    "gateUp": 3848,
+    "gateDown": 5199,
+    "usable": 5199,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 19,
+    "sum": 2133,
+    "max": 623
+   },
+   "initLocalDb": [
+    502
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 17,
+   "mirrorSettledAfterUsableMs": 3046,
+   "ltUntilSettled": {
+    "n": 22,
+    "sum": 2511,
+    "max": 623
+   },
+   "rpcOver50": [
+    "initLocalDb:502",
+    "persistBootstrap:111",
+    "getPendingWrites:92",
+    "getRejectedWrites:214",
+    "upsertNode:169",
+    "loadCanvases:83",
+    "catchUpWithOtherTabs:149",
+    "getLastEventId:164",
+    "getPendingWrites:136",
+    "setLastEventId:99",
+    "persistBootstrap:155",
+    "getLastEventId:97"
+   ],
+   "net": {
+    "requests": 149,
+    "kbTotal": 655,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 365,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 157,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 273
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 250
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 160,
+      "ttfbMs": 251
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 227,
+      "ttfbMs": 252
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 220,
+      "ttfbMs": 236
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 161,
+      "ttfbMs": 162
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136,
+      "rawKB": 775.9,
+      "ms": 281,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 267
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 156,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 256
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 249
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 162,
+      "ttfbMs": 238
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 275,
+      "ttfbMs": 324
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 279,
+      "ttfbMs": 320
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 286,
+      "ttfbMs": 320
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 277,
+      "ttfbMs": 305
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 290,
+      "ttfbMs": 304
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 289
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 278
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 161,
+      "ttfbMs": 275
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 158,
+      "ttfbMs": 172
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 158,
+      "ttfbMs": 169
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 240
+     },
+     {
+      "m": "POST",
+      "p": "/api/nodes",
+      "status": 201,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 158,
+      "ttfbMs": 225
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 210
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 159,
+      "ttfbMs": 310
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 180
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 159,
+      "ttfbMs": 275
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 164,
+      "ttfbMs": 268
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 155,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 273,
+      "ttfbMs": 315
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 276,
+      "ttfbMs": 317
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 166,
+      "ttfbMs": 223
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 274,
+      "ttfbMs": 316
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 196,
+      "ttfbMs": 229
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.2,
+      "ms": 156,
+      "ttfbMs": 216
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 159,
+      "ttfbMs": 170
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203,
+      "rawKB": 3731.1,
+      "ms": 404,
+      "ttfbMs": 221
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 155,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 242
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 156,
+      "ttfbMs": 229
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 154
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 158,
+      "ttfbMs": 184
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 157,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 157
+     }
+    ]
+   },
+   "heapSettledMb": 25
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 3398,
+   "marks": {
+    "shell": 451,
+    "workerCreated": 984,
+    "gateUp": 2060,
+    "gateDown": 3068,
+    "usable": 3293,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 11,
+    "sum": 1588,
+    "max": 545
+   },
+   "initLocalDb": [
+    416
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 119,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 154,
+      "ttfbMs": 183
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 172
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 183
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 180
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 181,
+      "ttfbMs": 267
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 179,
+      "ttfbMs": 264
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 161,
+      "ttfbMs": 166
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 160,
+      "ttfbMs": 748
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 214
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 206
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 204
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 198
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 194
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 284,
+      "ttfbMs": 298
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 292,
+      "ttfbMs": 302
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 160,
+      "ttfbMs": 174
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 177
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 158,
+      "ttfbMs": 377
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 158,
+      "ttfbMs": 170
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 567
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 158,
+      "ttfbMs": 328
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 181
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 160,
+      "ttfbMs": 195
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 155,
+      "ttfbMs": 180
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 157,
+      "ttfbMs": 180
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 210
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.6,
+      "rawKB": 75.4,
+      "ms": 164,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 156,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 155
+     }
+    ]
+   },
+   "heapMb": 16,
+   "rpcOver50": [
+    "initLocalDb:416",
+    "loadBootstrapList:117",
+    "catchUpWithOtherTabs:681",
+    "getPendingWrites:569",
+    "getRejectedWrites:173",
+    "getPendingWrites:73",
+    "getPendingWrites:65",
+    "loadBootstrapRelations:70",
+    "setMembershipEpoch:110",
+    "loadAttributePage:369",
+    "getPendingWrites:134",
+    "loadCanvases:64"
+   ]
+  },
+  "open": {
+   "short": {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-page-row').first() to be visible\u001b[22m\n"
+   },
+   "long50k": {
+    "ms": 936,
+    "backlinksMs": null,
+    "lt": {
+     "n": 5,
+     "sum": 878,
+     "max": 511
+    }
+   },
+   "hub300": {
+    "ms": 294,
+    "backlinksMs": 300,
+    "lt": {
+     "n": 1,
+     "sum": 182,
+     "max": 182
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 88,
+   "p95Ms": 155,
+   "maxMs": 304,
+   "lt": {
+    "n": 46,
+    "sum": 3280,
+    "max": 179
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1615,
+   "roundTripMs": 933,
+   "lastKeyToSavedMs": 2466,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279041,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279041"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 310,
+    "rows": 2,
+    "keyMedianMs": 67,
+    "keyMaxMs": 89
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 535,
+    "rows": 9,
+    "keyMedianMs": 62,
+    "keyMaxMs": 62
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 55,
+   "appliedAfterEditMs": 637,
+   "applyRpcMs": 5,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 154,
+     "ttfbMs": 155
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 162,
+     "ttfbMs": 160
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 157
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 161,
+     "ttfbMs": 165
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 302,
+     "ttfbMs": 303
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 163
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 159,
+     "ttfbMs": 159
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 158,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 156
+    }
+   ]
+  },
+  "offline": {
+   "error": "TimeoutError: page.waitForFunction: Timeout 300000ms exceeded."
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 2,
+  "cold": {
+   "label": "cold",
+   "wall": 4422,
+   "marks": {
+    "shell": 1076,
+    "workerCreated": 1562,
+    "gateUp": 4057,
+    "gateDown": 4405,
+    "usable": 4405,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 13,
+    "sum": 1510,
+    "max": 600
+   },
+   "initLocalDb": [
+    532
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 18,
+   "mirrorSettledAfterUsableMs": 3040,
+   "ltUntilSettled": {
+    "n": 16,
+    "sum": 1872,
+    "max": 600
+   },
+   "rpcOver50": [
+    "initLocalDb:532",
+    "persistBootstrap:136",
+    "getPendingWrites:116",
+    "getRejectedWrites:203",
+    "loadCanvases:80",
+    "getPendingWrites:87",
+    "getPendingWrites:105",
+    "getLastEventId:91",
+    "getAllMembershipIds:97",
+    "persistBootstrap:172",
+    "getLastEventId:92"
+   ],
+   "net": {
+    "requests": 133,
+    "kbTotal": 648,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 154,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 181
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 255
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 255
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 191,
+      "ttfbMs": 229
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 197,
+      "ttfbMs": 219
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 161
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.2,
+      "rawKB": 776,
+      "ms": 281,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 234
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 159,
+      "ttfbMs": 230
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 227
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 228
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 224
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 295,
+      "ttfbMs": 333
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 301,
+      "ttfbMs": 333
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 300,
+      "ttfbMs": 333
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 291,
+      "ttfbMs": 327
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 292,
+      "ttfbMs": 326
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 348,
+      "ttfbMs": 358
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 340,
+      "ttfbMs": 345
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 202
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 157,
+      "ttfbMs": 197
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 186
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 155,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 156,
+      "ttfbMs": 256
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 157,
+      "ttfbMs": 208
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 194
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 295
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 161,
+      "ttfbMs": 168
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 158,
+      "ttfbMs": 207
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731.1,
+      "ms": 359,
+      "ttfbMs": 212
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 155
+     }
+    ]
+   },
+   "heapSettledMb": 14
+  },
+  "mirrorBytes": 4210688,
+  "warm": {
+   "label": "warm",
+   "wall": 3354,
+   "marks": {
+    "shell": 442,
+    "workerCreated": 963,
+    "gateUp": 2034,
+    "gateDown": 3030,
+    "usable": 3214,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 10,
+    "sum": 1487,
+    "max": 521
+   },
+   "initLocalDb": [
+    375
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 117,
+    "kbTotal": 30,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 30,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 154,
+      "ttfbMs": 171
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 196
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 178
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 176
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 174,
+      "ttfbMs": 285
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 174,
+      "ttfbMs": 284
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 162,
+      "ttfbMs": 724
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 213
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 160,
+      "ttfbMs": 211
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 210
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 204
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 288,
+      "ttfbMs": 299
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 294,
+      "ttfbMs": 311
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 155,
+      "ttfbMs": 172
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 173
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 159,
+      "ttfbMs": 360
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 158,
+      "ttfbMs": 174
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 233
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 157,
+      "ttfbMs": 249
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 157,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 161,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 157,
+      "ttfbMs": 186
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 241
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 204
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.8,
+      "rawKB": 75.4,
+      "ms": 176,
+      "ttfbMs": 194
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 157
+     }
+    ]
+   },
+   "heapMb": 16,
+   "rpcOver50": [
+    "initLocalDb:375",
+    "getLastEventId:76",
+    "loadBootstrapList:108",
+    "catchUpWithOtherTabs:649",
+    "getPendingWrites:564",
+    "getRejectedWrites:175",
+    "getPendingWrites:63",
+    "applySync:62",
+    "loadAttributePage:88",
+    "setMembershipEpoch:77",
+    "getPendingWrites:71",
+    "loadCanvases:51"
+   ]
+  },
+  "open": {
+   "short": {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-page-row').first() to be visible\u001b[22m\n"
+   },
+   "long50k": {
+    "ms": 900,
+    "backlinksMs": null,
+    "lt": {
+     "n": 5,
+     "sum": 807,
+     "max": 452
+    }
+   },
+   "hub300": {
+    "ms": 318,
+    "backlinksMs": 327,
+    "lt": {
+     "n": 1,
+     "sum": 192,
+     "max": 192
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 83,
+   "p95Ms": 127,
+   "maxMs": 139,
+   "lt": {
+    "n": 34,
+    "sum": 2283,
+    "max": 135
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1604,
+   "roundTripMs": 937,
+   "lastKeyToSavedMs": 2461,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279127,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279127"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 309,
+    "rows": 2,
+    "keyMedianMs": 81,
+    "keyMaxMs": 90
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 538,
+    "rows": 9,
+    "keyMedianMs": 99,
+    "keyMaxMs": 99
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 79,
+   "appliedAfterEditMs": 676,
+   "applyRpcMs": 14,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 156,
+     "ttfbMs": 156
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 158,
+     "ttfbMs": 160
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 157
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 160
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 301,
+     "ttfbMs": 301
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 168
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 155,
+     "ttfbMs": 156
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 158,
+     "ttfbMs": 159
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 154,
+     "ttfbMs": 155
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 155
+    }
+   ]
+  },
+  "offline": {
+   "error": "TimeoutError: page.waitForFunction: Timeout 300000ms exceeded."
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 3,
+  "cold": {
+   "label": "cold",
+   "wall": 4384,
+   "marks": {
+    "shell": 1173,
+    "workerCreated": 1688,
+    "gateUp": 4017,
+    "gateDown": 4367,
+    "usable": 4367,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 13,
+    "sum": 1610,
+    "max": 642
+   },
+   "initLocalDb": [
+    498
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 20,
+   "mirrorSettledAfterUsableMs": 3052,
+   "ltUntilSettled": {
+    "n": 16,
+    "sum": 1976,
+    "max": 642
+   },
+   "rpcOver50": [
+    "initLocalDb:498",
+    "persistBootstrap:104",
+    "getPendingWrites:75",
+    "getRejectedWrites:226",
+    "loadCanvases:57",
+    "catchUpWithOtherTabs:59",
+    "persistBootstrap:165",
+    "getLastEventId:97"
+   ],
+   "net": {
+    "requests": 133,
+    "kbTotal": 648,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 155,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 181
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 232
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 230
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 239,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 237,
+      "ttfbMs": 257
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 173
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 171
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.8,
+      "ms": 281,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 302
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 154,
+      "ttfbMs": 300
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 161,
+      "ttfbMs": 299
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 163,
+      "ttfbMs": 299
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 160,
+      "ttfbMs": 269
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 267,
+      "ttfbMs": 291
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 257,
+      "ttfbMs": 281
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 258,
+      "ttfbMs": 278
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 243,
+      "ttfbMs": 269
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 262,
+      "ttfbMs": 312
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 263,
+      "ttfbMs": 265
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 250,
+      "ttfbMs": 257
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 153,
+      "ttfbMs": 180
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 320
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 158,
+      "ttfbMs": 308
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 156,
+      "ttfbMs": 220
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 156,
+      "ttfbMs": 217
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 160,
+      "ttfbMs": 212
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 166,
+      "ttfbMs": 174
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 297
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 160,
+      "ttfbMs": 188
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 155,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731,
+      "ms": 351,
+      "ttfbMs": 162
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 156
+     }
+    ]
+   },
+   "heapSettledMb": 14
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 3603,
+   "marks": {
+    "shell": 452,
+    "workerCreated": 1018,
+    "gateUp": 2274,
+    "gateDown": 3262,
+    "usable": 3475,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 14,
+    "sum": 1819,
+    "max": 632
+   },
+   "initLocalDb": [
+    393
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 117,
+    "kbTotal": 30,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 30,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 159,
+      "ttfbMs": 212
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 200
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 179
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 176
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 185,
+      "ttfbMs": 317
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 185,
+      "ttfbMs": 321
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 160,
+      "ttfbMs": 864
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 243
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 239
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 236
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 231
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 227
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 285,
+      "ttfbMs": 295
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 291,
+      "ttfbMs": 315
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 158,
+      "ttfbMs": 169
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 166
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 162,
+      "ttfbMs": 346
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 156,
+      "ttfbMs": 162
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 469
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 156,
+      "ttfbMs": 224
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 162
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 157,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 157,
+      "ttfbMs": 208
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 155,
+      "ttfbMs": 197
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 284
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 225
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.7,
+      "rawKB": 75.3,
+      "ms": 166,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 157
+     }
+    ]
+   },
+   "heapMb": 16,
+   "rpcOver50": [
+    "initLocalDb:393",
+    "getLastEventId:130",
+    "loadBootstrapList:125",
+    "catchUpWithOtherTabs:773",
+    "getPendingWrites:652",
+    "getRejectedWrites:197",
+    "getPendingWrites:88",
+    "getPendingWrites:56",
+    "applySync:55",
+    "loadAttributePage:89",
+    "setMembershipEpoch:85",
+    "getPendingWrites:72",
+    "loadCanvases:55"
+   ]
+  },
+  "open": {
+   "short": {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-page-row').first() to be visible\u001b[22m\n"
+   },
+   "long50k": {
+    "ms": 1029,
+    "backlinksMs": null,
+    "lt": {
+     "n": 6,
+     "sum": 954,
+     "max": 511
+    }
+   },
+   "hub300": {
+    "ms": 426,
+    "backlinksMs": 464,
+    "lt": {
+     "n": 1,
+     "sum": 240,
+     "max": 240
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 89,
+   "p95Ms": 149,
+   "maxMs": 183,
+   "lt": {
+    "n": 42,
+    "sum": 3018,
+    "max": 150
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1556,
+   "roundTripMs": 926,
+   "lastKeyToSavedMs": 2407,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279213,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279213"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 316,
+    "rows": 2,
+    "keyMedianMs": 73,
+    "keyMaxMs": 74
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 491,
+    "rows": 9,
+    "keyMedianMs": 94,
+    "keyMaxMs": 94
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 84,
+   "appliedAfterEditMs": 724,
+   "applyRpcMs": 10,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 158,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 164,
+     "ttfbMs": 163
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 164,
+     "ttfbMs": 164
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 165,
+     "ttfbMs": 171
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 164,
+     "ttfbMs": 167
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 309,
+     "ttfbMs": 308
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 158
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 160,
+     "ttfbMs": 160
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 158,
+     "ttfbMs": 157
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 158,
+     "ttfbMs": 162
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 157
+    }
+   ]
+  },
+  "offline": {
+   "error": "TimeoutError: page.waitForFunction: Timeout 300000ms exceeded."
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 4,
+  "cold": {
+   "label": "cold",
+   "wall": 4394,
+   "marks": {
+    "shell": 1173,
+    "workerCreated": 1613,
+    "gateUp": 3982,
+    "gateDown": 4316,
+    "usable": 4316,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 12,
+    "sum": 1476,
+    "max": 662
+   },
+   "initLocalDb": [
+    394
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 17,
+   "mirrorSettledAfterUsableMs": 3041,
+   "ltUntilSettled": {
+    "n": 15,
+    "sum": 1910,
+    "max": 662
+   },
+   "rpcOver50": [
+    "initLocalDb:394",
+    "persistBootstrap:112",
+    "getPendingWrites:92",
+    "getRejectedWrites:167",
+    "loadCanvases:52",
+    "catchUpWithOtherTabs:64",
+    "getPendingWrites:91",
+    "getAllMembershipIds:98",
+    "persistBootstrap:166",
+    "getLastEventId:110"
+   ],
+   "net": {
+    "requests": 133,
+    "kbTotal": 648,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 155,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 184
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 184
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 167,
+      "ttfbMs": 188
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 250,
+      "ttfbMs": 336
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.7,
+      "ms": 277,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 284
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 157,
+      "ttfbMs": 275
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 270
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 269
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 215,
+      "ttfbMs": 260
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 219,
+      "ttfbMs": 274
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 219,
+      "ttfbMs": 272
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 211,
+      "ttfbMs": 260
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 279,
+      "ttfbMs": 311
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 255,
+      "ttfbMs": 259
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 258,
+      "ttfbMs": 267
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 197
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 157,
+      "ttfbMs": 198
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 385
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 179,
+      "ttfbMs": 380
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 156,
+      "ttfbMs": 261
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 156,
+      "ttfbMs": 217
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 208
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 160,
+      "ttfbMs": 314
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 162,
+      "ttfbMs": 166
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 156,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731,
+      "ms": 357,
+      "ttfbMs": 173
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 166,
+      "ttfbMs": 166
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 158
+     }
+    ]
+   },
+   "heapSettledMb": 26
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 3457,
+   "marks": {
+    "shell": 459,
+    "workerCreated": 926,
+    "gateUp": 1998,
+    "gateDown": 2920,
+    "usable": 3283,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 12,
+    "sum": 1660,
+    "max": 479
+   },
+   "initLocalDb": [
+    480
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 117,
+    "kbTotal": 30,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 30,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 156,
+      "ttfbMs": 174
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 164
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 187
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 186
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 167,
+      "ttfbMs": 300
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 282
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 172
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 162,
+      "ttfbMs": 710
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 224
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 220
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 220
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 214
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 212
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 296,
+      "ttfbMs": 303
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 307,
+      "ttfbMs": 314
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 155,
+      "ttfbMs": 171
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 170
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 159,
+      "ttfbMs": 380
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 157,
+      "ttfbMs": 189
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 389
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 155,
+      "ttfbMs": 224
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 158
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 153,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 156,
+      "ttfbMs": 238
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 156,
+      "ttfbMs": 233
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 268
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 175,
+      "ttfbMs": 227
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.8,
+      "rawKB": 75.1,
+      "ms": 167,
+      "ttfbMs": 200
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 155
+     }
+    ]
+   },
+   "heapMb": 16,
+   "rpcOver50": [
+    "initLocalDb:480",
+    "loadBootstrapList:127",
+    "catchUpWithOtherTabs:652",
+    "getPendingWrites:524",
+    "getRejectedWrites:181",
+    "getPendingWrites:69",
+    "getPendingWrites:59",
+    "getPendingWrites:70",
+    "getLastFullRefresh:71",
+    "loadAttributePage:79",
+    "getPendingWrites:138"
+   ]
+  },
+  "open": {
+   "short": {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-page-row').first() to be visible\u001b[22m\n"
+   },
+   "long50k": {
+    "ms": 892,
+    "backlinksMs": null,
+    "lt": {
+     "n": 4,
+     "sum": 771,
+     "max": 506
+    }
+   },
+   "hub300": {
+    "ms": 364,
+    "backlinksMs": 392,
+    "lt": {
+     "n": 1,
+     "sum": 201,
+     "max": 201
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 82,
+   "p95Ms": 115,
+   "maxMs": 129,
+   "lt": {
+    "n": 35,
+    "sum": 2235,
+    "max": 137
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1569,
+   "roundTripMs": 928,
+   "lastKeyToSavedMs": 2445,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279299,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279299"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 315,
+    "rows": 2,
+    "keyMedianMs": 104,
+    "keyMaxMs": 209
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 500,
+    "rows": 9,
+    "keyMedianMs": 57,
+    "keyMaxMs": 57
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 60,
+   "appliedAfterEditMs": 644,
+   "applyRpcMs": 6,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 155,
+     "ttfbMs": 157
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 157
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 156
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 163
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 167
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 305,
+     "ttfbMs": 304
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 159
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 155,
+     "ttfbMs": 154
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 156
+    }
+   ]
+  },
+  "offline": {
+   "error": "TimeoutError: page.waitForFunction: Timeout 300000ms exceeded."
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 5,
+  "cold": {
+   "label": "cold",
+   "wall": 4612,
+   "marks": {
+    "shell": 1142,
+    "workerCreated": 1621,
+    "gateUp": 3887,
+    "gateDown": 4594,
+    "usable": 4594,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 15,
+    "sum": 1837,
+    "max": 563
+   },
+   "initLocalDb": [
+    490
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 17,
+   "mirrorSettledAfterUsableMs": 3050,
+   "ltUntilSettled": {
+    "n": 16,
+    "sum": 1970,
+    "max": 563
+   },
+   "rpcOver50": [
+    "initLocalDb:490",
+    "persistBootstrap:100",
+    "getPendingWrites:80",
+    "getRejectedWrites:161",
+    "getPendingWrites:134",
+    "getLastEventId:172",
+    "getAllMembershipIds:202",
+    "persistBootstrap:158",
+    "getLastEventId:108"
+   ],
+   "net": {
+    "requests": 133,
+    "kbTotal": 648,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 154,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 154,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 178,
+      "ttfbMs": 219
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 178,
+      "ttfbMs": 219
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 191,
+      "ttfbMs": 213
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 246,
+      "ttfbMs": 357
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 160
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.6,
+      "ms": 282,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 155,
+      "ttfbMs": 198
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 196
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 194
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 158,
+      "ttfbMs": 190
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 291,
+      "ttfbMs": 296
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 290,
+      "ttfbMs": 296
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 290,
+      "ttfbMs": 293
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 282,
+      "ttfbMs": 295
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 286,
+      "ttfbMs": 299
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 328,
+      "ttfbMs": 328
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 326,
+      "ttfbMs": 329
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 188,
+      "ttfbMs": 207
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 187,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 169
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 260,
+      "ttfbMs": 464
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731,
+      "ms": 604,
+      "ttfbMs": 396
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 154,
+      "ttfbMs": 251
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 160,
+      "ttfbMs": 327
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 407
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 389
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 161,
+      "ttfbMs": 262
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 155,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 157
+     }
+    ]
+   },
+   "heapSettledMb": 27
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 3251,
+   "marks": {
+    "shell": 411,
+    "workerCreated": 932,
+    "gateUp": 1941,
+    "gateDown": 2933,
+    "usable": 3109,
+    "rowsAtUsable": 0
+   },
+   "ltToUsable": {
+    "n": 10,
+    "sum": 1437,
+    "max": 460
+   },
+   "initLocalDb": [
+    433
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 117,
+    "kbTotal": 30,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 30,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 157,
+      "ttfbMs": 165
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 190
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 207
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 205
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 163,
+      "ttfbMs": 254
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 164,
+      "ttfbMs": 249
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 162,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 170,
+      "ttfbMs": 786
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 334
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 327
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 159,
+      "ttfbMs": 326
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 157,
+      "ttfbMs": 318
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 312
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 283,
+      "ttfbMs": 321
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 287,
+      "ttfbMs": 326
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 160,
+      "ttfbMs": 198
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 193
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 158,
+      "ttfbMs": 316
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 158,
+      "ttfbMs": 172
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 155,
+      "ttfbMs": 386
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 156,
+      "ttfbMs": 241
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 159
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 157,
+      "ttfbMs": 162
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 155,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 154,
+      "ttfbMs": 183
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/1a7527bd-5db5-40bb-8a0b-c57ff8b8e0a6/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 162,
+      "ttfbMs": 234
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 160,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.7,
+      "rawKB": 75,
+      "ms": 166,
+      "ttfbMs": 157
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 156,
+      "ttfbMs": 156
+     }
+    ]
+   },
+   "heapMb": 16,
+   "rpcOver50": [
+    "initLocalDb:433",
+    "loadBootstrapList:123",
+    "catchUpWithOtherTabs:685",
+    "getPendingWrites:559",
+    "getRejectedWrites:284",
+    "getPendingWrites:133",
+    "getPendingWrites:59",
+    "getPendingWrites:75",
+    "getLastFullRefresh:68",
+    "getPendingWrites:96",
+    "loadCanvases:57"
+   ]
+  },
+  "open": {
+   "short": {
+    "error": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.obsidian-page-row').first() to be visible\u001b[22m\n"
+   },
+   "long50k": {
+    "ms": 879,
+    "backlinksMs": null,
+    "lt": {
+     "n": 4,
+     "sum": 689,
+     "max": 462
+    }
+   },
+   "hub300": {
+    "ms": 360,
+    "backlinksMs": 428,
+    "lt": {
+     "n": 1,
+     "sum": 232,
+     "max": 232
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 84,
+   "p95Ms": 127,
+   "maxMs": 142,
+   "lt": {
+    "n": 33,
+    "sum": 2241,
+    "max": 157
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1593,
+   "roundTripMs": 928,
+   "lastKeyToSavedMs": 2441,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279385,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279385"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 312,
+    "rows": 2,
+    "keyMedianMs": 68,
+    "keyMaxMs": 77
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 487,
+    "rows": 9,
+    "keyMedianMs": 93,
+    "keyMaxMs": 93
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 53,
+   "appliedAfterEditMs": 630,
+   "applyRpcMs": 5,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 155,
+     "ttfbMs": 155
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 154,
+     "ttfbMs": 156
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 160
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 156,
+     "ttfbMs": 164
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 155,
+     "ttfbMs": 164
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 303,
+     "ttfbMs": 304
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 158,
+     "ttfbMs": 274
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 156,
+     "ttfbMs": 156
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 157,
+     "ttfbMs": 158
+    }
+   ]
+  },
+  "offline": {
+   "error": "TimeoutError: page.waitForFunction: Timeout 300000ms exceeded."
+  }
+ }
+]

@@ -1,0 +1,55 @@
+/* The surface and items are ui/Popover (ui/ui.css); these are the context menu's own rows. */
+.ctx-actions { display: flex; flex-direction: column; min-width: 0; padding: 0; margin: 0; border: 0; }
+.ctx-menu .ctx-remove-card { flex-direction: column; align-items: flex-start; gap: 4px; }
+.ctx-remove-card small { color: var(--ac-muted); font-size: var(--ac-fs-caption); white-space: normal; }
+.ctx-status { padding: 6px 10px; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+/* A derived arrow's menu is only this explanation; keep it to a readable width. */
+.ctx-status--note { margin: 0; max-width: 260px; white-space: normal; }
+
+.ctx-color-row {
+  display: flex;
+  gap: 5px;
+  padding: 4px 10px 6px;
+  flex-wrap: wrap;
+}
+/* Card colour swatches: shared by this menu and the note's ⋯ menu. */
+.ctx-color-swatch {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+}
+.ctx-color-swatch::after {
+  content: "";
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  border-radius: var(--ac-radius-full);
+  background: var(--swatch-bg, var(--ac-raised));
+  border: 2px solid var(--swatch-border, var(--ac-line));
+}
+.ctx-color-swatch:hover { background: var(--ac-overlay-hover); }
+.ctx-color-swatch:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-inset); }
+
+.ctx-edge-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--ac-radius-xs);
+  margin-right: 6px;
+  vertical-align: middle;
+  /* The edge type's colour, from the edge manifest (lib/edgeKinds). */
+  background: var(--edge-color);
+}
+
+
+@media (max-width: 900px), (hover: none) {
+  .ctx-color-swatch { width: 44px; height: 44px; }
+}
+
+.note-color-title { margin: 0 0 8px; font-size: var(--ac-fs-ui-touch); font-weight: 600; }

@@ -1,0 +1,17 @@
+{
+  "_comment": "Shared by the server's TASK_BUCKET_CASE_SQL test and the client's taskBucket test, so the two agenda rules cannot drift. now is wall-clock time in timeZone. `when` is the task's day; someday parks it whatever its day.",
+  "timeZone": "Asia/Taipei",
+  "now": "2026-10-14T10:00:00",
+  "cases": [
+    { "status": "todo", "when": null, "someday": false, "bucket": "unscheduled" },
+    { "status": "waiting", "when": "2026-10-01", "someday": false, "bucket": "waiting" },
+    { "status": "todo", "when": null, "someday": true, "bucket": "later" },
+    { "status": "todo", "when": "2026-10-13", "someday": true, "bucket": "later" },
+    { "status": "waiting", "when": null, "someday": true, "bucket": "waiting" },
+    { "status": "todo", "when": "2026-10-13", "someday": false, "bucket": "overdue" },
+    { "status": "todo", "when": "2026-10-14", "someday": false, "bucket": "today" },
+    { "status": "doing", "when": "2026-10-14", "someday": false, "bucket": "today" },
+    { "status": "todo", "when": "2026-10-21", "someday": false, "bucket": "upcoming" },
+    { "status": "todo", "when": "2026-10-22", "someday": false, "bucket": "scheduled" }
+  ]
+}

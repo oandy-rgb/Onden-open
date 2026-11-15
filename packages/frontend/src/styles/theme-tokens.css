@@ -1,0 +1,171 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Onden theme tokens: the non-colour names components read (--onden-text-*
+   sizes, radii, motion, control sizes, fonts) and the few colour names the
+   published-site stylesheets still read.
+
+   App colours are NOT here. They are --ac-* in tokens.css, the single source,
+   and app CSS/TSX reads only those (test/guards: css-legacy-token). The colour
+   names kept at the end of :root exist because stylesheets the published site
+   shares (MarkdownRenderer.css, sidebar.css, embeds.css, EmptyState.css,
+   BaseRenderer.css, OndenQueryBlock.css, global.css' element rules) still read
+   them; the site resolves them from site-tokens.css, the app from here. They go
+   when those stylesheets move to the site's own names. Do not use them in new code.
+
+   Dark mode is activated by [data-theme="dark"] on <html>.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root {
+  --onden-focus-ring: var(--ac-focus-ring);
+
+  /* Control sizes. A control is DRAWN at --onden-control-*; on touch screens
+     .tap-target (global.css) widens only its hit area to --onden-tap. The
+     drawn sizes move to --ac-control-* (28/32) with the Button PR; until then
+     they keep today's 30/36 so no button changes size here. */
+  --onden-control-sm: 30px;
+  --onden-control-md: 36px;
+  --onden-tap: var(--ac-tap);
+  --shadow: var(--ac-shadow-modal); /* read by 7 rules; moves with the shadow tokens */
+
+  /* ── Colour names the published-site stylesheets still read — do not use in new code ── */
+  --onden-accent-2: color-mix(in srgb, var(--ac-accent) 7%, var(--ac-bg));
+  --onden-accent-9: var(--ac-accent);
+  --onden-bg-base: var(--ac-bg);
+  --onden-bg-surface: var(--ac-surface);
+  --onden-bg-surface-2: var(--ac-raised);
+  --onden-bg-subtle: color-mix(in srgb, var(--ac-ink) 4%, transparent);
+  --onden-text-strong: var(--ac-ink);
+  --onden-text-normal: var(--ac-ink);
+  --onden-text-muted: var(--ac-muted);
+  --onden-text-faint: var(--ac-muted);
+  --onden-text-on-accent: var(--ac-accent-ink);
+  --onden-overlay-hover: var(--ac-overlay-hover);
+  --onden-overlay-selected: var(--ac-overlay-selected);
+  --onden-border-default: var(--ac-line);
+  --onden-accent-bg: var(--ac-accent);
+  --onden-accent-bg-hover: var(--ac-accent-hover);
+  --onden-state-success-text: var(--ac-success);
+  --onden-state-warning-text: var(--ac-warning);
+  --onden-state-error-bg: var(--ac-danger-soft);
+  --onden-state-error-text: var(--ac-danger);
+  --onden-state-info-text: var(--ac-info);
+  --bg: var(--ac-bg);
+  --surface: var(--ac-surface);
+  --surface-strong: var(--ac-raised);
+  --surface-2: var(--ac-raised);
+  --accent-muted: color-mix(in srgb, var(--ac-accent) 12%, transparent);
+  --text: var(--ac-ink);
+  --muted: var(--ac-muted);
+  --text-muted: var(--ac-muted);
+  --line: var(--ac-line);
+  --border: var(--ac-line);
+  --accent: var(--ac-accent);
+  --accent-strong: var(--ac-accent-hover);
+  --danger: var(--ac-danger);
+  --onden-ink-12: var(--ac-ink);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UI preference tokens — written by SettingsModal's appearance section.
+   Settings store the raw value (px / scale / font stack); CSS consumes via
+   var(). Defaults match the pre-registry-refactor look.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Typography — A+C: Noto Serif TC for display and note text, Noto Sans
+     TC for the interface (tokens.css; npm @fontsource-variable slices, fonts-noto.css).
+     The --onden-font-* names stay as the public contract and point there. */
+  --onden-font-display: var(--ac-font-display);
+  --onden-font-body:    var(--ac-font-ui);
+  --onden-font-mono:    var(--ac-font-mono);
+
+  /* Published-site names. styles/sidebar.css and components/MarkdownRenderer.css are shared with
+     published sites (frozen, styles/site-tokens.css), so they keep these four; app styles use
+     --ac-fs-* (tokens.css). Do not add steps; move those two files off when the site look may change. */
+  --onden-text-xs:   calc(var(--onden-ui-font-size-base) * 11 / 14);
+  --onden-text-sm:   calc(var(--onden-ui-font-size-base) * 12 / 14);
+  --onden-text-sm2:  calc(var(--onden-ui-font-size-base) * 13 / 14);
+  --onden-text-base: var(--onden-ui-font-size-base);
+
+  --onden-leading-tight:   1.25;
+  --onden-leading-snug:    1.4;
+  --onden-leading-normal:  1.55;
+  --onden-leading-relaxed: 1.75;
+
+  /* Display serif wants slightly negative tracking at title sizes; UI labels
+     that go uppercase want positive tracking (already used ad-hoc as .06em). */
+  --onden-tracking-tight:  -0.02em;
+  --onden-tracking-snug:   -0.01em;
+  --onden-tracking-normal: 0;
+  --onden-tracking-wide:   0.06em;
+
+  --onden-weight-normal:   400;
+  --onden-weight-medium:   500;
+  --onden-weight-semibold: 600;
+  --onden-weight-bold:     700;
+
+  /* ── Motion — the instrument register ──────────────────────────────────
+     Short, deterministic, single-curve. A calibrated instrument responds
+     exactly and gets out of the way; nothing eases for a third of a second.
+     Consume these instead of ad-hoc 0.15s/0.2s literals in new code. */
+  --onden-motion-instant: 80ms;
+  --onden-motion-fast:    120ms;
+  --onden-motion-base:    160ms;
+  --onden-motion-ease:    cubic-bezier(0.2, 0, 0, 1);   /* crisp, no overshoot — enter */
+  /* Leaving easing — accelerate out (ease-in) so exits feel like they get out
+     of the way, distinct from the decelerating enter curve above. */
+  --onden-ease-leave:     cubic-bezier(0.4, 0, 1, 1);
+
+  /* Formerly undefined font names (see the colour list above). --font-sans,
+     --font-serif and --font-mono are NOT here: Tailwind's theme defines them. */
+  --font-display:  var(--ac-font-display);
+  --font-ui:       var(--ac-font-ui);
+  --onden-font-ui: var(--ac-font-ui);
+
+  --onden-ui-font-size-base: 14px;
+  /* The note title is `note font × this / 17`: it follows the 「文字大小」 with the text. */
+  --onden-note-title-scale: 38;
+  /* Note-page text. Floor = today's prose size; it grows with the window (0.9375vw
+     = 18px at 1920 wide) up to 28px, then × the 「內文大小」 ratio. --onden-note-fluid
+     (1|0) and --onden-note-text-scale are written by settings/appearance.ts. */
+  --onden-note-font-min: calc(var(--onden-ui-font-size-base) * 17 / 14);
+  --onden-note-font: calc(max(var(--onden-note-font-min), min(28px, 0.9375vw * var(--onden-note-fluid, 1))) * var(--onden-note-text-scale, 1));
+  /* The note editor's face: A+C prose serif. SettingsModal may override it
+     with a raw stack. */
+  --onden-ui-font-family-editor: var(--ac-font-prose);
+  --onden-ui-density-scale: 1;          /* 0.85 compact / 1 normal / 1.15 spacious */
+  --onden-ui-density-row-pad: 8px;      /* derived per density */
+}
+
+html[data-density="compact"]  { --onden-ui-density-scale: 0.85; --onden-ui-density-row-pad: 5px; }
+html[data-density="spacious"] { --onden-ui-density-scale: 1.15; --onden-ui-density-row-pad: 12px; }
+
+/* The phone layout keeps today's prose size, whatever the ratio setting. */
+@media (max-width: 900px) { :root { --onden-note-font: var(--onden-note-font-min); } }
+
+/* Motion preference — overrides the OS setting when explicit. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+body {
+  font-size: var(--onden-ui-font-size-base);
+}
+.cm-content,
+.markdown-editor-host,
+.onden-editor-surface {
+  font-family: var(--onden-ui-font-family-editor);
+}

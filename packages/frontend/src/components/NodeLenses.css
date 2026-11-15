@@ -1,0 +1,79 @@
+/* Shared chrome for the D3 node lenses (timeline / local-graph) —
+   center-pane siblings of OverviewEditor, same reading-width posture. */
+
+.node-lens-pane {
+  /* Cap to the viewport (minus topbar) + scroll internally — same pattern as
+     .timeline-feed / .schema-lens. height:100% only constrains inside a
+     definite-height parent; the workspace grid is min-height (growable), so a
+     tall lens grew the row and stranded the fixed-height col-1 sidebar with an
+     empty block beneath it. calc fixes that. */
+  height: calc(100dvh - 48px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--ac-surface);
+}
+/* As a direct child of .workspace-grid the pane must name its column: at
+   <=1024px the grid is `0 1fr 0` and the hidden sidebar no longer pushes
+   auto-placement into column 2, so the pane landed in the 0-width column 1. */
+.workspace-grid > .node-lens-pane { grid-column: 2; }
+
+.node-lens-header {
+  /* title on its own row; sub + scope toggle share the second row (the
+     toggle used to flow inline right after the sub text and read as a
+     collision — audit ⑧ punch #1) */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 20px 28px 12px;
+  border-bottom: 1px solid var(--ac-line);
+  flex: 0 0 auto;
+}
+.node-lens-header .node-lens-title { flex-basis: 100%; }
+.node-lens-header .node-lens-sub { flex: 1; min-width: 0; }
+
+.node-lens-title {
+  margin: 0 0 2px;
+  font-size: var(--ac-fs-lg);
+  line-height: 1.3;
+}
+
+.node-lens-sub {
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+
+.node-lens-body {
+  padding: 16px 28px 28px;
+  max-width: 860px;
+}
+
+/* The graph lens needs the canvas to own all remaining height. */
+.node-lens-graph { overflow: hidden; min-width: 0; }
+.node-lens-graph-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.node-lens-empty {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ac-muted);
+  text-align: center;
+  padding: 48px 24px;
+}
+.node-lens-empty p { margin: 0; font-size: var(--ac-fs-ui); max-width: 360px; }
+
+/* 「完整關係」: the header's two buttons. */
+.node-lens-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.node-lens-action {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: transparent;
+  font: inherit; font-size: var(--ac-fs-ui); color: var(--ac-ink); cursor: pointer;
+}
+.node-lens-action:hover { border-color: var(--ac-accent); color: var(--ac-accent); }

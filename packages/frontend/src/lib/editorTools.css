@@ -1,0 +1,68 @@
+/* Small editor aids: the fold arrow and 「…」 chip (lib/editorFold), the other
+   copies of the selected words (lib/editorSelectionTools), the room under the
+   last line (lib/editorEndRoom). Colours are app tokens only. */
+
+/* The arrow follows the heading's last word (a ::after, so the text, the caret
+   and IME composition are untouched). Both margins are taken: the left one by
+   the paragraph handle (desktop) or a 16px gutter (phone), the right one by
+   the outline rail. editorFold treats a press on this strip as a toggle. */
+.cm-fold-head::after {
+  display: inline-block;
+  margin-left: 0.35em;
+  width: 1.6em;
+  text-align: center;
+  font-size: 0.8em;
+  color: var(--ac-muted);
+  opacity: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.12s;
+}
+.cm-fold-open::after { content: "▾"; }
+.cm-fold-closed::after { content: "▸"; opacity: 0.75; }
+@media (hover: hover) {
+  .cm-fold-head:hover::after { opacity: 0.85; }
+}
+/* No hover on a touch screen: keep the arrows faintly visible, with a finger-sized strip. */
+@media (hover: none), (pointer: coarse) {
+  .cm-fold-head::after { width: 44px; }
+  .cm-fold-open::after { opacity: 0.45; }
+  .cm-fold-closed::after { opacity: 0.8; }
+}
+@media (prefers-reduced-motion: reduce) { .cm-fold-head::after { transition: none; } }
+
+.cm-foldPlaceholder {
+  display: inline-block;
+  min-width: 2.2em;
+  margin-inline: 0.3em;
+  padding: 0 0.5em;
+  text-align: center;
+  color: var(--ac-muted);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .cm-foldPlaceholder { min-width: 44px; min-height: 32px; line-height: 30px; }
+}
+
+/* Other copies of the selected words: a quiet underlined tint, apart from the
+   find panel's accent marks (.cm-searchMatch). The .cm-editor prefix outranks
+   CodeMirror's own green. */
+.cm-editor .cm-selectionMatch {
+  background: color-mix(in srgb, var(--ac-ink) 8%, transparent);
+  text-decoration: underline dotted color-mix(in srgb, var(--ac-muted) 70%, transparent);
+  text-underline-offset: 3px;
+  border-radius: var(--ac-radius-xs);
+}
+.cm-editor .cm-selectionMatch.cm-searchMatch { background: color-mix(in srgb, var(--ac-accent) 22%, transparent); }
+
+.cm-end-room { pointer-events: none; }
+
+/* The selection is drawn by the editor (several ranges at once, for column
+   selection), so it takes the app's accent instead of CodeMirror's lavender. */
+.md-editor-cm .cm-editor .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.md-editor-cm .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: color-mix(in srgb, var(--ac-accent) 26%, transparent);
+}

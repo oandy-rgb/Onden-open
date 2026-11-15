@@ -1,0 +1,13 @@
+/* The History screen: a one-line title over the page. The page scrolls in its own parts (two
+ * columns each scroll; one column scrolls the body), so the pane itself does not. */
+.node-lens-pane.history-lens-pane { overflow: hidden; }
+.node-lens-header.history-lens-header { padding: 10px 28px; }
+.history-lens-header .node-lens-title { margin: 0; flex-basis: auto; }
+.node-lens-body.history-lens-body { flex: 1 1 auto; min-height: 0; max-width: none; padding: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.history-lens-body > .wh-frame { flex: 1 1 auto; }
+
+/* On a phone the title row takes the page gutter. */
+@media (max-width: 900px) {
+  .node-lens-header.history-lens-header { padding: 8px var(--ac-phone-gutter); }
+  .history-lens-header .node-lens-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

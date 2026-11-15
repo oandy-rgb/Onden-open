@@ -1,0 +1,9 @@
+/* The colour of each callout type (callouts.ts): aliases and unknown names arrive as one of these.
+   Shared by the reading view (MarkdownRenderer) and the editor's callout lines (lib/editorCallouts). */
+.callout-note, .callout-info, .callout-todo { --callout: var(--ac-info); }
+.callout-abstract, .callout-tip             { --callout: var(--ac-accent); }
+.callout-success                            { --callout: var(--ac-success); }
+.callout-question, .callout-warning         { --callout: var(--ac-warning); }
+.callout-failure, .callout-danger, .callout-bug { --callout: var(--ac-danger); }
+.callout-example                            { --callout: var(--ac-callout-example); }
+.callout-quote                              { --callout: var(--ac-callout-quote); }

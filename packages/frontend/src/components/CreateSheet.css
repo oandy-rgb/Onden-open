@@ -1,0 +1,53 @@
+/* The ＋ create sheet (CreateSheet.tsx): a popover on a wide screen, a bottom
+ * sheet on a phone (ui/Sheet: the layer, the docking and the keyboard; this is
+ * the card's content and its desktop look). */
+.create-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, 95vw);
+  max-height: min(560px, 80dvh);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 14px;
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+}
+.create-sheet-popover { padding: 0; }
+@media (width > 600px) {
+  .ui-modal.create-sheet-layer .create-sheet {
+    border: 1px solid var(--ac-line);
+    border-radius: var(--ac-radius-lg);
+    box-shadow: var(--ac-shadow-modal);
+  }
+}
+.create-sheet-heading { font-size: var(--ac-fs-small); font-weight: 600; }
+.create-sheet-label { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.create-sheet-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Buttons come from ui/Button; the sheet keeps its thumb-sized rows and chips. */
+.create-sheet .ui-btn:not(.create-sheet-capture-link) { min-height: 44px; }
+.create-sheet-kind { gap: 6px; }
+.create-sheet-kind.is-selected { border-color: var(--ac-accent); font-weight: 600; }
+/* 放在: one row — the label, where it goes now, and a chevron into the picker. */
+.create-sheet .create-sheet-place { display: flex; justify-content: flex-start; gap: 10px; text-align: left; }
+.create-sheet-place-label { flex: none; color: var(--ac-muted); }
+.create-sheet-place-name { display: flex; align-items: center; flex: 1; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.create-sheet-place-name > svg { flex: none; color: var(--ac-muted); }
+.create-sheet-place-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.create-sheet-place > svg { flex: none; color: var(--ac-muted); }
+.create-sheet .create-sheet-capture-link { align-self: center; padding: 2px 4px; border: 0; font-size: var(--ac-fs-caption); }
+.create-sheet .create-sheet-capture-link:hover:not(:disabled) { background: none; color: var(--ac-ink); text-decoration: underline; }
+.create-sheet-name {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: var(--ac-fs-input); /* below 16px iOS zooms the page on focus */
+  color: var(--ac-ink);
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+}
+.create-sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.create-sheet-actions .ui-btn--primary { font-weight: 600; }

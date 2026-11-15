@@ -1,0 +1,14 @@
+---
+// Turns the step-by-step figures (```steps) of a page into players. The server
+// draws each as a plain list of its steps (StepsFigure.tsx), so without script
+// a reader still gets every step in order. Rendered only on a site whose notes
+// use one (usesSteps), so every other site ships none of this. The player is
+// the same code the app runs (@onden/markdown stepsEnhance.ts), fetched as a
+// script of the site itself.
+---
+
+<script>
+  if (document.querySelector(".md-steps[data-steps]")) {
+    void import("@onden/markdown/steps-enhance").then((m) => m.installStepsPlayers(document));
+  }
+</script>

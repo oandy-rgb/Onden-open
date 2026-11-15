@@ -1,0 +1,15 @@
+export const TAG_PAGE_ZH_TW: Record<string, string> = {
+  "Field settings": "欄位設定",
+  "New field": "新欄位",
+  "Delete field": "刪除欄位",
+  "Drag to change the order": "拖曳可以調整順序",
+  "Another tag already has a field with this name": "另一個標籤已經有同名的欄位",
+  "Settings of “{function}”": "「{function}」的設定",
+  "Move under another tag": "移到另一個標籤底下",
+  "Move under another tag…": "移到另一個標籤底下…",
+  "Move #{name} under": "把 #{name} 移到",
+  "Merge into…": "合併到…",
+  "Unfold description": "展開",
+  "Fold description": "收起",
+  "Tagged notes": "已標記的筆記",
+};

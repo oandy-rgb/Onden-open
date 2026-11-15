@@ -1,0 +1,65 @@
+name: Android APK (debug)
+
+# Manual only, like CI (the owner says when to run): Actions → Android APK
+# (debug) → Run workflow, or `gh workflow run android-apk.yml --ref <branch>`.
+# Builds an UNSIGNED debug APK to check that the Android shell compiles and
+# its unit tests pass (docs/mobile-app.md, step 0). It signs nothing, publishes
+# nothing and uses no secret.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Debug APK — unit tests · assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Capacitor 8's Android project compiles for Java 21 (capacitor.build.gradle).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Installs the Android command-line tools and accepts the SDK licences, so
+      # Gradle can fetch the platform in variables.gradle (compileSdkVersion).
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      - name: Copy the built-in pages
+        run: npm run build:cap -w packages/frontend
+
+      - name: Sync Capacitor into the Android project
+        working-directory: packages/frontend
+        run: npx cap sync android
+
+      - name: Unit tests (BuiltInPagesTest)
+        working-directory: packages/frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew test --no-daemon --stacktrace
+
+      - name: Assemble the debug APK
+        working-directory: packages/frontend/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onden-debug-apk
+          path: packages/frontend/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

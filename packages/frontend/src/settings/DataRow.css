@@ -1,0 +1,27 @@
+/* Settings › Your Data rows (DataRow.tsx). Text left, one button right; under
+ * 600px the button drops below the text. */
+.settings-data-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ac-line);
+}
+.settings-section-title + .settings-setting > .settings-data-row { padding-top: 0; border-top: 0; }
+.settings-data-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-data-row-title { margin: 0; font-size: var(--ac-fs-ui); font-weight: 400; color: var(--ac-ink); }
+.settings-data-row-hint {
+  margin: 0; font-size: var(--ac-fs-small); line-height: 1.5;
+  color: var(--ac-muted); overflow-wrap: anywhere;
+}
+.settings-data-row-hint--faint { color: var(--ac-muted); }
+.settings-data-row-action { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.settings-data-row-extra { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.settings-data-lede { margin: 0; font-size: var(--ac-fs-ui); line-height: 1.6; color: var(--ac-ink); }
+
+@media (max-width: 600px) {
+  .settings-data-row { grid-template-columns: minmax(0, 1fr); }
+  .settings-data-row-action { justify-content: flex-start; }
+  .settings-data-row-action .ui-btn { min-height: 44px; }
+}

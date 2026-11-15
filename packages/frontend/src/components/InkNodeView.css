@@ -1,0 +1,39 @@
+/* InkNodeView — the handwriting note surface. Quiet chrome: it should feel
+   like sheets of paper under the app's normal toolbar language.
+   (Toolbar styles live in InkToolbar.css — shared with the canvas pen mode.) */
+
+.ink-note {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  outline: none;
+}
+
+/* The pen's toolbar is docked at the bottom on every host (board, note, PDF). */
+.ink-note .ink-note-toolbar {
+  order: 2;
+  margin-top: 10px;
+}
+
+/* The sheets, their scrolling and the zoom chip are the page book's (pagebook/PageBook.css); the
+   cursor over a sheet follows the tool in hand. */
+.ink-note--eraser .page-ink-surface { cursor: cell; }
+.ink-note--readonly .page-ink-surface { cursor: default; }
+.ink-note--text .page-ink-surface { cursor: text; }
+.ink-note--panning .page-ink-surface,
+.ink-note--hand .page-ink-surface { cursor: grab; }
+
+.ink-note-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: var(--ac-fs-small);
+  color: var(--ac-muted);
+  border-bottom: 1px solid var(--ac-line);
+}
+
+/* 「放大畫面」 (the shared .pane--expanded) leaves the page a little air. */
+.ink-note.pane--expanded { padding: 8px 12px; }

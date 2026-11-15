@@ -1,0 +1,40 @@
+/* The ink of one page, in a PDF page's overlay or a notebook page: its picture (PageInkSvg) and
+   the surface that holds its engine's canvases (PageInkSurface). Both fill the page box.
+   Strokes keep their own colours, not the app theme's: they sit ON the paper. */
+
+.page-ink-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.page-ink-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: crosshair;
+  z-index: var(--z-local-5);
+  /* touch-action is the engine's (it follows the tool and the stylus setting).
+     Same opt-outs the engine sets inline: no selection or long-press callout
+     (the pen's side button and a long press would otherwise select the text
+     underneath or offer the canvas as an image; iPad: no magnifier). */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Far from the screen: no engine yet, so let touches through (scroll, select). */
+.page-ink-surface.is-idle { pointer-events: none; }
+
+.page-ink-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

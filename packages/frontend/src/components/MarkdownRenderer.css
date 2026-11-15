@@ -1,0 +1,203 @@
+/* MarkdownRenderer — colocated CSS for inline-style migration. */
+
+.md-mermaid-error {
+  color: var(--ac-danger);
+  font-size: var(--onden-text-sm, 12px);
+}
+
+.md-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--ac-radius-md);
+}
+
+/* A page of the note's own handwriting (the renderer marks it: the address the
+   publisher writes carries #ink-page-N, @onden/markdown handwritingPageNumber):
+   as wide as the text, a gap between pages. The picture carries its own light
+   paper (ink colours are stored for a light page), so the theme changes
+   nothing here. */
+.md-image--ink-page {
+  display: block;
+  width: 100%;
+  margin: 1.5em 0;
+}
+
+/* Rendered fenced-code block + copy button (Gallery language). */
+.md-codeblock {
+  position: relative;
+}
+
+.md-codeblock-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: var(--z-local-1);
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--onden-text-xs, 11px);
+  line-height: 1.6;
+  color: var(--ac-muted);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.md-codeblock:hover .md-codeblock-copy,
+.md-codeblock-copy:focus-visible {
+  opacity: 1;
+}
+
+.md-codeblock-copy:hover {
+  color: var(--ac-accent);
+  border-color: var(--ac-accent);
+}
+
+/* Media embeds — palette-token only (Gallery greige/ink), no new colors. */
+.md-video {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-ink);
+  display: block;
+  margin: 0.75rem 0;
+}
+
+.md-audio {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+/* 16:9 responsive iframe wrapper for YouTube/Vimeo embeds. */
+.md-embed-iframe {
+  display: block; /* a span: it sits inside a paragraph, where a div is not allowed */
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0.75rem 0;
+  border-radius: var(--ac-radius-md);
+  overflow: hidden;
+  background: var(--ac-raised);
+}
+
+.md-embed-iframe iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Click-to-load YouTube / Vimeo (liteEmbed.ts): a thumbnail, or a neutral box
+   with the domain, and a play button; it is a link to the video until pressed.
+   Read by the app and the published site alike, so colours come from the text
+   colour (currentColor), not from either one's tokens. */
+.md-embed-lite {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0.75rem 0;
+  border-radius: var(--onden-radius-md);
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.md-lite-link {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+.md-lite-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.md-lite-host {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.5rem;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+.md-lite-play {
+  position: relative;
+  width: 3.5rem;
+  height: 3.5rem;
+  clip-path: circle(50%);
+  background: color-mix(in srgb, CanvasText 80%, transparent);
+}
+.md-lite-play::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-35%, -50%);
+  border-style: solid;
+  border-width: 0.55rem 0 0.55rem 0.9rem;
+  border-color: transparent transparent transparent Canvas;
+}
+.md-lite-link:hover .md-lite-play,
+.md-lite-link:focus-visible .md-lite-play { background: CanvasText; }
+
+/* The audio speed button: a small pill under the player. */
+.md-audio-speed {
+  display: block;
+  margin: 0 0 0.5rem auto;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: var(--onden-radius-lg);
+  background: transparent;
+  color: inherit;
+  font-size: 0.85em;
+  opacity: 0.8;
+  cursor: pointer;
+}
+.md-audio-speed[hidden] { display: none; }
+
+/* Callouts (`> [!note]`, @onden/markdown) — on every surface, the published
+   site included. Fallback colours cover pages without the app's theme tokens. */
+.callout {
+  border-left: 3px solid;
+  border-radius: 0 var(--ac-radius-md) var(--ac-radius-md) 0;
+  padding: 10px 14px;
+  margin: 12px 0;
+  color: inherit;
+}
+.callout .callout-title {
+  font-weight: 600;
+  font-size: 0.85em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.callout p { margin: 4px 0 0; }
+/* A folded callout (`[!tip]-` / `[!tip]+`) is a <details>; its title is the summary you click. */
+details.callout > summary.callout-title { cursor: pointer; }
+.callout[class*="callout-"] {
+  border-color: var(--callout);
+  background: color-mix(in srgb, var(--callout) 8%, transparent);
+}
+
+/* D113: an onden-query / onden-base block on the published site — its result
+   frozen at publish time (FrozenQueryResult). */
+.onden-query-frozen { margin: 12px 0; overflow-x: auto; }
+.onden-query-frozen-list { margin: 0; }
+.onden-query-frozen-in { margin-left: 0.5em; opacity: 0.7; font-size: 0.9em; }
+.onden-query-frozen-table { border-collapse: collapse; }
+.onden-query-frozen-table th, .onden-query-frozen-table td { padding: 4px 10px; text-align: left; border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+.onden-query-frozen-more,
+.onden-query-frozen-note,
+.onden-query-frozen-problem { opacity: 0.7; font-size: 0.9em; margin: 6px 0; }
+
+/* Wrapper React removes instead of the player, so a playing one can be faded out. */
+.md-media-wrap {
+  display: contents;
+}

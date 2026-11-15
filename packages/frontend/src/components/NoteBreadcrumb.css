@@ -1,0 +1,116 @@
+/* The line above a note's title (NoteBreadcrumb.tsx). Every ancestor is capped
+   and ellipsised so a long title never widens the page (320px): the trail may
+   wrap, but no item is wider than the line. */
+/* The trail. The parent picker is a floating Popover (portal), not part of this row. */
+.note-breadcrumb { flex: 1 1 auto; min-width: 0; }
+.obsidian-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px 10px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  color: var(--ac-muted);
+}
+.breadcrumb-trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px 6px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.breadcrumb-trail > li { display: flex; align-items: center; min-width: 0; max-width: 100%; }
+.breadcrumb-trail > li + li::before {
+  content: "›";
+  margin-right: 6px;
+  color: color-mix(in srgb, var(--ac-muted) 65%, transparent);
+  font-size: var(--ac-fs-caption);
+}
+.breadcrumb-item,
+.breadcrumb-move {
+  border: none;
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  line-height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+.breadcrumb-item {
+  min-width: 0;
+  max-width: min(16ch, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb-item:hover,
+.breadcrumb-move:hover { color: var(--ac-accent); }
+.breadcrumb-more { padding: 0 4px; }
+.breadcrumb-move {
+  border: none;
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  line-height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+.breadcrumb-item {
+  min-width: 0;
+  max-width: min(16ch, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb-item:hover,
+.breadcrumb-move:hover { color: var(--ac-accent); }
+.breadcrumb-more { padding: 0 4px; }
+.breadcrumb-current {
+  min-width: 0;
+  max-width: min(24ch, 60vw);
+  font-size: var(--ac-fs-caption);
+  line-height: 18px;
+  color: color-mix(in srgb, var(--ac-ink) 70%, var(--ac-muted));
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A quiet word, not a button: it is there for the pointer that comes to the top
+   row, and for the keyboard that tabs into it. A touch screen and a phone have no
+   hover, so there it stays. */
+@media (hover: hover) and (width > 900px) {
+  .breadcrumb-move { opacity: 0; transition: opacity 120ms ease; }
+  .breadcrumb-move[aria-expanded="true"],
+  .note-topbar:hover .breadcrumb-move,
+  .note-topbar:focus-within .breadcrumb-move { opacity: 1; }
+}
+.breadcrumb-menu-title {
+  min-width: 0;
+  max-width: min(28ch, 70vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* On a phone the line is narrow and shares the bar with the right-hand buttons: it may wrap. */
+@media (max-width: 900px) {
+  .obsidian-breadcrumb, .breadcrumb-trail { flex-wrap: wrap; }
+}
+/* The picker floats at the word that opened it: a fixed, readable width, and the list takes the
+   room the popover has (shorter than the list near the bottom edge or above a soft keyboard). */
+.breadcrumb-picker { width: min(360px, calc(100vw - 16px)); }
+.breadcrumb-picker .parent-picker-options { max-height: min(240px, calc(var(--popover-room, 100dvh) - 96px)); }
+
+/* The "move to…" word sits right above the title. Its invisible touch area (.tap-target, global.css) is centred
+ * on it, so its lower part lay over the top of the title's letters: on touch it grows upward and stops 2px
+ * short of the title. */
+@media (pointer: coarse) {
+  .breadcrumb-move.tap-target::after { top: auto; bottom: -6px; transform: translateX(-50%); }
+}

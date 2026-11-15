@@ -1,0 +1,83 @@
+/* The ```steps figure (StepsFigure.tsx; the player: @onden/markdown stepsEnhance.ts).
+   Without script it is a list of steps; `.is-player` stacks the steps in one grid
+   cell so the figure is as tall as its tallest step and nothing jumps. */
+.md-steps {
+  margin: 1.25em 0;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.md-steps:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.md-steps-intro { padding: 0.75em 1em 0; color: var(--ac-muted); }
+.md-steps-stage { padding: 0.5em 1em 0.75em; }
+.md-step + .md-step { border-top: 1px dashed var(--ac-line); margin-top: 0.75em; padding-top: 0.5em; }
+.md-step-title { margin: 0.4em 0 0.3em; font-size: 1.05em; }
+.md-step-body > :first-child { margin-top: 0; }
+.md-step-body > :last-child { margin-bottom: 0; }
+
+.md-steps-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--ac-line);
+}
+.md-steps-status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; color: var(--ac-muted); }
+.md-steps-btn, .md-steps-all {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.75em;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.md-steps-all { font-size: 0.85em; }
+.md-steps-btn:disabled { opacity: 0.4; cursor: default; }
+.md-steps-btn:focus-visible, .md-steps-all:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.md-steps-all[aria-pressed="true"] { border-color: var(--ac-accent); }
+
+.md-steps.is-player .md-steps-stage { display: grid; touch-action: pan-y; }
+.md-steps.is-player .md-step {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.25s ease, visibility 0.25s;
+}
+.md-steps.is-player .md-step.is-active { visibility: visible; opacity: 1; }
+.md-steps.is-player.is-expanded .md-steps-stage { display: flex; flex-direction: column; gap: 0.75em; }
+.md-steps.is-player.is-expanded .md-step { visibility: visible; opacity: 1; }
+.md-steps.is-player.is-expanded .md-step + .md-step { border-top: 1px dashed var(--ac-line); padding-top: 0.5em; }
+
+/* The code transition (flipCode): one element per line, drawn over the step's code. */
+.md-flip { overflow: hidden; pointer-events: none; }
+.md-flip-line { display: block; white-space: pre; }
+.md-flip-line:empty::before { content: " "; }
+.md-line-added { background: color-mix(in srgb, var(--ac-success) 22%, transparent); transition: background 1s ease 0.3s; }
+.md-line-removed { background: color-mix(in srgb, var(--ac-danger) 18%, transparent); }
+.md-steps .md-step pre { position: relative; }
+
+/* On a published site the app's --ac-* tokens are the fixed light ones (site-tokens.css);
+   the site's own colours (--f-*) follow its light and dark schemes. */
+.site-scope .md-steps { background: var(--s-surface); border-color: var(--s-border); color: var(--s-text); }
+.site-scope .md-steps-intro, .site-scope .md-steps-status { color: var(--s-muted); }
+.site-scope .md-steps-bar { border-bottom-color: var(--s-border); }
+.site-scope .md-step + .md-step, .site-scope .md-steps.is-player.is-expanded .md-step + .md-step { border-top-color: var(--s-border); }
+.site-scope .md-steps-btn, .site-scope .md-steps-all { background: var(--s-bg); color: var(--s-text); border-color: var(--s-border); }
+.site-scope .md-steps-all[aria-pressed="true"] { border-color: var(--s-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .md-steps.is-player .md-step { transition: none; }
+  .md-line-added { transition: none; }
+}
+
+@media print {
+  .md-steps-bar { display: none; }
+  .md-steps.is-player .md-steps-stage { display: flex; flex-direction: column; gap: 0.75em; }
+  .md-steps.is-player .md-step { visibility: visible; opacity: 1; break-inside: avoid; }
+}

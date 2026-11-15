@@ -1,0 +1,11 @@
+node_modules
+data
+out/site
+out/tmp-*
+out/try.json
+out/*-old.json
+out/*.jsonl
+out/browser-chromium-x4-new.json
+out/node-new.json
+out/cold-x4.json
+out/*.err

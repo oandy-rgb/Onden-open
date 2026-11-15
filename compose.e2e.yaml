@@ -1,0 +1,93 @@
+# Full-stack e2e stack — fully isolated, ephemeral, NEVER touches the real onden.
+#
+# Its own project (-p ${E2E_PROJECT:-onden-e2e}), its own Postgres whose POSTGRES_DB is
+# onden_test (initdb creates it + loads schema.sql), its own volume + network,
+# and nginx on :${E2E_PORT:-5099} so it can't collide with a dev stack on :5000. Backend +
+# frontend are rebuilt from the current source, so this exercises the REAL full
+# stack (browser → nginx → Astro SSR → Hono API → Postgres) with local changes.
+#
+# Driven by packages/frontend/e2e/fullstack/run.sh. Auth: emailAndPassword
+# signup is open (ONDEN_SIGNUP=open below), so the Playwright run self-provisions a throwaway user.
+services:
+  postgres:
+    build:
+      context: docker/postgres
+    command: postgres -c shared_preload_libraries='pg_stat_statements'
+    environment:
+      POSTGRES_DB: onden_test          # <- the whole point: an isolated test DB
+      POSTGRES_USER: onden
+      POSTGRES_PASSWORD: onden
+    volumes:
+      - e2e_pgdata:/var/lib/postgresql
+      - ./packages/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U onden -d onden_test"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/docker/Dockerfile
+    environment:
+      DATABASE_URL: postgres://onden:onden@postgres:5432/onden_test
+      PORT: 8787
+      CORS_ORIGIN: http://localhost:${E2E_PORT:-5099}
+      BETTER_AUTH_SECRET: e2e-only-secret-not-for-production
+      # Retrieval (suggestLinks, semantic search) uses the deterministic stub
+      # embedder — NOT the real local e5-small. The default outside NODE_ENV=test
+      # is "local", which dynamic-imports @huggingface/transformers; that package
+      # is an opt-in manual install absent from the lean container, so retrieval
+      # 500s without this. The stub needs no model download
+      # and ranks an exact body match first — exactly what the e2e asserts.
+      EMBEDDING_MODE: stub
+      BETTER_AUTH_URL: http://localhost:${E2E_PORT:-5099}
+      # The static site output (zip, Pages push) asks the frontend SSR server for
+      # each page; the frontend listens on :80 in this stack.
+      SITE_SSR_URL: http://frontend
+      # Specs sign up several throwaway users; the deployed default refuses all
+      # but the first account.
+      ONDEN_SIGNUP: open
+      # This isolated stack is NOT production (overrides the image's
+      # NODE_ENV=production): it runs migrate() on boot (skipped only under
+      # NODE_ENV=test) and the background reconciler the RSS specs need, while
+      # keeping the SSRF guard's "never weaken in production" property intact.
+      NODE_ENV: e2e
+      # The RSS specs subscribe to feeds served from the internal nginx/backend
+      # hosts; the SSRF guard blocks private addresses unless a non-production
+      # env explicitly opts in (see services/safeFetch.ts).
+      SAFE_FETCH_ALLOW_PRIVATE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/docker/Dockerfile
+      args:
+        PUBLIC_API_BASE_URL: ""        # same-origin via the test nginx
+    environment:
+      HOST: 0.0.0.0
+      PORT: 80
+      SSR_API_URL: http://backend:8787
+      # The address readers use: canonical, sitemap and feed links are built from
+      # it (lib/siteOrigin.ts). Without it they fall back to the request origin,
+      # which behind the test nginx loses the port (GAP-200).
+      APP_URL: http://localhost:${E2E_PORT:-5099}
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${E2E_PORT:-5099}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  e2e_pgdata:

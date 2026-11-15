@@ -1,0 +1,82 @@
+/* doc 09 #4 — pinned "featured fields" strip under the note title. Compact,
+   editable typed cells; reads as ordinary metadata (surface-no-programmer-ui),
+   not a schema editor. Sits between the #tag pills and the body. */
+
+.featured-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 14px;
+}
+
+.ff-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 100%;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.3;
+  color: var(--ac-ink);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  cursor: text;
+  text-align: left;
+}
+.ff-cell:disabled { cursor: default; }
+.ff-cell:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--ac-accent) 45%, var(--ac-line));
+}
+
+.ff-label {
+  flex: 0 0 auto;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+}
+
+.ff-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ff-value--empty {
+  color: var(--ac-muted);
+  font-weight: 400;
+  font-style: var(--ac-hint-style);
+}
+
+/* Boolean cell — a check toggle rather than a value. */
+.ff-cell--bool { cursor: pointer; }
+.ff-cell--bool .ff-check {
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+.ff-cell--bool.on .ff-check { color: var(--ac-accent); }
+
+/* Editing state — inline input/select sized to the cell. */
+.ff-cell--editing {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 8px;
+  border: 1px solid var(--ac-accent);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+.ff-cell--editing input,
+.ff-cell--editing select {
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  font-weight: 500;
+  color: var(--ac-ink);
+  background: transparent;
+  border: none;
+  outline: none;
+  min-width: 80px;
+  max-width: 220px;
+}

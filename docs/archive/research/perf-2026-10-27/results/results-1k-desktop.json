@@ -1,0 +1,4758 @@
+[
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 1,
+  "cold": {
+   "label": "cold",
+   "wall": 1518,
+   "marks": {
+    "shell": 197,
+    "workerCreated": 518,
+    "firstRow": 1447,
+    "usable": 1447,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 1,
+    "sum": 253,
+    "max": 253
+   },
+   "initLocalDb": [
+    420
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 17,
+   "mirrorSettledAfterUsableMs": 6023,
+   "ltUntilSettled": {
+    "n": 9,
+    "sum": 733,
+    "max": 253
+   },
+   "rpcOver50": [
+    "initLocalDb:420",
+    "persistBootstrap:79",
+    "getPendingWrites:75",
+    "getRejectedWrites:107",
+    "upsertNode:110",
+    "loadCanvases:59",
+    "catchUpWithOtherTabs:122",
+    "getPendingWrites:72",
+    "getPendingWrites:95",
+    "getLastEventId:115",
+    "catchUpWithOtherTabs:133",
+    "getPendingWrites:85",
+    "persistBootstrap:336",
+    "catchUpWithOtherTabs:53",
+    "getPendingWrites:64",
+    "setLastEventId:68"
+   ],
+   "net": {
+    "requests": 154,
+    "kbTotal": 782,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 367,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 10,
+      "ttfbMs": 35
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 17
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 56,
+      "ttfbMs": 47
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 56,
+      "ttfbMs": 47
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 215,
+      "ttfbMs": 216
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 222,
+      "ttfbMs": 240
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 79,
+      "ttfbMs": 81
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 76,
+      "ttfbMs": 80
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136,
+      "rawKB": 775.9,
+      "ms": 156,
+      "ttfbMs": 143
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 127
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 127
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 39,
+      "ttfbMs": 126
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 129,
+      "ttfbMs": 200
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 141,
+      "ttfbMs": 256
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 37,
+      "ttfbMs": 124
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 134,
+      "ttfbMs": 254
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 61,
+      "ttfbMs": 123
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 65,
+      "ttfbMs": 121
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 166,
+      "ttfbMs": 251
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 13,
+      "ttfbMs": 110
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 18,
+      "ttfbMs": 90
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 142
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 51,
+      "ttfbMs": 161
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 56,
+      "ttfbMs": 132
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 54,
+      "ttfbMs": 125
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 31,
+      "ttfbMs": 38
+     },
+     {
+      "m": "POST",
+      "p": "/api/nodes",
+      "status": 201,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 216,
+      "ttfbMs": 238
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 28,
+      "ttfbMs": 29
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership?cursor=&expected_epoch=0&limit=5000&prefixes=ae",
+      "status": 200,
+      "encKB": 1.9,
+      "rawKB": 17.8,
+      "ms": 76,
+      "ttfbMs": 76
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203,
+      "rawKB": 3731,
+      "ms": 309,
+      "ttfbMs": 280
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership?cursor=%EF%BF%BF&expected_epoch=0&limit=5000&prefixes=ae",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 110,
+      "ttfbMs": 115
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 56,
+      "ttfbMs": 112
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 54,
+      "ttfbMs": 85
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 86,
+      "ttfbMs": 90
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 56,
+      "ttfbMs": 84
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 66,
+      "ttfbMs": 83
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 54,
+      "ttfbMs": 88
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 23,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 36,
+      "ttfbMs": 57
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 24,
+      "ttfbMs": 30
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 22,
+      "ttfbMs": 55
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 57
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 20,
+      "ttfbMs": 66
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.2,
+      "ms": 26,
+      "ttfbMs": 49
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 36
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 19,
+      "ttfbMs": 36
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 40,
+      "ttfbMs": 63
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 19,
+      "ttfbMs": 34
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 26,
+      "ttfbMs": 53
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 21,
+      "ttfbMs": 42
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 18,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 10
+     }
+    ]
+   },
+   "heapSettledMb": 28
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 1855,
+   "marks": {
+    "shell": 151,
+    "workerCreated": 474,
+    "firstRow": 1099,
+    "gateUp": 1099,
+    "gateDown": 1848,
+    "usable": 1848,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 346,
+    "max": 207
+   },
+   "initLocalDb": [
+    290
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 120,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 17,
+      "ttfbMs": 31
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 33,
+      "ttfbMs": 107
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 32,
+      "ttfbMs": 107
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 47,
+      "ttfbMs": 86
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 59,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 52
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 34,
+      "ttfbMs": 52
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 37,
+      "ttfbMs": 37
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 36,
+      "ttfbMs": 116
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 47,
+      "ttfbMs": 128
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 63,
+      "ttfbMs": 127
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 63,
+      "ttfbMs": 127
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 37,
+      "ttfbMs": 114
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 113
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 57,
+      "ttfbMs": 121
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 42,
+      "ttfbMs": 129
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 49,
+      "ttfbMs": 140
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 19,
+      "ttfbMs": 84
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 13,
+      "ttfbMs": 155
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 13
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 25,
+      "ttfbMs": 48
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 16,
+      "ttfbMs": 19
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 21,
+      "ttfbMs": 27
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 41,
+      "ttfbMs": 50
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 26,
+      "ttfbMs": 38
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 26
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.6,
+      "rawKB": 75.4,
+      "ms": 34,
+      "ttfbMs": 52
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 16
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 20,
+      "ttfbMs": 20
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 10
+     }
+    ]
+   },
+   "heapMb": 20,
+   "rpcOver50": [
+    "initLocalDb:290",
+    "loadBootstrapList:133",
+    "catchUpWithOtherTabs:363",
+    "getPendingWrites:230",
+    "getRejectedWrites:99",
+    "getPendingWrites:66",
+    "getLastEventId:97",
+    "getPendingWrites:71"
+   ]
+  },
+  "open": {
+   "short": {
+    "ms": 143,
+    "backlinksMs": null,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   },
+   "long50k": {
+    "ms": 212,
+    "backlinksMs": null,
+    "lt": {
+     "n": 1,
+     "sum": 101,
+     "max": 101
+    }
+   },
+   "hub300": {
+    "ms": 127,
+    "backlinksMs": 132,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 22,
+   "p95Ms": 29,
+   "maxMs": 34,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1461,
+   "roundTripMs": 139,
+   "lastKeyToSavedMs": 1574,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279041,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279041"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 121,
+    "rows": 2,
+    "keyMedianMs": 18,
+    "keyMaxMs": 18
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 357,
+    "rows": 9,
+    "keyMedianMs": 17,
+    "keyMaxMs": 17
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 63,
+   "appliedAfterEditMs": 411,
+   "applyRpcMs": 3,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 29,
+     "ttfbMs": 31
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 27,
+     "ttfbMs": 28
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 40,
+     "ttfbMs": 47
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 46,
+     "ttfbMs": 50
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 40,
+     "ttfbMs": 46
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 71,
+     "ttfbMs": 71
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 24,
+     "ttfbMs": 24
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 23,
+     "ttfbMs": 24
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 9,
+     "ttfbMs": 39
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 24,
+     "ttfbMs": 24
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 14,
+     "ttfbMs": 14
+    }
+   ]
+  },
+  "offline": {
+   "label": "offline",
+   "wall": 1590,
+   "marks": {
+    "shell": 135,
+    "workerCreated": 480,
+    "firstRow": 917,
+    "gateUp": 917,
+    "gateDown": 1549,
+    "usable": 1549,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 317,
+    "max": 172
+   },
+   "initLocalDb": [
+    156
+   ],
+   "loadBootstrap": []
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 2,
+  "cold": {
+   "label": "cold",
+   "wall": 1329,
+   "marks": {
+    "shell": 154,
+    "workerCreated": 499,
+    "firstRow": 1276,
+    "usable": 1276,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 1,
+    "sum": 217,
+    "max": 217
+   },
+   "initLocalDb": [
+    288
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 16,
+   "mirrorSettledAfterUsableMs": 6020,
+   "ltUntilSettled": {
+    "n": 2,
+    "sum": 286,
+    "max": 217
+   },
+   "rpcOver50": [
+    "initLocalDb:288",
+    "persistBootstrap:75",
+    "getPendingWrites:69",
+    "getRejectedWrites:88",
+    "catchUpWithOtherTabs:131",
+    "getPendingWrites:92",
+    "getLastEventId:77",
+    "getAllMembershipIds:52",
+    "persistBootstrap:118"
+   ],
+   "net": {
+    "requests": 138,
+    "kbTotal": 775,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 360,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 16,
+      "ttfbMs": 32
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 9,
+      "ttfbMs": 26
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 41,
+      "ttfbMs": 36
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 43,
+      "ttfbMs": 40
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 33,
+      "ttfbMs": 31
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 42,
+      "ttfbMs": 43
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 97,
+      "ttfbMs": 97
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 77,
+      "ttfbMs": 79
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.2,
+      "rawKB": 776,
+      "ms": 168,
+      "ttfbMs": 154
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 100
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 100
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 19,
+      "ttfbMs": 105
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 42,
+      "ttfbMs": 106
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 35,
+      "ttfbMs": 104
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 42,
+      "ttfbMs": 105
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 36,
+      "ttfbMs": 103
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 104
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 56,
+      "ttfbMs": 104
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 50,
+      "ttfbMs": 102
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 66
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 29,
+      "ttfbMs": 64
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 47
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 46
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 17,
+      "ttfbMs": 90
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 27,
+      "ttfbMs": 123
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 38,
+      "ttfbMs": 173
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 29,
+      "ttfbMs": 73
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 49,
+      "ttfbMs": 43
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 26,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 57,
+      "ttfbMs": 93
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 22,
+      "ttfbMs": 23
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731.1,
+      "ms": 246,
+      "ttfbMs": 208
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 13,
+      "ttfbMs": 14
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 18,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 21,
+      "ttfbMs": 21
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 7,
+      "ttfbMs": 7
+     }
+    ]
+   },
+   "heapSettledMb": 27
+  },
+  "mirrorBytes": 4210688,
+  "warm": {
+   "label": "warm",
+   "wall": 1824,
+   "marks": {
+    "shell": 157,
+    "workerCreated": 494,
+    "firstRow": 1051,
+    "gateUp": 1051,
+    "gateDown": 1814,
+    "usable": 1814,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 3,
+    "sum": 448,
+    "max": 198
+   },
+   "initLocalDb": [
+    235
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 121,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 13,
+      "ttfbMs": 31
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 27
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 27,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 30,
+      "ttfbMs": 71
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 16,
+      "ttfbMs": 43
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 42
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 27,
+      "ttfbMs": 40
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 19,
+      "ttfbMs": 39
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 44,
+      "ttfbMs": 45
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 23,
+      "ttfbMs": 90
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 32,
+      "ttfbMs": 91
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 72,
+      "ttfbMs": 96
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 21,
+      "ttfbMs": 86
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 33,
+      "ttfbMs": 89
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 28,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 22,
+      "ttfbMs": 114
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 51,
+      "ttfbMs": 134
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 38,
+      "ttfbMs": 348
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 39,
+      "ttfbMs": 198
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 30,
+      "ttfbMs": 38
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 33,
+      "ttfbMs": 65
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 23,
+      "ttfbMs": 30
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 28,
+      "ttfbMs": 37
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 40,
+      "ttfbMs": 50
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 28,
+      "ttfbMs": 34
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 16,
+      "ttfbMs": 26
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 13
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.8,
+      "rawKB": 75.4,
+      "ms": 42,
+      "ttfbMs": 42
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 18,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 20,
+      "ttfbMs": 20
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 14
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 20,
+      "ttfbMs": 20
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 11
+     }
+    ]
+   },
+   "heapMb": 21,
+   "rpcOver50": [
+    "initLocalDb:235",
+    "loadBootstrapList:126",
+    "catchUpWithOtherTabs:339",
+    "getPendingWrites:214",
+    "getRejectedWrites:80",
+    "getPendingWrites:88",
+    "getLastEventId:87",
+    "getPendingWrites:68"
+   ]
+  },
+  "open": {
+   "short": {
+    "ms": 140,
+    "backlinksMs": null,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   },
+   "long50k": {
+    "ms": 194,
+    "backlinksMs": null,
+    "lt": {
+     "n": 1,
+     "sum": 87,
+     "max": 87
+    }
+   },
+   "hub300": {
+    "ms": 128,
+    "backlinksMs": 133,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 22,
+   "p95Ms": 31,
+   "maxMs": 35,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1461,
+   "roundTripMs": 122,
+   "lastKeyToSavedMs": 1559,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279127,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279127"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 114,
+    "rows": 2,
+    "keyMedianMs": 19,
+    "keyMaxMs": 20
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 348,
+    "rows": 9,
+    "keyMedianMs": 17,
+    "keyMaxMs": 17
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 61,
+   "appliedAfterEditMs": 422,
+   "applyRpcMs": 9,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 50,
+     "ttfbMs": 61
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 48,
+     "ttfbMs": 60
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 44,
+     "ttfbMs": 43
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 50,
+     "ttfbMs": 60
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 49,
+     "ttfbMs": 60
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 63,
+     "ttfbMs": 81
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 11,
+     "ttfbMs": 20
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 20,
+     "ttfbMs": 22
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 18,
+     "ttfbMs": 18
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 20,
+     "ttfbMs": 20
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 10,
+     "ttfbMs": 10
+    }
+   ]
+  },
+  "offline": {
+   "label": "offline",
+   "wall": 1676,
+   "marks": {
+    "shell": 186,
+    "workerCreated": 499,
+    "firstRow": 971,
+    "gateUp": 971,
+    "gateDown": 1633,
+    "usable": 1633,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 300,
+    "max": 161
+   },
+   "initLocalDb": [
+    200
+   ],
+   "loadBootstrap": []
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 3,
+  "cold": {
+   "label": "cold",
+   "wall": 1365,
+   "marks": {
+    "shell": 173,
+    "workerCreated": 506,
+    "firstRow": 1314,
+    "usable": 1314,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 1,
+    "sum": 237,
+    "max": 237
+   },
+   "initLocalDb": [
+    331
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 16,
+   "mirrorSettledAfterUsableMs": 3016,
+   "ltUntilSettled": {
+    "n": 2,
+    "sum": 349,
+    "max": 237
+   },
+   "rpcOver50": [
+    "initLocalDb:331",
+    "persistBootstrap:82",
+    "getPendingWrites:78",
+    "getRejectedWrites:95",
+    "catchUpWithOtherTabs:58",
+    "getPendingWrites:53",
+    "getLastEventId:87",
+    "getPendingWrites:57",
+    "getMembershipEpoch:61",
+    "persistBootstrap:159"
+   ],
+   "net": {
+    "requests": 136,
+    "kbTotal": 774,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 46,
+      "ttfbMs": 31
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 14
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 37,
+      "ttfbMs": 39
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 47,
+      "ttfbMs": 48
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 153,
+      "ttfbMs": 178
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 151,
+      "ttfbMs": 177
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 53,
+      "ttfbMs": 53
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 53,
+      "ttfbMs": 54
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.9,
+      "ms": 133,
+      "ttfbMs": 119
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 110
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 16,
+      "ttfbMs": 109
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 27,
+      "ttfbMs": 109
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 43,
+      "ttfbMs": 110
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 108
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 107
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 39,
+      "ttfbMs": 107
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 42,
+      "ttfbMs": 108
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 67,
+      "ttfbMs": 111
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 59,
+      "ttfbMs": 106
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 39,
+      "ttfbMs": 78
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 29,
+      "ttfbMs": 68
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 54
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 13,
+      "ttfbMs": 56
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 188
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 29,
+      "ttfbMs": 202
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 11,
+      "ttfbMs": 156
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 46,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 39
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 23,
+      "ttfbMs": 26
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731.1,
+      "ms": 229,
+      "ttfbMs": 191
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 52,
+      "ttfbMs": 52
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 17
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 19,
+      "ttfbMs": 19
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 9,
+      "ttfbMs": 9
+     }
+    ]
+   },
+   "heapSettledMb": 26
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 1780,
+   "marks": {
+    "shell": 121,
+    "workerCreated": 495,
+    "firstRow": 1097,
+    "gateUp": 1097,
+    "gateDown": 1769,
+    "usable": 1769,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 3,
+    "sum": 421,
+    "max": 182
+   },
+   "initLocalDb": [
+    264
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 119,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 17,
+      "ttfbMs": 61
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 60
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 46,
+      "ttfbMs": 83
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 41,
+      "ttfbMs": 82
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 53,
+      "ttfbMs": 69
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 46,
+      "ttfbMs": 60
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 34
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 54
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 68,
+      "ttfbMs": 68
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 38,
+      "ttfbMs": 95
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 37,
+      "ttfbMs": 94
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 63,
+      "ttfbMs": 99
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 49,
+      "ttfbMs": 95
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 78,
+      "ttfbMs": 104
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 52,
+      "ttfbMs": 96
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 50,
+      "ttfbMs": 94
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 26,
+      "ttfbMs": 100
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 60,
+      "ttfbMs": 116
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 19,
+      "ttfbMs": 298
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 14,
+      "ttfbMs": 173
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 17
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 55,
+      "ttfbMs": 74
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 26
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 45,
+      "ttfbMs": 51
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 57,
+      "ttfbMs": 62
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 35,
+      "ttfbMs": 35
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 32,
+      "ttfbMs": 38
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 23,
+      "ttfbMs": 30
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.7,
+      "rawKB": 75.3,
+      "ms": 42,
+      "ttfbMs": 42
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 17
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 22,
+      "ttfbMs": 22
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     }
+    ]
+   },
+   "heapMb": 20,
+   "rpcOver50": [
+    "initLocalDb:264",
+    "loadBootstrapList:159",
+    "catchUpWithOtherTabs:354",
+    "getPendingWrites:201",
+    "getRejectedWrites:87",
+    "getPendingWrites:77",
+    "getPendingWrites:77"
+   ]
+  },
+  "open": {
+   "short": {
+    "ms": 108,
+    "backlinksMs": null,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   },
+   "long50k": {
+    "ms": 183,
+    "backlinksMs": null,
+    "lt": {
+     "n": 1,
+     "sum": 77,
+     "max": 77
+    }
+   },
+   "hub300": {
+    "ms": 149,
+    "backlinksMs": 154,
+    "lt": {
+     "n": 1,
+     "sum": 61,
+     "max": 61
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 21,
+   "p95Ms": 33,
+   "maxMs": 34,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1478,
+   "roundTripMs": 108,
+   "lastKeyToSavedMs": 1545,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279213,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279213"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 118,
+    "rows": 2,
+    "keyMedianMs": 17,
+    "keyMaxMs": 29
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 337,
+    "rows": 9,
+    "keyMedianMs": 15,
+    "keyMaxMs": 15
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 55,
+   "appliedAfterEditMs": 389,
+   "applyRpcMs": 5,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 30,
+     "ttfbMs": 43
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 26,
+     "ttfbMs": 26
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 42,
+     "ttfbMs": 43
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 35,
+     "ttfbMs": 42
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 38,
+     "ttfbMs": 42
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 51,
+     "ttfbMs": 57
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 9,
+     "ttfbMs": 13
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 14,
+     "ttfbMs": 17
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 8,
+     "ttfbMs": 27
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 21,
+     "ttfbMs": 22
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 10,
+     "ttfbMs": 9
+    }
+   ]
+  },
+  "offline": {
+   "label": "offline",
+   "wall": 1498,
+   "marks": {
+    "shell": 121,
+    "workerCreated": 433,
+    "firstRow": 860,
+    "gateUp": 860,
+    "gateDown": 1449,
+    "usable": 1449,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 329,
+    "max": 168
+   },
+   "initLocalDb": [
+    152
+   ],
+   "loadBootstrap": []
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 4,
+  "cold": {
+   "label": "cold",
+   "wall": 1296,
+   "marks": {
+    "shell": 156,
+    "workerCreated": 499,
+    "firstRow": 1265,
+    "usable": 1265,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 1,
+    "sum": 184,
+    "max": 184
+   },
+   "initLocalDb": [
+    329
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 15,
+   "mirrorSettledAfterUsableMs": 3017,
+   "ltUntilSettled": {
+    "n": 4,
+    "sum": 374,
+    "max": 184
+   },
+   "rpcOver50": [
+    "initLocalDb:329",
+    "persistBootstrap:68",
+    "getPendingWrites:64",
+    "getRejectedWrites:65",
+    "catchUpWithOtherTabs:51",
+    "getPendingWrites:65",
+    "getPendingWrites:73",
+    "getLastEventId:82",
+    "persistBootstrap:105"
+   ],
+   "net": {
+    "requests": 136,
+    "kbTotal": 774,
+    "kbJs": 254,
+    "kbCss": 32,
+    "kbApi": 359,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 25,
+      "ttfbMs": 28
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 12
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 51,
+      "ttfbMs": 47
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 51,
+      "ttfbMs": 60
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 134,
+      "ttfbMs": 132
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 138,
+      "ttfbMs": 139
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 42,
+      "ttfbMs": 42
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 73,
+      "ttfbMs": 74
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.7,
+      "ms": 153,
+      "ttfbMs": 141
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 73
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 73
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 25,
+      "ttfbMs": 73
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 29,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 29,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 70
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 21,
+      "ttfbMs": 69
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 28,
+      "ttfbMs": 70
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 41,
+      "ttfbMs": 69
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 34,
+      "ttfbMs": 68
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 38
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 19,
+      "ttfbMs": 35
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 20,
+      "ttfbMs": 89
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 9,
+      "ttfbMs": 74
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 19,
+      "ttfbMs": 102
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 85
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 24,
+      "ttfbMs": 147
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 18,
+      "ttfbMs": 78
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 46,
+      "ttfbMs": 75
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 26,
+      "ttfbMs": 50
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 23,
+      "ttfbMs": 46
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 22,
+      "ttfbMs": 21
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731,
+      "ms": 191,
+      "ttfbMs": 166
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 24,
+      "ttfbMs": 23
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 26,
+      "ttfbMs": 29
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 19,
+      "ttfbMs": 20
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     }
+    ]
+   },
+   "heapSettledMb": 26
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 1541,
+   "marks": {
+    "shell": 155,
+    "workerCreated": 482,
+    "firstRow": 948,
+    "gateUp": 948,
+    "gateDown": 1535,
+    "usable": 1535,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 296,
+    "max": 164
+   },
+   "initLocalDb": [
+    201
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 119,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 19,
+      "ttfbMs": 30
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 7,
+      "ttfbMs": 22
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 23,
+      "ttfbMs": 66
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 34,
+      "ttfbMs": 71
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 44,
+      "ttfbMs": 62
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 36,
+      "ttfbMs": 59
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 24,
+      "ttfbMs": 46
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 43
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 34,
+      "ttfbMs": 35
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 73
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 11,
+      "ttfbMs": 70
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 28,
+      "ttfbMs": 70
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 32,
+      "ttfbMs": 70
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 25,
+      "ttfbMs": 68
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 18,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 24,
+      "ttfbMs": 67
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 20,
+      "ttfbMs": 111
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 19,
+      "ttfbMs": 112
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 16,
+      "ttfbMs": 258
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 13,
+      "ttfbMs": 167
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 16,
+      "ttfbMs": 16
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 24,
+      "ttfbMs": 51
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 18,
+      "ttfbMs": 31
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 17,
+      "ttfbMs": 25
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 41,
+      "ttfbMs": 52
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 26,
+      "ttfbMs": 34
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 20,
+      "ttfbMs": 29
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 9,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.7,
+      "rawKB": 75.2,
+      "ms": 32,
+      "ttfbMs": 32
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 13,
+      "ttfbMs": 13
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 21,
+      "ttfbMs": 22
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 10,
+      "ttfbMs": 10
+     }
+    ]
+   },
+   "heapMb": 20,
+   "rpcOver50": [
+    "initLocalDb:201",
+    "loadBootstrapList:104",
+    "catchUpWithOtherTabs:281",
+    "getPendingWrites:179",
+    "getRejectedWrites:63",
+    "getPendingWrites:94",
+    "getPendingWrites:86"
+   ]
+  },
+  "open": {
+   "short": {
+    "ms": 132,
+    "backlinksMs": null,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   },
+   "long50k": {
+    "ms": 186,
+    "backlinksMs": null,
+    "lt": {
+     "n": 1,
+     "sum": 86,
+     "max": 86
+    }
+   },
+   "hub300": {
+    "ms": 145,
+    "backlinksMs": 152,
+    "lt": {
+     "n": 1,
+     "sum": 68,
+     "max": 68
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 20,
+   "p95Ms": 31,
+   "maxMs": 36,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1466,
+   "roundTripMs": 133,
+   "lastKeyToSavedMs": 1574,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279299,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279299"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 117,
+    "rows": 2,
+    "keyMedianMs": 19,
+    "keyMaxMs": 24
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 379,
+    "rows": 9,
+    "keyMedianMs": 22,
+    "keyMaxMs": 22
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 58,
+   "appliedAfterEditMs": 416,
+   "applyRpcMs": 4,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 32,
+     "ttfbMs": 33
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 45,
+     "ttfbMs": 45
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 48,
+     "ttfbMs": 64
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 48,
+     "ttfbMs": 47
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 48,
+     "ttfbMs": 46
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 54,
+     "ttfbMs": 65
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 26,
+     "ttfbMs": 32
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 21,
+     "ttfbMs": 45
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 15,
+     "ttfbMs": 16
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 19,
+     "ttfbMs": 19
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 13,
+     "ttfbMs": 14
+    }
+   ]
+  },
+  "offline": {
+   "label": "offline",
+   "wall": 1543,
+   "marks": {
+    "shell": 125,
+    "workerCreated": 477,
+    "firstRow": 856,
+    "gateUp": 856,
+    "gateDown": 1488,
+    "usable": 1488,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 333,
+    "max": 183
+   },
+   "initLocalDb": [
+    132
+   ],
+   "loadBootstrap": []
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 5,
+  "cold": {
+   "label": "cold",
+   "wall": 1427,
+   "marks": {
+    "shell": 184,
+    "workerCreated": 521,
+    "firstRow": 1390,
+    "usable": 1390,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 1,
+    "sum": 238,
+    "max": 238
+   },
+   "initLocalDb": [
+    380
+   ],
+   "loadBootstrap": [],
+   "heapAtUsableMb": 15,
+   "mirrorSettledAfterUsableMs": 6023,
+   "ltUntilSettled": {
+    "n": 2,
+    "sum": 293,
+    "max": 238
+   },
+   "rpcOver50": [
+    "initLocalDb:380",
+    "persistBootstrap:73",
+    "getPendingWrites:68",
+    "getRejectedWrites:80",
+    "catchUpWithOtherTabs:131",
+    "getPendingWrites:127",
+    "getLastEventId:73",
+    "getPendingWrites:51",
+    "persistBootstrap:111"
+   ],
+   "net": {
+    "requests": 138,
+    "kbTotal": 1103,
+    "kbJs": 556,
+    "kbCss": 58,
+    "kbApi": 360,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 22,
+      "ttfbMs": 21
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 13,
+      "ttfbMs": 13
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 55,
+      "ttfbMs": 49
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 56,
+      "ttfbMs": 59
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 39,
+      "ttfbMs": 30
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 94,
+      "ttfbMs": 93
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 63,
+      "ttfbMs": 64
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 90,
+      "ttfbMs": 91
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?bodies=none",
+      "status": 200,
+      "encKB": 136.1,
+      "rawKB": 775.6,
+      "ms": 141,
+      "ttfbMs": 122
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 89
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 21,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 42,
+      "ttfbMs": 88
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 51,
+      "ttfbMs": 88
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 53,
+      "ttfbMs": 88
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 48,
+      "ttfbMs": 86
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 48,
+      "ttfbMs": 86
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 58,
+      "ttfbMs": 88
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 71,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 70,
+      "ttfbMs": 87
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 48,
+      "ttfbMs": 60
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 45,
+      "ttfbMs": 57
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 55
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 46
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 32,
+      "ttfbMs": 93
+     },
+     {
+      "m": "PUT",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 175
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 37,
+      "ttfbMs": 173
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 13,
+      "ttfbMs": 77
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 68,
+      "ttfbMs": 65
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 24,
+      "ttfbMs": 58
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest?expected_epoch=0",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 36,
+      "ttfbMs": 60
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 24,
+      "ttfbMs": 24
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap",
+      "status": 200,
+      "encKB": 203.2,
+      "rawKB": 3731,
+      "ms": 201,
+      "ttfbMs": 169
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 36,
+      "ttfbMs": 34
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 12,
+      "ttfbMs": 12
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 20,
+      "ttfbMs": 21
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 16,
+      "ttfbMs": 16
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     }
+    ]
+   },
+   "heapSettledMb": 27
+  },
+  "mirrorBytes": 4214784,
+  "warm": {
+   "label": "warm",
+   "wall": 1634,
+   "marks": {
+    "shell": 138,
+    "workerCreated": 475,
+    "firstRow": 929,
+    "gateUp": 929,
+    "gateDown": 1623,
+    "usable": 1623,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 340,
+    "max": 179
+   },
+   "initLocalDb": [
+    190
+   ],
+   "loadBootstrap": [],
+   "net": {
+    "requests": 121,
+    "kbTotal": 31,
+    "kbJs": 0,
+    "kbCss": 0,
+    "kbApi": 31,
+    "api": [
+     {
+      "m": "GET",
+      "p": "/api/auth/get-session",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 0.6,
+      "ms": 14,
+      "ttfbMs": 17
+     },
+     {
+      "m": "GET",
+      "p": "/api/auth/providers",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 7,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 29,
+      "ttfbMs": 51
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 29,
+      "ttfbMs": 49
+     },
+     {
+      "m": "GET",
+      "p": "/api/edges/manifest",
+      "status": 200,
+      "encKB": 0.9,
+      "rawKB": 1.3,
+      "ms": 27,
+      "ttfbMs": 46
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/dayNoteParent",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 40,
+      "ttfbMs": 51
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 45,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 50,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/membership/digest",
+      "status": 200,
+      "encKB": 5.2,
+      "rawKB": 23.7,
+      "ms": 40,
+      "ttfbMs": 40
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/nav",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 13,
+      "ttfbMs": 105
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/sidebarTags",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 14,
+      "ttfbMs": 104
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 95,
+      "ttfbMs": 110
+     },
+     {
+      "m": "GET",
+      "p": "/api/events?event_type=BODY_CONFLICT&limit=50",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 53,
+      "ttfbMs": 103
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/hintsSeen",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 63,
+      "ttfbMs": 103
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAsk",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 53,
+      "ttfbMs": 102
+     },
+     {
+      "m": "GET",
+      "p": "/api/me/prefs/timeZoneAnswered",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 60,
+      "ttfbMs": 102
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 37,
+      "ttfbMs": 118
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/versions",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 37,
+      "ttfbMs": 118
+     },
+     {
+      "m": "POST",
+      "p": "/api/sync",
+      "status": 200,
+      "encKB": 0.6,
+      "rawKB": 0.3,
+      "ms": 21,
+      "ttfbMs": 316
+     },
+     {
+      "m": "GET",
+      "p": "/api/skills",
+      "status": 200,
+      "encKB": 1.1,
+      "rawKB": 0.9,
+      "ms": 17,
+      "ttfbMs": 192
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/2421f3fd-9d0a-4bed-8303-731d93de0a75/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 22
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 25,
+      "ttfbMs": 43
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/views",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 21,
+      "ttfbMs": 25
+     },
+     {
+      "m": "GET",
+      "p": "/api/spaces",
+      "status": 200,
+      "encKB": 0.8,
+      "rawKB": 0.5,
+      "ms": 21,
+      "ttfbMs": 24
+     },
+     {
+      "m": "GET",
+      "p": "/api/day/2026-10-27/lens",
+      "status": 200,
+      "encKB": 2,
+      "rawKB": 5,
+      "ms": 73,
+      "ttfbMs": 74
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/versions",
+      "status": 200,
+      "encKB": 0.5,
+      "rawKB": 0.3,
+      "ms": 67,
+      "ttfbMs": 72
+     },
+     {
+      "m": "GET",
+      "p": "/api/nodes/ae097de0-1b4a-416d-b6bf-78e54ec9fd1b/attributes?keys=pdf_url,pdf_annotations,ink_data",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 22,
+      "ttfbMs": 24
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 17,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/bootstrap?nodes=none",
+      "status": 200,
+      "encKB": 11.7,
+      "rawKB": 75,
+      "ms": 48,
+      "ttfbMs": 48
+     },
+     {
+      "m": "GET",
+      "p": "/api/sync/drawings",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 15,
+      "ttfbMs": 15
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 18,
+      "ttfbMs": 18
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 8,
+      "ttfbMs": 8
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0.1,
+      "ms": 18,
+      "ttfbMs": 19
+     },
+     {
+      "m": "GET",
+      "p": "/api/inbox/approvals",
+      "status": 200,
+      "encKB": 0.3,
+      "rawKB": 0,
+      "ms": 19,
+      "ttfbMs": 19
+     }
+    ]
+   },
+   "heapMb": 21,
+   "rpcOver50": [
+    "initLocalDb:190",
+    "loadBootstrapList:106",
+    "catchUpWithOtherTabs:293",
+    "getPendingWrites:191",
+    "getRejectedWrites:96",
+    "getPendingWrites:77",
+    "getLastEventId:65",
+    "getPendingWrites:70"
+   ]
+  },
+  "open": {
+   "short": {
+    "ms": 107,
+    "backlinksMs": null,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   },
+   "long50k": {
+    "ms": 161,
+    "backlinksMs": null,
+    "lt": {
+     "n": 1,
+     "sum": 76,
+     "max": 76
+    }
+   },
+   "hub300": {
+    "ms": 115,
+    "backlinksMs": 119,
+    "lt": {
+     "n": 0,
+     "sum": 0,
+     "max": 0
+    }
+   }
+  },
+  "typing": {
+   "n": 43,
+   "medianMs": 21,
+   "p95Ms": 31,
+   "maxMs": 35,
+   "lt": {
+    "n": 1,
+    "sum": 52,
+    "max": 52
+   }
+  },
+  "autosave": {
+   "lastKeyToSentMs": 1462,
+   "roundTripMs": 103,
+   "lastKeyToSavedMs": 1543,
+   "method": "PATCH",
+   "path": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59",
+   "reqBytes": 279385,
+   "posts": [
+    "PATCH /api/nodes/3d58545c-f656-463a-98b1-203243888c59 279385"
+   ]
+  },
+  "search": [
+   {
+    "query": "筆記 770",
+    "lastKeyToResultMs": 114,
+    "rows": 2,
+    "keyMedianMs": 25,
+    "keyMaxMs": 26
+   },
+   {
+    "query": "演算法 期中",
+    "lastKeyToResultMs": 346,
+    "rows": 9,
+    "keyMedianMs": 19,
+    "keyMaxMs": 19
+   }
+  ],
+  "sync": {
+   "patchStatus": 200,
+   "patchMs": 50,
+   "appliedAfterEditMs": 401,
+   "applyRpcMs": 5,
+   "op": "applySync",
+   "api": [
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 29,
+     "ttfbMs": 29
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=NOTIFICATION&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 40,
+     "ttfbMs": 39
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=20&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 44,
+     "ttfbMs": 61
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=ATTRIBUTE_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 40,
+     "ttfbMs": 40
+    },
+    {
+     "m": "GET",
+     "p": "/api/events?event_type=BODY_CONFLICT&limit=50&since=0",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 42,
+     "ttfbMs": 59
+    },
+    {
+     "m": "GET",
+     "p": "/api/nodes/3d58545c-f656-463a-98b1-203243888c59/views",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 61,
+     "ttfbMs": 65
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 49,
+     "ttfbMs": 48
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 17,
+     "ttfbMs": 17
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 12,
+     "ttfbMs": 31
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0.1,
+     "ms": 32,
+     "ttfbMs": 32
+    },
+    {
+     "m": "GET",
+     "p": "/api/inbox/approvals",
+     "status": 200,
+     "encKB": 0.3,
+     "rawKB": 0,
+     "ms": 7,
+     "ttfbMs": 8
+    }
+   ]
+  },
+  "offline": {
+   "label": "offline",
+   "wall": 1917,
+   "marks": {
+    "shell": 148,
+    "workerCreated": 458,
+    "firstRow": 894,
+    "gateUp": 894,
+    "gateDown": 1874,
+    "usable": 1874,
+    "rowsAtUsable": 27
+   },
+   "ltToUsable": {
+    "n": 2,
+    "sum": 646,
+    "max": 491
+   },
+   "initLocalDb": [
+    173
+   ],
+   "loadBootstrap": []
+  }
+ }
+]

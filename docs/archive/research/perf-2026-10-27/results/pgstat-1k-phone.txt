@@ -1,0 +1,12 @@
+334|1.1|354|SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.deleted_at IS NULL AND (n.parent_id IS NULL OR NOT EXISTS ( SELECT $3 FROM node_tags scope_nt JOIN content_nodes scope_tag ON scope_tag
+10|23.3|233|WITH evt_meta AS ( SELECT m.node_id AS target_id, (array_agg(m.actor_id ORDER BY m.last_event_at DESC))[$4] AS last_actor, to_char(max(m.last_event_at) AT TIME ZONE $5, $6) AS last_modified_at, array_
+10|19.2|192|UPDATE content_nodes SET markdown = $3, updated_at = now() WHERE workspace_id = $1 AND id = $2 RETURNING *
+10|16.2|162|WITH evt_meta AS ( SELECT m.node_id AS target_id, (array_agg(m.actor_id ORDER BY m.last_event_at DESC))[$3] AS last_actor, to_char(max(m.last_event_at) AT TIME ZONE $4, $5) AS last_modified_at, array_
+1600|0.1|131|UPDATE outbox SET status=$3, done_at=now(), updated_at=now() WHERE id=$1 AND xmin::text=$2
+15|5.8|88|SELECT n.id, n.title, n.slug, n.node_type, NOT NOT EXISTS ( SELECT $5 FROM node_tags xnt JOIN content_nodes xtg ON xtg.id = xnt.tag_id AND (xtg.node_type = $6 AND xtg.deleted_at IS NULL AND xtg.tag_sc
+114|0.6|68|SELECT id, actor_type, actor_id, event_type, target_type, target_id, CASE WHEN event_type = $6 AND payload->>$7 = $8 THEN payload - $9 - $10 ELSE payload END AS payload, created_at, tx_meta, external,
+1|54.9|55|SELECT s.id::text, s.markdown FROM content_nodes s WHERE s.workspace_id = $1 AND ( s.id IN (SELECT e.source_node_id FROM node_edges e WHERE e.workspace_id = $1 AND e.origin = $7 AND e.target_node_id =
+503|0.1|52|SELECT id, effect_kind, payload, dedup_key, attempts, max_attempts, xmin::text AS xmin FROM outbox WHERE status = $2 AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT $1
+66|0.8|52|SELECT e.id::text, e.actor_type, e.actor_id, a.name AS actor_name, e.event_type, e.target_type, e.target_id, e.payload, e.created_at, e.tx_meta, e.external, e.triggered_by_event_id::text FROM domain_e
+1600|0.0|48|SELECT n.slug, n.space_id::text, s.is_default, (s.capabilities->>$2) = $3 AS allowed FROM content_nodes n JOIN spaces s ON s.id = n.space_id WHERE n.id = $1::uuid LIMIT $4
+26|1.8|46|SELECT c.id AS canvas_id, c.title AS canvas_title, np.node_id::text AS node_id FROM node_positions np JOIN content_nodes c ON c.id::text = np.surface AND c.workspace_id = np.workspace_id AND c.node_ty

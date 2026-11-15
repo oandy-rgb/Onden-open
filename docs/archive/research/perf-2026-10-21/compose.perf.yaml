@@ -1,0 +1,10 @@
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgres://onden:onden@postgres:5432/${PERF_DB:-onden_test}
+      CORS_ORIGIN: http://localhost:5095
+      BETTER_AUTH_URL: http://localhost:5095
+      ONDEN_TIMEZONE: Asia/Taipei
+  nginx:
+    ports: !override
+      - "5095:80"

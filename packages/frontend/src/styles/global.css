@@ -1,0 +1,2454 @@
+@import "tailwindcss";
+
+/* Site-builder custom classes: users type Tailwind utilities into a block's
+ * Style panel; those strings live in the DB, so build-time scanning never sees
+ * them. Pre-generate the common customization vocabulary so typed classes
+ * actually resolve on the published site. Curated, not exhaustive — arbitrary
+ * values (w-[37px]) and exotic utilities still need a source-code usage. */
+@source inline("{p,px,py,pt,pb,m,mx,my,mt,mb}-{0,1,2,3,4,6,8,10,12,16}");
+@source inline("text-{xs,sm,base,lg,xl,2xl,3xl,4xl} font-{normal,medium,semibold,bold} italic underline text-{left,center,right}");
+@source inline("{text,bg,border}-{white,black,transparent}");
+@source inline("{text,bg,border}-{gray,stone,red,amber,emerald,sky,indigo,rose}-{50,100,200,300,500,700,900}");
+@source inline("flex inline-flex grid block inline-block hidden flex-col flex-row flex-wrap");
+@source inline("items-{start,center,end} justify-{start,center,between,end} gap-{1,2,3,4,6,8}");
+@source inline("w-full h-full max-w-{md,lg,xl,2xl,prose} mx-auto grow shrink-0");
+@source inline("border border-0 border-2 rounded rounded-{sm,md,lg,xl,2xl,full} shadow shadow-{sm,md,lg,xl,none}");
+@source inline("opacity-{25,50,75,100} overflow-hidden truncate leading-{tight,normal,relaxed} tracking-{tight,wide}");
+
+@import "highlight.js/styles/github.css";
+@import "./syntax-highlight.css";
+@import "katex/dist/katex.min.css";
+@import "./fonts.css";
+
+/* Utility classes added 2026-06-03 during inline-style migration.
+ * Small + reusable. Avoid near-identical per-component classes. */
+.u-fill { flex: 1; }
+.u-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* tokens.css holds every value (A+C, palette A) and the size/radius/font names the
+   components read; theme-tokens.css keeps only the older names the published site's
+   shared stylesheets still read (the site resolves them from site-tokens.css). */
+@import "./tokens.css";
+@import "./theme-tokens.css";
+/* The published site's own frozen tokens (scoped to html.onden-site and
+   .site-root), so re-theming the app never restyles a published site. */
+@import "./site-tokens.css";
+
+:root,
+[data-theme="light"] {
+  font-family: var(--onden-font-body);
+  /* Studio surface wants its text to read as printed, not screen-buzzy. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Scrollbars, one rule for the whole app. With a mouse: a thin, faint bar
+   that darkens while the pointer is over its area (it still tells how long a
+   note is and can be dragged). Touch screens keep the system's overlay bar. */
+@media (hover: hover) and (pointer: fine) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ac-faint) 45%, transparent) transparent; }
+  :hover { scrollbar-color: var(--ac-faint) transparent; }
+}
+/* Rows of tabs, chips and tools that slide sideways read as slidable on their
+   own: no bar under them. (Wide tables, boards and code blocks keep theirs.) */
+:is(.view-tabs, .canvas-tabbar, .tasks-tabs, .ink-toolbar-scroll, .md-mobile-toolbar-scroll,
+    .canvas-tree-path, .canvas-align-bar, .canvas-edge-bar, .board-toolbar) { scrollbar-width: none; }
+:is(.view-tabs, .canvas-tabbar, .tasks-tabs, .ink-toolbar-scroll, .md-mobile-toolbar-scroll,
+    .canvas-tree-path, .canvas-align-bar, .canvas-edge-bar, .board-toolbar)::-webkit-scrollbar { display: none; }
+
+body {
+  margin: 0;
+  /* Paper, lit from above — a faint accent wash bleeds down from the top edge
+     so the surface has depth instead of reading as flat fill. */
+  background:
+    radial-gradient(125% 70% at 50% -8%,
+      color-mix(in srgb, var(--ac-accent) 5%, transparent), transparent 58%),
+    var(--ac-bg);
+  background-attachment: fixed;
+  color: var(--ac-ink);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  /* Instrument feel: state changes are quick and certain; the press gives a
+     hair of tactile dip rather than a soft fade. */
+  transition:
+    background var(--onden-motion-fast) var(--onden-motion-ease),
+    color var(--onden-motion-fast) var(--onden-motion-ease),
+    border-color var(--onden-motion-fast) var(--onden-motion-ease),
+    box-shadow var(--onden-motion-fast) var(--onden-motion-ease),
+    transform var(--onden-motion-instant) var(--onden-motion-ease);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* One precise focus ring across every interactive element. A crisp accent
+   ring, not a fuzzy browser glow — the instrument register. :where() keeps
+   specificity at zero so a component can still opt out. */
+:where(button, a, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--onden-focus-ring);
+}
+
+#app-initial-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100dvh;
+  /* Warm Gallery paper — matches the body's first paint so there's no cold
+     flash before the React app mounts and theme tokens take over. */
+  background: var(--ac-bg);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-ui-touch);
+  font-family: system-ui, sans-serif;
+}
+
+#app-initial-loading svg {
+  animation: spin 1s linear infinite;
+  color: var(--ac-muted);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.app-shell {
+  display: block;
+  min-height: 100dvh;
+  padding: 0;
+  /* Hard cap horizontal — no child should ever cause horizontal scroll.
+   * Trumps any descendent that forgets to box-sizing border-box. `clip`, not
+   * `hidden`: hidden makes the shell a scroll container, and the phone note
+   * strip (position: sticky) then scrolls away with the page. */
+  overflow-x: clip;
+  width: 100%;
+}
+
+.lazy-offline-pane {
+  flex: 1;
+  padding: 32px 24px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-ui);
+  line-height: 1.6;
+  background: var(--ac-bg);
+}
+
+.lazy-loading-pane {
+  flex: 1;
+  background:
+    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--ac-raised) 70%, transparent) 50%, transparent 70%)
+    var(--ac-bg);
+  background-size: 220% 100%;
+  animation: onden-skeleton 1.1s ease-in-out infinite;
+}
+@keyframes onden-skeleton {
+  from { background-position: 160% 0; }
+  to   { background-position: -60% 0; }
+}
+
+.app-boot-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  gap: 20px;
+  background: var(--ac-bg);
+}
+/* Step D fail-closed membership gate: an opaque scrim over the whole workspace
+   while read-membership is being reconciled — possibly-restricted local content
+   stays hidden until it converges. Opaque (not translucent) so nothing shows
+   through. */
+/* The workspace under the gate is inert from the first moment (BuilderApp),
+   so input is blocked at once. The cover itself only appears when the check
+   is slow: most re-checks (a reconnect, a permission tick) finish within a
+   second, and blanking the screen for them read as the app flashing. What
+   stays visible meanwhile is what was already on screen. */
+.membership-gate {
+  inset: 0;
+  z-index: var(--z-gate);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  animation: membership-gate-cover 0.2s ease-out 1.5s forwards;
+}
+.membership-gate > .membership-gate-card {
+  visibility: hidden;
+  opacity: 0;
+  animation: membership-gate-card 0.2s ease-out 1.5s forwards;
+}
+@keyframes membership-gate-cover { to { background: var(--ac-bg); } }
+/* GateTypingBuffer: holds typing while the workspace is inert. Invisible but
+   on screen (not display:none), so it can take focus and an IME can compose. */
+.gate-typing-buffer {
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  resize: none;
+}
+@keyframes membership-gate-card { from { visibility: visible; opacity: 0; } to { visibility: visible; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .membership-gate { animation-duration: 0s; }
+  .membership-gate > .membership-gate-card { animation-duration: 0s; }
+}
+.membership-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-ui);
+  max-width: min(360px, calc(100vw - 40px));
+  text-align: center;
+}
+.membership-gate-card button {
+  min-height: 44px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  cursor: pointer;
+}
+.membership-gate-card button:hover:not(:disabled) {
+  background: var(--ac-accent-hover);
+}
+.membership-gate-card button:focus-visible {
+  outline: 2px solid var(--ac-accent);
+  outline-offset: 3px;
+}
+.membership-gate-card button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.membership-gate-card p {
+  margin: 0;
+  line-height: 1.5;
+}
+.app-boot-logo {
+  font-size: var(--ac-fs-h3);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ac-ink);
+  opacity: 0.8;
+}
+.app-boot-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--ac-line);
+  border-top-color: var(--ac-accent);
+  border-radius: var(--ac-radius-full);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Cross-component: .server-setup-title and .server-setup-btn (+ :disabled)
+   are also used by ObsidianImport. Kept here because that component imports
+   only ObsidianImport.css and would lose styling if these moved. */
+.server-setup-title {
+  font-size: var(--ac-fs-lg);
+  font-weight: 600;
+  color: var(--ac-ink);
+  margin: 0;
+}
+.server-setup-btn {
+  width: 100%;
+  padding: 9px;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  border: none;
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.server-setup-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* .settings-overlay is a ui/Modal layer (native top layer, backdrop, centring).
+   The window has ONE size for every page (a fixed height; long pages scroll inside .settings-content), and
+   .settings-content owns the column's padding. A page sets no width, max-width or padding of its own:
+   test/guards/settingsPageSize.guard.test.ts. */
+.settings-modal {
+  width: min(1080px, 95vw); height: min(720px, 90vh);
+  background: var(--ac-surface); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-modal); display: flex; flex-direction: column; overflow: hidden;
+}
+.settings-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 14px 20px; border-bottom: 1px solid var(--ac-line); flex-shrink: 0;
+}
+.settings-title { font-size: var(--ac-fs-ui-touch); font-weight: 600; color: var(--ac-ink); }
+.settings-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+.settings-sidebar {
+  width: 140px; flex-shrink: 0; padding: 10px 8px;
+  border-right: 1px solid var(--ac-line); display: flex; flex-direction: column; gap: 2px;
+}
+.settings-nav-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
+  font-size: var(--ac-fs-small); color: var(--ac-muted); background: none; border: none;
+  border-radius: var(--ac-radius-md); cursor: pointer; text-align: left;
+}
+.settings-nav-item:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.settings-nav-item.active { background: var(--ac-surface); color: var(--ac-ink); font-weight: 500; }
+.settings-content { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 24px; }
+.settings-section { display: flex; flex-direction: column; gap: 12px; }
+.settings-setting { display: contents; } /* SettingRow's named wrapper (no box) */
+.settings-section-title { font-size: var(--ac-fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ac-muted); margin: 0; }
+.settings-row { display: flex; align-items: center; gap: 10px; }
+.settings-row--actions { flex-wrap: wrap; }
+.settings-row--input { gap: 8px; }
+.settings-label { font-size: var(--ac-fs-small); color: var(--ac-muted); min-width: 72px; }
+.settings-value { font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.settings-hint { font-size: var(--ac-fs-caption); color: var(--ac-muted); margin: 0; line-height: 1.5; }
+.settings-input {
+  flex: 1; padding: 7px 10px; font-size: var(--ac-fs-small); border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); outline: none;
+}
+.settings-input:focus { border-color: var(--ac-accent); }
+/* A settings widget's file input, opened by its button. Global: module
+   settings also render on their module card (ModuleLibrary). */
+.settings-file-input--hidden { display: none; }
+.settings-status-dot {
+  width: 7px; height: 7px; border-radius: var(--ac-radius-full); flex-shrink: 0;
+}
+.settings-status-dot.online { background: var(--ac-accent); }
+.settings-status-dot.offline { background: var(--ac-muted); }
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  /* Document-level title — the editorial serif. h2/h3 stay on the body face
+     since in this app they're mostly small UI chrome (15/14px), where a serif
+     would read as mud rather than as a title. */
+  font-family: var(--onden-font-display);
+  font-size: var(--ac-fs-h3);
+  font-weight: var(--onden-weight-semibold);
+  letter-spacing: var(--onden-tracking-tight);
+  line-height: var(--onden-leading-tight);
+}
+
+h2 {
+  font-size: var(--ac-fs-ui-touch);
+}
+
+h3 {
+  font-size: var(--ac-fs-ui);
+}
+
+.workspace-grid {
+  display: grid;
+  /* col-1 = the lens-stable left sidebar (doc 01 P1); col-2 = lens content;
+   * col-3 = inspector (toggled). In NOTES mode .obsidian-workspace spans 1/-1
+   * and re-grids internally, so col-1's width is moot there. */
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) 0;
+  min-height: 100dvh;
+  padding: 0;
+  position: relative;
+  /* Belt-and-suspenders: even if a child has min-width that doesn't
+   * shrink, the grid clips horizontally so the viewport stays sane. */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* The notes list folded away alone (the top bar's left switch): its column
+ * shrinks to 0 in every grid that reads --onden-sidebar-track, and the list,
+ * still in its column, is hidden and out of the tab order. */
+@media (width > 900px) {
+  .workspace-grid.sidebar-collapsed,
+  .obsidian-workspace.sidebar-collapsed { --onden-sidebar-track: 0px; }
+  .sidebar-collapsed > .obsidian-sidebar { visibility: hidden; overflow: hidden; min-width: 0; padding-inline: 0; border-inline-end: 0; }
+}
+
+/* The col-1 sidebar in non-notes lenses (a direct .workspace-grid child). The
+ * notes-mode sidebar lives inside .obsidian-workspace, so this never matches it. */
+.workspace-grid > .obsidian-sidebar { grid-column: 1; }
+
+.workspace-grid.inspector-open {
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) var(--onden-inspector-width, minmax(300px, 340px));
+}
+
+/* Inspector collapsed: right column fully retracts to 0. Editor reclaims
+ * the whole width. The expand toggle floats fixed-position outside the
+ * grid so the user can pop the pane back open. */
+.workspace-grid.inspector-open.inspector-collapsed {
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) 0;
+}
+
+/* Below 900px the 3-column inspector layout cramps the editor + view-mode
+ * toolbar (its controls get squeezed).
+ * Force the grid back to single-column on narrow screens so the inspector
+ * stacks beneath the editor (mobile fallback already places it under via
+ * data-mobile-tab; this catches the in-between "tablet" range too). */
+@media (max-width: 900px) {
+  .workspace-grid,
+  .workspace-grid.inspector-open,
+  .workspace-grid.inspector-open.inspector-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
+  }
+  /* The non-notes lens sidebar is desktop-only for now — notes keeps its own
+   * data-mobile-tab List/Edit/Info; full mobile parity for other lenses later. */
+  .workspace-grid > .obsidian-sidebar { display: none; }
+}
+
+/* A full page (hooks/shellNavigation pageLayout: module screens, History)
+ * has no note-list sidebar or inspector beside it. */
+.workspace-grid.full-page {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+.overview-workspace {
+  grid-column: 1 / -1;
+  /* Sits inside .workspace-grid which has padding-top: 48px for the fixed
+   * topbar. Using 100dvh here would force the page total to (48 + 100dvh)
+   * and let the user scroll down into 48px of dead space. */
+  min-height: calc(100dvh - 48px);
+  background: var(--ac-bg);
+}
+
+.overview-activity {
+  display: grid;
+  /* Event/version titles must not impose their intrinsic width on every row. */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0;
+  /* Cap height to the viewport (minus topbar) so inner sections scroll
+   * instead of pushing the page taller than the screen. */
+  height: calc(100dvh - 48px);
+  overflow-y: auto;
+  /* Hard-cap horizontal too — prevent Properties / Parent rows from
+   * blowing past the column edge on narrow screens. */
+  overflow-x: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-left: 1px solid var(--ac-line);
+  background: var(--ac-bg);
+  padding: 16px 14px;
+  position: relative;
+}
+
+/* ── Overview right panel (Obsidian/LogSeq style) ── */
+
+/* ── Tag management (OverviewActivityPane) ──────────────────────────────── */
+
+/* Manage panel */
+
+/* Mini local graph SVG */
+
+/* Graph toolbar (local/tag toggles) */
+/* ── Canvas Tab Bar (Heptabase whiteboard tabs) ── */
+
+/* Sub-canvas back-to-parent affordance. Shown only when nav stack is non-empty. */
+
+/* Card subCanvas inline buttons */
+
+/* Collapsed node-panel sidebar */
+
+/* ── Canvas Tools (left vertical toolbar, Heptabase-style) ── */
+
+/* Card-creation mode: crosshair cursor on canvas */
+.graph-panel--card-mode .react-flow__pane { cursor: crosshair !important; }
+
+/* ── Card Node (React Flow whiteboard card) ── */
+/* Cards with a sub-canvas get a subtle left-border tint as a passive indicator
+ * (the explicit "open sub-canvas" button in the header is the actionable cue). */
+.react-flow__edge-path {
+  transition: stroke 0.15s, stroke-width 0.15s, opacity 0.15s;
+}
+
+/* ── Card Bubble Menu ── */
+
+/* ── Card Slash / Floating Menu ── */
+
+/* Section mode cursor (KnowledgeWorkspace) */
+.graph-panel--section-mode .react-flow__pane { cursor: crosshair !important; }
+
+/* ── Notes center (editor / canvas toggle) ──────────────────────────────── */
+
+.notes-center-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (width > 900px) {
+  /* The welcome strip and editor share ONE viewport-height column. Giving
+   * the editor a whole viewport below the strip creates dead space under both
+   * sidebars and makes the entire desktop page scroll. */
+  .overview-workspace {
+    height: calc(100dvh - 48px);
+    min-height: 0;
+  }
+  .overview-workspace .obsidian-sidebar,
+  .overview-workspace .overview-activity {
+    height: 100%;
+    min-height: 0;
+  }
+  .notes-center-wrap > .welcome-banner { flex: 0 0 auto; }
+  .overview-workspace .obsidian-main {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+  body.onden-zen .overview-workspace { height: 100dvh; }
+}
+
+.inbox-promote-btn {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-accent-muted);
+  color: var(--ac-accent);
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.12s;
+}
+.inbox-promote-btn:hover { background: var(--ac-accent); color: var(--ac-accent-ink); }
+
+/* ── Schema-driven attribute widgets ────────────────────────────────────── */
+
+/* ── Canvas membership badge on sidebar tree rows ───────────────────────── */
+
+/* ── Multi-value attribute editor ───────────────────────────────────────── */
+
+/* ── Collections schema editor banner — directs to Tags mode ────────────── */
+.cms-schema-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 8px 0 16px;
+  background: color-mix(in srgb, var(--ac-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac-accent) 30%, var(--ac-line));
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+.cms-schema-banner span { flex: 1; }
+
+.search-result-path {
+  display: block;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.3;
+}
+.search-hl {
+  background: var(--ac-warning-soft);
+  color: inherit;
+  border-radius: var(--ac-radius-xs);
+  /* No side padding: in Chinese text (no spaces) it reads as a gap before/after the match. */
+  padding: 0;
+}
+
+/* ── Tiptap overview editor ── */
+/* Floating bubble toolbar (appears on text selection) */
+.ui-popover.tiptap-bubble-menu {
+  overflow: visible;
+  padding: 3px 4px;
+  border: none;
+  background: var(--ac-ink);
+  border-radius: var(--ac-radius-md);
+  box-shadow: var(--ac-shadow-float);
+  pointer-events: all;
+  animation: bubble-in 0.1s ease;
+}
+.tiptap-bubble-row { display: flex; align-items: center; gap: 1px; }
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tiptap-bubble-menu button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-line);
+  font-size: var(--ac-fs-caption);
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tiptap-bubble-menu button:hover { background: color-mix(in srgb, var(--ac-bg) 15%, transparent); }
+.tiptap-bubble-menu button.active { background: color-mix(in srgb, var(--ac-bg) 20%, transparent); color: var(--ac-accent-ink); }
+.tiptap-bubble-sep { width: 1px; height: 14px; background: color-mix(in srgb, var(--ac-bg) 20%, transparent); margin: 0 2px; }
+.bubble-link-input {
+  background: color-mix(in srgb, var(--ac-bg) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac-bg) 25%, transparent);
+  border-radius: var(--ac-radius-sm);
+  color: var(--ac-line);
+  font-size: var(--ac-fs-caption);
+  font-family: inherit;
+  padding: 2px 7px;
+  width: 190px;
+  outline: none;
+  margin: 0 2px;
+}
+.bubble-link-input::placeholder { color: color-mix(in srgb, var(--ac-bg) 38%, transparent); }
+
+/* A button of the selection bubble that says its name: an Onden action
+   (ToolbarRow), next to the icon-only general formats. */
+.tiptap-bubble-menu button.tiptap-bubble-labeled { gap: 4px; padding: 0 8px; font-weight: 600; }
+
+/* Slash command menu */
+/* The surface is ui/Popover; the menu inside (.slash-menu) draws its own box. */
+.ui-popover.slash-menu-popup {
+  overflow: visible;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.slash-menu {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  box-shadow: var(--ac-shadow-float);
+  padding: 4px;
+  min-width: 190px;
+  max-width: calc(100vw - 16px);
+  /* Tall enough for the block and insert lists (17 rows, 440px cut off the list
+     at Code Block), and never taller than what can be seen: with a phone keyboard
+     up, 70vh alone put the top rows off the screen. */
+  max-height: min(720px, 70vh, var(--popover-room, 100vh));
+  overflow-y: auto;
+  /* A longer list or a short window still cuts it: the bar says more follows. */
+  scrollbar-color: var(--ac-muted) transparent;
+  animation: bubble-in 0.1s ease;
+}
+.slash-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-small);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.slash-menu-item:hover,
+.slash-menu-item.active { background: var(--ac-raised); }
+.slash-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-raised);
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  color: var(--ac-muted);
+  flex-shrink: 0;
+}
+.slash-menu-icon--brackets { font-size: var(--ac-fs-xs); }
+.slash-menu-title { font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.slash-menu-empty { padding: 10px 12px; font-size: var(--ac-fs-small); color: var(--ac-muted); }
+/* The # menu's second line: whose tag it is (your own, from a module, needs a module imported). */
+.slash-menu-source { margin-left: auto; padding-left: 12px; font-size: var(--ac-fs-xs); color: var(--ac-muted); white-space: nowrap; }
+.slash-menu-source.is-needs-import { color: var(--ac-warning); }
+.slash-menu:has(.slash-menu-source) { min-width: min(300px, calc(100vw - 16px)); }
+.slash-menu-item:has(.slash-menu-source) .slash-menu-title { white-space: nowrap; }
+/* The @ menu: the AI to ask. A hint row (no AI yet) wraps; touch targets stay 44px. */
+.slash-menu:has(.slash-menu-item--mention) { min-width: min(280px, calc(100vw - 16px)); }
+.slash-menu-item--mention .slash-menu-source { white-space: normal; text-align: right; }
+.slash-menu-item--hint { align-items: flex-start; white-space: normal; line-height: 1.5; color: var(--ac-muted); cursor: default; }
+.slash-menu-item--hint .slash-menu-title { color: var(--ac-muted); white-space: normal; }
+.slash-menu-item--mention.is-unavailable .slash-menu-title { color: var(--ac-muted); }
+@media (pointer: coarse) {
+  .slash-menu-item--mention { min-height: 44px; }
+}
+/* 「交給 AI：技能」 buttons in a note's header, and the skill-kept-away line (modules/skills). */
+.skill-handoff-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px;
+  border: 1px solid var(--ac-accent); border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-accent);
+  font: inherit; font-size: var(--ac-fs-small); cursor: pointer;
+}
+.skill-handoff-btn:disabled { opacity: 0.55; cursor: default; }
+.skill-handoff-away { position: relative; font-size: var(--ac-fs-small); }
+.skill-handoff-away > summary { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; cursor: pointer; color: var(--ac-warning); }
+.skill-handoff-away > p {
+  position: absolute; z-index: var(--z-local-5); right: 0; top: 100%; width: min(320px, calc(100vw - 32px)); margin: 4px 0 0; padding: 8px 10px;
+  border-radius: var(--ac-radius-md); background: var(--ac-warning-soft); color: var(--ac-warning); line-height: 1.5;
+}
+@media (pointer: coarse) {
+  .skill-handoff-btn, .skill-handoff-away > summary { min-height: 44px; min-width: 44px; }
+}
+/* What sits under an @ai mention in the editor (lib/editorMentions.ts). */
+.cm-mention-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: 4px 0 8px; padding: 6px 10px;
+  border-left: 3px solid var(--ac-line); border-radius: var(--ac-radius-sm);
+  background: var(--ac-raised); color: var(--ac-muted);
+  font-size: var(--ac-fs-small); line-height: 1.5;
+}
+.cm-mention-card--working { border-left-color: var(--ac-accent); color: var(--ac-ink); }
+.cm-mention-card--done { border-left-color: var(--ac-success); }
+.cm-mention-card--failed { border-left-color: var(--ac-danger); color: var(--ac-danger); }
+.cm-mention-card-text { flex: 1 1 12em; min-width: 0; }
+.cm-mention-card-detail {
+  flex: 1 1 100%; max-height: 14em; overflow: auto; padding: 6px 8px; border-radius: var(--ac-radius-sm);
+  background: var(--ac-bg); color: var(--ac-ink); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cm-mention-card-btn {
+  min-height: 36px; padding: 0 14px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-bg); color: var(--ac-ink);
+  font: inherit; cursor: pointer;
+}
+.cm-mention-card-btn--send { border-color: var(--ac-accent); color: var(--ac-accent); font-weight: 600; }
+.cm-mention-card-btn:disabled { opacity: 0.55; cursor: default; }
+@media (pointer: coarse) {
+  .cm-mention-card-btn { min-height: 44px; min-width: 44px; }
+}
+/* The [[Note# menu: headings and paragraphs of one note. */
+.slash-menu:has(.slash-menu-item--target) { min-width: min(300px, calc(100vw - 16px)); }
+.slash-menu-group { padding: 6px 8px 2px; font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-muted); }
+.slash-menu-title--target { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) {
+  .slash-menu-item--target { min-height: 44px; }
+}
+/* The (( menu: a paragraph's words with the note they belong to beside them. */
+.slash-menu:has(.slash-menu-item--block-ref) { min-width: min(420px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.slash-menu-item--block-ref .slash-menu-source { flex: 0 1 38%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.editor-zen-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--ac-radius-md);
+  border: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.editor-zen-toggle:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.editor-zen-toggle.active {
+  background: color-mix(in srgb, var(--ac-accent) 15%, transparent);
+  color: var(--ac-accent);
+  border-color: color-mix(in srgb, var(--ac-accent) 40%, var(--ac-line));
+}
+
+/* ── Zen / focus mode ──────────────────────────────────────────────────────
+ * Toggled by the editor's zen button (adds `onden-zen` to <body>). True
+ * distraction-free: every shell affordance retracts and the writing column
+ * recentres. Reference-strip (links/backlinks) and the in-editor toggle hint
+ * fall away too — only the words remain. The zen toggle itself stays so the
+ * user always has a way back. */
+body.onden-zen .app-topbar,
+body.onden-zen .overview-mobile-tabs,
+body.onden-zen .mobile-bottom-nav,
+body.onden-zen .mobile-sync-strip,
+body.onden-zen .overview-activity,
+body.onden-zen .ov-activity-pane--collapsed,
+body.onden-zen .welcome-banner,
+body.onden-zen .obsidian-sidebar,
+body.onden-zen .obsidian-breadcrumb,
+body.onden-zen .tiptap-slash-hint {
+  display: none !important;
+}
+/* The notes workspace itself owns the columns; hiding the left rail must
+   also release its column. The app shell reserves room for desktop/mobile nav. */
+body.onden-zen .app-shell,
+body.onden-zen .workspace-grid { padding: 0 !important; }
+body.onden-zen .overview-workspace.obsidian-workspace {
+  display: flex;
+  min-height: 100dvh;
+  height: 100dvh;
+  background: var(--ac-bg);
+}
+body.onden-zen .notes-center-wrap { width: 100%; min-width: 0; }
+/* Widen + breathe: the editor sheet floats on a calm full-bleed surface. */
+body.onden-zen .obsidian-main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 720px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 auto;
+  padding-top: 6vh;
+}
+body.onden-zen .obsidian-tiptap-wrap {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+body.onden-zen .obsidian-tiptap-wrap .md-editor-cm .cm-content {
+  font-size: var(--ac-fs-prose);
+}
+
+/* ── Task list ── */
+
+/* ── Table ── */
+
+/* ── Callout blocks ── */
+
+/* ── CodeMirror markdown editor ── */
+.md-editor-wrap { flex: 1; display: flex; flex-direction: column; position: relative; }
+.md-editor-cm { flex: 1; }
+
+/* Mobile above-keyboard formatting toolbar. Fixed + bottom:kbInset (set inline
+   from visualViewport) rides the top edge of the on-screen keyboard. z-index
+   above the bottom nav (100) and the More-sheet scrim (110). */
+/* Touch reach without visual bulk: the control keeps its drawn size and an
+   invisible ::after centred on it grows the hit area to --onden-tap. Use it
+   instead of setting a visible min-height: 44px on phones. */
+/* The list is the controls that are drawn small on purpose (dense toolbars,
+   the sidebar bar, toasts) but are not each a .tap-target in their markup.
+   Ones that already have a ::after for another job are not listed. */
+@media (pointer: coarse) {
+  .tap-target,
+  .ui-btn--sm,
+  .sb-bar-btn,
+  .sidebar-tab,
+  .sidebar-search-toggle,
+  .app-topbar .topbar-mode-btn,
+  .toast-dismiss,
+  .toast-action,
+  .task-editor-close,
+  .quick-capture-place,
+  .quick-capture-kind,
+  .quick-capture-more { position: relative; }
+  .tap-target::after,
+  .ui-btn--sm::after,
+  .sb-bar-btn::after,
+  .sidebar-tab::after,
+  .sidebar-search-toggle::after,
+  .app-topbar .topbar-mode-btn::after,
+  .toast-dismiss::after,
+  .toast-action::after,
+  .task-editor-close::after,
+  .quick-capture-place::after,
+  .quick-capture-kind::after,
+  .quick-capture-more::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--onden-tap));
+    height: max(100%, var(--onden-tap));
+    transform: translate(-50%, -50%);
+  }
+}
+
+.md-mobile-toolbar {
+  left: 0;
+  right: 0;
+  bottom: var(--kb-inset, 0px);
+  z-index: var(--z-kb-toolbar);
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: var(--ac-surface);
+  border-top: 1px solid var(--ac-line);
+  box-shadow: none;
+}
+.md-mobile-toolbar-scroll {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* The row's clipped end fades out, so a half-hidden tool reads as "scroll for more"
+   rather than as part of the pinned ¶ beside it. */
+.md-mobile-toolbar-scroll { padding-right: 20px; mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); }
+.md-mobile-tool {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.md-mobile-tool:active { background: var(--ac-overlay-selected); }
+/* Selection mode: the selection toolbar's actions fill the row (SelectionToolbar variant="bar"). */
+.md-mobile-tool[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--ac-accent) 16%, transparent);
+  color: var(--ac-accent);
+}
+/* An Onden action on a bar: its icon and its words (ToolbarRow). */
+.md-mobile-tool--labeled { width: auto; padding: 0 12px; gap: 6px; font: inherit; font-size: var(--ac-fs-caption); font-weight: 600; white-space: nowrap; }
+.md-mobile-tool--more { color: var(--ac-muted); }
+.md-mobile-tool:disabled { opacity: 0.45; }
+.md-selection-bar { align-items: center; }
+/* The tools row inside the selection bar: the row scrolls, 「更多」 stays at its end. */
+.md-selection-bar--tools { flex: 1; display: flex; min-width: 0; }
+.md-selection-bar .tiptap-bubble-sep { flex: 0 0 auto; width: 1px; height: 24px; margin: 0 2px; background: var(--ac-line); }
+.md-selection-bar .bubble-link-input {
+  flex: 1 0 160px;
+  height: 40px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--ac-fs-input); /* below 16px iOS zooms the page on focus */
+}
+.md-selection-bar .bubble-link-input::placeholder { color: var(--ac-muted); }
+.md-mobile-tool--dismiss {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  color: var(--ac-muted);
+  border-left: 1px solid var(--ac-line);
+  border-radius: 0 var(--ac-radius-md) var(--ac-radius-md) 0;
+}
+.md-editor-cm .cm-editor {
+  color: var(--ac-ink);
+  background: transparent;
+  min-height: min(520px, calc(100dvh - 304px));
+}
+.md-editor-cm .cm-scroller { font-size: var(--ac-fs-ui); }
+.md-editor-cm .cm-content { padding: 26px 30px 70px; }
+.md-editor-cm .cm-focused { outline: none; }
+
+/* iOS zoom-on-focus fix (P0). Mobile Safari/WebKit auto-zooms the viewport when a
+   focused input/textarea/contenteditable has font-size < 16px — the single most
+   jarring "feels broken" moment on the phone, taxing every capture/edit. On touch
+   screens (phone and tablet, any width) floor every editable surface at 16px. max() keeps
+   any LARGER user font-size setting; it only ever raises sub-16px text. */
+@media (max-width: 900px), (pointer: coarse) {
+  input, textarea, select,
+  .md-editor-cm .cm-scroller, .md-editor-cm .cm-content,
+  .quick-capture-input, .login-input,
+  [contenteditable="true"] {
+    font-size: var(--ac-fs-input);
+  }
+}
+
+/* ── Editor image upload ── */
+.editor-upload-progress {
+  position: absolute; bottom: 12px; right: 16px;
+  background: var(--ac-surface); border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md); padding: 5px 12px;
+  font-size: var(--ac-fs-caption); color: var(--ac-muted);
+  box-shadow: var(--ac-shadow-float);
+  pointer-events: none;
+}
+.editor-upload-error {
+  margin: 0 0 6px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--ac-danger) 12%, transparent);
+  color: var(--ac-danger);
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-small);
+}
+
+/* ── Overview bubble/float menus ── */
+
+/* ── Sidebar sort bar ── */
+/* Left-anchored variant — used by the "+" create dropdown which sits at
+ * the LEFT edge of its parent toolbar. Default right:0 would extend the
+ * menu off the left side of the viewport on narrow sidebars (the "被擋了"
+ * report). Setting left:0 + right:auto opens it to the right of the
+ * button, where there's always space.  */
+
+/* Slash command menu */
+.slash-menu {
+  width: 220px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--shadow);
+  /* No overflow here: the block above makes the list scroll (overflow-y: auto); an
+     `overflow: hidden` left in this older block cut long lists off with no way to scroll. */
+  display: flex;
+  flex-direction: column;
+}
+
+.slash-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.slash-menu button:hover,
+.slash-menu button.active {
+  background: color-mix(in srgb, var(--ac-accent) 10%, transparent);
+  color: var(--ac-accent);
+}
+
+.slash-menu-icon {
+  width: 22px;
+  text-align: center;
+  font-size: var(--ac-fs-caption);
+  opacity: 0.7;
+  font-family: ui-monospace, monospace;
+}
+
+/* History diff */
+
+/* react-markdown / GFM extras */
+/* GFM task list */
+.md-checkbox {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  flex-shrink: 0;
+  position: relative;
+  top: 2px;
+}
+.md-checkbox.checked {
+  background: var(--ac-accent);
+  border-color: var(--ac-accent);
+}
+.md-checkbox.checked::after {
+  content: "";
+  position: absolute;
+  left: 3px; top: 1px;
+  width: 6px; height: 9px;
+  border: 2px solid var(--ac-surface);
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+/* Interactive task checkbox (MarkdownRenderer with an onToggleTask handler):
+ * a real keyboard-focusable button, not the inert aria-hidden span. */
+button.md-checkbox--interactive {
+  padding: 0;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+button.md-checkbox--interactive.checked {
+  background: var(--ac-accent);
+}
+button.md-checkbox--interactive:hover {
+  border-color: var(--ac-accent);
+}
+button.md-checkbox--interactive:focus-visible {
+  outline: 2px solid var(--ac-accent);
+  outline-offset: 2px;
+}
+/* GFM table */
+
+/* Section count badges — Backlinks (12), Links (4), Tags (3). The compounding
+ * signal Fibery users describe ("you don't realize you need it until you have
+ * it") is the back-reference count climbing into double digits. */
+
+/* Backlink card — shows the source's title + the snippet of prose around the
+ * matched [[wikilink]]. The matched link gets a yellow highlight so the
+ * reader sees the linking moment in context, not just a list of titles. */
+.backlink-card {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 3px;
+  text-align: left !important;
+  padding: 6px 10px !important;
+  border-radius: var(--ac-radius-md) !important;
+  background: var(--ac-surface) !important;
+  border-color: color-mix(in srgb, var(--ac-accent) 22%, transparent) !important;
+  max-width: 100%;
+  flex-basis: 100%;
+  overflow: hidden;
+  cursor: pointer;
+}
+.backlink-card:hover {
+  background: var(--ac-overlay-hover) !important;
+  border-color: color-mix(in srgb, var(--ac-accent) 50%, transparent) !important;
+}
+.backlink-card-title {
+  font-weight: 600;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-accent-hover);
+  line-height: 1.25;
+}
+.backlink-card-snippet {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  line-height: 1.45;
+  white-space: normal;
+  font-weight: 400;
+  /* Cap at 3 lines so a wall of text doesn't bury the next card */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.backlink-card-snippet--muted { font-style: italic; opacity: 0.6; }
+.backlink-card-match {
+  background: color-mix(in srgb, var(--ac-warning) 30%, transparent);
+  color: var(--ac-ink);
+  padding: 1px 0;
+  border-radius: var(--ac-radius-xs);
+  font-weight: 500;
+}
+.backlink-card-ellipsis {
+  color: var(--ac-muted);
+  font-weight: 400;
+}
+
+.wikilink-token {
+  display: inline;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: color-mix(in srgb, var(--ac-accent) 7%, var(--ac-bg));
+  color: var(--ac-accent-hover);
+  padding: 1px 4px;
+  font: inherit;
+}
+
+button.wikilink-token {
+  cursor: pointer;
+}
+
+/* A part link whose paragraph was deleted: its old words, struck through, and what happened beside them. */
+.wikilink-token--deleted,
+.wikilink-token--unavailable {
+  background: transparent;
+  color: var(--ac-muted);
+}
+.wikilink-token-note {
+  font-size: 0.85em;
+}
+
+/* "Maybe here": the guess is marked, and whoever may edit the note can make it certain. */
+.part-link-maybe {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: 4px;
+  font-size: 0.85em;
+  color: var(--ac-muted);
+}
+.part-link-maybe-confirm {
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-accent-hover);
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.panel,
+.graph-panel {
+  min-height: 0;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  box-shadow: var(--shadow);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  overflow: auto;
+}
+
+/* doc 09 — the single NodeInspector, when it renders as a direct child of
+   .workspace-grid (every lens except notes, where it lives in the obsidian
+   inner grid), sits in the reserved right column. Collapsed/empty states keep
+   their own classes; the column width is driven by .inspector-open. */
+.workspace-grid > .overview-activity,
+.workspace-grid > .ov-activity-pane--collapsed {
+  grid-column: 3;
+}
+
+.push-right {
+  margin-left: auto;
+}
+
+.graph-panel {
+  grid-column: 2;
+  position: relative;
+  overflow: hidden;
+  border-width: 0 1px;
+  border-radius: 0;
+  /* Sits inside .workspace-grid (padding-top: 48px). */
+  height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-topbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: var(--z-pane-overlay);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  /* Frosted paper — the surface behind shows through faintly so the topbar
+     reads as part of the same sheet, not a bar bolted on top. */
+  background: color-mix(in srgb, var(--ac-surface) 80%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border-bottom: 1px solid var(--ac-line);
+}
+
+.app-topbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.app-logo {
+  /* The wordmark carries the studio signature — set in the editorial serif. */
+  font-family: var(--onden-font-display);
+  font-size: var(--ac-fs-ui-touch);
+  font-weight: var(--onden-weight-semibold);
+  color: var(--ac-ink);
+  letter-spacing: var(--onden-tracking-snug);
+}
+
+.app-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-grid {
+  padding-top: 48px;
+}
+@media (max-width: 900px) {
+  /* The bottom bar (MobileNav) is position:fixed (~56px + safe-area) and
+   * overlays the foot of every mode. Without a bottom gutter the last items of
+   * any scrollable surface — the note list, the editor, the Info inspector, the
+   * task list — sit UNDER it and can't be seen/tapped ("底下都會漏"). Reserve
+   * the bar's height so the page scrolls content clear of it. */
+  .workspace-grid {
+    padding-left: 0;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-header.compact {
+  margin-bottom: 8px;
+}
+
+.create-row {
+  display: grid;
+  grid-template-columns: 1fr 40px;
+  gap: 8px;
+}
+
+.create-node-box {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--ac-bg);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+}
+
+.segmented-control {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+}
+
+.segmented-control button {
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  padding: 4px 10px;
+  font-size: var(--ac-fs-small);
+  white-space: nowrap;
+}
+
+.segmented-control button.active {
+  background: var(--ac-surface);
+  color: var(--ac-accent-hover);
+  outline: 1px solid var(--ac-line);
+  outline-offset: -1px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  padding: 9px 10px;
+  transition:
+    border-color var(--onden-motion-fast) var(--onden-motion-ease),
+    box-shadow var(--onden-motion-fast) var(--onden-motion-ease);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--ac-accent);
+}
+
+/* The list a <select> opens: a select with no background of its own lists on
+   white in Chromium, under the theme's light text. */
+option,
+optgroup {
+  background-color: var(--ac-surface);
+  color: var(--ac-ink);
+}
+
+option:disabled {
+  color: var(--ac-muted);
+}
+
+textarea {
+  min-height: 190px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.create-row button,
+.wide-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  padding: 9px 10px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  padding: 9px;
+  text-align: left;
+}
+
+.task-row.done {
+  color: var(--ac-muted);
+  text-decoration: line-through;
+}
+
+pre {
+  max-width: 100%;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  padding: 10px;
+  font-size: var(--ac-fs-caption);
+}
+
+.graph-node {
+  width: 240px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  box-shadow: var(--shadow);
+}
+
+.graph-node.content {
+  border-color: var(--ac-accent);
+}
+
+.graph-node.group {
+  border-color: var(--ac-purple);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--ac-purple) 8%, var(--ac-surface));
+}
+
+.event-drawer {
+  position: absolute;
+  right: 14px;
+  top: 78px;
+  z-index: var(--z-raised);
+  width: min(360px, calc(100vw - 28px));
+  max-height: calc(100dvh - 96px);
+}
+
+.meta-list {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px 12px;
+  font-size: var(--ac-fs-small);
+}
+
+.meta-list span {
+  color: var(--ac-muted);
+}
+
+.meta-list strong {
+  overflow-wrap: anywhere;
+}
+
+/* Cross-component input — used by TagsPanel, SandboxWorkspace, SandboxPanel,
+   and SideDrawers. Kept here because no single component owns it. */
+.actors-input {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-small);
+  padding: 6px 10px;
+  width: 100%;
+}
+
+/* ── Tags panel (admin) ─────────────────────────────────────────────────── */
+
+/* TagPack import dialog — sits between header and list when importMode is on */
+
+/* Make list rows look like buttons but keep .tag-row sizing */
+
+/* Detail view */
+
+/* Schema editor */
+.schema-editor { display: flex; flex-direction: column; gap: 8px; }
+.schema-field-list { display: flex; flex-direction: column; gap: 8px; }
+.schema-field-row {
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.schema-field-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr auto;
+  gap: 6px;
+  align-items: center;
+}
+/* Its box and spacing come from .ui-checkbox. */
+.schema-field-required {
+  justify-self: start;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  user-select: none;
+}
+.schema-field-options { font-size: var(--ac-fs-xs); }
+.schema-field-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.schema-editor-footer { padding-top: 6px; }
+
+/* ── Sandbox Panel ── */
+
+/* Staging node list */
+
+/* Add area */
+
+/* ── Sandbox Workspace (full-screen) ──────────────────────────────────────── */
+
+/* Post-submit confirmation banner — appears in the staging header area. */
+
+/* Sandbox workspace setup */
+
+/* Sandbox setup (role picker) */
+
+/* ─── Blog template ────────────────────────────────────────────────────────── */
+
+.event-drawer.collapsed {
+  display: none;
+}
+
+.event-list {
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.event-item {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  padding: 9px;
+  font-size: var(--ac-fs-caption);
+}
+
+.event-item span,
+.event-item time {
+  color: var(--ac-muted);
+}
+
+.overview-mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 0;
+  }
+
+  .workspace-grid {
+    display: block;
+    min-height: calc(100dvh - 45px);
+  }
+
+  /* Specificity bump: ObsidianImport.css sets the desktop grid for
+   * `.obsidian-workspace` and gets imported AFTER global.css, so the
+   * grid rule wins on equal specificity. Stack a second class
+   * (.overview-workspace appears on the same element) to outrank it. */
+  .overview-workspace.obsidian-workspace,
+  .obsidian-workspace {
+    display: block;
+    padding-top: 0;
+  }
+
+  .overview-workspace {
+    background: var(--ac-bg);
+  }
+
+  /* Specificity bump for the same reason as .obsidian-workspace above. */
+  .overview-workspace .obsidian-sidebar,
+  .obsidian-sidebar {
+    min-height: auto;
+    height: auto;             /* desktop fixed calc(100dvh-48px) would clip */
+    width: 100%;
+    overflow: visible;        /* let the inner list scroll within the page */
+  }
+
+  .overview-activity {
+    min-height: auto;
+    /* Desktop caps this at calc(100dvh-48px) + overflow-y:auto (a side-column
+     * internal scroller). On mobile that makes the Info pane taller than the
+     * viewport (it ignores the 48px tab strip AND the bottom nav) and a
+     * touch-trapping scroller. Grow with content + let the page scroll (the
+     * workspace bottom gutter clears the fixed nav). */
+    height: auto;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--ac-line);
+  }
+
+  /* Overview mobile tab bar */
+  /* .workspace-grid's overflow-x:hidden promotes overflow-y to `auto`, making
+   * the grid a scroll-container; the sticky tabs below then offset top:48 INSIDE
+   * a scrollport whose content already starts 48px down (the grid's padding-top
+   * for the fixed topbar) — a 48px empty band above the tabs. `clip` clips
+   * horizontally WITHOUT establishing a scroll container, so the tabs stick
+   * against the document (top:48 = right under the fixed topbar) with no band. */
+  .workspace-grid { overflow-x: clip; }
+  .overview-mobile-tabs {
+    display: flex;
+    position: sticky;
+    top: 48px;
+    /* Below the topbar (50), above content (auto). The topbar sits at 0–48 and
+       this strip at 48+, so they never overlap — lowering z only lets the
+       topbar's stacking context (which traps the account dropdown, anchored
+       there) paint ITS dropdown over this opaque strip instead of being clipped
+       by it. */
+    z-index: var(--z-pane-float);
+    background: var(--ac-surface);
+    border-bottom: 1px solid var(--ac-line);
+  }
+
+  /* Option A (mobile-nav-two-axis): inside a note the .overview-mobile-tabs
+     strip IS the sole top bar. Hide the brand app-topbar, drop the 48px gutter
+     it reserved, and float the strip to the very top. One bar = no
+     fixed-vs-sticky desync. The LIST level (no body class) keeps the brand bar. */
+  body.onden-note-detail .app-topbar { display: none; }
+  body.onden-note-detail .workspace-grid { padding-top: 0; }
+  body.onden-note-detail .overview-mobile-tabs { top: 0; }
+
+  .overview-mobile-tabs button {
+    flex: 1;
+    padding: 10px 4px;
+    font-size: var(--ac-fs-small);
+    font-weight: 500;
+    color: var(--ac-muted);
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  /* Two-axis nav (mobile-nav-two-axis): the list level has no strip;
+     note level = a compact back affordance + the note's lenses sharing the rest. */
+  .overview-mobile-tabs .omt-back {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    /* Centred like the icon buttons at the right end, not placed by a font's
+       glyph metrics (a text ‹ sat below the bar's middle). */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    line-height: 1;
+    padding: 0 12px;
+    color: var(--ac-accent);
+    font-weight: 500;
+    border-bottom-color: transparent;
+  }
+
+  /* Show only active tab panel.
+   * .notes-center-wrap is the flex shell that contains both the
+   * Editor/Canvas tab bar AND obsidian-main; hiding obsidian-main
+   * alone leaves the bar dangling above an empty area. Toggle the
+   * wrap itself so the panel is genuinely off-screen on non-edit
+   * tabs. */
+  /* The phone list sits on the page's own background: no second surface
+     that ends somewhere above the bottom bar and leaves a seam. */
+  .overview-workspace[data-mobile-tab="list"] .obsidian-sidebar { display: flex; background: transparent; }
+  .overview-workspace[data-mobile-tab="list"] .notes-center-wrap { display: none; }
+  .overview-workspace[data-mobile-tab="list"] .obsidian-main { display: none; }
+  .overview-workspace[data-mobile-tab="list"] .overview-activity { display: none; }
+
+  .overview-workspace[data-mobile-tab="edit"] .obsidian-sidebar { display: none; }
+  .overview-workspace[data-mobile-tab="edit"] .notes-center-wrap { display: flex; }
+  .overview-workspace[data-mobile-tab="edit"] .obsidian-main { display: flex; }
+  .overview-workspace[data-mobile-tab="edit"] .overview-activity { display: none; }
+
+  .overview-workspace[data-mobile-tab="info"] .obsidian-sidebar { display: none; }
+  .overview-workspace[data-mobile-tab="info"] .notes-center-wrap { display: none; }
+  .overview-workspace[data-mobile-tab="info"] .obsidian-main { display: none; }
+  /* Belt-and-braces with the Info tab's click handler (which force-opens the
+     inspector): even while .inspector-hidden still lingers, the chosen Info
+     tab must show the pane — a blank tab is never the right answer. GRID, not
+     flex: the pane's sections stack (the desktop single column); the old
+     `display: flex` defaulted to row and squeezed Properties/Backlinks/
+     History side-by-side into 390px. */
+  .overview-workspace[data-mobile-tab="info"] .overview-activity,
+  .overview-workspace.inspector-hidden[data-mobile-tab="info"] .overview-activity { display: grid; }
+
+  /* Mobile tab strip — make sure all 3 buttons fit even on the
+   * narrowest phone. With flex:1 each they share the row evenly. */
+  .overview-mobile-tabs button {
+    min-width: 0;       /* allow flex shrink below content min */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .obsidian-page-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Touch-scroll fix for the List tab. Desktop makes .obsidian-page-list an
+   * overflow-y:auto internal scroller inside a fixed-height sidebar. On a phone
+   * the sidebar grows to content (height:auto), so the list has NO internal
+   * scroll room — yet overflow-y:auto still SWALLOWS the touch-drag instead of
+   * letting the page scroll under the finger (the page IS scrollable; the
+   * gesture just never reaches it). Virtualization is off on mobile
+   * (!mobileLayout), so let it overflow and the page scroll. The double-class
+   * bump is required because ObsidianImport.css (overflow-y:auto) loads after
+   * this file; workspace-grid's overflow-x:hidden still contains horizontal
+   * excess from deep indents. */
+  .overview-workspace .obsidian-page-list {
+    overflow: visible;
+  }
+
+  /* Specificity bump (double class) for the SAME reason as .obsidian-workspace
+   * above: ObsidianImport.css is imported AFTER global.css, so its plain
+   * `.obsidian-main { height:calc(100dvh-48px); overflow-y:auto }` outranks a
+   * single-class rule here on equal specificity. Desktop caps the height and
+   * scrolls INTERNALLY; on a phone that TRAPS scrolling — .obsidian-main is a
+   * flex column, so the fixed height makes flex-shrink crush .obsidian-tiptap-
+   * wrap (whose overflow:hidden then clips the editor) while the editor's own
+   * .cm-scroller is height:content / overflow:visible. Result: nothing scrolls
+   * and the note body below the fold is unreachable. Let it grow and scroll the
+   * PAGE instead (natural on mobile; also reveals the references / Today lens
+   * that sit below the editor). */
+  .overview-workspace .obsidian-main {
+    width: 100%;
+    padding: 20px 14px 36px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .obsidian-actions {
+    justify-content: start;
+  }
+
+  .obsidian-editor,
+  .obsidian-preview {
+    min-height: 55vh;
+  }
+
+  .panel,
+  .graph-panel {
+    height: calc(100dvh - 180px);
+  }
+
+  .event-drawer {
+    position: static;
+    width: auto;
+    height: calc(100dvh - 180px);
+    overflow: auto;
+  }
+
+  .mobile-hidden {
+    display: none;
+  }
+
+  /* Opaque topbar on mobile. The frosted (translucent) desktop treatment lets
+     content bleed through as it scrolls under the fixed bar; with the sticky
+     .overview-mobile-tabs sitting directly beneath it, that read as the two
+     bars smearing into each other. A solid fill keeps the top chrome legible. */
+  .app-topbar {
+    background: var(--ac-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* Hide desktop mode switch on mobile */
+  .canvas-controls .mode-switch,
+  .app-topbar .mode-switch,
+  .app-topbar-divider.topbar-desktop-only,
+  .topbar-desktop-only {
+    display: none;
+  }
+  /* Search stays in More on mobile, including note detail where the brand
+     topbar is hidden. Override CommandPalette.css's later display rule. */
+  .app-topbar .palette-trigger {
+    display: none;
+  }
+  /* The user chip's right padding (10px) is sized for the name label, which is
+     .topbar-desktop-only and hidden here — leaving lopsided space to the right
+     of the lone avatar. Tighten to a symmetric ring around the avatar. */
+  .user-chip {
+    padding: 3px;
+    gap: 0;
+    /* The avatar opens the account sheet (sync, Settings, sign-out): a full
+       44px target around a 28px avatar. */
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    border-color: transparent;
+  }
+  .user-chip .user-avatar { width: 28px; height: 28px; }
+
+  /* Larger touch targets */
+  .obsidian-page-button {
+    min-height: 44px;
+  }
+
+  .obsidian-delete-btn,
+  .inbox-promote-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  /* Graph panel full height on mobile */
+  .graph-panel {
+    height: calc(100dvh - 56px - env(safe-area-inset-bottom) - 90px);
+  }
+
+}
+
+/* ─── Phone topbar (≤600px) ────────────────────────────────────────────────
+ * The desktop topbar packs the wordmark + New + Today + lens strip on the left
+ * and a full "Search…  ⌘K" box on the right. On a phone that crowds and clips.
+ * Keep search in More and creation in the bottom navigation; hide the
+ * desktop shortcut hint. The
+ * lens strip keeps its own mobile handling (overview-mobile-tabs / mobile-tabs).
+ */
+@media (max-width: 600px) {
+  /* The desktop "Search… ⌘K" palette trigger is already hidden at ≤900px via
+   * .topbar-desktop-only; belt-and-suspenders: drop the ⌘K key hint anywhere it
+   * renders on touch (no keyboard to press it). */
+  .palette-trigger kbd,
+  .tiptap-slash-hint {
+    display: none;
+  }
+
+  /* Keep the wordmark from being squeezed by the lens strip. */
+  .app-topbar .app-logo {
+    flex-shrink: 0;
+  }
+
+  /* Clear the fixed/sticky topbar (48px) plus the device safe-area inset so the
+   * note title / main content isn't tucked under the bar or the notch. */
+  .obsidian-main {
+    padding-top: calc(20px + env(safe-area-inset-top));
+  }
+}
+
+/* ─── Toast notifications ──────────────────────────────────────────────────── */
+
+/* ⑧ motion pass — shared entrance curves, token-driven (theme-tokens.css:
+   "the instrument register"). One fade + one 98%-scale pop; nothing slides
+   across the screen. prefers-reduced-motion zeroes them all. */
+@keyframes onden-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes onden-pop-in {
+  from { opacity: 0; transform: scale(0.98) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.toast-stack {
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(50dvh, calc(100dvh - 48px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+}
+
+/* Inside a modal layer the stack must not take the layer's pop-in (it would override the centring transform). */
+.ui-modal > .toast-stack { animation: none; }
+
+.toast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: normal;
+  box-shadow: var(--ac-shadow-float);
+  animation: toast-in 0.18s ease;
+  /* The .toast-stack container is pointer-events:none so it never blocks the
+     page behind it — but each toast MUST re-enable pointer events or its Undo /
+     dismiss buttons can't be tapped (taps fall through to the workspace below).
+     This is why the delete "Undo" button did nothing. */
+  pointer-events: auto;
+}
+.toast-icon { grid-column: 1; grid-row: 1; }
+.toast-message { grid-column: 2; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
+.toast-dismiss {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  /* A one-line toast stays one line tall: the button overhangs the padding
+     instead of stretching the row (touch keeps its larger ::after hit area). */
+  margin-block: -6px;
+  padding: 0;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.toast-dismiss:hover { background: var(--ac-overlay-hover); }
+.toast-dismiss:focus-visible, .toast-action:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+
+.toast--success {
+  background: var(--ac-ink);
+  color: var(--ac-accent-ink);
+}
+
+.toast--info {
+  background: var(--ac-info-soft);
+  color: var(--ac-info);
+}
+
+.toast--warning {
+  background: var(--ac-warning-soft);
+  color: var(--ac-warning);
+}
+
+.toast--error {
+  background: var(--ac-danger-soft);
+  color: var(--ac-danger);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
+  /* ⑧ motion pass — shared entrance curves, token-driven (theme-tokens.css:
+   "the instrument register"). One fade + one 98%-scale pop; nothing slides
+   across the screen. prefers-reduced-motion zeroes them all. */
+@keyframes onden-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes onden-pop-in {
+  from { opacity: 0; transform: scale(0.98) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.toast-stack {
+    bottom: calc(var(--mobile-bottom-clearance, 70px) + 8px + env(safe-area-inset-bottom));
+    max-height: 45dvh;
+  }
+  :root:has(.fwr-collapsed) .toast-stack {
+    bottom: calc(var(--mobile-bottom-clearance, 70px) + 64px + env(safe-area-inset-bottom));
+  }
+  /* The open recovery panel (up to 40dvh) owns the bottom; toasts rise above it. */
+  :root:has(.failed-write-recovery:not(.fwr-collapsed)) .toast-stack {
+    bottom: calc(var(--mobile-bottom-clearance, 70px) + 40dvh + 16px + env(safe-area-inset-bottom));
+  }
+  .toast-dismiss { width: 44px; height: 44px; }
+  .toast-action { min-height: 44px; }
+}
+
+/* ─── Command Palette ──────────────────────────────────────────────────────── */
+
+/* ── Canvas mode ──────────────────────────────────────────────────────────── */
+
+/* Pickers (dropdowns) */
+
+/* Cards */
+
+/* Group */
+
+/* Node toolbar */
+
+/* ── Tag system enhancements ──────────────────────────────────────────────── */
+
+/* Status pane */
+
+/* Notion-style status chip selector */
+
+/* ── Timeline mode ── */
+
+/* ── User menu (topbar) ── */
+.user-menu-wrap { position: relative; }
+.user-chip { display: flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-xl); padding: 3px 10px 3px 4px; cursor: pointer; color: var(--ac-ink); font-size: var(--ac-fs-caption); }
+.user-chip:hover { background: var(--ac-overlay-hover); }
+.user-avatar { width: 22px; height: 22px; border-radius: var(--ac-radius-full); background: var(--ac-accent); color: var(--ac-accent-ink); display: flex; align-items: center; justify-content: center; font-size: var(--ac-fs-xs); font-weight: 700; flex-shrink: 0; }
+.user-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Sandbox button states ── */
+
+/* ── Pending versions (inbox) ── */
+.pending-section { margin-top: 8px; border-top: 1px solid var(--ac-line); padding-top: 6px; }
+.pending-section-label {
+  font-size: var(--ac-fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ac-muted); padding: 4px 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.pending-section-selected {
+  margin-left: auto;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ac-accent);
+  text-transform: none;
+}
+
+/* Sticky bulk action bar */
+/* Conflict section — Day 5 local-first surfacing */
+.conflict-section { border-top: 2px solid color-mix(in srgb, var(--ac-warning) 35%, var(--ac-line)); }
+.conflict-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border-radius: var(--ac-radius-sm);
+  background: color-mix(in srgb, var(--ac-warning) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac-warning) 22%, var(--ac-line));
+}
+.conflict-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-fs-xs);
+}
+.conflict-item-node {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ac-ink);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.conflict-item-node:hover { color: var(--ac-accent); text-decoration: underline; }
+.conflict-item-node:disabled { color: var(--ac-muted); cursor: default; }
+.conflict-item-key {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-warning);
+  background: color-mix(in srgb, var(--ac-warning) 15%, transparent);
+  padding: 1px 5px;
+  border-radius: var(--ac-radius-sm);
+  flex-shrink: 0;
+}
+.conflict-item-time { font-size: var(--ac-fs-xs); color: var(--ac-muted); flex-shrink: 0; }
+.conflict-item-values {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-fs-xs);
+  font-family: ui-monospace, Menlo, monospace;
+  padding: 2px 0;
+}
+.conflict-item-prev { color: var(--ac-muted); }
+.conflict-item-arrow { color: var(--ac-muted); }
+.conflict-item-next { color: var(--ac-ink); }
+.conflict-item-summary { color: var(--ac-ink); }
+.conflict-item-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.conflict-item-revert {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ac-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--ac-warning) 40%, var(--ac-line));
+  background: transparent;
+  color: var(--ac-warning);
+  cursor: pointer;
+}
+.conflict-item-revert:hover { background: color-mix(in srgb, var(--ac-warning) 12%, transparent); }
+.conflict-item-revert:disabled { opacity: 0.4; cursor: default; }
+.conflict-item-dismiss {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: var(--ac-radius-sm);
+  border: 1px solid var(--ac-line);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.conflict-item-dismiss:hover { color: var(--ac-ink); border-color: var(--ac-muted); }
+.conflict-item-head .conflict-item-dismiss { padding: 2px 4px; }
+.body-conflict-note { margin: 0; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.body-conflict-region {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--ac-warning) 22%, var(--ac-line));
+}
+.body-conflict-side { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.body-conflict-label { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.body-conflict-text {
+  margin: 0;
+  max-height: 8em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-ink);
+}
+.body-conflict-left-out .body-conflict-text { color: var(--ac-warning); }
+.body-conflict-done { align-self: flex-end; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+/* ── Vertical Timeline ── */
+
+/* ── Login ── */
+.login-loading { display: flex; align-items: center; justify-content: center; height: 100dvh; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.login-gate { display: flex; align-items: center; justify-content: center; min-height: 100dvh; min-height: 100dvh; padding: 24px 16px; background: var(--ac-bg); }
+.login-card { width: 320px; max-width: 100%; display: flex; flex-direction: column; gap: 16px; padding: 32px; background: var(--ac-surface); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); }
+.login-logo { font-size: var(--ac-fs-h3); font-weight: 700; color: var(--ac-ink); text-align: center; letter-spacing: -0.02em; }
+.login-connection { width: 380px; padding: clamp(24px, 5vw, 32px); }
+.login-connection-title { margin: 0; font-size: var(--ac-fs-lg); font-weight: 600; line-height: 1.5; color: var(--ac-ink); text-wrap: balance; }
+.login-connection-note { margin: 0; font-size: var(--ac-fs-small); line-height: 1.7; color: var(--ac-muted); }
+.login-connection .login-submit { min-height: 44px; }
+.login-submit:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 3px; }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-field { display: flex; flex-direction: column; gap: 4px; }
+.login-label { font-size: var(--ac-fs-xs); font-weight: 500; color: var(--ac-muted); }
+.login-input { padding: 9px 12px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-bg); color: var(--ac-ink); font-size: var(--ac-fs-small); outline: none; }
+.login-input:focus { border-color: var(--ac-accent); }
+.login-error { font-size: var(--ac-fs-caption); color: var(--ac-danger); margin: 0; }
+.login-hint { font-size: var(--ac-fs-caption); color: var(--ac-muted); margin: 4px 0 0; }
+/* Arrived through an invite link (D110). */
+.login-invite-note { font-size: var(--ac-fs-caption); color: var(--ac-muted); margin: 0; text-align: center; }
+.login-submit { padding: 9px; background: var(--ac-accent); color: var(--ac-accent-ink); border: none; border-radius: var(--ac-radius-md); font-size: var(--ac-fs-small); font-weight: 500; cursor: pointer; }
+.login-submit:disabled, .login-submit[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+.login-toggle { background: none; border: none; color: var(--ac-muted); font-size: var(--ac-fs-caption); cursor: pointer; text-align: center; }
+.login-toggle:hover { color: var(--ac-ink); }
+/* OAuth social login — rendered only when the backend reports configured providers. */
+.login-social { display: flex; flex-direction: column; gap: 8px; }
+.login-social-btn { display: flex; align-items: center; justify-content: center; padding: 9px 12px; background: var(--ac-bg); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); font-size: var(--ac-fs-small); font-weight: 500; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.login-social-btn:hover:not(:disabled) { border-color: var(--ac-accent); background: color-mix(in srgb, var(--ac-accent) 6%, var(--ac-bg)); }
+.login-social-btn:disabled { opacity: 0.6; cursor: default; }
+.login-divider { display: flex; align-items: center; gap: 10px; color: var(--ac-muted); font-size: var(--ac-fs-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: var(--ac-line); }
+
+/* ── Free-form attribute panel (NodeAttributesPanel) ─────────────────────
+   Reference implementation for the theme token contract. All theme-sensitive
+   styling uses --onden-* semantic tokens — no hex colors, no opacity tricks
+   that break in either theme. */
+
+/* Settings — row-stack accommodates a label + hint pair next to a toggle */
+.settings-hint {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  line-height: 1.4;
+}
+
+/* ── Tasks mode (workspace task list) ───────────────────────────────────── */
+.tasks-mode {
+  grid-column: 2;          /* center column; a full page, so cols 1 and 3 are 0 wide */
+  /* Reading width, centered like the journal page; no wider on big screens. */
+  width: 100%;
+  max-width: 1320px;   /* wide enough for the two columns of 今天 (TasksMode.css) */
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* Sits inside .workspace-grid (padding-top: 48px). */
+  min-height: calc(100dvh - 48px);
+  background: var(--ac-bg);
+}
+.tasks-mode-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.tasks-mode-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-fs-ui);
+  font-weight: 600;
+  color: var(--ac-ink);
+}
+.tasks-mode-count {
+  display: inline-block;
+  padding: 0 6px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  min-width: 18px;
+  text-align: center;
+}
+.tasks-mode-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 20px;
+}
+
+.tasks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+}
+.task-row:hover { background: var(--ac-overlay-hover); }
+.task-row--done .task-title {
+  color: var(--ac-muted);
+  text-decoration: line-through;
+}
+.task-row--pending { opacity: 0.6; }
+.task-row input[type="checkbox"] { cursor: pointer; }
+.task-title { flex: 1; }
+.task-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-source:hover {
+  color: var(--ac-ink);
+  background: var(--ac-overlay-hover);
+}
+
+/* ── Single-tag View tab (clicked from pinned topbar chip) ──────────────── */
+
+/* Toast action button (e.g. Undo on delete): on the message's row, before the
+   dismiss button, so the toast stays one line (2026-10-29 phone: 「一行就好」). */
+.toast:has(.toast-action) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.toast-action {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  white-space: nowrap;
+  /* Like the dismiss button: overhang the padding instead of growing the row. */
+  margin-block: -6px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--ac-radius-md);
+  background: none;
+  color: inherit;
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-action:hover:not(:focus-visible) { outline: 1px solid currentColor; outline-offset: -2px; }
+.toast-action ~ .toast-dismiss { grid-column: 4; }
+
+@media (max-width: 900px), (hover: none) {
+  .obsidian-actions .editor-zen-toggle { height: 44px; min-height: 44px; flex-shrink: 0; }
+}
+
+/* The page's title strip (components/viewTabs/ViewStrip): one full-width row at the top of the centre pane, the same
+   on every tab, with the view tabs at the left and the open tab's buttons and the note's ⋯ at the right. A phone has
+   no strip: its tabs are a row inside the page (.phone-view-tabs, ViewTabs.css). */
+.center-lens-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0 var(--ac-page-gutter);
+  border-bottom: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+}
+@media (pointer: coarse) { .center-lens-bar { height: 52px; } }
+.view-strip-end { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+.view-strip-slot { display: flex; align-items: center; gap: 6px; }
+.view-strip-slot:empty { display: none; }
+.view-strip-group { display: flex; align-items: center; gap: 6px; }
+/* Where a page's text column starts, for the saved-view tabs that use the whole width to keep. */
+.view-pane {
+  --view-start: max(var(--ac-page-gutter), calc((100% - var(--ac-page-column)) / 2 + var(--ac-page-gutter)));
+}
+/* Access revoked (AccessRevokedNotice): cover at once — there is nothing left
+   underneath to keep visible. */
+.membership-gate.access-revoked { animation: none; background: var(--ac-bg); }
+.membership-gate.access-revoked > .membership-gate-card { visibility: visible; opacity: 1; animation: none; max-width: 28rem; text-align: center; }
+/* Review settings: the personal override under the shared form. */
+.function-settings-personal { border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); padding: 8px 10px; margin: 8px 0 0; display: grid; gap: 6px; }
+.function-settings-personal legend { font-size: var(--ac-fs-caption); color: var(--ac-muted); padding: 0 4px; }
+/* Spaces (SpaceChip): the note's space next to its title, and its dialog. */
+.space-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 7px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); line-height: 1.3;
+  background: var(--ac-surface); color: var(--ac-muted); font-size: var(--ac-fs-xs); cursor: pointer;
+}
+.space-chip:hover { border-color: var(--ac-accent); color: var(--ac-ink); }
+.space-dialog-members { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 2px; font-size: var(--ac-fs-small); }
+.space-dialog-members span { color: var(--ac-muted); font-size: var(--ac-fs-caption); margin-left: 6px; }
+.space-dialog-manage { margin-top: 6px; }
+.space-dialog-move { display: grid; gap: 4px; margin-top: 10px; font-size: var(--ac-fs-caption); }
+.space-dialog-preview { margin-top: 10px; font-size: var(--ac-fs-small); line-height: 1.5; }
+.space-dialog-preview p { margin: 0 0 4px; }
+.space-dialog-warning { color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+/* Settings › Spaces */
+.spaces-setting { display: grid; gap: 12px; }
+.spaces-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.spaces-row-head { display: flex; align-items: center; gap: 8px; }
+.spaces-row-head strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.spaces-create { display: flex; gap: 6px; flex-wrap: wrap; }
+.spaces-create input { flex: 1; min-width: 10rem; }
+.note-readonly-badge { font-size: var(--ac-fs-xs); color: var(--ac-muted); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); padding: 0 6px; }
+/* Sidebar: a space's heading above its top-level notes (spaces on). */
+.sb-space-heading { position: relative; font-size: var(--ac-fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ac-muted); padding: 8px 8px 2px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.sb-space-members { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; padding: 2px 4px; border-radius: var(--ac-radius-sm); font: inherit; font-size: var(--ac-fs-xs); text-transform: none; letter-spacing: 0; color: var(--ac-accent); cursor: pointer; white-space: nowrap; }
+.sb-space-members:hover { text-decoration: underline; }
+/* A narrow rail (English 「Members and permissions」 at 1280px) must not widen the list: the label and the
+   link shrink, the link's words first, each cut with … (the link keeps its full name in title/aria-label). */
+.sb-space-heading__label { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-space-members { min-width: 0; flex: 0 3 auto; overflow: hidden; }
+.sb-space-members__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .sb-space-members { min-height: 32px; } }
+
+/* A module's mark on its navigation entries (FrontendModule.NavIndicator):
+   a dot for "something new", or a small number when the module shows one. */
+.nav-indicator--dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-inline-start: 4px;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-accent);
+  vertical-align: middle;
+}
+.nav-indicator--count {
+  display: inline-block;
+  flex: none;
+  min-width: 18px;
+  margin-inline-start: 4px;
+  padding: 0 5px;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-overlay-selected);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+/* NavMarks: inline with the label; a folding container (更多 ▾, the phone's
+   更多 button) shows its first mark only, as one dot. */
+.nav-marks.nav-marks { display: contents; } /* over ".mobile-nav-btn span" */
+.nav-marks[data-dot-only] > .nav-indicator ~ .nav-indicator { display: none; }
+/* The bottom bar stacks icon over label: the mark sits on the icon's corner. */
+.mobile-nav-btn .mobile-nav-icon { position: relative; display: inline-flex; }
+.mobile-nav-icon > .nav-marks > .nav-indicator {
+  position: absolute;
+  top: -2px;
+  inset-inline-end: -6px;
+  margin: 0;
+}
+.mobile-nav-icon > .nav-marks > .nav-indicator--count { top: -6px; inset-inline-end: -14px; min-width: 16px; padding: 0 4px; line-height: 16px; }
+
+/* Controls drawn from a def's `control` (settings/SettingRenderer): a slider
+   with an icon at each end, and colour swatches for the theme. */
+.settings-row--slider { gap: 12px; }
+.settings-slider { flex: 1; min-width: 0; accent-color: var(--ac-accent); }
+/* A touch-height drag target with the drawn row unchanged: the extra height is taken back by the margin. */
+@media (pointer: coarse) {
+  .settings-slider { height: var(--onden-tap, 44px); margin-block: calc((32px - var(--onden-tap, 44px)) / 2); }
+}
+.settings-slider-end { flex-shrink: 0; color: var(--ac-muted); }
+.settings-theme-sample { display: flex; align-self: stretch; width: 100%; }
+.settings-theme-sample i { flex: 1; background: var(--ac-bg); }
+.settings-slider-value { margin-inline-start: auto; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+/* A setting that deletes or replaces something: its button reads in the danger colour. */
+.settings-setting--danger .ui-btn, .settings-setting--danger .settings-row-title { color: var(--ac-danger); }
+
+/* Settings › Notes preview: one note page at about 80% of its real size. */
+.note-preview-page { width: 100%; max-width: calc(var(--onden-note-measure, 41.18em) * 0.45); min-width: 0; margin: 0 auto; }
+.note-preview-title {
+  margin: 0 0 6px; font-family: var(--onden-ui-font-family-editor); font-weight: 700; line-height: 1.25; color: var(--ac-ink);
+  --preview-size: calc(var(--onden-note-font) * var(--onden-note-title-scale, 38) / 17 * 0.8);
+  font-size: var(--preview-size);
+}
+.note-preview-body, .note-preview-list {
+  margin: 0; font-family: var(--onden-ui-font-family-editor); line-height: 1.7; color: var(--ac-ink);
+  --preview-size: calc(var(--onden-note-font) * 0.8);
+  font-size: var(--preview-size);
+}
+.note-preview-list { padding-inline-start: 1.4em; list-style: disc; }
+.settings-slider-block { display: flex; flex-direction: column; gap: 6px; }
+.settings-avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 40px; height: 40px;
+  border-radius: var(--ac-radius-full); background: var(--ac-accent); color: var(--ac-accent-ink); font-weight: 600;
+}
+.settings-account-identity { display: flex; align-items: center; gap: 12px; }
+.settings-account-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.settings-account-text span { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.settings-sign-out { align-self: flex-start; color: var(--ac-danger); }
+.settings-owner-lock { flex-shrink: 0; color: var(--ac-muted); }
+.settings-segmented-block { display: flex; flex-direction: column; gap: 6px; }

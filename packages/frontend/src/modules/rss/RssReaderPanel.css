@@ -1,0 +1,603 @@
+/* RSS reader drawer (modules/rss) — two-pane reading surface inside the
+   action drawer. The host aside gets .node-action-panel--wide while this
+   panel is mounted (SideDrawers adds it), so the reader has room. */
+
+.rss-reader {
+  /* As a full-page mode this is a DIRECT .workspace-grid child (Suspense
+     adds no element) — without an explicit column it auto-places into col-1,
+     which .full-page collapses to 0 width (the .tasks-mode lesson). */
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Give the "閱讀器" header the same 12px gutter as the subscribe row and item
+   list below it — the base .panel-header has no padding, so as a full-page
+   mode the title hugged the top-left corner, out of line with the content. */
+.rss-reader .panel-header.compact:not(.panel-header--phone) {
+  padding: 10px 12px 2px;
+}
+
+.rss-subscribe-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 4px;
+}
+.rss-subscribe-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-caption);
+  padding: 6px 8px;
+}
+.rss-subscribe-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-caption);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.rss-subscribe-btn:disabled { opacity: 0.5; cursor: default; }
+.rss-subscribe-row { flex-wrap: wrap; }
+.rss-subscribe-dest-toggle {
+  border: 0; background: transparent; color: var(--ac-accent); font: inherit; font-size: var(--ac-fs-caption);
+  padding: 6px 4px; cursor: pointer;
+}
+.rss-subscribe-dest { flex-basis: 100%; padding: 4px 0; }
+
+.rss-notice {
+  margin: 4px 12px;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+
+.rss-reader-body {
+  display: grid;
+  /* --rss-list-width: dragged (ColumnResizer). The article keeps 360px however
+     wide the list was left. */
+  grid-template-columns: min(var(--rss-list-width, 240px), max(180px, calc(100% - 360px))) minmax(0, 1fr);
+  /* The row is the available height, not the taller column's content: the
+     list and the article each scroll on their own. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--ac-line);
+}
+
+/* Desktop two-pane only; the back affordance is mobile-only. */
+.rss-article-back { display: none; }
+
+/* Phone: single pane that drills — the article list, then the article (with a
+   back), one at a time. A two-column reader at 360px is unusable. */
+@media (max-width: 900px) {
+  /* As a full-page mode the reader sits in the block-flow workspace (not a
+     fixed drawer), so height:100% collapses — fill the viewport between the
+     topbar (48px) and the bottom nav (56px), growing + page-scrolling beyond. */
+  .rss-reader {
+    height: auto;
+    min-height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom));
+  }
+  .rss-reader-body { grid-template-columns: minmax(0, 1fr); }
+  .rss-reader-body[data-has-article="0"] .rss-right { display: none; }
+  .rss-reader-body[data-has-article="1"] .rss-left { display: none; }
+  .rss-article-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 8px 0 4px;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    color: var(--ac-accent);
+    font-weight: 500;
+    cursor: pointer;
+  }
+}
+
+.rss-left {
+  position: relative; /* anchors the ColumnResizer */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--ac-line);
+}
+
+/* The source tags at the top of the list (RssSourceBar = ui FilterChips) and its 來源 button. */
+.rss-source-bar { padding: 6px 6px 6px 8px; border-bottom: 1px solid var(--ac-line); }
+.rss-sources-open {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px;
+  border: 0; border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-muted); cursor: pointer;
+}
+.rss-sources-open:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+@media (max-width: 900px) {
+  .rss-sources-open { min-width: 44px; min-height: 44px; }
+}
+
+/* The 「來源」 sheet's feed rows. */
+.rss-sources-sheet.shell-dialog { width: min(100%, 520px); }
+.rss-source-row { display: flex; align-items: center; }
+.rss-source-name { flex: 1; min-width: 0; padding: 0 8px; font-size: var(--ac-fs-ui-touch); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rss-source-refresh, .rss-source-more {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+  border: 0; border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-muted); cursor: pointer;
+}
+.rss-source-refresh:hover, .rss-source-more:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+.rss-source-refresh:disabled { opacity: 0.5; cursor: default; }
+.rss-source-group + .rss-source-group { margin-top: 4px; }
+.rss-source-group-head {
+  padding: 8px 8px 2px; font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Day headings, the line where you left off, and 「上面有新的」 (RssItemList). */
+.rss-day { padding: 12px 14px 4px; font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-muted); }
+.rss-last-read {
+  display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: var(--ac-fs-xs); color: var(--ac-muted); opacity: 0.8;
+}
+.rss-last-read::before, .rss-last-read::after { content: ""; flex: 1; border-top: 1px solid var(--ac-line); }
+.rss-item-list { position: relative; }
+.rss-newer {
+  position: sticky; top: 8px; display: block; margin: 8px auto; min-height: 36px; padding: 0 16px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: var(--ac-surface); color: var(--ac-ink);
+  font: inherit; font-size: var(--ac-fs-caption); cursor: pointer;
+}
+@media (max-width: 900px) { .rss-newer { min-height: 44px; } }
+
+.rss-load-more {
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  padding: 6px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.rss-load-more:hover:not(:disabled) { color: var(--ac-ink); }
+
+/* Pin the checkbox to a size proportional to the 11px label — the platform
+   default (large on mobile) dwarfed the text and read as broken. accent-color
+   ties it to the brand instead of the OS blue. */
+
+.rss-item-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+.rss-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.rss-item:hover { background: var(--ac-overlay-hover); }
+/* The open article: a tinted row with an accent bar, distinct from "seen". */
+.rss-item.active { background: var(--ac-raised); box-shadow: var(--ac-bar-start); }
+.rss-item-text { display: grid; gap: 3px; min-width: 0; }
+.rss-item-excerpt {
+  font-size: var(--ac-fs-xs);
+  line-height: 1.45;
+  color: var(--ac-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.rss-item.read .rss-item-excerpt { opacity: 0.75; }
+.rss-item-thumb {
+  width: 56px; height: 56px; object-fit: cover; border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+}
+.rss-item.read .rss-item-thumb { opacity: 0.6; }
+.rss-item.read .rss-item-title { color: var(--ac-muted); font-weight: 400; }
+.rss-item-title {
+  font-size: var(--ac-fs-small);
+  line-height: 1.35;
+  font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.rss-item-meta { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+.rss-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: clip; /* the slide-in never adds a horizontal scroll */
+}
+/* Desktop: no toolbar — the list is beside the article. */
+.rss-article-toolbar { display: none; }
+/* Place in the list: a 2px bar under the toolbar (no numbers). */
+.rss-article-progress { flex: none; height: 2px; background: var(--ac-line); overflow: hidden; }
+.rss-article-progress > span { display: block; width: var(--rss-progress, 0%); height: 100%; background: var(--ac-accent); opacity: 0.7; transition: width 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { .rss-article-progress > span { transition: none; } }
+/* An article reached by a swipe or an end card slides in from that side. */
+@media (prefers-reduced-motion: no-preference) {
+  .rss-article-scroll[data-enter="next"] { animation: rss-enter-next 0.18s ease-out; }
+  .rss-article-scroll[data-enter="prev"] { animation: rss-enter-prev 0.18s ease-out; }
+}
+@keyframes rss-enter-next { from { transform: translateX(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes rss-enter-prev { from { transform: translateX(-24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.rss-fulltext-fallback { max-width: 720px; margin: 8px auto 0; font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.rss-fulltext-link {
+  font: inherit; color: var(--ac-accent); background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; min-height: 32px;
+}
+.rss-fulltext-link:disabled { opacity: 0.5; cursor: default; }
+.rss-article-meta > * + *::before { content: "·"; margin-right: 12px; color: var(--ac-muted); opacity: 0.6; }
+.rss-article-meta { gap: 0 12px; }
+
+.rss-article-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 24px;
+}
+/* One reading column, about 64–75 characters wide (NetNewsWire's default). */
+.rss-article-head,
+.rss-article-body,
+.rss-article-end {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.rss-article-head { padding: 36px 0 18px; }
+/* The title and 存成筆記 share a row; the title takes the width it needs. */
+.rss-article-head-row { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 10px; }
+.rss-article-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--onden-font-display, inherit);
+  font-size: var(--ac-fs-title);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.rss-article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+.rss-article-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ac-muted);
+}
+.rss-article-link:hover { color: var(--ac-accent); }
+
+.rss-article-body {
+  font-size: var(--ac-fs-prose);
+  line-height: 1.85;
+  padding-bottom: 8px;
+}
+.rss-article-body img { max-width: 100%; height: auto; border-radius: var(--ac-radius-md); margin: 6px 0; }
+/* An image's caption: smaller, muted, centred under the picture. The block that holds a caption centres its
+   picture too, so the caption does not sit centred under a left-aligned image. */
+.rss-article-body figure,
+.rss-article-body div:has(> figcaption) { margin: 0 0 16px; text-align: center; }
+.rss-article-body figcaption { display: block; font-size: 0.85em; line-height: 1.5; color: var(--ac-muted); text-align: center; margin: 2px 0 0; }
+
+/* Article typography. The global h1–h3 defaults are sized for UI CHROME
+   (15/14px, unbold, margin:0 — see global.css), so a feed article's real <h2>
+   headings rendered identically to body text with no spacing. This is a
+   READING surface, so restore an article scale + block rhythm (mirrors the
+   in-app .obsidian-preview--md preview, scoped here). */
+.rss-article-body h1 { font-size: 1.55em; font-weight: 700; line-height: 1.25; margin: 4px 0 12px; }
+.rss-article-body h2 { font-size: 1.35em; font-weight: 700; line-height: 1.3;  margin: 32px 0 10px; }
+.rss-article-body h3 { font-size: 1.15em; font-weight: 700; line-height: 1.35; margin: 24px 0 8px; }
+.rss-article-body h4 { font-size: 1em;    font-weight: 700; margin: 14px 0 6px; }
+.rss-article-body p  { margin: 0 0 16px; }
+.rss-article-body ul,
+.rss-article-body ol { margin: 0 0 12px; padding-left: 1.5em; }
+.rss-article-body ul { list-style: disc; }
+.rss-article-body ol { list-style: decimal; }
+.rss-article-body li { margin: 0 0 4px; }
+.rss-article-body strong { font-weight: 700; }
+.rss-article-body em { font-style: italic; }
+/* Links read as text with a soft underline; the accent shows on hover. */
+.rss-article-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ac-accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.rss-article-body a:hover { color: var(--ac-accent); text-decoration-color: var(--ac-accent); }
+.rss-article-body blockquote {
+  border-left: 3px solid var(--ac-accent);
+  margin: 0 0 14px;
+  padding: 6px 14px;
+  color: var(--ac-muted);
+  background: var(--ac-raised);
+  border-radius: 0 var(--ac-radius-md) var(--ac-radius-md) 0;
+}
+.rss-article-body blockquote p { margin: 0 0 6px; }
+.rss-article-body blockquote p:last-child { margin: 0; }
+.rss-article-body code {
+  background: var(--ac-raised);
+  padding: 0 4px;
+  border-radius: var(--ac-radius-sm);
+  font-size: 0.88em;
+}
+.rss-article-body pre {
+  background: var(--ac-raised);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0 0 14px;
+}
+.rss-article-body pre code { background: none; padding: 0; }
+.rss-article-body hr { border: none; border-top: 1px solid var(--ac-line); margin: 20px 0; }
+
+.rss-article-end {
+  padding: 24px 0 32px;
+  border-top: 1px solid var(--ac-line);
+  margin-top: 24px;
+}
+.rss-next-btn {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  text-align: left;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.rss-next-btn:hover { border-color: var(--ac-accent); }
+.rss-next-label { display: block; font-size: var(--ac-fs-xs); color: var(--ac-muted); margin-bottom: 3px; }
+.rss-next-title { display: block; font-size: var(--ac-fs-ui-touch); font-weight: 600; }
+.rss-end-note {
+  display: block;
+  margin: 12px 0 0;
+  text-align: center;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+}
+
+.rss-quote-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+}
+.rss-quote-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--ac-fs-xs);
+  font-style: italic;
+  color: var(--ac-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 放進今天的日記 / 放進〈上次的筆記〉 / 別篇筆記…: the first is the lead. */
+.rss-quote-options { display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex: none; }
+.rss-quote-known { font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.rss-quote-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  border: 1px solid var(--ac-accent);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-accent);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  padding: 0 10px;
+  cursor: pointer;
+}
+.rss-quote-bar .rss-quote-main { background: var(--ac-accent); color: var(--ac-surface); }
+@media (max-width: 900px) {
+  .rss-quote-bar { flex-wrap: wrap; }
+  .rss-quote-preview { flex-basis: 100%; }
+  .rss-quote-options { justify-content: flex-start; }
+  .rss-quote-bar button { min-height: 44px; }
+}
+
+.rss-empty-article { margin: auto; }
+
+/* The host drawer widens for the two-pane reader. */
+.node-action-panel--wide {
+  width: min(860px, calc(100vw - 28px)) !important;
+  display: flex;
+  flex-direction: column;
+}
+/* Phone: the reader is a full-screen page (node-action-panel mobile rule), so
+   override the desktop 860px width !important (placed after it to win on source
+   order). */
+@media (max-width: 900px) {
+  .node-action-panel--wide { width: auto !important; }
+}
+
+/* ── Reading immersion (phone) ─────────────────────────────────────────────
+   Reading is the NEXT navigation layer: while an article is open the list
+   layer's UI leaves the screen entirely (industry-uniform — Unread/Reeder/
+   Matter/NNW), and the app chrome goes with it. What remains: content, a
+   small back affordance, and no bottom toolbar. */
+@media (max-width: 900px) {
+  /* List-layer chrome dies while reading. */
+  .rss-reader[data-reading="1"] .panel-header.compact,
+  .rss-reader[data-reading="1"] .rss-subscribe-row { display: none; }
+
+  /* App chrome (topbar + bottom nav) drops with it; the reader owns the
+     whole viewport. The classes live on .app-shell (BuilderApp) because the
+     bottom nav is the workspace grid's sibling, not its child. */
+  .app-shell.rss-reading .app-topbar { display: none; }
+  .app-shell.rss-reading .mobile-bottom-nav { display: none; }
+  /* Reclaim the 48px the grid reserves for the (now hidden) fixed topbar —
+     the same move body.onden-zen makes. */
+  .app-shell.rss-reading .workspace-grid { padding-top: 0; padding-bottom: 0; }
+  .app-shell.rss-reading .rss-reader {
+    min-height: 100dvh;
+  }
+
+  /* Double-tap = paragraph highlight, so the browser's double-tap zoom has
+     to be off inside the article. */
+  .rss-reader[data-reading="1"] .rss-article-body { touch-action: manipulation; }
+
+  /* No bottom toolbar (存成筆記 sits beside the title and at the end): the
+     article only keeps the home-indicator inset below it. */
+  .rss-reader[data-reading="1"] .rss-right { padding-bottom: env(safe-area-inset-bottom); }
+  .rss-reader[data-reading="1"] .rss-article-end { padding-bottom: 16px; }
+  /* The shell (56px) and the workspace grid (64px) each keep room under
+     everything for the bottom nav, which is hidden while reading: with the
+     article's own 64px and a 48px end padding that was an empty band at the
+     bottom. While reading only the safe-area inset stays (above); with the
+     sync strip showing, its own clearance stays too. */
+  .app-shell.rss-reading:not(:has(.mobile-sync-strip)) { padding-bottom: 0; }
+  /* A short article: the text grows to fill the screen, so the end (and its
+     上一篇／下一篇) sits at the bottom of the screen, not in the middle. */
+  .rss-reader[data-reading="1"] .rss-article-scroll { display: flex; flex-direction: column; }
+  .rss-reader[data-reading="1"] .rss-article-scroll > * { width: 100%; box-sizing: border-box; }
+  .rss-reader[data-reading="1"] .rss-article-body { flex: 1 0 auto; }
+
+  /* The quote bar takes the top of the screen while a selection is live (over the
+     reader's own top bar, like Android's selection bar). The bottom belongs to the
+     browser then: Chrome/Brave's 「輕觸即可查看搜尋結果」 sheet rises there on a
+     selection and used to cover the bar. */
+  .rss-reader[data-reading="1"] .rss-quote-bar {
+    left: 0;
+    right: 0;
+    top: 0;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    z-index: var(--z-dropdown);
+    border-top: 0;
+    border-bottom: 1px solid var(--ac-line);
+    box-shadow: var(--ac-shadow-sm);
+  }
+}
+
+
+@media (max-width: 900px) {
+  .rss-article-toolbar { display: flex; padding: 0 8px; }
+  .rss-article-toolbar { align-items: center; }
+  .rss-article-scroll { padding: 0 16px; }
+  .rss-article-head { padding: 8px 0 14px; }
+  .rss-article-title { font-size: var(--ac-fs-title-sm); }
+  .rss-article-body { font-size: var(--ac-fs-prose); }
+}
+
+/* As a full page (desktop) the reader is exactly the window below the 48px
+   topbar, so the list and the article scroll inside it instead of the whole
+   page growing with the longer column. */
+@media (width > 900px) {
+  .workspace-grid > .rss-reader { height: calc(100dvh - 48px); }
+}
+
+/* The end-of-article actions: 寫點什麼 and 存成筆記 side by side on one row,
+   equal height (both are small ui buttons). The default destination is a
+   caption that drops under them only when it does not fit; 寫點什麼's two
+   choices open below the row without moving it. */
+.rss-end-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.rss-end-btn { min-height: 36px; white-space: nowrap; }
+.rss-write-choice { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rss-write-choice .ui-btn { min-height: 36px; }
+.rss-write-hint { flex-basis: 100%; margin: 2px 0 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+/* 存成筆記 (RssSaveControl): its root dissolves into the row; ▾ joins the verb
+   as one split button (only the seam is custom). */
+.rss-save-ctl { display: contents; }
+.rss-save-split { display: inline-flex; align-items: stretch; }
+.rss-save-split .rss-act-save { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.rss-save-split .rss-act-save-more { padding: 3px 6px; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.rss-save-dest { min-width: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); overflow-wrap: anywhere; }
+
+/* Previous / next at the end of an article, side by side at every width:
+   上一篇 on the left, 下一篇 on the right (the way a swipe goes); an empty slot
+   holds the place of a missing one. Titles clamp to two lines. */
+.rss-article-nav { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.rss-article-nav .rss-next-btn { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; }
+.rss-prev-btn { text-align: left; }
+.rss-article-nav .rss-next-btn:not(.rss-prev-btn) { text-align: right; align-items: flex-end; }
+.rss-next-title {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .rss-next-title { font-size: var(--ac-fs-ui); }
+}
+
+/* 「這週讀到的」 (RssWeekCard): quiet, above the list. */
+.rss-week { margin: 8px 10px; padding: 10px 12px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-raised); }
+.rss-week-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rss-week-title { margin: 0; font-size: var(--ac-fs-caption); font-weight: 600; color: var(--ac-muted); }
+.rss-week-list { margin: 6px 0; padding: 0; list-style: none; font-size: var(--ac-fs-caption); line-height: 1.5; }
+.rss-week-list li + li { margin-top: 4px; }
+.rss-week-from { color: var(--ac-muted); }
+@media (max-width: 900px) { .rss-week-hide { min-width: 44px; min-height: 44px; } }
+.rss-week-more { margin: 0 0 6px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+/* 同一則故事: the other sources open under the first (RssItemList). */
+.rss-story-more {
+  display: block; margin: 0 0 4px 14px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--ac-radius-md);
+  background: transparent; color: var(--ac-accent); font: inherit; font-size: var(--ac-fs-xs); text-align: left; cursor: pointer;
+}
+@media (max-width: 900px) { .rss-story-more { min-height: 44px; } }
+.rss-item-sub { padding-left: 28px; }
+
+/* 顯示方式 (RssItemList): 圖片優先 is a large picture card, 影音 adds a play control. */
+.rss-item-wrap { display: flow-root; }
+.rss-item--image { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.rss-item-cover { display: block; width: 100%; min-width: 0; max-width: 100%; max-height: 320px; object-fit: cover; border-radius: var(--ac-radius-md); background: var(--ac-raised); }
+.rss-item--image .rss-item-title { font-size: var(--ac-fs-caption); }
+.rss-item.read .rss-item-cover { opacity: 0.6; }
+.rss-item-play {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px 14px; min-height: 32px; padding: 0 14px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: transparent; color: var(--ac-ink);
+  font: inherit; font-size: var(--ac-fs-caption); cursor: pointer;
+}
+.rss-item-play:hover { border-color: var(--ac-accent); }
+@media (max-width: 900px) { .rss-item-play { min-height: 44px; } }
+.rss-item-player { display: block; width: calc(100% - 28px); margin: 0 14px 10px; border-radius: var(--ac-radius-md); }
+
+/* The 來源 sheet's subscribe form: the address on its own line, then the choices. */
+.rss-sources-sheet .rss-subscribe-row { flex-direction: column; align-items: stretch; flex-wrap: nowrap; padding: 4px 0 12px; gap: 8px; }
+.rss-sources-sheet .rss-subscribe-input { flex: none; min-height: 44px; font-size: var(--ac-fs-ui-touch); }
+.rss-sources-sheet .rss-subscribe-btn { justify-content: center; min-height: 44px; font-size: var(--ac-fs-ui-touch); }
+.rss-sources-sheet .rss-subscribe-dest-toggle { align-self: flex-start; min-height: 44px; font-size: var(--ac-fs-ui); }
+.rss-sources-sheet .rss-subscribe-voice { display: flex; flex-direction: column; gap: 4px; }
+
+/* A page of the same feed opened from a link (RssLinkedPage) is shown over the article, which keeps its place below. */
+.rss-reader .rss-article-scroll[hidden] { display: none; }
+.rss-link-back { margin-left: 8px; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

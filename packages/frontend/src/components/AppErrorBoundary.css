@@ -1,0 +1,69 @@
+/* Full-viewport fallback shown when the React tree throws unrecoverably.
+   Gallery palette via theme tokens — it must look like Onden even when
+   Onden is broken. */
+.app-error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+  text-align: center;
+}
+
+.app-error-boundary h1 {
+  font-family: var(--onden-font-display, inherit);
+  font-size: var(--ac-fs-h3);
+  font-weight: 600;
+  margin: 0;
+}
+
+.app-error-boundary p {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-ui);
+}
+
+.app-error-boundary details {
+  max-width: min(640px, 90vw);
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+
+.app-error-boundary details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-error-boundary pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--ac-overlay-subtle);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+}
+
+.app-error-boundary button {
+  margin-top: 4px;
+  padding: 8px 18px;
+  font: inherit;
+  font-size: var(--ac-fs-ui);
+  color: var(--ac-accent-ink);
+  background: var(--ac-accent);
+  border: none;
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+}
+
+.app-error-boundary button:hover {
+  background: var(--ac-accent-hover);
+  color: var(--ac-accent-ink);
+}

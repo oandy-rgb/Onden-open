@@ -1,0 +1,55 @@
+---
+export const prerender = false;
+
+import SiteMissing from "../../components/SiteMissing.astro";
+import SiteLayout from "../../components/SiteLayout.astro";
+import { ArticleFrame, coverImage, movedTo } from "../../components/siteFrame";
+import SitePreview from "../../components/siteFrame/SitePreview.astro";
+import { loadAllEnhancers, noteSummary } from "@onden/markdown";
+import { loadSite } from "./_siteLoad";
+import { publicOrigin, publicUrl } from "../../lib/siteOrigin";
+import { shareImageUrl } from "../../lib/siteShareImage";
+import { siteName } from "../../lib/siteName";
+
+// The note renderer colours code and typesets math with pieces it loads on
+// demand; a server render can't wait, so it has them all first (MarkdownRenderer).
+await loadAllEnhancers();
+
+const loaded = await loadSite();
+
+// Slugs keep CJK characters; a malformed escape keeps the raw segment.
+const raw = Astro.params.slug ?? "";
+let slug = raw;
+try { slug = decodeURIComponent(raw); } catch { /* keep the raw segment */ }
+
+const data = loaded.kind === "ok" ? loaded.data : null;
+const node = data?.nodes.find((n) => n.slug === slug) ?? null;
+// The old address of a page renamed since goes to where it is now (GAP-240);
+// any other unknown or unpublished page is a 404 in the site's own frame.
+const moved = data && !node ? movedTo(data.redirects, `/site/${slug}/`) : null;
+if (moved) return Astro.redirect(moved, 301);
+if (loaded.kind === "error") Astro.response.status = 503;
+else if (!node) Astro.response.status = 404;
+
+const brand = siteName(data?.site.brand, data?.title);
+// 200: the cap a hand-written `description:` has (the auto one was cut at 160).
+const description = node ? noteSummary(node.markdown, { title: node.title, maxLen: 200 }) : undefined;
+// The note's first picture is what a shared link shows; without one the layout falls back to the site's logo.
+const cover = node ? shareImageUrl(coverImage(node.markdown), publicOrigin(Astro.url)) : undefined;
+---
+
+{data && node ? (
+  <SiteLayout
+    data={data}
+    pageTitle={`${node.title} — ${brand}`}
+    description={description}
+    canonical={publicUrl(Astro.url, Astro.url.pathname)}
+    variant="article"
+    image={cover && node ? { url: cover, alt: node.title } : undefined}
+  >
+    <ArticleFrame data={data} node={node} />
+    {data.design.reading.preview && <SitePreview />}
+  </SiteLayout>
+) : (
+  <SiteMissing data={data} canonical={publicUrl(Astro.url, Astro.url.pathname)} />
+)}

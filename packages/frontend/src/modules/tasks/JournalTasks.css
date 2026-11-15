@@ -1,0 +1,12 @@
+.journal-task { display: flex; align-items: center; gap: 8px; min-height: 44px; flex-wrap: wrap; }
+.journal-task-check { width: 44px; height: 44px; flex: none; border: 0; background: transparent; cursor: pointer; position: relative; padding: 0; }
+.journal-task-check::before { content: ""; position: absolute; inset: 12px; border: 2px solid var(--ac-muted); border-radius: var(--ac-radius-full); }
+.journal-task.is-done .journal-task-check::before { background: var(--ac-accent); border-color: var(--ac-accent); }
+.journal-task.is-done .journal-task-title { text-decoration: line-through; color: var(--ac-muted); }
+.journal-task-text { flex: 1 1 8rem; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; }
+button.journal-task-text { cursor: pointer; }
+.journal-task-detail { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.journal-task-title { min-width: 0; overflow-wrap: anywhere; }
+.journal-task-tonight { padding: 1px 8px; border-radius: var(--ac-radius-full); font-size: var(--onden-text-sm, 12px); color: var(--ac-hl-purple); border: 1px solid currentColor; }
+.journal-task-actions { display: flex; gap: 6px; margin-left: auto; }
+.journal-tasks-list { list-style: none; margin: 0; padding: 0; }

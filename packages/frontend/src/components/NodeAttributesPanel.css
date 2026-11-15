@@ -1,0 +1,358 @@
+/* NodeAttributesPanel — colocated CSS for inline-style migration. */
+
+.attr-panel-section-label.attr-panel-section-label--colored {
+  color: var(--tag-color, var(--ac-ink));
+}
+
+/* Attribute panel + cell editors — node-level attribute UI.
+ * Extracted from global.css 2026-06-04 (Pass 1 / batch 2.2).
+ * Consumers: NodeAttributesPanel.tsx + attributes/*.tsx cell editors.
+ */
+
+.attr-relation-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attr-relation-clear {
+  font-size: var(--ac-fs-xs);
+  padding: 2px 6px;
+  border: 1px solid var(--ac-line);
+  background: transparent;
+  color: var(--ac-muted);
+  border-radius: var(--ac-radius-sm);
+  cursor: pointer;
+  align-self: flex-start;
+}
+.attr-relation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-bg);
+}
+.attr-relation-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.attr-relation-option:hover { background: var(--ac-overlay-hover); }
+.attr-media-editor {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.attr-media-editor .attr-input { flex: 1; }
+.attr-media-upload {
+  padding: 4px 8px;
+  border: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+  border-radius: var(--ac-radius-sm);
+  cursor: pointer;
+  font-size: var(--ac-fs-caption);
+}
+.attr-media-upload:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.attr-media-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+.attr-multi-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attr-multi-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.attr-multi-slot {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 0 1fr;
+}
+.attr-multi-slot .attr-key { display: none; }
+.attr-multi-remove {
+  border: none;
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--ac-radius-sm);
+}
+.attr-multi-remove:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+.attr-multi-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px dashed var(--ac-line);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  border-radius: var(--ac-radius-sm);
+  cursor: pointer;
+}
+.attr-multi-add:hover {
+  background: var(--ac-overlay-hover);
+  color: var(--ac-ink);
+}
+.attr-multi-empty {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+.attr-panel-inherited {
+  border-top: 1px dashed var(--ac-line);
+  padding-top: 8px;
+}
+.attr-row--inherited {
+  opacity: 0.85;
+}
+.attr-value--inherited {
+  font-style: italic;
+  color: var(--ac-muted);
+}
+.attr-inherited-source {
+  font-style: normal;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+.attr-panel-rollup {
+  border-top: 1px dashed var(--ac-line);
+  padding-top: 8px;
+}
+.attr-row--rollup .attr-key {
+  font-weight: 500;
+}
+.attr-value--rollup {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  color: var(--ac-ink);
+  font-weight: 600;
+}
+.attr-panel {
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: var(--ac-raised);
+  font-size: var(--ac-fs-caption);
+}
+.attr-panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ac-muted);
+}
+.attr-panel-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ac-line);
+}
+.attr-panel-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.attr-panel-section-label {
+  font-size: var(--ac-fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ac-muted);
+  margin: 0 0 6px;
+  display: block;
+}
+.attr-panel-loading,
+.attr-panel-empty {
+  color: var(--ac-muted);
+  font-style: var(--ac-hint-style);
+  font-size: var(--ac-fs-xs);
+}
+.attr-panel-error {
+  color: var(--ac-danger);
+  background: var(--ac-danger-soft);
+  padding: 4px 8px;
+  border-radius: var(--ac-radius-sm);
+  font-size: var(--ac-fs-xs);
+  margin: 6px 0 0;
+}
+/* Why the add button is off: the typed name is outside the key grammar. */
+.attr-panel-hint {
+  color: var(--ac-danger);
+  font-size: var(--ac-fs-xs);
+  margin: 4px 0 0;
+}
+.attr-panel-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attr-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px 12px auto;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--ac-fs-caption);
+  padding: 3px 6px;
+  border-radius: var(--ac-radius-sm);
+}
+.attr-row--derived {
+  opacity: 0.85;
+  background: var(--ac-overlay-subtle);
+}
+.attr-key { font-weight: 500; color: var(--ac-ink); }
+
+.attr-value {
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ac-ink);
+  padding: 2px 4px;
+  border-radius: var(--ac-radius-xs);
+}
+.attr-value:hover { background: var(--ac-overlay-hover); }
+.attr-value--clickable { cursor: pointer; }
+.attr-type { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.attr-delete-btn,
+.attr-save-btn,
+.attr-cancel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+}
+.attr-delete-btn:hover,
+.attr-cancel-btn:hover { color: var(--ac-danger); }
+.attr-save-btn:hover { color: var(--ac-accent-hover); }
+.attr-input {
+  font-size: var(--ac-fs-xs);
+  padding: 3px 6px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-xs);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+}
+.attr-input:focus {
+  outline: none;
+  border-color: var(--ac-focus);
+}
+.attr-inheritable-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+.attr-inheritable-toggle input { margin: 0; }
+.attr-add-btn {
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  border: none;
+  border-radius: var(--ac-radius-xs);
+  padding: 3px 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.attr-add-btn:hover { background: var(--ac-accent-hover); }
+.attr-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
+/* ── Field rows: name above, value below, one per line ─────────────────────
+ * The controls are the values themselves (no press-to-edit step). */
+.attr-row:not(.attr-row--custom):not(.attr-row--rollup):not(.attr-row--inherited) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 0;
+  border-radius: 0;
+}
+.attr-row:not(.attr-row--custom) > .attr-key {
+  font-size: var(--ac-fs-xs);
+  font-weight: 400;
+  color: var(--ac-muted);
+}
+.attr-row .attr-input--direct {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  border-color: transparent;
+  background: var(--ac-overlay-subtle);
+  font-size: var(--ac-fs-caption);
+}
+.attr-row .attr-input--direct:hover { border-color: var(--ac-line); }
+.attr-row .attr-input--direct:focus { border-color: var(--ac-focus); }
+.attr-row input[type="number"].attr-input--direct { width: 8em; }
+.attr-row .attr-input--direct::placeholder { color: var(--ac-muted); }
+.attr-fill { color: var(--ac-muted); font-style: normal; }
+
+/* Option chips; the chosen one has the theme-colour frame. */
+.attr-choices, .attr-date-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.attr-choice {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.attr-choice:hover { background: var(--ac-overlay-hover); }
+.attr-choice--on { border-color: var(--ac-accent); border-width: 2px; font-weight: 600; }
+.attr-choice--add { border-style: dashed; color: var(--ac-muted); }
+
+/* A date: the day, then its quick picks. */
+.attr-date { display: flex; flex-direction: column; gap: 6px; }
+.attr-date-value {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0 10px;
+  text-align: left;
+  background: var(--ac-overlay-subtle);
+  border-color: transparent;
+  cursor: pointer;
+}
+
+/* A linked note: a pill that opens it, and 「換一則」. */
+.attr-relation-linked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.attr-linked-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-overlay-subtle);
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+  overflow-wrap: anywhere;
+}
+button.attr-linked-note { cursor: pointer; }
+button.attr-linked-note:hover { background: var(--ac-overlay-hover); }
+.attr-relation-change {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.attr-relation-change:hover { color: var(--ac-ink); text-decoration: underline; }
+
+@media (max-width: 900px) {
+  .attr-choice, .attr-linked-note, .attr-relation-change, .attr-date-value, .attr-row .attr-input--direct { min-height: 44px; }
+}

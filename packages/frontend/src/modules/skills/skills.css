@@ -1,0 +1,40 @@
+.shell-dialog.skill-run { width: min(640px, calc(100vw - 32px)); }
+.skill-run-title { margin: 0 0 12px; font-size: var(--ac-fs-lg); }
+.skill-run-name { font-weight: 600; }
+.skill-run-hint { color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.skill-run-result {
+  white-space: pre-wrap; word-break: break-word; font: inherit; margin: 8px 0; padding: 10px;
+  max-height: 50vh; overflow: auto; border-radius: var(--ac-radius-md); background: var(--ac-raised);
+}
+.skill-run-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.skill-import-field { display: grid; gap: 4px; font-size: var(--ac-fs-caption); }
+.skill-import-text { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; color: inherit; font: inherit; font-family: var(--onden-font-mono, monospace); resize: vertical; }
+.skill-new-form { display: grid; gap: 12px; }
+.skill-new-input { width: 100%; box-sizing: border-box; min-height: 36px; padding: 6px 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; color: inherit; font: inherit; }
+.skill-new-instructions { font-family: inherit; }
+.skill-new-output { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; border: 0; font-size: var(--ac-fs-caption); }
+.skill-new-output legend { padding: 0; margin-bottom: 4px; }
+.skill-new-choice { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The skill's fields in the info panel (under 「當成技能」) */
+.skill-fields { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 0 26px; }
+.skill-field { display: flex; flex-direction: column; gap: 4px; }
+.skill-field--switch { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.skill-field-text { display: flex; flex-direction: column; min-width: 0; }
+.skill-field-label { font-size: var(--onden-text-sm, 12px); font-weight: 600; }
+.skill-field-hint { color: var(--ac-muted); font-size: var(--onden-text-sm, 12px); }
+.skill-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.skill-tag-item { gap: 2px; }
+
+/* Settings › Features › Skills, and a tag page's 「用到的技能」 */
+.skills-page { display: flex; flex-direction: column; gap: 8px; }
+.skills-page-lead, .skills-page-note { margin: 0; color: var(--ac-muted); }
+.skills-page-heading { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; font-size: var(--onden-text-sm, 12px); font-weight: 600; color: var(--ac-muted); }
+.skills-page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.skills-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.skills-row { display: flex; align-items: center; gap: 10px; min-height: 48px; border-bottom: 1px solid var(--ac-line); }
+.skills-row-main { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; }
+.skills-row-name { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.skills-row-sub { color: var(--ac-muted); font-size: var(--onden-text-sm, 12px); }
+.skills-row-main.ui-btn { padding: 8px 0; border-color: transparent; background: transparent; white-space: normal; gap: 0; }
+.skill-tag-item .ui-btn { min-height: 0; padding: 0 2px; border-color: transparent; background: transparent; }

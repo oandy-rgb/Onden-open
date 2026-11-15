@@ -1,0 +1,18 @@
+{
+  "_format": "onden.tagpack/v1",
+  "name": "review",
+  "color": "#6a7fb0",
+  "description": "This starter enables Review on its tag. Apply that tag to a note to add it to the study queue; its name can change without losing the function. Grade your recall (Again / Hard / Good / Easy) to schedule the next review. Write a Q:/A: block, or extract cards from a lecture that carries a review-enabled tag.",
+  "version": "1.0.0",
+  "fields": [],
+  "publish_collection": false,
+  "behaviour": {
+    "modules": { "review": { "enabled": true } },
+    "review": {
+      "request_retention": 0.9,
+      "maximum_interval_days": 365,
+      "new_per_day": 15
+    }
+  },
+  "modules": ["review"]
+}

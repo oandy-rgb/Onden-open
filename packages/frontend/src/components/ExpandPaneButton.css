@@ -1,0 +1,10 @@
+/* 「放大」: a pane (PDF page, handwriting page) fills the app window, above the
+   side panels and top bar, below dialogs and menus. In-app, not the browser's
+   Fullscreen API, so it survives leaving the note and coming back
+   (hooks/useExpandedPane). The pane's own CSS only adds what is specific to it. */
+.pane--expanded {
+  z-index: var(--z-pane-expand);
+  height: 100dvh;
+  box-sizing: border-box;
+  background: var(--ac-surface);
+}

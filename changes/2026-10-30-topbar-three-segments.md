@@ -1,0 +1,5 @@
+---
+date: 2026-10-30
+zh-TW: 電腦版最上面一列改成三段，對齊下面的側欄、中間和資訊欄；右上角新增一組「左｜右」開關，可以只收起筆記列表，或只收起資訊欄（快捷鍵 Ctrl+Shift+B）。把側欄的邊拖到最窄再多拖一點，放開就會收起。「上一頁／下一頁」按鈕拿掉了，點連結跳到另一篇後，瀏覽器的上一頁、滑鼠側鍵或 Alt+← 都能回到原來那篇（從任務或時間軸點進筆記也是，上一頁會回到原本那一頁）。收起筆記列表後，資訊欄可以拉得更寬；Ctrl+. 與頂列的開關現在行為一致。設定與同步狀態收進點頭像開的視窗，同步有問題時頭像上會有小標記。
+en: On a computer the top row is now three segments lined up with the sidebar, the middle and the info panel. A left | right switch at the top right folds just the notes list or just the info panel (Ctrl+Shift+B), and dragging a side panel's edge past its narrowest width folds it. The previous / next buttons are gone — after following a link, the browser's Back, a mouse side button or Alt+← returns to the earlier note (from Tasks or Timeline too, Back returns to that page). With the notes list folded, the info panel can be dragged wider, and Ctrl+. now behaves like the top-bar switch. Settings and the sync status moved into the account window, and the avatar shows a small mark when syncing needs attention.
+---

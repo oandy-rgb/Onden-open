@@ -1,0 +1,75 @@
+/* The AI conversation (NoteAiConversation.tsx), in the info panel's tab and in the phone's bottom panel.
+   The thread scrolls above; the chips and the box stay at the bottom. Quiet like the other tabs: type and
+   space, no boxes except the input. */
+.note-ai { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.note-ai-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
+.note-ai-line { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.note-ai-who { max-width: 100%; font-size: var(--ac-fs-caption); }
+.note-ai-blocked { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.note-ai-blocked p { margin: 0; }
+.note-ai-quiet { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.note-ai-thread { display: flex; flex-direction: column; gap: 20px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.note-ai-intro { display: flex; flex-direction: column; gap: 12px; margin-block: auto; }
+.note-ai-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.note-ai-turn { display: flex; flex-direction: column; gap: 8px; }
+.note-ai-question { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
+.note-ai-scope { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.note-ai-answer { display: flex; flex-direction: column; gap: 6px; }
+.note-ai-text.obsidian-preview { flex: none; min-height: 0; padding: 0; overflow: visible; }
+.note-ai-text h1, .note-ai-text h2, .note-ai-text h3 { font-size: var(--ac-fs-ui); margin-bottom: 6px; }
+.note-ai-text { min-width: 0; font-size: var(--ac-fs-small); line-height: 1.6; overflow-wrap: anywhere; }
+.note-ai-text > :first-child { margin-top: 0; }
+.note-ai-text > :last-child { margin-bottom: 0; }
+.note-ai-step { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.note-ai-step--stuck { color: var(--ac-ink); }
+.note-ai-failed { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-danger); }
+.note-ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.note-ai-sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: var(--ac-fs-caption); }
+.note-ai-sources-label { color: var(--ac-muted); }
+.note-ai-sources ul { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
+.note-ai-source { color: var(--ac-accent); text-align: left; overflow-wrap: anywhere; }
+.note-ai-source:hover { text-decoration: underline; }
+.note-ai-source-block { margin-left: 4px; color: var(--ac-muted); }
+.note-ai-proposed { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; font-size: var(--ac-fs-caption); color: var(--ac-ink); }
+
+.note-ai-composer { flex-shrink: 0; padding: 4px 0 calc(4px + env(safe-area-inset-bottom, 0px)); background: inherit; }
+.note-ai-box { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.note-ai-scope-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.note-ai-scope-item { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.note-ai-scope-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-ai-scope-x { display: inline-flex; align-items: center; padding: 2px; border-radius: var(--ac-radius-lg); }
+.note-ai-compose { position: relative; display: flex; }
+.note-ai-input {
+  width: 100%; box-sizing: border-box; resize: none; overflow-y: auto; min-height: 40px;
+  padding: 9px 48px 9px 12px; font: inherit; font-size: var(--ac-fs-small); line-height: 1.5;
+}
+.note-ai-send { position: absolute; right: 4px; bottom: 4px; width: 32px; height: 32px; min-width: 0; border-radius: var(--ac-radius-full); }
+.note-ai-send:not(:disabled) { background: var(--ac-accent); color: var(--ac-accent-ink); }
+.note-ai-send:not(:disabled):hover { background: var(--ac-accent); filter: brightness(1.08); }
+.note-ai-send:disabled { background: var(--ac-overlay-hover); color: var(--ac-faint); }
+/* A finger needs 44px at phone widths whatever the pointer reports. */
+@media (max-width: 900px) {
+  .note-ai-input { min-height: 44px; padding-right: 52px; }
+  .note-ai-send { width: 44px; height: 44px; min-width: 44px; right: 0; bottom: 0; }
+}
+.note-ai-pick { position: absolute; left: 0; right: 0; bottom: 100%; z-index: var(--z-local-1); max-height: 220px; overflow-y: auto; margin: 0 0 4px; padding: 4px; list-style: none; background: var(--ac-bg); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+.note-ai-pick-row { display: flex; gap: 8px; width: 100%; padding: 6px 8px; text-align: left; font-size: var(--ac-fs-small); }
+.note-ai-pick-row:hover { background: var(--ac-hover); }
+.note-ai-pick-kind { flex: none; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.note-ai-pick-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The desktop frame: the AI tab fills the info panel (the thread scrolls, the box stays at the bottom). */
+.info-panel--ai { display: flex; flex-direction: column; overflow: hidden; }
+.info-panel--ai > .info-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 12px; }
+/* The phone frame's panel: the conversation fills the sheet's body under its header. */
+.phone-ai-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 16px; }
+.phone-ai-bar { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font-size: var(--ac-fs-small); }
+.phone-ai-bar-open { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 44px; text-align: left; color: var(--ac-ink); }
+.phone-ai-bar-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-ai-bar-text--quiet { color: var(--ac-muted); }
+.phone-ai-bar-icon { flex: none; color: var(--ac-accent); }
+.phone-ai-bar[data-pending="true"] .phone-ai-bar-icon { animation: phone-ai-pulse 1.4s ease-in-out infinite; }
+@keyframes phone-ai-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .phone-ai-bar[data-pending="true"] .phone-ai-bar-icon { animation: none; } }

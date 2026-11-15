@@ -1,0 +1,37 @@
+/* ConfirmDialog — shared in-app confirm()/alert() replacement: the card.
+ * Sized for a one-question decision; opened from inside other modals
+ * (Settings, imports), which is why it must sit above every layer (GAP-264). */
+/* The layer and backdrop are ui/Modal (native top layer), so it always sits above
+   the modal that opened it. */
+
+.confirm-dialog {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  width: min(440px, 95vw);
+  padding: 16px;
+  box-shadow: var(--ac-shadow-modal);
+}
+
+.confirm-dialog-title {
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+  color: var(--ac-ink);
+  margin: 0 0 8px;
+}
+
+.confirm-dialog-message {
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  line-height: 1.5;
+  margin: 0;
+  word-break: break-word;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+

@@ -1,0 +1,68 @@
+{
+  "comment": "Heading-anchor parity (audit D62): CJK, Devanagari, duplicates (GitHub's -1, -2), a `{…}` on a heading (an `^id` is no mark any more: it would be heading text), a [[link]], headings in a quote and a list, a setext heading, and heading-like lines in code, math and a hidden `key:: value` setext. headingAnchors, the renderer's h1–h6 ids (frontend MarkdownRenderer app/published, backend md2html) and the published TOC must agree on it. `{#custom}` ids are not a syntax Onden has: a trailing `{…}` is a block node's tags.",
+  "markdown": "headingAnchors.md",
+  "anchors": [
+    {
+      "depth": 1,
+      "text": "筆記標題",
+      "id": "筆記標題"
+    },
+    {
+      "depth": 2,
+      "text": "目標",
+      "id": "目標"
+    },
+    {
+      "depth": 2,
+      "text": "Goals",
+      "id": "goals"
+    },
+    {
+      "depth": 2,
+      "text": "Goals",
+      "id": "goals-1"
+    },
+    {
+      "depth": 2,
+      "text": "Goals-1",
+      "id": "goals-1-1"
+    },
+    {
+      "depth": 3,
+      "text": "code and bold 別名",
+      "id": "code-and-bold-別名"
+    },
+    {
+      "depth": 2,
+      "text": "引用裡的標題",
+      "id": "引用裡的標題"
+    },
+    {
+      "depth": 2,
+      "text": "清單裡",
+      "id": "清單裡"
+    },
+    {
+      "depth": 2,
+      "text": "Setext 標題",
+      "id": "setext-標題"
+    },
+    {
+      "depth": 2,
+      "text": "हिंदी",
+      "id": "हिंदी"
+    },
+    {
+      "depth": 2,
+      "text": "!!!",
+      "id": "heading"
+    }
+  ],
+  "notHeadings": [
+    "comment in a fence",
+    "comment in a tilde fence",
+    "indented code",
+    "not a heading (math)",
+    "status:: done"
+  ]
+}

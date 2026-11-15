@@ -1,0 +1,108 @@
+---
+import AppRoot from "../AppRoot";
+import AppHead from "../appShell/AppHead.astro";
+import { THEME_COLORS } from "../settings/themeColor";
+import "../styles/global.css";
+// Stylesheets the app shares with the public site's pages are imported here
+// too, not only by the components that use them: when both import a sheet,
+// the build moves it into a shared CSS chunk that this page never linked, and
+// the app silently lost the sidebar, rendered Markdown and collection view
+// styles. scripts/check-app-css.mjs fails the build if it happens again.
+import "../styles/sidebar.css";
+import "../styles/calloutColors.css";
+import "../components/MarkdownRenderer.css";
+import "../components/views/BaseRenderer.css";
+import "../components/OndenQueryBlock.css";
+// The sheets of what renders before the workspace chunk loads (error boundary,
+// server setup). Without these the build leaves them in a CSS chunk linked only
+// through the lazy workspace's preload list, so they would be missing exactly
+// when the workspace has not loaded (the sign-in page).
+import "../components/AppErrorBoundary.css";
+import "../components/ServerSetup.css";
+---
+
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <AppHead />
+    <script is:inline define:vars={{ themeColors: THEME_COLORS }}>
+      // No-FOUC: resolve the persisted theme and set data-theme + theme-color
+      // BEFORE the React bundle loads, so there is no light flash on a dark
+      // workspace. Mirrors settings/registry.tsx applyThemeMode(); the colours
+      // come from settings/themeColor.ts (define:vars), the one source both use.
+      (function () {
+        try {
+          var mode = localStorage.getItem("theme");
+          if (mode !== "light" && mode !== "dark") mode = "system";
+          var dark =
+            mode === "dark" ||
+            (mode === "system" &&
+              typeof window.matchMedia === "function" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var resolved = dark ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", resolved);
+          var color = themeColors[resolved];
+          // The colours the user chose (lib/appColors.ts stores them with the page colour
+          // of each theme); the formula that made them is not loaded here.
+          try {
+            var chosen = JSON.parse(localStorage.getItem("theme.colors"));
+            if (chosen && typeof chosen.css === "string" && chosen.bg && /^#[0-9a-f]{6}$/i.test(chosen.bg[resolved])) {
+              var style = document.createElement("style");
+              style.id = "onden-colors";
+              style.textContent = chosen.css;
+              document.head.appendChild(style);
+              color = chosen.bg[resolved];
+            }
+          } catch (e) {
+            /* no choice stored, or an unreadable one: tokens.css's colours stand */
+          }
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", color);
+        } catch (e) {
+          /* localStorage/matchMedia unavailable — fall back to the static light default */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app-initial-loading">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" opacity="0.25"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2.5"/>
+      </svg>
+      <span>Onden</span>
+    </div>
+    <AppRoot client:only="react" />
+    <script>
+      // The app's faces (Noto Serif TC / Noto Sans TC slices from npm
+      // @fontsource-variable/*). The @font-face list is ~220 KB of
+      // unicode-range text and every face is font-display: swap, so it must
+      // not block rendering. A plain `import "…css"` here is hoisted by the
+      // build into a render-blocking <link> in <head> (measured 2026-10-21),
+      // and `?url` emits no file. `?inline` hands back the processed CSS text
+      // (the woff2 urls already point at the built /_astro/ slices), fetched as
+      // a script chunk after the page has loaded and added as a <style>. Only
+      // the app entries do this, never the public site's pages.
+      const addFonts = () => {
+        void import("../styles/fonts-noto.css?inline").then(({ default: css }) => {
+          const style = document.createElement("style");
+          style.dataset.onden = "fonts";
+          style.textContent = css;
+          document.head.appendChild(style);
+        }).catch(() => {});
+      };
+      if (document.readyState === "complete") addFonts();
+      else window.addEventListener("load", addFonts, { once: true });
+      import { rememberLoadedFiles } from "../lib/rememberLoadedFiles";
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js")
+            // Files loaded before the worker took over (a first visit):
+            // public/sw.js keeps the cacheable ones for offline use.
+            .then(rememberLoadedFiles)
+            .catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>

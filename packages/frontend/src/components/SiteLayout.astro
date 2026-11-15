@@ -1,0 +1,59 @@
+---
+// The frame every published /site page shares: <head>, the design's style
+// variables and CSS, the header and the foot (boxes of the design, drawn by
+// SiteFrames.tsx). The page body is the slot. The search is a small script over the
+// Pagefind index (SiteSearch.astro); there is no framework island.
+import { scopedCss, styleCss, usesLegacyHome } from "@onden/site";
+import "@onden/site/react/siteParts.css";
+import "../styles/global.css";
+import "../styles/input-font.css";
+import "./siteFrame/siteFrame.css";
+import { siteLang, type SiteHeadSite, type SiteHeadVariant } from "@onden/markdown";
+import SiteHead from "./SiteHead.astro";
+import SiteSearch from "./siteFrame/SiteSearch.astro";
+import SiteScheme from "./siteFrame/SiteScheme.astro";
+import { publicOrigin } from "../lib/siteOrigin";
+import { shareImageUrl } from "../lib/siteShareImage";
+import SiteCopyCode from "./siteFrame/SiteCopyCode.astro";
+import SiteDiagrams from "./siteFrame/SiteDiagrams.astro";
+import SiteSteps from "./siteFrame/SiteSteps.astro";
+import { SiteFoot, SiteHeader, usesDiagrams, usesStepsBlocks, type SiteData } from "./siteFrame";
+
+interface Props {
+  data: SiteData;
+  pageTitle: string;
+  description?: string;
+  canonical: string;
+  variant: SiteHeadVariant;
+  /** The shared-link picture of this page (absolute address); without one the site's logo, when it has one. */
+  image?: { url: string; alt?: string };
+}
+
+const { data, pageTitle, description, canonical, variant } = Astro.props;
+const site = data.site;
+const brand = site.brand ?? data.title;
+const logoUrl = shareImageUrl(typeof site.logo === "string" ? site.logo : undefined, publicOrigin(Astro.url));
+const image = Astro.props.image ?? (logoUrl ? { url: logoUrl, alt: brand } : undefined);
+const hasHeader = data.design.boxes.header !== null;
+---
+
+<html class="onden-site" lang={siteLang(typeof site.locale === "string" ? site.locale : undefined)}>
+  <head>
+    <SiteHead site={site as SiteHeadSite} pageTitle={pageTitle} description={description} canonical={canonical} variant={variant} image={image} />
+    {hasHeader && <link rel="x-site-search" href="/site/search.idx/" />}
+    <style is:inline set:html={styleCss(data.design.style, "html.onden-site, .site-scope")} />
+  </head>
+  <body>
+    <div class="site-scope">
+      <style is:inline set:html={scopedCss(data.design.css, usesLegacyHome(data.design) ? data.design.legacy_home : null)} />
+      <SiteHeader data={data} />
+      <main class="s-frame-main"><slot /></main>
+      <SiteFoot data={data} />
+    </div>
+    <SiteSearch />
+    <SiteScheme />
+    {usesDiagrams(data.nodes, data.diagrams) && <SiteDiagrams />}
+    {usesStepsBlocks(data.nodes) && <SiteSteps />}
+    <SiteCopyCode />
+  </body>
+</html>

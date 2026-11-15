@@ -1,0 +1,44 @@
+{
+  "differences": {
+    "browser-module-external-calendars-off": {
+      "step": "全部狀態（連結、屬性、標籤）", "host": "browser", "paths": [".modules.external_calendars"],
+      "reason": "瀏覽器版預設關掉外部行事曆（需要網路，抓取迴圈在試用版不啟動）。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-external-calendars-unavailable": {
+      "step": "外部行事曆：清單", "host": "browser", "paths": [".available"],
+      "reason": "清單端點仍回 200，但 available 為 false：沒有網路抓取，也沒有金鑰加密網址。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-no-ai-key-storage": {
+      "step": "AI：金鑰能不能存放（ONDEN_SECRET_KEY）", "host": "browser", "paths": [".api_runtime_offered"],
+      "reason": "瀏覽器版沒有 ONDEN_SECRET_KEY，AES 加密（createCipheriv）不提供，所以不提供 API 金鑰存放。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-no-push": {
+      "step": "推播：公開金鑰", "host": "browser", "paths": ["status", ".error", ".detail"],
+      "reason": "/api/push 在瀏覽器版由 unavailable.ts 先回 501 browser_app_unavailable；伺服器版沒設定推播金鑰時回 404 push_not_configured。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-no-bookmark-title": {
+      "step": "稍後閱讀：抓網頁標題", "host": "browser", "paths": ["status", ".title", ".error", ".detail"],
+      "reason": "瀏覽器不能跨網域讀別人的頁面（CORS），/api/bookmark 回 501 browser_app_unavailable。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-extras-modules-off": {
+      "step": "下載完整備份", "host": "browser", "paths": [".entries..onden/extras.json.modules"],
+      "reason": "備份的 extras.json 記著「關掉的模組」：瀏覽器版的快照預設關掉引用、技能、外部行事曆（modules_off 三項），伺服器版與桌面版沒有。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-extras-modules-off-restore-source": {
+      "step": "備份：下載完整備份（還原用）", "host": "browser", "paths": [".entries..onden/extras.json.modules"],
+      "reason": "同上（browser-extras-modules-off），出現在還原用的第二次備份下載。",
+      "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
+    },
+    "browser-revoked-token-falls-back-to-local-owner": {
+      "step": "權杖：撤銷後再用（拒絕）", "host": "browser", "paths": ["status", ".status", ".error", ".ok", ".result", ".title"],
+      "reason": "瀏覽器版 worker 替每個請求補本機登入的 cookie（只有一個人）；Bearer 權杖認不得（撤銷、偽造）時依既有順序退回登入身分＝本機擁有者，所以回 200 而不是 401。伺服器版與桌面版這一步劇本不帶 cookie（權杖本來是另一個身分）才看到 401。瀏覽器版沒有對外的網址，拿得到權杖的只有頁面自己。",
+      "doc": "docs/architecture/browser-app.md#2-fetch-橋為什麼放在頁面的-fetch不用-service-worker"
+    }
+  }
+}

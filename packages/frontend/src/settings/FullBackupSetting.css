@@ -1,0 +1,35 @@
+/* Settings › 你的資料 › 從備份還原 (FullBackupSetting.tsx). */
+.settings-backup-modes {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.settings-backup-modes label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.settings-backup-counts,
+.settings-backup-list {
+  margin: 4px 0;
+  padding-left: 1.2em;
+}
+.settings-backup-progress {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+.settings-backup-progress progress {
+  width: 100%;
+}
+.settings-backup-history {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.settings-backup-history > span {
+  display: grid;
+  gap: 2px;
+}

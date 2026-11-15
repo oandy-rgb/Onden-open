@@ -1,0 +1,25 @@
+/* History › 永久刪除 confirmation. The card and footer are ConfirmDialog's. */
+.purge-dialog { width: min(480px, calc(100vw - 32px)); max-height: min(80vh, 640px); overflow-y: auto; }
+.purge-dialog-warning {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin: 0 0 12px; padding: 8px 10px; border-radius: var(--ac-radius-md);
+  background: var(--ac-danger-soft); color: var(--ac-danger);
+  font-size: var(--ac-fs-small); line-height: 1.5;
+}
+.purge-dialog-warning svg { flex: none; margin-top: 3px; }
+.purge-dialog-section { margin: 0 0 10px; font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.purge-dialog-section p { margin: 0 0 4px; }
+.purge-dialog-list { margin: 0; padding-left: 20px; font-size: var(--ac-fs-small); line-height: 1.6; word-break: break-word; }
+.purge-dialog-note { margin: 0 0 8px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.purge-dialog-confirm { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.purge-dialog-confirm input {
+  font: inherit; padding: 6px 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-surface); color: var(--ac-ink);
+}
+
+/* Settings › Spaces › delete: the two choices for a space's deleted notes. */
+.space-delete-choices { border: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.space-delete-choices label { display: flex; gap: 8px; align-items: flex-start; font-size: var(--ac-fs-small); color: var(--ac-ink); cursor: pointer; }
+.space-delete-choices input { margin-top: 3px; }
+.space-delete-choices span { display: flex; flex-direction: column; gap: 2px; }
+.space-delete-choices small { color: var(--ac-muted); font-size: var(--ac-fs-caption); line-height: 1.4; }

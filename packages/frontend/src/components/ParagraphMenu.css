@@ -1,0 +1,60 @@
+/* The paragraph tools' panels (ParagraphMenu.tsx): the tag panel and the AI panel open above
+   the phone bar or below the bubble / handle; the menu rows reuse ui/Popover's. */
+.paragraph-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(280px, calc(100vw - 16px));
+}
+.paragraph-panel-list { display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; }
+.paragraph-tag-row .tag-color-dot { flex: 0 0 auto; }
+
+/* Why an entry can't run now, under its name. */
+.paragraph-menu-hint {
+  display: block;
+  margin-left: 8px;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  white-space: normal;
+}
+
+/* The desktop handle beside a paragraph (ParagraphHandle.tsx): absolutely
+   placed in .md-editor-wrap, left of the text, so it takes no room and never
+   covers typing. Faint until the pointer is on it. */
+.md-paragraph-handle {
+  position: absolute;
+  top: var(--handle-top);
+  left: var(--handle-left);
+  z-index: var(--z-local-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.12s, background-color 0.12s;
+}
+.md-paragraph-handle:hover,
+.md-paragraph-handle:focus-visible,
+.md-paragraph-handle[aria-expanded="true"] { opacity: 1; background: var(--ac-overlay-hover); }
+@media (prefers-reduced-motion: reduce) { .md-paragraph-handle { transition: none; } }
+
+/* The tag panel's function rows and example card (ParagraphMenu.tsx). */
+.paragraph-panel-heading { padding: 6px 8px 2px; font-size: var(--ac-fs-caption); color: var(--ac-faint); }
+.paragraph-fn-row { display: flex; align-items: center; gap: 10px; min-height: 44px; text-align: left; }
+.paragraph-fn-row > svg { flex: none; }
+.paragraph-fn-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.paragraph-fn-desc { font-size: var(--ac-fs-caption); color: var(--ac-faint); white-space: normal; }
+.paragraph-fn-off { margin-left: 6px; font-size: var(--ac-fs-caption); color: var(--ac-faint); }
+.paragraph-panel-quiet { align-self: flex-start; min-height: 44px; color: var(--ac-faint); }
+.paragraph-example-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.paragraph-example-text { margin: 0; font-size: var(--ac-fs-ui); }
+.paragraph-example-sample { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); }
+.paragraph-example-sample-title { font-size: var(--ac-fs-ui); }
+.paragraph-example-actions { display: flex; justify-content: flex-end; gap: 8px; }

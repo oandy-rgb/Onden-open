@@ -1,0 +1,22 @@
+{
+ "empty-object": "{}",
+ "null": "null",
+ "wire-only": "{\"wire\":2}",
+ "wire-no-dict": "{\"wire\":2,\"nodes\":[],\"workspace\":{\"id\":\"w\"}}",
+ "wire-version-1": "{\"wire\":1,\"dict\":[],\"nodes\":[],\"workspace\":{\"id\":\"w\"}}",
+ "wire-version-string": "{\"wire\":\"2\",\"dict\":[],\"nodes\":[],\"workspace\":{\"id\":\"w\"}}",
+ "dict-not-array": "{\"wire\":2,\"dict\":{\"0\":\"a\"},\"nodes\":[],\"workspace\":{\"id\":\"w\"}}",
+ "nodes-not-array": "{\"wire\":2,\"dict\":[],\"nodes\":{},\"workspace\":{\"id\":\"w\"}}",
+ "dict-index-out-of-range": "{\"wire\":2,\"dict\":[\"a\"],\"nodes\":[{\"id\":\"n1\",\"space_id\":7,\"last_actor\":-1,\"class_tag_ids\":[9,1.5,null]}],\"workspace\":{\"id\":\"w\"}}",
+ "dict-truncated": "{\"wire\":2,\"dict\":[\"a\"],\"nodes\":[{\"id\":\"n1\",\"class_tag_ids\":[0,1,2]}],\"attribute_groups\":[[0,[[0,\"v\",1,1,2]]]],\"workspace\":{\"id\":\"w\"}}",
+ "group-node-out-of-range": "{\"wire\":2,\"dict\":[\"k\"],\"nodes\":[],\"attribute_groups\":[[3,[[0,\"v\",null,null,null]]]],\"workspace\":{\"id\":\"w\"}}",
+ "group-not-array": "{\"wire\":2,\"dict\":[\"k\"],\"nodes\":[{\"id\":\"n\"}],\"attribute_groups\":{\"0\":1},\"workspace\":{\"id\":\"w\"}}",
+ "group-rows-short": "{\"wire\":2,\"dict\":[\"k\"],\"nodes\":[{\"id\":\"n\"}],\"attribute_groups\":[[0,[[0]]]],\"workspace\":{\"id\":\"w\"}}",
+ "no-workspace": "{\"wire\":2,\"dict\":[],\"nodes\":[]}",
+ "proto-keys": "{\"wire\":2,\"dict\":[],\"nodes\":[{\"id\":\"n\",\"__proto__\":{\"polluted\":1},\"constructor\":{\"prototype\":{\"polluted\":1}}}],\"workspace\":{\"id\":\"w\"}}",
+ "loose-attributes-not-array": "{\"wire\":2,\"dict\":[],\"nodes\":[],\"attributes\":5,\"workspace\":{\"id\":\"w\"}}",
+ "truncated-json": "{\"wire\":2,\"dict\":[\"a\",\"b\"],\"nodes\":[{\"id\":\"n1\",\"cla",
+ "huge-index": "{\"wire\":2,\"dict\":[\"a\"],\"nodes\":[{\"id\":\"n1\",\"space_id\":1e308}],\"workspace\":{\"id\":\"w\"}}",
+ "plain-bootstrap": "{\"workspace\":{\"id\":\"w\"},\"nodes\":[],\"attributes\":[]}",
+ "node-without-id": "{\"wire\":2,\"dict\":[],\"nodes\":[{\"title\":\"no id\"},{\"id\":5}],\"workspace\":{\"id\":\"w\"}}"
+}

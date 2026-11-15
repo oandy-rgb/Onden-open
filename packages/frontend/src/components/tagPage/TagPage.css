@@ -1,0 +1,52 @@
+/* The tag page's field and function rows (FieldChips, FunctionsRow) and the
+   field popover (FieldPopover). Breakpoints are the app's: 600 / 900 / 1280. */
+.tag-page-row { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: 8px 12px; align-items: start; margin: 0 0 10px; }
+.tag-page-row-label { padding-top: 8px; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.tag-page-items { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.tag-page-row .tag-promote { display: contents; }
+
+.tag-field-item, .tag-field-add, .tag-fn-entry {
+  display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: var(--ac-surface); color: var(--ac-ink);
+  font: inherit; font-size: var(--ac-fs-ui);
+}
+button.tag-field-item { cursor: grab; }
+button.tag-field-item:hover { background: var(--ac-overlay-hover); }
+.tag-field-item.is-dragging { opacity: 0.5; }
+.tag-field-item.is-over { border-color: var(--ac-accent); }
+.tag-field-item.is-clash { border-color: var(--ac-danger); }
+.tag-field-item.is-inherited { background: none; border-style: dashed; color: var(--ac-muted); }
+.tag-field-type { color: var(--ac-muted); font-size: var(--ac-fs-xs); }
+.tag-field-add { border-style: dashed; background: none; color: var(--ac-muted); cursor: pointer; }
+.tag-field-add:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+
+.tag-fn-entry { padding-right: 4px; background: var(--ac-accent-soft); color: var(--ac-accent); border-color: transparent; }
+.tag-fn-entry.is-dormant { background: none; border: 1px dashed var(--ac-line); color: var(--ac-muted); }
+.tag-fn-entry-note { color: var(--ac-muted); font-size: var(--ac-fs-xs); }
+.tag-fn-entry-remove {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: var(--ac-radius-full); background: none; color: inherit; cursor: pointer;
+}
+.tag-fn-entry-remove:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.tag-fn-entry .tag-function-quick { min-height: 36px; }
+.ui-popover.tag-fn-settings { width: min(360px, calc(100vw - 16px)); padding: 12px; }
+
+.ui-popover.tag-field-popover { display: flex; flex-direction: column; gap: 10px; width: min(320px, calc(100vw - 16px)); box-sizing: border-box; padding: 14px; }
+.tag-field-popover .schema-field-grid { grid-template-columns: minmax(0, 1fr); }
+.tag-field-popover-actions { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--ac-line); }
+.tag-field-popover-actions button { min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--ac-radius-md); background: none; color: inherit; font: inherit; cursor: pointer; }
+.tag-field-popover-delete { color: var(--ac-danger); }
+.tag-field-popover-done { background: var(--ac-accent) !important; color: var(--ac-accent-ink); }
+
+.tag-description.is-folded { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tag-description-fold { margin: -14px 0 14px; padding: 0 4px; min-height: 44px; border: 0; background: none; color: var(--ac-accent); font: inherit; font-size: var(--ac-fs-small); cursor: pointer; }
+.cv-table-th-edit { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; text-align: left; }
+.cv-table-th-edit:hover { text-decoration: underline; }
+
+@media (max-width: 600px) {
+  .tag-page-row { grid-template-columns: minmax(0, 1fr); }
+  /* Finger-sized: the chip's own buttons are smaller on wide screens. */
+  .tag-fn-entry .tag-function-quick { min-height: 44px; }
+  .tag-fn-entry-remove { width: 44px; height: 44px; }
+  .tag-page-row-label { padding-top: 0; }
+}

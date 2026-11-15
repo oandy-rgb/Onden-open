@@ -1,0 +1,163 @@
+{
+  "_comment": "Written by hand from the release's component source (see each scenario's `source`), not captured: these requests are built inside components the capture harness does not render. `npm run capture:client-writes` keeps this file.",
+  "scenarios": [
+    {
+      "name": "actor.invite a person by email",
+      "source": "packages/frontend/src/components/SideDrawers.tsx createActor @c93b93d4",
+      "expect": [
+        {
+          "actorNamed": {
+            "name": "Bob",
+            "type": "human"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/actors",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e01"
+          },
+          "body": {
+            "name": "Bob",
+            "type": "human",
+            "email": "bob@example.com"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "actor.add an AI helper",
+      "source": "packages/frontend/src/components/SideDrawers.tsx createActor @c93b93d4",
+      "expect": [
+        {
+          "actorNamed": {
+            "name": "Helper",
+            "type": "agent"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/actors",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e02"
+          },
+          "body": {
+            "name": "Helper",
+            "type": "agent"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "actor.remove a member",
+      "source": "packages/frontend/src/components/SideDrawers.tsx removeActor @c93b93d4",
+      "expect": [
+        {
+          "actorGone": "00000000-0000-4000-8000-000000000701"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/actors/00000000-0000-4000-8000-000000000701",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e04"
+          },
+          "body": null
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "token.mint read/write key",
+      "source": "packages/frontend/src/components/TokenManager.tsx mint @c93b93d4",
+      "expect": [
+        {
+          "tokenFor": {
+            "actor": "00000000-0000-4000-8000-000000000702",
+            "name": "reviewer"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/actors/00000000-0000-4000-8000-000000000702/tokens",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e05"
+          },
+          "body": {
+            "name": "reviewer",
+            "access": "read"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "token.re-scope a live token",
+      "source": "packages/frontend/src/components/TokenManager.tsx rescope @c93b93d4",
+      "expect": [
+        {
+          "tokenScopeAccepted": {
+            "actor": "00000000-0000-4000-8000-000000000702",
+            "token": "00000000-0000-4000-8000-000000000901"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/actors/00000000-0000-4000-8000-000000000702/tokens/00000000-0000-4000-8000-000000000901",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e06"
+          },
+          "body": {
+            "read_space_ids": [
+              "00000000-0000-4000-8000-000000000601"
+            ],
+            "write_space_ids": [
+              "00000000-0000-4000-8000-000000000601"
+            ]
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "token.revoke",
+      "source": "packages/frontend/src/components/TokenManager.tsx revoke @c93b93d4",
+      "expect": [
+        {
+          "tokenRevoked": {
+            "actor": "00000000-0000-4000-8000-000000000702",
+            "token": "00000000-0000-4000-8000-000000000901"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/actors/00000000-0000-4000-8000-000000000702/tokens/00000000-0000-4000-8000-000000000901/revoke",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000e07"
+          },
+          "body": "{}"
+        }
+      ],
+      "queued": []
+    }
+  ]
+}

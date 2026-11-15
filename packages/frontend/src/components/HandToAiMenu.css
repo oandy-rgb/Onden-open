@@ -1,0 +1,18 @@
+/* The 「交給 AI」 menu (HandToAiMenu.tsx) and the card that shows the answer coming in (HandToAiPreview.tsx). */
+.hand-ai-target { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 4px 12px; }
+.hand-ai-line { font-size: var(--onden-text-sm); color: var(--ac-muted); }
+.hand-ai-note { margin: 4px 12px; max-width: 260px; font-size: var(--onden-text-sm2); color: var(--ac-muted); white-space: normal; }
+.hand-ai-role { margin: 6px 12px 2px; font-size: var(--onden-text-sm); color: var(--ac-muted); }
+.hand-ai-hint { margin-left: 8px; font-size: var(--onden-text-sm); color: var(--ac-muted); }
+.hand-ai-custom { display: flex; flex-direction: column; gap: 6px; padding: 4px 8px; width: min(280px, calc(100vw - 32px)); }
+.hand-ai-buttons { display: flex; justify-content: flex-end; gap: 6px; }
+
+.hand-ai-card { display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100vw - 16px)); padding: 12px; }
+.hand-ai-card-head { display: flex; justify-content: space-between; gap: 8px; font-size: var(--onden-text-sm); color: var(--ac-muted); }
+.hand-ai-card-text {
+  max-height: 40vh; overflow-y: auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: inherit; font-size: var(--onden-text-sm2); color: var(--ac-ink);
+}
+.hand-ai-card-status { margin: 0; font-size: var(--onden-text-sm2); color: var(--ac-muted); }
+.hand-ai-card-status[data-tone="failed"] { color: var(--ac-danger); }
+.hand-ai-card-buttons { display: flex; justify-content: flex-end; gap: 6px; }

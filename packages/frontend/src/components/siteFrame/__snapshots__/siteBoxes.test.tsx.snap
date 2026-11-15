@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`every home page style, every temperament, light and dark > home page style garden draws 1`] = `"<div class="s-home s-home--boxes" data-frame="home"><div class="s-box s-box--home-hero" data-box="home.hero" data-fold="flow"><section class="s-w s-w--intro s-w--paragraph" data-widget="intro" data-variant="paragraph" data-box="home.hero" data-index="0"><div class="s-prose s-intro" data-note="home"><!--$--><p>我在這裡種花也寫字。第二句。</p><!--/$--></div></section></div><div class="s-box s-box--home-list" data-box="home.list" data-fold="flow"><section class="s-w s-w--topics s-w--list" data-widget="topics" data-variant="list" data-box="home.list" data-index="0"><h2 class="s-w__title">主題</h2><ul class="s-topics"><li><a href="/site/tag/garden/">花園</a><span class="s-count">2 篇</span></li></ul></section><section class="s-w s-w--all s-w--maturity" data-widget="all" data-variant="maturity" data-box="home.list" data-index="1"><h2 class="s-w__title">全部文章</h2><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><span class="s-maturity" data-level="1">幼苗</span><time class="s-date">更新於 2026-03-05</time></li><li><a href="/site/seed">播種</a><time class="s-date">更新於 2026-01-10</time></li><li><a href="/site/series">系列</a><time class="s-date">更新於 2026-01-02</time></li><li><a href="/site/guide">園藝入門</a><span class="s-maturity" data-level="3">常青</span><time class="s-date">更新於 2025-12-20</time></li></ul></section></div></div>"`;
+
+exports[`every home page style, every temperament, light and dark > home page style index draws 1`] = `"<div class="s-home s-home--boxes" data-frame="home"><div class="s-box s-box--home-hero" data-box="home.hero" data-fold="flow"><section class="s-w s-w--intro s-w--paragraph" data-widget="intro" data-variant="paragraph" data-box="home.hero" data-index="0"><div class="s-prose s-intro" data-note="home"><!--$--><p>我在這裡種花也寫字。第二句。</p><!--/$--></div></section></div><div class="s-box s-box--home-list" data-box="home.list" data-fold="flow"><section class="s-w s-w--topics s-w--list" data-widget="topics" data-variant="list" data-box="home.list" data-index="0"><h2 class="s-w__title">主題</h2><ul class="s-topics"><li><a href="/site/tag/garden/">花園</a><span class="s-count">2 篇</span></li></ul></section><section class="s-w s-w--all s-w--recent10" data-widget="all" data-variant="recent10" data-box="home.list" data-index="1"><h2 class="s-w__title">全部文章</h2><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><time class="s-date">更新於 2026-03-05</time></li><li><a href="/site/seed">播種</a><time class="s-date">更新於 2026-01-10</time></li><li><a href="/site/series">系列</a><time class="s-date">更新於 2026-01-02</time></li><li><a href="/site/guide">園藝入門</a><time class="s-date">更新於 2025-12-20</time></li></ul></section></div></div>"`;
+
+exports[`every home page style, every temperament, light and dark > home page style newsletter draws 1`] = `"<div class="s-home s-home--boxes" data-frame="home"><div class="s-box s-box--home-hero" data-box="home.hero" data-fold="flow"><section class="s-w s-w--subscribe s-w--rss" data-widget="subscribe" data-variant="rss" data-box="home.hero" data-index="0"><div class="s-subscribe"><h2 class="s-w__title">訂閱</h2><p>用任何 RSS 閱讀器追蹤新文章。</p><a class="s-button" href="/site/feed.xml">RSS 訂閱</a></div></section></div><div class="s-box s-box--home-list" data-box="home.list" data-fold="flow"><section class="s-w s-w--latest s-w--card" data-widget="latest" data-variant="card" data-box="home.list" data-index="0"><h2 class="s-w__title">最新一篇</h2><a class="s-latest" href="/site/compost"><span class="s-latest__title">堆肥</span><span class="s-latest__summary">落葉與廚餘，見 園藝入門。</span></a></section><section class="s-w s-w--featured s-w--list" data-widget="featured" data-variant="list" data-box="home.list" data-index="1"><h2 class="s-w__title">精選</h2><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><time class="s-date">更新於 2026-03-05</time></li></ul></section><section class="s-w s-w--all s-w--recent10" data-widget="all" data-variant="recent10" data-box="home.list" data-index="2"><h2 class="s-w__title">全部文章</h2><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><time class="s-date">更新於 2026-03-05</time></li><li><a href="/site/seed">播種</a><time class="s-date">更新於 2026-01-10</time></li><li><a href="/site/series">系列</a><time class="s-date">更新於 2026-01-02</time></li><li><a href="/site/guide">園藝入門</a><time class="s-date">更新於 2025-12-20</time></li></ul></section></div></div>"`;
+
+exports[`every home page style, every temperament, light and dark > home page style simple draws 1`] = `"<div class="s-home s-home--boxes" data-frame="home"><div class="s-box s-box--home-hero" data-box="home.hero" data-fold="flow"><section class="s-w s-w--intro s-w--paragraph" data-widget="intro" data-variant="paragraph" data-box="home.hero" data-index="0"><div class="s-prose s-intro" data-note="home"><!--$--><p>我在這裡種花也寫字。第二句。</p><!--/$--></div></section></div><div class="s-box s-box--home-list" data-box="home.list" data-fold="flow"><section class="s-w s-w--recent s-w--list" data-widget="recent" data-variant="list" data-box="home.list" data-index="0"><h2 class="s-w__title">最近更新</h2><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><time class="s-date">更新於 2026-03-05</time></li><li><a href="/site/seed">播種</a><time class="s-date">更新於 2026-01-10</time></li><li><a href="/site/series">系列</a><time class="s-date">更新於 2026-01-02</time></li><li><a href="/site/guide">園藝入門</a><time class="s-date">更新於 2025-12-20</time></li></ul></section><section class="s-w s-w--topics s-w--list" data-widget="topics" data-variant="list" data-box="home.list" data-index="1"><h2 class="s-w__title">主題</h2><ul class="s-topics"><li><a href="/site/tag/garden/">花園</a><span class="s-count">2 篇</span></li></ul></section><section class="s-w s-w--all s-w--byYear" data-widget="all" data-variant="byYear" data-box="home.list" data-index="2"><h2 class="s-w__title">全部文章</h2><div class="s-year"><h3 class="s-year__label">2026</h3><ul class="s-list s-list--notes"><li><a href="/site/compost">堆肥</a><time class="s-date" dateTime="2026-02-03">02-03</time></li><li><a href="/site/seed">播種</a><time class="s-date" dateTime="2026-02-03">02-03</time></li><li><a href="/site/series">系列</a><time class="s-date" dateTime="2026-02-03">02-03</time></li></ul></div><div class="s-year"><h3 class="s-year__label">2025</h3><ul class="s-list s-list--notes"><li><a href="/site/guide">園藝入門</a><time class="s-date" dateTime="2025-12-01">12-01</time></li></ul></div></section></div></div>"`;
+
+exports[`every home page style, every temperament, light and dark > temperament folio: type and colours, light and dark 1`] = `
+{
+  "base": "clamp(16px, 15.59px + 0.1136vw, 17px)",
+  "dark": {
+    "--s-bg": "#121514",
+    "--s-border": "#2d302f",
+    "--s-link": "#9ec8bc",
+    "--s-muted": "#bbbfbd",
+    "--s-text": "#e8eceb",
+  },
+  "font": ""Noto Sans TC Variable", "Noto Sans TC", "PingFang TC", "Source Han Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif",
+  "light": {
+    "--s-bg": "#f7fdfb",
+    "--s-border": "#d7dcda",
+    "--s-link": "#3c6e62",
+    "--s-muted": "#606463",
+    "--s-text": "#242726",
+  },
+  "measure": "36em",
+}
+`;
+
+exports[`every home page style, every temperament, light and dark > temperament hand: type and colours, light and dark 1`] = `
+{
+  "base": "clamp(17px, 16.59px + 0.1136vw, 18px)",
+  "dark": {
+    "--s-bg": "#0e1613",
+    "--s-border": "#28312f",
+    "--s-link": "#9ec8bc",
+    "--s-muted": "#b5c1bd",
+    "--s-text": "#e3eeeb",
+  },
+  "font": ""Kaiti TC", "BiauKai", "DFKai-SB", serif",
+  "light": {
+    "--s-bg": "#f3fffb",
+    "--s-border": "#d2deda",
+    "--s-link": "#3c6e62",
+    "--s-muted": "#5c6663",
+    "--s-text": "#202926",
+  },
+  "measure": "34em",
+}
+`;
+
+exports[`every home page style, every temperament, light and dark > temperament paper: type and colours, light and dark 1`] = `
+{
+  "base": "clamp(16px, 15.59px + 0.1136vw, 17px)",
+  "dark": {
+    "--s-bg": "#0b1713",
+    "--s-border": "#26322f",
+    "--s-link": "#9ec8bc",
+    "--s-muted": "#b2c2bd",
+    "--s-text": "#dfefeb",
+  },
+  "font": ""Noto Serif TC Variable", "Noto Serif TC", "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", "PMingLiU", Georgia, "Times New Roman", serif",
+  "light": {
+    "--s-bg": "#f3fffb",
+    "--s-border": "#cfdfda",
+    "--s-link": "#3c6e62",
+    "--s-muted": "#596763",
+    "--s-text": "#1d2926",
+  },
+  "measure": "34em",
+}
+`;
+
+exports[`every home page style, every temperament, light and dark > temperament quiet: type and colours, light and dark 1`] = `
+{
+  "base": "clamp(16px, 15.59px + 0.1136vw, 17px)",
+  "dark": {
+    "--s-bg": "#101514",
+    "--s-border": "#2b302f",
+    "--s-link": "#9ec8bc",
+    "--s-muted": "#b8bfbd",
+    "--s-text": "#e6edeb",
+  },
+  "font": ""Noto Sans TC Variable", "Noto Sans TC", "PingFang TC", "Source Han Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif",
+  "light": {
+    "--s-bg": "#f4fffb",
+    "--s-border": "#d5ddda",
+    "--s-link": "#3c6e62",
+    "--s-muted": "#5f6563",
+    "--s-text": "#222826",
+  },
+  "measure": "36em",
+}
+`;

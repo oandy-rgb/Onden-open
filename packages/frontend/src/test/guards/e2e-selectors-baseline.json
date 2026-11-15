@@ -1,0 +1,15 @@
+{
+  "about": "e2e 腳本找的 class／data-testid 在 src/ 已不存在的清單；只准變少（見 e2eSelectors.guard.test.ts）",
+  "classes": {
+    "e2e/fullstack/imeInputs.spec.ts › .obsidian-search-result": 1,
+    "e2e/fullstack/journey.spec.ts › .obsidian-add-btn": 1,
+    "e2e/fullstack/journey.spec.ts › .sidebar-create-btn": 1,
+    "e2e/fullstack/splitView.spec.ts › .editor-wrap": 1,
+    "e2e/fullstack/tour.spec.ts › .sidebar-tag-chip": 1,
+    "e2e/fullstack/usertour.spec.ts › .sidebar-tag-chip": 2,
+    "e2e/fullstack/usertour.spec.ts › .canvas-empty-state": 1,
+    "e2e/fullstack/usertour.spec.ts › .ov-history-open": 1,
+    "e2e/fullstack/uxAudit.spec.ts › .topbar-settings-btn": 1
+  },
+  "testIds": {}
+}

@@ -1,0 +1,85 @@
+.capture-inbox {
+  /* The full width up to 640px: in the phone's list (a grid) auto margins
+     alone shrank the page to its content and pushed it off the left edge. */
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.capture-inbox-title { margin: 0; font-size: var(--ac-fs-h3); }
+.capture-inbox-sub { margin: 4px 0 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.capture-inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.capture-inbox-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+}
+
+.capture-inbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.capture-inbox-item-title { font-weight: 600; overflow-wrap: anywhere; }
+.capture-inbox-excerpt { font-size: var(--ac-fs-small); color: var(--ac-muted); overflow-wrap: anywhere; }
+.capture-inbox-when { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+.capture-inbox-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.capture-decide { display: flex; flex-direction: column; gap: 8px; }
+.capture-decide-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--ac-fs-ui-touch);
+}
+.capture-decide-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  text-align: center;
+}
+.capture-decide-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.capture-decide-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.capture-decide-row:hover { background: var(--ac-overlay-hover); }
+.capture-decide-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.capture-decide-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-decide-kind, .capture-decide-n { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.capture-decide-n { white-space: nowrap; }

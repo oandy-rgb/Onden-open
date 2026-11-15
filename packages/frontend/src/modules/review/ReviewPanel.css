@@ -1,0 +1,260 @@
+/* The review drawer — quiet card-at-a-time flow, the old Ask panel's tone. */
+.review-panel {
+  /* Same as .rss-reader: a direct .workspace-grid child must claim the
+     center column or it auto-places into the 0-width col-1. */
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+/* As a full-page mode the panel sits in the block-flow workspace, where
+   height:100% collapses — fill the viewport between the topbar (48px) and the
+   bottom nav (56px). */
+@media (max-width: 900px) {
+  .review-panel {
+    height: auto;
+    min-height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom));
+  }
+}
+.review-count {
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  margin-left: 8px;
+}
+.review-error { color: var(--ac-danger); font-size: var(--ac-fs-caption); margin: 4px 14px; }
+.review-budget {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  margin: 0 14px 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.review-scope {
+  font-size: var(--ac-fs-caption);
+  font-weight: 500;
+  color: var(--ac-ink);
+  margin: 0 14px 8px;
+  padding: 4px 10px;
+  background: var(--ac-overlay-subtle);
+  border-radius: var(--ac-radius-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-empty {
+  padding: 24px 16px;
+  font-size: var(--ac-fs-small);
+  line-height: 1.6;
+  color: var(--ac-muted);
+}
+.review-done { color: var(--ac-ink); }
+.review-setup {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--ac-accent-tint-54);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-accent-tint-3);
+  color: var(--ac-accent-tint-70);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.review-setup:disabled { opacity: 0.55; cursor: default; }
+
+/* As a full page (?view=review) the session reads as a column, not a strip
+   pinned to the left edge. */
+.full-page > .review-panel {
+  width: min(760px, 100%);
+  margin-inline: auto;
+  padding: 20px 20px 0;
+  box-sizing: border-box;
+}
+
+.review-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: 10px 14px 14px;
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+}
+.review-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.review-card-title {
+  font-weight: 600;
+  font-size: var(--ac-fs-ui);
+  color: var(--ac-ink);
+}
+.review-open-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.review-open-note:hover { color: var(--ac-accent); }
+
+.review-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: var(--ac-fs-ui-touch);
+  line-height: 1.75;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: clamp(16px, 2vw, 24px);
+  background: var(--ac-surface);
+  margin-bottom: 12px;
+}
+
+.review-card-body :is(p, ul, ol, blockquote, pre) { margin: 0 0 1em; }
+.review-card-body :is(ul, ol) { padding-left: 1.5em; }
+.review-card-body ul { list-style: disc; }
+.review-card-body ol { list-style: decimal; }
+.review-card-body li { margin-block: 0.35em; }
+.review-card-body :is(h1, h2, h3, h4) { font-weight: 600; line-height: 1.35; margin: 1em 0 0.5em; }
+.review-card-body h1 { font-size: 1.5em; }
+.review-card-body h2 { font-size: 1.3em; }
+.review-card-body > :first-child { margin-top: 0; }
+.review-card-body > :last-child { margin-bottom: 0; }
+.review-card-body pre { overflow-x: auto; border-radius: var(--ac-radius-md); font-size: var(--ac-fs-ui); }
+
+.review-card-prompt {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 1px dashed var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 24px 14px;
+  background: var(--ac-surface);
+}
+.review-recall-hint {
+  margin: 0;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+  text-align: center;
+}
+.review-reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  font-size: var(--ac-fs-small);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.review-reveal:hover { border-color: var(--ac-accent); color: var(--ac-accent); }
+.review-reveal kbd {
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  padding: 0 4px;
+  background: var(--ac-surface);
+}
+
+/* Handwritten card: a static SVG of the strokes, fit to the body width. */
+.review-ink-thumb {
+  display: flex;
+  justify-content: center;
+}
+.review-ink-thumb svg {
+  width: 100%;
+  max-height: 360px;
+  height: auto;
+}
+
+.review-grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.review-grade {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  font-size: var(--ac-fs-caption);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  cursor: pointer;
+  min-height: 44px;
+}
+.review-grade-name { display: inline-flex; align-items: center; gap: 6px; }
+.review-grade-next { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.review-grade:hover:not(:disabled) { border-color: var(--ac-accent); color: var(--ac-accent); }
+.review-grade:disabled { opacity: 0.5; cursor: default; }
+.review-grade kbd {
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  padding: 0 4px;
+  background: var(--ac-surface);
+}
+
+.review-notice { color: var(--ac-muted); font-size: var(--ac-fs-caption); margin: 4px 14px; }
+.review-status-link { margin-left: auto; }
+
+/* Where the card comes from: the source's name, and the paragraphs around it. */
+.review-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ac-line);
+  background: var(--ac-overlay-subtle);
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-fs-caption);
+  line-height: 1.55;
+}
+.review-context p { margin: 0; }
+.review-context-source { font-weight: 600; color: var(--ac-ink); overflow-wrap: anywhere; }
+.review-context-near { color: var(--ac-muted); overflow-wrap: anywhere; }
+
+/* Open, edit, tomorrow, stop: all in sight, two by two on a phone. */
+.review-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.review-actions .ui-btn { min-height: 44px; justify-content: center; }
+
+@media (max-width: 900px) {
+  .review-grade kbd, .review-reveal kbd { display: none; }
+}
+
+/* The cards of a note that were stopped, offered back above its queue. */
+.review-stopped-here { margin: 0 var(--ac-space-3, 12px) var(--ac-space-3, 12px); }
+.review-scope-row { display: flex; align-items: center; gap: 8px; }
+.review-scope-row .review-scope { flex: 1 1 auto; min-width: 0; }
+.review-scope-row .ui-btn { flex: none; margin-right: 14px; min-height: 44px; }

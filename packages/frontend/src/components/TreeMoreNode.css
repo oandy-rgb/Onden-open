@@ -1,0 +1,14 @@
+/* The 「+N 篇」 card of the board's sub-note tree: a quiet pill, not a note. */
+.tree-more-node { display: flex; align-items: center; justify-content: center; height: 44px; }
+.tree-more-button {
+  width: 100%;
+  height: 100%;
+  background: var(--ac-surface);
+  border: 1.5px dashed var(--ac-line);
+  border-radius: var(--ac-radius-xl);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  cursor: pointer;
+}
+.tree-more-button:hover { color: var(--ac-accent); border-color: var(--ac-accent); }
+.tree-more-handle { opacity: 0; pointer-events: none; }

@@ -1,0 +1,5 @@
+{
+  "commit": "7fbfc57e0e4bcb9d1a74af6cafd69e4a5bd14d7c",
+  "subject": "fix(phone): hold a note row — move it to drag, let go in place for its menu (#592)",
+  "committed_at": "2026-10-24T02:46:11+08:00"
+}

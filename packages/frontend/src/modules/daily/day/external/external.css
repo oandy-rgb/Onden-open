@@ -1,0 +1,19 @@
+/* Subscribed-calendar events: read-only, a dashed outline in the calendar's own colour (--ext-color, set per event). */
+.ext-dot { background: var(--ext-color); display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: var(--ac-radius-full); }
+.ext-allday { list-style: none; margin: 0 0 6px; padding: 4px 0; display: flex; flex-wrap: wrap; gap: 4px; position: sticky; top: 0; z-index: var(--z-local-3); background: var(--ac-bg); }
+.ext-allday-item { max-width: 100%; display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border: 1.5px dashed var(--ext-color); border-radius: var(--ac-radius-full); background: color-mix(in srgb, var(--ext-color) 10%, var(--ac-bg)); color: var(--ac-ink); font: inherit; font-size: var(--onden-text-sm2, 13px); cursor: pointer; }
+.ext-allday-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-lanes { position: absolute; top: 0; bottom: 0; right: 0; width: var(--ext-w); }
+.ext-block { position: absolute; top: var(--top); height: var(--h); left: calc(var(--lane) / var(--lanes) * 100%); width: calc(100% / var(--lanes) - 4px); box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; padding: 3px 6px; overflow: hidden; border: 1.5px dashed var(--ext-color); border-left-style: solid; border-left-width: 4px; border-radius: var(--ac-radius-md); background: color-mix(in srgb, var(--ext-color) 10%, var(--ac-bg)); color: var(--ac-ink); font: inherit; font-size: var(--onden-text-xs, 11px); text-align: left; cursor: pointer; z-index: var(--z-local-1); }
+.ext-block-time { color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.ext-block-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--onden-text-sm2, 13px); }
+.week-card.ext-card { cursor: default; background: color-mix(in srgb, var(--ext-color) 10%, var(--ac-bg)); border: 1.5px dashed var(--ext-color); }
+.ext-sheet { width: min(440px, 100%); }
+.ext-sheet-body { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.ext-sheet-title { margin: 0; font-size: var(--onden-text-lg, 18px); overflow-wrap: anywhere; }
+.ext-sheet-when, .ext-sheet-line, .ext-sheet-from { margin: 0; color: var(--ac-muted); font-size: var(--onden-text-sm2, 13px); }
+.ext-sheet-line { color: var(--ac-ink); overflow-wrap: anywhere; }
+.ext-sheet-description { margin: 0; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--onden-text-sm2, 13px); }
+.ext-sheet-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+/* A Sheet's card is the caller's above the phone breakpoint (components/ui/ui.css). */
+.ext-sheet { box-sizing: border-box; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-xl); background: var(--ac-surface); color: var(--ac-ink); box-shadow: var(--ac-shadow-modal); }

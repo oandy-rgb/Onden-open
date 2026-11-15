@@ -1,0 +1,85 @@
+/* TagsPanel — Day 2 inline → class migration. */
+
+/* Tag color swatches — dynamic per-tag via --tag-color custom prop */
+
+.tag-action-btn--push-end { margin-left: auto; }
+
+/* Tag list panels — .tags-panel (sidebar drawer) + .tags-mode-empty (shared
+ * empty-state, still used by TasksMode). TagsMode itself is retired; its
+ * full-page styles were pruned with it.
+ * Consumers: TagsPanel.tsx, SideDrawers.tsx, TasksMode.tsx.
+ */
+.tags-mode-empty {
+  color: var(--ac-muted);
+  font-style: var(--ac-hint-style);
+  font-size: var(--ac-fs-caption);
+  margin: 6px 0;
+}
+
+/* Single-tag detail rows, import dialog, chip list. */
+
+/* 8px variant for chip lists / slash-menu icon. A 7px variant with
+   margin-right exists below for inline list rows — both are deliberate. */
+.tag-color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ac-radius-full);
+  flex-shrink: 0;
+  background: var(--dot-color, transparent);
+}
+.tag-color-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ac-radius-full);
+  background: var(--dot-color, var(--ac-muted));
+  margin-right: 4px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* P2 per-field default-value editor */
+.schema-field-default {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.schema-field-default-label {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  cursor: help;
+}
+.schema-field-default .actors-input { max-width: 220px; font-size: var(--ac-fs-caption); }
+
+/* De-jargon: plain one-line helper above the calculated-field config */
+.schema-field-rollup-help {
+  margin: 4px 0 6px;
+  font-size: var(--ac-fs-xs);
+  line-height: 1.4;
+  color: var(--ac-muted);
+}
+
+/* P2 migration preview: field-usage badge */
+.schema-field-usage {
+  font-size: var(--ac-fs-xs);
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--ac-radius-md);
+  color: var(--ac-muted);
+  background: var(--ac-overlay-subtle);
+  border: 1px solid var(--ac-line);
+  cursor: help;
+}
+
+/* Usage fetch failed — the count is UNKNOWN, not zero. Dashed border reads
+   as "unverified" rather than a confirmed count. */
+.schema-field-usage--unknown {
+  border-style: dashed;
+  font-style: italic;
+}
+
+/* A field named like one the tag inherits: refused, and not saved. */
+.schema-field-row.is-clash > .schema-field-grid input:first-child { border-color: var(--ac-danger); }
+.schema-field-clash { margin: 4px 0 0; font-size: var(--ac-fs-caption); color: var(--ac-danger); }

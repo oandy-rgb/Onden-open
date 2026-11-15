@@ -1,0 +1,329 @@
+{
+ "content_nodes": {
+  "class": "stamped",
+  "note": "whole row; title, body, parent, sort, hidden, space, deleted state each on their own; tag_schema per key and collection_views per view as separate stamps (S3, table_name 'content_nodes.tag_schema' / 'content_nodes.collection_views')",
+  "wired": true
+ },
+ "node_attributes": {
+  "class": "stamped",
+  "note": "per (note, key), only what a person or automation wrote (source ui / explicit / dispatcher); tombstone on delete (S2); a board's _canvas_sections per section (S3, table_name 'node_attributes._canvas_sections')",
+  "wired": true
+ },
+ "node_tags": {
+  "class": "stamped",
+  "note": "per (note, tag); tombstone on remove; apply / remove in structure_log (S2)",
+  "wired": true
+ },
+ "node_edges": {
+  "class": "stamped",
+  "note": "only hand-made edges (origin manual), keyed by what they connect; the automatic ones are derived (S2)",
+  "wired": true
+ },
+ "note_pointers": {
+  "class": "stamped",
+  "note": "per pointer, keyed by an id derived from (parent, target); sort position and label each on their own (S2)",
+  "wired": true
+ },
+ "node_positions": {
+  "class": "stamped",
+  "note": "per card: position, look and sub-board each on their own; a drag run is merged in structure_log (S2)",
+  "wired": true
+ },
+ "spaces": {
+  "class": "stamped",
+  "note": "name, kind, owner and deleted state; each capability switch on its own, switches also in structure_log (S3)",
+  "wired": true
+ },
+ "space_members": {
+  "class": "stamped",
+  "note": "per (space, member), permission in structure_log; tombstone on remove, also when the whole space is deleted (S3)",
+  "wired": true
+ },
+ "function_refs": {
+  "class": "stamped",
+  "note": "per reference (function, instance, holder); config per key (S1 + S3 pattern, migration 201; table_name 'function_refs' and 'function_refs.config')",
+  "wired": true
+ },
+ "block_anchors": {
+  "class": "stamped",
+  "note": "the anchor's identity; the position is derived"
+ },
+ "block_link_bindings": {
+  "class": "stamped",
+  "note": "per (note, link text)"
+ },
+ "focus_sessions": {
+  "class": "stamped",
+  "note": "whole row"
+ },
+ "review_states": {
+  "class": "stamped",
+  "note": "per (card, person); personal data"
+ },
+ "actor_prefs": {
+  "class": "stamped",
+  "note": "per key; personal data"
+ },
+ "actor_module_settings": {
+  "class": "stamped",
+  "note": "per key; personal data",
+  "wired": true
+ },
+ "read_later_done_removed_192": {
+  "class": "stamped",
+  "note": "per row; personal data; kept one release after read-later was removed (migration 192)"
+ },
+ "rss_mutes": {
+  "class": "stamped",
+  "note": "per row; personal data",
+  "wired": true
+ },
+ "rss_seen": {
+  "class": "stamped",
+  "note": "per row; personal data"
+ },
+ "rss_subscriptions": {
+  "class": "stamped",
+  "note": "the settings; the fetch state (etag, last fetch) belongs to the node on duty",
+  "wired": true
+ },
+ "external_calendars": {
+  "class": "stamped",
+  "note": "name, color, enabled; the address is a sealed secret",
+  "wired": true
+ },
+ "workspaces": {
+  "class": "stamped",
+  "note": "time zone, day-change hour; each module switch on its own (modules_off, modules_confirmed) (S3)",
+  "wired": true
+ },
+ "ai_edit_suggestions": {
+  "class": "stamped",
+  "note": "each decision"
+ },
+ "ai_edit_suggestion_items": {
+  "class": "stamped",
+  "note": "each decision"
+ },
+ "note_block_refs": {
+  "class": "derived",
+  "note": "worked out from note text"
+ },
+ "note_link_index": {
+  "class": "derived",
+  "note": "worked out from note text"
+ },
+ "node_embeddings": {
+  "class": "derived",
+  "note": "worked out from note text"
+ },
+ "node_event_meta": {
+  "class": "derived",
+  "note": "trigger-kept side table"
+ },
+ "node_tag_states": {
+  "class": "derived",
+  "note": "trigger-kept side table"
+ },
+ "block_nodes": {
+  "class": "derived",
+  "note": "worked out from note text (tasks and split-out blocks are decided separately)"
+ },
+ "rss_staging": {
+  "class": "derived",
+  "note": "articles can be fetched again"
+ },
+ "external_calendar_events": {
+  "class": "derived",
+  "note": "replaced as a whole on every fetch"
+ },
+ "domain_events": {
+  "class": "node-local",
+  "note": "each node's own history and undo ledger"
+ },
+ "idempotency_keys": {
+  "class": "node-local",
+  "note": "retry de-duplication"
+ },
+ "outbox": {
+  "class": "node-local",
+  "note": "outgoing side effects"
+ },
+ "agent_sessions": {
+  "class": "node-local",
+  "note": "belongs to the node on duty"
+ },
+ "ai_credentials": {
+  "class": "node-local",
+  "note": "belongs to the node on duty"
+ },
+ "publish_snapshots": {
+  "class": "node-local",
+  "note": "belongs to the node on duty"
+ },
+ "rate_limit_hits": {
+  "class": "node-local",
+  "note": "counters of this server"
+ },
+ "backup_restore_jobs": {
+  "class": "node-local",
+  "note": "belongs to the node on duty"
+ },
+ "sync_node": {
+  "class": "node-local",
+  "note": "this node's id (S1)"
+ },
+ "sync_stamps": {
+  "class": "node-local",
+  "note": "the stamps themselves are what is copied, with the data they describe (S1)"
+ },
+ "structure_log": {
+  "class": "node-local",
+  "note": "each node's own history of structure; never sent (S1, proposal §8.5)"
+ },
+ "user": {
+  "class": "node-local",
+  "note": "sign-in library table"
+ },
+ "session": {
+  "class": "node-local",
+  "note": "sign-in library table"
+ },
+ "account": {
+  "class": "node-local",
+  "note": "sign-in library table"
+ },
+ "verification": {
+  "class": "node-local",
+  "note": "sign-in library table"
+ },
+ "blobs": {
+  "class": "separate",
+  "note": "keyed by content hash, cannot conflict; whether every node keeps a copy is decided after launch"
+ },
+ "media_uploads": {
+  "class": "separate",
+  "note": "attachments, after launch"
+ },
+ "imported_media": {
+  "class": "separate",
+  "note": "attachments, after launch"
+ },
+ "actors": {
+  "class": "separate",
+  "note": "identity: only changed on the main server"
+ },
+ "agent_runners": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "agent_session_events": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "agent_tokens": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ai_suggestions": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "block_node_tags": {
+  "class": "stamped",
+  "note": "per (paragraph, tag); tombstone on delete (S2; the proposal's tag-apply row, extended to paragraph tags)",
+  "wired": true
+ },
+ "board_copy_folds": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "board_copy_unparents": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "board_ink_moves": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "canvas_note_conversions": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "dispatcher_pending": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_capture_cursor": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_captured_events": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_node": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_ops": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_peers": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_projection_failures": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_rejections": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "ds_unsupported": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "event_reviews": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "member_removals": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "owner_member_migration_log": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "push_reminder_sent": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "push_subscriptions": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "schema_migrations": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "snapshot_media": {
+  "class": "undecided",
+  "note": "the proposal does not name this table"
+ },
+ "browser_app_state": {
+  "class": "node-local",
+  "note": "the browser version's own state (which sample notes it made); made by browser/sampleNotes.ts, not by a migration"
+ },
+ "sync_clock": {
+  "class": "node-local",
+  "note": "this node's sequence number and clock, one row per workspace (S1)"
+ },
+ "id_rewrites": {
+  "class": "node-local",
+  "note": "what migration 201 changed on this node (old id -> new id), so restoring an older event follows it; another node computes its own, never copied"
+ }
+}

@@ -1,0 +1,437 @@
+/* Pinned to the window: the one place a stylesheet says `position: fixed` for something that
+   is not a popover, sheet or modal (rule css-position-fixed). The element keeps its own
+   offsets and z-index (var(--z-*)); it takes the class from `layerClass` (ui/layer.ts).
+   `--fill` also covers the window; `--narrow` pins only at phone and tablet widths, where a
+   bar docks to the screen edge and on a wide window it flows in the page. */
+.ui-layer { position: fixed; }
+.ui-layer--fill { inset: 0; }
+@media (max-width: 900px) { .ui-layer--narrow { position: fixed; } }
+
+/* Shared floating surfaces (ui/Popover.tsx). Position comes from usePopover
+   through --popover-x / --popover-y. A surface is portalled to <body>, or into
+   the top open modal (a native <dialog> in the top layer paints above <body>). */
+.ui-popover {
+  position: fixed;
+  top: var(--popover-y, 0);
+  left: var(--popover-x, 0);
+  z-index: var(--z-popover);
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  max-height: min(calc(100dvh - 16px), var(--popover-room, 100dvh));
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-elevated);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+}
+.ui-popover:focus { outline: none; }
+
+.ui-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+}
+
+.ui-menu-item {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ui-menu-item:hover { background: var(--ac-overlay-hover); }
+.ui-menu-item:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-inset); }
+.ui-menu-item:disabled { opacity: 0.5; cursor: default; }
+.ui-menu-item--danger { color: var(--ac-danger); }
+.ui-menu-item--danger:hover { background: var(--ac-danger-soft); }
+.ui-menu-item--checked { font-weight: 600; background: var(--ac-overlay-selected); }
+/* The ✓ only draws what aria-checked already says: empty alternative text keeps it out of the item's
+   name (「Full width」, not 「Full width ✓」); the first declaration is for browsers without alt text. */
+.ui-menu-item--checked::after { content: "✓"; content: "✓" / ""; margin-left: auto; padding-left: 12px; color: var(--ac-accent); }
+
+.ui-menu-separator { height: 1px; margin: 3px 0; background: var(--ac-line); }
+
+.ui-menu-label {
+  padding: 2px 10px 3px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ui-menu-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.ui-menu-heading > span {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  overflow-wrap: anywhere;
+}
+.ui-menu-heading > button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.ui-menu-heading > button:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+
+@media (max-width: 900px), (hover: none) {
+  .ui-menu { width: min(280px, calc(100vw - 16px)); }
+  .ui-menu-item { min-height: 44px; padding: 10px 14px; font-size: var(--ac-fs-ui-touch); }
+}
+
+/* The phone's bottom sheet, one look for both ways in: <Menu sheet> and
+   <Popover sheet> (fixed to the bottom edge, usePopover's position unused) and
+   ui/Sheet (a Modal whose card docks to the bottom). The tokens below are the
+   look; a sheet-specific rule only places it. */
+:root {
+  --ui-sheet-radius: 16px 16px 0 0;
+  --ui-sheet-max-height: 85dvh;
+  --ui-sheet-gap-top: 24px;
+  --ui-sheet-animation: ui-sheet-in 0.18s ease-out;
+}
+.ui-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-backdrop);
+  background: var(--ac-scrim);
+}
+.ui-menu--sheet {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: var(--ui-sheet-max-height);
+  gap: 8px;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-width: 1px 0 0;
+  border-radius: var(--ui-sheet-radius);
+  animation: var(--ui-sheet-animation);
+}
+/* A tall sheet scrolls as one page: its blocks keep their own height instead of
+   being squeezed, so a block that clips its corners (overflow: hidden) never cuts
+   off its last rows (the note ⋯ sheet hid 「簡報」 under 「這篇筆記」, 2026-11-02). */
+.ui-menu--sheet > * { flex-shrink: 0; }
+/* The finger's target (ui/SheetHandle: drag down to close) is the whole top strip,
+   edge to edge and 28px tall; the bar drawn in it stays 36×4. The negative margins
+   reach past a menu sheet's padding to its edges (owner, 2026-11-01: a bigger target). */
+.ui-sheet-handle {
+  flex-shrink: 0;
+  position: relative;
+  height: 28px;
+  margin: -8px -12px 0;
+  touch-action: none;
+  cursor: grab;
+}
+.ui-sheet-handle::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 4px;
+  border-radius: var(--ac-radius-xs);
+  background: var(--ac-faint);
+}
+/* A short rise and a fade, not a slide up the whole screen: measured on the
+   owner's phone (2026-10-30), the full-height slide dropped its first frames
+   while the card's content painted, so it jumped up in three steps. */
+@keyframes ui-sheet-in { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ui/Sheet. Above the phone breakpoint the card is the caller's (no handle). */
+.ui-sheet > .ui-sheet-handle { display: none; }
+.ui-modal.ui-sheet-layer--bottom > .ui-sheet { border-radius: var(--ui-sheet-radius); }
+@media (width > 600px) { .ui-modal.ui-sheet-layer--bottom[open] { align-items: flex-end; } }
+@media (max-width: 600px) {
+  .ui-modal.ui-sheet-layer { padding: 0; }
+  .ui-modal.ui-sheet-layer[open] { align-items: flex-end; justify-content: center; }
+  .ui-modal.ui-sheet-layer > .ui-sheet {
+    /* The bottom sits on the keyboard's top edge; the height is what is left above it. */
+    --ui-sheet-room: min(var(--ui-sheet-max-height), calc(100dvh - var(--kb-inset, 0px) - var(--ui-sheet-gap-top)));
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    margin: 0 0 var(--kb-inset, 0px);
+    max-height: var(--ui-sheet-room);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--ac-line);
+    border-width: 1px 0 0;
+    border-radius: var(--ui-sheet-radius);
+    background: var(--ac-surface);
+    color: var(--ac-ink);
+    box-shadow: var(--ac-shadow-sheet);
+    animation: var(--ui-sheet-animation);
+  }
+  /* With the keyboard up the sheet sits above the home indicator's area. */
+  .ui-modal.ui-sheet-layer > .ui-sheet[data-keyboard] { padding-bottom: 14px; }
+  .ui-sheet > .ui-sheet-handle { display: block; margin: 0; }  /* a sheet card has no padding of its own */
+  /* Steady: a fixed height; the list inside takes the rest and scrolls. The
+     height is the content's own when it opened (ui/Sheet measures it while
+     data-fitting), capped by the room; a taller content gets all the room. */
+  .ui-modal.ui-sheet-layer > .ui-sheet--steady {
+    display: flex;
+    flex-direction: column;
+    height: var(--ui-sheet-steady-height, var(--ui-sheet-room));
+    overflow: hidden;
+  }
+  .ui-modal.ui-sheet-layer > .ui-sheet--steady[data-fitting] { height: auto; }
+}
+
+/* ui/Sheet with `dock` (ui/SheetDock): a bottom panel that is not modal, three heights. It sits on the bottom
+   navigation, or on the keyboard (+ the editor's formatting row) where --ui-dock-lift says so. */
+.ui-sheet-dock {
+  --ui-dock-nav: var(--mobile-dock-base, calc(56px + env(safe-area-inset-bottom, 0px)));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--ui-dock-lift, 0px) + var(--ui-dock-nav));
+  z-index: var(--z-floating-panel);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  border: 1px solid var(--ac-line);
+  border-width: 1px 0 0;
+  border-radius: var(--ui-sheet-radius);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-sheet);
+  --ui-dock-room: calc(100dvh - var(--ui-dock-lift, 0px) - var(--ui-dock-nav) - var(--ui-sheet-gap-top) - env(safe-area-inset-top, 0px));
+}
+/* The bottom navigation is hidden while the editor's keyboard row shows; and the keyboard covers it while typing here. */
+body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui-dock-nav: 0px; }
+.ui-sheet-dock > .ui-sheet-handle { margin: 0; }
+.ui-sheet-dock .ui-sheet-header { flex-shrink: 0; padding: 0 8px 0 16px; }
+.ui-sheet-dock[data-height="bar"] > .ui-sheet-handle { height: 14px; }
+.ui-sheet-dock[data-height="bar"] > .ui-sheet-handle::before { top: 6px; }
+.ui-sheet-dock[data-height="half"] { height: min(50dvh, var(--ui-dock-room)); }
+.ui-sheet-dock[data-height="full"], .ui-sheet-dock[data-typing]:not([data-height="bar"]) { height: var(--ui-dock-room); }
+.ui-sheet-dock__bar { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px 0 12px; }
+.ui-sheet-dock__body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.ui-sheet-dock__body[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .ui-sheet-dock { transition: height 0.16s ease-out, transform 0.16s ease-out; } }
+
+/* After the phone block, which sets the animation at the same specificity. */
+@media (prefers-reduced-motion: reduce) { .ui-menu--sheet, .ui-modal.ui-sheet-layer > .ui-sheet { animation: none; } }
+
+/* Buttons (ui/Button.tsx). One shape; the variant says what it does. */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ui-btn:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.ui-btn:disabled { opacity: 0.5; cursor: default; }
+.ui-btn--sm { padding: 3px 10px; border-radius: var(--ac-radius-sm); font-size: var(--ac-fs-caption); }
+
+.ui-btn--secondary:hover:not(:disabled) { background: var(--ac-overlay-hover); border-color: var(--ac-faint); }
+
+.ui-btn--primary { border-color: var(--ac-accent); background: var(--ac-accent); color: var(--ac-accent-ink); }
+.ui-btn--primary:hover:not(:disabled) { border-color: var(--ac-accent-hover); background: var(--ac-accent-hover); }
+
+.ui-btn--ghost { background: transparent; color: var(--ac-muted); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+
+.ui-btn--danger { border-color: var(--ac-danger); background: var(--ac-danger); color: var(--ac-bg); }
+.ui-btn--danger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ac-danger) 82%, var(--ac-pure-black)); background: color-mix(in srgb, var(--ac-danger) 82%, var(--ac-pure-black)); }
+
+.ui-btn--icon { width: 38px; height: 38px; padding: 0; border-radius: var(--ac-radius-md); color: var(--ac-ink); }
+.ui-btn--icon.ui-btn--sm { width: 30px; height: 30px; }
+.ui-btn--icon:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+/* A toggle that is on wears the accent (the supporting pane, focus mode). */
+.ui-btn--icon[aria-pressed="true"], .ui-btn--icon.is-active { color: var(--ac-accent-tint-70); border-color: var(--ac-accent-tint-54); background: var(--ac-accent-tint-3); }
+
+@media (pointer: coarse) {
+  .ui-btn:not(.ui-btn--sm) { min-height: 44px; }
+  .ui-btn--icon:not(.ui-btn--sm) { min-width: 44px; }
+  /* Small icon buttons (nav editor, toolbars) still need a thumb-sized target. */
+  .ui-btn--icon.ui-btn--sm { width: 40px; height: 40px; }
+}
+
+/* Modals (ui/Modal.tsx): the <dialog> is a transparent full-screen layer that
+   centres the card it holds; the backdrop is the dialog's own ::backdrop. */
+.ui-modal {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-ink);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.ui-modal[open] { display: flex; align-items: center; justify-content: center; }
+.ui-modal::backdrop { background: var(--ac-scrim); animation: onden-fade-in var(--onden-motion-fast) var(--onden-motion-ease); }
+.ui-modal > * { animation: onden-pop-in var(--onden-motion-base) var(--onden-motion-ease); }
+.ui-modal:focus { outline: none; }
+@media (max-width: 600px) { .ui-modal { padding: 12px; } }
+
+/* Drag handle on the inner edge of a desktop side pane or a page's list column (components/ui/PaneHandle).
+ * The line is invisible until hover, keyboard focus or a drag. */
+.pane-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: var(--z-local-6);
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.pane-resizer--sidebar { right: 0; }
+/* A list column scrolls right up to its edge: the handle sits just outside it, so
+ * the scrollbar stays the scrollbar, and its line falls on the column's border. */
+.pane-resizer--column { right: -6px; }
+.pane-resizer--column::after { left: 0; transform: none; }
+.pane-resizer--column-start { left: -6px; }
+.pane-resizer--column-start::after { left: auto; right: 0; transform: none; }
+.pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background var(--onden-motion-fast, 120ms);
+}
+.pane-resizer:hover::after,
+.pane-resizer:focus-visible::after,
+.pane-resizer[data-dragging]::after { background: var(--ac-accent); }
+/* Dragged past the minimum: letting go folds the pane. The line fades and the pane dims. */
+.pane-resizer[data-collapsing]::after { background: var(--ac-muted); opacity: 0.5; }
+:has(> .pane-resizer[data-collapsing]) { opacity: 0.5; }
+/* The info pane scrolls, so its handle sticks to the top of the scrollport and
+ * takes no height of its own: the hit area is the ::before below. */
+.pane-resizer--inspector {
+  position: sticky;
+  top: 0;
+  bottom: auto;
+  height: 0;
+  width: 6px;
+  justify-self: start;
+  margin: -16px 0 0 -14px;
+}
+.pane-resizer--inspector::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: calc(100dvh - 48px);
+}
+.pane-resizer--inspector::after { height: calc(100dvh - 48px); bottom: auto; }
+body.onden-pane-dragging,
+body.onden-pane-dragging * { user-select: none !important; cursor: col-resize !important; }
+body.onden-zen .pane-resizer { display: none; }
+/* DatePicker (ui/DatePicker.tsx): a text box, quick picks and a MonthGrid. The
+   phone shows it as a bottom sheet (<Popover sheet>), where the panel takes the
+   sheet's width. */
+.ui-datepicker-trigger { gap: 6px; min-height: 36px; }
+.ui-datepicker { display: flex; flex-direction: column; gap: 6px; padding: 8px; width: 308px; max-width: 100%; box-sizing: content-box; }
+.ui-menu--sheet .ui-datepicker { width: auto; padding: 4px 4px 0; box-sizing: border-box; }
+.ui-datepicker-input { width: 100%; box-sizing: border-box; min-height: 36px; padding: 6px 10px; font: inherit; font-size: var(--ac-fs-ui-touch); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); }
+.ui-datepicker-input[aria-invalid="true"] { border-color: var(--ac-danger); }
+.ui-datepicker-hint { margin: 0; min-height: 1.2em; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.ui-datepicker-hint .ui-error { margin: 0; font-size: inherit; }
+.ui-datepicker-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.ui-datepicker > .ui-month { margin-top: 2px; }
+/* MonthGrid (ui/MonthGrid.tsx): one month of days, in DatePicker and under the
+   diary's week strip. Seven equal columns of the width it gets; 44px cells. */
+.ui-month { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ui-month-nav { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ui-month-title { font-family: var(--onden-font-display); font-size: var(--ac-fs-ui-touch); font-weight: 600; }
+.ui-month-grid { display: flex; flex-direction: column; }
+.ui-month-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ui-month-weekday { font-size: var(--ac-fs-xs); color: var(--ac-muted); text-align: center; padding-bottom: 2px; }
+.ui-month-day { position: relative; display: grid; place-items: center; justify-self: center; width: 44px; max-width: 100%; height: 44px; padding: 0; border: 0; border-radius: var(--ac-radius-full); background: transparent; color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-small); font-variant-numeric: tabular-nums; cursor: pointer; }
+.ui-month-day:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.ui-month-day:disabled { opacity: 0.35; cursor: not-allowed; }
+.ui-month-day.is-out { color: var(--ac-muted); opacity: 0.6; }
+.ui-month-day.is-today { box-shadow: var(--ac-inset-ring-thin); font-weight: 600; }
+.ui-month-day.is-picked { background: var(--ac-accent); color: var(--ac-accent-ink); font-weight: 600; }
+/* Dots: solid = something written, hollow = something scheduled (MonthDayCell; the journal's legend draws the same two). */
+.ui-month-dots { position: absolute; left: 0; right: 0; bottom: 5px; display: flex; justify-content: center; gap: 3px; pointer-events: none; }
+.ui-month-dot { display: inline-block; box-sizing: border-box; flex: none; width: 5px; height: 5px; border-radius: var(--ac-radius-full); }
+.ui-month-dot.is-written { background: var(--ac-accent); }
+.ui-month-dot.is-planned { border: 1.25px solid var(--ac-accent); }
+.ui-month-day.is-picked .ui-month-dot.is-written { background: currentColor; }
+.ui-month-day.is-picked .ui-month-dot.is-planned { border-color: currentColor; }
+.ui-month-day:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+/* Chip: a small read-only label (a count, a state, a source). One size; the tone is the meaning. */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.ui-chip--accent { border-color: var(--ac-accent); color: var(--ac-accent); }
+.ui-chip--info { border-color: transparent; background: color-mix(in srgb, var(--ac-info) 18%, transparent); color: var(--ac-info); }
+.ui-chip--warning { border-color: transparent; background: var(--ac-warning-soft); color: var(--ac-warning); }
+
+
+/* Sheet / dialog header (ui/SheetHeader.tsx): the title, text actions and ✕ share one control height and frame. */
+.ui-sheet-header { --ui-sheet-header-control: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ui-sheet-header__title { margin: 0; min-width: 0; font-size: var(--ac-fs-ui); font-weight: 600; color: var(--ac-ink); overflow-wrap: anywhere; }
+.ui-sheet-header__actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ui-sheet-header .ui-btn { box-sizing: border-box; height: var(--ui-sheet-header-control); min-height: var(--ui-sheet-header-control); border-color: transparent; background: transparent; }
+.ui-sheet-header .ui-btn--icon { width: var(--ui-sheet-header-control); min-width: var(--ui-sheet-header-control); }
+.ui-sheet-header .ui-btn:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+@media (pointer: coarse) { .ui-sheet-header { --ui-sheet-header-control: 44px; } }

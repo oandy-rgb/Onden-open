@@ -1,0 +1,347 @@
+[
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 1,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 428
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 839
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 38,
+   "p95Ms": 60,
+   "maxMs": 71,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 56,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1416,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 13,
+    "sum": 2039,
+    "max": 447
+   },
+   "paneDrag": {
+    "frames": 360,
+    "avgFps": 25,
+    "p95FrameMs": 83.3,
+    "maxFrameMs": 483.3,
+    "over50": 42
+   },
+   "cardDrag": {
+    "frames": 287,
+    "avgFps": 40,
+    "p95FrameMs": 50,
+    "maxFrameMs": 450,
+    "over50": 10
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2143,
+   "scroll": {
+    "frames": 76,
+    "avgFps": 26,
+    "p95FrameMs": 99.9,
+    "maxFrameMs": 116.7,
+    "over50": 13,
+    "canvasesAfter": 9,
+    "scrolledPx": 3080
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 2,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 309
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 1006
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 40,
+   "p95Ms": 58,
+   "maxMs": 62,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 56,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1171,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 13,
+    "sum": 2084,
+    "max": 379
+   },
+   "paneDrag": {
+    "frames": 346,
+    "avgFps": 24,
+    "p95FrameMs": 66.8,
+    "maxFrameMs": 483.4,
+    "over50": 33
+   },
+   "cardDrag": {
+    "frames": 263,
+    "avgFps": 44,
+    "p95FrameMs": 49.9,
+    "maxFrameMs": 533.3,
+    "over50": 5
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1873,
+   "scroll": {
+    "frames": 80,
+    "avgFps": 27,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 13,
+    "canvasesAfter": 9,
+    "scrolledPx": 3240
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 3,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 298
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 859
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 39,
+   "p95Ms": 108,
+   "maxMs": 126,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 120,
+   "lt": {
+    "n": 5,
+    "sum": 398,
+    "max": 96
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 888,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 6,
+    "sum": 1316,
+    "max": 387
+   },
+   "paneDrag": {
+    "frames": 357,
+    "avgFps": 26,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 466.6,
+    "over50": 27
+   },
+   "cardDrag": {
+    "frames": 295,
+    "avgFps": 42,
+    "p95FrameMs": 50,
+    "maxFrameMs": 450,
+    "over50": 11
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2028,
+   "scroll": {
+    "frames": 73,
+    "avgFps": 24,
+    "p95FrameMs": 116.7,
+    "maxFrameMs": 133.4,
+    "over50": 12,
+    "canvasesAfter": 8,
+    "scrolledPx": 2960
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 4,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 326
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 955
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 44,
+   "p95Ms": 95,
+   "maxMs": 101,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 104,
+   "lt": {
+    "n": 4,
+    "sum": 317,
+    "max": 94
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 746,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 6,
+    "sum": 1183,
+    "max": 304
+   },
+   "paneDrag": {
+    "frames": 358,
+    "avgFps": 25,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 616.6,
+    "over50": 30
+   },
+   "cardDrag": {
+    "frames": 293,
+    "avgFps": 37,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 416.7,
+    "over50": 26
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2086,
+   "scroll": {
+    "frames": 76,
+    "avgFps": 26,
+    "p95FrameMs": 116.6,
+    "maxFrameMs": 133.3,
+    "over50": 14,
+    "canvasesAfter": 9,
+    "scrolledPx": 3080
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "phone",
+  "run": 5,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 456
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 894
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 36,
+   "p95Ms": 51,
+   "maxMs": 109,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 104,
+   "lt": {
+    "n": 2,
+    "sum": 120,
+    "max": 66
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 986,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 6,
+    "sum": 1045,
+    "max": 281
+   },
+   "paneDrag": {
+    "frames": 342,
+    "avgFps": 28,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 383.4,
+    "over50": 27
+   },
+   "cardDrag": {
+    "frames": 299,
+    "avgFps": 30,
+    "p95FrameMs": 83.3,
+    "maxFrameMs": 516.7,
+    "over50": 45
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1791,
+   "scroll": {
+    "frames": 80,
+    "avgFps": 26,
+    "p95FrameMs": 99.9,
+    "maxFrameMs": 100.1,
+    "over50": 16,
+    "canvasesAfter": 9,
+    "scrolledPx": 3240
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ }
+]

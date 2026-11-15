@@ -1,0 +1,17 @@
+{
+  // No account id, no routes, no secrets: whoever deploys supplies their own (see docs/architecture/send-to-phone-relay.md).
+  "name": "onden-relay",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSIONS", "class_name": "SessionObject" },
+      { "name": "LIMITERS", "class_name": "LimiterObject" },
+      { "name": "REGISTRY", "class_name": "RegistryObject" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionObject", "LimiterObject", "RegistryObject"] }],
+  "vars": {
+    // "ALLOWED_ORIGIN": "https://your-onden-page.example"
+  }
+}

@@ -1,0 +1,369 @@
+/* InkToolbar — shared ink chrome (handwriting note + canvas pen mode).
+   Quiet toolbar language matching the app's normal controls. */
+
+.ink-note-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* One row at any width: the tools scroll sideways inside .ink-toolbar-scroll
+     while undo / redo stay beside it, always in view. */
+  flex-wrap: nowrap;
+  padding: 6px 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+}
+
+.ink-toolbar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.ink-toolbar-group {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
+
+.ink-toolbar-group--history {
+  margin-left: auto;
+  background: var(--ac-surface);
+}
+
+.ink-toolbar-group + .ink-toolbar-group {
+  border-left: 1px solid var(--ac-line);
+  padding-left: 12px;
+}
+
+.ink-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+
+.ink-tool-btn:hover:not(:disabled) {
+  background: var(--ac-overlay-hover);
+  color: var(--ac-ink);
+}
+
+.ink-tool-btn.active {
+  background: var(--ac-accent-soft);
+  color: var(--ac-link);
+}
+
+.ink-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ink-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ac-radius-full);
+  border: 2px solid transparent;
+  background: var(--ink-swatch-color);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ink-swatch.active {
+  border-color: var(--ac-focus);
+  box-shadow: var(--ac-shadow-swatch-chosen);
+}
+
+.ink-size-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.ink-size-btn:hover { background: var(--ac-overlay-hover); }
+.ink-size-btn.active { background: var(--ac-accent-soft); }
+
+.ink-size-dot {
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-ink);
+}
+
+.ink-size-dot--fine { width: 4px; height: 4px; }
+.ink-size-dot--medium { width: 7px; height: 7px; }
+.ink-size-dot--broad { width: 11px; height: 11px; }
+
+/* Collapsed colour + size: the button shows the current colour, its size
+   follows the current thickness. */
+.ink-compact-dot {
+  border-radius: var(--ac-radius-full);
+  background: var(--ink-swatch-color);
+}
+
+.ink-compact-dot--fine { width: 8px; height: 8px; }
+.ink-compact-dot--medium { width: 12px; height: 12px; }
+.ink-compact-dot--broad { width: 18px; height: 18px; }
+
+.ink-compact-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+}
+
+.ink-compact-panel .ink-toolbar-group { gap: 6px; }
+.ink-compact-panel .ink-toolbar-group + .ink-toolbar-group { border-left: none; padding-left: 0; }
+
+/* The shape tool's list: the eight shapes in two rows. */
+.ink-shape-panel {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 2px;
+  padding: 6px;
+}
+
+/* The pen presets: a list of at most six rows, then the save button. */
+.ink-preset-panel { display: flex; flex-direction: column; gap: 4px; padding: 6px; width: 260px; max-width: calc(100vw - 16px); }
+.ink-preset-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.ink-preset-row { display: flex; align-items: center; gap: 2px; }
+.ink-preset-use {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ink-preset-use:hover { background: var(--ac-overlay-hover); }
+.ink-preset-use.active { background: var(--ac-accent-soft); color: var(--ac-link); }
+.ink-preset-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ink-preset-swatch { flex: none; width: 18px; height: 18px; border-radius: var(--ac-radius-full); background: var(--ink-swatch-color); box-shadow: var(--ac-shadow-swatch-rim); }
+.ink-preset-row--editing { padding-inline-start: 8px; gap: 6px; }
+.ink-preset-name {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+}
+.ink-preset-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-top: 1px solid var(--ac-line);
+  border-radius: 0 0 var(--ac-radius-sm) var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.ink-preset-save:hover:not(:disabled) { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.ink-preset-save:disabled { opacity: 0.5; cursor: default; }
+
+/* Fill or not, under the shapes. */
+.ink-shape-fill {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ac-line);
+}
+.ink-shape-fill-btn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ink-shape-fill-btn:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.ink-shape-fill-btn.active { background: var(--ac-accent-soft); color: var(--ac-link); }
+
+/* 「更多」: the full colour panel, in its own popover from the toolbar or
+   unfolded inside the collapsed colour-and-size panel. */
+.ink-color-popover { padding: 10px; }
+.ink-color-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 224px;
+  max-width: 100%;
+}
+/* In the collapsed panel the quick colours wrap and 「更多」 unfolds under them. */
+.ink-compact-panel .ink-toolbar-group { flex-wrap: wrap; max-width: 100%; }
+.ink-color-inline { flex: 1 0 100%; padding-top: 8px; border-top: 1px solid var(--ac-line); }
+.ink-color-inline .ink-color-panel { width: 100%; }
+.ink-color-section h3 {
+  margin: 0 0 6px;
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  color: var(--ac-muted);
+}
+.ink-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  justify-items: center;
+}
+.ink-color-panel .ink-swatch { width: 28px; height: 28px; box-shadow: var(--ac-shadow-swatch-rim); }
+.ink-color-panel .ink-swatch.active { box-shadow: var(--ac-shadow-swatch-chosen-panel); }
+.ink-swatch--slot { border-radius: var(--ac-radius-md); }
+.ink-color-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+  font-family: var(--onden-font-mono, monospace);
+}
+.ink-color-code[aria-invalid="true"] { border-color: var(--ac-danger); }
+
+/* The palette: a square for saturation (across) and brightness (up), a hue bar
+   under it, then the colour code and the eyedropper. Sizes are for a pen or a
+   finger: the square is at least 200 × 140, the hue bar's touch target 44 tall. */
+.ink-picker { display: flex; flex-direction: column; gap: 10px; }
+.ink-picker-square,
+.ink-picker-hue {
+  position: relative;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  cursor: crosshair;
+  outline: none;
+}
+.ink-picker-square {
+  width: 100%;
+  min-width: 200px;
+  height: 140px;
+  border-radius: var(--ac-radius-sm);
+  background:
+    linear-gradient(to top, var(--ac-pure-black), transparent),
+    linear-gradient(to right, var(--ac-pure-white), var(--ink-picker-hue, var(--ac-hue-red)));
+  box-shadow: var(--ac-shadow-swatch-rim);
+}
+.ink-picker-hue { width: 100%; height: 44px; display: flex; align-items: center; }
+.ink-picker-hue-track {
+  display: block;
+  width: 100%;
+  height: 20px;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-hue-spectrum);
+  box-shadow: var(--ac-shadow-swatch-rim);
+}
+.ink-picker-square:focus-visible,
+.ink-picker-hue:focus-visible { box-shadow: var(--ac-ring-focus); border-radius: var(--ac-radius-sm); }
+.ink-picker-thumb {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 3px solid var(--ac-pure-white);
+  border-radius: var(--ac-radius-full);
+  background: var(--ink-swatch-color);
+  box-shadow: var(--ac-shadow-picker-thumb);
+  pointer-events: none;
+}
+.ink-picker-thumb { left: var(--pk-x); top: var(--pk-y); }
+.ink-picker-thumb--bar { top: 50%; }
+.ink-picker-row { display: flex; align-items: center; gap: 8px; }
+.ink-picker-preview { flex: none; width: 24px; height: 24px; border-radius: var(--ac-radius-full); background: var(--ink-swatch-color); box-shadow: var(--ac-shadow-swatch-rim); }
+.ink-picker-row .ink-color-code { height: 32px; min-width: 0; }
+
+/* The eyedropper waits for a press on the page: a crosshair everywhere but the bar,
+   and a hint with a way out (a touch screen has no Esc). */
+body[data-ink-eyedropper="on"] *:not(.ink-note-toolbar):not(.ink-note-toolbar *):not(.ui-popover):not(.ui-popover *):not(.ink-eyedropper-hint):not(.ink-eyedropper-hint *) { cursor: crosshair !important; }
+.ink-eyedropper-hint {
+  left: 50%;
+  bottom: 24px;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  padding: 6px 8px 6px 6px;
+  transform: translateX(-50%);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-elevated);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+  font-size: var(--ac-fs-small);
+}
+.ink-eyedropper-hint[data-ink-eyedropper-missed] { border-color: var(--ac-danger); }
+.ink-eyedropper-cancel {
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-accent-wash);
+  color: var(--ac-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Touch: finger-sized targets (the row scrolls, so the width is free). */
+@media (pointer: coarse) {
+  .ink-tool-btn,
+  .ink-size-btn { width: 44px; height: 44px; }
+  .ink-swatch { position: relative; width: 24px; height: 24px; }
+  /* The dot stays small; the touch target around it is 44px. */
+  .ink-swatch::after { content: ""; position: absolute; inset: -10px; }
+  .ink-compact-panel .ink-toolbar-group { gap: 20px; }
+  .ink-color-panel .ink-swatch { width: 36px; height: 36px; }
+  .ink-color-panel .ink-swatch::after { inset: -4px; }
+  .ink-shape-fill-btn { min-height: 44px; }
+  .ink-preset-use, .ink-preset-save, .ink-preset-name { min-height: 44px; height: 44px; }
+  .ink-color-code, .ink-picker-row .ink-color-code { height: 44px; }
+  .ink-color-panel { width: 260px; }
+  .ink-picker-square { height: 160px; }
+  .ink-eyedropper-cancel { min-height: 44px; }
+}

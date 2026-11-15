@@ -1,0 +1,32 @@
+node_modules
+packages/*/node_modules
+packages/*/dist
+packages/frontend/dist-cap
+packages/frontend/.astro
+packages/frontend/e2e
+packages/backend/content
+docker
+.git
+*.md
+# 前端建置要打包 changes/（更新說明），不能被上面的 *.md 擋掉。
+!changes/*.md
+
+# Local-only: vendored competitor repos (reference reading, ~1.6GB) and the
+# agent sandbox home. Never part of any build context — keep it lean.
+.claude-sandbox-home
+AFFiNE
+any-sync
+anytype-heart
+anytype-ts
+khoj
+reor
+AppFlowy-main
+blinko-main
+etherpad-develop
+joplin-dev
+LearnData-main
+logseq-master
+markor-master
+siyuan-master
+SpeedyNote-main
+Trilium-main

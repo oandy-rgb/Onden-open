@@ -1,0 +1,8 @@
+lean=true 4258ms raw=20974KB(chars) gz=1889KB
+  keys: bodies=0KB attrs_omitted=0KB deferred_attribute_keys=0KB(2) last_event_id=0KB server_time=0KB workspace=0KB nodes=15782KB(20138) attributes=0KB(1) edges=5275KB(20384) tasks=0KB(0) pointers=0KB(0) features=0KB canvas_memberships=26KB(200) graph_positions=0KB(0) suggestions=0KB(0) events=33KB(50) actor_is_owner=0KB can_review=0KB example_seed_eligible=0KB tags=18KB(31) site_config=0KB chrome=0KB
+  node fields: label_tag_ids=1268KB recent_actors=1120KB workspace_id=1062KB last_actor=1022KB space_id=982KB id=865KB last_modified_at=825KB created_at=787KB updated_at=787KB deleted_by_event_id=531KB tag_is_inheritable=511KB collection_views=472KB slug=453KB source_type=452KB
+  attributes by key: pdf_url=0KB
+lean=false 4025ms raw=21191KB(chars) gz=1888KB
+  keys: bodies=0KB last_event_id=0KB server_time=0KB workspace=0KB nodes=15998KB(20138) attributes=0KB(1) edges=5275KB(20384) tasks=0KB(0) pointers=0KB(0) features=0KB canvas_memberships=26KB(200) graph_positions=0KB(0) suggestions=0KB(0) events=33KB(50) actor_is_owner=0KB can_review=0KB example_seed_eligible=0KB tags=18KB(31) site_config=0KB chrome=0KB
+  node fields: label_tag_ids=1268KB recent_actors=1120KB workspace_id=1062KB last_actor=1022KB space_id=982KB id=865KB last_modified_at=825KB created_at=787KB updated_at=787KB deleted_by_event_id=531KB tag_is_inheritable=511KB collection_views=472KB slug=453KB source_type=452KB
+  attributes by key: pdf_url=0KB

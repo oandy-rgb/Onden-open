@@ -1,0 +1,38 @@
+---
+// The copy button of a code block. The pages have no framework, so this is the
+// whole behaviour: one delegated click handler. Without script the button stays
+// hidden (siteFrame.css shows it only once `.s-js` is set below).
+// The same script wakes the media: a YouTube / Vimeo thumbnail loads its player
+// when pressed and an audio player gets its speed button (@onden/markdown
+// mediaEnhance.ts), fetched only by a page that has one.
+---
+
+<script>
+  document.documentElement.classList.add("s-js");
+  if (document.querySelector(".md-embed-lite, [data-audio-speed]")) {
+    void import("@onden/markdown/media-enhance").then((m) => m.installMediaEnhancer(document));
+  }
+  document.addEventListener("click", (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>(".md-codeblock-copy");
+    if (!button) return;
+    const text = button.parentElement?.querySelector("pre")?.textContent?.replace(/\n$/, "") ?? "";
+    const done = () => {
+      const label = button.textContent;
+      button.textContent = "✓";
+      window.setTimeout(() => { button.textContent = label; }, 1400);
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(done, () => {});
+      return;
+    }
+    // file:// and plain-http hosts have no async clipboard.
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    if (document.execCommand("copy")) done();
+    area.remove();
+  });
+</script>

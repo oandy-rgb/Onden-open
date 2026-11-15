@@ -1,0 +1,73 @@
+{
+  "components/CanvasInkLayer": [
+    "lib/ink/committed",
+    "lib/ink/engine",
+    "lib/ink/flowTransform",
+    "lib/ink/store",
+    "lib/ink/types"
+  ],
+  "components/FeaturedFields": [
+    "components/attributes/useFieldSave",
+    "components/attributes/utils"
+  ],
+  "components/InkNodeView": [
+    "lib/ink/engine",
+    "lib/ink/types"
+  ],
+  "components/InkToolbar": [
+    "lib/ink/types"
+  ],
+  "components/NodeAttributesPanel": [
+    "components/attributes/CustomRow",
+    "components/attributes/SchemaRow",
+    "components/attributes/utils"
+  ],
+  "components/NodeEventHistory": [
+    "lib/ink/store"
+  ],
+  "components/OndenBaseBlock": [
+    "components/views/BaseRenderer"
+  ],
+  "components/OverviewEditor": [
+    "lib/ink/store",
+    "lib/ink/types",
+    "lib/pdf/extractText"
+  ],
+  "components/PdfNodeView": [
+    "components/pdf/PdfHighlights",
+    "components/pdf/PdfViewerHost",
+    "lib/pdf/capture",
+    "lib/pdf/coords",
+    "lib/pdf/drawSession"
+  ],
+  "modules/table/TableLayout": [
+    "components/attributes/StarRating"
+  ],
+  "components/pdf/PdfHighlights": [
+    "lib/pdf/coords"
+  ],
+  "components/pdf/PdfViewerHost": [
+    "lib/pdf/coords"
+  ],
+  "data/starterPacks": [
+    "data/packs/book.tagpack.json",
+    "data/packs/meeting.tagpack.json",
+    "data/packs/person.tagpack.json",
+    "data/packs/project.tagpack.json"
+  ],
+  "hooks/useCanvasTools": [
+    "lib/ink/types"
+  ],
+  "lib/data/inkWriter": [
+    "lib/ink/store",
+    "lib/ink/types"
+  ],
+  "lib/pdf/drawSession": [
+    "lib/ink/engine",
+    "lib/ink/types"
+  ],
+  "modules/review/ReviewPanel": [
+    "lib/ink/store",
+    "lib/ink/thumbnail"
+  ]
+}

@@ -1,0 +1,18 @@
+# Optional HTTPS front (compose profile `https`). Caddy gets and renews the
+# certificate for ONDEN_DOMAIN by itself and forwards to nginx's private port
+# 8081, where nginx takes the client address from X-Real-IP (nginx.conf,
+# $onden_client_ip). header_up REPLACES whatever the browser sent, so a
+# client cannot pick its own IP. Docs: docs/self-host/https.md
+{
+	email {$ONDEN_ACME_EMAIL}
+}
+
+{$ONDEN_DOMAIN} {
+	# Caddy flushes text/event-stream (the sync stream) right away and sets no
+	# upload size limit; nginx still enforces the per-route body caps.
+	reverse_proxy nginx:8081 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

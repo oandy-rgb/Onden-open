@@ -1,0 +1,155 @@
+/* 這一天 — the day pane. Quiet like the journal: tokens only, no boxes except
+   where an item needs a shape. Past items are a soft solid, coming ones an outline. */
+.day-pane { min-width: 0; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; }
+.day-pane.is-board, .day-pane.is-phone { position: static; }
+.day-pane-list, .day-pane-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.day-pane-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.day-pane-title { margin: 0; font-family: var(--onden-font-display); font-size: var(--onden-text-xl, 22px); font-weight: 600; }
+.day-pane-date { color: var(--ac-muted); font-size: var(--onden-text-sm2, 13px); }
+.day-pane-ranges { margin-left: auto; }
+/* On a phone the segments are narrow: 「1 天」 broke at its space onto two lines. */
+.day-pane-ranges .ui-segment { white-space: nowrap; }
+.day-pane-more { flex: none; margin-left: auto; }
+.day-pane-ranges + .day-pane-more { margin-left: 0; }
+
+/* The week row or the month (DayStrip): one ‹ range › row over either; the day cells are ui/MonthDayCell. */
+.day-strip { display: flex; flex-direction: column; gap: 2px; }
+.day-strip-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--ac-space-2); }
+.day-strip-range { font-size: var(--ac-fs-small); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.day-strip-month { align-self: center; width: 100%; max-width: 360px; }
+.day-strip-legend { display: flex; justify-content: center; gap: var(--ac-space-5); margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.day-strip-legend > span { display: inline-flex; align-items: center; gap: var(--ac-space-1); }
+
+.day-check { flex: none; width: 18px; height: 18px; margin-top: 2px; padding: 0; border: 1.5px solid var(--ac-muted); border-radius: var(--ac-radius-sm); background: transparent; cursor: pointer; position: relative; }
+.day-check[aria-checked="true"] { background: var(--ac-accent); border-color: var(--ac-accent); }
+.day-check[aria-checked="true"]::after { content: ""; position: absolute; left: 5px; top: 1px; width: 4px; height: 9px; border: solid var(--ac-accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.day-check--none { border-style: dotted; cursor: default; opacity: 0.5; }
+@media (hover: none) { .day-check { width: 22px; height: 22px; } .day-check[aria-checked="true"]::after { left: 7px; top: 2px; } }
+
+/* Timeline: an hour is HOUR_PX tall (DayTimeline.tsx), so a gap is a stretch of empty page. */
+.day-timeline { max-height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; border-radius: var(--ac-radius-lg); }
+.day-pane.is-phone .day-timeline { max-height: calc(100dvh - 360px); min-height: 240px; }
+/* The hour labels sit half above their line: room above the first one (00:00) and below the last keeps them from being clipped by the scroller. */
+.day-timeline-body { --day-gutter: 56px; position: relative; height: var(--h); margin-block: 8px; }
+.day-hour { position: absolute; top: var(--top); left: 0; right: 0; height: 0; border-top: 1px solid color-mix(in srgb, var(--ac-muted) 22%, transparent); }
+.day-hour-label { position: absolute; top: -8px; left: 0; width: calc(var(--day-gutter) - 8px); box-sizing: border-box; padding-left: 2px; white-space: nowrap; overflow: visible; font-size: var(--onden-text-xs, 11px); color: var(--ac-muted); font-variant-numeric: tabular-nums; background: var(--ac-bg); }
+.day-lanes { position: absolute; top: 0; bottom: 0; left: var(--day-gutter); right: 4px; --ext-w: 0px; }
+/* Subscribed-calendar events take the right part of the lanes (external_calendars/day/external.css). */
+.day-lanes.has-ext { --ext-w: 38%; }
+.day-block { position: absolute; top: var(--top); height: var(--h); left: calc(var(--lane) / var(--lanes) * (100% - var(--ext-w))); width: calc((100% - var(--ext-w)) / var(--lanes) - 4px); display: flex; flex-direction: row; align-items: baseline; box-sizing: border-box; padding: 3px 8px; overflow: hidden; border-radius: var(--ac-radius-md); flex-wrap: wrap; align-content: flex-start; column-gap: 8px; font: inherit; font-size: var(--onden-text-sm2, 13px); text-align: left; cursor: pointer; color: var(--ac-ink); z-index: var(--z-local-1); }
+.day-block:disabled { cursor: default; }
+.day-block.is-past { background: color-mix(in srgb, var(--ac-accent) 12%, var(--ac-bg)); border: 1px solid transparent; color: var(--ac-muted); }
+.day-block.is-coming { background: var(--ac-bg); border: 1.5px solid color-mix(in srgb, var(--ac-accent) 70%, transparent); }
+.day-block--edit.is-past, .day-block--created.is-past, .day-block--capture.is-past, .day-block--agent.is-past { background: var(--ac-overlay-subtle); }
+.day-block.is-compact { flex-wrap: nowrap; align-items: center; padding-top: 0; padding-bottom: 0; column-gap: 6px; font-size: var(--onden-text-xs, 11px); line-height: 1.2; }
+.day-block-time { font-size: var(--onden-text-xs, 11px); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.day-block-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-block-detail { flex-basis: 100%; font-size: var(--onden-text-xs, 11px); color: var(--ac-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-now { position: absolute; top: var(--top); left: calc(-1 * var(--day-gutter)); right: -4px; height: 0; border-top: 2px solid var(--ac-danger); pointer-events: none; }
+/* The line has no z-index of its own (blocks sit above it); only the time pill rides on top. */
+.day-now span { z-index: var(--z-local-3); position: absolute; left: 0; top: -9px; padding: 0 4px; border-radius: var(--ac-radius-sm); background: var(--ac-danger); color: var(--ac-accent-ink); font-size: var(--onden-text-xs, 11px); font-variant-numeric: tabular-nums; }
+
+/* 3 天 / 週 */
+.week-board { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; }
+.week-shelf { display: flex; flex-direction: column; gap: 8px; }
+.week-shelf-title { margin: 0; font-size: var(--onden-text-sm2, 13px); font-weight: 600; color: var(--ac-muted); }
+.week-columns { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.week-column { min-width: 0; min-height: 240px; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: var(--ac-radius-lg); border: 1px solid transparent; }
+.week-column.is-selected { background: color-mix(in srgb, var(--ac-accent) 7%, transparent); }
+.week-column.is-over { border-color: var(--ac-accent); background: color-mix(in srgb, var(--ac-accent) 12%, transparent); }
+.week-column-head { display: flex; align-items: baseline; gap: 6px; border: 0; background: transparent; padding: 2px 4px; font: inherit; cursor: pointer; text-align: left; color: var(--ac-ink); }
+.week-column.is-today .week-column-num { color: var(--ac-accent); font-weight: 600; }
+.week-column-weekday { font-size: var(--onden-text-xs, 11px); color: var(--ac-muted); }
+.week-column-num { font-size: var(--onden-text-lg, 18px); font-variant-numeric: lining-nums; }
+.week-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.week-card { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: var(--ac-radius-md); background: var(--ac-overlay-subtle); font-size: var(--onden-text-sm2, 13px); cursor: grab; }
+.week-card.is-past { color: var(--ac-muted); }
+.week-card.is-done .week-card-title { text-decoration: line-through; color: var(--ac-muted); }
+.week-card-open { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.week-card-time { font-size: var(--onden-text-xs, 11px); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.week-card-title { overflow-wrap: anywhere; }
+
+/* 去年今天 */
+.last-year-open { display: flex; align-items: baseline; gap: var(--ac-space-3); width: 100%; min-width: 0; padding: var(--ac-space-2) var(--ac-space-4); border: 0; border-radius: var(--ac-radius-lg); background: var(--ac-overlay-subtle); font: inherit; font-size: var(--ac-fs-small); text-align: left; color: var(--ac-ink); cursor: pointer; }
+.last-year-label { flex: none; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.last-year-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 900px) { .week-board { grid-template-columns: minmax(0, 1fr); } }
+
+/* 日記 · 單天頁 */
+.day-page { min-width: 0; display: flex; flex-direction: column; gap: var(--ac-space-5); }
+.day-page-head { display: flex; align-items: center; gap: var(--ac-space-3); }
+.day-page-title { margin: 0; font-family: var(--ac-font-display); font-size: var(--ac-fs-title-sm); font-weight: var(--ac-fw-medium); line-height: var(--ac-lh-title); color: var(--ac-ink); }
+.day-page-title.is-today { color: var(--ac-accent); }
+/* The big date reads as a heading: no frame or fill until it is hovered, focused or open. */
+.ui-btn.day-page-datebtn { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font: inherit; color: inherit; border-color: transparent; background: transparent; }
+.ui-btn.day-page-datebtn:hover:not(:disabled), .ui-btn.day-page-datebtn:focus-visible, .ui-btn.day-page-datebtn[aria-expanded="true"] { border-color: var(--ac-line); background: var(--ac-overlay-hover); }
+/* 今天 beside the date: a small pill in the place 「回到今天」 takes on another day. */
+.day-page-word { margin: 0; padding: 2px 10px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); font-size: var(--ac-fs-caption); line-height: 1.4; color: var(--ac-muted); }
+.ui-btn.day-page-back { color: var(--ac-accent); }
+.day-page-note { min-width: 0; }
+.day-page-body { position: relative; cursor: pointer; padding-right: var(--ac-space-9); }
+.day-page-open { position: absolute; top: 0; right: 0; }
+.day-page-loading { margin: 0; font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.day-section { display: flex; flex-direction: column; gap: var(--ac-space-2); }
+.day-section-title { margin: 0; font-family: var(--ac-font-ui); font-size: var(--ac-fs-small); font-weight: var(--ac-fw-bold); color: var(--ac-muted); }
+/* 還有 N 件要做 / 排了 N 件: one framed row, the text on the left and the way to Tasks on the right (44px+ tall). */
+.ui-btn.day-todo-row { display: flex; align-items: center; justify-content: space-between; gap: var(--ac-space-3); width: 100%; min-height: 44px; padding: var(--ac-space-2) var(--ac-space-4); border-radius: var(--ac-radius-lg); font-size: var(--ac-fs-small); text-align: left; }
+.day-todo-text { min-width: 0; color: var(--ac-ink); }
+.day-todo-go { flex: none; color: var(--ac-accent); }
+.day-happened { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.day-happened-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ac-space-4); width: 100%; min-height: var(--ac-row-touch); padding: 0; border: 0; background: none; font: inherit; color: var(--ac-ink); text-align: left; cursor: pointer; }
+.day-happened-row:hover .day-happened-title { text-decoration: underline; }
+.day-happened-title { min-width: 0; overflow-wrap: anywhere; }
+.day-happened-kind { flex: none; font-size: var(--ac-fs-caption); color: var(--ac-faint); }
+.day-mentions { display: flex; flex-direction: column; gap: var(--ac-space-4); }
+/* Rows that are buttons: a ui Button, laid out as a left-aligned row instead of a framed pill. */
+.ui-btn.day-happened-row, .ui-btn.backlink-card, .ui-btn.journal-task-text { height: auto; white-space: normal; text-align: left; font-weight: var(--ac-fw-regular); }
+.ui-btn.day-happened-row { width: 100%; justify-content: space-between; padding-inline: 0; }
+.ui-btn.backlink-card { width: 100%; flex-direction: column; align-items: flex-start; }
+.ui-btn.journal-task-text { justify-content: flex-start; padding-inline: 0; }
+.ui-btn.journal-placeholder { height: auto; justify-content: flex-start; align-items: flex-start; font-weight: var(--ac-fw-regular); white-space: normal; }
+.ui-btn.day-happened-row, .ui-btn.backlink-card, .ui-btn.journal-task-text { color: var(--ac-ink); }
+.ui-btn.journal-placeholder { color: var(--ac-faint); }
+/* Focus records (lib/focus/focusDayItems): a solid block; the one still running has a heavier edge. */
+.day-block--focus.is-past { background: var(--ac-accent-soft); }
+.day-block--focus.is-live { border: 2px solid var(--ac-accent); }
+/* The small timer button inside the right end of a task's block (begins a focus on it): 36px wide, as tall as the
+   block up to 36px, so a short block's whole right side is the target; the block leaves it room (has-focus). */
+.day-block.has-focus { padding-right: 44px; }
+.day-lanes .ui-btn.day-block-focus { --focus-h: min(36px, var(--h)); position: absolute; z-index: var(--z-local-2); box-sizing: border-box; width: 36px; min-width: 0; height: var(--focus-h); min-height: 0;
+  top: calc(var(--top) + (var(--h) - var(--focus-h)) / 2); left: calc((var(--lane) + 1) / var(--lanes) * (100% - var(--ext-w)) - 43px); }
+
+/* Planning on the timeline */
+.day-timeline-body.is-plannable { cursor: cell; }
+.day-pane.is-phone .day-timeline-body.is-plannable { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.day-block-slot { position: absolute; top: var(--top); height: var(--h); left: 0; right: 0; box-sizing: border-box; padding: 3px 8px; border-radius: var(--onden-radius-md); pointer-events: none; z-index: var(--z-local-1); }
+.day-block-slot--draft { border: 1.5px dashed var(--ac-accent); background: var(--ac-accent-soft); }
+.day-block-slot--preview { border: 1.5px solid var(--ac-accent); background: var(--ac-accent-soft); opacity: 0.85; }
+.day-plan { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+/* The width bounds are the desktop popover's; on a phone the form sits in a bottom sheet and spans it. */
+.day-plan-popover .day-plan { width: min(380px, 92vw); }
+
+/* Moving a planned block and pulling its lower edge (useBlockDrag). Only open tasks the reader may write get these. */
+.day-block.is-movable { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.day-block.is-dragging { cursor: grabbing; z-index: var(--z-local-2); border: 2px solid var(--ac-accent); background: var(--ac-accent-soft); color: var(--ac-ink); }
+.day-block.is-selected { border: 2px solid var(--ac-accent); }
+.day-block-grip { position: absolute; z-index: var(--z-local-2); top: calc(var(--top) + var(--h) - 8px); height: 14px; left: calc(var(--lane) / var(--lanes) * (100% - var(--ext-w))); width: calc((100% - var(--ext-w)) / var(--lanes) - 4px); cursor: ns-resize; display: flex; align-items: center; justify-content: center; }
+.day-block-grip::after { content: ""; width: 28px; height: 4px; border-radius: var(--ac-radius-xs); background: var(--ac-muted); opacity: 0; }
+.day-block-grip.is-shown::after { opacity: 0.8; }
+/* Selected (held on a phone): a finger-sized target. */
+.day-block-grip.is-selected { touch-action: none; top: calc(var(--top) + var(--h) - 20px); height: 32px; }
+.day-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.week-card.is-lifted { opacity: 0.7; background: var(--ac-accent-soft); }
+
+/* A folded empty stretch: one quiet line in the lanes' column, opened by a tap. */
+/* Above the lanes, which cover the whole day and are drawn after it: a tap must reach the fold, not the empty lane over it. */
+.day-fold { position: absolute; top: var(--top); height: var(--h); left: var(--day-gutter); right: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-muted); cursor: pointer; font-variant-numeric: tabular-nums; z-index: var(--z-local-1); }
+.day-fold:hover, .day-fold:focus-visible { color: var(--ac-ink); border-style: solid; }
+
+/* The focus lane (DayTimeline focusLane): what was really focused on, a slim column at the right edge beside what was planned. */
+.day-timeline-body.has-focus-lane .day-lanes { right: 36px; }
+.day-focus-lane { position: absolute; top: 0; bottom: 0; right: 4px; width: 26px; border-inline-start: 1px dashed color-mix(in srgb, var(--ac-muted) 40%, transparent); }
+.day-focus-block { position: absolute; top: var(--top); height: var(--h); left: 4px; right: 0; padding: 0; border: 0; border-radius: var(--ac-radius-sm); background: var(--ac-accent-soft); border: 1px solid var(--ac-accent-border); box-sizing: border-box; cursor: pointer; }
+.day-focus-block:disabled { cursor: default; }
+.day-focus-block.is-live { background: var(--ac-accent); border-color: var(--ac-accent); }

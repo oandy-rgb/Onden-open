@@ -1,0 +1,9 @@
+/* A drawing's change: a toggle under a history row and a small picture. Strokes are stored for the light theme, so in the dark one
+   the picture is inverted by lightness the way the drawing surface does (lib/ink/color.ts). */
+.ink-change { flex: 0 0 100%; padding: 0 12px 8px; }
+.ink-change-toggle { background: none; border: 0; padding: 0; color: var(--ac-accent); text-decoration: underline; cursor: pointer; font: inherit; font-size: var(--ac-fs-xs); min-height: 44px; }
+.ink-change-picture { margin-top: 4px; display: flex; justify-content: center; background: var(--ac-surface); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); padding: 8px; }
+.ink-change-picture svg { width: 100%; max-width: 360px; max-height: 160px; height: auto; }
+.ink-change-note { margin: 4px 0 0; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ink-change-picture svg { filter: invert(1) hue-rotate(180deg); } }
+:root[data-theme="dark"] .ink-change-picture svg { filter: invert(1) hue-rotate(180deg); }

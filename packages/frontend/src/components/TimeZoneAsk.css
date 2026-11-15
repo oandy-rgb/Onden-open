@@ -1,0 +1,23 @@
+/* 旅行時詢問: a small card in the corner, never over the content being edited. */
+.time-zone-ask {
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--z-notice-low);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+  font-size: var(--ac-fs-small);
+}
+.time-zone-ask-text { margin: 0; line-height: 1.5; }
+.time-zone-ask-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 600px) {
+  /* Above the phone's bottom navigation bar. */
+  .time-zone-ask { right: 16px; left: 16px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}

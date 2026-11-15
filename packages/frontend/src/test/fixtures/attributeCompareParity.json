@@ -1,0 +1,32 @@
+{
+  "comment": "One attribute-comparison fixture (D49), evaluated by both ends: the onden-base block's filters and sorts (frontend lib/basesEval.ts, src/test/basesCompareParity.test.ts) and the server's filter clauses and attribute sort (backend services/filter/sqlClauses.ts and collectionViewQuery.ts attributeSortSql, packages/backend/src/test/attributeCompareParity.integration.test.ts). Each attribute is [value, value_type]. A filter has the Bases expression and the server clause it stands for; both must list `expect`. Values are typed by value_type: a text-typed \"5\" is no number to a range (it still equals the text \"5\"), a range on a non-number non-date value matches nothing, and a missing attribute fails every comparison but != (the server's NOT EXISTS). A list value (a JSON array, D117) equals the text of any of its elements; \"[draft\" only looks like one. Sorts: numbers by value (9 before 10), then dates, then text, a note without the attribute last in both directions.",
+  "notes": [
+    { "key": "a", "attrs": { "rating": ["5", "number"], "due": ["2026-10-05", "date"], "authors": ["[\"Alice\",\"Bob\"]", "text"] } },
+    { "key": "b", "attrs": { "rating": ["10", "number"], "due": ["2026-09-20", "date"], "authors": ["Alice", "text"] } },
+    { "key": "c", "attrs": { "rating": ["9", "number"], "due": ["2026-10-01", "date"], "authors": ["[draft", "text"] } },
+    { "key": "d", "attrs": { "rating": ["5", "text"], "authors": ["[\"Bob\"]", "text"] } },
+    { "key": "e", "attrs": { "due": ["soon", "text"] } }
+  ],
+  "filters": [
+    { "expr": "rating == 5", "clause": { "field": "rating", "op": "eq", "value": "5" }, "expect": ["a", "d"] },
+    { "expr": "rating != 5", "clause": { "field": "rating", "op": "ne", "value": "5" }, "expect": ["b", "c", "e"] },
+    { "expr": "rating == \"10\"", "clause": { "field": "rating", "op": "eq", "value": "10" }, "expect": ["b"] },
+    { "expr": "rating > 8", "clause": { "field": "rating", "op": "gt", "value": "8" }, "expect": ["b", "c"] },
+    { "expr": "rating >= \"9\"", "clause": { "field": "rating", "op": "gte", "value": "9" }, "expect": ["b", "c"] },
+    { "expr": "rating < 10", "clause": { "field": "rating", "op": "lt", "value": "10" }, "expect": ["a", "c"] },
+    { "expr": "rating <= 5", "clause": { "field": "rating", "op": "lte", "value": "5" }, "expect": ["a"] },
+    { "expr": "due >= \"2026-10-01\"", "clause": { "field": "due", "op": "gte", "value": "2026-10-01" }, "expect": ["a", "c"] },
+    { "expr": "due < \"2026-10-01\"", "clause": { "field": "due", "op": "lt", "value": "2026-10-01" }, "expect": ["b"] },
+    { "expr": "due > \"later\"", "clause": { "field": "due", "op": "gt", "value": "later" }, "expect": [] },
+    { "expr": "authors == \"Alice\"", "clause": { "field": "authors", "op": "eq", "value": "Alice" }, "expect": ["a", "b"] },
+    { "expr": "authors != \"Alice\"", "clause": { "field": "authors", "op": "ne", "value": "Alice" }, "expect": ["c", "d", "e"] },
+    { "expr": "authors == \"Bob\"", "clause": { "field": "authors", "op": "eq", "value": "Bob" }, "expect": ["a", "d"] },
+    { "expr": "authors == \"[draft\"", "clause": { "field": "authors", "op": "eq", "value": "[draft" }, "expect": ["c"] }
+  ],
+  "sorts": [
+    { "key": "rating", "dir": "asc", "expect": ["a", "c", "b", "d", "e"] },
+    { "key": "rating", "dir": "desc", "expect": ["b", "c", "a", "d", "e"] },
+    { "key": "due", "dir": "asc", "expect": ["b", "c", "a", "e", "d"] },
+    { "key": "due", "dir": "desc", "expect": ["a", "c", "b", "e", "d"] }
+  ]
+}

@@ -1,0 +1,198 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Published-site tokens — the published site's OWN token set.
+
+   A published site must not change when the app is re-themed. Until this file
+   the site read the app's live tokens (theme-tokens.css), so any app palette,
+   font or radius change silently restyled every published site. Here is a
+   frozen copy of the values the site rendered on 2026-10-19 (the app's light
+   theme then), written as literals so nothing resolves back to an app token.
+
+   Scope: html.onden-site, the server-rendered site pages (pages/site/*.astro).
+
+   The names are the ones published CSS already reads (published-site.css,
+   MarkdownRenderer.css, siteFrame.css), so no published rule changed.
+   test/cssTokensDefined.test.ts checks that every token those files read is
+   defined here, so a published rule can never fall through to an app token
+   again.
+
+   To restyle published sites on purpose, edit THIS file.
+   ────────────────────────────────────────────────────────────────────────── */
+
+html.onden-site {
+  --onden-gray-1: #fcfbf9;
+  --onden-gray-2: #edebe4;
+  --onden-gray-3: #e3e0d7;
+  --onden-gray-4: #d6d2c6;
+  --onden-gray-5: #c4bfb0;
+  --onden-gray-6: #aaa493;
+  --onden-gray-7: #8d8775;
+  --onden-gray-8: #6f6957;
+  --onden-gray-9: #565044;
+  --onden-gray-10: #3d3930;
+  --onden-gray-11: #292620;
+  --onden-gray-12: #15130d;
+  --onden-accent-1: #fdf8f7;
+  --onden-accent-2: #f8ece9;
+  --onden-accent-3: #f0d9d5;
+  --onden-accent-4: #e6c0bb;
+  --onden-accent-5: #d7a09a;
+  --onden-accent-6: #c47b75;
+  --onden-accent-7: #ac5852;
+  --onden-accent-8: #93423d;
+  --onden-accent-9: #7a2e33;
+  --onden-accent-10: #672629;
+  --onden-accent-11: #531e21;
+  --onden-accent-12: #3a1517;
+  --onden-red-3: #fce4e4;
+  --onden-red-9: #c43c3c;
+  --onden-red-11: #8f2c2c;
+  --onden-amber-3: #fdf0d4;
+  --onden-amber-9: #c2871d;
+  --onden-amber-11: #8f6014;
+  --onden-blue-3: #dde7f2;
+  --onden-blue-9: #315f8f;
+  --onden-blue-11: #234470;
+  --onden-bg-base: #edebe4;
+  --onden-bg-surface: #fcfbf9;
+  --onden-bg-surface-2: #e3e0d7;
+  --onden-bg-elevated: #fcfbf9;
+  --onden-bg-overlay: rgba(0, 0, 0, 0.4);
+  --onden-bg-subtle: color-mix(in srgb, #15130d 4%, transparent);
+  --onden-text-strong: #15130d;
+  --onden-text-normal: #292620;
+  --onden-text-muted: #565044;
+  --onden-text-faint: #6f6957;
+  --onden-text-on-accent: #ffffff;
+  --onden-overlay-hover: rgba(0, 0, 0, 0.04);
+  --onden-overlay-selected: rgba(0, 0, 0, 0.08);
+  --onden-overlay-press: rgba(0, 0, 0, 0.12);
+  --onden-border-default: #c4bfb0;
+  --onden-border-strong: #8d8775;
+  --onden-border-focus: #7a2e33;
+  --onden-accent-bg: #7a2e33;
+  --onden-accent-bg-hover: #672629;
+  --onden-accent-text: #7a2e33;
+  --onden-accent-text-hover: #672629;
+  --onden-state-success-bg: #f0d9d5;
+  --onden-state-success-text: #531e21;
+  --onden-state-warning-bg: #fdf0d4;
+  --onden-state-warning-text: #8f6014;
+  --onden-state-error-bg: #fce4e4;
+  --onden-state-error-text: #8f2c2c;
+  --onden-state-info-bg: #dde7f2;
+  --onden-state-info-text: #234470;
+  --onden-status-positive: #317563;
+  --onden-status-positive-bg: color-mix(in srgb, #317563 12%, transparent);
+  --onden-shadow-sm: 0 1px 2px rgba(70, 56, 30, 0.07);
+  --onden-shadow-md: 0 4px 14px rgba(70, 56, 30, 0.09);
+  --onden-shadow-lg: 0 16px 44px rgba(70, 56, 30, 0.14);
+  --onden-focus-ring: 0 0 0 3px color-mix(in srgb, #7a2e33 28%, transparent);
+  --onden-hover-wash: color-mix(in srgb, #7a2e33 6%, transparent);
+  --syntax-heading: #15130d;
+  --syntax-bold: #15130d;
+  --syntax-emphasis: #3d3930;
+  --syntax-link: #234470;
+  --syntax-code: #531e21;
+  --syntax-quote: #565044;
+  --syntax-list: #7a2e33;
+  --syntax-tag: #531e21;
+  --tag-chip-bg: color-mix(in srgb, #7a2e33 10%, transparent);
+  --tag-chip-fg: #531e21;
+  --tag-chip-border: color-mix(in srgb, #7a2e33 28%, transparent);
+  --wikilink-resolved: #531e21;
+  --wikilink-missing: #8f2c2c;
+  --onden-radius-xs: 3px;
+  --onden-radius-sm: 4px;
+  --onden-radius-md: 6px;
+  --onden-radius-lg: 8px;
+  --onden-radius-xl: 12px;
+  --onden-control-sm: 30px;
+  --onden-control-md: 36px;
+  --onden-tap: 44px;
+  --bg: #edebe4;
+  --surface: #fcfbf9;
+  --surface-strong: #e3e0d7;
+  --surface-2: #e3e0d7;
+  --surface-hover: #e3e0d7;
+  --bg-subtle: color-mix(in srgb, #15130d 4%, transparent);
+  --accent-muted: color-mix(in srgb, #7a2e33 12%, transparent);
+  --text: #292620;
+  --muted: #565044;
+  --text-muted: #565044;
+  --hover: rgba(0, 0, 0, 0.04);
+  --line: #c4bfb0;
+  --border: #c4bfb0;
+  --accent: #7a2e33;
+  --accent-strong: #672629;
+  --warn: #8f6014;
+  --blue: #234470;
+  --shadow: 0 16px 44px rgba(70, 56, 30, 0.14);
+  --danger: #8f2c2c;
+  --onden-danger: #8f2c2c;
+  --faint: #565044;
+  --text-dim: #292620;
+  --ink: #292620;
+  --onden-text-default: #292620;
+  --onden-ink-12: #15130d;
+  --onden-accent: #7a2e33;
+  --onden-border: #c4bfb0;
+  --onden-state-warning-border: #c4bfb0;
+  --onden-surface-hover: rgba(0, 0, 0, 0.04);
+  --onden-surface-active: rgba(0, 0, 0, 0.07);
+  --surface-active: rgba(127, 127, 127, 0.18);
+  --accent-soft: rgba(127, 127, 127, 0.15);
+  --purple: #7c3aed;
+  --onden-status-connected: #4a7c59;
+  --onden-cjk: "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK TC", "Noto Sans CJK SC", "Source Han Sans TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+  --onden-font-display: "Fraunces", "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK TC", "Noto Sans CJK SC", "Source Han Sans TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif, serif;
+  --onden-font-body: "IBM Plex Sans", "Source Sans 3", "Source Sans Pro", system-ui, -apple-system, "Segoe UI", Roboto, "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK TC", "Noto Sans CJK SC", "Source Han Sans TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif, sans-serif;
+  --onden-font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --onden-text-xs: calc(var(--onden-ui-font-size-base) * 11 / 14);
+  --onden-text-sm: calc(var(--onden-ui-font-size-base) * 12 / 14);
+  --onden-text-sm2: calc(var(--onden-ui-font-size-base) * 13 / 14);
+  --onden-text-base: var(--onden-ui-font-size-base);
+  --onden-text-md: calc(var(--onden-ui-font-size-base) * 15 / 14);
+  --onden-text-lg: calc(var(--onden-ui-font-size-base) * 18 / 14);
+  --onden-text-xl: calc(var(--onden-ui-font-size-base) * 22 / 14);
+  --onden-text-2xl: calc(var(--onden-ui-font-size-base) * 2);
+  --onden-text-3xl: calc(var(--onden-ui-font-size-base) * 36 / 14);
+  --onden-leading-tight: 1.25;
+  --onden-leading-snug: 1.4;
+  --onden-leading-normal: 1.55;
+  --onden-leading-relaxed: 1.75;
+  --onden-tracking-tight: -0.02em;
+  --onden-tracking-snug: -0.01em;
+  --onden-tracking-normal: 0;
+  --onden-tracking-wide: 0.06em;
+  --onden-weight-normal: 400;
+  --onden-weight-medium: 500;
+  --onden-weight-semibold: 600;
+  --onden-weight-bold: 700;
+  --font-display: "Fraunces", "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "PingFang TC", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK TC", "Noto Sans CJK SC", "Source Han Sans TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif, serif;
+  --font-ui: sans-serif;
+  --onden-font-ui: sans-serif;
+  /* The --ac-* names components/MarkdownRenderer.css reads, at the values this site already rendered
+     for the older names that file used (--muted, --surface, --onden-state-info-text …). */
+  --ac-danger: #8f2c2c;
+  --ac-muted: #565044;
+  --ac-surface: #fcfbf9;
+  --ac-raised: #e3e0d7;
+  --ac-line: #c4bfb0;
+  --ac-accent: #7a2e33;
+  --ac-ink: #15130d;
+  --ac-info: #234470;
+  --ac-success: #531e21;
+  --ac-warning: #8f6014;
+  --ac-callout-example: #8b5cf6;
+  --ac-callout-quote: #6b7280;
+  --ac-radius-md: 6px;
+  --ac-focus-outline: 2px solid var(--ac-accent);
+  --ac-focus-offset: 2px;
+  --z-local-1: 1;
+}
+
+/* Server-rendered site pages: no user settings reach them, so the base size is
+   pinned to the default the site was designed at. */
+html.onden-site {
+  --onden-ui-font-size-base: 14px;
+}

@@ -1,0 +1,13 @@
+{
+  "rawEventImporters": 11,
+  "content_nodes.writers": 22,
+  "content_nodes.readers": 142,
+  "node_attributes.writers": 8,
+  "node_attributes.readers": 55,
+  "node_tags.writers": 5,
+  "node_tags.readers": 36,
+  "block_nodes.writers": 7,
+  "block_nodes.readers": 15,
+  "domain_events.writers": 3,
+  "domain_events.readers": 43
+}

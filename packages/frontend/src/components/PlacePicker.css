@@ -1,0 +1,54 @@
+/* PlacePicker: search, then places grouped by space. The card around it is
+ * MoveToDialog's (move-to-dialog) or the create sheet's own. */
+.place-picker { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
+.place-picker-where { margin: 0; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.place-picker-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1;
+}
+/* A desktop card has only a max-height, so the list can't take "the rest" of
+ * it: the list carries its own cap, or a long list stretches the card past the
+ * window (every caller: Move to…, 放在…, quick capture, quick-add task). On a
+ * phone the steady sheet bounds it and the list takes what is left. */
+@media (width > 600px) { .place-picker-options { max-height: min(400px, calc(80dvh - 150px)); } }
+.place-picker-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 4px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+}
+.place-picker-options > .place-picker-heading:first-child { padding-top: 2px; }
+.place-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-block: 6px;
+  padding-inline-end: 10px;
+  padding-inline-start: calc(10px + var(--depth, 0) * 20px); /* a level per step, to MAX_INDENT_DEPTH */
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-ui);
+}
+.place-picker-row.active { background: var(--ac-overlay-hover); }
+.place-picker-row.is-here { cursor: default; color: var(--ac-muted); }
+.place-picker-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.place-picker-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.place-picker-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+}
+.place-picker-row > svg { flex: none; color: var(--ac-accent); }
+.place-picker-more { margin: 0; padding: 6px 10px; color: var(--ac-muted); font-size: var(--ac-fs-small); }

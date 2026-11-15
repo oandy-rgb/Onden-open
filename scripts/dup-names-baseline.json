@@ -1,0 +1,255 @@
+{
+  "allow": {
+    "GET": {
+      "reason": "Astro 端點的約定名稱，每個 pages/ 檔案各一個",
+      "files": "/pages/"
+    },
+    "prerender": {
+      "reason": "Astro 端點的約定名稱，每個 pages/ 檔案各一個",
+      "files": "/pages/"
+    },
+    "MODULES": "前後端各有一份模組註冊表（decisions-modules.md），兩邊同名是設計",
+    "*Module": {
+      "reason": "每個功能模組在後端與前端各註冊一次（decisions-modules.md），兩邊同名是設計；只限 modules/<id>/index.ts",
+      "files": "/modules/[^/]+/index\\.tsx?$"
+    }
+  },
+  "typesAllow": {
+    "BoardChanges": {
+      "reason": "前端是送出的請求形狀（cards/sections 巢狀、可省略）；後端是解析後的內部形狀（upsertCards/removeCards…）。請求與內部表示，不是同一個回應。",
+      "files": [
+        "packages/backend/src/services/boardWrites.ts",
+        "packages/frontend/src/lib/boardLayout.ts"
+      ]
+    },
+    "EditorBodyChange": {
+      "reason": "前端是要送的 body_change（device 必填、可帶 carried_anchors）；後端是讀請求後的結果（device 可為 null）。一個是寫出、一個是讀入驗證後的值。",
+      "files": [
+        "packages/backend/src/services/blockAnchors/changes.ts",
+        "packages/frontend/src/lib/editorChangeLog.ts"
+      ]
+    },
+    "FunctionHolder": {
+      "reason": "後端的持有者有 node 與 space 兩種；前端只處理 node（目錄裡的標籤）。前端那份是刻意較窄的視角，且不在 API 回應中。",
+      "files": [
+        "packages/backend/src/services/functionRefs.ts",
+        "packages/frontend/src/hooks/useFunctions.ts"
+      ]
+    },
+    "JournalEntry": {
+      "reason": "後端是瀏覽器版 HTTP 請求的日誌列（method/path/headers）；前端是本機資料庫的操作日誌（session/seq/op）。兩個不相關的日誌。",
+      "files": [
+        "packages/backend/src/browser/journal.ts",
+        "packages/frontend/src/lib/localDbJournal.ts"
+      ]
+    },
+    "LiveEvent": {
+      "reason": "後端是 AI 即時回答的串流事件（text/step/end）；前端是領域事件列（id/event_type/payload）。同名但完全不同的東西。",
+      "files": [
+        "packages/backend/src/services/agentRuntime/api/liveRun.ts",
+        "packages/frontend/src/lib/liveEvent.ts"
+      ]
+    },
+    "NoteSkill": {
+      "reason": "後端是完整技能筆記（含 instructions、output）；前端是 @ 提及選單用的精簡清單項（id/name/description/appliesTo）。",
+      "files": [
+        "packages/backend/src/services/harness/noteSkills.ts",
+        "packages/frontend/src/lib/agentMentions.ts"
+      ]
+    },
+    "RuntimeKind": {
+      "reason": "後端是封閉的 \"api\" | \"mcp\"；前端刻意開放（\"api\" | \"mcp\" | string），讀到新版伺服器的新種類時不壞。",
+      "files": [
+        "packages/backend/src/services/agentRuntime/types.ts",
+        "packages/frontend/src/lib/aiRuntimeText.ts"
+      ]
+    },
+    "SkillRow": {
+      "reason": "後端是資料庫讀出的技能筆記列（id/title/markdown）；前端是提及選單的畫面列（skill/hint）。",
+      "files": [
+        "packages/backend/src/services/harness/noteSkills.ts",
+        "packages/frontend/src/lib/agentMentions.ts"
+      ]
+    },
+    "Space": {
+      "reason": "後端是分散式同步引擎裡的模擬空間（owner、members Map）；前端是 GET /api/spaces 的回應列。",
+      "files": [
+        "packages/backend/src/distributedSync/materialize.ts",
+        "packages/frontend/src/lib/spaces.ts"
+      ]
+    },
+    "TaskLine": {
+      "reason": "後端是筆記中任務行的 block 對應（blockId/ref）；前端是行號與勾選框位置（line/markOffset），為編輯器用。",
+      "files": [
+        "packages/backend/src/services/taskSeam.ts",
+        "packages/frontend/src/lib/taskLines.ts"
+      ]
+    },
+    "TaskPatch": {
+      "reason": "後端是 zod 驗證的請求 schema（接受舊欄位名）；前端是寫入端的輸入形狀（巢狀、可為 null）。請求兩端，不是同一個回應。",
+      "files": [
+        "packages/backend/src/modules/tasks/update.ts",
+        "packages/frontend/src/lib/data/taskWriter.ts"
+      ]
+    },
+    "TaskRow": {
+      "reason": "後端是資料庫列（含 workspace_id、created_at）；前端是以 NodeTask 衍生的畫面模型。線上傳送的形狀是 contract 的 NodeTask。",
+      "files": [
+        "packages/backend/src/services/tasksStore.ts",
+        "packages/frontend/src/lib/tasks/taskModel.ts"
+      ]
+    },
+    "ToolSpec": {
+      "reason": "後端是模型呼叫的工具規格（name/inputSchema）；前端是工具列按鈕的規格（run/pressed）。同名但不相關。",
+      "files": [
+        "packages/backend/src/services/agentRuntime/api/protocols/types.ts",
+        "packages/frontend/src/components/ToolbarRow.tsx"
+      ]
+    }
+  },
+  "names": {
+    "BUILT_IN_FIELDS": [
+      "packages/backend/src/services/filter/sqlClauses.ts",
+      "packages/frontend/src/components/viewLayoutKit/groupRows.ts"
+    ],
+    "K": [
+      "packages/backend/src/modules/rss/sources.ts",
+      "packages/backend/src/spine/taskIdentity.ts"
+    ],
+    "MAX_REQUEST_BYTES": [
+      "packages/frontend/src/modules/importers/folderImport.ts",
+      "packages/markdown/src/mediaTypes.ts"
+    ],
+    "MEMBERSHIP_BUCKET_CHARS": [
+      "packages/backend/src/services/sync/membership.ts",
+      "packages/frontend/src/lib/data/membershipDigest.ts"
+    ],
+    "PROPS_RUNS": [
+      "packages/backend/src/test/helpers/propsConfig.ts",
+      "packages/frontend/src/test/helpers/propsConfig.ts"
+    ],
+    "PROPS_SEED": [
+      "packages/backend/src/test/helpers/propsConfig.ts",
+      "packages/frontend/src/test/helpers/propsConfig.ts"
+    ],
+    "Tab": [
+      "packages/frontend/src/components/ui/Tabs.tsx",
+      "packages/frontend/src/test/helpers/tabWorld.ts"
+    ],
+    "World": [
+      "packages/backend/src/test/helpers/syncSim/ops.ts",
+      "packages/frontend/src/test/helpers/tabWorld.ts"
+    ],
+    "applyView": [
+      "packages/frontend/src/lib/basesEval.ts",
+      "packages/markdown/src/basesEval.ts"
+    ],
+    "canPlaceUnder": [
+      "packages/backend/src/services/nodePlacement.ts",
+      "packages/frontend/src/lib/data/placement.ts"
+    ],
+    "chromeRevision": [
+      "packages/backend/src/services/siteConfig.ts",
+      "packages/frontend/src/modules/website/websiteWriter.ts"
+    ],
+    "contrastRatio": [
+      "packages/frontend/src/test/a11y/contrast.ts",
+      "packages/site/src/palette.ts"
+    ],
+    "decodeInk": [
+      "packages/frontend/src/lib/ink/store.ts",
+      "packages/markdown/src/inkFormat.ts"
+    ],
+    "describeChange": [
+      "packages/backend/src/services/history/noteVersions.ts",
+      "packages/frontend/src/lib/history/charDiff.ts"
+    ],
+    "encodeInk": [
+      "packages/frontend/src/lib/ink/store.ts",
+      "packages/markdown/src/inkFormat.ts"
+    ],
+    "evalFilter": [
+      "packages/frontend/src/lib/basesEval.ts",
+      "packages/markdown/src/basesEval.ts"
+    ],
+    "exportTagPack": [
+      "packages/backend/src/services/tagPacks.ts",
+      "packages/frontend/src/components/TagsPanel.tsx"
+    ],
+    "fieldValue": [
+      "packages/frontend/src/components/viewLayoutKit/groupRows.ts",
+      "packages/markdown/src/frontmatter.ts"
+    ],
+    "firstImageUrl": [
+      "packages/backend/src/modules/rss/routes.ts",
+      "packages/backend/src/modules/website/publishing/siteRows.ts"
+    ],
+    "installTagPack": [
+      "packages/backend/src/services/tagPacks.ts",
+      "packages/frontend/src/lib/moduleLibrary.ts"
+    ],
+    "isPinned": [
+      "packages/frontend/src/lib/navLayout.ts",
+      "packages/frontend/src/lib/noteMarks.ts"
+    ],
+    "memberTagIds": [
+      "packages/backend/src/services/tagHierarchy.ts",
+      "packages/frontend/src/lib/nodeTags.ts"
+    ],
+    "membershipDigestOf": [
+      "packages/backend/src/services/sync/membership.ts",
+      "packages/frontend/src/lib/data/membershipDigest.ts"
+    ],
+    "moveToSpace": [
+      "packages/backend/src/services/spaces.ts",
+      "packages/frontend/e2e/fullstack/helpers.ts",
+      "packages/frontend/src/lib/moveToSpace.ts"
+    ],
+    "openNoteHistory": [
+      "packages/frontend/e2e/fullstack/helpers.ts",
+      "packages/frontend/src/lib/history/openNoteHistory.ts"
+    ],
+    "openQuickCapture": [
+      "packages/frontend/e2e/fullstack/helpers.ts",
+      "packages/frontend/src/modules/capture/openQuickCapture.ts"
+    ],
+    "pageLayout": [
+      "packages/frontend/src/hooks/shellNavigation.ts",
+      "packages/frontend/src/lib/ink/pageZoom.ts"
+    ],
+    "personalSpaceId": [
+      "packages/frontend/e2e/fullstack/helpers.ts",
+      "packages/frontend/src/lib/spaces.ts"
+    ],
+    "rewriteLinks": [
+      "packages/backend/src/services/exportZip.ts",
+      "packages/markdown/src/blockChild.ts"
+    ],
+    "searchNodes": [
+      "packages/backend/src/services/agentTools/searchNodes.ts",
+      "packages/backend/src/services/nodeSearch.ts",
+      "packages/frontend/src/lib/localDb.ts"
+    ],
+    "subtreeOf": [
+      "packages/backend/src/test/helpers/spaceModel.ts",
+      "packages/backend/src/test/helpers/syncSim/client.ts"
+    ],
+    "tagPath": [
+      "packages/frontend/src/components/siteFrame/siteModel.ts",
+      "packages/frontend/src/lib/data/tagPaths.ts"
+    ],
+    "updateNode": [
+      "packages/backend/src/services/agentTools/updateNode.ts",
+      "packages/backend/src/services/nodeUpdate.ts"
+    ],
+    "withActorReadSnapshot": [
+      "packages/backend/src/services/actorReadSnapshot.ts",
+      "packages/backend/src/test/helpers/injectedActorReadSnapshot.ts"
+    ],
+    "workspaceTimeZone": [
+      "packages/backend/src/localDay.ts",
+      "packages/frontend/src/lib/localDate.ts"
+    ]
+  },
+  "types": {}
+}

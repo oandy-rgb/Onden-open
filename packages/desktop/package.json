@@ -1,0 +1,62 @@
+{
+  "name": "onden-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Onden 桌面版：Electron 外殼，內建後端與資料庫，在這台電腦雙擊就能用",
+  "author": "Onden",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "node scripts/stage.mjs --dev && electron .",
+    "stage": "node scripts/stage.mjs",
+    "build": "node scripts/stage.mjs && electron-builder --linux AppImage --publish never",
+    "pack": "node scripts/stage.mjs && electron-builder --linux dir --publish never",
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "xvfb-run -a node test/smoke.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.64.1",
+    "typescript": "^5.9.0"
+  },
+  "build": {
+    "appId": "app.onden.desktop",
+    "productName": "Onden",
+    "asar": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "package.json",
+      "!**/*.test.*",
+      "!node_modules"
+    ],
+    "extraResources": [
+      {
+        "from": "stage/web",
+        "to": "web"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "artifactName": "Onden-${version}-${arch}.${ext}",
+      "syncDesktopName": true,
+      "icon": "build/icon.png",
+      "synopsis": "Onden 桌面版",
+      "executableName": "onden"
+    },
+    "publish": null,
+    "afterPack": "scripts/afterPack.cjs",
+    "compression": "maximum"
+  },
+  "desktopName": "onden.desktop"
+}

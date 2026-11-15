@@ -1,0 +1,4 @@
+{
+  "_": "後端執行時會 import 的 @onden/* 套件，建置順序即陣列順序（markdown 先，其餘依賴它）。伺服器映像（Dockerfile）與桌面版（packages/desktop/scripts/stage.mjs）共用這一份；守門：packages/backend/src/test/guards/runtimePackages.guard.test.ts",
+  "packages": ["markdown", "site", "contract"]
+}

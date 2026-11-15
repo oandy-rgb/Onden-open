@@ -1,0 +1,18 @@
+{
+  // Emits dist/ for the backend's production image. Reads @onden/markdown's
+  // built declarations, so build that package first (npm run build does).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": { "@onden/markdown": ["../markdown/dist/index.d.ts"] }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

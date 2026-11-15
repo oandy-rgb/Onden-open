@@ -1,0 +1,99 @@
+// Scenario 5 — the page goes away in the middle of a save. The save request is
+// held in flight (never answered), then the page is closed with its unload
+// handlers (`runBeforeUnload`) or the whole context is killed without them.
+// The same persistent profile is opened again: the last typed text must be on
+// the server, in the editor, or in the recovery panel.
+//
+// The graceful close is covered by the pagehide path (unconfirmed-write
+// recovery). The hard close gives the page no event at all, so a write that
+// only lived in memory is gone: expected to fail until in-flight saves are made
+// durable before they are sent (fix/a1-save-path).
+import { chromium, test, expect, type BrowserContext, type Route } from "@playwright/test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  BASE, FAULTS_TAG, PHONE, editor, openNote, seedNote, serverMarkdown, signInPersistent,
+  skipUnlessRequested, typeInNote, uniqueToken,
+} from "./faultKit";
+
+test.beforeEach(skipUnlessRequested);
+
+type Profile = { phone: boolean };
+
+async function launch(dir: string, { phone }: Profile): Promise<BrowserContext> {
+  const context = await chromium.launchPersistentContext(dir, {
+    baseURL: BASE,
+    ...(phone ? PHONE : { viewport: { width: 1280, height: 800 } }),
+  });
+  await signInPersistent(context);
+  return context;
+}
+
+/** Type into a note whose save never gets an answer, then end the session. */
+async function typeThenDie(profile: Profile, dir: string, end: "page" | "context"): Promise<{ id: string; text: string }> {
+  const text = uniqueToken("midsave");
+  const context = await launch(dir, profile);
+  try {
+    const page = await context.newPage();
+    const id = await seedNote(page);
+    await openNote(page, id);
+    const held: Route[] = [];
+    await page.route(`**/api/nodes/${id}`, (route) => {
+      if (route.request().method() === "PATCH") held.push(route);
+      else void route.continue();
+    });
+    const inFlight = page.waitForRequest((req) => req.method() === "PATCH" && req.url().includes(id));
+    await typeInNote(page, "end", ` ${text}`);
+    await inFlight; // the save is on the wire and unanswered
+    if (end === "page") await page.close({ runBeforeUnload: true });
+    return { id, text };
+  } finally {
+    await context.close(); // for "context" this is the hard kill; for "page" it ends the session
+  }
+}
+
+async function reopenAndFind(profile: Profile, dir: string, id: string, text: string): Promise<void> {
+  const context = await launch(dir, profile);
+  try {
+    const page = await context.newPage();
+    await openNote(page, id);
+    await expect
+      .poll(async () => {
+        if ((await serverMarkdown(page, id)).includes(text)) return "server";
+        if ((await editor(page).innerText()).includes(text)) return "editor";
+        const recovery = await page.locator(".failed-write-recovery").innerText().catch(() => "");
+        return recovery.includes(text) ? "recovery" : "missing";
+      }, { timeout: 45_000, message: `the last typed text (${text}) must be on the server, in the editor, or in recovery` })
+      .not.toBe("missing");
+  } finally {
+    await context.close();
+  }
+}
+
+for (const variant of [
+  { name: "desktop", profile: { phone: false }, prefix: "5a" },
+  { name: "phone", profile: { phone: true }, prefix: "9c" },
+]) {
+  test.describe(`close mid-save (${variant.name})`, () => {
+    let dir: string;
+    test.beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "onden-fault-profile-")); });
+    test.afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+
+    test(`${variant.prefix}: page.close({ runBeforeUnload }) mid-save keeps the last text`, { tag: FAULTS_TAG }, async () => {
+      test.setTimeout(120_000);
+      const { id, text } = await typeThenDie(variant.profile, dir, "page");
+      await reopenAndFind(variant.profile, dir, id, text);
+    });
+
+    // The phone variant only repeats the graceful close (scenario 9 asks for 1, 3 and 5).
+    if (variant.name === "desktop") {
+      test("5b: a hard context close mid-save keeps the last text", { tag: FAULTS_TAG }, async () => {
+        test.fail(true, "fix/a1-save-path: an in-flight save that was never made durable dies with the page");
+        test.setTimeout(120_000);
+        const { id, text } = await typeThenDie(variant.profile, dir, "context");
+        await reopenAndFind(variant.profile, dir, id, text);
+      });
+    }
+  });
+}

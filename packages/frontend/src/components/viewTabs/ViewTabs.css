@@ -1,0 +1,126 @@
+/* The row of view tabs above a note's or a tag's title (ViewTabs.tsx).
+   One row that never wraps: when the tabs do not fit, the row scrolls
+   sideways. Touch screens get 44px targets. */
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+/* 「＋」 is a button beside the tab list, not a tab in it. */
+.view-tabs-list { flex: none; display: flex; align-items: center; gap: 4px; }
+.view-tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 14rem;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.view-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.view-tab-via { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.view-tab:hover:not(:disabled) { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+.view-tab--active { color: var(--ac-ink); background: var(--ac-raised); }
+.view-tab::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--ac-radius-xs);
+  background: var(--ac-accent);
+  transform: scaleX(0);
+  transition: transform 130ms ease;
+  pointer-events: none;
+}
+.view-tab--active::after { transform: scaleX(1); }
+.view-tab--add { padding: 6px 8px; }
+.view-tab--add:disabled { opacity: 0.5; cursor: default; }
+.view-tab--dragging { opacity: 0.5; }
+.view-tab--drop { box-shadow: var(--ac-bar-start-thin); }
+.view-tab-rename {
+  flex: none;
+  width: 9rem;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--ac-accent);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+}
+@media (max-width: 900px), (pointer: coarse) {
+  .view-tab { min-height: 44px; min-width: 44px; }
+  .view-tab-rename { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-tab::after { transition: none; }
+}
+
+/* A saved-view tab's page: it starts where the content tab's column starts (--view-start in global.css) and takes the rest of the width, so a
+   table grows to the right and nothing jumps when the tabs switch. The title looks like the
+   content tab's (.schema-lens-title). */
+.view-pane {
+  width: 100%; box-sizing: border-box; min-width: 0;
+  padding: 8px var(--ac-page-gutter) 32px var(--view-start);
+}
+.view-pane-title {
+  margin: 0 0 12px; overflow-wrap: anywhere; color: var(--ac-ink);
+  font-family: var(--onden-font-display, serif); font-weight: 500; font-size: var(--ac-fs-title); letter-spacing: -0.015em;
+}
+/* A pane that fills the note area (the 「手寫」 tab): the note column is a flex column under the tab strip, so the section
+   takes what is left and the pane inside takes the section — no guessed subtraction from the viewport. */
+.view-pane-fill { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 480px; padding-bottom: var(--ac-space-3); }
+.view-pane-fill > * { flex: 1 1 auto; min-height: 0; }
+@media (max-width: 900px) { .view-pane { padding: 8px 16px 32px; } .view-pane-title { font-size: var(--ac-fs-title-sm); } }
+/* On a phone the note column is not a viewport-high flex column (the page scrolls under a fixed bottom bar), so a fill
+   pane gets the height by making the workspace one screen high above the bar's clearance (MobileNav.css) and dropping the
+   scroll room the page otherwise reserves for the bar. */
+@media (max-width: 900px) {
+  .overview-workspace:has(.view-pane-fill) { display: flex; flex-direction: column; height: calc(100dvh - var(--mobile-bottom-clearance, 70px) - env(safe-area-inset-bottom)); min-height: 0; }
+  .overview-workspace:has(.view-pane-fill) .notes-center-wrap { flex: 1 1 auto; }
+  .app-shell:has(.view-pane-fill), .workspace-grid:has(.view-pane-fill) { padding-bottom: 0; min-height: 0; }
+  .view-pane-fill { padding-bottom: 0; }
+}
+/* Held by a finger: raised, like a lifted sidebar row. */
+.view-tab--lifted { opacity: 1; transform: scale(1.05); box-shadow: var(--ac-shadow-float); -webkit-touch-callout: none; }
+
+/* A phone's row of tabs: inside the page above its title (NotesWorkspace), so it scrolls away with it. Tabs are drawn
+   40px tall; the invisible ::before grows each hit area to 44px, so the row (2px padding above and below) is 44px. Sideways
+   swipes stay in the row (no page-back gesture), and a swipe or a hold is told apart by lib/touchHold. */
+/* The first tab's icon sits on the title's left edge (the page's 20px at this width): the row starts one tab padding
+   and border (11px) before it, so the open tab's background hangs out to the left. */
+.phone-view-tabs { flex: none; padding: 0 20px 0 9px; }
+.phone-view-tabs .view-tabs { gap: 2px; padding: 2px 0; overscroll-behavior-x: contain; scrollbar-width: none; }
+.phone-view-tabs .view-tabs::-webkit-scrollbar { display: none; }
+.phone-view-tabs .view-tab { min-height: 40px; min-width: 40px; }
+/* ::before is placed from the padding box: -3px reaches 2px past the tab's 1px border, a full 44px. */
+.phone-view-tabs .view-tab::before { content: ""; position: absolute; inset: -3px -1px; }
+
+/* 「＋」 is a plain icon in the strip; in a full-screen board's title sheet it is a labelled row under the tabs. */
+.view-tab-add-label { display: none; }
+.board-note-sheet__tabs .view-tabs { flex-direction: column; align-items: stretch; overflow: visible; }
+.board-note-sheet__tabs .view-tabs-list { flex-direction: column; align-items: stretch; }
+.board-note-sheet__tabs .view-tab { max-width: none; justify-content: flex-start; }
+.board-note-sheet__tabs .view-tab-add-label { display: inline; }

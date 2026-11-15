@@ -1,0 +1,32 @@
+/* 「這段的歷史」(BlockHistorySheet.tsx): a bottom sheet on a phone, a side
+   panel on a desktop. No backdrop tint: the paragraph being looked at stays
+   readable in the editor behind. */
+.shell-dialog-layer:has(> .block-history-sheet)::backdrop { background: transparent; }
+.shell-dialog.block-history-sheet { display: flex; flex-direction: column; width: min(100%, 440px); max-height: min(100%, 60dvh); overscroll-behavior: contain; }
+.block-history-sheet .shell-dialog-content { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding-top: 12px; }
+.bh-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.bh-title { margin: 0; font-size: var(--ac-fs-lg); }
+.bh-sub { margin: 2px 0 0; font-size: var(--ac-fs-small); color: var(--ac-muted); overflow-wrap: anywhere; }
+.bh-head .ui-btn { min-height: 44px; }
+.bh-note { margin: 0; color: var(--ac-muted); }
+.bh-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.bh-step { display: inline-flex; align-items: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-ink); font: inherit; cursor: pointer; }
+.bh-step:disabled { opacity: 0.4; cursor: default; }
+.bh-which { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.bh-when { font-weight: 600; }
+.bh-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.bh-actor { padding: 0 6px; border-radius: var(--ac-radius-full); background: color-mix(in srgb, var(--ac-muted) 14%, transparent); }
+.bh-actor--self { background: color-mix(in srgb, var(--ac-accent) 16%, transparent); color: var(--ac-accent-hover); }
+.bh-actor--agent { background: color-mix(in srgb, var(--ac-accent) 14%, transparent); color: var(--ac-accent); }
+.bh-actor--member { background: color-mix(in srgb, var(--ac-warning) 16%, transparent); color: var(--ac-ink); }
+.bh-created { color: var(--ac-accent-hover); }
+.bh-change { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.bh-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.bh-actions .ui-btn { min-height: 44px; }
+@media (width > 600px) {
+  .shell-dialog-layer:has(> .block-history-sheet) { justify-content: flex-end; }
+  .shell-dialog.block-history-sheet { height: 100%; max-height: 100%; }
+}
+
+/* In the editor (lib/blockHistoryPreview): the paragraph being looked at. */
+.cm-block-history-old { border-radius: var(--ac-radius-sm); background: color-mix(in srgb, var(--ac-warning) 24%, transparent); outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); white-space: pre-wrap; }

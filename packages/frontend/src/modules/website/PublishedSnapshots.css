@@ -1,0 +1,23 @@
+/* 發布紀錄: the header (state + link, then the publish button) and one aligned
+   row per snapshot. Imported by the component, so it has its style on every page. */
+.tl-publish-section { display: flex; flex-direction: column; gap: 10px; }
+.tl-publish-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; justify-content: space-between; }
+.tl-publish-title { font-weight: 600; color: var(--ac-ink); }
+.tl-publish-link { margin-inline-start: 8px; color: var(--ac-accent); text-decoration: none; }
+.tl-publish-link::before { content: "·"; margin-inline-end: 8px; color: var(--ac-muted); }
+.tl-publish-link:hover { text-decoration: underline; }
+.tl-publish-header .timeline-snapshot-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box;
+  border: 1px solid var(--ac-accent); border-radius: var(--ac-radius-md);
+  background: var(--ac-accent); color: var(--ac-accent-ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+.tl-publish-header .timeline-snapshot-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.tl-publish-header .timeline-snapshot-btn:disabled { opacity: 0.5; cursor: default; }
+.tl-publish-list { display: flex; flex-direction: column; }
+.tl-publish-row {
+  display: grid; grid-template-columns: 3.5ch minmax(0, 1fr) auto; column-gap: 16px; align-items: baseline;
+  padding: 8px 0; border-top: 1px solid var(--ac-line);
+}
+.tl-publish-index, .tl-publish-nodes { color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.tl-publish-date { font-variant-numeric: tabular-nums; }
+.tl-publish-nodes { text-align: end; }

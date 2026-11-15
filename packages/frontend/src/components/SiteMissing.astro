@@ -1,0 +1,31 @@
+---
+// What a /site page shows when it has no page to show: a 404 in the site's own
+// frame when the snapshot loaded, a plain "unavailable" when it did not.
+import SiteLayout from "./SiteLayout.astro";
+import { makeT } from "./templates";
+import type { SiteData } from "./siteFrame";
+
+interface Props { data: SiteData | null; canonical: string }
+const { data, canonical } = Astro.props;
+const t = makeT(typeof data?.site.locale === "string" ? data.site.locale : undefined);
+const brand = (data?.site.brand as string | undefined) ?? data?.title ?? "Onden";
+---
+
+{data ? (
+  <SiteLayout data={data} pageTitle={`${t("pageNotFound")} — ${brand}`} canonical={canonical} variant="index">
+    <div class="s-frame-notfound">
+      <h1>{t("pageNotFound")}</h1>
+      <p><a href="/site/">{t("backHome")}</a></p>
+    </div>
+  </SiteLayout>
+) : (
+  <html class="onden-site" lang="zh-TW">
+    <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>{t("siteUnavailable")}</title></head>
+    <body>
+      <main style="padding:4rem 2rem;font-family:system-ui">
+        <h1>{t("siteUnavailable")}</h1>
+        <p>{t("siteUnavailableLead")}</p>
+      </main>
+    </body>
+  </html>
+)}

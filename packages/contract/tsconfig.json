@@ -1,0 +1,15 @@
+{
+  // Typecheck over everything (src and tests). Resolves @onden/markdown from
+  // source. The production emit is tsconfig.build.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": { "@onden/markdown": ["../markdown/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"]
+}

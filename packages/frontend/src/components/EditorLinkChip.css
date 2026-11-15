@@ -1,0 +1,30 @@
+/* Positioned in the editor wrapper's coordinates (.md-editor-wrap is relative). */
+.md-link-chip {
+  position: absolute;
+  top: var(--chip-top);
+  left: var(--chip-left);
+  z-index: var(--z-local-5);
+  min-width: 80px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-xl);
+  background: var(--ac-surface);
+  color: var(--ac-accent);
+  font: inherit;
+  font-size: var(--ac-fs-ui);
+  box-shadow: var(--ac-shadow-float);
+  cursor: pointer;
+}
+.md-link-chip:active { background: var(--ac-overlay-selected); }
+.md-link-chip:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+/* The 44px touch area, invisible (the .tap-target pattern). */
+.md-link-chip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, var(--onden-tap));
+  height: max(100%, var(--onden-tap));
+  transform: translate(-50%, -50%);
+}

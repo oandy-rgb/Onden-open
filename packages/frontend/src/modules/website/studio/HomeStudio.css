@@ -1,0 +1,285 @@
+/* The home-page studio (desktop): toolbar on top, then 區塊 | canvas | 屬性・建議.
+   The canvas draws the site's own styles (SiteScope.css, @onden/site siteParts.css);
+   everything here is the app's chrome around it. */
+
+.hs-studio {
+  display: flex;
+  flex-direction: column;
+  grid-column: 1 / -1;
+  /* Sits inside .workspace-grid (padding-top: 48px). */
+  height: calc(100dvh - 48px);
+  overflow: hidden;
+  background: var(--ac-bg);
+  color: var(--ac-ink);
+}
+
+/* Puck's own colours (@puckeditor/core) are fixed light-theme values; point them at
+   the app's tokens so its panels, cards and drop zones follow the light/dark theme.
+   The semantic names (surface, text, border, interactive…) resolve at :root inside
+   Puck's stylesheet, so they must be set here directly: re-pointing only the
+   grey/azure primitives would not reach them. The site preview is unaffected: the
+   canvas paper takes its colours from the design itself (SiteScope.css) and the site does not read these. */
+.hs-studio {
+  /* Greys: Puck 01 = darkest … 12 = lightest in its light theme; the app's greys run the
+     other way and flip per theme, so the dark theme has its own list below. */
+  --puck-color-black: var(--ac-ink);
+  --puck-color-white: var(--ac-elevated);
+  --puck-color-grey-01: var(--ac-ink);
+  --puck-color-grey-02: var(--ac-ink);
+  --puck-color-grey-03: var(--ac-ink-2);
+  --puck-color-grey-04: var(--ac-muted);
+  --puck-color-grey-05: var(--ac-faint);
+  --puck-color-grey-06: var(--ac-faint);
+  --puck-color-grey-07: var(--ac-line);
+  --puck-color-grey-08: var(--ac-line);
+  --puck-color-grey-09: var(--ac-hover);
+  --puck-color-grey-10: var(--ac-raised);
+  --puck-color-grey-11: var(--ac-bg);
+  --puck-color-grey-12: var(--ac-elevated);
+  /* Azure: Puck 01 = darkest … 12 = lightest; onden-accent-N runs the other way. */
+  --puck-color-azure-01: var(--ac-link-deep);
+  --puck-color-azure-02: var(--ac-link);
+  --puck-color-azure-03: var(--ac-accent-hover);
+  --puck-color-azure-04: var(--ac-accent);
+  --puck-color-azure-05: var(--ac-accent-tint-85);
+  --puck-color-azure-06: var(--ac-accent-tint-70);
+  --puck-color-azure-07: var(--ac-accent-tint-54);
+  --puck-color-azure-08: var(--ac-accent-tint-38);
+  --puck-color-azure-09: var(--ac-accent-tint-24);
+  --puck-color-azure-10: var(--ac-accent-soft);
+  --puck-color-azure-11: var(--ac-accent-tint-7);
+  --puck-color-azure-12: var(--ac-accent-tint-3);
+
+  /* Semantic layer */
+  --puck-color-surface: var(--ac-elevated);
+  --puck-color-surface-muted: var(--ac-raised);
+  --puck-color-surface-subtle: var(--ac-surface);
+  --puck-color-surface-inverse: var(--ac-ink);
+  --puck-color-border: var(--ac-line);
+  --puck-color-border-hover: var(--ac-faint);
+  --puck-color-border-muted: var(--ac-line);
+  --puck-color-border-inverse: var(--ac-faint);
+  --puck-color-text: var(--ac-ink);
+  --puck-color-text-secondary: var(--ac-muted);
+  --puck-color-text-muted: var(--ac-muted);
+  --puck-color-text-subtle: var(--ac-muted);
+  --puck-color-text-inverse: var(--ac-bg);
+  --puck-color-interactive: var(--ac-accent);
+  --puck-color-interactive-hover: var(--ac-accent-hover);
+  --puck-color-interactive-active: var(--ac-accent-hover);
+  --puck-color-interactive-subtle: var(--ac-accent-soft);
+  --puck-color-interactive-soft: var(--ac-accent-tint-7);
+  --puck-color-interactive-soft-hover: var(--ac-accent-soft);
+  --puck-color-interactive-neutral-hover: var(--ac-overlay-hover);
+  --puck-color-interactive-inverse-hover: var(--ac-accent-tint-70);
+  --puck-color-interactive-inverse-active: var(--ac-accent-tint-54);
+  --puck-color-focus-ring: var(--ac-focus);
+  --puck-color-selection-bg: color-mix(in srgb, var(--ac-accent) 22%, transparent);
+  --puck-color-selection-border: var(--ac-accent);
+  --puck-color-line-placeholder: var(--ac-accent);
+  --puck-color-highlight: var(--ac-danger);
+  --puck-color-bg-disabled: var(--ac-raised);
+  --puck-color-text-disabled: var(--ac-muted);
+  --puck-color-overlay-backdrop: var(--ac-scrim);
+}
+[data-theme="dark"] .hs-studio {
+  --puck-color-grey-01: var(--ac-ink);
+  --puck-color-grey-02: var(--ac-ink-2);
+  --puck-color-grey-03: var(--ac-ink-2);
+  --puck-color-grey-04: var(--ac-muted);
+  --puck-color-grey-05: var(--ac-faint);
+  --puck-color-grey-06: var(--ac-faint);
+  --puck-color-grey-07: var(--ac-line);
+  --puck-color-grey-08: var(--ac-line);
+  --puck-color-grey-09: var(--ac-elevated);
+  --puck-color-grey-10: var(--ac-raised);
+  --puck-color-grey-11: var(--ac-surface);
+  --puck-color-grey-12: var(--ac-bg);
+}
+
+/* ── Toolbar: one row at every desktop width, never vertical text ── */
+.hs-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+  flex: none;
+}
+.hs-toolbar__title { margin: 0; font-size: var(--ac-fs-ui-touch); font-weight: 600; white-space: nowrap; }
+.hs-toolbar__actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-inline-start: auto; min-width: 0; }
+.hs-toolbar__actions > * { flex: none; white-space: nowrap; }
+.hs-save { font-size: var(--ac-fs-caption); color: var(--ac-muted); display: inline-flex; gap: 8px; align-items: center; }
+.hs-save[data-status="error"] { color: var(--ac-danger); }
+
+.hs-button {
+  display: inline-flex; align-items: center; gap: 4px;
+  box-sizing: border-box; height: 32px; padding: 0 12px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-bg); color: inherit; font: inherit; font-size: var(--ac-fs-caption);
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.hs-button:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.hs-button:disabled { opacity: 0.5; cursor: default; }
+.hs-button[aria-pressed="true"] { background: var(--ac-accent); border-color: var(--ac-accent); color: var(--ac-accent-ink); }
+.hs-button--primary { background: var(--ac-accent); border-color: var(--ac-accent); color: var(--ac-accent-ink); }
+.hs-button--primary:hover:not(:disabled) { background: var(--ac-accent); filter: brightness(1.08); }
+.hs-link { background: none; border: 0; padding: 0; color: var(--ac-accent); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* ── Three columns ── */
+/* Puck wraps .hs-body in its own root div, which scrolls by default: then the
+   three columns move as one and the canvas leaves the screen while you scroll
+   區塊. Fill the studio instead, so each column scrolls on its own. */
+.hs-studio > .Puck { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.hs-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 340px);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.hs-left, .hs-right-wrap { overflow: auto; background: var(--ac-surface); }
+.hs-left { border-inline-end: 1px solid var(--ac-line); }
+.hs-right-wrap { border-inline-start: 1px solid var(--ac-line); }
+.hs-center { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* Puck's drawer items, tighter: a workspace can have hundreds of notes. */
+.hs-assets { --puck-drawer-item-space: 6px 10px; }
+.hs-assets [data-puck-drawer] { gap: 4px; }
+.hs-section { margin-top: 14px; }
+.hs-section__title { margin: 0 0 6px; font-size: var(--ac-fs-caption); color: var(--ac-muted); font-weight: 600; }
+.hs-hint { margin: 4px 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.hs-warn { margin: 4px 0; color: var(--ac-warning); font-size: var(--ac-fs-caption); }
+
+.hs-assets__lead { margin: 0 0 10px; color: var(--ac-ink); }
+.hs-hint--faint { margin-top: 10px; color: var(--ac-muted); }
+.hs-section__title { color: var(--ac-ink); }
+.hs-section .hs-hint { margin: 0 0 6px; }
+
+/* An entry: wireframe on the left, name + drag handle, then the sentence. */
+.hs-entry {
+  position: relative; cursor: pointer; min-height: 44px; box-sizing: border-box;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center;
+}
+.hs-entry__icon { grid-row: 1 / span 2; color: var(--ac-muted); display: inline-flex; }
+.hs-entry:hover .hs-entry__icon, .hs-entry:focus-visible .hs-entry__icon { color: var(--ac-accent); }
+.hs-entry__main { grid-column: 2; min-width: 0; }
+.hs-entry:not([data-described]) .hs-entry__main { grid-column: 1 / -1; }
+.hs-entry__desc { grid-column: 2; font-size: var(--ac-fs-xs); line-height: 1.35; color: var(--ac-muted); }
+.hs-entry:not(:has(.hs-entry__icon)) .hs-entry__desc { grid-column: 1 / -1; }
+.hs-wire { display: block; }
+.hs-entries--faint { opacity: 0.65; }
+.hs-entry:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.hs-entry__remove {
+  position: absolute; inset-block-start: 50%; inset-inline-end: 34px; transform: translateY(-50%);
+  border: 0; background: transparent; color: var(--ac-muted); cursor: pointer; font-size: var(--ac-fs-prose); line-height: 1; padding: 2px 6px;
+}
+.hs-entry__remove:hover { color: var(--ac-danger); }
+
+/* ── Canvas ── */
+.hs-canvas { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.hs-canvas__bar { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; padding: 6px 12px; border-bottom: 1px solid var(--ac-line); flex: none; min-width: 0; }
+.hs-viewports { display: inline-flex; gap: 4px; flex: none; }
+.hs-preview-banner {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto;
+  padding: 3px 8px; border-radius: var(--ac-radius-md);
+  background: var(--ac-info-soft); color: var(--ac-info);
+}
+.hs-preview-banner > span { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-preview-banner > button { flex: none; }
+.hs-canvas__scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; background: var(--ac-overlay-subtle); }
+.hs-canvas__frame { position: relative; width: var(--hs-width, 100%); margin-inline: auto; max-width: 100%; box-shadow: var(--ac-shadow-float); transition: width 0.15s ease-out; }
+
+/* An empty layout is one quiet line, tall enough to drop a block into. Puck's own
+   empty zone is a 128px tinted, dashed box; while dragging, Puck still outlines
+   the zones that accept the block. */
+.hs-canvas__frame [data-puck-dropzone]:empty {
+  min-height: 44px; display: flex; align-items: center; justify-content: center;
+  background: none; outline: none;
+}
+.hs-canvas__frame [data-puck-dropzone]:empty::before {
+  content: "把區塊拖進來"; color: var(--ac-muted); font-size: var(--ac-fs-caption); opacity: 0.8;
+}
+/* Content on the top level has no layout around it, but the published page draws
+   it as if in a default stack (@onden/site withImplicitStacks): the same space above and below. */
+.hs-canvas__frame [data-puck-dropzone="root:default-zone"] > [data-puck-component]:not(:has(> .s-part)) {
+  padding-block: var(--s-space);
+}
+
+/* ── Right panel ── */
+.hs-right { display: flex; flex-direction: column; min-height: 100%; }
+.hs-tabs { display: flex; flex-wrap: nowrap; border-bottom: 1px solid var(--ac-line); position: sticky; top: 0; background: var(--ac-surface); z-index: var(--z-local-1); }
+.hs-tab { flex: 1 1 0; padding: 10px 6px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--ac-muted); font: inherit; cursor: pointer; white-space: nowrap; }
+.hs-tab[aria-selected="true"] { color: var(--ac-ink); border-bottom-color: var(--ac-accent); font-weight: 600; }
+.hs-panel { padding: 12px; }
+.hs-pattern-note { margin-bottom: 12px; padding: 8px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); }
+.hs-pattern-note p { margin: 0 0 6px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+/* ── Fields (the custom ones in fields.tsx, and the settings panel) ── */
+.hs-field { margin-bottom: 14px; }
+.hs-field__label { display: block; margin: 8px 0 4px; font-size: var(--ac-fs-caption); color: var(--ac-muted); font-weight: 600; }
+.hs-field > .hs-field__label { margin-top: 0; }
+.hs-field__current { margin: 0 0 6px; font-weight: 600; overflow-wrap: anywhere; }
+.hs-field__current[data-empty] { color: var(--ac-muted); font-weight: 400; }
+.hs-input {
+  box-sizing: border-box; width: 100%; padding: 6px 8px; font: inherit;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-bg); color: inherit;
+}
+.hs-input--code { font-family: var(--onden-font-mono, monospace); font-size: 0.85em; resize: vertical; }
+.hs-pick-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow: auto; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+.hs-pick { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.hs-pick:hover { background: var(--ac-overlay-hover); }
+.hs-pick[aria-pressed="true"] { background: var(--ac-accent); color: var(--ac-accent-ink); font-weight: 600; }
+.hs-pick[aria-pressed="true"] .hs-pick__note { color: inherit; opacity: 0.8; }
+.hs-pick__note { color: var(--ac-muted); font-size: 0.85em; flex: none; }
+.hs-readonly { margin-top: 8px; padding: 8px; background: var(--ac-overlay-subtle); border-radius: var(--ac-radius-md); }
+.hs-readonly__text { margin: 0 0 6px; font-size: var(--ac-fs-caption); color: var(--ac-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.hs-advanced { margin-top: 12px; }
+.hs-advanced > summary { cursor: pointer; font-weight: 600; font-size: var(--ac-fs-caption); }
+
+.hs-suggestions { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hs-suggestion { padding: 10px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+.hs-suggestion[data-active] { border-color: var(--ac-accent); }
+.hs-suggestion p { margin: 0 0 8px; }
+.hs-suggestion__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.hs-assets .publish-log { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--ac-line); }
+.hs-section__tab { font-weight: 400; color: var(--ac-muted); }
+
+/* 頁面結構: our own title above Puck's outline; Puck's own header (its title is blank in dictionary.ts) is not drawn. */
+.hs-structure [class*="OutlineHeader"] { display: none; }
+
+/* ── The note picker: filter, rows with a date and a 已發布／未發布 mark ── */
+.hs-filters { margin-bottom: 6px; }
+.hs-pick__title { min-width: 0; overflow-wrap: anywhere; }
+.hs-pick__meta { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--ac-muted); font-size: 0.85em; font-variant-numeric: tabular-nums; }
+.hs-pick[aria-pressed="true"] .hs-pick__meta { color: inherit; opacity: 0.85; }
+.hs-publish-this { margin-top: 8px; }
+.hs-publish-this .hs-hint { margin-top: 6px; }
+.hs-readonly .hs-link + .hs-link { margin-inline-start: 12px; }
+
+/* ── ＋ and `/`: adding a block from the canvas. The ＋ stays beside the selected block. ── */
+.hs-insert { position: absolute; z-index: var(--z-local-5); top: var(--at-top); left: var(--at-left); transform: translate(-50%, -50%); }
+.hs-insert--page { top: 12px; left: 50%; transform: translateX(-50%); }
+.hs-insert__plus {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  border: 2px solid var(--ac-bg); border-radius: var(--ac-radius-full); cursor: pointer; font-size: var(--ac-fs-lg); line-height: 1;
+  background: var(--ac-accent); color: var(--ac-accent-ink); box-shadow: var(--ac-shadow-float);
+}
+.hs-insert__plus:hover { filter: brightness(1.1); }
+.hs-insert__plus:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+/* Drawn by ui/Popover (portalled, placed by usePopover); this is its content layout. */
+.hs-insert-menu { width: min(340px, 90vw); max-height: 60vh; display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.hs-insert-menu__label { font-size: var(--ac-fs-caption); color: var(--ac-muted); font-weight: 600; }
+.hs-insert-menu__list { overflow: auto; min-height: 0; }
+.hs-insert-menu__group { margin: 8px 0 2px; font-size: var(--ac-fs-xs); color: var(--ac-muted); font-weight: 600; }
+.hs-insert-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center; width: 100%; min-height: 44px;
+  padding: 4px 6px; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--ac-radius-sm);
+}
+.hs-insert-item:hover, .hs-insert-item:focus-visible { background: var(--ac-overlay-hover); }
+.hs-insert-item .hs-entry__icon { grid-row: 1 / span 2; }
+.hs-insert-item__desc { grid-column: 2; font-size: var(--ac-fs-xs); color: var(--ac-muted); }

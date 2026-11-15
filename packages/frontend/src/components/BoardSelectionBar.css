@@ -1,0 +1,33 @@
+/* The bar over the selected card (React Flow's NodeToolbar keeps it with the card). */
+.board-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-sm);
+  white-space: nowrap;
+}
+.board-selection-bar .ui-btn { gap: 4px; }
+/* Touch: each button's 44px press area (global.css) is wider than the drawn button; 8px apart, neighbours' areas don't overlap. */
+@media (pointer: coarse) {
+  .board-selection-bar { gap: 8px; }
+}
+.board-selection-colors { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; max-width: 220px; }
+.board-selection-colors .canvas-color-swatch {
+  width: 28px; height: 28px; border-radius: var(--ac-radius-full);
+  border: 1px solid var(--ac-line); background: var(--swatch-bg, var(--ac-surface)); cursor: pointer;
+}
+.board-selection-colors .canvas-color-swatch--clear {
+  background-image: linear-gradient(45deg, transparent 45%, var(--ac-danger) 45%, var(--ac-danger) 55%, transparent 55%);
+}
+
+/* A narrow board (the panel's width, not the window's — a side bar or a portrait tablet narrows it too):
+   icons only, so the bar and its ⋯ — the touch way into the card's menu — fit a 360px board. The
+   buttons keep their aria-label. */
+.board-selection-bar { max-width: calc(100cqw - 24px); overflow-x: auto; }
+@container board (max-width: 600px) {
+  .board-selection-label { display: none; }
+}

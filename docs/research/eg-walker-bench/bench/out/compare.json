@@ -1,0 +1,204 @@
+{
+ "examples": [
+  {
+   "id": "E1",
+   "title": "同一行、不同句（各改各的）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重送。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": false,
+    "conflicts": 1,
+    "merged": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重送。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重送。最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 0
+  },
+  {
+   "id": "E2",
+   "title": "同一句、不同詞（依規則應衝突）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，驗證都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": false,
+    "conflicts": 1,
+    "merged": "今天完成同步功能的第一版，驗證都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第二版，驗證都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 1
+  },
+  {
+   "id": "E3",
+   "title": "同一個詞改成不同字（依規則應衝突）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第三版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": false,
+    "conflicts": 1,
+    "merged": "今天完成同步功能的第三版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第二版第三版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 1
+  },
+  {
+   "id": "E4",
+   "title": "同一點各插入一句（相鄰、不重疊）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第一版，測試都通過了。另外補測試。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，測試都通過了。先看效能。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": true,
+    "conflicts": 0,
+    "merged": "今天完成同步功能的第一版，測試都通過了。先看效能。另外補測試。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第一版，測試都通過了。另外補測試。先看效能。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 0
+  },
+  {
+   "id": "E5",
+   "title": "同一句中間各插入不同字（依規則應衝突）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第一版，測試都通過了。接下來處理手機離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，測試都通過了。接下來處理桌機離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": true,
+    "conflicts": 0,
+    "merged": "今天完成同步功能的第一版，測試都通過了。接下來處理手機桌機離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第一版，測試都通過了。接下來處理手機桌機離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 1
+  },
+  {
+   "id": "E6",
+   "title": "一邊刪掉整句、一邊改這句裡的詞（依規則應衝突）",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第一版，測試都通過了。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重送。最後整理文件。\n下週開始寫研究報告。\n",
+   "diff3": {
+    "clean": false,
+    "conflicts": 1,
+    "merged": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重送。最後整理文件。\n下週開始寫研究報告。\n"
+   },
+   "egw": "今天完成同步功能的第一版，測試都通過了。重送最後整理文件。\n下週開始寫研究報告。\n",
+   "overlapSentences": 1
+  },
+  {
+   "id": "E7",
+   "title": "不同行各改一處",
+   "base": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "a": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫研究報告。\n",
+   "b": "今天完成同步功能的第一版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫實驗報告。\n",
+   "diff3": {
+    "clean": true,
+    "conflicts": 0,
+    "merged": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫實驗報告。\n"
+   },
+   "egw": "今天完成同步功能的第二版，測試都通過了。接下來處理離線佇列的重試。最後整理文件。\n下週開始寫實驗報告。\n",
+   "overlapSentences": 0
+  }
+ ],
+ "stats": {
+  "10KB-10": {
+   "overlapSentences": 0,
+   "diff3Conflicts": 3,
+   "diff3FalseConflicts": 3,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 2,
+   "safeCases": 2,
+   "edits": 10
+  },
+  "10KB-100": {
+   "overlapSentences": 30,
+   "diff3Conflicts": 104,
+   "diff3FalseConflicts": 78,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 100
+  },
+  "10KB-1000": {
+   "overlapSentences": 262,
+   "diff3Conflicts": 70,
+   "diff3FalseConflicts": 8,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 1000
+  },
+  "50KB-10": {
+   "overlapSentences": 0,
+   "diff3Conflicts": 5,
+   "diff3FalseConflicts": 5,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 10
+  },
+  "50KB-100": {
+   "overlapSentences": 30,
+   "diff3Conflicts": 71,
+   "diff3FalseConflicts": 41,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 100
+  },
+  "50KB-1000": {
+   "overlapSentences": 300,
+   "diff3Conflicts": 914,
+   "diff3FalseConflicts": 637,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 1000
+  },
+  "200KB-10": {
+   "overlapSentences": 0,
+   "diff3Conflicts": 3,
+   "diff3FalseConflicts": 3,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 2,
+   "safeCases": 2,
+   "edits": 10
+  },
+  "200KB-100": {
+   "overlapSentences": 30,
+   "diff3Conflicts": 44,
+   "diff3FalseConflicts": 14,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 0,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 100
+  },
+  "200KB-1000": {
+   "overlapSentences": 300,
+   "diff3Conflicts": 958,
+   "diff3FalseConflicts": 671,
+   "diff3PointConflicts": 0,
+   "overlapNotFlaggedByDiff3": 3,
+   "scenarios": 5,
+   "equalWhenSafe": 0,
+   "safeCases": 0,
+   "edits": 1000
+  }
+ },
+ "seeds": 5
+}

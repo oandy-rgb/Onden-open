@@ -1,0 +1,331 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Onden design tokens — A+C 「安靜寫作」, palette A 「赭紅墨」.
+
+   THE one source of every colour, size, radius and font in the app. The colours
+   are NOT hand-tuned: the two colour blocks below are what the formula
+   (packages/site/src/palette.ts appTokens) computes from the default seeds,
+   accent #9c3a48 and paper #f8f4ec; test/appColors.test.ts fails when they
+   drift apart. To change the default look change the seeds or the formula and
+   copy the computed values here (the test prints them). A user's own seeds
+   (Settings › Appearance › Colours) override these at run time
+   (lib/appColors.ts); sizes, radii, shadows and fonts are not part of that.
+
+   Layers:
+     --ac-*      this file. Values. App CSS and TSX read only these colours
+                 (test/guards/allowlist: css-legacy-token).
+     --onden-*   theme-tokens.css. The non-colour names (type sizes, radii,
+                 motion, control sizes) plus the few older colour names the
+                 published-site stylesheets still read.
+     site        site-tokens.css. Published sites keep their own frozen set
+                 and do NOT follow this file.
+
+   Theme switch: settings/registry.tsx (applyThemeMode) and the no-FOUC script
+   in pages/index.astro resolve the setting (system / light / dark) and put
+   data-theme="light" | "dark" on <html>.
+
+   Sizes are calc() multiples of --onden-ui-font-size-base (the 基礎字級
+   setting, default 14px) so that setting rescales the whole type scale.
+   Contrast (WCAG): ink on bg is 13.59:1 dark and 13.54:1 light.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Fonts ────────────────────────────────────────────────────────────
+     Display and note text: Noto Serif TC. Interface: Noto Sans TC. Both are
+     self-hosted unicode-range slices from npm @fontsource-variable/* (loaded
+     by fonts-noto.css, family names "… Variable"); nothing is fetched from a
+     font CDN. Next comes the same face if the device has it installed, then
+     what renders before a slice arrives (font-display: swap). */
+  --ac-font-serif: "Noto Serif TC Variable", "Noto Serif TC",
+    "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", "PMingLiU",
+    Georgia, "Times New Roman", serif;
+  --ac-font-sans: "Noto Sans TC Variable", "Noto Sans TC", "PingFang TC",
+    "Source Han Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* 楷體: 霞鶩文楷 TC (fonts-noto.css loads its slices only when a page shows it). */
+  --ac-font-kai: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "DFKai-SB", "KaiTi", serif;
+  --ac-font-display: var(--ac-font-serif);
+  --ac-font-prose:   var(--ac-font-serif);
+  --ac-font-ui:      var(--onden-ui-font-family-ui, var(--ac-font-sans));
+  --ac-font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Code",
+    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── Type scale (px at the 14px base) ─────────────────────────────────── */
+  --ac-fs-base:      var(--onden-ui-font-size-base);
+  --ac-fs-xs:        calc(var(--ac-fs-base) * 11 / 14);   /* 11   fine print, counts */
+  --ac-fs-caption:   calc(var(--ac-fs-base) * 12.5 / 14); /* 12.5 labels, meta, counts */
+  --ac-fs-small:     calc(var(--ac-fs-base) * 13 / 14);   /* 13   secondary, breadcrumbs */
+  --ac-fs-ui:        var(--ac-fs-base);                   /* 14   nav, lists, menus */
+  --ac-fs-ui-touch:  calc(var(--ac-fs-base) * 15 / 14);   /* 15   phone UI */
+  --ac-fs-prose:     calc(var(--ac-fs-base) * 17 / 14);   /* 17   note text (16 on phones) */
+  --ac-fs-lg:        calc(var(--ac-fs-base) * 18 / 14);   /* 18   section heads */
+  --ac-fs-h3:        calc(var(--ac-fs-base) * 20 / 14);   /* 20   card titles */
+  --ac-fs-title-sm:  calc(var(--ac-fs-base) * 24 / 14);   /* 24   phone note title, tag title */
+  --ac-fs-title:     calc(var(--ac-fs-base) * 32 / 14);   /* 32   note title */
+
+  --ac-fw-regular: 400;
+  --ac-fw-medium:  500;
+  --ac-fw-bold:    700;
+
+  --ac-lh-title: 1.35;
+  --ac-lh-ui:    1.55;
+  --ac-lh-quote: 1.8;
+  --ac-lh-prose: 1.9;
+
+  /* Hints, placeholders and empty states: muted, upright. CJK has no italic
+     face, so the browser slants the glyphs (faux italic), which reads cheap. */
+  --ac-hint-color: var(--ac-muted);
+  --ac-hint-style: normal;
+
+  /* ── Spacing ──────────────────────────────────────────────────────────── */
+  --ac-space-1: 2px;
+  --ac-space-2: 4px;
+  --ac-space-3: 6px;
+  --ac-space-4: 8px;
+  --ac-space-5: 12px;
+  --ac-space-6: 16px;
+  --ac-space-7: 20px;
+  --ac-space-8: 24px;
+  --ac-space-9: 32px;
+  --ac-space-10: 48px;
+
+  /* ── Radii ────────────────────────────────────────────────────────────── */
+  --ac-radius-xs:   2px;    /* highlight marks */
+  --ac-radius-sm:   4px;    /* toolbar buttons, kbd, badges */
+  --ac-radius-md:   6px;    /* default */
+  --ac-radius-lg:   12px;   /* modal, sheet */
+  --ac-radius-xl:   16px;   /* large cards, bottom sheets */
+  --ac-radius-full: 999px;  /* avatars, dots */
+
+  /* ── Rows and controls (data-density below) ───────────────────────────── */
+  --ac-row-compact: 28px;
+  --ac-row:         32px;
+  --ac-row-touch:   44px;
+  --ac-control-sm:  28px;
+  --ac-control-md:  32px;
+  --ac-tap:         44px;
+
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+  --ac-topbar-h:     52px;
+  --ac-tree-w:       232px;
+  --ac-panel-w:      320px;
+  --ac-prose-max:    640px;
+  /* The centre pane's page column: the tab row above a note or tag, the tag page, and the
+     left edge a wide view (表格…) keeps. One width and gutter, so switching tabs moves nothing. */
+  --ac-page-column:  744px;
+  --ac-page-gutter:  24px;
+  --ac-list-max:     720px;  /* lists read as one column: 全部標籤 */
+  --ac-phone-gutter: 20px;
+
+  /* ── Layers: who paints over whom (z-index). Every z-index in a stylesheet is one
+     of these; a modal is a top-layer <dialog> and needs no number (ui/TopLayerPortal).
+     local-N = order inside one component; the rest are page-level, lowest first. ── */
+  --z-base: 0;
+  --z-local-1: 1; --z-local-2: 2; --z-local-3: 3; --z-local-4: 4;
+  --z-local-5: 5; --z-local-6: 6; --z-local-7: 7;
+  --z-sticky: 10;         /* sticky headers, graph controls */
+  --z-raised: 20;
+  --z-dropdown: 30;       /* in-pane menus and previews */
+  --z-pane-float: 40;
+  --z-pane-overlay: 50;
+  --z-pane-top: 60;
+  --z-bar: 100;           /* phone bottom bar and its sync strip */
+  --z-kb-toolbar: 120;    /* editing toolbar riding the keyboard */
+  --z-board-menu: 200;
+  --z-floating-panel: 300;
+  --z-notice-low: 350;    /* corner notices that sit under toasts */
+  --z-toast: 400;
+  --z-notice-top: 420;    /* above toasts when no modal is open */
+  --z-pane-expand: 900;   /* below dialogs and menus */
+  --z-backdrop: 999;
+  --z-popover: 1000;
+  --z-bubble: 3000;       /* selection / slash menus */
+  --z-drawer: 4000;
+  --z-gate: 9999;         /* login and membership gate */
+
+  /* ── Focus ring: a gap in the page colour, then the focus colour, so it
+     shows on filled and on transparent controls alike. :focus-visible only. */
+  /* The one outline for keyboard focus (and "selected" rings): outline: var(--ac-focus-outline);
+     outline-offset: var(--ac-focus-offset) outside the box, var(--ac-focus-inset) for rows that clip. */
+  --ac-focus-outline: 2px solid var(--ac-focus);
+  --ac-focus-offset: 2px;
+  --ac-focus-inset: -2px;
+  --ac-focus-ring: 0 0 0 2px var(--ac-bg), 0 0 0 4px var(--ac-focus);
+
+  /* ── Derived colours (follow the palette below in both themes) ─────────── */
+  --ac-overlay-hover:    color-mix(in srgb, var(--ac-ink) 5%, transparent);
+  --ac-overlay-selected: color-mix(in srgb, var(--ac-ink) 9%, transparent);
+  --ac-overlay-press:    color-mix(in srgb, var(--ac-ink) 13%, transparent);
+  --ac-accent-hover:     color-mix(in srgb, var(--ac-accent) 85%, var(--ac-ink));
+  --ac-warning-soft:     color-mix(in srgb, var(--ac-warning) 16%, var(--ac-bg));
+  --ac-success-soft:     color-mix(in srgb, var(--ac-success) 16%, var(--ac-bg));
+  --ac-info-soft:        color-mix(in srgb, var(--ac-info) 16%, var(--ac-bg));
+  --ac-overlay-subtle:   color-mix(in srgb, var(--ac-ink) 4%, transparent);
+  --ac-accent-wash:      color-mix(in srgb, var(--ac-accent) 6%, transparent);
+  --ac-accent-muted:     color-mix(in srgb, var(--ac-accent) 12%, transparent);
+  --ac-accent-border:    color-mix(in srgb, var(--ac-accent) 28%, transparent);
+  --ac-success-wash:     color-mix(in srgb, var(--ac-success) 12%, transparent);
+  --ac-link-deep:        color-mix(in srgb, var(--ac-link) 50%, var(--ac-ink));
+  /* The accent mixed into the page, named by its percentage: faint fills and borders. */
+  --ac-accent-tint-3:    color-mix(in srgb, var(--ac-accent) 3%, var(--ac-bg));
+  --ac-accent-tint-7:    color-mix(in srgb, var(--ac-accent) 7%, var(--ac-bg));
+  --ac-accent-tint-24:   color-mix(in srgb, var(--ac-accent) 24%, var(--ac-bg));
+  --ac-accent-tint-38:   color-mix(in srgb, var(--ac-accent) 38%, var(--ac-bg));
+  --ac-accent-tint-54:   color-mix(in srgb, var(--ac-accent) 54%, var(--ac-bg));
+  --ac-accent-tint-70:   color-mix(in srgb, var(--ac-accent) 70%, var(--ac-bg));
+  --ac-accent-tint-85:   color-mix(in srgb, var(--ac-accent) 85%, var(--ac-bg));
+  /* One-off hue (the "tonight" and drag-target borders); the same in both themes. */
+  --ac-purple:           #7c3aed;
+
+  /* Fixed colours that do not follow the theme: the PDF page and a photo stay light or dark
+     whatever the app is, and a colour picker draws real colours. */
+  --ac-callout-example:  #8b5cf6;  /* callout types without a state colour; both themes, and the published site */
+  --ac-callout-quote:    #6b7280;
+  --ac-pure-black:       #000;
+  --ac-pure-white:       #fff;
+  --ac-hue-red:          #f00;
+  --ac-hue-spectrum:     linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  --ac-pdf-highlight:    rgba(255, 226, 143, 0.5);
+  --ac-pdf-highlight-solid: rgb(255, 226, 143);
+  --ac-pdf-area-fill:    rgba(153, 193, 218, 0.6);
+  --ac-pdf-area-edge:    #333;
+
+  /* Input text: 16px at least, or iOS zooms the page on focus (styles/input-font.css). */
+  --ac-fs-input:         max(16px, var(--ac-fs-ui));
+  --ac-fs-slide-body:    clamp(1.05rem, 0.8rem + 1.6vw, 2rem);
+
+  /* Rings, edge bars and lifts: shadows that mark a state (selected, drop target, today) rather
+     than raise a surface. Named by the state; a stylesheet reads them as `box-shadow: var(--ac-ring)`. */
+  --ac-ring:             0 0 0 2px var(--ac-accent-border);
+  --ac-ring-soft:        0 0 0 2px var(--ac-accent-muted);
+  --ac-ring-wide:        0 0 0 3px var(--ac-accent-border);
+  --ac-ring-halo:        0 0 0 4px var(--ac-accent-muted);
+  --ac-ring-halo-wide:   0 0 0 7px var(--ac-accent-muted);
+  --ac-ring-thin:        0 0 0 1px var(--ac-accent);
+  --ac-ring-focus:       0 0 0 2px var(--ac-focus);
+  --ac-inset-ring:       inset 0 0 0 2px var(--ac-accent);
+  --ac-inset-ring-thin:  inset 0 0 0 1.5px var(--ac-accent);
+  --ac-inset-ring-drop:  inset 0 0 0 1.5px var(--ac-accent-tint-54);
+  --ac-bar-start:        inset 3px 0 0 var(--ac-accent);
+  --ac-bar-start-thin:   inset 2px 0 0 var(--ac-accent);
+  --ac-bar-top:          inset 0 2px 0 var(--ac-accent);
+  --ac-bar-bottom:       inset 0 -2px 0 var(--ac-accent);
+  --ac-edge-up:          0 -1px 0 var(--ac-line);
+  --ac-shadow-sheet:     0 -8px 24px rgba(0, 0, 0, 0.2);
+  --ac-shadow-bar-up:    0 -4px 12px rgba(0, 0, 0, 0.06);
+  --ac-shadow-card-hover:    0 0 0 2px var(--ac-accent-muted), 0 10px 24px rgb(15 23 42 / 0.12);
+  --ac-shadow-card-selected: 0 0 0 3px var(--ac-accent-border), 0 14px 30px rgb(15 23 42 / 0.16);
+  --ac-shadow-card-editing:  0 0 0 2px var(--ac-accent-border), 0 8px 22px rgb(15 23 42 / 0.12);
+  --ac-shadow-card-lifted:   0 0 0 3px var(--ac-accent-border), 0 22px 44px rgb(15 23 42 / 0.24);
+  --ac-shadow-thumb:     0 0 0 1px var(--ac-accent), var(--ac-shadow-modal);
+  --ac-shadow-swatch-rim:    inset 0 0 0 1px rgb(0 0 0 / 0.15);
+  --ac-shadow-swatch-gloss:  inset 0 0 0 1px rgb(255 255 255 / 0.35);
+  --ac-shadow-swatch-chosen: 0 0 0 2px var(--ac-surface) inset;
+  --ac-shadow-swatch-chosen-panel: 0 0 0 2px var(--ac-elevated) inset, 0 0 0 1px rgb(0 0 0 / 0.15);
+  --ac-shadow-picker-thumb:  0 0 0 1px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
+}
+
+html[data-density="compact"]  { --ac-row: 28px; --ac-row-compact: 24px; }
+html[data-density="spacious"] { --ac-row: 36px; --ac-row-compact: 32px; }
+
+@media (max-width: 600px) {
+  :root { --ac-fs-prose: calc(var(--ac-fs-base) * 16 / 14); }
+}
+
+/* ── Palette A 「赭紅墨」 — light ───────────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --ac-bg:          #f8f4ec;  /* page */
+  --ac-surface:     #f0ece4;  /* side panels */
+  --ac-elevated:    #fffdf9;  /* menus, popovers, dialogs */
+  --ac-raised:      #eeeae2;  /* inputs, nested fills */
+  --ac-hover:       #ece8e0;
+  --ac-selected:    #f2dfe0;
+  --ac-line:        #e7e0d2;  /* hairline: tables, whiteboard, code */
+
+  --ac-ink:         #2b2720;  /* 13.54:1 on bg */
+  --ac-ink-2:       #464239;  /* quotes, summaries */
+  --ac-muted:       #676157;  /* meta, inactive tabs */
+  --ac-faint:       #7c776d;  /* ≥12.5px only, never body text */
+
+  --ac-accent:      #9c3a48;
+  --ac-accent-ink:  #fcfaf5;  /* text on an accent fill */
+  --ac-accent-soft: #f6e0e1;
+  --ac-focus:       #ae5962;
+  --ac-link:        #9c3a48;
+  --ac-selection:   #eccfd1;
+
+  --ac-danger:      #a7391e;
+  --ac-danger-soft: #ffe0d8;
+  --ac-warning:     #7c5700;
+  --ac-success:     #3b691a;
+  --ac-info:        #226291;
+
+  --ac-code-bg:     #eeeae2;
+
+  /* Highlights: notes store the NAME (yellow, red, …); each theme maps it. */
+  --ac-hl-yellow:   #fce9a7;
+  --ac-hl-red:      #ffd4d1;  /* also "coral" */
+  --ac-hl-green:    #d5e7c4;
+  --ac-hl-blue:     #d0e2f3;
+  --ac-hl-purple:   #e5daf4;
+  --ac-hl-orange:   #f9d9be;
+
+  --ac-scrim:        rgba(30, 20, 10, 0.32);
+  --ac-shadow-sm:    0 1px 2px rgba(60, 40, 20, 0.07);
+  --ac-shadow-modal: 0 16px 44px rgba(60, 40, 20, 0.14);
+  --ac-shadow-float: 0 6px 20px rgba(60, 40, 20, 0.14);
+}
+
+/* ── Palette A 「赭紅墨」 — dark ────────────────────────────────────────── */
+[data-theme="dark"] {
+  --ac-bg:          #1c1a17;
+  --ac-surface:     #201d17;
+  --ac-elevated:    #27241e;
+  --ac-raised:      #23201a;
+  --ac-hover:       #24211b;
+  --ac-selected:    #3a292a;
+  --ac-line:        #332e25;
+
+  --ac-ink:         #e8e3da;  /* 13.59:1 on bg */
+  --ac-ink-2:       #c9c3b9;
+  --ac-muted:       #a49e92;
+  --ac-faint:       #858076;
+
+  --ac-accent:      #d9969a;
+  --ac-accent-ink:  #221012;
+  --ac-accent-soft: #3e2a2c;
+  --ac-focus:       #e5a8ac;
+  --ac-link:        #e39fa3;
+  --ac-selection:   #503536;
+
+  --ac-danger:      #ec9983;
+  --ac-danger-soft: #44241b;
+  --ac-warning:     #d0ab6d;
+  --ac-success:     #9abd87;
+  --ac-info:        #8cb6db;
+
+  --ac-code-bg:     #23201a;
+
+  --ac-hl-yellow:   #483f1f;
+  --ac-hl-red:      #502d2c;
+  --ac-hl-green:    #313c25;
+  --ac-hl-blue:     #253a4d;
+  --ac-hl-purple:   #3d314d;
+  --ac-hl-orange:   #49331f;
+
+  --ac-scrim:        rgba(10, 8, 6, 0.62);
+  --ac-shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.35);
+  --ac-shadow-modal: 0 16px 44px rgba(0, 0, 0, 0.55);
+  --ac-shadow-float: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* Placeholders and empty-state hints read upright in every language. The
+   editor's own hints (CodeMirror placeholder, the empty-note hint set by
+   lib/editorEmptyHint.ts) are themed at runtime, so this beats them on
+   specificity rather than editing each source. Component hint rules read
+   var(--ac-hint-style) directly. */
+::placeholder,
+:root .cm-editor .cm-placeholder,
+:root .cm-editor .cm-emptyHint {
+  font-style: var(--ac-hint-style);
+}

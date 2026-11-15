@@ -1,0 +1,46 @@
+{
+  "name": "@onden/site",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "description": "Onden's website design: the SiteDesign type, validation, styles and CSS tools (no React), plus the Puck config and server-renderable components (./react).",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./palette": "./src/palette.ts",
+    "./look": "./src/look.ts",
+    "./react": {
+      "types": "./src/react/index.ts",
+      "default": "./src/react/index.ts"
+    },
+    "./react/siteParts.css": "./src/react/siteParts.css"
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@onden/markdown",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@onden/markdown": "*"
+  },
+  "peerDependencies": {
+    "@puckeditor/core": "0.23.0",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@puckeditor/core": { "optional": true },
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@puckeditor/core": "0.23.0",
+    "@types/react": "^19.0.12",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.7"
+  }
+}

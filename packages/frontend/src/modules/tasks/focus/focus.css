@@ -1,0 +1,69 @@
+/* The focus timer (FocusHost / FocusScreens). Tokens only: colours, radii and
+   sizes come from --ac-*; the layers are ui/Sheet and ui/Modal (top layer). */
+
+/* Phone: a bar in the flow just above the navigation, stuck to it while the page scrolls. */
+.focus-bar {
+  display: none;
+}
+@media (max-width: 900px) {
+  .focus-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--ac-space-2);
+    position: sticky;
+    /* Above the navigation (56px), and above the sync strip when that is showing (100px in all): MobileNav.css. */
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    z-index: var(--z-bar);
+    padding: var(--ac-space-2) var(--ac-space-3);
+    border-top: 1px solid var(--ac-line);
+    background: var(--ac-elevated);
+  }
+  .app-shell:has(.mobile-sync-strip) .focus-bar { bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .focus-bar-main { flex: 1; min-width: 0; justify-content: flex-start; min-height: var(--ac-tap); }
+  .focus-bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+  .focus-bar-time { flex: none; color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+}
+
+/* Desktop: the little mark at the top. Zero height, so it never pushes the page. */
+.focus-mark-slot { position: sticky; top: 0; z-index: var(--z-bar); height: 0; overflow: visible; }
+.focus-mark { position: absolute; top: var(--ac-space-2); inset-inline-end: var(--ac-space-4); font-variant-numeric: tabular-nums; }
+
+.focus-sheet { display: flex; flex-direction: column; gap: var(--ac-space-3); padding: var(--ac-space-4); width: min(440px, 100%); box-sizing: border-box; }
+/* Wider than a phone the card floats, so it carries its own surface (a phone's sheet has the shared one). */
+.focus-sheet { background: var(--ac-elevated); color: var(--ac-ink); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); }
+@media (max-width: 600px) { .focus-sheet { background: none; color: inherit; border: 0; border-radius: 0; } }
+.focus-heading { margin: 0; font-size: var(--ac-fs-h3); }
+.focus-what { margin: 0; font-weight: var(--ac-fw-bold); overflow-wrap: anywhere; }
+.focus-sub { margin: 0; color: var(--ac-muted); }
+.focus-big { margin: 0; font-size: var(--ac-fs-title); font-variant-numeric: tabular-nums; text-align: center; }
+.focus-lengths { display: flex; flex-wrap: wrap; gap: var(--ac-space-2); }
+/* A length of one's own: the question, then a short number box. */
+.focus-own { display: flex; align-items: center; gap: var(--ac-space-2); font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.focus-own input { width: 88px; min-height: 44px; padding: 0 10px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); font: inherit; box-sizing: border-box; }
+.focus-actions { display: flex; justify-content: flex-end; gap: var(--ac-space-2); flex-wrap: wrap; }
+
+/* Desktop full screen: the clock in the middle of its half, the note beside it. */
+.focus-full-layer { padding: 0; }
+.ui-modal.focus-full-layer { width: 100vw; height: 100dvh; max-width: none; max-height: none; background: var(--ac-bg); color: var(--ac-ink); }
+.focus-full { display: flex; height: 100dvh; box-sizing: border-box; }
+.focus-full-clock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ac-space-4); padding: var(--ac-space-6); min-width: 0; }
+.focus-big--full { zoom: 3; }
+.focus-full-note { flex: 0 0 min(var(--ac-prose-max), 45vw); display: flex; flex-direction: column; border-inline-start: 1px solid var(--ac-line); background: var(--ac-surface); min-width: 0; }
+.focus-full-note-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ac-space-3); padding: var(--ac-space-3) var(--ac-space-4); border-bottom: 1px solid var(--ac-line); }
+.focus-full-note-title { margin: 0; font-size: var(--ac-fs-h3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-full-note-body { flex: 1; overflow-y: auto; padding: var(--ac-space-4); }
+
+/* A cycle's break: framed with a dashed line on a tinted ground, where a focus is solid on the plain one,
+   so the two differ in lightness and in outline as well as hue. */
+.focus-row-label { margin: var(--ac-space-3) 0 var(--ac-space-1); font-weight: var(--ac-fw-bold); font-size: var(--ac-fs-caption); }
+.focus-round { margin: 0; color: var(--ac-accent); font-weight: var(--ac-fw-bold); font-variant-numeric: tabular-nums; }
+.focus-bar--break { background: var(--ac-accent-soft); border-top-style: dashed; border-top-color: var(--ac-accent-border); }
+.focus-sheet--break, .focus-full--break .focus-full-clock { background: var(--ac-accent-soft); }
+.focus-mark--break { background: var(--ac-accent-soft); border-style: dashed; border-color: var(--ac-accent-border); }
+.focus-sheet--break { border-style: dashed; border-color: var(--ac-accent-border); }
+
+/* The focus bar under a page's header (FocusPageBar, the 今天 page): one quiet row, a dashed edge during a break. */
+.focus-page-bar { display: flex; align-items: center; gap: var(--ac-space-2); min-width: 0; padding: var(--ac-space-1) var(--ac-space-3); border: 1px solid var(--ac-accent-border); border-radius: var(--ac-radius-md); background: var(--ac-accent-soft); color: var(--ac-ink); }
+.focus-page-bar--break { border-style: dashed; }
+.focus-page-bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.focus-page-bar-round, .focus-page-bar-time { flex: none; color: var(--ac-muted); font-variant-numeric: tabular-nums; }

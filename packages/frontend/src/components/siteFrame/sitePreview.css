@@ -1,0 +1,44 @@
+/* The link-preview card (SitePreview.astro). Only reads the site's variables. */
+.s-preview {
+  position: fixed; z-index: var(--z-dropdown);
+  inline-size: min(22em, calc(100vw - 2 * var(--s-space)));
+  max-block-size: calc(100dvh - 2 * var(--s-space));
+  overflow-y: auto; box-sizing: border-box;
+  padding: var(--s-space);
+  background: var(--f-bg); color: var(--f-fg);
+  border: 1px solid var(--f-line); border-radius: var(--s-radius);
+  box-shadow: 0 0.5em 1.5em color-mix(in srgb, var(--f-fg) 18%, transparent);
+  font-family: var(--s-font-b); font-size: 0.9em; line-height: 1.6;
+}
+.s-preview > :first-child { margin-block-start: 0; }
+.s-preview__title { margin: 0 0 0.2em; font-family: var(--s-font-h); font-size: var(--s-step1); line-height: 1.3; font-weight: 700; }
+.s-preview__meta { margin: 0 0 0.5em; font-size: 0.85em; color: var(--f-muted); font-variant-numeric: tabular-nums; }
+.s-preview__summary { margin: 0 0 0.6em; }
+.s-preview__tags { list-style: none; margin: 0 0 0.7em; padding: 0; display: flex; flex-wrap: wrap; gap: 0.2em 0.8em; font-size: 0.85em; color: var(--f-muted); }
+.s-preview__tags li::before { content: "#"; }
+.site-scope .s-preview a.s-preview__open {
+  display: inline-block; padding: 0.35em 0.9em; border-radius: var(--s-radius);
+  background: var(--s-accent); color: var(--f-bg); text-decoration: none; font-weight: 600;
+}
+.site-scope .s-preview a.s-preview__open:hover { color: var(--f-bg); filter: brightness(1.1); }
+
+/* Touch: a sheet from the bottom, above the home indicator. */
+.s-preview--sheet {
+  inset-block-end: 0; inset-inline: 0; inline-size: auto; max-block-size: 70vh;
+  border-end-start-radius: 0; border-end-end-radius: 0;
+  padding-block-end: calc(var(--s-space) + env(safe-area-inset-bottom, 0px));
+  padding-inline: max(var(--s-space), env(safe-area-inset-left, 0px)) max(var(--s-space), env(safe-area-inset-right, 0px));
+}
+.s-preview__close {
+  position: absolute; inset-block-start: 0.3em; inset-inline-end: 0.3em;
+  min-inline-size: 2.75em; min-block-size: 2.75em; border: 0; background: none; color: var(--f-muted); font-size: 1.4em; line-height: 1; cursor: pointer;
+}
+.s-preview--sheet .s-preview__title { padding-inline-end: 2.5em; }
+.s-preview--sheet .s-preview__open { padding: 0.6em 1.2em; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .s-preview { animation: s-preview-in 120ms ease-out; }
+  .s-preview--sheet { animation-name: s-preview-up; }
+}
+@keyframes s-preview-in { from { opacity: 0; } }
+@keyframes s-preview-up { from { transform: translateY(1em); opacity: 0; } }

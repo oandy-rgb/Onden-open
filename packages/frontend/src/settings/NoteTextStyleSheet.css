@@ -1,0 +1,8 @@
+.note-text-style__body { display: flex; flex-direction: column; gap: 16px; padding: 8px 16px 16px; }
+/* The same body in the desktop popover: 360px wide, the popover's own look, its own padding. */
+.note-text-style-popover { width: 360px; }
+.note-text-style-popover .note-text-style__body { padding: 12px; }
+/* Four faces on one row; one more (「跟系統一樣」, a custom font) wraps. */
+.note-text-style__body .ui-choice-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.note-text-style__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.note-text-style__size { flex: 1; text-align: center; color: var(--ac-muted); }

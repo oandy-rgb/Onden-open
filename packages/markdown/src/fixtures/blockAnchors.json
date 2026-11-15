@@ -1,0 +1,87 @@
+{
+  "comment": "Block-anchor parity (audit D59): one note with an ^id on every block kind and ids inside code. blockAnchors, parseBlocks, the renderer (remarkBlockId: frontend MarkdownRenderer, backend md2html) and extractBlock must agree on it. `element` is the tag the renderer gives data-block-id; `text` is extractBlock's preview.",
+  "markdown": "blockAnchors.md",
+  "anchors": [
+    {
+      "id": "h1",
+      "kind": "heading",
+      "element": "h2",
+      "text": "## Title\n\nA paragraph\nover two lines.\n\n- item one\n- item two\n  - nested\n\nBetween the lists.\n\n- list a\n- list b\n\n\n\n> quoted\n\n> plain quote\n>\n\n> [!note] Callout title\n> body\n\n\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n\n\nTagged block {t}\n\nHashtag line #topic\n\n```js\nconst x = 1; ^c1\n```\n\n~~~\nfence tilde ^c2\n~~~\n\n    indented code ^c3"
+    },
+    {
+      "id": "p1",
+      "kind": "paragraph",
+      "element": "p",
+      "text": "A paragraph\nover two lines."
+    },
+    {
+      "id": "li1",
+      "kind": "listItem",
+      "element": "li",
+      "text": "- item one"
+    },
+    {
+      "id": "li2",
+      "kind": "listItem",
+      "element": "li",
+      "text": "- nested"
+    },
+    {
+      "id": "list1",
+      "kind": "list",
+      "element": "ul",
+      "text": "- list a\n- list b"
+    },
+    {
+      "id": "qp",
+      "kind": "paragraph",
+      "element": "p",
+      "text": "quoted"
+    },
+    {
+      "id": "q2",
+      "kind": "quote",
+      "element": "blockquote",
+      "text": "> plain quote"
+    },
+    {
+      "id": "q1",
+      "kind": "quote",
+      "element": "div",
+      "text": "> [!note] Callout title\n> body"
+    },
+    {
+      "id": "t1",
+      "kind": "table",
+      "element": "table",
+      "text": "| a | b |\n| - | - |\n| 1 | 2 |"
+    },
+    {
+      "id": "tb",
+      "kind": "paragraph",
+      "element": "p",
+      "text": "Tagged block {t}"
+    },
+    {
+      "id": "hb",
+      "kind": "paragraph",
+      "element": "p",
+      "text": "Hashtag line #topic"
+    },
+    {
+      "id": "h2",
+      "kind": "heading",
+      "element": "h2",
+      "text": "## Last"
+    }
+  ],
+  "blockNodes": [
+    "tb",
+    "hb"
+  ],
+  "inCode": [
+    "c1",
+    "c2",
+    "c3"
+  ]
+}

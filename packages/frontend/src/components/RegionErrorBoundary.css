@@ -1,0 +1,20 @@
+/* The message that stands in for one broken region; it fills the region and leaves its neighbours alone. */
+.region-error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  height: 100%;
+  padding: 20px;
+  color: var(--ac-ink);
+  text-align: center;
+}
+
+.region-error-boundary p {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-ui);
+}

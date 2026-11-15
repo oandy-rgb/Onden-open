@@ -1,0 +1,133 @@
+/* Due-soon reminder toggle — sits at the right edge of the Tasks header.
+   Reuses Gallery palette tokens only (no new colors). */
+.tasks-reminder {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+button.tasks-reminder--cta {
+  padding: 4px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+button.tasks-reminder--cta:hover,
+button.tasks-reminder--cta:focus-visible {
+  border-color: var(--ac-accent);
+  color: var(--ac-accent);
+}
+.tasks-reminder-problem {
+  margin-left: auto;
+  max-width: 28em;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  white-space: normal;
+}
+.tasks-reminder-problem + .tasks-reminder { margin-left: 8px; }
+.tasks-reminder--on { color: var(--ac-muted); }
+.tasks-reminder--off { color: var(--ac-muted); opacity: 0.85; }
+
+
+.tasks-add {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: var(--ac-radius-full); border: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ac-accent); color: var(--ac-accent-ink);
+}
+.tasks-add:focus-visible, .tasks-tab:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.tasks-mode-header .tasks-mode-title { margin: 0; font-size: var(--ac-fs-lg); }
+.tasks-mode-header .tasks-reminder { margin-left: auto; }
+.tasks-mode-header .tasks-reminder + .tasks-add { margin-left: 8px; }
+.tasks-mode-header .tasks-mode-title + .tasks-add { margin-left: auto; }
+
+.tasks-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--ac-line); overflow-x: auto; }
+.tasks-tab {
+  flex: 1 0 auto; min-height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid transparent; background: none;
+  color: var(--ac-muted); font: inherit; cursor: pointer; white-space: nowrap;
+}
+.tasks-tab--on { color: var(--ac-ink); font-weight: 600; border-bottom-color: var(--ac-accent); }
+.tasks-tab-count { margin-left: 6px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tasks-tab-hint { margin: 4px 0 12px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.tasks-section { margin-bottom: 20px; }
+.tasks-section-title { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.tasks-section-title--soon { color: var(--task-orange); }
+
+
+/* 還沒排時間: a dashed frame, so it is not mistaken for a block on the timeline. */
+.tk-unscheduled { border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-lg); padding: 2px 10px 6px; }
+.tk-unscheduled-head { display: flex; align-items: center; gap: 6px; min-height: 36px; margin: 0; font: inherit; font-size: var(--ac-fs-small); font-weight: 400; color: var(--ac-muted); }
+
+/* 可以排進今天的: a solid card (late and due-soon tasks), its rows carry their own buttons. */
+.tk-candidates { border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface); padding: 2px 10px 4px; }
+.tk-candidates-head { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.tk-candidates-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-ink); }
+.tk-candidates-all { flex: none; min-height: 44px; padding: 0 4px; border: 0; background: transparent; font: inherit; font-size: var(--ac-fs-small); color: var(--ac-accent); cursor: pointer; }
+
+/* The page is exactly the screen under the top bar (and above a phone's bottom bar), so it does not
+   scroll itself: the body scrolls, and on 今天 the timeline fills what the list leaves, down to the
+   bottom. One rule for a phone and a computer; only the page's height differs. */
+.workspace-grid:has(> .tasks-page) { padding-bottom: 0; min-height: 0; }
+.tasks-page { height: calc(100dvh - 48px); min-height: 0; }
+.tasks-mode-body:has(> .day-pane) { display: flex; flex-direction: column; }
+.tasks-mode-body > .day-pane { flex: 1 1 0; min-height: 300px; position: static; }
+.tasks-mode-body > .day-pane.is-board { flex: 0 0 auto; }
+.tasks-mode-body > .day-pane .day-pane-main { flex: 1 1 auto; min-height: 0; }
+.tasks-mode-body > .day-pane:not(.is-board) .day-timeline { flex: 1; min-height: 0; max-height: none; }
+@media (max-width: 900px) {
+  .tasks-page { height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom)); }
+  .app-shell:has(.mobile-sync-strip) .tasks-page { height: calc(100dvh - 48px - 100px - env(safe-area-inset-bottom)); }
+}
+
+/* A wide page (what the page itself has, not the window: the side bars open and close): 今天 is two
+   columns. Left, the lists (today's, 「可以排進今天的」, 「還沒排時間」); right, the timeline. Each column
+   scrolls by itself, so a task is dragged from the left onto an hour on the right. The week and
+   3-day boards need the width, so they stay under the lists, full width (the page then scrolls). */
+.tasks-mode { container: tasks-page / inline-size; --tasks-list-w: 440px; }
+@container tasks-page (min-width: 1000px) {
+  .tasks-mode-body > :not(.day-pane) { max-width: var(--tasks-list-w); }
+  .tasks-mode-body > .day-pane:not(.is-board):not(.is-phone) {
+    display: grid; min-height: 0; column-gap: 20px; row-gap: 10px;
+    grid-template-columns: minmax(340px, var(--tasks-list-w)) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "list head" "list main";
+  }
+  .day-pane:not(.is-board):not(.is-phone) > .day-pane-head { grid-area: head; }
+  .day-pane:not(.is-board):not(.is-phone) > .day-pane-list { grid-area: list; min-height: 0; overflow-y: auto; }
+  .day-pane:not(.is-board):not(.is-phone) > .day-pane-main { grid-area: main; display: flex; flex-direction: column; }
+  /* Nothing in the list column: the timeline takes the width. */
+  .day-pane:not(.is-board):not(.is-phone):not(:has(> .day-pane-list)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
+}
+/* A narrower page keeps the reading column it always had. */
+@container tasks-page (max-width: 999px) {
+  .tasks-mode > * { width: 100%; max-width: 760px; margin-inline: auto; box-sizing: border-box; }
+}
+
+/* The row's own buttons (排到今天, 某天): they keep their height and line up with the 38px focus button at the top.
+   A row stretches its children (.tk-row). */
+.tk-plan-today, .tk-someday { flex: none; min-height: 32px; white-space: nowrap; align-self: flex-start; margin-top: 3px; }
+
+/* 接下來 as an agenda: the week row stays in view while the days scroll under it; a day with
+   nothing is one grey line; 「之後」 has its date on the left. */
+.tk-agenda-week { position: sticky; top: 0; z-index: var(--z-local-2); padding-bottom: 4px; background: var(--ac-bg); border-bottom: 1px solid var(--ac-line); }
+.tk-agenda-day { margin-top: 12px; scroll-margin-top: 84px; }
+.tk-agenda-title { margin-bottom: 2px; font-weight: 600; color: var(--ac-ink); }
+.tk-agenda-quiet { margin: 10px 0 0; padding: 4px 2px; font-size: var(--ac-fs-caption); color: var(--ac-muted); scroll-margin-top: 84px; }
+.tk-agenda-later { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; }
+.tk-agenda-date { padding-top: 14px; font-size: var(--ac-fs-caption); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+/* The second line of an agenda row is one line: the time or 「截止」 chip, then where it was written. */
+.tk-agenda .tk-main { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 2px; }
+.tk-agenda .tk-title { flex: 1 0 100%; }
+@container tasks-page (min-width: 1000px) {
+  .tasks-mode-body > .day-pane.is-board > .day-pane-list { max-width: var(--tasks-list-w); }
+}
+
+/* A section's title row: the title, an optional note, and a button at the right end (TaskSection). */
+.tasks-section-head { display: flex; align-items: center; gap: var(--ac-space-2); }
+.tasks-section-head .tasks-section-title { margin: 0 0 4px; }
+.tasks-section-note { color: var(--ac-muted); font-size: var(--ac-fs-caption); }

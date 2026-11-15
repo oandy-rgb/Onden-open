@@ -1,0 +1,28 @@
+{
+  "name": "@onden/contract",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "description": "The shapes the server and the app agree on, as zod schemas: what the API sends (ServerNode) and what the app sends to create or change a note (DraftNode), plus the plain types of API answers both sides share. Types come from the schemas (z.infer); the app imports types only.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace=@onden/markdown",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@onden/markdown": "*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.7"
+  }
+}

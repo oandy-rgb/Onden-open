@@ -1,0 +1,17 @@
+.space-filter {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; max-width: 45%; margin-left: 8px; padding: 0 8px;
+  background: transparent; border: 0; border-radius: var(--ac-radius-md); cursor: pointer; font: inherit;
+  font-size: var(--ac-fs-caption); color: var(--ac-muted);
+}
+.space-filter > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.space-filter:hover { color: var(--ac-ink); }
+.space-filter:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+/* Phone: a small line under the bar, only while the list is narrowed. */
+.space-filter-note { padding: 4px 12px 0; }
+.space-filter-note-clear {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 0 10px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: var(--ac-overlay-hover);
+  font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-ink); cursor: pointer;
+}
+.space-filter-note-clear > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

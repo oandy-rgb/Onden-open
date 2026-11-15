@@ -1,0 +1,160 @@
+/* Nav editing (components/NavLayoutEditor, settings/NavigationSetting): the
+   reorder list, the phone's cut, the swap question. Quiet rows: no borders,
+   hierarchy from type and space (A+C 「安靜寫作」). */
+
+.nav-reorder-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+
+.nav-reorder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 2px 4px;
+  border-radius: var(--ac-radius-sm);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-ui);
+}
+.nav-reorder-row.is-dragging { opacity: 0.5; }
+.nav-reorder-row.is-drop-target,
+.nav-reorder-divider.is-drop-target,
+.nav-reorder-end.is-drop-target { box-shadow: var(--ac-bar-top); }
+.nav-reorder-row--fixed { color: var(--ac-muted); }
+
+.nav-reorder-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: grab;
+  touch-action: none;
+}
+button.nav-reorder-handle:hover { background: var(--ac-overlay-hover); }
+.nav-reorder-icon { flex: 0 0 auto; color: var(--ac-muted); }
+.nav-reorder-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.nav-reorder-actions { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+.nav-reorder-note { flex: 0 0 auto; color: var(--ac-muted); font-size: var(--ac-fs-xs); }
+.nav-editor-hint { margin: 0; padding: 0 4px; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.nav-editor-actions { display: flex; margin-top: 16px; }
+.nav-reorder-end.is-drop-target { box-shadow: var(--ac-bar-top); }
+.nav-reorder-row--fixed { color: var(--ac-muted); }
+
+.nav-reorder-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: grab;
+  touch-action: none;
+}
+button.nav-reorder-handle:hover { background: var(--ac-overlay-hover); }
+.nav-reorder-icon { flex: 0 0 auto; color: var(--ac-muted); }
+.nav-reorder-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.nav-reorder-actions { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+/* The phone's cut: a quiet label between the rows it divides. */
+.nav-reorder-divider {
+  padding: 6px 8px 4px 46px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  letter-spacing: 0.02em;
+}
+.nav-reorder-end { height: 8px; }
+
+.nav-settings-heading {
+  margin: 16px 0 4px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  font-weight: 500;
+}
+
+/* 「在「更多」裡」的分組小標題（時間／整理／功能），與手機「更多」相同。 */
+.nav-settings-subheading {
+  margin: 8px 0 2px;
+  padding-inline: 8px;
+  color: var(--ac-muted);
+  font-size: var(--onden-text-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* 「導覽列已滿，要換掉哪一個？」 */
+.nav-swap-card {
+  width: min(100% - 32px, 360px);
+  padding: 20px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-modal);
+}
+.nav-swap-title { margin: 0 0 6px; font-family: var(--font-display); font-size: var(--ac-fs-lg); font-weight: 500; }
+.nav-swap-hint { margin: 0 0 12px; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.nav-swap-options { display: grid; gap: 2px; margin: 0 0 12px; padding: 0; list-style: none; }
+.nav-swap-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.nav-swap-option svg { color: var(--ac-muted); }
+.nav-swap-option:hover, .nav-swap-option:focus-visible { background: var(--ac-overlay-hover); }
+.nav-swap-option:active { background: var(--ac-overlay-press); }
+.nav-swap-actions { display: flex; justify-content: flex-end; }
+
+/* Settings › 工具列 (components/ToolbarLayoutEditor): the rows are the nav's. */
+.toolbar-editor + .toolbar-editor { margin-top: 12px; }
+.toolbar-more-heading {
+  margin: 12px 0 2px;
+  padding: 0 4px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  font-weight: 500;
+}
+
+/* The bar drawn as the phone shows it (NavBarPreview): equal slots in a card
+   that never scrolls sideways. */
+.nav-bar-preview {
+  display: flex; align-items: stretch; gap: 4px; margin: 0; padding: 8px; list-style: none;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface); overflow: hidden;
+}
+.nav-bar-preview-slot {
+  display: flex; flex: 1 1 0; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 52px; padding: 4px 2px; border-radius: var(--ac-radius-lg); color: var(--ac-ink); font-size: var(--ac-fs-xs); text-align: center;
+}
+.nav-bar-preview-slot span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The bar's raised ＋ (MobileNav .mobile-nav-capture), small. */
+.nav-bar-preview-capture { flex: 0 0 auto; min-width: 44px; }
+.nav-bar-preview-plus {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: var(--ac-radius-full); background: var(--ac-accent); color: var(--ac-accent-ink);
+}
+.nav-bar-preview-slot.is-free { border: 1px dashed var(--ac-line); }
+
+/* The computer's top bar (AppNavigation preview), in a card: it measures this
+   box, so the entries it cannot fit fold into 更多 ▾ as they would in the bar. */
+.nav-desktop-preview {
+  padding: 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface);
+}
+.app-primary-nav--preview { display: flex; align-items: center; gap: 6px; margin: 0; position: relative; pointer-events: none; }
+.app-primary-nav--preview .topbar-mode-btn { white-space: nowrap; flex-shrink: 0; }

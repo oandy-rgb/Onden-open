@@ -1,0 +1,3 @@
+/* The 「手寫」 tab of a note: the notebook fills the note area like a handwriting note's content tab.
+   Its height is the section's (.view-pane-fill in ViewTabs.css), not a number taken off the viewport. */
+.handwriting-pane { min-width: 0; min-height: 0; }

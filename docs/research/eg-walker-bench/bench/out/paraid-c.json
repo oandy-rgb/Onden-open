@@ -1,0 +1,822 @@
+{
+ "sets": {
+  "性質測試 bodyMergeInsertions": {
+   "merges": 993,
+   "curConflict": 0,
+   "proConflict": 0,
+   "curRegions": 0,
+   "proRegions": 0,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 0,
+   "differentClean": 98,
+   "ws": 98,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 0,
+   "regionsRemovedBad": 0,
+   "hybConflict": 0,
+   "hybRegions": 0,
+   "hybWrong": 0,
+   "hybMsMedian": 0.010711729946523942,
+   "hybMsP95": 0.01876096261682259,
+   "curMsMedian": 0.010711729946523942,
+   "proMsMedian": 0.029229810218978452,
+   "curMsP95": 0.01876096261682259,
+   "proMsP95": 0.04829456249999945,
+   "proKinds": {}
+  },
+  "單元測試 restoreBodyMerge": {
+   "merges": 4,
+   "curConflict": 1,
+   "proConflict": 1,
+   "curRegions": 1,
+   "proRegions": 1,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 1,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 0,
+   "regionsRemovedBad": 0,
+   "hybConflict": 1,
+   "hybRegions": 1,
+   "hybWrong": 0,
+   "hybMsMedian": 0.010140653164558852,
+   "hybMsP95": 0.07131554487916969,
+   "curMsMedian": 0.010140653164558852,
+   "proMsMedian": 0.03854402884614781,
+   "curMsP95": 0.02543977215190111,
+   "proMsP95": 0.04587577272726859,
+   "proKinds": {
+    "edit-edit": 1
+   }
+  },
+  "單元測試 bodyMerge": {
+   "merges": 16,
+   "curConflict": 8,
+   "proConflict": 8,
+   "curRegions": 8,
+   "proRegions": 8,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 8,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 1,
+   "regionsAdded": 1,
+   "regionsRemovedBad": 1,
+   "hybConflict": 8,
+   "hybRegions": 8,
+   "hybWrong": 0,
+   "hybMsMedian": 0.044555760357531546,
+   "hybMsP95": 0.06547095765103705,
+   "curMsMedian": 0.010396903896102018,
+   "proMsMedian": 0.03435816239315554,
+   "curMsP95": 0.04740109574469627,
+   "proMsP95": 0.07143984210525607,
+   "proKinds": {
+    "edit-edit": 8
+   }
+  },
+  "性質測試 bodyMerge": {
+   "merges": 3192,
+   "curConflict": 284,
+   "proConflict": 330,
+   "curRegions": 287,
+   "proRegions": 356,
+   "newlyClean": 72,
+   "newlyConflict": 118,
+   "bothConflict": 212,
+   "differentClean": 70,
+   "ws": 28,
+   "better": 8,
+   "worse": 18,
+   "arguable": 16,
+   "curWrong": 19,
+   "proWrong": 57,
+   "fellBack": 0,
+   "regionsRemoved": 139,
+   "regionsAdded": 206,
+   "regionsRemovedBad": 20,
+   "hybConflict": 244,
+   "hybRegions": 247,
+   "hybWrong": 19,
+   "hybMsMedian": 0.00010404273304206562,
+   "hybMsP95": 0.07541462313430033,
+   "curMsMedian": 0.00010404273304206562,
+   "proMsMedian": 0.0005838220957384581,
+   "curMsP95": 0.033359175000002024,
+   "proMsP95": 0.07726565384613283,
+   "proKinds": {
+    "edit-delete": 234,
+    "edit-edit": 112,
+    "move-delete": 10
+   }
+  },
+  "單元測試 bodyMergeSameLine": {
+   "merges": 9,
+   "curConflict": 3,
+   "proConflict": 3,
+   "curRegions": 3,
+   "proRegions": 3,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 3,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 0,
+   "regionsRemovedBad": 0,
+   "hybConflict": 3,
+   "hybRegions": 3,
+   "hybWrong": 0,
+   "hybMsMedian": 0.012798559105426547,
+   "hybMsP95": 0.038797111700729074,
+   "curMsMedian": 0.010240905370846565,
+   "proMsMedian": 0.02397506586824088,
+   "curMsP95": 0.014008825174839134,
+   "proMsP95": 0.032628422764206126,
+   "proKinds": {
+    "edit-edit": 3
+   }
+  },
+  "單元測試 bodyMergeAdjacent": {
+   "merges": 43,
+   "curConflict": 0,
+   "proConflict": 0,
+   "curRegions": 0,
+   "proRegions": 0,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 0,
+   "differentClean": 6,
+   "ws": 6,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 0,
+   "regionsRemovedBad": 0,
+   "hybConflict": 0,
+   "hybRegions": 0,
+   "hybWrong": 0,
+   "hybMsMedian": 0.008755413566738814,
+   "hybMsP95": 0.011031534435259904,
+   "curMsMedian": 0.008755413566738814,
+   "proMsMedian": 0.0222428444444328,
+   "curMsP95": 0.011031534435259904,
+   "proMsP95": 0.028463049645408498,
+   "proKinds": {}
+  },
+  "單元測試 bodyMergeEdges": {
+   "merges": 34,
+   "curConflict": 14,
+   "proConflict": 18,
+   "curRegions": 15,
+   "proRegions": 18,
+   "newlyClean": 0,
+   "newlyConflict": 4,
+   "bothConflict": 14,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 2,
+   "regionsAdded": 6,
+   "regionsRemovedBad": 2,
+   "hybConflict": 14,
+   "hybRegions": 15,
+   "hybWrong": 0,
+   "hybMsMedian": 0.008526344680842854,
+   "hybMsP95": 366.4283920000016,
+   "curMsMedian": 0.008526344680842854,
+   "proMsMedian": 0.024440646341490055,
+   "curMsP95": 107.71664400000009,
+   "proMsP95": 258.71174800000153,
+   "proKinds": {
+    "edit-edit": 14,
+    "edit-delete": 4
+   }
+  },
+  "單元測試 bodyMergeSharedInsert": {
+   "merges": 17,
+   "curConflict": 0,
+   "proConflict": 0,
+   "curRegions": 0,
+   "proRegions": 0,
+   "newlyClean": 0,
+   "newlyConflict": 0,
+   "bothConflict": 0,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 0,
+   "regionsRemovedBad": 0,
+   "hybConflict": 0,
+   "hybRegions": 0,
+   "hybWrong": 0,
+   "hybMsMedian": 0.011102013850419033,
+   "hybMsP95": 0.04701438709678534,
+   "curMsMedian": 0.011102013850419033,
+   "proMsMedian": 0.03657104545451478,
+   "curMsP95": 0.04701438709678534,
+   "proMsP95": 0.07914446153844414,
+   "proKinds": {}
+  },
+  "同步模擬器": {
+   "merges": 46,
+   "curConflict": 7,
+   "proConflict": 17,
+   "curRegions": 7,
+   "proRegions": 17,
+   "newlyClean": 0,
+   "newlyConflict": 10,
+   "bothConflict": 7,
+   "differentClean": 0,
+   "ws": 0,
+   "better": 0,
+   "worse": 0,
+   "arguable": 0,
+   "curWrong": 0,
+   "proWrong": 0,
+   "fellBack": 0,
+   "regionsRemoved": 0,
+   "regionsAdded": 10,
+   "regionsRemovedBad": 0,
+   "hybConflict": 7,
+   "hybRegions": 7,
+   "hybWrong": 0,
+   "hybMsMedian": 0.006981759162297282,
+   "hybMsP95": 0.031890125634287475,
+   "curMsMedian": 0.006981759162297282,
+   "proMsMedian": 0.02028767171717423,
+   "curMsP95": 0.010378663212431437,
+   "proMsP95": 0.032741577235784955,
+   "proKinds": {
+    "edit-delete": 14,
+    "edit-edit": 3
+   }
+  },
+  "__all": {
+   "merges": 4354,
+   "curConflict": 317,
+   "proConflict": 377,
+   "curRegions": 321,
+   "proRegions": 403,
+   "newlyClean": 72,
+   "newlyConflict": 132,
+   "bothConflict": 245,
+   "differentClean": 174,
+   "ws": 132,
+   "better": 8,
+   "worse": 18,
+   "arguable": 16,
+   "curWrong": 19,
+   "proWrong": 57,
+   "fellBack": 0,
+   "regionsRemoved": 142,
+   "regionsAdded": 223,
+   "regionsRemovedBad": 23,
+   "hybConflict": 277,
+   "hybRegions": 281,
+   "hybWrong": 19,
+   "hybMsMedian": 0.008336239583347076,
+   "hybMsP95": 0.058973340578951525,
+   "curMsMedian": 0.008327447013479863,
+   "proMsMedian": 0.023312313953489816,
+   "curMsP95": 0.02879776978417088,
+   "proMsP95": 0.07045378947364761,
+   "proKinds": {
+    "edit-edit": 141,
+    "edit-delete": 252,
+    "move-delete": 10
+   }
+  }
+ },
+ "examples": {
+  "性質測試 bodyMerge|newlyConflict": [
+   {
+    "base": "> quote ^0⏎- 項目 ^1⏎  ^2⏎。貓。 ^3⏎- item ^4⏎- 項目 ^5⏎const x = 1; ^6⏎",
+    "incoming": "> quote ^0⏎- 項目 ^1⏎  ^2⏎ours-0: blank⏎ours-1: ---⏎ours-2: ```⏎。貓。 ^3⏎- 項目 ^5⏎const x = 1; ^6⏎",
+    "current": "> quote ^0⏎。貓。 ^3⏎- item ^4⏎const x = 1; ^6⏎- 項目 ^5⏎- 項目 ^1⏎  ^2⏎",
+    "cur": "> quote ^0⏎ours-0: blank⏎ours-1: ---⏎ours-2: ```⏎。貓。 ^3⏎const x = 1; ^6⏎- 項目 ^5⏎- 項目 ^1⏎  ^2⏎",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": " JbA ^0",
+    "incoming": "ours-0: 嗺。。。⏎ours-1: ```⏎ours-2: 。。乆⏎ JbA ^0",
+    "current": "",
+    "cur": "ours-0: 嗺。。。⏎ours-1: ```⏎ours-2: 。。乆",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "## rw究e ^0⏎ jck ^1⏎",
+    "incoming": "## rw究e ^0⏎ours-0: blank⏎ours-1: ## hf鮷⏎ jck ^1⏎ours-2: ## 備註⏎ours-3: 諠。。盓，，⏎",
+    "current": "theirs-3: ## 備註⏎theirs-4: 1. lxr⏎ jck ^1⏎",
+    "cur": "theirs-3: ## 備註⏎theirs-4: 1. lxr⏎ours-0: blank⏎ours-1: ## hf鮷⏎ jck ^1⏎ours-2: ## 備註⏎ours-3: 諠。。盓，，⏎",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "# 筆記 ^0⏎> p睏jg隘聨楴蹝 ^1⏎# 筆記 ^2⏎- 項目 ^3⏎- [ ] todo ^4⏎> 荫 ^5⏎ 4Q J 0g ^6⏎KUaG9B8Ijq ^7⏎TODO: follow up ^8⏎- 項目 ^9⏎。国， ^10⏎YhfP5 0r1Z ^11",
+    "incoming": "# 筆記 ^0⏎> p睏jg隘聨楴蹝 ^1⏎# 筆記 ^2⏎YhfP5 0r1Z ^11⏎- 項目 ^3⏎- [ ] todo ^4⏎TODO: follow up ^8⏎- 項目 ^9⏎> 荫 ^5⏎ 4Q J 0g ^6⏎KUaG9B8Ijq ^7⏎。国， ^10",
+    "current": "# 筆記 ^0⏎> p睏jg隘聨楴蹝 ^1⏎# 筆記 ^2⏎- 項目 ^3⏎- [ ] todo ^4⏎> 荫 ^5⏎ 4Q J 0g ^6⏎theirs-0: 嚦。。。湠⏎KUaG9B8Ijq ^7⏎TODO: follow up ^8⏎- 項目 ^9⏎。国， ^10⏎YhfP5 0r1Z ^11",
+    "cur": "# 筆記 ^0⏎> p睏jg隘聨楴蹝 ^1⏎# 筆記 ^2⏎YhfP5 0r1Z ^11⏎- 項目 ^3⏎- [ ] todo ^4⏎TODO: follow up ^8⏎- 項目 ^9⏎> 荫 ^5⏎ 4Q J 0g ^6⏎theirs-0: 嚦。。。湠⏎KUaG9B8Ijq ^7⏎。国， ^10",
+    "pro": "衝突 edit-edit",
+    "problems": []
+   },
+   {
+    "base": "，，，，一鈓，。第。 ^0⏎# 筆記 ^1⏎``` ^2⏎const x = 1; ^3⏎> quote ^4⏎今天的會議紀錄 ^5⏎",
+    "incoming": "，，，，一鈓，。第。 ^0⏎# 筆記 ^1⏎> quote ^4⏎``` ^2⏎const x = 1; ^3⏎今天的會議紀錄 ^5⏎",
+    "current": "，，，，一鈓，。第。 ^0⏎# 筆記 ^1⏎> quote ^4⏎``` ^2⏎theirs-0: ```⏎今天的會議紀錄 ^5⏎",
+    "cur": "，，，，一鈓，。第。 ^0⏎# 筆記 ^1⏎> quote ^4⏎``` ^2⏎theirs-0: ```⏎今天的會議紀錄 ^5⏎",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "，。。，聘，。梓， ^0⏎z 8xW ^1⏎> 沔mvz ^2⏎<!--3-->⏎。，漱。。，。銐久 ^4⏎，。，椣。。顔。， ^5⏎uWFT  4WnB ^6⏎``` ^7⏎- item ^8⏎--- ^9⏎- [ ] todo ^10⏎- [ ] todo ^11",
+    "incoming": "，。。，聘，。梓， ^0⏎z 8xW ^1⏎> 沔mvz ^2⏎<!--3-->⏎。，漱。。，。銐久 ^4⏎，。，椣。。顔。， ^5⏎uWFT  4WnB ^6⏎``` ^7⏎- item ^8⏎ours-0: - 項目⏎ours-1: 今天的會議紀錄⏎ours-2: TODO: follow up⏎--- ^9⏎- …",
+    "current": "，。。，聘，。梓， ^0⏎z 8xW ^1⏎> 沔mvz ^2⏎- [ ] todo ^10⏎theirs-0: > 嫘趟⏎<!--3-->⏎。，漱。。，。銐久 ^4⏎，。，椣。。顔。， ^5⏎uWFT  4WnB ^6⏎``` ^7⏎- item ^8⏎theirs-6: O15j ⏎--- ^9⏎theirs-1:…",
+    "cur": "，。。，聘，。梓， ^0⏎z 8xW ^1⏎> 沔mvz ^2⏎- [ ] todo ^10⏎theirs-0: > 嫘趟⏎<!--3-->⏎。，漱。。，。銐久 ^4⏎，。，椣。。顔。， ^5⏎uWFT  4WnB ^6⏎``` ^7⏎- item ^8⏎ours-0: - 項目⏎ours-1: 今天的會議紀錄⏎our…",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "TODO: follow up ^0⏎- item ^1⏎> 醙c ^2⏎9c   ^3⏎## yn嬊 ^4⏎1. 勭説g飇窇澭蹺 ^5⏎--- ^6⏎--- ^7⏎- item ^8",
+    "incoming": "TODO: follow up ^0⏎ours-1: > quote⏎> 醙c ^2⏎9c   ^3⏎## yn嬊 ^4⏎1. 勭説g飇窇澭蹺 ^5⏎--- ^6⏎--- ^7⏎- item ^8",
+    "current": "TODO: follow up ^0⏎- item ^1⏎> 醙c ^2⏎9c   ^3⏎--- ^7⏎- item ^8⏎## yn嬊 ^4⏎1. 勭説g飇窇澭蹺 ^5⏎--- ^6",
+    "cur": "TODO: follow up ^0⏎ours-1: > quote⏎> 醙c ^2⏎9c   ^3⏎--- ^7⏎- item ^8⏎## yn嬊 ^4⏎1. 勭説g飇窇澭蹺 ^5⏎--- ^6",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "--- ^0\r⏎",
+    "incoming": "",
+    "current": "theirs-4: - item\r⏎theirs-3: ```\r⏎--- ^0\r⏎",
+    "cur": "theirs-4: - item\r⏎theirs-3: ```\r⏎",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "total": 118
+   }
+  ],
+  "性質測試 bodyMerge|newlyClean": [
+   {
+    "base": "> quote ^0\r⏎今天的會議紀錄 ^1\r⏎> 菢諒my擲gk酼 ^2\r⏎## o籌y儁wp二 ^3\r⏎> 摪 ^4\r⏎",
+    "incoming": "今天的會議紀錄 ^1\r⏎> 菢諒my擲gk酼 ^2\r⏎## o籌y儁wp二 ^3\r⏎ours-0: ，。。。，，，，\r⏎ours-1: # 筆記\r⏎",
+    "current": "## o籌y儁wp二 ^3\r⏎> 摪 ^4\r⏎theirs-1: const x = 1;\r⏎theirs-2: - [ ] todo\r⏎> quote ^0\r⏎今天的會議紀錄 ^1\r⏎> 菢諒my擲gk酼 ^2\r⏎",
+    "cur": "衝突 1",
+    "pro": "## o籌y儁wp二 ^3\r⏎ours-0: ，。。。，，，，\r⏎ours-1: # 筆記\r⏎theirs-1: const x = 1;\r⏎theirs-2: - [ ] todo\r⏎> quote ^0\r⏎今天的會議紀錄 ^1\r⏎> 菢諒my擲gk酼 ^2\r⏎",
+    "problems": [
+     "重複：「> quote ^0」多了 1 份"
+    ]
+   },
+   {
+    "base": "甅廮，，。，，，，。 ^0\r⏎j 00o ^1\r⏎- 項目 ^2\r⏎1. 认 ^3\r⏎",
+    "incoming": "甅廮，，。，，，，。 ^0\r⏎j 00o ^1\r⏎",
+    "current": "甅廮，，。，，，，。 ^0\r⏎j 00o ^1\r⏎- 項目 ^2\r⏎theirs-0:  \r⏎",
+    "cur": "衝突 1",
+    "pro": "甅廮，，。，，，，。 ^0\r⏎j 00o ^1\r⏎- 項目 ^2\r⏎theirs-0:  \r⏎",
+    "problems": [
+     "重複：「- 項目 ^2」多了 1 份"
+    ]
+   },
+   {
+    "base": "今天的會議紀錄 ^0\r⏎- 蘻y醒雗髿 ^1\r⏎",
+    "incoming": "ours-4: ```ts\r⏎ours-5: ，。。，。，秝创脕\r⏎ours-1: TODO: follow up\r⏎",
+    "current": "今天的會議紀錄 ^0\r⏎",
+    "cur": "衝突 1",
+    "pro": "ours-4: ```ts\r⏎ours-5: ，。。，。，秝创脕\r⏎ours-1: TODO: follow up\r⏎",
+    "problems": []
+   },
+   {
+    "base": "今天的會議紀錄 ^0⏎> a仵w秲赤 ^1⏎## 懈籍t哎l轫 ^2⏎``` ^3⏎今天的會議紀錄 ^4⏎> ge ^5⏎，。。 ^6⏎",
+    "incoming": "今天的會議紀錄 ^0⏎> ge ^5⏎，。。 ^6⏎",
+    "current": "theirs-0: 嵙。。，。洿⏎theirs-4: ，。，，曤，，⏎theirs-5: ```ts⏎theirs-1: - 項目⏎，。。 ^6⏎theirs-2: # 筆記⏎``` ^3⏎今天的會議紀錄 ^4⏎> ge ^5⏎",
+    "cur": "衝突 1",
+    "pro": "theirs-0: 嵙。。，。洿⏎theirs-4: ，。，，曤，，⏎theirs-5: ```ts⏎theirs-1: - 項目⏎，。。 ^6⏎theirs-2: # 筆記⏎今天的會議紀錄 ^0⏎> ge ^5⏎",
+    "problems": [
+     "重複：「今天的會議紀錄 ^0」多了 1 份"
+    ]
+   },
+   {
+    "base": "> 靪炎龡 ^0⏎## 毞a黀gg踑 ^1⏎，。嫻縓瓴，挲靦， ^2",
+    "incoming": "> 靪炎龡 ^0⏎ours-0: TODO: follow up⏎ours-1: V   I7n6u8 o",
+    "current": "theirs-4: 1. 宰isc⏎theirs-5: ，匆。槵。，，。⏎## 毞a黀gg踑 ^1",
+    "cur": "衝突 1",
+    "pro": "theirs-4: 1. 宰isc⏎theirs-5: ，匆。槵。，，。⏎ours-0: TODO: follow up⏎ours-1: V   I7n6u8 o",
+    "problems": []
+   },
+   {
+    "base": "1. 霪c硨 ^0⏎- 項目 ^1⏎<!--2-->⏎- 項目 ^3⏎",
+    "incoming": "<!--2-->⏎ours-5: - [ ] todo⏎ours-6: ```⏎ours-7:  VR LwKH4n70⏎- 項目 ^3⏎",
+    "current": "theirs-0: 暫，娑藷，。。⏎- 項目 ^3⏎",
+    "cur": "衝突 1",
+    "pro": "<!--2-->⏎ours-5: - [ ] todo⏎ours-6: ```⏎ours-7:  VR LwKH4n70⏎theirs-0: 暫，娑藷，。。⏎- 項目 ^3⏎",
+    "problems": [
+     "重複：「<!--2-->」多了 1 份"
+    ]
+   },
+   {
+    "base": "蓴霭，见 ^0⏎，瘝。，芩綰。忉，， ^1⏎<!--2-->⏎const x = 1; ^3⏎帱，叿，靊。。 ^4⏎## rhd覻ug ^5⏎> quote ^6⏎const x = 1; ^7",
+    "incoming": "蓴霭，见 ^0⏎ours-0: 6r1c8FX ⏎ours-2: ```⏎const x = 1; ^3⏎帱，叿，靊。。 ^4⏎，瘝。，芩綰。忉，， ^1⏎<!--2-->⏎## rhd覻ug ^5⏎> quote ^6⏎const x = 1; ^7",
+    "current": "蓴霭，见 ^0⏎，瘝。，芩綰。忉，， ^1⏎<!--2-->⏎> quote ^6⏎const x = 1; ^7",
+    "cur": "衝突 1",
+    "pro": "蓴霭，见 ^0⏎ours-0: 6r1c8FX ⏎ours-2: ```⏎> quote ^6⏎const x = 1; ^7⏎，瘝。，芩綰。忉，， ^1⏎<!--2-->",
+    "problems": []
+   },
+   {
+    "base": " hpyI8 Al7x ^0⏎## p ^1⏎",
+    "incoming": "ours-3: # 筆記⏎ours-5: 今天的會議紀錄⏎ours-6: ---⏎ours-4: const x = 1;⏎",
+    "current": "theirs-3: ## 備註⏎",
+    "cur": "衝突 1",
+    "pro": "ours-3: # 筆記⏎ours-5: 今天的會議紀錄⏎ours-6: ---⏎ours-4: const x = 1;⏎theirs-3: ## 備註⏎",
+    "problems": []
+   },
+   {
+    "total": 72
+   }
+  ],
+  "性質測試 bodyMerge|diff-worse": [
+   {
+    "base": "今天的會議紀錄 ^0⏎# 筆記 ^1⏎## 印 ^2⏎<!--3-->⏎",
+    "incoming": "今天的會議紀錄 ^0⏎# 筆記 ^1⏎## 印 ^2⏎",
+    "current": "theirs-2: > 帴龚郙b泟⏎theirs-3: ---⏎theirs-0: g  B Q1eK  ⏎theirs-1: # 筆記⏎<!--3-->⏎",
+    "cur": "theirs-2: > 帴龚郙b泟⏎theirs-3: ---⏎theirs-0: g  B Q1eK  ⏎theirs-1: # 筆記⏎",
+    "pro": "theirs-2: > 帴龚郙b泟⏎theirs-3: ---⏎theirs-0: g  B Q1eK  ⏎theirs-1: # 筆記⏎<!--3-->⏎",
+    "problems": [
+     "重複：「<!--3-->」多了 1 份"
+    ]
+   },
+   {
+    "base": "今天的會議紀錄 ^0\r⏎I f y K ^1\r⏎1. t肮cd ^2\r⏎",
+    "incoming": "1. t肮cd ^2\r⏎",
+    "current": "今天的會議紀錄 ^0\r⏎I f y K ^1\r⏎theirs-0: 今天的會議紀錄\r⏎theirs-1: EMK1  5188\r⏎",
+    "cur": "theirs-0: 今天的會議紀錄\r⏎theirs-1: EMK1  5188\r⏎",
+    "pro": "今天的會議紀錄 ^0\r⏎I f y K ^1\r⏎theirs-0: 今天的會議紀錄\r⏎theirs-1: EMK1  5188\r⏎",
+    "problems": [
+     "重複：「今天的會議紀錄 ^0」多了 1 份",
+     "重複：「I f y K ^1」多了 1 份"
+    ]
+   },
+   {
+    "base": "。槪簱淒。\r⏎J\r⏎- 項目\r⏎",
+    "incoming": "。槪簱淒。\r⏎J\r⏎",
+    "current": "。槪簱淒。\r⏎- ivx\r⏎```ts\r⏎- 項目\r⏎",
+    "cur": "。槪簱淒。\r⏎- ivx\r⏎```ts\r⏎",
+    "pro": "。槪簱淒。\r⏎- ivx\r⏎```ts\r⏎- 項目\r⏎",
+    "problems": [
+     "重複：「- 項目」多了 1 份"
+    ]
+   },
+   {
+    "base": "> pf柑g歃h ^2⏎const x = 1; ^3⏎## 備註 ^4⏎## pi ^5⏎- item ^6⏎今天的會議紀錄 ^7⏎--- ^8⏎",
+    "incoming": "``` ^0⏎，総。，。 ^1⏎> pf柑g歃h ^2⏎const x = 1; ^3⏎## 備註 ^4⏎## pi ^5⏎- item ^6⏎今天的會議紀錄 ^7⏎--- ^8⏎",
+    "current": "> pf柑g歃h ^2⏎const x = 1; ^3⏎## 備註 ^4⏎later-0: blank⏎later-1: ## mwzl⏎later-2: ，，。，鏧。，，⏎--- ^8⏎",
+    "cur": "``` ^0⏎，総。，。 ^1⏎> pf柑g歃h ^2⏎const x = 1; ^3⏎## 備註 ^4⏎later-0: blank⏎later-1: ## mwzl⏎later-2: ，，。，鏧。，，⏎--- ^8⏎",
+    "pro": "``` ^0⏎，総。，。 ^1⏎> pf柑g歃h ^2⏎const x = 1; ^3⏎## 備註 ^4⏎## pi ^5⏎- item ^6⏎今天的會議紀錄 ^7⏎--- ^8⏎later-0: blank⏎later-1: ## mwzl⏎later-2: ，，。，鏧。，，⏎--- ^8⏎",
+    "problems": [
+     "重複：「## pi ^5」多了 1 份",
+     "重複：「- item ^6」多了 1 份",
+     "重複：「今天的會議紀錄 ^7」多了 1 份",
+     "重複：「--- ^8」多了 1 份"
+    ]
+   },
+   {
+    "base": "鐶堙蟴， ^0⏎- 跒秴kh欆刖 ^1⏎undone-0: blank⏎## 備註 ^3⏎1  naT ^4⏎今天的會議紀錄 ^5⏎## call ^6⏎6 8QY ^7⏎祢坐。。 ^8⏎<!--9-->⏎> 奬q ^10⏎## m糎na岕a ^11⏎5yok ig1 Tc ^12⏎> sb ^13⏎仒，。，。 ^14…",
+    "incoming": "鐶堙蟴， ^0⏎- 跒秴kh欆刖 ^1⏎```ts ^2⏎## 備註 ^3⏎1  naT ^4⏎今天的會議紀錄 ^5⏎## call ^6⏎6 8QY ^7⏎祢坐。。 ^8⏎<!--9-->⏎> 奬q ^10⏎## m糎na岕a ^11⏎5yok ig1 Tc ^12⏎> sb ^13⏎仒，。，。 ^14⏎- [ ] …",
+    "current": "鐶堙蟴， ^0⏎- 跒秴kh欆刖 ^1⏎undone-0: blank⏎## 備註 ^3⏎1  naT ^4⏎今天的會議紀錄 ^5⏎## call ^6⏎6 8QY ^7⏎祢坐。。 ^8⏎later-0: 。。涤⏎- [ ] todo ^15⏎今天的會議紀錄 ^16⏎<!--17-->⏎",
+    "cur": "鐶堙蟴， ^0⏎- 跒秴kh欆刖 ^1⏎```ts ^2⏎## 備註 ^3⏎1  naT ^4⏎今天的會議紀錄 ^5⏎## call ^6⏎6 8QY ^7⏎祢坐。。 ^8⏎later-0: 。。涤⏎- [ ] todo ^15⏎今天的會議紀錄 ^16⏎<!--17-->⏎",
+    "pro": "鐶堙蟴， ^0⏎- 跒秴kh欆刖 ^1⏎```ts ^2⏎## 備註 ^3⏎1  naT ^4⏎今天的會議紀錄 ^5⏎## call ^6⏎6 8QY ^7⏎祢坐。。 ^8⏎<!--9-->⏎> 奬q ^10⏎## m糎na岕a ^11⏎5yok ig1 Tc ^12⏎> sb ^13⏎仒，。，。 ^14⏎- [ ] …",
+    "problems": [
+     "重複：「6 8QY ^7」多了 1 份",
+     "重複：「祢坐。。 ^8」多了 1 份",
+     "重複：「<!--9-->」多了 1 份",
+     "重複：「> 奬q ^10」多了 1 份",
+     "重複：「## m糎na岕a ^11」多了 1 份",
+     "重複：「5yok ig1 Tc ^12」多了 1 份",
+     "重複：「> sb ^13」多了 1 份",
+     "重複：「仒，。，。 ^14」多了 1 份"
+    ]
+   },
+   {
+    "base": "## lax⏎## 龟⏎。，擦⏎> 上⏎",
+    "incoming": "## 龟⏎> 上⏎## lax⏎。，擦⏎",
+    "current": "## lax⏎## 龟⏎。，擦⏎",
+    "cur": "## 龟⏎## lax⏎。，擦⏎",
+    "pro": "## 龟⏎> 上⏎## lax⏎。，擦⏎",
+    "problems": [
+     "重複：「> 上」多了 1 份"
+    ]
+   },
+   {
+    "base": "## lax\r⏎## 龟\r⏎。，擦\r⏎> 上\r⏎",
+    "incoming": "## 龟\r⏎> 上\r⏎## lax\r⏎。，擦\r⏎",
+    "current": "## lax\r⏎## 龟\r⏎。，擦\r⏎",
+    "cur": "## 龟\r⏎## lax\r⏎。，擦\r⏎",
+    "pro": "## 龟\r⏎> 上\r⏎## lax\r⏎。，擦\r⏎",
+    "problems": [
+     "重複：「> 上」多了 1 份"
+    ]
+   },
+   {
+    "base": "> 歫嚴⏎今天的會議紀錄⏎c Pk78wlfx⏎> 問q潞曂瞍拽⏎> quote⏎# 筆記⏎",
+    "incoming": "> 歫嚴⏎今天的會議紀錄⏎c Pk78wlfx⏎蜫，⏎  xD⏎> 問q潞曂瞍拽⏎## w榓qu⏎TODO: follow up⏎1. 疻q婈軐d⏎> quote⏎",
+    "current": "> 歫嚴⏎今天的會議紀錄⏎s8x JT I⏎c Pk78wlfx⏎> 問q潞曂瞍拽⏎- item⏎# 筆記⏎",
+    "cur": "> 歫嚴⏎今天的會議紀錄⏎s8x JT I⏎c Pk78wlfx⏎蜫，⏎  xD⏎> 問q潞曂瞍拽⏎## w榓qu⏎TODO: follow up⏎1. 疻q婈軐d⏎- item⏎",
+    "pro": "> 歫嚴⏎今天的會議紀錄⏎s8x JT I⏎c Pk78wlfx⏎蜫，⏎  xD⏎> 問q潞曂瞍拽⏎## w榓qu⏎TODO: follow up⏎1. 疻q婈軐d⏎> quote⏎- item⏎",
+    "problems": [
+     "重複：「> quote」多了 1 份"
+    ]
+   },
+   {
+    "total": 18
+   }
+  ],
+  "性質測試 bodyMerge|diff-arguable": [
+   {
+    "base": " ⏎tu4o CJ213yt⏎1. n⏎",
+    "incoming": " ⏎const x = 1;⏎> qn補m⏎## 備註⏎",
+    "current": "Y09C⏎---⏎## 備註⏎tu4o CJ213yt⏎1. n⏎",
+    "cur": "Y09C⏎---⏎## 備註⏎const x = 1;⏎> qn補m⏎## 備註⏎",
+    "pro": "Y09C⏎---⏎const x = 1;⏎> qn補m⏎## 備註⏎",
+    "problems": []
+   },
+   {
+    "base": "。摃。。\r⏎> quote\r⏎---\r⏎姨摰，，。，\r⏎",
+    "incoming": "。摃。。\r⏎> quote\r⏎---\r⏎姨摰，，。，\r⏎。，，，。醞\r⏎",
+    "current": "。摃。。\r⏎> quote\r⏎```ts\r⏎妪。，\r⏎ 4Qq 5X182C \r⏎---\r⏎姨摰，，。，\r⏎",
+    "cur": "。摃。。\r⏎> quote\r⏎```ts\r⏎妪。，\r⏎ 4Qq 5X182C \r⏎---\r⏎姨摰，，。，\r⏎。，，，。醞\r⏎",
+    "pro": "。摃。。\r⏎> quote\r⏎。，，，。醞\r⏎```ts\r⏎妪。，\r⏎ 4Qq 5X182C \r⏎---\r⏎姨摰，，。，\r⏎",
+    "problems": []
+   },
+   {
+    "base": "> o佦jnn鈗稁\r⏎- item\r⏎const x = 1;\r⏎K \r⏎\r⏎# 筆記\r⏎\r⏎",
+    "incoming": "> o佦jnn鈗稁\r⏎- item\r⏎const x = 1;\r⏎K \r⏎，。，\r⏎# 筆記\r⏎\r⏎",
+    "current": "> o佦jnn鈗稁\r⏎- item\r⏎const x = 1;\r⏎\r⏎u fKADy 7w9\r⏎- 窿wq\r⏎\r⏎# 筆記\r⏎\r⏎",
+    "cur": "> o佦jnn鈗稁\r⏎- item\r⏎const x = 1;\r⏎\r⏎u fKADy 7w9\r⏎- 窿wq\r⏎，。，\r⏎# 筆記\r⏎\r⏎",
+    "pro": "> o佦jnn鈗稁\r⏎- item\r⏎const x = 1;\r⏎，。，\r⏎u fKADy 7w9\r⏎- 窿wq\r⏎\r⏎# 筆記\r⏎\r⏎",
+    "problems": []
+   },
+   {
+    "base": "# 筆記⏎。。。譁褸軎。。⏎- 項目⏎---⏎⏎> v恬鮥kl⏎# 筆記⏎⏎- item⏎",
+    "incoming": "# 筆記⏎。。。譁褸軎。。⏎---⏎- item⏎- 項目⏎---⏎⏎> v恬鮥kl⏎# 筆記⏎⏎- item⏎",
+    "current": "# 筆記⏎。。。譁褸軎。。⏎---⏎⏎> v恬鮥kl⏎# 筆記⏎⏎- item⏎",
+    "cur": "# 筆記⏎。。。譁褸軎。。⏎---⏎- item⏎---⏎⏎> v恬鮥kl⏎# 筆記⏎⏎- item⏎",
+    "pro": "# 筆記⏎。。。譁褸軎。。⏎---⏎⏎- item⏎> v恬鮥kl⏎# 筆記⏎⏎- item⏎",
+    "problems": []
+   },
+   {
+    "base": "- 鹿rb\r⏎Kx  Ap5\r⏎## 俜\r⏎- 瓇舛a傯\r⏎",
+    "incoming": "- 鹿rb\r⏎Kx  Ap5\r⏎---\r⏎> 崵\r⏎## 俜\r⏎- 瓇舛a傯\r⏎",
+    "current": "- 鹿rb\r⏎```\r⏎- 項目\r⏎## 俜\r⏎- 瓇舛a傯\r⏎",
+    "cur": "- 鹿rb\r⏎```\r⏎- 項目\r⏎---\r⏎> 崵\r⏎## 俜\r⏎- 瓇舛a傯\r⏎",
+    "pro": "- 鹿rb\r⏎---\r⏎> 崵\r⏎```\r⏎- 項目\r⏎## 俜\r⏎- 瓇舛a傯\r⏎",
+    "problems": []
+   },
+   {
+    "base": "- 項目 ^1\r⏎1. 霪c硨 ^0\r⏎<!--2-->\r⏎- 項目 ^3\r⏎TODO: follow up ^4\r⏎5flE ^5\r⏎<!--6-->\r⏎1. m葉雩o陉y ^7\r⏎。。，泂职 ^8\r⏎## 啶j ^9\r⏎",
+    "incoming": "1. 霪c硨 ^0\r⏎- 項目 ^1\r⏎<!--2-->\r⏎- 項目 ^3\r⏎TODO: follow up ^4\r⏎5flE ^5\r⏎<!--6-->\r⏎1. m葉雩o陉y ^7\r⏎。。，泂职 ^8\r⏎## 啶j ^9\r⏎",
+    "current": "- 項目 ^1\r⏎1. 霪c硨 ^0\r⏎<!--2-->\r⏎- 項目 ^3\r⏎TODO: follow up ^4\r⏎5flE ^5\r⏎<!--6-->\r⏎1. m葉雩o陉y ^7\r⏎。。，泂职 ^8\r⏎## 啶j ^9\r⏎later-0: - [ ] todo\r⏎later-1: # 筆記\r⏎",
+    "cur": "1. 霪c硨 ^0\r⏎- 項目 ^1\r⏎<!--2-->\r⏎- 項目 ^3\r⏎TODO: follow up ^4\r⏎5flE ^5\r⏎<!--6-->\r⏎1. m葉雩o陉y ^7\r⏎。。，泂职 ^8\r⏎## 啶j ^9\r⏎later-0: - [ ] todo\r⏎later-1: # 筆記\r⏎",
+    "pro": "- 項目 ^1\r⏎<!--2-->\r⏎1. 霪c硨 ^0\r⏎- 項目 ^3\r⏎TODO: follow up ^4\r⏎5flE ^5\r⏎<!--6-->\r⏎1. m葉雩o陉y ^7\r⏎。。，泂职 ^8\r⏎## 啶j ^9\r⏎later-0: - [ ] todo\r⏎later-1: # 筆記\r⏎",
+    "problems": []
+   },
+   {
+    "base": "TODO: follow up⏎⏎l⏎⏎，。，粓⏎wVM54n⏎TODO: follow up⏎## 蜸讌鏀外锡琱楈⏎```⏎```⏎",
+    "incoming": "> m⏎TODO: follow up⏎⏎l⏎⏎，。，粓⏎wVM54n⏎## 蜸讌鏀外锡琱楈⏎```⏎```⏎",
+    "current": "---⏎TODO: follow up⏎⏎l⏎⏎，。，粓⏎wVM54n⏎TODO: follow up⏎⏎## 蜸讌鏀外锡琱楈⏎```⏎```⏎",
+    "cur": "---⏎> m⏎TODO: follow up⏎⏎l⏎⏎，。，粓⏎wVM54n⏎⏎## 蜸讌鏀外锡琱楈⏎```⏎```⏎",
+    "pro": "> m⏎---⏎TODO: follow up⏎⏎l⏎⏎，。，粓⏎wVM54n⏎⏎## 蜸讌鏀外锡琱楈⏎```⏎```⏎",
+    "problems": []
+   },
+   {
+    "base": "TODO: follow up\r⏎\r⏎l\r⏎\r⏎，。，粓\r⏎wVM54n\r⏎TODO: follow up\r⏎## 蜸讌鏀外锡琱楈\r⏎```\r⏎```\r⏎",
+    "incoming": "> m\r⏎TODO: follow up\r⏎\r⏎l\r⏎\r⏎，。，粓\r⏎wVM54n\r⏎## 蜸讌鏀外锡琱楈\r⏎```\r⏎```\r⏎",
+    "current": "---\r⏎TODO: follow up\r⏎\r⏎l\r⏎\r⏎，。，粓\r⏎wVM54n\r⏎TODO: follow up\r⏎\r⏎## 蜸讌鏀外锡琱楈\r⏎```\r⏎```\r⏎",
+    "cur": "---\r⏎> m\r⏎TODO: follow up\r⏎\r⏎l\r⏎\r⏎，。，粓\r⏎wVM54n\r⏎\r⏎## 蜸讌鏀外锡琱楈\r⏎```\r⏎```\r⏎",
+    "pro": "> m\r⏎---\r⏎TODO: follow up\r⏎\r⏎l\r⏎\r⏎，。，粓\r⏎wVM54n\r⏎\r⏎## 蜸讌鏀外锡琱楈\r⏎```\r⏎```\r⏎",
+    "problems": []
+   },
+   {
+    "total": 16
+   }
+  ],
+  "性質測試 bodyMerge|diff-better": [
+   {
+    "base": "- item⏎## 備註⏎> 湄寢h⏎J  P   ⏎ ik ⏎。螜，拋，，。⏎5⏎- [ ] todo⏎",
+    "incoming": "- item⏎---⏎- item⏎## 備註⏎。螜，拋，，。⏎5⏎> 湄寢h⏎J  P   ⏎ ik ⏎- [ ] todo⏎",
+    "current": "- item⏎5⏎## 備註⏎> 湄寢h⏎J  P   ⏎ ik ⏎- [ ] todo⏎",
+    "cur": "- item⏎---⏎- item⏎5⏎## 備註⏎。螜，拋，，。⏎5⏎> 湄寢h⏎J  P   ⏎ ik ⏎- [ ] todo⏎",
+    "pro": "- item⏎---⏎- item⏎5⏎## 備註⏎> 湄寢h⏎J  P   ⏎ ik ⏎- [ ] todo⏎",
+    "problems": []
+   },
+   {
+    "base": "- item\r⏎## 備註\r⏎> 湄寢h\r⏎J  P   \r⏎ ik \r⏎。螜，拋，，。\r⏎5\r⏎- [ ] todo\r⏎",
+    "incoming": "- item\r⏎---\r⏎- item\r⏎## 備註\r⏎。螜，拋，，。\r⏎5\r⏎> 湄寢h\r⏎J  P   \r⏎ ik \r⏎- [ ] todo\r⏎",
+    "current": "- item\r⏎5\r⏎## 備註\r⏎> 湄寢h\r⏎J  P   \r⏎ ik \r⏎- [ ] todo\r⏎",
+    "cur": "- item\r⏎---\r⏎- item\r⏎5\r⏎## 備註\r⏎。螜，拋，，。\r⏎5\r⏎> 湄寢h\r⏎J  P   \r⏎ ik \r⏎- [ ] todo\r⏎",
+    "pro": "- item\r⏎---\r⏎- item\r⏎5\r⏎## 備註\r⏎> 湄寢h\r⏎J  P   \r⏎ ik \r⏎- [ ] todo\r⏎",
+    "problems": []
+   },
+   {
+    "base": "- item⏎⏎---⏎",
+    "incoming": "- item⏎⏎",
+    "current": "---⏎- item⏎⏎",
+    "cur": "---⏎- item⏎⏎",
+    "pro": "- item⏎⏎",
+    "problems": []
+   },
+   {
+    "base": "- item\r⏎\r⏎---\r⏎",
+    "incoming": "- item\r⏎\r⏎",
+    "current": "---\r⏎- item\r⏎\r⏎",
+    "cur": "---\r⏎- item\r⏎\r⏎",
+    "pro": "- item\r⏎\r⏎",
+    "problems": []
+   },
+   {
+    "base": "- 項目⏎⏎> quote⏎```⏎⏎TODO: follow up⏎- 尟尫y觉韑硝g⏎> quote⏎今天的會議紀錄⏎mf4lRv V2x⏎FPkf⏎## 備註⏎",
+    "incoming": "- 項目⏎⏎> quote⏎```⏎⏎> quote⏎今天的會議紀錄⏎TODO: follow up⏎- 尟尫y觉韑硝g⏎mf4lRv V2x⏎FPkf⏎## 備註⏎",
+    "current": "- 項目⏎⏎```⏎⏎> quote⏎TODO: follow up⏎- 尟尫y觉韑硝g⏎> quote⏎今天的會議紀錄⏎mf4lRv V2x⏎FPkf⏎## 備註⏎",
+    "cur": "- 項目⏎⏎```⏎⏎> quote⏎今天的會議紀錄⏎TODO: follow up⏎- 尟尫y觉韑硝g⏎mf4lRv V2x⏎FPkf⏎## 備註⏎",
+    "pro": "- 項目⏎⏎```⏎⏎> quote⏎> quote⏎今天的會議紀錄⏎TODO: follow up⏎- 尟尫y觉韑硝g⏎mf4lRv V2x⏎FPkf⏎## 備註⏎",
+    "problems": []
+   },
+   {
+    "base": "- 項目\r⏎\r⏎> quote\r⏎```\r⏎\r⏎TODO: follow up\r⏎- 尟尫y觉韑硝g\r⏎> quote\r⏎今天的會議紀錄\r⏎mf4lRv V2x\r⏎FPkf\r⏎## 備註\r⏎",
+    "incoming": "- 項目\r⏎\r⏎> quote\r⏎```\r⏎\r⏎> quote\r⏎今天的會議紀錄\r⏎TODO: follow up\r⏎- 尟尫y觉韑硝g\r⏎mf4lRv V2x\r⏎FPkf\r⏎## 備註\r⏎",
+    "current": "- 項目\r⏎\r⏎```\r⏎\r⏎> quote\r⏎TODO: follow up\r⏎- 尟尫y觉韑硝g\r⏎> quote\r⏎今天的會議紀錄\r⏎mf4lRv V2x\r⏎FPkf\r⏎## 備註\r⏎",
+    "cur": "- 項目\r⏎\r⏎```\r⏎\r⏎> quote\r⏎今天的會議紀錄\r⏎TODO: follow up\r⏎- 尟尫y觉韑硝g\r⏎mf4lRv V2x\r⏎FPkf\r⏎## 備註\r⏎",
+    "pro": "- 項目\r⏎\r⏎```\r⏎\r⏎> quote\r⏎> quote\r⏎今天的會議紀錄\r⏎TODO: follow up\r⏎- 尟尫y觉韑硝g\r⏎mf4lRv V2x\r⏎FPkf\r⏎## 備註\r⏎",
+    "problems": []
+   },
+   {
+    "base": "今天的會議紀錄⏎10NiduKNDl8⏎## 備註⏎",
+    "incoming": "今天的會議紀錄⏎10NiduKNDl8⏎",
+    "current": "## 備註⏎今天的會議紀錄⏎10NiduKNDl8⏎",
+    "cur": "## 備註⏎今天的會議紀錄⏎10NiduKNDl8⏎",
+    "pro": "今天的會議紀錄⏎10NiduKNDl8⏎",
+    "problems": []
+   },
+   {
+    "base": "今天的會議紀錄⏎10NiduKNDl8⏎## 備註⏎",
+    "incoming": "## 備註⏎今天的會議紀錄⏎10NiduKNDl8⏎",
+    "current": "今天的會議紀錄⏎10NiduKNDl8⏎",
+    "cur": "## 備註⏎今天的會議紀錄⏎10NiduKNDl8⏎",
+    "pro": "今天的會議紀錄⏎10NiduKNDl8⏎",
+    "problems": []
+   },
+   {
+    "total": 8
+   }
+  ],
+  "單元測試 bodyMergeEdges|newlyConflict": [
+   {
+    "base": "A",
+    "incoming": "B⏎A",
+    "current": "",
+    "cur": "B",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A",
+    "incoming": "A⏎B",
+    "current": "",
+    "cur": "B",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "x",
+    "incoming": "",
+    "current": "x⏎y",
+    "cur": "y",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "x⏎",
+    "incoming": "",
+    "current": "x⏎y⏎",
+    "cur": "y⏎",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "total": 4
+   }
+  ],
+  "同步模擬器|newlyConflict": [
+   {
+    "base": "A2",
+    "incoming": "",
+    "current": "A2⏎A8",
+    "cur": "A8",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A1",
+    "incoming": "",
+    "current": "B9⏎A1",
+    "cur": "B9",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A2",
+    "incoming": "B4⏎A2",
+    "current": "",
+    "cur": "B4",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A2",
+    "incoming": "",
+    "current": "C5⏎A2",
+    "cur": "C5",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A8",
+    "incoming": "",
+    "current": "A8⏎B4",
+    "cur": "B4",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A2",
+    "incoming": "",
+    "current": "A2⏎A4",
+    "cur": "A4",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A1",
+    "incoming": "",
+    "current": "A1⏎A7",
+    "cur": "A7",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "base": "A2",
+    "incoming": "C8⏎A2",
+    "current": "",
+    "cur": "C8",
+    "pro": "衝突 edit-delete",
+    "problems": []
+   },
+   {
+    "total": 10
+   }
+  ]
+ }
+}

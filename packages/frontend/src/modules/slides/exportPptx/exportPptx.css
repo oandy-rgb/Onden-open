@@ -1,0 +1,12 @@
+/* The export panel (ExportPptxDialog). The slide drawn off screen is the measuring stage, not shown. */
+.pe-card { display: flex; flex-direction: column; gap: var(--ac-space-3); width: min(480px, 100%); padding-bottom: var(--ac-space-4); }
+.pe-body { display: flex; flex-direction: column; gap: var(--ac-space-3); padding: 0 var(--ac-space-4); }
+.pe-label { font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.pe-note { margin: 0; font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.pe-warn { margin: 0; font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.pe-actions { display: flex; gap: var(--ac-space-2); justify-content: flex-end; flex-wrap: wrap; }
+.pe-progress { font-variant-numeric: tabular-nums; }
+.pe-stage { position: absolute; left: -100000px; top: 0; width: 1920px; pointer-events: none; }
+@media (max-width: 600px) {
+  .pe-actions .ui-btn { min-height: 44px; }
+}

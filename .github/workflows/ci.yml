@@ -1,0 +1,302 @@
+name: CI
+
+# Two ways in (owner, 2026-11-14):
+# - Every PR runs only the guard lane (scripts/guard-lane.sh, a few minutes): the cheap checks no merge
+#   may break. Drafts are skipped; a new push cancels the run before it.
+# - The full suites below run only when asked (2026-10-29: 「我說要跑才跑」): Actions → CI → Run workflow,
+#   or `gh workflow run ci.yml --ref <branch>`. Private-repo minutes ran out in October when every push
+#   ran everything, so the heavy jobs stay manual and the local suites stay the merge gate.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      fullstack:
+        description: "Also run the full-stack E2E (slow)"
+        type: boolean
+        default: false
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: Guard lane
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    timeout-minutes: 15
+    steps:
+      # The ratchet and change-note checks compare against origin/main, so they need history.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # PR_BODY lets the change-note check see 「不需要更新說明」 in the PR description (scripts/changes.mjs),
+      # so an internal-only PR passes without writing a note users would then be shown.
+      - name: Guard lane
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash scripts/guard-lane.sh
+
+  pairing-relay:
+    name: Pairing and relay — typecheck · unit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pairing typecheck and tests
+        working-directory: packages/pairing
+        run: npx tsc --noEmit && npx vitest run
+
+      - name: Relay typecheck and tests (local Workers runtime, no account)
+        working-directory: packages/relay
+        run: npx tsc --noEmit && npx vitest run
+
+  backend:
+    name: Backend — lint · typecheck · unit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # matches packages/backend/docker/Dockerfile
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (read-gate forcing function)
+        working-directory: packages/backend
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: packages/backend
+        run: npx tsc --noEmit
+
+      # An explicit no-database run (ONDEN_TESTS_WITHOUT_DATABASE=1): the
+      # integration files skip themselves and the run says so at the end. Any
+      # other run without a database fails (scripts/lib/skipGateReporter.mjs).
+      - name: Unit tests (no database)
+        working-directory: packages/backend
+        run: npm run test:no-db
+
+  # The DB-gated files against a real Postgres, in four shards side by side: the files run one at a time (they share
+  # one test database), so a single job took 52 minutes on a hosted 2-core runner (2026-11-15). Each shard has its own
+  # Postgres; a skipped test fails its shard (src/test/helpers/pgliteSkipList.ts names the few that are PGlite-only).
+  backend-postgres:
+    name: Backend — real Postgres (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The schema needs extensions a stock Postgres image doesn't ship:
+      # pgroonga (FTS), pg_stat_statements (shared_preload), pgvector,
+      # pgcrypto. Build the same custom image compose uses.
+      - name: Build Postgres image
+        run: docker build -t onden-postgres ./docker/postgres
+
+      - name: Start Postgres
+        run: |
+          docker run -d --name onden-pg \
+            -p 5432:5432 \
+            -e POSTGRES_DB=onden \
+            -e POSTGRES_USER=onden \
+            -e POSTGRES_PASSWORD=onden \
+            -v "$PWD/packages/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro" \
+            onden-postgres \
+            postgres -c shared_preload_libraries='pg_stat_statements'
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 60); do
+            if docker exec onden-pg pg_isready -U onden -d onden >/dev/null 2>&1; then
+              echo "Postgres ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres never became ready"; docker logs onden-pg; exit 1
+
+      # schema.sql is the GENERATED current snapshot (it pre-seeds
+      # schema_migrations), so onden_test = just load it — fast, no migration
+      # replay. The migration chain IS runnable from an empty DB (asserted by
+      # migration.integration.test.ts), but replaying it here would double-apply
+      # onto the already-current schema; loading the snapshot is the right path
+      # for a fresh DB and migrate() then applies only NEWER migrations
+      # incrementally on existing deployments.
+      - name: Build onden_test schema (load the generated schema.sql)
+        run: |
+          docker exec onden-pg psql -U onden -d onden -c "CREATE DATABASE onden_test;"
+          docker exec -i onden-pg psql -U onden -d onden_test -v ON_ERROR_STOP=1 -q \
+            -f /docker-entrypoint-initdb.d/01_schema.sql
+
+      # The real value: every DB-gated file (integration, properties, backup
+      # round trips…) runs against a real Postgres with the actual schema +
+      # triggers (capture_node_version, the spine path, JOINs). The whole suite,
+      # not a glob: `src/test/*.integration.test.ts` missed ~35 gated files.
+      # A skipped test fails this step (src/test/helpers/pgliteSkipList.ts names
+      # the few that are PGlite-only).
+      - name: Suite on real Postgres (shard ${{ matrix.shard }} of 4)
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: postgres://onden:onden@localhost:5432/onden_test
+        run: npx vitest run --shard=${{ matrix.shard }}/4
+
+      # Real client stack (frontend) against the real backend on this database,
+      # over a network that drops, duplicates and delays requests. It reads the
+      # schema the integration run above just built.
+      - name: Multi-device sync fault simulation
+        if: matrix.shard == 1
+        working-directory: packages/frontend
+        env:
+          DATABASE_URL: postgres://onden:onden@localhost:5432/onden_test
+        run: npx vitest run src/test/properties/syncFaultSimulation.integration.property.test.ts
+
+      - name: Postgres logs (on failure)
+        if: failure()
+        run: docker logs onden-pg
+
+  frontend:
+    name: Frontend — lint · typecheck · unit · build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        working-directory: packages/frontend
+        run: npm run lint
+
+      # astro sync first: astro:content + ImportMeta.env types are GENERATED
+      # (.astro/types.d.ts) — on a fresh checkout tsc has nothing to resolve
+      # them against and fails with TS2307/TS2339.
+      # The heap limit is the one scripts/fast-lane.sh uses: the default runs out (exit 134).
+      - name: Typecheck
+        working-directory: packages/frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=5120
+        run: npx astro sync && npx tsc --noEmit
+
+      # vitest is scoped to src/**/*.{test,spec} (e2e/ Playwright specs excluded).
+      # No database here (the sync fault simulation runs in the backend job,
+      # which has one), so this is an explicit no-database run.
+      - name: Unit tests (no database)
+        working-directory: packages/frontend
+        run: npm run test:no-db
+
+      - name: Build
+        working-directory: packages/frontend
+        run: npm run build
+
+  # Critical-path e2e on every run: the @critical subset (~24 tests — auth gate,
+  # capture→task→daily loop, governance/approval, publish/site basics, smoke,
+  # offline sync drain). Same self-contained run.sh stack as the full suite;
+  # the --grep filter keeps it inside a PR-friendly budget. E2E_REQUIRE_ADMIN=1
+  # turns the "needs admin; reset the stack" skips into hard failures so a
+  # stale/misprovisioned stack can never produce a silently-green run.
+  e2e-critical:
+    name: Critical-path E2E (PR subset)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Every e2e spec loads (runner layout, before the stack is built)
+        working-directory: packages/frontend
+        run: npm run check:specs
+
+      - name: Critical e2e subset (build stack → drive Chromium → teardown)
+        env:
+          E2E_REQUIRE_ADMIN: "1"
+        run: bash packages/frontend/e2e/fullstack/run.sh --grep @critical
+
+  # Real-browser full-stack E2E — heavy (builds the compose stack + pulls the
+  # playwright image), so only when asked (the `fullstack` input); every run
+  # gets the e2e-critical subset above. run.sh is self-contained (isolated onden_test
+  # stack on :5099, never the real onden) and tears down.
+  # One job ran the whole suite serially (467 chromium tests ≈ 55 min on the cloud stack, past the old 30-minute
+  # limit), so it is split into parallel jobs, each with its own stack. Together they select every test run.sh
+  # selects with no arguments: the chromium project (4 shards by spec file), the `faults` project, and the
+  # cross-engine projects. Shards split by file, so a spec must not depend on another spec's data.
+  e2e-fullstack:
+    name: Full-stack E2E (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.fullstack
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "chromium 1/4", args: "--project chromium --shard=1/4" }
+          - { name: "chromium 2/4", args: "--project chromium --shard=2/4" }
+          - { name: "chromium 3/4", args: "--project chromium --shard=3/4" }
+          - { name: "chromium 4/4", args: "--project chromium --shard=4/4" }
+          - { name: "faults", args: "--project faults" }
+          - { name: "cross-engine", args: "--project firefox --project webkit --project mobile-chrome --project mobile-safari" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Full-stack e2e (build stack → drive the browsers → teardown)
+        env:
+          E2E_REQUIRE_ADMIN: "1"
+          E2E_ARGS: ${{ matrix.args }}
+        # E2E_ARGS comes from the matrix above (not from user input); unquoted on purpose so it splits into flags.
+        run: bash packages/frontend/e2e/fullstack/run.sh $E2E_ARGS

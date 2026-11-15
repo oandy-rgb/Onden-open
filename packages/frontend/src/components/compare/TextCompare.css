@@ -1,0 +1,17 @@
+/* Two-version compare (TextCompareView). Colours only through --ac-* tokens; the colour of a
+   removed / added passage is set in the view's theme, the same two hues as the keys below. */
+.text-compare { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.text-compare-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; font-family: var(--ac-font-ui); font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.text-compare-legend, .text-compare-nav { display: inline-flex; align-items: center; gap: 8px; }
+.text-compare-key { padding: 1px 8px; border-radius: var(--ac-radius-md); font-size: var(--ac-fs-xs); color: var(--ac-ink); }
+.text-compare-key--before { background: color-mix(in srgb, var(--ac-danger) 16%, transparent); }
+.text-compare-key--after { background: color-mix(in srgb, var(--ac-success) 18%, transparent); }
+.text-compare-count { color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.text-compare-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-accent-tint-3); }
+.text-compare-heads { display: grid; grid-template-columns: 1fr 1fr; gap: 0; font-size: var(--ac-fs-xs); color: var(--ac-muted); padding: 0 12px; }
+.text-compare-host { border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-bg); max-height: 60vh; overflow: auto; min-width: 0; }
+.text-compare-host .cm-mergeView { overflow: visible; }
+.text-compare-host .cm-mergeViewEditors { display: flex; align-items: stretch; }
+.text-compare-host .cm-mergeViewEditor { flex: 1 1 0; min-width: 0; }
+.text-compare-host .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: 1px solid var(--ac-line); }
+.text-compare-note { margin: 0; padding: 8px 10px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); color: var(--ac-ink-2); font-size: var(--ac-fs-small); }

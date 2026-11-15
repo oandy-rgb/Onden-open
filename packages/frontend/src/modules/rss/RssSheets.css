@@ -1,0 +1,40 @@
+/* The reader's sheets (RssSourceSheet, RssSaveSheet): a ShellDialog card,
+   centred on desktop, a bottom sheet on the phone. */
+.shell-dialog.rss-sheet { width: min(100%, 480px); }
+
+.rss-sheet-head { margin-bottom: 12px; }
+.rss-sheet-title { margin: 0; font-size: var(--ac-fs-prose); font-weight: 600; line-height: 1.35; }
+.rss-sheet-sub { margin: 4px 0 0; color: var(--ac-muted); font-size: var(--ac-fs-small); overflow-wrap: anywhere; }
+.rss-sheet-section { padding: 12px 0; border-top: 1px solid var(--ac-line); }
+.rss-sheet-section:first-of-type { border-top: 0; }
+.rss-sheet-label { display: block; margin: 0 0 6px; font-size: var(--ac-fs-small); font-weight: 600; color: var(--ac-muted); }
+.rss-sheet-hint { margin: 6px 0; color: var(--ac-muted); font-size: var(--ac-fs-ui); line-height: 1.5; }
+.rss-sheet-error { margin: 8px 0 0; color: var(--ac-danger); font-size: var(--ac-fs-ui); }
+.rss-sheet-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.rss-sheet-actions .ui-btn { min-height: 44px; }
+.rss-sheet-foot { margin-top: 8px; }
+.rss-sheet-danger .ui-btn { min-height: 44px; }
+.rss-sheet-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: var(--ac-fs-ui-touch); }
+.rss-sheet-check input { width: 18px; height: 18px; }
+.rss-sheet-select { width: 100%; min-height: 44px; padding: 0 10px; font: inherit; font-size: var(--ac-fs-ui-touch); color: var(--ac-ink); background: var(--ac-bg); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+
+/* 「存到」 fields (RssDestinationFields): tag chips like the note's tag row,
+   the parent note from the shared ParentPicker. */
+.rss-dest { display: flex; flex-direction: column; gap: 12px; }
+.rss-dest-row { display: flex; flex-direction: column; gap: 4px; }
+.rss-dest .obsidian-prop-strip.rss-dest-tags { margin: 0; align-items: center; }
+.rss-dest .title-tag-input { width: 150px; min-height: 32px; font-size: var(--ac-fs-small); }
+.rss-dest-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.rss-dest-chip {
+  font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-muted); background: transparent; cursor: pointer;
+  border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-full); padding: 6px 10px; min-height: 32px;
+}
+.rss-dest-chip:hover { color: var(--ac-ink); border-color: var(--ac-accent); }
+.rss-dest-parent { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--ac-fs-ui-touch); }
+.rss-dest-parent-value { font-weight: 500; }
+.rss-dest-link {
+  font: inherit; font-size: var(--ac-fs-ui); color: var(--ac-accent); background: none; border: 0; padding: 6px 0;
+  cursor: pointer; min-height: 32px;
+}
+.rss-dest-link:disabled { opacity: 0.5; cursor: default; }
+.rss-dest .parent-picker { max-width: none; }

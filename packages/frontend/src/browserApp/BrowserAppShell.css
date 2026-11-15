@@ -1,0 +1,18 @@
+.browser-app-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--ac-ink);
+  background: var(--ac-bg);
+}
+.browser-app-status h1 { margin: 0; font-size: var(--ac-fs-lg); }
+.browser-app-status p { margin: 0; max-width: 28em; line-height: 1.6; }
+.browser-app-status .browser-app-status-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.browser-app-choices { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+.browser-app-choices > div { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.browser-app-choices p { color: var(--ac-ink-2); font-size: var(--ac-fs-small); }

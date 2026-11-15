@@ -1,0 +1,193 @@
+.mobile-shell { display: none; }
+
+.shell-dialog.mobile-more-sheet { width: min(100%, 480px); }
+/* Docked on the screen edge at tablet widths too: no layer padding below it. */
+.shell-dialog-layer:has(> .mobile-more-sheet) { padding-bottom: 0; }
+
+@media (max-width: 900px) {
+  .mobile-shell { display: block; }
+  .mobile-sync-strip { bottom: calc(56px + env(safe-area-inset-bottom)); left: 0; right: 0; z-index: var(--z-bar); background: var(--ac-surface); border-top: 1px solid var(--ac-line); }
+  .mobile-sync-strip .sync-status { border: 0; border-radius: 0; }
+  .app-shell:has(.mobile-sync-strip) { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  /* On the root: toasts and the recovery panel are portalled to <body>, outside the app shell, and only inherit from here. */
+  :root:has(.mobile-sync-strip) { --mobile-bottom-clearance: 100px; --mobile-dock-base: calc(100px + env(safe-area-inset-bottom)); }
+  .mobile-shell:has(.mobile-sync-strip) .mobile-nav-capture { margin-top: 0; }
+
+  .mobile-bottom-nav {
+    display: flex;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-bar);
+    background: var(--ac-surface);
+    border-top: 1px solid var(--ac-line);
+    box-shadow: var(--ac-edge-up);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px;
+    min-height: 44px;
+    height: 56px;
+    border: none;
+    background: transparent;
+    color: var(--ac-muted);
+    font-size: var(--ac-fs-xs);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-btn:active {
+    background: var(--ac-overlay-press);
+  }
+
+  /* The colour alone marks where you are: with two or three destinations a
+     button is a third of the bar, and a filled one read as a stray slab. */
+  .mobile-nav-btn.active {
+    color: var(--ac-accent);
+  }
+
+  .mobile-nav-btn span {
+    display: block;
+  }
+
+  /* Central action — capture. HIG: a raised, prominent + that reads as an
+     action rather than a tab. Greige bar, oxblood accent disc. */
+  .mobile-nav-capture {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin: -14px 6px 0; /* lift it above the bar */
+    border: none;
+    border-radius: var(--ac-radius-full);
+    background: var(--ac-accent);
+    color: var(--ac-accent-ink);
+    box-shadow: var(--ac-shadow-modal);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    align-self: center;
+  }
+
+  .mobile-nav-capture:active {
+    transform: scale(0.96);
+  }
+
+  /* 56px = .mobile-nav-btn min-height; keep app-shell scrollable area above the nav */
+  :root {
+    /* Shared by feedback overlays so sync, recovery and notifications remain reachable. */
+    --mobile-bottom-clearance: 70px;
+  }
+  .app-shell {
+    /* --ui-dock-clearance: the height of a docked bottom panel (ui/SheetDock), so the page's last lines stay reachable. */
+    padding-bottom: calc(56px + env(safe-area-inset-bottom) + var(--ui-dock-clearance, 0px));
+  }
+
+  /* ── More sheet ── */
+  /* The card scrolls when the list is taller than the screen (ShellDialog);
+     the header is sticky and the last row clears the home indicator. */
+  .mobile-more-sheet .shell-dialog-content { padding-top: 8px; }
+  .mobile-more-header {
+    position: sticky;
+    top: -8px;
+    z-index: var(--z-local-1);
+    padding: 8px 4px 12px;
+    background: var(--ac-surface);
+  }
+  .mobile-more-header .ui-sheet-header__title {
+    font-family: var(--font-display);
+    font-size: var(--ac-fs-lg);
+    font-weight: 400;
+  }
+
+  .mobile-more-grid {
+    padding: 0; margin: 0; border: 0; min-width: 0;
+    display: grid;
+    gap: 16px;
+  }
+
+  .mobile-more-group { min-width: 0; }
+
+  .mobile-more-group-title {
+    margin: 0 0 4px;
+    padding: 0 8px;
+    color: var(--ac-muted);
+    font-size: var(--ac-fs-caption);
+    font-weight: 500;
+  }
+
+  /* One column: a list of destinations, each a full-width 48px row. */
+  .mobile-more-items {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mobile-more-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 8px;
+    min-width: 0;
+    min-height: 48px;
+    border: none;
+    border-radius: var(--ac-radius-md);
+    background: transparent;
+    color: var(--ac-ink);
+    font-size: var(--ac-fs-ui-touch);
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-more-item svg { flex: 0 0 auto; color: var(--ac-muted); }
+  .mobile-more-item span { min-width: 0; overflow-wrap: anywhere; }
+
+  .mobile-more-item:active {
+    background: var(--ac-overlay-press);
+  }
+
+  /* ── Pinning (long press; 「編輯」 opens Settings › 導覽列) ── */
+
+  /* A More row's long-press menu, drawn under the row (the sheet is a modal). */
+  .mobile-more-row-menu {
+    display: flex;
+    gap: 4px;
+    padding: 4px 8px 8px 40px;
+  }
+  .mobile-more-row-menu-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: var(--ac-radius-sm);
+    background: var(--ac-overlay-hover);
+    color: var(--ac-ink);
+    font-size: var(--ac-fs-caption);
+    cursor: pointer;
+  }
+  .mobile-more-row-menu-item:active { background: var(--ac-overlay-press); }
+
+  /* Five destinations and Capture share 390px: labels stay one line. */
+  .mobile-nav-btn > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* Android resizes the layout for the on-screen keyboard (index.html: interactive-widget=resizes-content), so a
+   bar fixed to the bottom rides on top of it. While the editor's formatting bar is up it takes that place. */
+@media (max-width: 900px) {
+  body:has([data-keyboard-bar]) .mobile-bottom-nav,
+  body:has([data-keyboard-bar]) .mobile-sync-strip { display: none; }
+}

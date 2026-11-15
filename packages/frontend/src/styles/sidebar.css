@@ -1,0 +1,154 @@
+/* Sidebar UI primitives — shared by several consumers:
+ * OverviewSidebar (main left rail), ContextMenu, BuilderApp.
+ *
+ * The .sidebar-* family covers: sort bar / dropdown, status panes, tag
+ * cloud, tag chips, tabs, status indicators.
+ *
+ * Extracted from global.css 2026-06-04 (Pass 3 / batch 7.3).
+ */
+
+.sidebar-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--onden-text-sm, 12px);
+  font-weight: 500;
+  border-radius: var(--ac-radius-md);
+  background: none;
+  border: none;
+  color: var(--ac-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.sidebar-tab:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.sidebar-tab.active { background: var(--ac-overlay-selected); color: var(--ac-accent); }
+.sidebar-tag-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--onden-text-xs, 11px);
+  font-weight: 600;
+  color: var(--ac-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+/* The heading actions (the "+") sit on the right. */
+.sidebar-tag-heading { gap: 6px; }
+.sidebar-tag-heading > span:first-child { margin-right: auto; }
+/* Quiet ghost "+" — tag creation rehomed from TagsMode (no-programmer-ui:
+   a tag is born from a name, shaped later on its own page). */
+.sidebar-tag-new {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ac-muted);
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+}
+.sidebar-tag-new:hover { color: var(--ac-accent); }
+.sidebar-tag-new:disabled { opacity: 0.5; cursor: default; }
+.sidebar-tag-new-input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  font-size: var(--onden-text-sm, 12px);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+}
+.sidebar-tag-new-input:focus { outline: none; border-color: var(--ac-accent); }
+.sidebar-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.sidebar-sort-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  align-self: center;
+}
+/* The create and sort menus are ui/Popover surfaces (ui/ui.css). */
+.sidebar-sort-menu { min-width: 140px; }
+
+/* The tag tree (SidebarTagTree): the phone's 標籤 tab and the desktop's 標籤
+   section under the notes tree. Tag rows are one step fainter than
+   note titles (--text) and start with "#"; --muted stays readable text (AA),
+   so they do not look disabled. */
+.sb-tagtree { padding: 0 0 16px; }
+.sb-tagtree-heading, .sb-tagtree-disclosure {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--onden-text-sm, 12px); font-weight: 600; color: var(--ac-muted); padding: 6px 4px;
+}
+.sb-tagtree-heading > span:first-child { margin-right: auto; padding-left: 0; }
+.sb-tagtree-heading .sidebar-tag-new { min-width: 44px; min-height: 36px; justify-content: center; }
+.sb-tagtree-disclosure { width: 100%; background: none; border: none; cursor: pointer; text-align: left; min-height: 44px; }
+.sb-tagtree-disclosure[aria-expanded="true"] .sb-tagtree-chevron,
+.sb-tagtree-toggle[aria-expanded="true"] .sb-tagtree-chevron { transform: rotate(90deg); }
+.sb-tagtree-chevron { flex: 0 0 auto; transition: transform 0.15s; }
+.sb-tagtree-list { list-style: none; margin: 0; padding: 0; }
+/* Between the 功能 block and the person's own tags. */
+/* Tag rows are note rows (.obsidian-page-row / .obsidian-page-button, the
+   notes tab's own classes): same height, type and selection. Only a tag's
+   own marks differ: fainter text, a "#", a small colour dot, a quiet count. */
+.sb-tagtree-item, .sb-tagtree-item.obsidian-page-row--child { padding-left: calc(var(--depth, 0) * 16px); align-items: center; }
+.sb-tagtree-toggle { flex: 0 0 auto; }
+span.sb-tagtree-toggle { display: inline-flex; align-items: center; justify-content: center; cursor: default; }
+.sb-tagtree-item .sb-tagtree-name { gap: 0; }
+.sb-tagtree-hash { margin-right: 1px; opacity: 0.7; }
+.sb-tagtree-dot {
+  flex: 0 0 6px; width: 6px; height: 6px; border-radius: var(--ac-radius-full);
+  background-color: var(--tag-color, var(--ac-muted)); opacity: 0.8;
+}
+.sb-tagtree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sb-tagtree-pin { flex: 0 0 auto; margin-left: 6px; color: var(--ac-muted); }
+.sb-tagtree-count { margin-left: auto; padding-left: 12px; font-size: var(--onden-text-xs, 11px); font-variant-numeric: tabular-nums; color: var(--ac-muted); opacity: 0.7; }
+.sb-tagtree-disclosure .sb-tagtree-count { margin-left: 0; padding-left: 4px; font-weight: 400; }
+.sb-tagtree-empty { font-size: var(--onden-text-sm2, 13px); color: var(--ac-muted); padding: 12px 4px; margin: 0; }
+
+/* The desktop section: a header that folds the list, rows at note-row size.
+   It shares the rail with the notes tree, so a large tag set scrolls inside
+   its own box instead of eating the note list. */
+.sb-tagtree--section {
+  flex-shrink: 0; min-height: 0; max-height: 40%; display: flex; flex-direction: column; overflow: hidden;
+  padding: 2px 8px 8px; border-top: 1px solid var(--ac-line);
+}
+.sb-tagtree-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.sb-tagtree--section > .tag-tidy { flex: 0 0 auto; max-height: 55%; overflow-y: auto; overscroll-behavior: contain; }
+.sb-tagtree-heading--section { position: sticky; top: 0; z-index: var(--z-local-1); background: var(--ac-surface); padding: 2px 0; }
+.sb-tagtree-section-toggle {
+  display: inline-flex; align-items: center; gap: 4px; margin-right: auto; padding: 4px 4px;
+  background: none; border: none; border-radius: var(--ac-radius-md); cursor: pointer; font: inherit; color: inherit;
+}
+.sb-tagtree-section-toggle:hover { color: var(--ac-ink); }
+.sb-tagtree-section-toggle[aria-expanded="true"] .sb-tagtree-chevron { transform: rotate(90deg); }
+.sb-tagtree--section .sb-tagtree-heading .sidebar-tag-new { min-width: 28px; min-height: 28px; }
+.sb-tagtree--section .sb-tagtree-disclosure { min-height: 28px; }
+/* Faint "#" and name, the count quieter still. */
+.sb-tagtree-hash { opacity: 0.55; }
+.sb-tagtree-item[data-sidebar-hidden] .sb-tagtree-name { opacity: 0.55; font-style: italic; }
+/* A note held over a row (it would take the tag), a tag held over a row (it would move under it). */
+.sb-tagtree-item[data-note-drop] .sb-tagtree-name,
+.sb-tagtree-item[data-tag-drop] .sb-tagtree-name {
+  background: var(--ac-overlay-selected); color: var(--ac-accent); outline: 1.5px solid var(--ac-accent); outline-offset: -1.5px;
+}
+.sb-tagtree-item[draggable="true"] .sb-tagtree-name { cursor: pointer; }
+.sb-tagtree-hidden-line {
+  display: block; width: 100%; margin-top: 2px; padding: 4px 6px; background: none; border: none; cursor: pointer;
+  text-align: left; font-size: var(--onden-text-sm, 12px); color: var(--ac-muted); opacity: 0.8;
+}
+.sb-tagtree-hidden-line:hover { opacity: 1; color: var(--ac-ink); }
+.sb-tagtree-name:focus-visible, .sb-tagtree-toggle:focus-visible, .sb-tagtree-section-toggle:focus-visible,
+.sb-tagtree-hidden-line:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: -2px; }

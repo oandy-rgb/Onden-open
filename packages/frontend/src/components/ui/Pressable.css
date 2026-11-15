@@ -1,0 +1,14 @@
+/* Pressable: zero specificity, so the caller's own class always wins over these resets. */
+:where(.ui-pressable) {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+:where(.ui-pressable):disabled { cursor: default; }
+:where(.ui-pressable):focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }

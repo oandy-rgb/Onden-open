@@ -1,0 +1,60 @@
+# ⚠️ STUB MANIFEST — not a supported deployment path.
+# The image below (ghcr.io/your-org/…) is a PLACEHOLDER: no such image is
+# published. The supported way to run onden is `docker compose up` at the repo
+# root (compose.yaml). Build/push your own frontend image (the nginx build the
+# compose stack uses) and replace the ref before using this.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onden-frontend
+  namespace: onden
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onden-frontend
+  template:
+    metadata:
+      labels:
+        app: onden-frontend
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/your-org/onden-frontend:latest # PLACEHOLDER — build + push your own
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          # Static nginx serving the built surface — tiny footprint.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onden-frontend
+  namespace: onden
+spec:
+  selector:
+    app: onden-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

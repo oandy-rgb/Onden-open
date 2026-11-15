@@ -1,0 +1,36 @@
+---
+// Shared <head> metadata for the published /site pages — SEO description,
+// OpenGraph, favicon, the search-engine index toggle, and analytics opt-in.
+// All values come from manifest.site (live workspace config overlays the
+// snapshot server-side), so the three site pages stay in lockstep.
+// The tags themselves come from @onden/markdown siteHead() — the one builder
+// the GitHub Pages deploy (backend seoFiles.ts) uses too.
+import { siteHead, renderHeadTags, type SiteHeadSite, type SiteHeadVariant } from "@onden/markdown";
+
+interface Props {
+  site: SiteHeadSite;
+  pageTitle: string;
+  /** Page-specific description; falls back to the site description/tagline. */
+  description?: string;
+  canonical: string;
+  /** "index" for the site root or a listing (og:type website), "article" for a note or item. */
+  variant: SiteHeadVariant;
+  /** The picture a shared link shows (absolute address) and what it shows in words. */
+  image?: { url: string; alt?: string };
+}
+
+const { site, pageTitle, description, canonical, variant, image } = Astro.props;
+const head = renderHeadTags(
+  siteHead(site, { pageTitle, description, canonical, variant, image, feed: "/site/feed.xml", sitemap: "/site/sitemap.xml" }),
+);
+
+// Clickjacking guard for the SSR half of publishing. The static/Pages deploy
+// can only ship meta-CSP (headers aren't controllable there), and meta-CSP
+// ignores frame-ancestors — but these SSR pages CAN set the real header, so
+// they do. 'self' keeps any future same-origin in-app preview working.
+Astro.response.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+Astro.response.headers.set("X-Frame-Options", "SAMEORIGIN");
+Astro.response.headers.set("X-Content-Type-Options", "nosniff");
+---
+
+<Fragment set:html={head} />

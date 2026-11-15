@@ -1,0 +1,18 @@
+/* The app's faces: Noto Serif TC (display + note text) and Noto Sans TC
+   (interface), variable weight, from npm (@fontsource-variable/*, OFL-1.1).
+   Each package's @font-face list splits the face into ~108 unicode-range
+   woff2 slices; Vite fingerprints the slices into /_astro/ (immutable cache;
+   public/sw.js keeps /_astro/* cache-first, so they work offline), and a
+   browser downloads only the slices for the characters a page shows.
+   font-display: swap, so text paints at once in the fallback face.
+   The family names are "Noto Serif TC Variable" / "Noto Sans TC Variable"
+   (styles/tokens.css). Only the app entries load this file (pages/index.astro
+   after first paint, main.tsx), never the public site's pages. */
+@import "@fontsource-variable/noto-serif-tc";
+@import "@fontsource-variable/noto-sans-tc";
+
+/* 楷體 (霞鶩文楷 LXGW WenKai TC, OFL-1.1, @fontsource/lxgw-wenkai-tc), regular weight only:
+   the note-text choice 「楷體」 (Settings › Notes). The ~115 unicode-range slices download
+   only for characters a page shows in this face, so nothing loads until a note or the
+   settings preview is drawn in it. */
+@import "@fontsource/lxgw-wenkai-tc/400.css";

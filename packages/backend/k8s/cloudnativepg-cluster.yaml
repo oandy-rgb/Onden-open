@@ -1,0 +1,58 @@
+# ⚠️ STUB MANIFEST — not a supported deployment path (compose is; see repo root).
+# Two things make this cluster NOT work as-is:
+#   1. onden's schema needs extensions a stock CNPG Postgres image doesn't
+#      ship: pgroonga (FTS), pg_stat_statements (shared_preload),
+#      pgvector, pgcrypto. You must build an extension-bearing image (see
+#      docker/postgres/ for the compose equivalent) and point `imageName` at it.
+#   2. There is no backup configured. A real deployment MUST add one — see the
+#      commented barmanObjectStore example below.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: onden-postgres
+  namespace: onden
+spec:
+  instances: 1
+  # imageName: ghcr.io/your-org/onden-cnpg-postgres:16 # PLACEHOLDER — must include pgroonga/pgvector
+  # postgresql:
+  #   shared_preload_libraries:
+  #     - pg_stat_statements
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  storage:
+    size: 5Gi
+  bootstrap:
+    initdb:
+      database: onden
+      owner: onden
+  # --- Backup example (REQUIRED for any real deployment; uncomment + fill) ---
+  # backup:
+  #   retentionPolicy: "30d"
+  #   barmanObjectStore:
+  #     destinationPath: s3://your-bucket/onden-postgres
+  #     endpointURL: https://s3.your-provider.example
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: onden-backup-s3
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: onden-backup-s3
+  #         key: SECRET_ACCESS_KEY
+  #     wal:
+  #       compression: gzip
+# ---
+# A ScheduledBackup to pair with the above:
+# apiVersion: postgresql.cnpg.io/v1
+# kind: ScheduledBackup
+# metadata:
+#   name: onden-postgres-nightly
+#   namespace: onden
+# spec:
+#   schedule: "0 0 3 * * *" # 03:00 daily (six-field cron)
+#   cluster:
+#     name: onden-postgres

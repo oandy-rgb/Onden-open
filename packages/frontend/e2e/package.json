@@ -1,0 +1,9 @@
+{
+  "name": "onden-frontend-e2e",
+  "private": true,
+  "description": "Real-browser e2e for the surface build. The playwright LIB + test runner are pinned here; the matching browsers + system libs come from the playwright docker image (the host lacks them and there is no sudo).",
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "playwright": "1.60.0"
+  }
+}

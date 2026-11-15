@@ -1,0 +1,6 @@
+{"probe":"C1-authority-before-lock","reproduced":true,"evidence":{"http":200,"savedSortOrder":73,"currentAuthority":"denied","freshRequest":403}}
+{"probe":"C2-stale-merge-baseline","reproduced":true,"evidence":{"http":[200,200],"finalBody":"alpha\n\nmiddle\n\nomega from B\n","lostNonOverlappingEdit":"alpha from A","conflictEvents":0,"sequentialControl":"alpha from A\n\nmiddle\n\nomega from B\n"}}
+{"probe":"C2b-parent-cycle","reproduced":true,"evidence":{"http":[200,200],"cycle":"A.parent=B and B.parent=A"}}
+{"probe":"C3-empty-delta-cursor","reproduced":true,"evidence":{"before":22,"after":"23","nodeId":"af47da9e-d55e-4f3d-81c6-819701d33080","deliveredFirst":false,"deliveredNext":false}}
+{"probe":"C4-outbox-stale-failure","reproduced":true,"evidence":{"result":{"done":0,"retried":0,"dead":1},"row":{"status":"dead","attempts":3,"markdown":"v2-new-save"},"performed":["v1"]}}
+{"probe":"C5-node-type-policy-bypass","reproduced":true,"evidence":{"beforeRead":403,"nodeTypePatch":200,"afterRead":200,"policyEpochBefore":9,"policyEpochAfter":9}}

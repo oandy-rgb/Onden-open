@@ -1,0 +1,407 @@
+[
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 1,
+  "expandAll": {
+   "msToSettled": 65,
+   "rowsBefore": 62,
+   "rowsAfter": 62,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 184
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 192
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 12,
+   "p95Ms": 19,
+   "maxMs": 20,
+   "eventTimingOver16": 101,
+   "eventTimingMaxMs": 24,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 130,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 2,
+    "sum": 141,
+    "max": 81
+   },
+   "paneDrag": {
+    "frames": 270,
+    "avgFps": 47,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 83.4,
+    "over50": 16
+   },
+   "cardDrag": {
+    "frames": 161,
+    "avgFps": 51,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 183.3,
+    "over50": 3
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 801,
+   "scroll": {
+    "frames": 180,
+    "avgFps": 60,
+    "p95FrameMs": 16.7,
+    "maxFrameMs": 16.8,
+    "over50": 0,
+    "canvasesAfter": 8,
+    "scrolledPx": 7240
+   }
+  },
+  "history": {
+   "openToListMs": 1495,
+   "lt": {
+    "n": 2,
+    "sum": 536,
+    "max": 352
+   }
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 2,
+  "expandAll": {
+   "msToSettled": 44,
+   "rowsBefore": 62,
+   "rowsAfter": 62,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 140
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 173
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 13,
+   "p95Ms": 20,
+   "maxMs": 21,
+   "eventTimingOver16": 120,
+   "eventTimingMaxMs": 32,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 64,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 2,
+    "sum": 109,
+    "max": 58
+   },
+   "paneDrag": {
+    "frames": 282,
+    "avgFps": 47,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 100,
+    "over50": 18
+   },
+   "cardDrag": {
+    "frames": 166,
+    "avgFps": 47,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 300,
+    "over50": 4
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 809,
+   "scroll": {
+    "frames": 180,
+    "avgFps": 60,
+    "p95FrameMs": 16.7,
+    "maxFrameMs": 16.8,
+    "over50": 0,
+    "canvasesAfter": 8,
+    "scrolledPx": 7240
+   }
+  },
+  "history": {
+   "openToListMs": 1384,
+   "lt": {
+    "n": 2,
+    "sum": 439,
+    "max": 273
+   }
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 3,
+  "expandAll": {
+   "msToSettled": 52,
+   "rowsBefore": 62,
+   "rowsAfter": 62,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 161
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 188
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 12,
+   "p95Ms": 21,
+   "maxMs": 28,
+   "eventTimingOver16": 122,
+   "eventTimingMaxMs": 40,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 63,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 3,
+    "sum": 223,
+    "max": 92
+   },
+   "paneDrag": {
+    "frames": 248,
+    "avgFps": 47,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 100,
+    "over50": 16
+   },
+   "cardDrag": {
+    "frames": 145,
+    "avgFps": 43,
+    "p95FrameMs": 33.3,
+    "maxFrameMs": 416.7,
+    "over50": 5
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 850,
+   "scroll": {
+    "frames": 180,
+    "avgFps": 60,
+    "p95FrameMs": 16.7,
+    "maxFrameMs": 16.8,
+    "over50": 0,
+    "canvasesAfter": 8,
+    "scrolledPx": 7240
+   }
+  },
+  "history": {
+   "openToListMs": 1441,
+   "lt": {
+    "n": 4,
+    "sum": 575,
+    "max": 283
+   }
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 4,
+  "expandAll": {
+   "msToSettled": 54,
+   "rowsBefore": 62,
+   "rowsAfter": 62,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 161
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 214
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 13,
+   "p95Ms": 20,
+   "maxMs": 20,
+   "eventTimingOver16": 134,
+   "eventTimingMaxMs": 32,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 70,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 3,
+    "sum": 223,
+    "max": 117
+   },
+   "paneDrag": {
+    "frames": 258,
+    "avgFps": 46,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 83.4,
+    "over50": 21
+   },
+   "cardDrag": {
+    "frames": 151,
+    "avgFps": 45,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 450.1,
+    "over50": 4
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 815,
+   "scroll": {
+    "frames": 180,
+    "avgFps": 60,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 16.8,
+    "over50": 0,
+    "canvasesAfter": 8,
+    "scrolledPx": 7240
+   }
+  },
+  "history": {
+   "openToListMs": 1405,
+   "lt": {
+    "n": 3,
+    "sum": 490,
+    "max": 272
+   }
+  }
+ },
+ {
+  "tier": "1k",
+  "device": "desktop",
+  "run": 5,
+  "expandAll": {
+   "msToSettled": 52,
+   "rowsBefore": 62,
+   "rowsAfter": 62,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 155
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 177
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 12,
+   "p95Ms": 18,
+   "maxMs": 20,
+   "eventTimingOver16": 115,
+   "eventTimingMaxMs": 32,
+   "lt": {
+    "n": 0,
+    "sum": 0,
+    "max": 0
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 59,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 1,
+    "sum": 64,
+    "max": 64
+   },
+   "paneDrag": {
+    "frames": 272,
+    "avgFps": 45,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 100.1,
+    "over50": 21
+   },
+   "cardDrag": {
+    "frames": 166,
+    "avgFps": 45,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 450,
+    "over50": 4
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 816,
+   "scroll": {
+    "frames": 180,
+    "avgFps": 60,
+    "p95FrameMs": 16.8,
+    "maxFrameMs": 16.8,
+    "over50": 0,
+    "canvasesAfter": 8,
+    "scrolledPx": 7240
+   }
+  },
+  "history": {
+   "openToListMs": 1486,
+   "lt": {
+    "n": 3,
+    "sum": 524,
+    "max": 303
+   }
+  }
+ }
+]

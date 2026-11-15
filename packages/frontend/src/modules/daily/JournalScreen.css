@@ -1,0 +1,19 @@
+/* A full-page module screen is a DIRECT .workspace-grid child: without an
+   explicit column it auto-places into col-1, which .full-page collapses to
+   0 width, so the page shrank to the calendar's width (RssReaderPanel.css).
+
+   Quiet writing: no rules or boxes; hierarchy comes from the display serif, the
+   editor's prose face and white space. The page lays itself out by its OWN
+   width (container query) — the side column and the date column need room the
+   window width alone does not promise next to the sidebar. */
+.journal-screen { grid-column: 2; width: 100%; max-width: 680px; margin: 0 auto; padding: 24px 16px 0; display: flex; flex-direction: column; box-sizing: border-box; }
+
+/* The day's words: prose face, roomy lines, headings no bigger than the date. */
+.journal-body { overflow-wrap: anywhere; font-family: var(--onden-ui-font-family-editor, var(--onden-font-body)); line-height: 1.7; }
+.journal-screen .journal-body :is(h1, h2, h3, h4, h5, h6) { font-family: inherit; font-size: 1em; font-weight: 700; line-height: 1.5; margin: 1.1em 0 0.25em; }
+.journal-screen .journal-body h1 { font-size: 1.1em; }
+.journal-screen .journal-body > :first-child { margin-top: 0; }
+
+/* A day with no words yet: one line the size of the text asking to be written on, right under the date. */
+.journal-placeholder { display: flex; align-items: center; width: 100%; min-height: var(--ac-row-touch); padding: 0; border: 0; background: none; text-align: left; font-family: var(--onden-ui-font-family-editor, var(--onden-font-body)); font-size: var(--ac-fs-prose); color: var(--ac-muted); cursor: text; }
+.journal-placeholder:hover:not(:disabled) { color: var(--ac-muted); }

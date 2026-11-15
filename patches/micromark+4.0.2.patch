@@ -1,0 +1,114 @@
+diff --git a/node_modules/micromark/dev/lib/initialize/text.js b/node_modules/micromark/dev/lib/initialize/text.js
+index 7192e70..d403cec 100644
+--- a/node_modules/micromark/dev/lib/initialize/text.js
++++ b/node_modules/micromark/dev/lib/initialize/text.js
+@@ -113,30 +113,40 @@ function createResolver(extraResolver) {
+ 
+   /** @type {Resolver} */
+   function resolveAllText(events, context) {
+-    let index = -1
+-    /** @type {number | undefined} */
+-    let enter
+-
+     // A rather boring computation (to merge adjacent `data` events) which
+     // improves mm performance by 29%.
+-    while (++index <= events.length) {
+-      if (enter === undefined) {
+-        if (events[index] && events[index][1].type === types.data) {
+-          enter = index
++    //
++    // Done in one pass: events are compacted in place (`write` trails
++    // `index`), instead of one `splice` per run of data, which made long
++    // paragraphs with many runs (one or more per line) quadratic.
++    // Same result as the splice version: each run of adjacent data events
++    // keeps its first enter/exit pair, whose token ends where the run ends.
++    let index = 0
++    let write = 0
++
++    while (index < events.length) {
++      if (events[index][1].type === types.data) {
++        const enter = index
++        // The event after a data enter is its exit: skip it unchecked.
++        index += 2
++        while (index < events.length && events[index][1].type === types.data) {
+           index++
+         }
+-      } else if (!events[index] || events[index][1].type !== types.data) {
++
+         // Don’t do anything if there is one data token.
+         if (index !== enter + 2) {
+           events[enter][1].end = events[index - 1][1].end
+-          events.splice(enter + 2, index - enter - 2)
+-          index = enter + 2
+         }
+ 
+-        enter = undefined
++        const exit = events[enter + 1]
++        events[write++] = events[enter]
++        if (exit) events[write++] = exit
++      } else {
++        events[write++] = events[index++]
+       }
+     }
+ 
++    events.length = write
+     return extraResolver ? extraResolver(events, context) : events
+   }
+ }
+diff --git a/node_modules/micromark/lib/initialize/text.js b/node_modules/micromark/lib/initialize/text.js
+index b9383cb..731e200 100644
+--- a/node_modules/micromark/lib/initialize/text.js
++++ b/node_modules/micromark/lib/initialize/text.js
+@@ -104,28 +104,40 @@ function createResolver(extraResolver) {
+ 
+   /** @type {Resolver} */
+   function resolveAllText(events, context) {
+-    let index = -1;
+-    /** @type {number | undefined} */
+-    let enter;
+-
+     // A rather boring computation (to merge adjacent `data` events) which
+     // improves mm performance by 29%.
+-    while (++index <= events.length) {
+-      if (enter === undefined) {
+-        if (events[index] && events[index][1].type === "data") {
+-          enter = index;
++    //
++    // Done in one pass: events are compacted in place (`write` trails
++    // `index`), instead of one `splice` per run of data, which made long
++    // paragraphs with many runs (one or more per line) quadratic.
++    // Same result as the splice version: each run of adjacent data events
++    // keeps its first enter/exit pair, whose token ends where the run ends.
++    let index = 0;
++    let write = 0;
++
++    while (index < events.length) {
++      if (events[index][1].type === "data") {
++        const enter = index;
++        // The event after a data enter is its exit: skip it unchecked.
++        index += 2;
++        while (index < events.length && events[index][1].type === "data") {
+           index++;
+         }
+-      } else if (!events[index] || events[index][1].type !== "data") {
++
+         // Don’t do anything if there is one data token.
+         if (index !== enter + 2) {
+           events[enter][1].end = events[index - 1][1].end;
+-          events.splice(enter + 2, index - enter - 2);
+-          index = enter + 2;
+         }
+-        enter = undefined;
++
++        const exit = events[enter + 1];
++        events[write++] = events[enter];
++        if (exit) events[write++] = exit;
++      } else {
++        events[write++] = events[index++];
+       }
+     }
++
++    events.length = write;
+     return extraResolver ? extraResolver(events, context) : events;
+   }
+ }

@@ -1,0 +1,109 @@
+/* AllCardsGraph — Day 2 inline → class migration. */
+
+.all-cards-graph-wrap {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ac-bg);
+  position: relative;
+}
+
+.all-cards-graph-legend {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-ink);
+  pointer-events: none;
+}
+
+/* "Showing N of M cards" — surfaced when the node cap truncates the graph. */
+.all-cards-graph-cap-notice {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: var(--z-sticky);
+  padding: 4px 10px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  pointer-events: none;
+}
+
+.all-cards-graph-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Legend swatch — color injected via --legend-color custom prop */
+.all-cards-graph-legend-swatch {
+  width: 12px;
+  height: 2px;
+  background: var(--legend-color, var(--ac-line));
+  display: inline-block;
+}
+
+.all-cards-graph-fit {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-local-1);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.all-cards-graph-fit:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+/* 「顯示」: bring back the notes and tags the graph leaves out by default. */
+.all-cards-graph-display {
+  position: absolute;
+  top: 8px;
+  left: 60px;
+  z-index: var(--z-local-1);
+}
+.all-cards-graph-display-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-xs);
+  cursor: pointer;
+}
+.all-cards-graph-display-button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+/* Legend: a note is a disc, a tag a diamond; size follows the number of links. */
+.all-cards-graph-legend-dot,
+.all-cards-graph-legend-diamond {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  background: var(--ac-muted);
+}
+.all-cards-graph-legend-dot { border-radius: var(--ac-radius-full); }
+.all-cards-graph-legend-diamond { transform: rotate(45deg) scale(0.8); margin-left: 6px; background: var(--ac-ink); }
+.all-cards-graph-legend-note { color: var(--ac-muted); }

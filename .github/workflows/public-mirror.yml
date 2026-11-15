@@ -1,0 +1,49 @@
+name: Public mirror
+
+# Keeps the public repo's main equal to this repo's main, minus what is not published (scripts/public-mirror/README.md).
+# One commit per run on top of the public main; this repo's history is never pushed. About a minute per merge.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One at a time, in order: a newer run waits for the older one instead of racing it to the public main.
+concurrency:
+  group: public-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Push main to the public repo and verify
+    runs-on: ubuntu-latest
+    # Only in the private repo: the public copy carries this file too, and has neither the key nor anything to mirror.
+    if: github.repository == 'oandy-rgb/Onden'
+    timeout-minutes: 10
+    steps:
+      # persist-credentials off: checkout otherwise rewrites git@github.com: to https with this run's token, and the
+      # push to the public repo would go out with that token (no right to touch workflow files) instead of the key.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Key for the public repo (write access to that repo only)
+        env:
+          PUBLIC_MIRROR_KEY: ${{ secrets.PUBLIC_MIRROR_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$PUBLIC_MIRROR_KEY" > ~/.ssh/public_mirror && chmod 600 ~/.ssh/public_mirror
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git config --global core.sshCommand "ssh -i ~/.ssh/public_mirror -o IdentitiesOnly=yes"
+          git config --global user.name "Onden mirror"
+          git config --global user.email "mirror@users.noreply.github.com"
+          git remote add open git@github.com:oandy-rgb/Onden-open.git
+
+      - name: Push this commit, stripped, to the public main
+        run: bash scripts/public-mirror/public-push.sh "$GITHUB_SHA" main
+
+      - name: Verify the public main equals this commit apart from the excluded files
+        run: bash scripts/public-mirror/verify.sh "$GITHUB_SHA"

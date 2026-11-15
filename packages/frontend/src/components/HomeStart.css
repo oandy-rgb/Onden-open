@@ -1,0 +1,133 @@
+/* D5 — the home node's auto-content strip, above its markdown. Compact and
+   paper-quiet: this is an orientation surface, not a dashboard. */
+.home-start {
+  padding: 18px 40px 4px;
+  border-bottom: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+}
+.home-start > * {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.home-start-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.home-start-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-fs-caption);
+  padding: 5px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.home-start-today:hover { border-color: var(--ac-accent); color: var(--ac-accent); }
+.home-start-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--ac-fs-caption);
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--pin-color, var(--ac-accent)) 45%, transparent);
+  border-radius: var(--ac-radius-full);
+  background: transparent;
+  color: var(--pin-color, var(--ac-accent));
+  cursor: pointer;
+}
+/* Daily-journal delighter — "don't break the chain" streak pill. The accent
+   (oxblood, --onden-accent-9) marks it as the one motivational signal in the
+   row without introducing a new colour. */
+.home-start-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, var(--ac-accent) 40%, transparent);
+  border-radius: var(--ac-radius-full);
+  background: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  color: var(--ac-accent);
+}
+.home-start-streak-unit {
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+/* Today's mood — a compact 1–5 emoji scale. Quiet until hovered/selected so it
+   reads as ordinary metadata, not a dashboard widget. */
+.home-start-mood {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-raised);
+}
+.home-start-mood-btn {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: var(--ac-fs-ui-touch);
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: var(--ac-radius-full);
+  filter: grayscale(0.7);
+  opacity: 0.55;
+  transition: filter 0.12s ease, opacity 0.12s ease, transform 0.08s ease;
+}
+.home-start-mood-btn:hover { filter: grayscale(0); opacity: 1; transform: scale(1.15); }
+.home-start-mood-btn.is-active {
+  filter: grayscale(0);
+  opacity: 1;
+  background: color-mix(in srgb, var(--ac-accent) 14%, transparent);
+}
+.home-start-section { margin-bottom: 12px; }
+.home-start-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ac-muted);
+  margin-bottom: 4px;
+}
+.home-start-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-start-list button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.home-start-list button:hover { color: var(--ac-accent); }
+.home-start-time {
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  white-space: nowrap;
+}

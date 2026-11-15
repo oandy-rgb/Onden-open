@@ -1,0 +1,11 @@
+-- node_block_ids is retired (audit D59).
+--
+-- It indexed each note's ^ids from a line scan of its own (028, 091), which
+-- disagreed with the Markdown parser the page and block nodes use: it took
+-- ids inside `~~~` fences and indented code, and its "ordinal" counted
+-- non-blank lines, not blocks. Its one reader, GET /api/nodes/block/:id, had
+-- no caller — the app and the published site resolve [[Note#^id]] from the
+-- note's own text (@onden/markdown blockAnchors), which needs no index.
+-- The ids stay where they always were, in content_nodes.markdown; tagged
+-- blocks keep their own rows in block_nodes (104).
+DROP TABLE IF EXISTS node_block_ids;

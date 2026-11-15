@@ -1,0 +1,56 @@
+語料：10000 篇，約 18.7 MB UTF-8
+PGlite 寫入 10000 篇：550 ms（無索引）
+
+── B. ILIKE 無索引（循序掃描）
+死結                  154 ms  命中(上限30) 30
+搜尋樹               152.6 ms  命中(上限30) 25
+樹                   387 ms  命中(上限30) 30
+死結 OR 排程          293.6 ms  命中(上限30) 30
+記憶體 -排程           294.1 ms  命中(上限30) 30
+kafka             284.1 ms  命中(上限30) 30
+"記憶體 管理"          141.2 ms  命中(上限30) 0
+
+── A. 後端現況原型：plpgsql onden_match（&@~ 相容函式，循序掃描）
+死結                246.2 ms  命中(上限30) 30
+搜尋樹               401.5 ms  命中(上限30) 25
+樹                   2.2 ms  命中(上限30) 30
+死結 OR 排程             56 ms  命中(上限30) 30
+記憶體 -排程            87.8 ms  命中(上限30) 30
+kafka               2.7 ms  命中(上限30) 30
+"記憶體 管理"            397 ms  命中(上限30) 0
+
+GIN pg_trgm 索引建立 10345 ms；表＋索引 72 MB（title 索引 4096 kB，內文索引 48 MB）
+
+── C. ILIKE＋GIN pg_trgm
+死結                155.8 ms  命中(上限30) 30
+搜尋樹                 1.9 ms  命中(上限30) 25
+樹                 387.5 ms  命中(上限30) 30
+死結 OR 排程          302.7 ms  命中(上限30) 30
+記憶體 -排程            18.2 ms  命中(上限30) 30
+kafka               233 ms  命中(上限30) 30
+"記憶體 管理"            0.6 ms  命中(上限30) 0
+
+是否用到索引（EXPLAIN）：
+  死結       Seq Scan on n  (cost=0.00..2540.00 rows=6 width=4)
+  搜尋樹      Bitmap Heap Scan on n  (cost=38.45..46.31 rows=2 width=4) | ->  Bitmap Index Scan on n_title_trgm  (cost=0.00..17.09 rows=1 width= | ->  Bitmap Index Sca
+  樹        Seq Scan on n  (cost=0.00..2540.00 rows=784 width=4)
+  kafka    Bitmap Heap Scan on n  (cost=99.00..216.37 rows=32 width=4) | ->  Bitmap Index Scan on n_title_trgm  (cost=0.00..43.09 rows=16 width | ->  Bitmap Index Scan on
+
+排序（查「死結」前 4 筆標題）： 死結 ｜ 死結與預防 ｜ 關於死結的筆記 ｜ 的下無網無對他是
+
+D. sql.js（前端離線搜尋實際路徑：LIKE）：寫入 321 ms
+
+死結                 23.2 ms  命中(上限30) 30
+搜尋樹                  38 ms  命中(上限30) 25
+樹                   0.1 ms  命中(上限30) 30
+死結 OR 排程            7.6 ms  命中(上限30) 30
+記憶體 -排程             5.5 ms  命中(上限30) 30
+kafka               0.2 ms  命中(上限30) 30
+"記憶體 管理"           37.2 ms  命中(上限30) 0
+sql.js 匯出檔 19.6 MB
+
+pgvector：寫入 10000 個 384 維向量 6159 ms
+  精確（循序）最近鄰 10.8 ms
+  hnsw 索引建立 14090 ms
+  hnsw 最近鄰 2.5 ms
+

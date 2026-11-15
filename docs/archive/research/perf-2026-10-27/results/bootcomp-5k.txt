@@ -1,0 +1,6 @@
+lean=true 15065ms raw=0KB(chars) gz=0KB
+  keys: error=0KB
+lean=false 546ms raw=5489KB(chars) gz=531KB
+  keys: bodies=0KB last_event_id=0KB server_time=0KB workspace=0KB nodes=4060KB(5138) attributes=0KB(1) edges=1394KB(5387) tasks=0KB(0) pointers=0KB(0) features=0KB canvas_memberships=26KB(200) graph_positions=0KB(0) suggestions=0KB(0) events=33KB(50) actor_is_owner=0KB can_review=0KB example_seed_eligible=0KB tags=18KB(31) site_config=0KB chrome=0KB
+  node fields: label_tag_ids=319KB recent_actors=285KB workspace_id=271KB last_actor=260KB space_id=250KB id=221KB last_modified_at=210KB created_at=201KB updated_at=201KB deleted_by_event_id=135KB tag_is_inheritable=130KB collection_views=121KB source_type=115KB node_type=110KB
+  attributes by key: pdf_url=0KB

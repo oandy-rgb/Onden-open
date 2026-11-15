@@ -1,0 +1,13 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  // e2e/ is its own package (e2e/package.json brings @playwright/test) and runs
+  // inside the dockerized harness — the workspace install never provides its
+  // deps, so sweeping it into this project can only ever fail the typecheck.
+  // scripts/client-writes/*.harness.ts is copied into src/test/ of another release
+  // before it runs (capture.mjs); its imports only resolve there.
+  "exclude": ["e2e", "dist", "node_modules", "scripts/client-writes"]
+}

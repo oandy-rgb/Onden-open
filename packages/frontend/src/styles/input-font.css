@@ -1,0 +1,20 @@
+/* The one place that sets how big an input's text is on a touch screen or phone-width window.
+ * A mouse on a narrow desktop window is left alone: iOS only zooms on touch.
+ * iOS Safari zooms the whole page on focus when an input's text is under 16px,
+ * and every input class used to fix (or break) that on its own. This rule
+ * outranks them all, so a class needs no phone font-size of its own — and
+ * input-font.guard.test.ts fails if one adds it back.
+ *
+ * An input that should be BIGGER (the note title) says so with
+ * `--onden-input-size`, not `font-size`; the floor is max(16px, the text-size
+ * setting, that). */
+@media (max-width: 600px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    --input-text-size: max(var(--ac-fs-input), var(--onden-input-size, 0px));
+    font-size: var(--input-text-size) !important;
+  }
+}

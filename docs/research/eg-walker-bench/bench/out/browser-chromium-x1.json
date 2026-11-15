@@ -1,0 +1,1357 @@
+{
+ "env": {
+  "browser": "chromium",
+  "version": "153.0.8010.12",
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "throttle": 1,
+  "calibrationMs": 68.29999999981374,
+  "date": "2026-11-01T19:43:12.466Z"
+ },
+ "rows": [
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6000000000931323,
+    "p95Ms": 1,
+    "minMs": 0.39999999990686774,
+    "meanMs": 0.6464999999990687
+   },
+   "hash": "7bfea926",
+   "len": 5916,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.19999999972060323,
+    "p95Ms": 0.2999999998137355,
+    "minMs": 0,
+    "meanMs": 0.15774999999441205
+   },
+   "hash": "6ad0670a",
+   "len": 5922,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.20000000018626451,
+    "p95Ms": 0.39999999990686774,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.25574999999138526
+   },
+   "hash": "6ad0670a",
+   "len": 5922,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.20000000018626451,
+    "p95Ms": 0.3000000002793968,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.2129999999969732
+   },
+   "hash": "6ad0670a",
+   "len": 5922,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.20000000018626451,
+    "p95Ms": 0.39999999990686774,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.24425000000395813
+   },
+   "hash": "6ad0670a",
+   "len": 5922,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.40000000037252903,
+    "p95Ms": 0.7000000001862645,
+    "minMs": 0.20000000018626451,
+    "meanMs": 0.47400000001420267
+   },
+   "hash": "4e1c00a4",
+   "len": 5909,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.2999999998137355,
+    "p95Ms": 0.40000000037252903,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.2922499999997672
+   },
+   "hash": "4e1c00a4",
+   "len": 5909,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.2999999998137355,
+    "p95Ms": 0.39999999990686774,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.27049999998766
+   },
+   "hash": "4e1c00a4",
+   "len": 5909,
+   "baseHash": "e125dd50"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.699999999953434,
+    "p95Ms": 4.399999999906868,
+    "minMs": 1.8999999999068677,
+    "meanMs": 2.849000000009546
+   },
+   "hash": "8e66d8e4",
+   "len": 6206,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5,
+    "p95Ms": 0.7000000001862645,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.5334999999951106
+   },
+   "hash": "8887dc3c",
+   "len": 6407,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.2999999998137355,
+    "p95Ms": 2.1000000000931323,
+    "minMs": 0.599999999627471,
+    "meanMs": 1.2822499999869614
+   },
+   "hash": "8887dc3c",
+   "len": 6407,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6000000000931323,
+    "p95Ms": 0.7999999998137355,
+    "minMs": 0.5,
+    "meanMs": 0.6287500000034925
+   },
+   "hash": "8887dc3c",
+   "len": 6407,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.3000000002793968,
+    "p95Ms": 1.8999999999068677,
+    "minMs": 0.6999999997206032,
+    "meanMs": 1.3352499999990686
+   },
+   "hash": "8887dc3c",
+   "len": 6407,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.39999999990686774,
+    "p95Ms": 0.7000000001862645,
+    "minMs": 0.19999999972060323,
+    "meanMs": 0.4597499999892898
+   },
+   "hash": "699b0ed9",
+   "len": 5963,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.39999999990686774,
+    "p95Ms": 0.6000000000931323,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.42175000000279395
+   },
+   "hash": "699b0ed9",
+   "len": 5963,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.39999999990686774,
+    "p95Ms": 0.6000000000931323,
+    "minMs": 0.19999999972060323,
+    "meanMs": 0.40899999999906866
+   },
+   "hash": "699b0ed9",
+   "len": 5963,
+   "baseHash": "ad8a67c9"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 9,
+    "medianMs": 223.1999999997206,
+    "p95Ms": 249.10000000009313,
+    "minMs": 218.70000000018626,
+    "meanMs": 228.34444444445478
+   },
+   "hash": "c5175363",
+   "len": 17386,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.5,
+    "p95Ms": 3.7000000001862645,
+    "minMs": 2.2999999998137355,
+    "meanMs": 2.674000000008382
+   },
+   "hash": "5670fe10",
+   "len": 20563,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 339,
+    "medianMs": 4.100000000093132,
+    "p95Ms": 7.5,
+    "minMs": 1.7999999998137355,
+    "meanMs": 4.430383480827057
+   },
+   "hash": "5670fe10",
+   "len": 20563,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 3.2000000001862645,
+    "p95Ms": 3.5,
+    "minMs": 3,
+    "meanMs": 3.2720000000030267
+   },
+   "hash": "5670fe10",
+   "len": 20563,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 296,
+    "medianMs": 4.899999999906868,
+    "p95Ms": 8.800000000279397,
+    "minMs": 2.400000000372529,
+    "meanMs": 5.070608108121952
+   },
+   "hash": "5670fe10",
+   "len": 20563,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.3000000002793968,
+    "p95Ms": 0.5,
+    "minMs": 0.19999999972060323,
+    "meanMs": 0.3615000000037253
+   },
+   "hash": "db5380bd",
+   "len": 13808,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.400000000372529,
+    "p95Ms": 1.7000000001862645,
+    "minMs": 1.2999999998137355,
+    "meanMs": 1.4682500000228174
+   },
+   "hash": "db5380bd",
+   "len": 13808,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "10KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8000000002793968,
+    "p95Ms": 1.2000000001862645,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.8219999999972061
+   },
+   "hash": "db5380bd",
+   "len": 13808,
+   "baseHash": "6c06cf94"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7000000001862645,
+    "p95Ms": 2.3000000002793968,
+    "minMs": 1.599999999627471,
+    "meanMs": 1.8034999999927823
+   },
+   "hash": "56443242",
+   "len": 28159,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.2999999998137355,
+    "p95Ms": 0.39999999990686774,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.2627500000223517
+   },
+   "hash": "fb1a3cb2",
+   "len": 28162,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.20000000018626451,
+    "p95Ms": 0.3000000002793968,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.22225000001024456
+   },
+   "hash": "fb1a3cb2",
+   "len": 28162,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.40000000037252903,
+    "p95Ms": 0.6000000000931323,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.4620000000030268
+   },
+   "hash": "fb1a3cb2",
+   "len": 28162,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.2999999998137355,
+    "p95Ms": 0.40000000037252903,
+    "minMs": 0.09999999962747097,
+    "meanMs": 0.27849999999743885
+   },
+   "hash": "fb1a3cb2",
+   "len": 28162,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7000000001862645,
+    "p95Ms": 2.6000000000931323,
+    "minMs": 1.5,
+    "meanMs": 1.8720000000065193
+   },
+   "hash": "c4bd5479",
+   "len": 28118,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8000000002793968,
+    "p95Ms": 1.1999999997206032,
+    "minMs": 0.599999999627471,
+    "meanMs": 0.85
+   },
+   "hash": "c4bd5479",
+   "len": 28118,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5,
+    "p95Ms": 0.7000000001862645,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.517999999995809
+   },
+   "hash": "c4bd5479",
+   "len": 28118,
+   "baseHash": "790d7bbe"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.8999999999068677,
+    "p95Ms": 4.399999999906868,
+    "minMs": 2.5,
+    "meanMs": 3.2144999999995343
+   },
+   "hash": "8cb52c7a",
+   "len": 29423,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6999999997206032,
+    "p95Ms": 0.900000000372529,
+    "minMs": 0.5,
+    "meanMs": 0.7054999999969732
+   },
+   "hash": "814e4b57",
+   "len": 29462,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.5,
+    "p95Ms": 2.3000000002793968,
+    "minMs": 0.6999999997206032,
+    "meanMs": 1.5442499999946449
+   },
+   "hash": "814e4b57",
+   "len": 29462,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1,
+    "p95Ms": 1.5,
+    "minMs": 0.7999999998137355,
+    "meanMs": 1.0507499999937135
+   },
+   "hash": "814e4b57",
+   "len": 29462,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.3999999999068677,
+    "p95Ms": 2,
+    "minMs": 0.7999999998137355,
+    "meanMs": 1.3977500000048895
+   },
+   "hash": "814e4b57",
+   "len": 29462,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7000000001862645,
+    "p95Ms": 2.5,
+    "minMs": 1.5,
+    "meanMs": 1.8302499999979045
+   },
+   "hash": "443bdfdf",
+   "len": 29028,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8999999999068677,
+    "p95Ms": 1.1000000000931323,
+    "minMs": 0.6999999997206032,
+    "meanMs": 0.9180000000190921
+   },
+   "hash": "443bdfdf",
+   "len": 29028,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.599999999627471,
+    "p95Ms": 0.8000000002793968,
+    "minMs": 0.2999999998137355,
+    "meanMs": 0.5590000000118743
+   },
+   "hash": "443bdfdf",
+   "len": 29028,
+   "baseHash": "14484017"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 35,
+    "medianMs": 40.799999999813735,
+    "p95Ms": 60.799999999813735,
+    "minMs": 37.89999999990687,
+    "meanMs": 44.08571428570098
+   },
+   "hash": "285d638f",
+   "len": 36657,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 299,
+    "medianMs": 4.699999999720603,
+    "p95Ms": 6.899999999906868,
+    "minMs": 4.2999999998137355,
+    "meanMs": 5.020066889613418
+   },
+   "hash": "7e538e57",
+   "len": 39225,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 215,
+    "medianMs": 6.699999999720603,
+    "p95Ms": 11.100000000093132,
+    "minMs": 3.7000000001862645,
+    "meanMs": 7.017209302337277
+   },
+   "hash": "7e538e57",
+   "len": 39225,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 255,
+    "medianMs": 5.600000000093132,
+    "p95Ms": 7.5,
+    "minMs": 5.2999999998137355,
+    "meanMs": 5.890196078447808
+   },
+   "hash": "7e538e57",
+   "len": 39225,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 165,
+    "medianMs": 8.899999999906868,
+    "p95Ms": 13.899999999906868,
+    "minMs": 4,
+    "meanMs": 9.096363636380005
+   },
+   "hash": "7e538e57",
+   "len": 39225,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.6999999997206032,
+    "p95Ms": 1.8999999999068677,
+    "minMs": 1.3999999999068677,
+    "meanMs": 1.668000000010943
+   },
+   "hash": "bf273ac5",
+   "len": 32685,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.1000000000931323,
+    "p95Ms": 3,
+    "minMs": 1.8999999999068677,
+    "meanMs": 2.2190000000060537
+   },
+   "hash": "bf273ac5",
+   "len": 32685,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "50KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1,
+    "p95Ms": 1.599999999627471,
+    "minMs": 0.5,
+    "meanMs": 1.0492500000062863
+   },
+   "hash": "bf273ac5",
+   "len": 32685,
+   "baseHash": "6372e3a7"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 194,
+    "medianMs": 7.399999999906868,
+    "p95Ms": 10.399999999906868,
+    "minMs": 7,
+    "meanMs": 7.768556701036209
+   },
+   "hash": "9f43dd1d",
+   "len": 111954,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8999999999068677,
+    "p95Ms": 1.2999999998137355,
+    "minMs": 0.6999999997206032,
+    "meanMs": 0.9799999999930151
+   },
+   "hash": "55ff9f32",
+   "len": 111958,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.39999999990686774,
+    "p95Ms": 0.5,
+    "minMs": 0.19999999972060323,
+    "meanMs": 0.36874999999301505
+   },
+   "hash": "55ff9f32",
+   "len": 111958,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.5,
+    "p95Ms": 2.2000000001862645,
+    "minMs": 1.2999999998137355,
+    "meanMs": 1.6565000000037253
+   },
+   "hash": "55ff9f32",
+   "len": 111958,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5,
+    "p95Ms": 0.6000000000931323,
+    "minMs": 0.19999999972060323,
+    "meanMs": 0.46999999999417924
+   },
+   "hash": "55ff9f32",
+   "len": 111958,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 201,
+    "medianMs": 7.2999999998137355,
+    "p95Ms": 8.400000000372529,
+    "minMs": 7,
+    "meanMs": 7.494029850752292
+   },
+   "hash": "834fdf7e",
+   "len": 111925,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.6000000000931323,
+    "p95Ms": 3.1999999997206032,
+    "minMs": 2.3999999999068677,
+    "meanMs": 2.699000000001397
+   },
+   "hash": "834fdf7e",
+   "len": 111925,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.1000000000931323,
+    "p95Ms": 1.3999999999068677,
+    "minMs": 0.7999999998137355,
+    "meanMs": 1.1162499999976716
+   },
+   "hash": "834fdf7e",
+   "len": 111925,
+   "baseHash": "19fa2e6a"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 173,
+    "medianMs": 8.200000000186265,
+    "p95Ms": 11.899999999906868,
+    "minMs": 7.2999999998137355,
+    "meanMs": 8.68323699423419
+   },
+   "hash": "66a7de9c",
+   "len": 113410,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.3000000002793968,
+    "p95Ms": 2,
+    "minMs": 1.1000000000931323,
+    "meanMs": 1.4582499999902212
+   },
+   "hash": "8f627c32",
+   "len": 113408,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.6000000000931323,
+    "p95Ms": 2.5,
+    "minMs": 0.8999999999068677,
+    "meanMs": 1.6590000000037253
+   },
+   "hash": "8f627c32",
+   "len": 113408,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2,
+    "p95Ms": 2.8999999999068677,
+    "minMs": 1.8000000002793968,
+    "meanMs": 2.173250000003027
+   },
+   "hash": "8f627c32",
+   "len": 113408,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.6999999997206032,
+    "p95Ms": 2.7000000001862645,
+    "minMs": 1,
+    "meanMs": 1.6679999999934807
+   },
+   "hash": "8f627c32",
+   "len": 113408,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 197,
+    "medianMs": 7.2999999998137355,
+    "p95Ms": 10.700000000186265,
+    "minMs": 6.899999999906868,
+    "meanMs": 7.619796954324649
+   },
+   "hash": "88c98964",
+   "len": 113019,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.7999999998137355,
+    "p95Ms": 4,
+    "minMs": 2.599999999627471,
+    "meanMs": 2.9629999999841674
+   },
+   "hash": "88c98964",
+   "len": 113019,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.1999999997206032,
+    "p95Ms": 1.6000000000931323,
+    "minMs": 0.8999999999068677,
+    "meanMs": 1.2340000000037252
+   },
+   "hash": "88c98964",
+   "len": 113019,
+   "baseHash": "1cf4fe36"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 74,
+    "medianMs": 19.899999999906868,
+    "p95Ms": 23.5,
+    "minMs": 18.799999999813735,
+    "meanMs": 20.402702702700186
+   },
+   "hash": "398e7caf",
+   "len": 121644,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 253,
+    "medianMs": 5.600000000093132,
+    "p95Ms": 8,
+    "minMs": 5.399999999906868,
+    "meanMs": 5.935968379425658
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 212,
+    "medianMs": 6.199999999720603,
+    "p95Ms": 9.700000000186265,
+    "minMs": 4,
+    "meanMs": 7.096226415082918
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 198,
+    "medianMs": 7.100000000093132,
+    "p95Ms": 10.900000000372529,
+    "minMs": 6.7999999998137355,
+    "meanMs": 7.608585858597618
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 162,
+    "medianMs": 9.650000000139698,
+    "p95Ms": 13.899999999906868,
+    "minMs": 4.699999999720603,
+    "meanMs": 9.2660493827195
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 189,
+    "medianMs": 7.600000000093132,
+    "p95Ms": 10.5,
+    "minMs": 7.099999999627471,
+    "meanMs": 7.963492063517195
+   },
+   "hash": "c62d2c43",
+   "len": 117546,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 338,
+    "medianMs": 4.2999999998137355,
+    "p95Ms": 5.300000000279397,
+    "minMs": 4,
+    "meanMs": 4.445266272197616
+   },
+   "hash": "c62d2c43",
+   "len": 117546,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7000000001862645,
+    "p95Ms": 2.5,
+    "minMs": 1.3999999999068677,
+    "meanMs": 1.8104999999934808
+   },
+   "hash": "c62d2c43",
+   "len": 117546,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "trace",
+   "id": "automerge-paper",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "automerge-paper.dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.6999999997206032,
+    "p95Ms": 3.400000000372529,
+    "minMs": 2.3999999999068677,
+    "meanMs": 2.769250000016764
+   },
+   "hash": "7148b7e2",
+   "len": 104852
+  },
+  {
+   "kind": "trace",
+   "id": "automerge-paper",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "automerge-paper.dt",
+   "stats": {
+    "n": 80,
+    "medianMs": 17.6500000001397,
+    "p95Ms": 25.09999999962747,
+    "minMs": 13.700000000186265,
+    "meanMs": 18.91750000002212
+   },
+   "hash": "7148b7e2",
+   "len": 104852
+  },
+  {
+   "kind": "trace",
+   "id": "seph-blog1",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "seph-blog1.dt",
+   "stats": {
+    "n": 375,
+    "medianMs": 3.8000000002793968,
+    "p95Ms": 5.5,
+    "minMs": 3.5,
+    "meanMs": 4.0143999999960265
+   },
+   "hash": "11f8ff92",
+   "len": 56769
+  },
+  {
+   "kind": "trace",
+   "id": "seph-blog1",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "seph-blog1.dt",
+   "stats": {
+    "n": 193,
+    "medianMs": 7.5,
+    "p95Ms": 10.399999999906868,
+    "minMs": 6.199999999720603,
+    "meanMs": 7.802072538861552
+   },
+   "hash": "11f8ff92",
+   "len": 56769
+  },
+  {
+   "kind": "trace",
+   "id": "friendsforever",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "friendsforever.dt",
+   "stats": {
+    "n": 137,
+    "medianMs": 10.5,
+    "p95Ms": 14.299999999813735,
+    "minMs": 9.900000000372529,
+    "meanMs": 10.95036496350161
+   },
+   "hash": "91df976a",
+   "len": 21362
+  },
+  {
+   "kind": "trace",
+   "id": "friendsforever",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "friendsforever.dt",
+   "stats": {
+    "n": 57,
+    "medianMs": 25,
+    "p95Ms": 35.6999999997206,
+    "minMs": 15.100000000093132,
+    "meanMs": 26.643859649117907
+   },
+   "hash": "91df976a",
+   "len": 21362
+  },
+  {
+   "kind": "trace",
+   "id": "clownschool",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "clownschool.dt",
+   "stats": {
+    "n": 91,
+    "medianMs": 15.399999999906868,
+    "p95Ms": 21.300000000279397,
+    "minMs": 13.799999999813735,
+    "meanMs": 16.60219780221111
+   },
+   "hash": "df7043ad",
+   "len": 21148
+  },
+  {
+   "kind": "trace",
+   "id": "clownschool",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "clownschool.dt",
+   "stats": {
+    "n": 34,
+    "medianMs": 42.049999999813735,
+    "p95Ms": 62.200000000186265,
+    "minMs": 32.39999999990687,
+    "meanMs": 44.547058823518455
+   },
+   "hash": "df7043ad",
+   "len": 21148
+  },
+  {
+   "kind": "trace",
+   "id": "node_nodecc",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "node_nodecc.dt",
+   "stats": {
+    "n": 15,
+    "medianMs": 94.6999999997206,
+    "p95Ms": 139.5,
+    "minMs": 90.8000000002794,
+    "meanMs": 105.82666666669151
+   },
+   "hash": "b4dc529e",
+   "len": 38142
+  },
+  {
+   "kind": "trace",
+   "id": "node_nodecc",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "node_nodecc.dt",
+   "stats": {
+    "n": 14,
+    "medianMs": 103.29999999981374,
+    "p95Ms": 153.39999999990687,
+    "minMs": 96.89999999990687,
+    "meanMs": 113.83571428566107
+   },
+   "hash": "b4dc529e",
+   "len": 38142
+  },
+  {
+   "kind": "trace",
+   "id": "git-makefile",
+   "op": "b",
+   "impl": "dt",
+   "dtFile": "git-makefile.dt",
+   "stats": {
+    "n": 25,
+    "medianMs": 59.10000000009313,
+    "p95Ms": 74.70000000018626,
+    "minMs": 56,
+    "meanMs": 61.220000000074506
+   },
+   "hash": "51a60ff9",
+   "len": 113676
+  },
+  {
+   "kind": "trace",
+   "id": "git-makefile",
+   "op": "b",
+   "impl": "proto",
+   "dtFile": "git-makefile.dt",
+   "stats": {
+    "n": 9,
+    "medianMs": 166.60000000009313,
+    "p95Ms": 229.59999999962747,
+    "minMs": 151.5,
+    "meanMs": 178.85555555552452
+   },
+   "hash": "16a7339f",
+   "len": 113676
+  }
+ ],
+ "cold": []
+}

@@ -1,0 +1,12 @@
+-- 178: drop the retired 收工 preferences from actor_prefs.
+--
+-- The 收工 (journal shutdown) feature left the frontend in #1315 (2026-11-06). Its two
+-- account preferences, `journalShutdown` and `journalShutdowns`,
+-- are no longer keys in services/actorPrefs.ts, so their rows are dead weight: nothing
+-- reads them, and the backup export would carry them along. A write to either key is still
+-- answered as accepted by routes/me.ts (an older page may be open on a phone) but is never
+-- stored, so no row comes back after this.
+--
+-- Only rows of those two keys go; no note, event or other preference is touched.
+-- Safe to run again: the second run finds nothing to delete.
+DELETE FROM actor_prefs WHERE key IN ('journalShutdown', 'journalShutdowns');

@@ -1,0 +1,16 @@
+-- 155_remove_publish_site_effect.sql
+--
+-- The agent's `publishSite` tool and its held "publish_site" outbox effect are
+-- gone (no token level or runtime could reach them any more; the owner's own
+-- POST /api/publish is unchanged). Rows of that kind that are still in the
+-- outbox would have no effect registered to run, approve or show them.
+--
+-- DELETE rather than mark 'dead': a dead row stays in the inbox's failed-effects
+-- list and can be requeued, and there is nothing left that could run it again.
+-- Nothing refers to an outbox row (no foreign key points at it), and the
+-- published result of an earlier approved request lives in publish_snapshots
+-- and its events, which stay. So this loses no history anyone can still read.
+--
+-- Migration 127's one-time UPDATE that names 'publishSite' in its tool list is
+-- left as written: it already ran, and replaying it changes nothing.
+DELETE FROM outbox WHERE effect_kind = 'publish_site';

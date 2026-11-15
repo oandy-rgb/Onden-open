@@ -1,0 +1,160 @@
+/* PDF reader + annotation surface. The chrome rides the app's paper tokens so
+   the reader, the canvas ink layer and the editor read as ONE surface — the
+   old hardcoded dark (#222/#3b82f6) toolbar clashed with everything. The PDF
+   page itself stays as rendered by pdf.js. */
+
+.pdf-node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--ac-surface);
+  position: relative;
+}
+
+/* 「放大」 is the shared .pane--expanded (ExpandPaneButton.css). */
+.pdf-node.pane--expanded .pdf-node-content { min-height: 0; }
+
+/* The one toolbar (InkToolbar) is the whole chrome; in fullscreen the Exit
+   button sits beside it in the same row, so it never covers a tool. */
+/* The pen's toolbar is docked at the bottom on every host (board, note, PDF). */
+.pdf-node-bar {
+  order: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--ac-line) 70%, transparent);
+}
+
+.pdf-node-ink-toolbar {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  padding: 0;
+}
+
+.pdf-node-notice {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+}
+
+.pdf-node-content {
+  flex: 1 1 auto;
+  min-height: 560px;
+  position: relative;
+  /* The page book fills it (and scrolls inside it). */
+  display: flex;
+}
+
+/* "✓ Card created": floats over the page so the toolbar never moves. */
+.pdf-node-spawn-flash {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-raised);
+  padding: 3px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-surface);
+  color: var(--ac-success);
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+}
+
+/* Lives inside the page's layers, floated just above the selection; its
+   position is a fraction of the page (--pdf-tip-x / -y), so it stays on its
+   text through a zoom. */
+.pdf-node-selection-tips {
+  position: absolute;
+  left: calc(var(--pdf-tip-x) * 100%);
+  top: calc(var(--pdf-tip-y) * 100%);
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: var(--z-local-6);
+  pointer-events: auto;
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  box-shadow: var(--ac-shadow-float);
+}
+.pdf-node-selection-tips button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pdf-node-selection-mark {
+  background: transparent;
+  color: var(--ac-ink);
+}
+.pdf-node-selection-mark:hover { background: var(--ac-overlay-hover); }
+.pdf-node-selection-tip {
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+}
+
+.pdf-node-error {
+  color: var(--ac-accent);
+  padding: 16px;
+}
+
+/* ── Committed annotations (rendered in the page's layers) ─────────────
+   Highlights never take pointer events: the old lib's parts swallowed
+   clicks for hover toolbars this app never wired up, and blocking
+   re-selection of highlighted text was pure cost. */
+
+.pdf-hl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* Per-instance geometry rides CSS custom properties (rectVars()) — the
+   project bans literal inline styles. */
+.pdf-hl-rect {
+  left: var(--pdf-hl-left);
+  top: var(--pdf-hl-top);
+  width: var(--pdf-hl-width);
+  height: var(--pdf-hl-height);
+}
+
+/* Same yellow the old TextHighlight was configured with; the area box uses
+   the identical hue at full alpha (the lib's default), both multiply-blended
+   so the page text stays readable beneath. */
+.pdf-hl-text {
+  background: var(--ac-pdf-highlight);
+}
+
+/* Text-highlight line parts + area boxes multiply-blend with the page, the
+   same composite the old lib achieved by nesting its layer inside the
+   multiplied textLayer — text stays crisp under the yellow. */
+.pdf-hl-part {
+  position: absolute;
+  mix-blend-mode: multiply;
+}
+
+.pdf-hl-area {
+  background: var(--ac-pdf-highlight-solid);
+}
+
+/* Alt+drag area selection preview (MouseSelection parity). */
+.pdf-area-preview {
+  position: absolute;
+  border: 1px dashed var(--ac-pdf-area-edge);
+  background: var(--ac-pdf-area-fill);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: var(--z-local-5);
+}

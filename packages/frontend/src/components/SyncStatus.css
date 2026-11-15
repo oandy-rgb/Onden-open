@@ -1,0 +1,96 @@
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ac-radius-full);
+  flex-shrink: 0;
+}
+/* State is carried by shape as well as colour: online is a filled dot, offline
+ * a hollow ring, so it reads without telling green from grey. */
+.status-dot.online  { background: var(--ac-success); }
+.status-dot.offline { box-sizing: border-box; background: transparent; border: 2px solid var(--ac-muted); }
+
+/* P0-4 sync-status chip: dot + pending-writes count (count hidden at 0). */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-status .sync-pending-count {
+  font-size: var(--ac-fs-xs);
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: var(--ac-radius-md);
+  color: var(--ac-muted);
+  background: var(--ac-overlay-subtle);
+  border: 1px solid var(--ac-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.sync-status.offline .sync-pending-count {
+  color: var(--ac-accent-ink);
+  background: var(--ac-accent);
+  border-color: transparent;
+}
+
+/* When writes are waiting the chip becomes an actionable button with a durable
+   label ("Sync now" online / "N change(s) waiting to sync" offline) — not a
+   transient toast, so the user can always SEE unsynced work and force a drain. */
+.sync-status--btn {
+  background: transparent;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 3px 8px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ac-muted);
+}
+.sync-status--btn:hover:not(:disabled) {
+  background: var(--ac-overlay-hover);
+}
+.sync-status--btn:disabled {
+  cursor: default;
+}
+
+.sync-status-label {
+  font-size: var(--ac-fs-xs);
+  line-height: 1;
+  color: var(--ac-muted);
+  white-space: nowrap;
+}
+
+/* On phones the label would crowd the topbar — the count badge alone carries
+   the signal there, and the full wording stays in title/aria. */
+@media (max-width: 600px) {
+  .sync-status-label { display: none; }
+}
+
+.sync-control { min-width: 0; }
+.sync-control--expanded .sync-status { min-height: 44px; width: 100%; padding: 8px 12px; gap: 8px; }
+.sync-control--expanded .sync-status-label { display: block; white-space: normal; text-align: left; font-size: var(--ac-fs-small); line-height: 1.4; }
+.sync-status-action { margin-left: auto; flex-shrink: 0; font-size: var(--ac-fs-small); color: var(--ac-accent); }
+.sync-feedback { margin: 8px 0 0; font-size: var(--ac-fs-small); line-height: 1.5; color: var(--ac-ink); }
+
+/* A stuck queue head or an unsaved local copy stays on screen until it is
+   dealt with: a toast would be gone before the user could act. */
+.sync-trouble {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 6px 0 0;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.4;
+  color: var(--ac-muted);
+}
+.sync-trouble p { margin: 0; }
+.sync-trouble-action {
+  font: inherit;
+  padding: 3px 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.sync-trouble-action:hover:not(:disabled) { background: var(--ac-overlay-hover); }

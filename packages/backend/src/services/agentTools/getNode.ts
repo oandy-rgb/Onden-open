@@ -1,0 +1,78 @@
+import { z } from "zod";
+import { q } from "../../db.js";
+import { readableNote } from "./readableNote.js";
+import { bodyMediaIds, describeAttachment, type NoteAttachment } from "./attachmentRefs.js";
+import { isInkPageAttr } from "@onden/markdown";
+import type { AgentTool } from "./types.js";
+import { liveTagNodeSql } from "../../spine/nodeSql.js";
+
+// Read-only fetch by id OR slug. Includes attributes + tags so an agent can
+// reason about a node without a follow-up call. A caller only resolves nodes
+// it may read (its spaces; a token: its read scope) — otherwise null,
+// indistinguishable from not-found, so it can't probe other spaces.
+
+const Args = z.object({
+  id: z.string().uuid().optional(),
+  slug: z.string().min(1).max(200).optional(),
+}).refine(
+  (v) => v.id !== undefined || v.slug !== undefined,
+  { message: "must provide id or slug" },
+);
+
+type GetNodeResult = {
+  id: string;
+  slug: string;
+  title: string;
+  node_type: string;
+  markdown: string;
+  created_at: string;
+  updated_at: string;
+  tags: Array<{ id: string; title: string }>;
+  attributes: Array<{ key: string; value: string; value_type: string }>;
+  /** Files the body references; fetch one with getAttachment({ nodeId, ref }). */
+  attachments: NoteAttachment[];
+} | null;
+
+export const getNodeTool: AgentTool<z.infer<typeof Args>, GetNodeResult> = {
+  name: "getNode",
+  access: "read",
+  description:
+    "Fetch a single node by id or slug, including its tags, attributes and attachments (files the body references; getAttachment fetches them). " +
+    "Drawing data (handwriting strokes, a whiteboard's pen layer, a PDF's marks) is not in the attributes: it is megabytes of stroke JSON that no tool reads or edits. " +
+    "Returns null if not found or soft-deleted. To edit the body later, keep " +
+    "the returned markdown and pass it unchanged as updateNode's base_markdown.",
+  inputSchema: Args,
+  async handler(args, { workspaceId, actor }) {
+    // Read authorization (space membership; a token: its read scope) decides which row is picked, before any
+    // other choice: out-of-scope rows are simply absent — same as not-found, no oracle.
+    const node = await readableNote(actor, workspaceId, args);
+    if (!node) return null;
+
+    const [tagsRes, attrsRes] = await Promise.all([
+      q<{ id: string; title: string }>(
+        `SELECT t.id, t.title
+         FROM node_tags nt
+         JOIN content_nodes t ON t.id = nt.tag_id
+           AND ${liveTagNodeSql("t")}
+         WHERE nt.node_id = $1`,
+        [node.id],
+      ),
+      q<{ key: string; value: string; value_type: string }>(
+        `SELECT key, value, value_type
+         FROM node_attributes
+         WHERE node_id = $1
+         ORDER BY key ASC`,
+        [node.id],
+      ),
+    ]);
+
+    return {
+      ...node,
+      tags: tagsRes.rows,
+      // Drawing data (handwriting, the board's pen layer, a note's 手寫 tab, a PDF's older marks) is megabytes of stroke JSON an agent can
+      // neither read nor edit through this tool; any note may carry it now, so it never goes into the tool output.
+      attributes: attrsRes.rows.filter((a) => !isInkPageAttr(a.key) && a.key !== "pdf_annotations"),
+      attachments: await Promise.all(bodyMediaIds(node.markdown ?? "").map(describeAttachment)),
+    };
+  },
+};

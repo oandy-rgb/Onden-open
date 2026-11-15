@@ -1,0 +1,85 @@
+.welcome-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 14px 16px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-left: 3px solid var(--ac-accent);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-sm);
+}
+.welcome-banner-icon { color: var(--ac-accent); margin-top: 1px; flex-shrink: 0; }
+.welcome-banner-body { flex: 1; min-width: 0; }
+.welcome-banner-title {
+  margin: 0 0 4px;
+  font-size: var(--ac-fs-ui-touch);
+  font-weight: 600;
+  color: var(--ac-ink);
+}
+.welcome-banner-text {
+  margin: 0 0 10px;
+  font-size: var(--ac-fs-small);
+  line-height: 1.5;
+  color: var(--ac-muted);
+}
+.welcome-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.welcome-banner-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-fs-small);
+  font-weight: 500;
+  color: var(--ac-accent-ink);
+  background: var(--ac-accent);
+  border: 1px solid var(--ac-accent);
+  border-radius: var(--ac-radius-md);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.welcome-banner-action:hover { filter: brightness(1.05); }
+.welcome-banner-action:disabled { cursor: default; opacity: 0.7; filter: none; }
+/* Secondary actions read as calm, equal-weight options — not a single CTA. */
+.welcome-banner-action--ghost {
+  color: var(--ac-ink);
+  background: transparent;
+  border-color: var(--ac-line);
+}
+.welcome-banner-action--ghost:hover { background: var(--ac-overlay-hover); filter: none; }
+.welcome-banner-spin { animation: spin 0.8s linear infinite; }
+.welcome-banner-note {
+  margin: 10px 0 0;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.5;
+  color: var(--ac-muted);
+}
+.welcome-banner-sitelink {
+  color: var(--ac-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.welcome-banner-sitelink:hover { text-decoration: underline; }
+.welcome-banner-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.welcome-banner-dismiss:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+
+.welcome-banner-language { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; }
+.welcome-banner-language-label { font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.welcome-banner-language-choices { display: flex; gap: 6px; }
+.welcome-banner-language-note { flex-basis: 100%; margin: 0; font-size: var(--ac-fs-small); color: var(--ac-muted); }

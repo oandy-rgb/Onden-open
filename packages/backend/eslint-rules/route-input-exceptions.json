@@ -1,0 +1,29 @@
+{
+  "counts": {
+    "modules/external_calendars/routes.ts": 2,
+    "modules/review/routes.ts": 3,
+    "modules/rss/routes.ts": 6,
+    "modules/semantic/routes.ts": 1,
+    "modules/tasks/routes.ts": 1,
+    "modules/website/routes.ts": 1,
+    "routes/actors.ts": 13,
+    "routes/agentSessions.ts": 10,
+    "routes/backup.ts": 4,
+    "routes/blockLinks.ts": 1,
+    "routes/bootstrap.ts": 2,
+    "routes/day.ts": 1,
+    "routes/events.ts": 12,
+    "routes/export.ts": 1,
+    "routes/history.ts": 10,
+    "routes/inbox.ts": 13,
+    "routes/mcp.ts": 2,
+    "routes/mcpSessions.ts": 5,
+    "routes/me.ts": 2,
+    "routes/media.ts": 2,
+    "routes/nodes.ts": 50,
+    "routes/skills.ts": 2,
+    "routes/spaces.ts": 2,
+    "routes/sync.ts": 8,
+    "routes/tags.ts": 20
+  }
+}

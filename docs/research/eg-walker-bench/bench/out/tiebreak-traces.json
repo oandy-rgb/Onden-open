@@ -1,0 +1,44 @@
+{
+  "friendsforever（真實 seq）": {
+    "fugueAsc": "符合",
+    "fugueDesc": "符合",
+    "maxAsc": "符合",
+    "maxDesc": "符合"
+  },
+  "git-makefile（真實 seq）": {
+    "fugueAsc": "符合",
+    "fugueDesc": "重放失敗：刪除位置超出文件",
+    "maxAsc": "符合",
+    "maxDesc": "重放失敗：刪除位置超出文件"
+  },
+  "node_nodecc（真實 seq）": {
+    "fugueAsc": "符合",
+    "fugueDesc": "符合",
+    "maxAsc": "符合",
+    "maxDesc": "符合"
+  },
+  "git-makefile（舊轉接：seq 照到達順序重編）": {
+    "fugueAsc": "不符",
+    "fugueDesc": "重放失敗：刪除位置超出文件",
+    "maxAsc": "不符",
+    "maxDesc": "重放失敗：刪除位置超出文件"
+  },
+  "clownschool": {
+    "fugueAsc": "符合",
+    "fugueDesc": "符合",
+    "maxAsc": "符合",
+    "maxDesc": "符合"
+  },
+  "automerge-paper": {
+    "fugueAsc": "符合",
+    "fugueDesc": "符合",
+    "maxAsc": "符合",
+    "maxDesc": "符合"
+  },
+  "seph-blog1": {
+    "fugueAsc": "符合",
+    "fugueDesc": "符合",
+    "maxAsc": "符合",
+    "maxDesc": "符合"
+  }
+}

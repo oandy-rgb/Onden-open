@@ -1,0 +1,24 @@
+/* `.ui-text-field`: opt-in look of a one-line box that fills its row; `.ui-checkbox`: a tick box with its words beside it. */
+.ui-text-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.ui-text-field::placeholder { color: var(--ac-muted); }
+.ui-text-field:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.ui-text-field:disabled { opacity: 0.6; }
+
+.ui-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  min-height: var(--ac-tap);
+  cursor: pointer;
+}
+.ui-checkbox input { width: 20px; height: 20px; flex: none; accent-color: var(--ac-accent); }

@@ -1,0 +1,35 @@
+/* The 「簡報」 tab of a note: thumbnails, the large slide, its controls. Chrome
+   uses the app's tokens; the slides themselves wear the deck's theme (slideView.css). */
+.view-pane-note { padding-top: var(--ac-space-2); }
+.sp { display: flex; flex-direction: column; gap: var(--ac-space-3); min-width: 0; }
+.sp-title { margin: 0; font-size: var(--ac-fs-title-sm); font-family: var(--ac-font-display); }
+.sp-main { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--ac-space-4); align-items: start; }
+.sp-main.has-replace { grid-template-columns: 168px minmax(0, 1fr) 248px; }
+.sp-replace { position: sticky; top: var(--ac-space-3); }
+.sp-thumbs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ac-space-2); max-height: 70dvh; overflow-y: auto; }
+.sp-thumbs > li { flex: none; }
+.sp-thumb { position: relative; display: flex; gap: var(--ac-space-2); align-items: flex-start; padding: var(--ac-space-1); border-radius: var(--ac-radius-md); }
+.sp-thumb.is-on { background: var(--ac-selected); }
+/* The button that selects a thumbnail or a layout covers it, so nothing inside the picture can be clicked or focused. */
+.ui-btn.sp-hit { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border-color: transparent; border-radius: inherit; background: transparent; }
+.sp-thumb-n { flex: none; width: 1.6em; font-size: var(--ac-fs-caption); color: var(--ac-muted); text-align: right; font-variant-numeric: tabular-nums; position: relative; }
+.sp-thumb-dot { position: absolute; right: 0; bottom: -0.9em; width: 6px; height: 6px; border-radius: var(--ac-radius-full); background: var(--ac-accent); }
+.sp-thumb-pic { flex: 1; min-width: 0; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-sm); overflow: hidden; pointer-events: none; }
+.sp-stage { min-width: 0; display: flex; flex-direction: column; gap: var(--ac-space-3); }
+.sp-big { position: relative; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); overflow: hidden; box-shadow: var(--ac-shadow-sm); }
+.sp-bar { display: flex; flex-wrap: wrap; gap: var(--ac-space-2); align-items: center; }
+.sp-bar .ui-btn:last-child { margin-left: auto; }
+.sp-rule { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.sp-hint { margin: 0; font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.sp-notes { font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.sp-notes summary { cursor: pointer; color: var(--ac-muted); }
+.sp-check-gap { display: inline-block; width: 14px; }
+
+/* Phone: the large slide on top, the thumbnails in a row under it. */
+@media (max-width: 900px) {
+  .sp-main, .sp-main.has-replace { grid-template-columns: minmax(0, 1fr); }
+  .sp-thumbs { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; order: 2; }
+  .sp-thumb { flex-direction: column; align-items: stretch; width: 112px; }
+  .sp-thumb-n { width: auto; text-align: left; }
+  .sp-bar .ui-btn { min-height: 44px; }
+}

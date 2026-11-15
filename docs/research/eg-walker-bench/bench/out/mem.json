@@ -1,0 +1,281 @@
+[
+ {
+  "impl": "diff3",
+  "spec": "fork:10KB-100:a",
+  "allocBytes": 2928184,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 89492,
+  "ms": 9.490515000000016,
+  "outLen": 6206
+ },
+ {
+  "impl": "ref",
+  "spec": "fork:10KB-100:a",
+  "allocBytes": 3697464,
+  "rssDeltaKB": 2944,
+  "rssPeakKB": 96620,
+  "ms": 60.514347999999984,
+  "outLen": 6407
+ },
+ {
+  "impl": "dt",
+  "spec": "fork:10KB-100:a",
+  "allocBytes": 148584,
+  "rssDeltaKB": 256,
+  "rssPeakKB": 103524,
+  "ms": 3.5022389999999746,
+  "outLen": 6407
+ },
+ {
+  "impl": "proto",
+  "spec": "fork:10KB-100:a",
+  "allocBytes": 661608,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 90056,
+  "ms": 4.4407640000000015,
+  "outLen": 6407
+ },
+ {
+  "impl": "diff3",
+  "spec": "fork:10KB-1000:a",
+  "allocBytes": 3557048,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 101628,
+  "ms": 378.21962199999996,
+  "outLen": 17386
+ },
+ {
+  "impl": "ref",
+  "spec": "fork:10KB-1000:a",
+  "allocBytes": 5852880,
+  "rssDeltaKB": 5000,
+  "rssPeakKB": 105760,
+  "ms": 1575.754564,
+  "outLen": 20563
+ },
+ {
+  "impl": "dt",
+  "spec": "fork:10KB-1000:a",
+  "allocBytes": 177528,
+  "rssDeltaKB": 384,
+  "rssPeakKB": 107344,
+  "ms": 6.5424240000000395,
+  "outLen": 20563
+ },
+ {
+  "impl": "proto",
+  "spec": "fork:10KB-1000:a",
+  "allocBytes": 2628320,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 102200,
+  "ms": 12.020338999999979,
+  "outLen": 20563
+ },
+ {
+  "impl": "diff3",
+  "spec": "fork:50KB-1000:a",
+  "allocBytes": 2560808,
+  "rssDeltaKB": 8512,
+  "rssPeakKB": 107588,
+  "ms": 76.78189900000001,
+  "outLen": 36657
+ },
+ {
+  "impl": "ref",
+  "spec": "fork:50KB-1000:a",
+  "allocBytes": 12252752,
+  "rssDeltaKB": 13428,
+  "rssPeakKB": 114740,
+  "ms": 4758.382780999999,
+  "outLen": 39225
+ },
+ {
+  "impl": "dt",
+  "spec": "fork:50KB-1000:a",
+  "allocBytes": 215112,
+  "rssDeltaKB": 636,
+  "rssPeakKB": 115068,
+  "ms": 10.035345000000007,
+  "outLen": 39225
+ },
+ {
+  "impl": "proto",
+  "spec": "fork:50KB-1000:a",
+  "allocBytes": 4340168,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 100812,
+  "ms": 16.501931000000013,
+  "outLen": 39225
+ },
+ {
+  "impl": "diff3",
+  "spec": "fork:200KB-100:a",
+  "allocBytes": 7448440,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 108952,
+  "ms": 27.105953,
+  "outLen": 113410
+ },
+ {
+  "impl": "ref",
+  "spec": "fork:200KB-100:a",
+  "allocBytes": 30424528,
+  "rssDeltaKB": 35156,
+  "rssPeakKB": 148144,
+  "ms": 1118.076896,
+  "outLen": 113408
+ },
+ {
+  "impl": "dt",
+  "spec": "fork:200KB-100:a",
+  "allocBytes": 363088,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 113516,
+  "ms": 4.853809999999953,
+  "outLen": 113408
+ },
+ {
+  "impl": "proto",
+  "spec": "fork:200KB-100:a",
+  "allocBytes": 812984,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 109848,
+  "ms": 5.486227999999983,
+  "outLen": 113408
+ },
+ {
+  "impl": "diff3",
+  "spec": "fork:200KB-1000:a",
+  "allocBytes": 11511976,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 135956,
+  "ms": 61.88000099999999,
+  "outLen": 121644
+ },
+ {
+  "impl": "ref",
+  "spec": "fork:200KB-1000:a",
+  "allocBytes": 48738040,
+  "rssDeltaKB": 24496,
+  "rssPeakKB": 159164,
+  "ms": 12744.123867999999,
+  "outLen": 122552
+ },
+ {
+  "impl": "dt",
+  "spec": "fork:200KB-1000:a",
+  "allocBytes": 380432,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 144664,
+  "ms": 11.862370000000055,
+  "outLen": 122552
+ },
+ {
+  "impl": "proto",
+  "spec": "fork:200KB-1000:a",
+  "allocBytes": 4395608,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 135424,
+  "ms": 16.33555100000001,
+  "outLen": 122552
+ },
+ {
+  "impl": "dt",
+  "spec": "trace:friendsforever:b",
+  "allocBytes": 191992,
+  "rssDeltaKB": 5308,
+  "rssPeakKB": 102940,
+  "ms": 32.16645900000003,
+  "outLen": 21362
+ },
+ {
+  "impl": "proto",
+  "spec": "trace:friendsforever:b",
+  "allocBytes": 5728664,
+  "rssDeltaKB": 8956,
+  "rssPeakKB": 112448,
+  "ms": 45.655350999999996,
+  "outLen": 21362
+ },
+ {
+  "impl": "dt",
+  "spec": "trace:clownschool:b",
+  "allocBytes": 190992,
+  "rssDeltaKB": 6688,
+  "rssPeakKB": 128204,
+  "ms": 43.261123999999995,
+  "outLen": 21148
+ },
+ {
+  "impl": "proto",
+  "spec": "trace:clownschool:b",
+  "allocBytes": 14771464,
+  "rssDeltaKB": 19328,
+  "rssPeakKB": 159032,
+  "ms": 79.61370399999998,
+  "outLen": 21148
+ },
+ {
+  "impl": "dt",
+  "spec": "trace:node_nodecc:b",
+  "allocBytes": 214256,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 131252,
+  "ms": 128.48594699999995,
+  "outLen": 38142
+ },
+ {
+  "impl": "proto",
+  "spec": "trace:node_nodecc:b",
+  "allocBytes": 7951128,
+  "rssDeltaKB": 16484,
+  "rssPeakKB": 137904,
+  "ms": 157.133737,
+  "outLen": 38142
+ },
+ {
+  "impl": "dt",
+  "spec": "trace:git-makefile:b",
+  "allocBytes": 286976,
+  "rssDeltaKB": 3160,
+  "rssPeakKB": 104692,
+  "ms": 77.28835299999997,
+  "outLen": 113676
+ },
+ {
+  "impl": "proto",
+  "spec": "trace:git-makefile:b",
+  "allocBytes": 17981624,
+  "rssDeltaKB": 16144,
+  "rssPeakKB": 116552,
+  "ms": 257.831115,
+  "outLen": 113676
+ },
+ {
+  "impl": "dt",
+  "spec": "trace:automerge-paper:b",
+  "allocBytes": 272256,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 239556,
+  "ms": 11.438779999999952,
+  "outLen": 104852
+ },
+ {
+  "impl": "proto",
+  "spec": "trace:automerge-paper:b",
+  "allocBytes": 30172960,
+  "rssDeltaKB": 0,
+  "rssPeakKB": 254764,
+  "ms": 25.314017000000035,
+  "outLen": 104852
+ },
+ {
+  "impl": "ref",
+  "spec": "trace:friendsforever:b",
+  "allocBytes": 9203352,
+  "rssDeltaKB": 7788,
+  "rssPeakKB": 109344,
+  "ms": 758.678535,
+  "outLen": 21362
+ }
+]

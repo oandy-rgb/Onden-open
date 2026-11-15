@@ -1,0 +1,1954 @@
+{
+  "ids": {
+    "alpha": "00000000-0000-4000-8000-000000000101",
+    "beta": "00000000-0000-4000-8000-000000000102",
+    "parent": "00000000-0000-4000-8000-000000000103",
+    "child": "00000000-0000-4000-8000-000000000104",
+    "gone": "00000000-0000-4000-8000-000000000105",
+    "trashed": "00000000-0000-4000-8000-000000000106",
+    "tag": "00000000-0000-4000-8000-000000000201",
+    "tag2": "00000000-0000-4000-8000-000000000202",
+    "moduleTag": "00000000-0000-4000-8000-000000000203",
+    "task": "00000000-0000-4000-8000-000000000301",
+    "edge": "00000000-0000-4000-8000-000000000401",
+    "board": "00000000-0000-4000-8000-000000000501",
+    "space": "00000000-0000-4000-8000-000000000601",
+    "person": "00000000-0000-4000-8000-000000000701",
+    "agent": "00000000-0000-4000-8000-000000000702",
+    "view": "00000000-0000-4000-8000-000000000801",
+    "token": "00000000-0000-4000-8000-000000000901",
+    "event": 9001
+  },
+  "serverErrorCodes": [
+    "account_changed",
+    "agent_cannot_write",
+    "agent_disabled",
+    "agent_rate_limited",
+    "already_decided",
+    "already_member",
+    "already_owner",
+    "already_restored",
+    "already_reviewed",
+    "already_subscribed",
+    "ambiguous_scope",
+    "attribute_changed",
+    "audience_changed",
+    "backup_too_large",
+    "bad_doi",
+    "bad_idempotency_key",
+    "bad_manifest",
+    "bad_note",
+    "bad_protocol",
+    "bad_request",
+    "cannot_read_note",
+    "citekey_taken",
+    "confirm_name_mismatch",
+    "custom_tools_removed",
+    "default_space",
+    "deleted_notes",
+    "derived_edge",
+    "design_stale",
+    "doi_not_found",
+    "duplicate_entry",
+    "effect_unavailable",
+    "email_required",
+    "empty_body",
+    "empty_prompt",
+    "encrypted_entry",
+    "entry_too_large",
+    "extends_cycle",
+    "feed_too_large",
+    "field_invalid",
+    "field_name_inherited",
+    "field_required",
+    "file_too_large",
+    "forbidden",
+    "forbidden_address",
+    "gone",
+    "handle_taken",
+    "history_incomplete",
+    "human_required",
+    "id_conflict",
+    "insufficient_storage",
+    "internal",
+    "interrupted",
+    "invalid_access",
+    "invalid_args",
+    "invalid_behaviour",
+    "invalid_email",
+    "invalid_field",
+    "invalid_key",
+    "invalid_log",
+    "invalid_new_owner",
+    "invalid_pref",
+    "invalid_role",
+    "invalid_runner",
+    "invalid_space_ids",
+    "invalid_url",
+    "invalid_value",
+    "invite_email_mismatch",
+    "invite_email_taken",
+    "invite_expired",
+    "invite_invalid",
+    "invite_not_pending",
+    "invite_used",
+    "job_not_found",
+    "last_manager",
+    "live_descendant",
+    "lookup_failed",
+    "membership_removed",
+    "mention_ambiguous",
+    "mention_not_found",
+    "mint_replayed",
+    "module_not_imported",
+    "name_collision",
+    "newer_version",
+    "no_entries",
+    "no_manifest",
+    "no_personal_space",
+    "not_agents_owner",
+    "not_claimable",
+    "not_deletable",
+    "not_deleted",
+    "not_empty",
+    "not_found",
+    "not_movable",
+    "not_purgeable",
+    "not_referenced",
+    "not_zip",
+    "note_exists",
+    "nothing_to_change",
+    "only_tags_can_be_hidden",
+    "owner_cannot_be_removed",
+    "owner_only",
+    "owner_role_fixed",
+    "paper_tag_missing",
+    "parent_cycle",
+    "parent_in_other_space",
+    "parent_kind_mismatch",
+    "parent_not_a_note",
+    "parent_not_found",
+    "personal_space",
+    "plan_changed",
+    "preview_stale",
+    "principal_admin",
+    "prompt_too_long",
+    "rate_limited",
+    "reply_too_long",
+    "reserved_name",
+    "reserved_tag",
+    "restore_failed",
+    "restore_running",
+    "role_removed",
+    "same_space",
+    "session_ended",
+    "session_open",
+    "session_write_limit",
+    "sessions_off",
+    "site_access_required",
+    "skill_ambiguous",
+    "skill_not_found",
+    "space_not_found",
+    "space_unavailable",
+    "sub_tag_name_conflict",
+    "system_actor_in_use",
+    "system_actor_no_tokens",
+    "system_space",
+    "tag_name_conflict",
+    "tag_name_invalid",
+    "target_not_empty",
+    "task_is_a_line",
+    "title_too_long",
+    "token_cannot_create",
+    "token_scope",
+    "token_scope_removed",
+    "too_large",
+    "too_many_entries",
+    "too_many_ids",
+    "too_many_redirects",
+    "too_many_running",
+    "tool_not_allowed",
+    "unauthorized",
+    "unexpected_entry",
+    "unknown_agent",
+    "unknown_pref",
+    "unknown_tag",
+    "unknown_template",
+    "unknown_tool",
+    "unknown_tools",
+    "unsafe_entry",
+    "unsupported_image",
+    "upload_not_found",
+    "view_module_tag"
+  ],
+  "scenarios": [
+    {
+      "name": "canvas.create",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "New board",
+            "node_type": "canvas"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/canvases",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "New board"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/canvases",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "New board"
+          }
+        }
+      ]
+    },
+    {
+      "name": "canvas.place a note and move a card",
+      "expect": [
+        {
+          "board": "00000000-0000-4000-8000-000000000501",
+          "cards": [
+            {
+              "nodeId": "00000000-0000-4000-8000-000000000101",
+              "x": 100,
+              "y": 120
+            }
+          ]
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/boards/00000000-0000-4000-8000-000000000501",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "cards": {
+              "upsert": [
+                {
+                  "nodeId": "00000000-0000-4000-8000-000000000101",
+                  "x": 40,
+                  "y": 60,
+                  "width": 280
+                }
+              ]
+            }
+          }
+        },
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/boards/00000000-0000-4000-8000-000000000501",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "cards": {
+              "upsert": [
+                {
+                  "nodeId": "00000000-0000-4000-8000-000000000101",
+                  "x": 100,
+                  "y": 120,
+                  "width": 280
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/boards/00000000-0000-4000-8000-000000000501",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "cards": {
+              "upsert": [
+                {
+                  "nodeId": "00000000-0000-4000-8000-000000000101",
+                  "x": 40,
+                  "y": 60,
+                  "width": 280
+                }
+              ]
+            }
+          }
+        },
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/boards/00000000-0000-4000-8000-000000000501",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "cards": {
+              "upsert": [
+                {
+                  "nodeId": "00000000-0000-4000-8000-000000000101",
+                  "x": 100,
+                  "y": 120,
+                  "width": 280
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "graph.position drag",
+      "expect": [
+        {
+          "position": {
+            "node": "00000000-0000-4000-8000-000000000101",
+            "x": 120,
+            "y": 80
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/position",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "surface": "graph",
+            "x": 120,
+            "y": 80
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/position",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "surface": "graph",
+            "x": 120,
+            "y": 80
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.create: a saved AI answer (source_type ai)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000c03",
+          "fields": {
+            "title": "Saved answer",
+            "source_type": "ai"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000c03"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c03",
+            "title": "Saved answer",
+            "markdown": "answer\n",
+            "source_type": "ai",
+            "node_type": "content"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000000c03"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c03",
+            "title": "Saved answer",
+            "markdown": "answer\n",
+            "source_type": "ai",
+            "node_type": "content"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.create: plain (the writer mints the id)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "Fresh note",
+            "markdown": ""
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Fresh note",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Fresh note",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.create: quick capture (client id, parent)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000c01",
+          "fields": {
+            "title": "Captured thought",
+            "markdown": "remember this\n",
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000c01"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c01",
+            "title": "Captured thought",
+            "markdown": "remember this\n",
+            "source_type": "manual",
+            "node_type": "content",
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000000c01"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c01",
+            "title": "Captured thought",
+            "markdown": "remember this\n",
+            "source_type": "manual",
+            "node_type": "content",
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.create: with tags and starting attributes in one request",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000c02",
+          "fields": {
+            "title": "Book"
+          }
+        },
+        {
+          "tagged": {
+            "node": "00000000-0000-4000-8000-000000000c02",
+            "tag": "00000000-0000-4000-8000-000000000201"
+          },
+          "present": true
+        },
+        {
+          "attribute": {
+            "node": "00000000-0000-4000-8000-000000000c02",
+            "key": "author"
+          },
+          "value": "Ursula"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000000c02"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c02",
+            "title": "Book",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content",
+            "tag_ids": [
+              "00000000-0000-4000-8000-000000000201"
+            ],
+            "attributes": [
+              {
+                "key": "author",
+                "value": "Ursula",
+                "value_type": "text",
+                "is_inheritable": false
+              }
+            ]
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000000c02"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000000c02",
+            "title": "Book",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content",
+            "tag_ids": [
+              "00000000-0000-4000-8000-000000000201"
+            ],
+            "attributes": [
+              {
+                "key": "author",
+                "value": "Ursula",
+                "value_type": "text",
+                "is_inheritable": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.delete",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000102",
+          "deleted": true
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "note.duplicate",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "Alpha (Copy)",
+            "markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/duplicate",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/duplicate",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.move to top level",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000104",
+          "fields": {
+            "parent_id": null
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000104",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "parent_id": null
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000104",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "parent_id": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.move under a parent (assignToGroup)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000102",
+          "fields": {
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "parent_id": "00000000-0000-4000-8000-000000000103"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.patch sort_order",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000102",
+          "fields": {
+            "sort_order": 5
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "sort_order": 5
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "sort_order": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.promote (show a hidden note again)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000105",
+          "fields": {
+            "hidden": false
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000105/promote",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000105/promote",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "note.rename (title only)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "fields": {
+            "title": "Alpha renamed"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Alpha renamed"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Alpha renamed"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.save body when the server text moved on (three-way merge by base_markdown)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "contains": [
+            "line one",
+            "client edit",
+            "server edit"
+          ]
+        }
+      ],
+      "serverFirst": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "markdown": "server edit\nline one\nline two\nline three\n"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "markdown": "line one\nline two\nline three\nclient edit\n",
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "markdown": "line one\nline two\nline three\nclient edit\n",
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.save body with base_markdown and cursor (editor autosave)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "fields": {
+            "markdown": "line one\nline two edited\nline three\n"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "markdown": "line one\nline two edited\nline three\n",
+            "cursor_state": {
+              "anchor": 14,
+              "head": 14
+            },
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "markdown": "line one\nline two edited\nline three\n",
+            "cursor_state": {
+              "anchor": 14,
+              "head": 14
+            },
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.save title and body together",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "fields": {
+            "title": "Alpha 2",
+            "markdown": "new\n"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Alpha 2",
+            "markdown": "new\n",
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Alpha 2",
+            "markdown": "new\n",
+            "base_markdown": "line one\nline two\nline three\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "note.undelete (the Undo toast)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000106",
+          "deleted": false
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000106/undelete",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "property.remove",
+      "expect": [
+        {
+          "attribute": {
+            "node": "00000000-0000-4000-8000-000000000102",
+            "key": "status"
+          },
+          "value": null
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102/attributes/status",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102/attributes/status",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "property.set number inheritable",
+      "expect": [
+        {
+          "attribute": {
+            "node": "00000000-0000-4000-8000-000000000101",
+            "key": "rating"
+          },
+          "value": "4"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/attributes/rating",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "value": "4",
+            "value_type": "number",
+            "is_inheritable": true,
+            "client_updated_at": "2026-10-24T00:00:00.000Z"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/attributes/rating",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "value": "4",
+            "value_type": "number",
+            "is_inheritable": true,
+            "client_updated_at": "2026-10-24T00:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "property.set text",
+      "expect": [
+        {
+          "attribute": {
+            "node": "00000000-0000-4000-8000-000000000101",
+            "key": "status"
+          },
+          "value": "reading"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/attributes/status",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "value": "reading",
+            "value_type": "text",
+            "is_inheritable": false,
+            "client_updated_at": "2026-10-24T00:00:00.000Z"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/attributes/status",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "value": "reading",
+            "value_type": "text",
+            "is_inheritable": false,
+            "client_updated_at": "2026-10-24T00:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "relation.connect",
+      "expect": [
+        {
+          "edge": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "source_node_id": "00000000-0000-4000-8000-000000000101",
+            "target_node_id": "00000000-0000-4000-8000-000000000103",
+            "edge_type": "related"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/edges",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "source_node_id": "00000000-0000-4000-8000-000000000101",
+            "target_node_id": "00000000-0000-4000-8000-000000000103",
+            "edge_type": "related",
+            "status": "active"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/edges",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "source_node_id": "00000000-0000-4000-8000-000000000101",
+            "target_node_id": "00000000-0000-4000-8000-000000000103",
+            "edge_type": "related",
+            "status": "active"
+          }
+        }
+      ]
+    },
+    {
+      "name": "relation.remove",
+      "expect": [
+        {
+          "edge": "00000000-0000-4000-8000-000000000401",
+          "fields": null
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/edges/00000000-0000-4000-8000-000000000401",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "DELETE",
+          "path": "/api/edges/00000000-0000-4000-8000-000000000401",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "space.create",
+      "expect": [
+        {
+          "spaceByName": "Study group"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/spaces",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "name": "Study group"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "space.move a note into a space",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000101",
+          "fields": {
+            "space_id": "00000000-0000-4000-8000-000000000601"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/spaces/move",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "node_id": "00000000-0000-4000-8000-000000000101",
+            "to_space_id": "00000000-0000-4000-8000-000000000601",
+            "membership_epoch": "1"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "space.remove member",
+      "expect": [
+        {
+          "member": {
+            "space": "00000000-0000-4000-8000-000000000601",
+            "actor": "00000000-0000-4000-8000-000000000701"
+          },
+          "permission": null
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/spaces/00000000-0000-4000-8000-000000000601/members/00000000-0000-4000-8000-000000000701",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "space.rename and capabilities",
+      "expect": [
+        {
+          "space": "00000000-0000-4000-8000-000000000601",
+          "fields": {
+            "name": "Study group 2"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/spaces/00000000-0000-4000-8000-000000000601",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "name": "Study group 2",
+            "capabilities": {
+              "external_ai": false
+            }
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "space.set member permission (edit)",
+      "expect": [
+        {
+          "member": {
+            "space": "00000000-0000-4000-8000-000000000601",
+            "actor": "00000000-0000-4000-8000-000000000701"
+          },
+          "permission": "edit"
+        }
+      ],
+      "personPermission": "view",
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/spaces/00000000-0000-4000-8000-000000000601/members/00000000-0000-4000-8000-000000000701",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "permission": "edit"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "space.set member permission (view)",
+      "expect": [
+        {
+          "member": {
+            "space": "00000000-0000-4000-8000-000000000601",
+            "actor": "00000000-0000-4000-8000-000000000701"
+          },
+          "permission": "view"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/spaces/00000000-0000-4000-8000-000000000601/members/00000000-0000-4000-8000-000000000701",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "permission": "view"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "tag.apply to a note",
+      "expect": [
+        {
+          "tagged": {
+            "node": "00000000-0000-4000-8000-000000000101",
+            "tag": "00000000-0000-4000-8000-000000000201"
+          },
+          "present": true
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/tags/00000000-0000-4000-8000-000000000201",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {}
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/tags/00000000-0000-4000-8000-000000000201",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {}
+        }
+      ]
+    },
+    {
+      "name": "tag.create",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "inbox",
+            "node_type": "class_tag"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/tags",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "name": "inbox"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/tags",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "name": "inbox"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tag.extends config",
+      "expect": [
+        {
+          "extendsTags": {
+            "tag": "00000000-0000-4000-8000-000000000201",
+            "targets": [
+              "00000000-0000-4000-8000-000000000203"
+            ]
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/extends",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "extends": [
+              "00000000-0000-4000-8000-000000000203"
+            ]
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "tag.extract note from selection (create then tag)",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "Extracted"
+          }
+        },
+        {
+          "tagged": {
+            "node": "00000000-0000-4000-8000-000000010000",
+            "tag": "00000000-0000-4000-8000-000000000201"
+          },
+          "present": true
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Extracted",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content"
+          }
+        },
+        {
+          "via": "api",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000010000/tags/00000000-0000-4000-8000-000000000201",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010002"
+          },
+          "body": {}
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010001"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Extracted",
+            "markdown": "",
+            "source_type": "manual",
+            "node_type": "content"
+          }
+        },
+        {
+          "via": "queue",
+          "method": "PUT",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000010000/tags/00000000-0000-4000-8000-000000000201",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010002"
+          },
+          "body": {}
+        }
+      ]
+    },
+    {
+      "name": "tag.hide",
+      "expect": [
+        {
+          "node": "00000000-0000-4000-8000-000000000202",
+          "fields": {
+            "hidden": true
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000202",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "hidden": true
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000202",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "hidden": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "tag.remove from a note",
+      "expect": [
+        {
+          "tagged": {
+            "node": "00000000-0000-4000-8000-000000000102",
+            "tag": "00000000-0000-4000-8000-000000000202"
+          },
+          "present": false
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102/tags/00000000-0000-4000-8000-000000000202",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "DELETE",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000102/tags/00000000-0000-4000-8000-000000000202",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ]
+    },
+    {
+      "name": "tag.resolve-path (#a/b in quick capture)",
+      "expect": [
+        {
+          "tagPath": [
+            "area",
+            "reading"
+          ]
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/tags/resolve-path",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "path": "area/reading"
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "tag.schema patch (fields)",
+      "expect": [
+        {
+          "tagSchemaFields": {
+            "tag": "00000000-0000-4000-8000-000000000201",
+            "names": [
+              "status"
+            ]
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/schema",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "fields": [
+              {
+                "name": "status",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/schema",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "fields": [
+              {
+                "name": "status",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "task.complete",
+      "expect": [
+        {
+          "task": "00000000-0000-4000-8000-000000000301",
+          "fields": {
+            "status": "done"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/tasks/00000000-0000-4000-8000-000000000301",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "status": "done"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/tasks/00000000-0000-4000-8000-000000000301",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "status": "done"
+          }
+        }
+      ]
+    },
+    {
+      "name": "task.create with due date",
+      "expect": [
+        {
+          "task": "00000000-0000-4000-8000-000000010000",
+          "fields": {
+            "title": "Write report",
+            "due_date": "2026-11-01"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/tasks",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Write report",
+            "due_date": "2026-11-01"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "POST",
+          "path": "/api/nodes/00000000-0000-4000-8000-000000000101/tasks",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "id": "00000000-0000-4000-8000-000000010000",
+            "title": "Write report",
+            "due_date": "2026-11-01"
+          }
+        }
+      ]
+    },
+    {
+      "name": "task.edit title, due date, recurrence",
+      "expect": [
+        {
+          "task": "00000000-0000-4000-8000-000000000301",
+          "fields": {
+            "title": "Renamed task",
+            "due_date": "2026-12-24",
+            "recur": "1w"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/tasks/00000000-0000-4000-8000-000000000301",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Renamed task",
+            "due_date": "2026-12-24",
+            "recur": "1w"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/tasks/00000000-0000-4000-8000-000000000301",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "title": "Renamed task",
+            "due_date": "2026-12-24",
+            "recur": "1w"
+          }
+        }
+      ]
+    },
+    {
+      "name": "view.create on a tag",
+      "expect": [
+        {
+          "viewNamed": {
+            "owner": "00000000-0000-4000-8000-000000000201",
+            "name": "Board view"
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "POST",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/views",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "name": "Board view",
+            "layout": "table",
+            "visible_fields": [
+              "title"
+            ]
+          }
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "view.remove",
+      "expect": [
+        {
+          "view": {
+            "owner": "00000000-0000-4000-8000-000000000201",
+            "id": "00000000-0000-4000-8000-000000000801",
+            "fields": null
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "DELETE",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/views/00000000-0000-4000-8000-000000000801",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": null
+        }
+      ],
+      "queued": []
+    },
+    {
+      "name": "view.update (only the keys changed)",
+      "expect": [
+        {
+          "view": {
+            "owner": "00000000-0000-4000-8000-000000000201",
+            "id": "00000000-0000-4000-8000-000000000801",
+            "fields": {
+              "name": "Renamed view",
+              "layout": "table"
+            }
+          }
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/views/00000000-0000-4000-8000-000000000801",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "name": "Renamed view",
+            "layout": "table"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/tags/00000000-0000-4000-8000-000000000201/views/00000000-0000-4000-8000-000000000801",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "name": "Renamed view",
+            "layout": "table"
+          }
+        }
+      ]
+    },
+    {
+      "name": "workspace.home cleared",
+      "expect": [
+        {
+          "workspaceHome": null
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/workspace",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "home_node_id": null
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/workspace",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "home_node_id": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "workspace.home page",
+      "expect": [
+        {
+          "workspaceHome": "00000000-0000-4000-8000-000000000101"
+        }
+      ],
+      "online": [
+        {
+          "via": "api",
+          "method": "PATCH",
+          "path": "/api/workspace",
+          "headers": {
+            "idempotency-key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "home_node_id": "00000000-0000-4000-8000-000000000101"
+          }
+        }
+      ],
+      "queued": [
+        {
+          "via": "queue",
+          "method": "PATCH",
+          "path": "/api/workspace",
+          "headers": {
+            "Idempotency-Key": "00000000-0000-4000-8000-000000010000"
+          },
+          "body": {
+            "home_node_id": "00000000-0000-4000-8000-000000000101"
+          }
+        }
+      ]
+    }
+  ]
+}

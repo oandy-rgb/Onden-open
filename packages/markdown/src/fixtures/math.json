@@ -1,0 +1,192 @@
+[
+  {
+    "name": "the user's report",
+    "markdown": "$W_{new} = W + \\Lambda (C^{-1} k_{*})^T$，右邊那串是一個 Rank-1 矩陣… 其中$\\Lambda = \\frac{v_{*} - Wk_{*}}{\\ell \\cdot (C^{-1} k_{*})}$",
+    "math": [
+      "$W_{new} = W + \\Lambda (C^{-1} k_{*})^T$",
+      "$\\Lambda = \\frac{v_{*} - Wk_{*}}{\\ell \\cdot (C^{-1} k_{*})}$"
+    ]
+  },
+  {
+    "name": "underscores",
+    "markdown": "$a_1 + b_2$ and _em_ and $c_3$",
+    "math": [
+      "$a_1 + b_2$",
+      "$c_3$"
+    ]
+  },
+  {
+    "name": "asterisks inside, emphasis around",
+    "markdown": "*before $x*y*z$ after* done",
+    "math": [
+      "$x*y*z$"
+    ]
+  },
+  {
+    "name": "escaped braces",
+    "markdown": "$\\{a, b\\}$ and $\\{c\\}$",
+    "math": [
+      "$\\{a, b\\}$",
+      "$\\{c\\}$"
+    ]
+  },
+  {
+    "name": "dollar amounts (math on the published page too)",
+    "markdown": "It costs $5 and $10 today",
+    "math": [
+      "$5 and $"
+    ]
+  },
+  {
+    "name": "a lone dollar",
+    "markdown": "only $5 here",
+    "math": []
+  },
+  {
+    "name": "escaped dollars",
+    "markdown": "\\$5 and \\$10",
+    "math": []
+  },
+  {
+    "name": "escaped opening, real math after",
+    "markdown": "\\$5 then $x$",
+    "math": [
+      "$x$"
+    ]
+  },
+  {
+    "name": "inline code holding dollars",
+    "markdown": "`$a$` and `price $5`",
+    "math": []
+  },
+  {
+    "name": "code span between dollars",
+    "markdown": "$a `x` b$",
+    "math": [
+      "$a `x` b$"
+    ]
+  },
+  {
+    "name": "double-dollar inline",
+    "markdown": "see $$x^2$$ here",
+    "math": [
+      "$$x^2$$"
+    ]
+  },
+  {
+    "name": "triple run",
+    "markdown": "$$$a$$$",
+    "math": [
+      "$$$a$$$"
+    ]
+  },
+  {
+    "name": "unclosed run is skipped whole",
+    "markdown": "$$a$ b",
+    "math": []
+  },
+  {
+    "name": "different closing length",
+    "markdown": "$x$$y$",
+    "math": [
+      "$x$$y$"
+    ]
+  },
+  {
+    "name": "spaces inside are fine",
+    "markdown": "$ a $ and $b $",
+    "math": [
+      "$ a $",
+      "$b $"
+    ]
+  },
+  {
+    "name": "math across a soft line break",
+    "markdown": "start $a +\nb$ end",
+    "math": [
+      "$a +\nb$"
+    ]
+  },
+  {
+    "name": "not across a blank line",
+    "markdown": "$a\n\nb$",
+    "math": []
+  },
+  {
+    "name": "backslash before the closing dollar",
+    "markdown": "$a\\$b$",
+    "math": [
+      "$a\\$"
+    ]
+  },
+  {
+    "name": "block",
+    "markdown": "before\n\n$$\nx^2 + y_1\n$$\n\nafter",
+    "math": [
+      "$$\nx^2 + y_1\n$$"
+    ]
+  },
+  {
+    "name": "block with a meta word",
+    "markdown": "$$ latex\nx\n$$",
+    "math": [
+      "$$ latex\nx\n$$"
+    ]
+  },
+  {
+    "name": "block interrupts a paragraph",
+    "markdown": "line\n$$\nx\n$$\nnext",
+    "math": [
+      "$$\nx\n$$"
+    ]
+  },
+  {
+    "name": "block longer fence",
+    "markdown": "$$$\nx\n$$\n$$$",
+    "math": [
+      "$$$\nx\n$$\n$$$"
+    ]
+  },
+  {
+    "name": "block unclosed runs to the end",
+    "markdown": "$$\nx\ny",
+    "math": [
+      "$$\nx\ny"
+    ]
+  },
+  {
+    "name": "block with blank line inside",
+    "markdown": "$$\na\n\nb\n$$",
+    "math": [
+      "$$\na\n\nb\n$$"
+    ]
+  },
+  {
+    "name": "block in a quote",
+    "markdown": "> $$\n> x\n> $$",
+    "math": [
+      "$$\n> x\n> $$"
+    ]
+  },
+  {
+    "name": "block in a list item",
+    "markdown": "- $$\n  x\n  $$",
+    "math": [
+      "$$\n  x\n  $$"
+    ]
+  },
+  {
+    "name": "indent of four is not a block",
+    "markdown": "    $$\nx\n$$",
+    "math": [
+      "$$"
+    ]
+  },
+  {
+    "name": "emphasis markers in a block",
+    "markdown": "$$\n*a* _b_ `c`\n$$",
+    "math": [
+      "$$\n*a* _b_ `c`\n$$"
+    ]
+  }
+]

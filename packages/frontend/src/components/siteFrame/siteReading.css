@@ -1,0 +1,7 @@
+/* Reading time under the title, and the sentence under each "Linked from" entry. */
+.s-article__meta { margin: 0; display: flex; flex-wrap: wrap; gap: 0 0.8em; }
+
+.s-backlinks li { margin-block: 0.15em 0.6em; }
+.s-backlinks__context { margin: 0.15em 0 0; font-size: 0.85em; color: var(--f-muted); line-height: 1.6; }
+.s-backlinks__context mark { background: color-mix(in srgb, var(--s-accent) 22%, transparent); color: var(--f-fg); border-radius: 2px; padding: 0 0.1em; }
+

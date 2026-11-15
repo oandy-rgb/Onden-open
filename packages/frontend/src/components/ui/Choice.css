@@ -1,0 +1,30 @@
+/* ChoiceCards, Segmented, PreviewBlock (components/ui/Choice.tsx). */
+.ui-choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 10px; }
+.ui-choice-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0;
+  font-size: var(--ac-fs-caption); color: var(--ac-muted);
+}
+.ui-choice-sample {
+  display: flex; align-items: center; justify-content: center; overflow: hidden; width: 100%; min-height: 52px;
+  border: 2px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-bg); color: var(--ac-ink);
+  font-size: var(--ac-fs-lg); line-height: 1.2; font-family: var(--choice-sample-font, inherit);
+}
+.ui-choice-card[aria-checked="true"] { color: var(--ac-ink); font-weight: 600; }
+.ui-choice-card[aria-checked="true"] .ui-choice-sample { border-color: var(--ac-accent); }
+.ui-choice-label { text-align: center; }
+
+.ui-segmented {
+  display: flex; padding: 2px; gap: 2px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface);
+}
+.ui-segment {
+  flex: 1; min-width: 0; min-height: 32px; padding: 4px 10px; border-radius: var(--ac-radius-md);
+  text-align: center; font-size: var(--ac-fs-small); color: var(--ac-muted);
+}
+.ui-segment--icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 30px; padding: 0; }
+.ui-segment[aria-checked="true"] { background: var(--ac-bg); color: var(--ac-ink); font-weight: 600; }
+
+.ui-preview-block {
+  position: relative; padding: 16px; overflow: hidden;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-bg); color: var(--ac-ink);
+}
+@media (max-width: 600px) { .ui-segment { min-height: 44px; } }

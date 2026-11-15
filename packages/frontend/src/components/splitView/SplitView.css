@@ -1,0 +1,88 @@
+/* Side by side (components/splitView). Two sides, never three: the left is the
+   workspace as ever, the right a pane. The split lives in --split-ratio. */
+.split-root { display: flex; position: relative; min-width: 0; }
+.split-left { flex: 0 0 calc(var(--split-ratio, 0.5) * 100%); min-width: 0; max-width: calc(var(--split-ratio, 0.5) * 100%); }
+.split-left > .workspace-grid { max-width: 100%; }
+.split-divider {
+  flex: none;
+  width: 6px;
+  margin-inline: -3px;
+  z-index: var(--z-local-2);
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+.split-divider:hover, .split-divider:focus-visible { background: var(--ac-accent-soft); }
+
+.split-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--ac-line);
+  background: var(--ac-bg);
+  container-type: inline-size;
+}
+/* Side by side on a computer the fixed top bar (48px, global.css .app-topbar)
+   spans the whole window, so the right side starts under it; otherwise the bar
+   covers the side's name and buttons. */
+.split-root--on > .split-pane { top: 48px; margin-top: 48px; height: calc(100dvh - 48px); }
+.split-pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--ac-topbar-h);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.split-pane-name { font-weight: var(--ac-fw-medium); cursor: grab; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-pane-spacer { flex: 1; }
+.split-pane-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 14px 12px; }
+/* The note page's column (obsidian-main note-document) inside the pane: its type and measure,
+   but the pane body is what scrolls. */
+.split-pane-body > .split-pane-text { height: auto; overflow: visible; padding-top: 8px; padding-bottom: 16px; }
+/* A fill pane (the 「手寫」 tab) takes the body's height; the body still scrolls when the pane is at its minimum. */
+.split-pane-body > .view-pane-fill { height: 100%; box-sizing: border-box; }
+.split-quick { display: flex; gap: 6px; position: sticky; bottom: 0; padding: 8px 0; background: var(--ac-bg); }
+.split-quick-input { flex: 1; min-width: 0; }
+
+/* The landing shown while something is dragged over the right half. */
+.split-drop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  z-index: var(--z-local-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--ac-accent);
+  background: color-mix(in srgb, var(--ac-accent) 14%, transparent);
+  color: var(--ac-accent);
+  font-weight: var(--ac-fw-medium);
+  opacity: 0.55;
+}
+.split-drop--right { right: 0; }
+.split-drop--left { left: 0; }
+.split-drop[data-active] { opacity: 1; }
+
+.split-quote {
+  position: absolute;
+  z-index: var(--z-local-6);
+  left: var(--split-quote-x);
+  top: var(--split-quote-y);
+  box-shadow: var(--ac-shadow-float);
+}
+
+/* Not split: the wrapper adds no box. */
+.split-root:not(.split-root--on) > .split-left { display: contents; }
+/* …so the workspace is then a flex item of .split-root and must take the full
+   width itself: sized to its content, a screen whose width follows its box
+   (the graph's canvas) kept the narrow width it was given on the way in. */
+.split-root:not(.split-root--on) > .split-left > .workspace-grid { flex: 1 1 0; min-width: 0; }

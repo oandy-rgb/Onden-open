@@ -1,0 +1,33 @@
+/* Match the selected app/site theme, not the operating system. The default
+ * GitHub light palette otherwise paints nearly black code on dark note pages. */
+:root[data-theme="dark"], .site-dark {
+  --code-text: #e6edf3;
+  --code-bg: #24201a;
+  --code-keyword: #ff8e86;
+  --code-title: #d2a8ff;
+  --code-constant: #79c0ff;
+  --code-string: #a5d6ff;
+  --code-builtin: #ffa657;
+  --code-comment: #a6afa9;
+  --code-tag: #8ddb8c;
+  --code-bullet: #e3c56b;
+  --code-addition-bg: #203728;
+  --code-deletion: #ffa198;
+  --code-deletion-bg: #442927;
+}
+
+.hljs { color: var(--code-text, #24292e); background: var(--code-bg, #fff); }
+.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag,
+.hljs-template-variable, .hljs-type, .hljs-variable.language_ { color: var(--code-keyword, #d73a49); }
+.hljs-title, .hljs-title.class_, .hljs-title.class_.inherited__, .hljs-title.function_ { color: var(--code-title, #6f42c1); }
+.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator,
+.hljs-variable, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id,
+.hljs-section { color: var(--code-constant, #005cc5); }
+.hljs-regexp, .hljs-string, .hljs-meta .hljs-string { color: var(--code-string, #032f62); }
+.hljs-built_in, .hljs-symbol { color: var(--code-builtin, #e36209); }
+.hljs-comment, .hljs-code, .hljs-formula { color: var(--code-comment, #6a737d); }
+.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo { color: var(--code-tag, #22863a); }
+.hljs-subst, .hljs-emphasis, .hljs-strong { color: var(--code-text, #24292e); }
+.hljs-bullet { color: var(--code-bullet, #735c0f); }
+.hljs-addition { color: var(--code-tag, #22863a); background: var(--code-addition-bg, #f0fff4); }
+.hljs-deletion { color: var(--code-deletion, #b31d28); background: var(--code-deletion-bg, #ffeef0); }

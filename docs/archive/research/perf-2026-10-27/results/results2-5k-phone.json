@@ -1,0 +1,347 @@
+[
+ {
+  "tier": "5k",
+  "device": "phone",
+  "run": 1,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 553
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 810
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 45,
+   "p95Ms": 61,
+   "maxMs": 63,
+   "eventTimingOver16": 218,
+   "eventTimingMaxMs": 72,
+   "lt": {
+    "n": 1,
+    "sum": 51,
+    "max": 51
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1146,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 9,
+    "sum": 1653,
+    "max": 369
+   },
+   "paneDrag": {
+    "frames": 335,
+    "avgFps": 24,
+    "p95FrameMs": 66.6,
+    "maxFrameMs": 533.4,
+    "over50": 24
+   },
+   "cardDrag": {
+    "frames": 282,
+    "avgFps": 42,
+    "p95FrameMs": 50,
+    "maxFrameMs": 449.9,
+    "over50": 8
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2112,
+   "scroll": {
+    "frames": 74,
+    "avgFps": 25,
+    "p95FrameMs": 100,
+    "maxFrameMs": 133.3,
+    "over50": 12,
+    "canvasesAfter": 9,
+    "scrolledPx": 3000
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "5k",
+  "device": "phone",
+  "run": 2,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 766
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 794
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 42,
+   "p95Ms": 58,
+   "maxMs": 79,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 80,
+   "lt": {
+    "n": 1,
+    "sum": 64,
+    "max": 64
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 2068,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 12,
+    "sum": 2197,
+    "max": 580
+   },
+   "paneDrag": {
+    "frames": 355,
+    "avgFps": 23,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 650,
+    "over50": 36
+   },
+   "cardDrag": {
+    "frames": 277,
+    "avgFps": 38,
+    "p95FrameMs": 50.1,
+    "maxFrameMs": 483.4,
+    "over50": 14
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1945,
+   "scroll": {
+    "frames": 78,
+    "avgFps": 26,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 17,
+    "canvasesAfter": 9,
+    "scrolledPx": 3160
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "5k",
+  "device": "phone",
+  "run": 3,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 532
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 752
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 36,
+   "p95Ms": 59,
+   "maxMs": 62,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 64,
+   "lt": {
+    "n": 1,
+    "sum": 51,
+    "max": 51
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 882,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 10,
+    "sum": 1774,
+    "max": 408
+   },
+   "paneDrag": {
+    "frames": 352,
+    "avgFps": 23,
+    "p95FrameMs": 100,
+    "maxFrameMs": 533.3,
+    "over50": 45
+   },
+   "cardDrag": {
+    "frames": 296,
+    "avgFps": 35,
+    "p95FrameMs": 66.7,
+    "maxFrameMs": 833.3,
+    "over50": 30
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1971,
+   "scroll": {
+    "frames": 76,
+    "avgFps": 25,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 14,
+    "canvasesAfter": 9,
+    "scrolledPx": 3080
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "5k",
+  "device": "phone",
+  "run": 4,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 643
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 769
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 39,
+   "p95Ms": 66,
+   "maxMs": 92,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 96,
+   "lt": {
+    "n": 3,
+    "sum": 192,
+    "max": 73
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 1999,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 10,
+    "sum": 1848,
+    "max": 429
+   },
+   "paneDrag": {
+    "frames": 348,
+    "avgFps": 26,
+    "p95FrameMs": 83.3,
+    "maxFrameMs": 400,
+    "over50": 25
+   },
+   "cardDrag": {
+    "frames": 299,
+    "avgFps": 29,
+    "p95FrameMs": 83.3,
+    "maxFrameMs": 700,
+    "over50": 47
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 1797,
+   "scroll": {
+    "frames": 76,
+    "avgFps": 25,
+    "p95FrameMs": 100,
+    "maxFrameMs": 150,
+    "over50": 15,
+    "canvasesAfter": 9,
+    "scrolledPx": 3080
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ },
+ {
+  "tier": "5k",
+  "device": "phone",
+  "run": 5,
+  "expandAll": {
+   "error": "Error: phone: the sidebar 展開 button is not in the phone layout (not measured)"
+  },
+  "switchShort": [
+   {
+    "title": "效能短筆記",
+    "ms": 443
+   },
+   {
+    "title": "效能長筆記",
+    "ms": 698
+   }
+  ],
+  "typing5k": {
+   "n": 54,
+   "keyToFrameMedianMs": 42,
+   "p95Ms": 68,
+   "maxMs": 84,
+   "eventTimingOver16": 217,
+   "eventTimingMaxMs": 80,
+   "lt": {
+    "n": 2,
+    "sum": 113,
+    "max": 57
+   }
+  },
+  "whiteboard": {
+   "tabToCardsMs": 825,
+   "nodesInDom": 200,
+   "lt": {
+    "n": 9,
+    "sum": 1441,
+    "max": 349
+   },
+   "paneDrag": {
+    "frames": 348,
+    "avgFps": 34,
+    "p95FrameMs": 50,
+    "maxFrameMs": 483.3,
+    "over50": 13
+   },
+   "cardDrag": {
+    "frames": 238,
+    "avgFps": 52,
+    "p95FrameMs": 33.3,
+    "maxFrameMs": 66.7,
+    "over50": 3
+   }
+  },
+  "pdf": {
+   "openToFirstPageMs": 2072,
+   "scroll": {
+    "frames": 77,
+    "avgFps": 26,
+    "p95FrameMs": 100,
+    "maxFrameMs": 116.7,
+    "over50": 14,
+    "canvasesAfter": 9,
+    "scrolledPx": 3120
+   }
+  },
+  "history": {
+   "error": "Error: phone: history entry not scripted"
+  }
+ }
+]

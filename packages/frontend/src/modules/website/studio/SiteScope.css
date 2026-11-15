@@ -1,0 +1,12 @@
+/* The page behind the site's own styles (@onden/site siteParts.css sets only
+   type and layout): the colours are the design's own, computed (styleVars), the
+   same as the published page, whatever the app's theme is. */
+.hs-paper {
+  background: var(--s-bg);
+  color: var(--s-text);
+  box-sizing: border-box;
+  padding: 24px 28px;
+  min-height: 100%;
+}
+.hs-paper a { color: inherit; text-decoration-color: var(--s-accent); text-underline-offset: 0.2em; }
+.hs-paper a:hover { color: var(--s-link); }

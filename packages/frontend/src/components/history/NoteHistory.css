@@ -1,0 +1,163 @@
+/* NoteHistory — a note's history as a time slider. Mobile first; from 900px the
+   "All versions" list sits beside the note instead of over it. */
+.ui-modal.nh-backdrop { padding: 0; }
+.nh {
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  width: min(1100px, 100vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+}
+@media (min-width: 900px) {
+  .ui-modal.nh-backdrop { padding: 3vh 3vw; }
+  .nh { height: min(92vh, 960px); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); box-shadow: var(--shadow); }
+}
+
+.nh-top { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-bottom: 1px solid var(--ac-line); }
+.nh-top-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nh-top-title small { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.nh-top-title strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nh-icon {
+  min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: transparent; color: inherit; border-radius: var(--ac-radius-md); cursor: pointer;
+}
+.nh-icon:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+@media (min-width: 900px) { .nh-all-btn { display: none; } }
+
+.nh-status { padding: 12px 16px 8px; }
+.nh-status-main { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.nh-status h2 { margin: 0; font-size: var(--ac-fs-h3); font-weight: 600; }
+.nh-status-sub { margin: 2px 0 0; font-size: var(--ac-fs-small); color: var(--ac-muted); min-height: 1.4em; }
+.nh-author { font-size: var(--ac-fs-caption); padding: 1px 8px; border-radius: var(--ac-radius-full); background: var(--ac-overlay-subtle); }
+.nh-author--agent { background: color-mix(in srgb, var(--ac-info) 18%, transparent); color: var(--ac-info); }
+.nh-author--system { color: var(--ac-muted); }
+
+.nh-body { flex: 1; min-height: 0; position: relative; display: flex; }
+.nh-paper { flex: 1; min-width: 0; overflow-y: auto; padding: 8px 16px 16px; }
+.nh-loading, .nh-empty, .nh-muted { color: var(--ac-muted); }
+.nh-p { border-radius: var(--ac-radius-md); padding: 2px 8px; margin: 2px -8px; }
+.nh-p > article { margin: 0; }
+/* The note preview brings the full page's box (min-height ~520px, 26–70px padding,
+   its own scroll). Here it shows one paragraph, so it is just text. */
+.nh .obsidian-preview { flex: none; min-height: 0; padding: 0; overflow: visible; }
+.nh .obsidian-preview > :last-child { margin-bottom: 0; }
+.nh-p--pick { cursor: pointer; }
+.nh-p--pick:hover, .nh-p--pick:focus-visible { outline: 1px solid var(--ac-line); }
+.nh-p--open { outline: 2px solid var(--ac-accent); }
+.nh-p--added { background: color-mix(in srgb, var(--ac-success) 16%, transparent); }
+.nh-p--changed { background: color-mix(in srgb, var(--ac-warning) 18%, transparent); }
+.nh-p--removed { color: var(--ac-muted); text-decoration: line-through; background: var(--ac-overlay-subtle); }
+.nh-p--removed * { color: inherit; }
+.nh-p-old { display: block; font-size: var(--ac-fs-caption); color: var(--ac-muted); white-space: pre-wrap; }
+
+/* Narrow: a sheet over the note, opened by the top-right button. Wide: always beside it. */
+.nh-versions {
+  display: none;
+  position: absolute; inset: 0 0 0 auto; width: min(360px, 100%); background: var(--ac-surface);
+  border-left: 1px solid var(--ac-line); overflow-y: auto; z-index: var(--z-local-2); box-shadow: var(--shadow);
+}
+@media (min-width: 900px) { .nh-versions { display: block; position: static; width: 320px; flex: none; box-shadow: none; } }
+.nh-versions--open { display: block; }
+.nh-versions-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 4px 16px; }
+.nh-versions ol { list-style: none; margin: 0; padding: 0 8px 8px; display: grid; gap: 4px; }
+.nh-row {
+  width: 100%; min-height: 44px; text-align: left; display: grid; gap: 2px; padding: 8px 10px;
+  border: 1px solid transparent; border-radius: var(--ac-radius-md); background: transparent; color: inherit; cursor: pointer;
+}
+.nh-row:hover { background: var(--ac-overlay-hover); }
+.nh-row--current { border-color: var(--ac-accent); }
+.nh-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nh-row-sub { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.nh-pill { font-size: var(--ac-fs-caption); padding: 0 8px; border-radius: var(--ac-radius-full); border: 1px solid var(--ac-line); background: var(--ac-surface); white-space: nowrap; }
+
+.nh-bottom { border-top: 1px solid var(--ac-line); padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 8px; background: var(--ac-surface); }
+.nh-notice { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px; border-radius: var(--ac-radius-md); background: var(--ac-success-soft); }
+.nh-notice span { flex: 1; }
+.nh-notice > button:not(.nh-icon) { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--ac-accent-hover); font-weight: 600; cursor: pointer; }
+.nh-take { display: grid; gap: 8px; max-height: 40dvh; overflow-y: auto; padding: 10px 12px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
+.nh-take-pair { display: grid; gap: 8px; }
+@media (min-width: 600px) { .nh-take-pair { grid-template-columns: 1fr 1fr; } }
+.nh-take-then, .nh-take-now { padding: 6px 10px; border-radius: var(--ac-radius-md); }
+.nh-take-then { background: color-mix(in srgb, var(--ac-success) 16%, transparent); }
+.nh-take-now { background: var(--ac-overlay-subtle); }
+.nh-take small { display: block; color: var(--ac-muted); }
+.nh-take-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.nh-scrub { display: grid; gap: 2px; }
+.nh-markers { position: relative; height: 24px; }
+/* --at is the stop's place along the slider, set per element. */
+.nh-pill--float { position: absolute; left: var(--at); top: 0; transform: translateX(-50%); }
+/* The slider draws its own rail so the dots sit on it. Its 44px-tall track takes the pointer; the rail is
+   inset by half that, so the thumb stays inside at both ends. */
+.nh-slider { display: grid; }
+.nh-track { position: relative; height: 44px; padding: 0 22px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; border-radius: var(--ac-radius-md); outline: none; }
+.nh-track[aria-disabled="true"] { cursor: default; opacity: 0.6; }
+.nh-track:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+.nh-rail { position: relative; height: 100%; }
+.nh-rail-line, .nh-rail-fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: var(--ac-radius-full); }
+.nh-rail-line { right: 0; background: var(--ac-line); }
+.nh-rail-fill { width: var(--at); background: var(--ac-accent); }
+.nh-ticks { position: absolute; inset: 0; pointer-events: none; }
+.nh-tick { position: absolute; left: var(--at); top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: var(--ac-radius-full); background: var(--ac-surface); border: 1.5px solid var(--ac-muted); box-sizing: border-box; }
+.nh-tick--passed { border-color: var(--ac-accent); background: var(--ac-accent); }
+.nh-tick--agent { border-color: var(--ac-info); background: var(--ac-info); }
+.nh-tick--now { width: 10px; height: 10px; margin: -5px 0 0 -5px; border-color: var(--ac-accent); }
+.nh-tick--current { width: 12px; height: 12px; margin: -6px 0 0 -6px; box-shadow: var(--ac-ring-wide); }
+.nh-tick--thin:not(.nh-tick--current):not(.nh-tick--now) { width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-width: 0; background: var(--ac-muted); opacity: 0.45; }
+.nh-tick--thin.nh-tick--passed:not(.nh-tick--current):not(.nh-tick--now) { background: var(--ac-surface); opacity: 0.7; }
+.nh-tick--thin.nh-tick--agent:not(.nh-tick--current):not(.nh-tick--now) { background: var(--ac-info); opacity: 0.8; }
+.nh-thumb { position: absolute; left: var(--at); top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: var(--ac-radius-full); background: var(--ac-accent); border: 3px solid var(--ac-surface); box-shadow: var(--ac-shadow-thumb); pointer-events: none; }
+/* The thumb settles on its version after a drag, and glides on a key press; while dragging it follows the pointer exactly. */
+@media (prefers-reduced-motion: no-preference) {
+  .nh-thumb, .nh-rail-fill { transition: left 150ms ease-out, width 150ms ease-out; }
+  .nh-label { transition: left 150ms ease-out; }
+  .nh-slider[data-dragging] .nh-thumb, .nh-slider[data-dragging] .nh-rail-fill, .nh-slider[data-dragging] .nh-label { transition: none; }
+}
+/* The time over the thumb's place, kept inside the slider at both ends (half the label is 56px). */
+.nh-label-lane { position: relative; height: 24px; margin: 0 22px; }
+.nh-label {
+  position: absolute; top: 0; left: clamp(56px, var(--at), calc(100% - 56px)); transform: translateX(-50%);
+  width: 112px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--ac-fs-caption); font-weight: 600; line-height: 22px; border-radius: var(--ac-radius-full);
+  background: var(--ac-surface); color: inherit; border: 1px solid var(--ac-accent); box-sizing: border-box;
+}
+.nh-ends { padding: 0 2px; display: flex; justify-content: space-between; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.nh-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nh-actions .ui-btn { min-height: 44px; }
+.nh-hold {
+  min-height: 44px; padding: 0 14px; border-radius: var(--ac-radius-md); border: 1px solid var(--ac-line);
+  background: var(--ac-surface); color: inherit; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; margin-right: auto;
+}
+.nh-hold:active:not(:disabled) { background: var(--ac-overlay-subtle); border-color: var(--ac-accent); }
+.nh-hold:disabled { opacity: 0.5; cursor: default; }
+.nh-now-note { margin: 0; color: var(--ac-muted); }
+@media (min-width: 900px) { .nh-versions-head .nh-icon { display: none; } }
+
+/* Inline: the screen sits in the history page's right column, so it fills that column and the
+   version list is always the sheet over the note (the column is too narrow to share). */
+.nh.nh--inline { width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.nh--inline .nh-bottom { padding-bottom: 12px; }
+.nh--inline .nh-versions { display: none; position: absolute; inset: 0 0 0 auto; width: min(360px, 100%); box-shadow: var(--shadow); }
+.nh--inline .nh-versions--open { display: block; }
+.nh--inline .nh-all-btn { display: inline-flex; }
+.nh--inline .nh-versions-head .nh-icon { display: inline-flex; }
+.nh-open {
+  min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: inherit; cursor: pointer;
+}
+.nh-open:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.nh-open:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+@media (pointer: fine) { .nh-open { min-height: 36px; } }
+
+.nh-ink { padding: 8px 8px 12px; border-top: 1px solid var(--ac-line); }
+.nh-ink > strong { display: block; padding: 4px 8px; }
+.nh-ink ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.nh-ink li { display: grid; gap: 2px; padding: 4px 10px; }
+.nh-ink .ink-change { padding: 0; }
+.nh-ink .nh-ink-restore { justify-self: start; background: none; border: 0; padding: 0; color: var(--ac-accent); text-decoration: underline; cursor: pointer; font: inherit; font-size: var(--ac-fs-xs); min-height: 44px; }
+.nh-ink .nh-ink-restore:disabled { color: var(--ac-muted); cursor: default; }

@@ -1,0 +1,44 @@
+---
+export const prerender = false;
+
+import SiteLayout from "../../components/SiteLayout.astro";
+import SiteHead from "../../components/SiteHead.astro";
+import { HomeBody } from "../../components/siteFrame";
+import { loadAllEnhancers, type SiteHeadSite } from "@onden/markdown";
+import { loadSite } from "./_siteLoad";
+import { siteName } from "../../lib/siteName";
+import { publicUrl } from "../../lib/siteOrigin";
+import { makeT } from "../../components/templates";
+import "../../styles/global.css";
+
+// The note renderer colours code and typesets math with pieces it loads on
+// demand; a server render can't wait, so it has them all first (MarkdownRenderer).
+await loadAllEnhancers();
+
+const loaded = await loadSite();
+if (loaded.kind === "error") Astro.response.status = 503;
+const t = makeT();
+---
+
+{loaded.kind === "ok" ? (
+  <SiteLayout
+    data={loaded.data}
+    pageTitle={siteName(loaded.data.site.brand, loaded.data.title)}
+    canonical={publicUrl(Astro.url, "/site/")}
+    variant="index"
+  >
+    <HomeBody data={loaded.data} />
+  </SiteLayout>
+) : (
+  <html class="onden-site" lang="zh-TW">
+    <head>
+      <SiteHead site={{} as SiteHeadSite} pageTitle="Onden" canonical={publicUrl(Astro.url, "/site/")} variant="index" />
+    </head>
+    <body>
+      <main style="padding:4rem 2rem;font-family:system-ui">
+        <h1>{t("siteUnavailable")}</h1>
+        <p>{t("siteUnavailableLead")}</p>
+      </main>
+    </body>
+  </html>
+)}

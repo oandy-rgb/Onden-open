@@ -1,0 +1,15 @@
+{
+  // Production emit (npm run build, the Docker image). Extends the typecheck
+  // config but DROPS the test tree: tests must not land in dist, and — the
+  // forcing reason this file exists — readGuard.test.ts imports the lint rule
+  // at ../../eslint-rules, which the Dockerfile deliberately does NOT copy into
+  // the build stage. Compiling tests there broke `docker compose build backend`.
+  // The CI typecheck lane still runs `tsc --noEmit` over the base config, so
+  // test files stay fully type-checked.
+  "extends": "./tsconfig.json",
+  // The production emit must not compile @onden/markdown's sources into
+  // dist/ (that would move dist/index.js): it reads the package's built
+  // declarations; the Dockerfile builds the package first.
+  "compilerOptions": { "paths": { "@onden/markdown": ["../markdown/dist/index.d.ts"], "@onden/markdown/block-id": ["../markdown/dist/blockId.d.ts"], "@onden/site": ["../site/dist/index.d.ts"], "@onden/contract": ["../contract/dist/index.d.ts"] } },
+  "exclude": ["src/test/**", "src/**/*.test.ts", "src/**/*.spec.ts"]
+}

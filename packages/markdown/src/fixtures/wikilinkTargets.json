@@ -1,0 +1,238 @@
+{
+ "_": "Which note a [[link]] names. Shared by the SQL rule (backend wikilinkEdges.ts linkMatchesNodeSql), the app's resolveWikilink and the site's servedLinkTarget. `reaches`: every note the link is an edge to (never the source itself); `opens`: the one note a click opens (the first in `notes` order, the source itself last), null if none. `site: false`: the case needs the workspace-wide rules (tags, other spaces), which one served site does not have.",
+ "notes": [
+  {
+   "id": "src",
+   "title": "Source",
+   "slug": "source",
+   "space": "s1"
+  },
+  {
+   "id": "alpha",
+   "title": "Alpha Note",
+   "slug": "alpha-note",
+   "space": "s1",
+   "aliases": [
+    "Ay",
+    "First Letter"
+   ]
+  },
+  {
+   "id": "alphaOtherSpace",
+   "title": "Alpha Note",
+   "slug": "alpha-note",
+   "space": "s2"
+  },
+  {
+   "id": "srcOtherSpace",
+   "title": "Source Two",
+   "slug": "source-two",
+   "space": "s2"
+  },
+  {
+   "id": "beta",
+   "title": "Beta",
+   "slug": "beta",
+   "space": "s1"
+  },
+  {
+   "id": "betaTwin",
+   "title": "BETA",
+   "slug": "beta-twin",
+   "space": "s1"
+  },
+  {
+   "id": "cafe",
+   "title": "Café",
+   "slug": "cafe",
+   "space": "s1"
+  },
+  {
+   "id": "sketch",
+   "title": "Sketch",
+   "slug": "sketch",
+   "space": "s1"
+  },
+  {
+   "id": "gone",
+   "title": "Gone",
+   "slug": "gone",
+   "space": "s1",
+   "deleted": true
+  },
+  {
+   "id": "project",
+   "title": "Project",
+   "slug": "project",
+   "space": "s2",
+   "type": "class_tag"
+  }
+ ],
+ "cases": [
+  {
+   "name": "title",
+   "from": "src",
+   "link": "Alpha Note",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "title is case-insensitive",
+   "from": "src",
+   "link": "alpha NOTE",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "surrounding blanks",
+   "from": "src",
+   "link": "  Alpha Note  ",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "slug",
+   "from": "src",
+   "link": "alpha-note",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "alias",
+   "from": "src",
+   "link": "Ay",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "alias is case-insensitive",
+   "from": "src",
+   "link": "first LETTER",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "|label dropped",
+   "from": "src",
+   "link": "Alpha Note|the first one",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "#heading dropped",
+   "from": "src",
+   "link": "Alpha Note#Heading",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "#^block id dropped",
+   "from": "src",
+   "link": "Alpha Note#^abc-123",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "alias with heading and label",
+   "from": "src",
+   "link": "Ay#Heading|shown",
+   "reaches": [
+    "alpha"
+   ],
+   "opens": "alpha"
+  },
+  {
+   "name": "same-page anchor names nothing",
+   "from": "src",
+   "link": "#Heading",
+   "reaches": [],
+   "opens": null
+  },
+  {
+   "name": "unknown name",
+   "from": "src",
+   "link": "No such note",
+   "reaches": [],
+   "opens": null
+  },
+  {
+   "name": "two notes share a name: all linked, first opens",
+   "from": "src",
+   "link": "Beta",
+   "reaches": [
+    "beta",
+    "betaTwin"
+   ],
+   "opens": "beta"
+  },
+  {
+   "name": "name decomposed (NFD) matches composed title",
+   "from": "src",
+   "link": "Café",
+   "reaches": [
+    "cafe"
+   ],
+   "opens": "cafe"
+  },
+  {
+   "name": "Obsidian drawing link names the drawing",
+   "from": "src",
+   "link": "sketch.excalidraw",
+   "reaches": [
+    "sketch"
+   ],
+   "opens": "sketch"
+  },
+  {
+   "name": "a trashed note is not named",
+   "from": "src",
+   "link": "Gone",
+   "reaches": [],
+   "opens": null
+  },
+  {
+   "name": "a note's own title: no edge, but it opens itself",
+   "from": "src",
+   "link": "Source",
+   "reaches": [],
+   "opens": "src"
+  },
+  {
+   "name": "another space's note is not named",
+   "from": "srcOtherSpace",
+   "link": "Alpha Note",
+   "reaches": [
+    "alphaOtherSpace"
+   ],
+   "opens": "alphaOtherSpace"
+  },
+  {
+   "name": "a tag is global",
+   "from": "src",
+   "link": "Project",
+   "reaches": [
+    "project"
+   ],
+   "opens": "project",
+   "site": false
+  }
+ ]
+}

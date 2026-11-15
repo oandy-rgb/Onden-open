@@ -1,0 +1,489 @@
+/* Card-node visual shell — the bordered editor/preview card rendered
+ * inside Knowledge Workspace + Canvas Mode for every content node.
+ *
+ * Includes the card chrome (.card-node, header/title/body), modal popups
+ * (.card-bubble-menu, .card-slash-menu), and BEM modifiers (--selected,
+ * --editing, --section-hidden, --hidden, --note).
+ *
+ * Extracted from global.css 2026-06-04 (Pass 3 / batch 7.2).
+ * Consumer: CardNode.tsx.
+ */
+
+.card-node-subcanvas-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  color: var(--ac-muted);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.card-node-subcanvas-btn:hover {
+  color: var(--ac-accent);
+  border-color: color-mix(in srgb, var(--ac-accent) 50%, var(--ac-line));
+  background: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+}
+.card-node-subcanvas-btn--open {
+  color: var(--ac-accent);
+  border-color: color-mix(in srgb, var(--ac-accent) 35%, var(--ac-line));
+  background: color-mix(in srgb, var(--ac-accent) 10%, transparent);
+}
+.card-node {
+  /* Subtle full-card tint: status color mixed ~8% against the surface so the
+     whole card reads as colored, not just a top rail. */
+  background: color-mix(in srgb, var(--card-status-color, var(--ac-muted)) 8%, var(--ac-surface));
+  border: 1.5px solid var(--ac-line);
+  border-top: 4px solid var(--card-status-color, var(--ac-muted));
+  border-radius: var(--ac-radius-md);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--ac-shadow-float);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s, opacity 0.15s;
+  cursor: grab;
+}
+.card-node:active { cursor: grabbing; }
+/* Picked up: a card being dragged (each one, in a multi-selection) rises — deeper shadow, a slight swell that
+   grows from the point held (--lift-x/--lift-y, lib/cardLift) so it never shifts under the finger — and settles
+   back over the card's usual 0.15s on drop. Only the card's look moves: its position (the node's own transform,
+   which the arrows are computed from) is never animated. Reduce motion keeps the shadow and drops the swell. */
+.react-flow__node.dragging .card-node {
+  box-shadow: var(--ac-shadow-card-lifted);
+  transform: scale(1.02);
+  transform-origin: var(--lift-x, 50%) var(--lift-y, 50%);
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-node { transition: none; }
+  .react-flow__node.dragging .card-node { transform: none; }
+}
+/* Touch: a finger is wider than the card's edge. A press a few pixels outside still lands on the card. */
+@media (pointer: coarse) {
+  .react-flow__node-card::before { content: ""; position: absolute; inset: -8px; }
+  /* Positioned, so the card paints over its own halo (in tree order) instead of under it. */
+  .react-flow__node-card .card-node { position: relative; }
+}
+/* A card with no saved height follows its note, but its body shows at most
+   BODY_MAX_H (lib/cardDisplay) and fades out under it, with 「開啟完整筆記」
+   below (.card-node-body--limited). A card the person resized keeps that height
+   and scrolls inside. A media/embed card stays its own size. */
+.card-node:hover {
+  border-color: color-mix(in srgb, var(--ac-accent) 45%, var(--ac-line));
+  box-shadow: var(--ac-shadow-card-hover);
+}
+.card-node--selected,
+.card-node.selected {
+  border-color: var(--ac-accent);
+  box-shadow: var(--ac-shadow-card-selected);
+  transform: translateY(-1px);
+}
+.card-node--editing {
+  cursor: default;
+  box-shadow: var(--ac-shadow-card-editing);
+}
+.card-node--editing .card-handle { visibility: hidden; }
+@media (max-width: 600px) {
+  .card-node--editing {
+    /* React Flow retains the stored outer width. Centre the temporary editor
+       within it and cap its physical width, including an existing >1x zoom. */
+    width: min(100%, calc((100vw - 56px) / var(--card-zoom, 1)));
+    margin-inline: auto;
+  }
+}
+.card-node-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 8px 6px 12px;
+  border-bottom: 1px solid var(--ac-line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card-status-color, var(--ac-muted)) 8%, var(--ac-raised)), var(--ac-raised));
+  cursor: grab;
+}
+.card-node--editing .card-node-header { cursor: default; }
+.card-node-save-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.5;
+  color: var(--ac-muted);
+  overflow-wrap: anywhere;
+}
+.card-node-save-status button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+}
+.card-node-save-status button:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+@media (max-width: 600px), (pointer: coarse) {
+  .card-node-save-status button { min-height: 44px; min-width: 44px; }
+}
+.card-node-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ac-radius-full);
+  background: var(--card-status-color, var(--ac-muted));
+  flex-shrink: 0;
+}
+.card-node-title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--ac-fs-caption);
+  font-weight: 600;
+  color: var(--ac-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  width: 100%;
+  font-family: inherit;
+}
+/* Touch: the title field holds the finger only once it is focused (a tap on an already selected card focuses it,
+   CardNode.tsx). Until then the press passes through to the card, so a card can be dragged by its title. */
+@media (pointer: coarse) {
+  .card-node-title-input:not(:focus) { pointer-events: none; }
+}
+.card-node-title-input:focus {
+  background: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  border-radius: var(--ac-radius-sm);
+  padding: 0 3px;
+}
+.card-node-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  cursor: grab;
+}
+.card-node-body--editing {
+  cursor: text;
+  background: color-mix(in srgb, var(--ac-accent) 3%, transparent);
+}
+.graph-card-node--folded .card-node {
+  border-style: solid;
+  box-shadow: var(--ac-shadow-float);
+}
+.graph-card-node--has-board .card-node {
+  border-left: 2px solid color-mix(in srgb, var(--ac-accent) 45%, transparent);
+}
+.graph-card-node--dimmed .card-node {
+  filter: grayscale(0.45);
+}
+/* A card picked into a multi-selection is part of what you are working on,
+   not background, whichever card the note focus dims around. */
+.react-flow__node.selected.graph-card-node--dimmed .card-node {
+  filter: none;
+}
+.card-node-preview {
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  line-height: 1.6;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-md-preview {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  overflow: visible;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-ink);
+  line-height: 1.6;
+}
+.card-md-preview p { margin: 0 0 4px; }
+.card-md-preview h1, .card-md-preview h2, .card-md-preview h3 {
+  font-size: var(--ac-fs-caption); font-weight: 700; margin: 6px 0 2px; color: var(--ac-ink);
+}
+.card-md-preview ul, .card-md-preview ol { margin: 0 0 4px; padding-left: 16px; }
+.card-md-preview li { margin-bottom: 2px; }
+.card-md-preview code { font-family: monospace; font-size: 0.85em; background: color-mix(in srgb, var(--ac-accent) 10%, transparent); border-radius: var(--ac-radius-sm); padding: 0 2px; }
+.card-md-preview strong { font-weight: 700; }
+.card-md-preview em { font-style: italic; }
+.card-md-preview s { text-decoration: line-through; opacity: 0.65; }
+/* Excerpt cards (PDF highlight spawns) carry a `> quote` body — render it as
+   a QUOTATION (warm left bar, serif italic), so the card reads as a captured
+   passage instead of an empty gray box with a truncated title. */
+.card-md-preview blockquote {
+  margin: 2px 0 4px;
+  padding: 3px 8px 3px 10px;
+  border-left: 3px solid color-mix(in srgb, var(--ac-warning) 70%, transparent);
+  background: color-mix(in srgb, var(--ac-warning) 6%, transparent);
+  border-radius: 0 var(--ac-radius-sm) var(--ac-radius-sm) 0;
+  font-family: var(--font-serif, Fraunces, Georgia, serif);
+  font-style: italic;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-ink);
+}
+.card-md-preview blockquote p { margin: 0; }
+.card-node-editor--hidden { display: none; }
+.card-node--selected .card-handle,
+.card-node.selected .card-handle {
+  opacity: 1 !important;
+  pointer-events: all;
+}
+/* Hover is a mouse thing: a finger leaves it behind on the last card touched, and a handle that shows up
+   (and takes presses) there is how a tap near a card ended up starting an arrow instead of opening it. */
+@media (hover: hover) {
+  .card-node:hover .card-handle {
+    opacity: 1 !important;
+    pointer-events: all;
+  }
+}
+.card-handle {
+  width: 14px;
+  height: 14px;
+  background: var(--ac-accent);
+  border: 2px solid var(--ac-surface);
+  transition: opacity 0.15s;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--ac-ring-halo);
+}
+.card-handle:hover {
+  transform: scale(1.15);
+  box-shadow: var(--ac-ring-halo-wide);
+}
+.card-node-editor .cm-editor { background: transparent; }
+.card-node-editor .cm-editor.cm-focused { outline: none; }
+/* The surface is ui/Popover (position, layer, Esc); this is the card's own look. */
+.ui-popover.card-bubble-menu {
+  overflow: visible;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  padding: 3px 4px;
+  box-shadow: var(--ac-shadow-float);
+}
+.card-bubble-row { display: flex; align-items: center; gap: 2px; }
+.card-bubble-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ac-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-caption);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.card-bubble-menu button:hover { background: var(--ac-overlay-hover); }
+.card-bubble-menu button.active { background: color-mix(in srgb, var(--ac-accent) 15%, transparent); color: var(--ac-accent); }
+.card-node--section-hidden {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.card-node-ai-badge {
+  font-size: var(--ac-fs-xs); font-weight: 700; letter-spacing: 0.04em;
+  padding: 0 5px; border-radius: var(--ac-radius-sm); line-height: 16px;
+  background: color-mix(in srgb, var(--ac-info) 18%, transparent); color: var(--ac-info);
+  flex-shrink: 0;
+}
+
+/* web embed card (bare-URL note body) */
+.card-node-webembed {
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+  height: 100%;
+}
+.card-node-webembed-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  border-bottom: 1px solid var(--ac-line);
+  background: var(--ac-raised);
+}
+.card-node-webembed-bar span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-node-webembed-bar a { color: var(--ac-muted); display: inline-flex; }
+.card-node-webembed-bar a:hover { color: var(--ac-accent); }
+.card-node-webembed iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  min-height: 150px;
+  background: var(--ac-bg);
+}
+/* A web card whose page is not a trusted embed provider: a link until tapped. */
+.card-node-webembed-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 80px;
+}
+.card-node-webembed-url {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ac-fs-caption);
+  color: var(--ac-muted);
+}
+/* ⑨ image card — bleed past the body padding so the picture fills the card. */
+.card-node-image {
+  margin: -10px -12px;
+  height: calc(100% + 20px);
+  min-height: 120px;
+  display: flex;
+  background: var(--ac-raised);
+  border-radius: 0 0 var(--ac-radius-md) var(--ac-radius-md);
+  overflow: hidden;
+}
+.card-node-image img,
+.card-node-image video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.card-node-image--audio {
+  align-items: center;
+  padding: 0 12px;
+}
+.card-node-image audio {
+  width: 100%;
+}
+
+/* The fold control of a card on the board's sub-note tree: just outside the
+   right edge, where the branch to its sub-notes leaves. */
+.card-branch-toggle {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translate(8px, -50%);
+  z-index: var(--z-local-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  cursor: pointer;
+}
+.card-branch-toggle:hover { color: var(--ac-accent); border-color: color-mix(in srgb, var(--ac-accent) 50%, var(--ac-line)); }
+@media (pointer: coarse) {
+  .card-branch-toggle { min-width: 44px; height: 44px; border-radius: var(--ac-radius-xl); font-size: var(--ac-fs-ui); }
+}
+
+/* ── Fold, body limit, far zoom (lib/cardDisplay) ─────────────────────────── */
+.card-node-fold-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  color: var(--ac-muted);
+  cursor: pointer;
+}
+.card-node-fold-btn:hover { color: var(--ac-accent); background: color-mix(in srgb, var(--ac-accent) 8%, transparent); }
+.card-node-fold-btn:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+/* Touch: the press area is 44px at 100% zoom whatever the button looks like, and the button keeps 10px from
+   its left neighbour (title, sub-board button) so that area never lands on it. A mouse needs neither. */
+@media (pointer: coarse) {
+  .card-node-fold-btn { margin-left: 4px; }
+  .card-node-fold-btn::after { content: ""; position: absolute; inset: -10px; }
+}
+.card-node-fold-count { flex: 0 0 auto; color: var(--ac-muted); font-size: var(--ac-fs-xs); opacity: 0.8; white-space: nowrap; }
+/* A folded card is its title bar and nothing else. */
+.card-node--folded .card-node-header { border-bottom: 0; }
+
+.card-node-body--limited { max-height: 170px; overflow: hidden; position: relative; }
+.card-node-body--clipped::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 44px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--card-status-color, var(--ac-muted)) 8%, var(--ac-surface)));
+}
+.card-node-open-full {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 2px 12px 6px;
+  background: transparent;
+  border: 0;
+  color: var(--ac-accent);
+  font-size: var(--ac-fs-xs);
+  cursor: pointer;
+}
+.card-node-open-full:hover { text-decoration: underline; }
+.card-node-open-full:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+/* Far zoom: just the title, in the size set from the zoom so it reads the same on screen.
+   The card's node keeps its stored size; the title may be wider (up to the next column). */
+.card-node.card-node--title-only {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: max(100%, var(--title-only-max-width, 0px));
+  height: auto;
+  border-top-width: 1.5px;
+  box-shadow: none;
+}
+.card-node-title-only {
+  display: block;
+  padding: 0.35em 0.6em;
+  background: transparent;
+  border: 0;
+  color: var(--ac-ink);
+  font: inherit;
+  font-size: var(--title-only-size, 14px);
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.card-node--title-only .card-handle { top: 50%; }

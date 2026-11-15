@@ -1,0 +1,21 @@
+/* The edge outline (NoteEdgeOutline): thin lines down the right edge of the note's text. The anchor is
+   zero-height and sticky, so the lines stay in view while the note scrolls inside its pane. */
+.note-edge-outline-anchor { position: sticky; top: 96px; height: 0; z-index: var(--z-local-2); }
+.note-edge-outline { position: absolute; top: 0; right: 4px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.note-edge-line {
+  position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 20px; padding: 0 6px;
+  border: 0; background: transparent; cursor: pointer;
+}
+.note-edge-bar { display: block; height: 3px; width: 8px; border-radius: var(--ac-radius-xs); background: var(--ac-line); transition: background 0.12s; }
+.note-edge-line--h1 .note-edge-bar { width: 18px; }
+.note-edge-line--h2 .note-edge-bar { width: 12px; }
+.note-edge-line.is-active .note-edge-bar,
+.note-edge-line:hover .note-edge-bar,
+.note-edge-line:focus-visible .note-edge-bar { background: var(--ac-accent); }
+.note-edge-label {
+  position: absolute; right: 100%; top: 50%; transform: translateY(-50%); max-width: 220px; margin-right: 4px; padding: 2px 8px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-raised); color: var(--ac-ink);
+  font-size: var(--ac-fs-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; visibility: hidden;
+}
+.note-edge-line:hover .note-edge-label,
+.note-edge-line:focus-visible .note-edge-label { opacity: 1; visibility: visible; }

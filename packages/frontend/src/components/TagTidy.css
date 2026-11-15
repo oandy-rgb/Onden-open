@@ -1,0 +1,51 @@
+/* The tag tidy lines: TagTidy under the tag list, RemovedModuleTags on a turned-off feature's settings page. */
+
+/* 「整理」: a quiet line under the tag list; 檢視 lists what it found. */
+.tag-tidy {
+  margin-top: var(--ac-space-5);
+  padding-left: var(--ac-space-5);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-small);
+}
+.tag-tidy-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-4);
+  margin: 0;
+}
+.tag-tidy-toggle.ui-btn {
+  color: var(--ac-link);
+  font-size: var(--ac-fs-small);
+  font-weight: var(--ac-fw-regular);
+}
+.tag-tidy-body { display: grid; gap: var(--ac-space-5); margin-top: var(--ac-space-4); padding-left: 23px; }
+.tag-tidy-hint { margin: 0; color: var(--ac-muted); }
+.tag-tidy-body h4 { margin: 0 0 var(--ac-space-2); font-size: var(--ac-fs-caption); font-weight: var(--ac-fw-medium); color: var(--ac-muted); }
+.tag-tidy-body ul { display: flex; flex-wrap: wrap; gap: var(--ac-space-3) var(--ac-space-5); margin: 0; padding: 0; list-style: none; }
+.tag-tidy-body [role="group"] > .tag-tidy-hint { margin-bottom: var(--ac-space-2); }
+.tag-tidy-tag {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ac-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 「來自已移除的模組」: one row per tag — open it, its module and notes, and
+   Settings › 模組 to import the module again. */
+.tag-tidy-body ul.tag-tidy-removed { flex-direction: column; flex-wrap: nowrap; gap: var(--ac-space-3); }
+.tag-tidy-removed li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ac-space-2) var(--ac-space-5); }
+.tag-tidy-removed-meta { color: var(--ac-muted); }
+
+/* On a phone too. */
+@media (max-width: 600px) {
+  .tag-tidy { padding-left: 0; }
+  .tag-tidy-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+      .tag-tidy-body { padding-left: 0; }
+  .tag-tidy-toggle.ui-btn, .tag-tidy-tag { min-height: var(--ac-tap); }
+}
+
+/* Under 「關掉的」 in the module library, flush with the group. */
+.module-group > .tag-tidy { margin-top: 0; padding-left: 4px; }

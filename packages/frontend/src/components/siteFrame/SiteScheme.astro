@@ -1,0 +1,20 @@
+---
+// The reader's light / dark button (the 「讀者切換深淺」 foot widget). It writes the
+// choice as `data-theme` on <html>, which the site's colour rules read
+// (@onden/site styleCss), and remembers it on this device. Without script the
+// button stays hidden (siteFrame.css shows it once `.s-js` is set).
+---
+
+<script>
+  const KEY = "s-theme";
+  const root = document.documentElement;
+  const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+  const saved = read();
+  if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+  document.addEventListener("click", (event) => {
+    if (!(event.target as Element | null)?.closest("[data-s-scheme]")) return;
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem(KEY, root.dataset.theme); } catch { /* private mode: the choice lasts this visit */ }
+  });
+</script>

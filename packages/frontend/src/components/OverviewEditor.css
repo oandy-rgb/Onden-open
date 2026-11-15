@@ -1,0 +1,361 @@
+/* OverviewEditor — colocated CSS for inline-style migration. */
+
+/* Ordinary prose owns its measure; media, collection and canvas surfaces keep
+ * their workspace width. The font follows the existing user text-size setting. */
+.obsidian-main.note-document {
+  /* --onden-note-measure (em) / -gutter / -title-scale and the note font come from
+     Settings › Appearance (settings/appearance.ts, styles/theme-tokens.css). The page's
+     own font-size is the note font, so the em measure follows it; the --ac-fs-* sizes
+     below are re-derived from it so the title, grey line and relations scale with the
+     prose while the app chrome keeps the base size. */
+  font-size: var(--onden-note-font);
+  /* styles/sidebar.css and MarkdownRenderer.css also render published sites, so they stay on
+     the site's --onden-text-* names (see theme-tokens.css); rescale those four here too. */
+  --onden-text-xs: calc(var(--onden-note-font) * 11 / 17);
+  --onden-text-sm: calc(var(--onden-note-font) * 12 / 17);
+  --onden-text-sm2: calc(var(--onden-note-font) * 13 / 17);
+  --onden-text-base: calc(var(--onden-note-font) * 14 / 17);
+  --ac-fs-xs: calc(var(--onden-note-font) * 11 / 17);
+  --ac-fs-caption: calc(var(--onden-note-font) * 12 / 17);
+  --ac-fs-small: calc(var(--onden-note-font) * 13 / 17);
+  --ac-fs-ui: calc(var(--onden-note-font) * 14 / 17);
+  --ac-fs-ui-touch: calc(var(--onden-note-font) * 15 / 17);
+  --ac-fs-lg: calc(var(--onden-note-font) * 18 / 17);
+  --ac-fs-h3: calc(var(--onden-note-font) * 22 / 17);
+  --ac-fs-title-sm: calc(var(--onden-note-font) * 28 / 17);
+  --ac-fs-title: calc(var(--onden-note-font) * 36 / 17);
+  max-width: calc(var(--onden-note-measure, 41.18em) + 2 * var(--onden-note-gutter, 32px));
+  padding: 4px var(--onden-note-gutter, 32px) 64px;
+}
+.obsidian-main.note-document[data-wide="true"],
+.obsidian-main.note-document[data-media="true"] { max-width: none; }
+/* The top row (breadcrumb at the left, ⋯ and a save problem at the right), then the
+ * title, then ONE grey line (NoteMetaLine). Quiet on purpose: the row is thin and the
+ * title is the first big thing on the page (Notion, Obsidian, Apple Notes, Bear). */
+.note-document .note-topbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 34px;
+}
+.note-document .obsidian-actions { margin-left: auto; flex-wrap: nowrap; gap: 6px; min-height: 34px; }
+/* 「離開寫作模式」 stays in the top row while writing mode hides the rest. */
+.note-document .obsidian-actions .editor-zen-toggle { width: auto; gap: 5px; padding: 0 10px; white-space: nowrap; }
+.note-document .note-heading { min-width: 0; }
+.note-document .obsidian-title-input {
+  --onden-input-size: calc(var(--onden-note-font) * var(--onden-note-title-scale, 38) / 17);
+  font-size: var(--onden-input-size);
+  line-height: 1.25;
+  padding: 0;
+  /* A textarea that grows with its text (OverviewEditor sets the height). */
+  display: block;
+  resize: none;
+  min-height: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+/* Who can see it · when it changed · tags ＋ — one line of grey words, not boxes. */
+.note-document .note-meta { margin: 2px 0 12px; }
+.note-document .note-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 16px;
+  min-height: 24px;
+  font-size: var(--ac-fs-caption);
+  line-height: 1.5;
+  color: var(--ac-muted);
+  /* Clips sideways only, 5px outside the words (padding, taken back by the negative margin), so the
+   * first and last word keep their touch area and focus ring; see the "·" below. clip-path, not
+   * overflow-x: clip + overflow-clip-margin (Chromium ignores the margin on one axis, Safari lacks it). */
+  padding-inline: 5px;
+  margin-inline: -5px;
+  clip-path: inset(-100vh 0);
+}
+/* The "·" stands in the middle of the 16px gap before each part, out of the flow: 8px on each
+ * side whatever the part is. A part that wraps to a new line puts its "·" past the line's left
+ * edge, 3px past the clip edge, so no line starts with a dot. The folded empty tag row
+ * (max-width 0, overflow hidden) hides its own "·" until it opens. */
+.note-document .note-meta-line > * + * { position: relative; }
+.note-document .note-meta-line > * + *::before {
+  content: "·";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: color-mix(in srgb, var(--ac-muted) 60%, transparent);
+}
+.note-document .note-meta-line:empty { display: none; }
+.note-document .space-chip { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
+.note-document .space-chip:hover { color: var(--ac-ink); }
+.note-document .note-readonly-badge { border: 0; padding: 0; font-size: inherit; }
+.note-document .note-edited-line { display: inline-flex; align-items: center; flex-wrap: wrap; --meta-inner-gap: 5px; gap: 0 var(--meta-inner-gap); font-size: inherit; color: inherit; }
+.note-document .note-history-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.note-document .note-history-link:hover { color: var(--ac-ink); text-decoration: underline; }
+/* The tags are words in the line: accent text, no pill. The remove x shows for the chip
+ * pointed at, focused or open; the ＋ on a note with none appears when the title area is
+ * pointed at or focused (like Notion's "add icon") and takes no room before that. */
+.note-document .note-meta-line > .title-tag-row { display: inline-flex; flex-wrap: wrap; align-items: center; --meta-inner-gap: 6px; gap: 2px var(--meta-inner-gap); margin: 0; }
+.note-document .obsidian-prop-strip .prop-tag { border: 0; background: none; padding: 0; font-size: inherit; line-height: inherit; }
+.note-document .obsidian-prop-strip .prop-tag:hover { background: none; text-decoration: underline; }
+.note-document .obsidian-prop-strip .prop-tag--applied { padding: 0; gap: 0; border-radius: var(--ac-radius-sm); }
+.note-document .prop-tag--applied .prop-tag-name { padding: 0 2px 0 0; }
+.note-document .prop-tag--applied:has(.prop-tag-name[aria-expanded="true"]) { background: var(--ac-accent-tint-7); }
+.note-document .prop-tag-name[aria-expanded="true"] { text-decoration: none; }
+/* The empty row now holds the line's "·" before the button: folded to 0 wide it must not wrap
+ * them onto two lines (that made the line 38px tall, and the note jumped on hover). */
+.note-document .note-meta-line > .title-tag-row--empty { flex-wrap: nowrap; }
+/* nowrap: folded to max-width 0 (below), 「標籤」 would break a character per line and make
+ * the line taller, so the note jumped each time the pointer came near the title. */
+.note-document .obsidian-prop-strip .prop-tag--add { color: var(--ac-muted); border: 0; gap: 3px; white-space: nowrap; font-family: inherit; }
+@media (hover: hover) {
+  .note-document .prop-tag--applied:not(:hover, :focus-within, :has(.prop-tag-name[aria-expanded="true"])) .prop-tag-remove { opacity: 0; }
+}
+@media (hover: hover) and (width > 900px) {
+  .note-document .title-tag-row--empty:not(:focus-within) { max-width: 0; overflow: hidden; opacity: 0; }
+  .note-document .note-heading:is(:hover, :focus-within) .title-tag-row--empty { max-width: 12em; overflow: visible; opacity: 1; }
+}
+/* Touch and phone: no hover, so the tag x shows only on the open chip (its card), and the
+ * ＋ is always there, faint. */
+@media (hover: none), (max-width: 900px) {
+  .note-document .prop-tag--applied:not(:has(.prop-tag-name[aria-expanded="true"])) .prop-tag-remove { display: none; }
+  .note-document .title-tag-row--empty .prop-tag--add { opacity: 0.6; }
+}
+/* Each clickable word of the grey line has a touch area of 32px (44px on a phone)
+ * without growing the line: an invisible box around it, around it. */
+.note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add) {
+  position: relative;
+}
+.note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add)::after {
+  content: "";
+  position: absolute;
+  inset: -7px -3px;
+  /* These words are also .tap-target (global.css), whose ::after is centred with width, height and a
+   * translate(-50%, -50%). This rule wins the insets, so without the three lines below both applied:
+   * the box stood half its height higher and half its width to the left, over the lower half of the
+   * title — a touch on the title's letters or on its selection handles pressed these buttons. */
+  width: auto;
+  height: auto;
+  transform: none;
+}
+@media (max-width: 900px), (pointer: coarse) {
+  .note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add)::after { inset: -13px -4px; }
+}
+.note-document .note-meta-cards { padding: 6px 0 4px; }
+.note-document .obsidian-save-button { width: auto; min-width: 64px; padding: 0 10px; }
+.note-document .obsidian-tiptap-wrap:not(.obsidian-tiptap-wrap--media) {
+  flex: 0 0 auto;
+  min-height: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.note-document .obsidian-preview {
+  padding: 16px 0 40px;
+  min-height: 0;
+  font-size: var(--onden-note-font);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.note-document .obsidian-preview > p { margin: 0 0 1em; }
+.note-document .obsidian-preview h1 { font-size: 1.65em; }
+.note-document .obsidian-preview h2 { font-size: 1.3em; }
+.note-document .obsidian-preview h3 { font-size: 1.15em; }
+.note-document .obsidian-preview :is(h1, h2, h3) { line-height: 1.4; margin: 1.3em 0 .6em; font-weight: 700; }
+.note-document .obsidian-preview > :first-child { margin-top: 0; }
+.note-document .md-editor-cm .cm-editor { min-height: 260px; }
+.overview-workspace .note-document .md-editor-cm .cm-scroller,
+.overview-workspace .note-document .md-editor-cm .cm-content {
+  font-size: var(--onden-note-font);
+  line-height: 1.7;
+}
+.note-document .md-editor-cm .cm-content {
+  padding: 16px 0 40px;
+  /* input-font.css floors contenteditable text with !important; say the note font is the size wanted */
+  --onden-input-size: var(--onden-note-font);
+}
+body.onden-zen .note-document .md-editor-cm .cm-content { font-size: var(--onden-note-font); }
+.notes-center-wrap > .welcome-banner {
+  width: calc(100% - 64px);
+  font-size: var(--onden-note-font);
+  max-width: var(--onden-note-measure, 41.18em);
+  margin: 16px auto 0;
+}
+@media (max-width: 900px) {
+  .overview-workspace .obsidian-main.note-document { padding: 8px 20px 36px; }
+  .note-document .obsidian-title-input { --onden-input-size: calc(var(--onden-ui-font-size-base, 14px) * 26 / 14); }
+  .notes-center-wrap > .welcome-banner { width: calc(100% - 40px); }
+}
+
+/* PDF and handwriting embeds use the full viewport minus toolbar+title chrome. */
+.obsidian-tiptap-wrap.obsidian-tiptap-wrap--media {
+  height: calc(100dvh - 238px);
+  min-height: 600px;
+}
+
+/* Inspector pane collapse (added 2026-06-05 with ER7 follow-up). The
+ * grid-template-columns switch sits in global.css next to the
+ * .workspace-grid layout rules; everything else stays here. */
+
+/* Overview surfaces — node editor + activity pane + version history rows.
+ * Extracted from global.css 2026-06-04 (Pass 1 / batch 3.1).
+ * Consumers: OverviewEditor.tsx (primary), OverviewActivityPane.tsx,
+ * EventLogPanel.tsx.
+ */
+.ov-panel-count {
+  margin-left: auto;
+  min-width: 18px;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-line);
+  padding: 1px 6px;
+  text-align: center;
+  font-size: var(--ac-fs-xs);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ac-muted);
+}
+/* Pill style for the inspector's to-read / SRS switch toggles. (Publish moved
+   to the header Share popover — its .ov-publish-* rules were removed.) */
+.ov-prop-label {
+  min-width: 56px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  flex-shrink: 0;
+}
+/* The text lines up with the section heading: the padding hangs outside, and
+ * the ↗ of a pointed row comes after the title instead of holding room before it. */
+.ov-link-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% + 12px);
+  margin-inline: -6px;
+  border-radius: var(--ac-radius-sm);
+  padding: 4px 6px;
+  text-align: left;
+  font-size: var(--ac-fs-small);
+  color: var(--ac-ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov-link-row::after {
+  content: "↗";
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ov-link-row:hover {
+  background: var(--ac-overlay-hover);
+  color: var(--ac-accent);
+}
+.ov-link-row:hover::after { opacity: 1; }
+.ov-panel-empty--center {
+  text-align: center;
+  padding: 2rem 0;
+  font-style: var(--ac-hint-style);
+}
+
+/* Node row + panel + source badge — Inbox / sidebar list visuals
+ * shared by OverviewEditor, OverviewSidebar, SideDrawers,
+ * KnowledgeWorkspace. Appended after .ov-* extract.
+ *
+ * Pass 3 / batch 7.4a (2026-06-04). 
+ */
+
+.node-list {
+  display: grid;
+  gap: 8px;
+}
+.node-list-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-bg);
+  padding: 10px;
+  cursor: grab;
+}
+.node-list-item:active { cursor: grabbing; }
+.node-list-item.active {
+  border-color: var(--ac-accent);
+  box-shadow: var(--ac-bar-start);
+}
+.node-list-item small,
+.graph-node-button small,
+.muted {
+  color: var(--ac-muted);
+}
+.node-action-panel {
+  position: absolute;
+  right: 14px;
+  top: 78px;
+  z-index: var(--z-raised);
+  width: min(420px, calc(100vw - 28px));
+  max-height: calc(100dvh - 96px);
+}
+.node-action-panel.collapsed {
+  display: none;
+}
+
+/* Links in the note preview read as links, matching the editor (lib/editorLinks):
+   accent text with a soft underline. [[wikilinks]] keep their chip style. */
+.obsidian-preview a:not(.editor-wikilink) {
+  color: var(--ac-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ac-accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.obsidian-preview a:not(.editor-wikilink):hover { text-decoration-color: var(--ac-accent); }
+
+/* Phone note header, quiet (A+C 「安靜寫作」: few things, no boxes, space
+ * between them). The trail to the parent; the title; the one grey line with the
+ * tags as words; then the body. ⋯ (and the save notice) sit at the right of the
+ * note's top bar (.overview-mobile-tabs), which stays in view (over the other
+ * tabs, NoteTabActions puts the same two there); the preview and
+ * find live in ⋯ (NoteActions phoneEditor), the display choices on a wide screen
+ * only. Touch reach comes from the invisible --onden-tap hit areas, not from
+ * bigger boxes. */
+@media (max-width: 900px) {
+  .note-document .note-topbar { min-height: 0; }
+  .note-document .obsidian-breadcrumb { min-height: 24px; }
+  .note-document .note-meta { margin: 4px 0 20px; }
+  body.onden-note-detail .overview-mobile-tabs { padding-right: 120px; }
+  body.onden-note-detail .note-document .obsidian-actions,
+  body.onden-note-detail .note-tab-actions {
+    z-index: var(--z-pane-float);
+    top: env(safe-area-inset-top, 0px); right: max(8px, env(safe-area-inset-right, 0px));
+    height: 41px; align-items: center; gap: 4px; padding: 0;
+  }
+  .note-document .note-actions-more-btn,
+  .note-tab-actions .note-actions-more-btn {
+    width: 32px; height: 32px; padding: 0; justify-content: center; border: 0; background: none;
+  }
+  .note-document .breadcrumb-move { padding: 0; border: 0; }
+  .note-document .note-meta-cards .attr-panel-section.tag-card {
+    border: 0; border-radius: var(--ac-radius-md); background: var(--ac-accent-tint-3); padding: 8px 10px;
+  }
+  .note-document .note-tag-cards :is(.tag-card-name, .tag-card-edit-fields) { min-height: 0; }
+}

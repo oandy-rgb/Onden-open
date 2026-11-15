@@ -1,0 +1,118 @@
+/* PageImageLayer — the pictures of one page. Everything is sized in px from the
+   page's current scale (custom properties set by the component), so zoom and
+   full screen carry the pictures with the page. */
+
+.page-image-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The pictures sit in the paper, under the pen strokes. */
+.page-image-layer--art { z-index: var(--z-base); overflow: hidden; border-radius: inherit; }
+
+/* The handles sit over the ink canvases (a text box's layer is at the same height). */
+.page-image-layer--controls { z-index: var(--z-local-6); }
+
+.page-image {
+  position: absolute;
+  left: var(--pi-left);
+  top: var(--pi-top);
+  width: var(--pi-width);
+  height: var(--pi-height);
+}
+.page-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.page-image-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px dashed var(--ac-line);
+  background: color-mix(in srgb, var(--ac-ink) 6%, transparent);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  text-align: center;
+  overflow: hidden;
+}
+
+.page-image-box {
+  position: absolute;
+  left: var(--pi-left);
+  top: var(--pi-top);
+  width: var(--pi-width);
+  height: var(--pi-height);
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  outline: none;
+  pointer-events: auto;
+  /* A press on a picture moves it, with a pen, a finger or a mouse. */
+  touch-action: none;
+  cursor: move;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.page-image-box:hover { border-color: color-mix(in srgb, var(--ac-ink) 30%, transparent); }
+.page-image-box--selected,
+.page-image-box:focus-visible { border: 2px solid var(--ac-focus); }
+
+/* A corner handle: a small dot with a finger-sized touch area around it. */
+.page-image-handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  touch-action: none;
+}
+.page-image-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid var(--ac-focus);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-surface);
+}
+.page-image-handle--nw { left: -22px; top: -22px; cursor: nwse-resize; }
+.page-image-handle--ne { right: -22px; top: -22px; cursor: nesw-resize; }
+.page-image-handle--sw { left: -22px; bottom: -22px; cursor: nesw-resize; }
+.page-image-handle--se { right: -22px; bottom: -22px; cursor: nwse-resize; }
+
+.page-image-delete {
+  position: absolute;
+  top: -46px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  box-shadow: var(--ac-shadow-sm);
+  cursor: pointer;
+}
+.page-image-delete:hover { color: var(--ac-danger); }
+/* A picture at the very top has no room above it for the button. */
+.page-image-delete--inside { top: 6px; right: 6px; }
+
+@media (pointer: coarse) {
+  .page-image-delete { width: 44px; height: 44px; top: -52px; }
+}

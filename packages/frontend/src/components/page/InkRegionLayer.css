@@ -1,0 +1,129 @@
+/* InkRegionLayer — the 「引用」 frame over one handwriting page. Everything is placed in percentages of
+   the page, so zoom and full screen carry it. */
+
+.ink-region-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-local-6);
+  pointer-events: none;
+}
+
+.ink-region-capture {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  /* A finger that only scrolls still scrolls and pinches; fingers that frame must not be taken by the browser. */
+  touch-action: pan-x pan-y pinch-zoom;
+  cursor: crosshair;
+  -webkit-tap-highlight-color: transparent;
+}
+.ink-region-capture--finger { touch-action: none; }
+
+.ink-region-frame,
+.ink-region-mark {
+  position: absolute;
+  left: var(--rl);
+  top: var(--rt);
+  width: var(--rw);
+  height: var(--rh);
+}
+.ink-region-frame {
+  box-sizing: border-box;
+  border: 2px solid var(--ac-link);
+  background: var(--ac-accent-soft);
+  border-radius: var(--ac-radius-sm);
+  pointer-events: none;
+}
+.ink-region-layer--active .ink-region-frame { pointer-events: auto; cursor: move; touch-action: none; }
+
+/* Corner handles: a 44px touch target around a small visible dot. */
+.ink-region-handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  touch-action: none;
+  cursor: nwse-resize;
+}
+.ink-region-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--ac-link);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-elevated);
+}
+.ink-region-handle--nw { left: 0; top: 0; }
+.ink-region-handle--ne { left: 100%; top: 0; cursor: nesw-resize; }
+.ink-region-handle--sw { left: 0; top: 100%; cursor: nesw-resize; }
+.ink-region-handle--se { left: 100%; top: 100%; }
+
+.ink-region-mark {
+  box-sizing: border-box;
+  border: 3px solid var(--ac-link);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-accent-soft);
+  animation: ink-region-mark 2.4s ease-out forwards;
+}
+@keyframes ink-region-mark {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink-region-mark { animation-duration: 2.4s; animation-timing-function: steps(1, end); }
+}
+
+.ink-region-bar {
+  position: absolute;
+  /* Under the frame, or above it near the bottom of the page; never off the page's right edge. */
+  left: clamp(0px, var(--rl), calc(100% - 300px));
+  top: calc(var(--rt) + 6px);
+  z-index: var(--z-local-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: calc(100% - 8px);
+  padding: 4px 6px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-elevated);
+  box-shadow: var(--ac-shadow-sm);
+  pointer-events: auto;
+  touch-action: manipulation;
+  font-size: var(--ac-fs-ui);
+}
+.ink-region-bar--above { top: auto; bottom: calc(var(--rb) + 6px); }
+.ink-region-copy,
+.ink-region-cancel {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.ink-region-copy { background: var(--ac-accent-soft); color: var(--ac-link); font-weight: 600; }
+.ink-region-note { color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.ink-region-manual { display: flex; flex-direction: column; gap: 4px; flex-basis: 100%; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.ink-region-text {
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font: inherit;
+}
+
+/* Fingers that only scroll: the frame and its handles do not take them (the pen and the mouse still do). */
+.ink-region-layer--finger-scrolls .ink-region-frame,
+.ink-region-layer--finger-scrolls .ink-region-handle { touch-action: pan-x pan-y pinch-zoom; }

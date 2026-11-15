@@ -1,0 +1,47 @@
+/* The reading hub (ReadingScreen): a full-page mode, so it is a direct
+   .workspace-grid child and must claim the middle column (.full-page
+   collapses the others). */
+.reading-hub {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.reading-hub-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.reading-hub-title { margin: 0; font-size: var(--ac-fs-lg); font-weight: 600; }
+.reading-hub-sections { display: flex; flex-wrap: wrap; gap: 4px; }
+.reading-hub-section {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--ac-radius-md);
+  background: none;
+  color: var(--ac-muted);
+  font: inherit;
+  font-size: var(--ac-fs-small);
+  cursor: pointer;
+}
+.reading-hub-section:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+.reading-hub-section.active { color: var(--ac-ink); font-weight: 500; background: var(--ac-overlay-selected); }
+.reading-hub-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.reading-hub-body > .rss-reader { flex: 1; height: auto; min-height: 0; }
+
+@media (width > 900px) {
+  .workspace-grid > .reading-hub { height: calc(100dvh - 48px); }
+}
+@media (max-width: 900px) {
+  .reading-hub { min-height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom)); }
+  .reading-hub[data-immersive="1"] { min-height: 100dvh; }
+}
+

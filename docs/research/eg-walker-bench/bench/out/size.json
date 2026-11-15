@@ -1,0 +1,283 @@
+{
+ "forkHistory": [
+  {
+   "case": "10KB-10",
+   "baseUtf8": 10264,
+   "textA": 10425,
+   "proto": {
+    "raw": 10905,
+    "gzip": 3744
+   },
+   "dt": {
+    "raw": 5423,
+    "gzip": 4519
+   },
+   "ref": {
+    "raw": 251096,
+    "gzip": 25883
+   }
+  },
+  {
+   "case": "10KB-100",
+   "baseUtf8": 10266,
+   "textA": 11184,
+   "proto": {
+    "raw": 15053,
+    "gzip": 5351
+   },
+   "dt": {
+    "raw": 7649,
+    "gzip": 6329
+   },
+   "ref": {
+    "raw": 330033,
+    "gzip": 33609
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "baseUtf8": 10443,
+   "textA": 28449,
+   "proto": {
+    "raw": 52202,
+    "gzip": 18562
+   },
+   "dt": {
+    "raw": 27081,
+    "gzip": 21817
+   },
+   "ref": {
+    "raw": 997318,
+    "gzip": 107630
+   }
+  },
+  {
+   "case": "50KB-10",
+   "baseUtf8": 51288,
+   "textA": 51402,
+   "proto": {
+    "raw": 51788,
+    "gzip": 14306
+   },
+   "dt": {
+    "raw": 23361,
+    "gzip": 18394
+   },
+   "ref": {
+    "raw": 1173401,
+    "gzip": 119285
+   }
+  },
+  {
+   "case": "50KB-100",
+   "baseUtf8": 51347,
+   "textA": 51993,
+   "proto": {
+    "raw": 56802,
+    "gzip": 16233
+   },
+   "dt": {
+    "raw": 25791,
+    "gzip": 20455
+   },
+   "ref": {
+    "raw": 1322255,
+    "gzip": 132110
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "baseUtf8": 51275,
+   "textA": 63434,
+   "proto": {
+    "raw": 100747,
+    "gzip": 33125
+   },
+   "dt": {
+    "raw": 50649,
+    "gzip": 40072
+   },
+   "ref": {
+    "raw": 2138249,
+    "gzip": 216761
+   }
+  },
+  {
+   "case": "200KB-10",
+   "baseUtf8": 204852,
+   "textA": 204893,
+   "proto": {
+    "raw": 205388,
+    "gzip": 52192
+   },
+   "dt": {
+    "raw": 90993,
+    "gzip": 70803
+   }
+  },
+  {
+   "case": "200KB-100",
+   "baseUtf8": 204846,
+   "textA": 205478,
+   "proto": {
+    "raw": 210430,
+    "gzip": 54248
+   },
+   "dt": {
+    "raw": 93137,
+    "gzip": 72704
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "baseUtf8": 204810,
+   "textA": 214887,
+   "proto": {
+    "raw": 256025,
+    "gzip": 71868
+   },
+   "dt": {
+    "raw": 118376,
+    "gzip": 92899
+   }
+  }
+ ],
+ "traces": [
+  {
+   "trace": "automerge-paper",
+   "ops": 259778,
+   "endUtf8": 104852,
+   "proto": {
+    "raw": 704294,
+    "gzip": 76832
+   },
+   "dt": {
+    "raw": 106247,
+    "gzip": 89403
+   },
+   "ref": {
+    "raw": 9488940,
+    "gzip": 789302
+   }
+  },
+  {
+   "trace": "seph-blog1",
+   "ops": 368209,
+   "endUtf8": 56769,
+   "proto": {
+    "raw": 498060,
+    "gzip": 113632
+   },
+   "dt": {
+    "raw": 157793,
+    "gzip": 125780
+   },
+   "ref": {
+    "raw": 12817297,
+    "gzip": 780454
+   }
+  },
+  {
+   "trace": "friendsforever",
+   "ops": 26078,
+   "endUtf8": 21362,
+   "proto": {
+    "raw": 64711,
+    "gzip": 40865
+   },
+   "dt": {
+    "raw": 35083,
+    "gzip": 28313
+   },
+   "ref": {
+    "raw": 1200277,
+    "gzip": 123490
+   }
+  },
+  {
+   "trace": "clownschool",
+   "ops": 24326,
+   "endUtf8": 21148,
+   "proto": {
+    "raw": 254076,
+    "gzip": 127403
+   },
+   "dt": {
+    "raw": 47263,
+    "gzip": 34645
+   },
+   "ref": {
+    "raw": 1258848,
+    "gzip": 136464
+   }
+  },
+  {
+   "trace": "node_nodecc",
+   "ops": 947337,
+   "endUtf8": 38142,
+   "proto": {
+    "raw": 617038,
+    "gzip": 223185
+   },
+   "dt": {
+    "raw": 334914,
+    "gzip": 259058
+   }
+  },
+  {
+   "trace": "git-makefile",
+   "ops": 348819,
+   "endUtf8": 113676,
+   "proto": {
+    "raw": 289012,
+    "gzip": 115954
+   },
+   "dt": {
+    "raw": 161979,
+    "gzip": 132113
+   },
+   "ref": {
+    "raw": 12667209,
+    "gzip": 958660
+   }
+  }
+ ],
+ "bundles": [
+  {
+   "name": "proto：合併引擎（mergeIntoBranch＋replay，含沿用的因果圖）",
+   "raw": 17826,
+   "gzip": 7054,
+   "brotli": 6433
+  },
+  {
+   "name": "proto：引擎＋序列化格式",
+   "raw": 19870,
+   "gzip": 7812,
+   "brotli": 7108
+  },
+  {
+   "name": "eg-walker-reference（原樣）",
+   "raw": 13129,
+   "gzip": 5103,
+   "brotli": 4662
+  },
+  {
+   "name": "現行 diff3（bodyMerge＋bodyPatch）",
+   "raw": 23179,
+   "gzip": 7998,
+   "brotli": 7201
+  },
+  {
+   "name": "diamond-types：WASM（dt_bg.wasm）",
+   "raw": 253138,
+   "gzip": 103788,
+   "brotli": 83542
+  },
+  {
+   "name": "diamond-types：JS 綁定（dt.js）",
+   "raw": 15293,
+   "gzip": 3488,
+   "brotli": 3093
+  }
+ ]
+}

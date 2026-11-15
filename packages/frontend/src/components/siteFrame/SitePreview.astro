@@ -1,0 +1,177 @@
+---
+// Link previews on an article page: a card with the other note's title, date,
+// reading time, summary and tags, shown when a link to it is hovered (after a
+// short pause) or focused; on a touch screen the first tap on such a link shows
+// the card as a sheet from the bottom and "Open this page" goes there.
+//
+// The cards' text is the page's own `<script type="application/json"
+// id="s-previews">` (SiteFrames.tsx), keyed by the `data-note` of each link —
+// no request, so it works the same in the zip and on a static host. Without
+// script the links stay plain links. One delegated listener per event, no framework.
+import "./sitePreview.css";
+---
+
+<script>
+  type Note = { title: string; meta: string; summary: string; tags: string[] };
+  type Previews = { labels: { open: string; close: string; preview: string }; notes: Record<string, Note> };
+
+  const HOVER_DELAY = 280;
+  const LEAVE_DELAY = 220;
+  const GAP = 8;
+
+  const raw = document.getElementById("s-previews")?.textContent;
+  let previews: Previews | null = null;
+  try { previews = raw ? (JSON.parse(raw) as Previews) : null; } catch { /* no previews */ }
+
+  if (previews) {
+    const { labels, notes } = previews;
+    const host = document.querySelector(".site-scope") ?? document.body;
+    let card: HTMLElement | null = null;
+    let current: HTMLAnchorElement | null = null;
+    let showTimer = 0;
+    let pending: HTMLAnchorElement | null = null;
+    let hideTimer = 0;
+    let pointerKind = "mouse";
+    let seq = 0;
+
+    const linkOf = (target: EventTarget | null): HTMLAnchorElement | null => {
+      const a = (target as Element | null)?.closest?.<HTMLAnchorElement>("a[data-note]") ?? null;
+      return a && notes[a.dataset.note ?? ""] ? a : null;
+    };
+    const clearTimers = () => { window.clearTimeout(showTimer); window.clearTimeout(hideTimer); pending = null; };
+
+    const close = () => {
+      clearTimers();
+      card?.remove();
+      card = null;
+      current?.removeAttribute("aria-describedby");
+      current = null;
+    };
+
+    const build = (link: HTMLAnchorElement, note: Note, sheet: boolean): HTMLElement => {
+      const el = document.createElement("div");
+      el.className = sheet ? "s-preview s-preview--sheet" : "s-preview";
+      el.id = `s-preview-${++seq}`;
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", note.title);
+      const add = (tag: string, cls: string, text: string): HTMLElement => {
+        const child = document.createElement(tag);
+        child.className = cls;
+        child.textContent = text;
+        el.append(child);
+        return child;
+      };
+      add("p", "s-preview__title", note.title);
+      if (note.meta) add("p", "s-preview__meta", note.meta);
+      if (note.summary) add("p", "s-preview__summary", note.summary);
+      if (note.tags.length > 0) {
+        const list = document.createElement("ul");
+        list.className = "s-preview__tags";
+        for (const tag of note.tags) {
+          const li = document.createElement("li");
+          li.textContent = tag;
+          list.append(li);
+        }
+        el.append(list);
+      }
+      const open = document.createElement("a");
+      open.className = "s-preview__open";
+      open.textContent = labels.open;
+      // The link's own address: relative in a copy, so it resolves as the link does.
+      open.setAttribute("href", link.getAttribute("href") ?? "#");
+      el.append(open);
+      if (sheet) {
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "s-preview__close";
+        x.textContent = "×";
+        x.setAttribute("aria-label", labels.close);
+        x.addEventListener("click", close);
+        el.prepend(x);
+      }
+      return el;
+    };
+
+    // Below the link, or above when the room below is too small.
+    const place = (el: HTMLElement, link: HTMLElement, at?: { x: number; y: number }) => {
+      const rects = Array.from(link.getClientRects());
+      const rect = (at && rects.find((r) => at.y >= r.top && at.y <= r.bottom)) || rects[0] || link.getBoundingClientRect();
+      const { offsetWidth: w, offsetHeight: h } = el;
+      const below = rect.bottom + GAP;
+      const top = below + h > window.innerHeight - GAP && rect.top - GAP - h >= GAP ? rect.top - GAP - h : below;
+      el.style.top = `${Math.max(GAP, top)}px`;
+      el.style.left = `${Math.min(Math.max(GAP, rect.left), Math.max(GAP, window.innerWidth - w - GAP))}px`;
+    };
+
+    const show = (link: HTMLAnchorElement, sheet: boolean, at?: { x: number; y: number }) => {
+      const note = notes[link.dataset.note ?? ""];
+      if (!note) return;
+      if (current === link && card) return;
+      close();
+      current = link;
+      card = build(link, note, sheet);
+      host.append(card);
+      link.setAttribute("aria-describedby", card.id);
+      if (!sheet) {
+        card.addEventListener("pointerenter", () => window.clearTimeout(hideTimer));
+        card.addEventListener("pointerleave", () => { hideTimer = window.setTimeout(close, LEAVE_DELAY); });
+        place(card, link, at);
+      }
+    };
+
+    document.addEventListener("pointerdown", (event) => {
+      pointerKind = event.pointerType || "mouse";
+      // A tap outside the card (and not on a previewed link) closes the sheet.
+      if (card?.classList.contains("s-preview--sheet") && !card.contains(event.target as Node) && !linkOf(event.target)) close();
+    }, true);
+
+    document.addEventListener("pointerover", (event) => {
+      if (event.pointerType !== "mouse") return;
+      const link = linkOf(event.target);
+      if (!link) return;
+      window.clearTimeout(hideTimer);
+      if (current === link || pending === link) return;
+      window.clearTimeout(showTimer);
+      pending = link;
+      const at = { x: event.clientX, y: event.clientY };
+      showTimer = window.setTimeout(() => { pending = null; show(link, false, at); }, HOVER_DELAY);
+    });
+
+    document.addEventListener("pointerout", (event) => {
+      if (event.pointerType !== "mouse") return;
+      const link = linkOf(event.target);
+      if (!link) return;
+      const to = event.relatedTarget as Node | null;
+      if (to && (link.contains(to) || card?.contains(to))) return;
+      window.clearTimeout(showTimer);
+      pending = null;
+      hideTimer = window.setTimeout(close, LEAVE_DELAY);
+    });
+
+    document.addEventListener("focusin", (event) => {
+      const link = linkOf(event.target);
+      // Only a keyboard focus: a tap or click also focuses the link.
+      if (link && link.matches(":focus-visible")) { clearTimers(); show(link, false); }
+    });
+
+    document.addEventListener("focusout", (event) => {
+      const to = event.relatedTarget as Node | null;
+      if (linkOf(event.target) && !(to && card?.contains(to))) close();
+    });
+
+    document.addEventListener("click", (event) => {
+      const link = linkOf(event.target);
+      // detail 0 is a keyboard activation: it follows the link as usual.
+      if (!link || event.detail === 0 || pointerKind === "mouse" || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      clearTimers();
+      show(link, true);
+    });
+
+    window.addEventListener("scroll", () => {
+      clearTimers();
+      if (card && !card.classList.contains("s-preview--sheet")) close();
+    }, { capture: true, passive: true });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && card) close(); });
+  }
+</script>

@@ -1,0 +1,16 @@
+/* Tables as the preview draws them. Shared by the reading view (ObsidianImport.css imports it) and the
+   editor's drawn tables (lib/editorTables). */
+.obsidian-preview--md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 0.9em;
+}
+.obsidian-preview--md th,
+.obsidian-preview--md td {
+  border: 1px solid var(--ac-line);
+  padding: 6px 10px;
+  text-align: left;
+}
+.obsidian-preview--md th { background: var(--ac-raised); font-weight: 600; }
+.obsidian-preview--md tr:nth-child(even) td { background: var(--ac-raised); }

@@ -1,0 +1,61 @@
+{
+ "env": {
+  "browser": "chromium",
+  "version": "153.0.8010.12",
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "throttle": 4,
+  "calibrationMs": 302.70000000018626,
+  "date": "2026-11-01T19:52:03.563Z"
+ },
+ "rows": [
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 17,
+    "medianMs": 88.70000000018626,
+    "p95Ms": 111.6000000005588,
+    "minMs": 75.6000000005588,
+    "meanMs": 90.04705882362802
+   },
+   "hash": "398e7caf",
+   "len": 121644,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 54,
+    "medianMs": 26.600000000093132,
+    "p95Ms": 41.59999999962747,
+    "minMs": 14.699999999254942,
+    "meanMs": 28.262962962897426
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  },
+  {
+   "kind": "fork",
+   "id": "200KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 47,
+    "medianMs": 31.600000000558794,
+    "p95Ms": 40,
+    "minMs": 20.200000000186265,
+    "meanMs": 32.35957446809303
+   },
+   "hash": "ec39df4f",
+   "len": 122552,
+   "baseHash": "5617f384"
+  }
+ ],
+ "cold": []
+}

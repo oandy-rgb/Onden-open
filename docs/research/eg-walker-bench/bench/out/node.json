@@ -1,0 +1,2436 @@
+{
+ "env": {
+  "node": "v22.23.4",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "calibrationMs": 71.92928500000005,
+  "date": "2026-11-01T19:32:39.432Z"
+ },
+ "rows": [
+  {
+   "case": "10KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.794018000000051,
+    "p95Ms": 1.2607579999998961,
+    "minMs": 0.4653440000001865,
+    "meanMs": 0.8195614649999954
+   },
+   "resultHash": "7bfea926",
+   "resultLen": 5916
+  },
+  {
+   "case": "10KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.20093499999984488,
+    "p95Ms": 0.2838130000000092,
+    "minMs": 0.16120800000044255,
+    "meanMs": 0.21563820500001157
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.3835210000006555,
+    "p95Ms": 0.5090470000004643,
+    "minMs": 0.17844400000103633,
+    "meanMs": 0.3825245824999638
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "10KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.37962400000014895,
+    "p95Ms": 0.45257200000014564,
+    "minMs": 0.24318399999901885,
+    "meanMs": 0.3800063275000457
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.4424479999997857,
+    "p95Ms": 0.6873599999998987,
+    "minMs": 0.1717979999993986,
+    "meanMs": 0.4469578749999755
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.766771499999777,
+    "p95Ms": 1.043244999998933,
+    "minMs": 0.4202690000001894,
+    "meanMs": 0.7560318675000007
+   },
+   "resultHash": "4e1c00a4",
+   "resultLen": 5909
+  },
+  {
+   "case": "10KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.40529999999853317,
+    "p95Ms": 0.5857189999987895,
+    "minMs": 0.29373499999928754,
+    "meanMs": 0.41113187500003734
+   },
+   "resultHash": "4e1c00a4",
+   "resultLen": 5909
+  },
+  {
+   "case": "10KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.4170849999991333,
+    "p95Ms": 0.6397679999972752,
+    "minMs": 0.2695349999994505,
+    "meanMs": 0.4495291524999993
+   },
+   "resultHash": "4e1c00a4",
+   "resultLen": 5909
+  },
+  {
+   "case": "10KB-10",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.6303100000022823,
+    "p95Ms": 4.26499700000204,
+    "minMs": 2.2305840000008175,
+    "meanMs": 2.941548055000003
+   },
+   "resultHash": "8e66d8e4",
+   "resultLen": 6206
+  },
+  {
+   "case": "10KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5413010000011127,
+    "p95Ms": 0.8811310000019148,
+    "minMs": 0.46454699999958393,
+    "meanMs": 0.6323771199999192
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.9129790000006324,
+    "p95Ms": 2.106156000001647,
+    "minMs": 0.3931799999991199,
+    "meanMs": 1.0552512749999914
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "10KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.9325870000029681,
+    "p95Ms": 1.1118940000014845,
+    "minMs": 0.6264480000027106,
+    "meanMs": 0.8766248900000846
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8860994999959075,
+    "p95Ms": 2.188434999996389,
+    "minMs": 0.41492400000424823,
+    "meanMs": 1.0766194450000695
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5599459999975807,
+    "p95Ms": 0.7984589999978198,
+    "minMs": 0.3730199999990873,
+    "meanMs": 0.5937301425001351
+   },
+   "resultHash": "699b0ed9",
+   "resultLen": 5963
+  },
+  {
+   "case": "10KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6273489999985031,
+    "p95Ms": 0.8835099999996601,
+    "minMs": 0.4198420000029728,
+    "meanMs": 0.6250873525000862
+   },
+   "resultHash": "699b0ed9",
+   "resultLen": 5963
+  },
+  {
+   "case": "10KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.5589824999988195,
+    "p95Ms": 0.6975529999981518,
+    "minMs": 0.33816099999967264,
+    "meanMs": 0.5585562675001348
+   },
+   "resultHash": "699b0ed9",
+   "resultLen": 5963
+  },
+  {
+   "case": "10KB-100",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 9,
+    "medianMs": 240.003896000002,
+    "p95Ms": 359.43039200000203,
+    "minMs": 231.54610700000194,
+    "meanMs": 269.0996361111126
+   },
+   "resultHash": "c5175363",
+   "resultLen": 17386
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 358,
+    "medianMs": 4.162549499997112,
+    "p95Ms": 5.116107000001648,
+    "minMs": 2.573597000002337,
+    "meanMs": 4.194279508379735
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 319,
+    "medianMs": 3.8635270000013406,
+    "p95Ms": 12.042154000002483,
+    "minMs": 1.81675499999983,
+    "meanMs": 4.707400595611222
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 358,
+    "medianMs": 3.831453499999043,
+    "p95Ms": 5.542680999998993,
+    "minMs": 3.314951000000292,
+    "meanMs": 4.198830405027828
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 285,
+    "medianMs": 4.239237000001594,
+    "p95Ms": 12.904934000005596,
+    "minMs": 2.411305999994511,
+    "meanMs": 5.3170295298242225
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6037154999939958,
+    "p95Ms": 0.8452560000005178,
+    "minMs": 0.426076000003377,
+    "meanMs": 0.5983317649998571
+   },
+   "resultHash": "db5380bd",
+   "resultLen": 13808
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7787700000044424,
+    "p95Ms": 2.5510339999891585,
+    "minMs": 1.4801920000027167,
+    "meanMs": 1.939245312500061
+   },
+   "resultHash": "db5380bd",
+   "resultLen": 13808
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.1895740000036312,
+    "p95Ms": 1.8001249999942956,
+    "minMs": 0.7097409999987576,
+    "meanMs": 1.2391216974996495
+   },
+   "resultHash": "db5380bd",
+   "resultLen": 13808
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.969856499999878,
+    "p95Ms": 3.5134990000078687,
+    "minMs": 2.018220999991172,
+    "meanMs": 2.759207035000218
+   },
+   "resultHash": "56443242",
+   "resultLen": 28159
+  },
+  {
+   "case": "50KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.4269080000012764,
+    "p95Ms": 0.6233340000035241,
+    "minMs": 0.36751100000401493,
+    "meanMs": 0.4665319375001127
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.2677540000004228,
+    "p95Ms": 0.38854699999501463,
+    "minMs": 0.1515030000009574,
+    "meanMs": 0.2863631999995414
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "50KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6013805000038701,
+    "p95Ms": 0.8936949999915669,
+    "minMs": 0.5470510000013746,
+    "meanMs": 0.643582892500126
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.41504900000290945,
+    "p95Ms": 0.6074510000034934,
+    "minMs": 0.18707899999571964,
+    "meanMs": 0.42277385000001233
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.9915574999977252,
+    "p95Ms": 3.2443679999996675,
+    "minMs": 1.8502060000027996,
+    "meanMs": 2.24845761250006
+   },
+   "resultHash": "c4bd5479",
+   "resultLen": 28118
+  },
+  {
+   "case": "50KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8945745000019087,
+    "p95Ms": 1.3525019999942742,
+    "minMs": 0.8162680000095861,
+    "meanMs": 0.9694570774998647
+   },
+   "resultHash": "c4bd5479",
+   "resultLen": 28118
+  },
+  {
+   "case": "50KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.6091040000028443,
+    "p95Ms": 1.0476720000006026,
+    "minMs": 0.4693870000046445,
+    "meanMs": 0.718443275000136
+   },
+   "resultHash": "c4bd5479",
+   "resultLen": 28118
+  },
+  {
+   "case": "50KB-10",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 379,
+    "medianMs": 3.4465909999998985,
+    "p95Ms": 5.714080999998259,
+    "minMs": 2.9889750000002095,
+    "meanMs": 3.9693349841689938
+   },
+   "resultHash": "8cb52c7a",
+   "resultLen": 29423
+  },
+  {
+   "case": "50KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.8534440000075847,
+    "p95Ms": 1.399674000000232,
+    "minMs": 0.7601249999861466,
+    "meanMs": 1.0125265449998915
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.9814229999974486,
+    "p95Ms": 2.3732899999886286,
+    "minMs": 0.4112349999923026,
+    "meanMs": 1.1508284749999802
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "50KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.7236384999996517,
+    "p95Ms": 1.9454379999951925,
+    "minMs": 1.0629899999912595,
+    "meanMs": 1.5953031699997882
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.9389875000051688,
+    "p95Ms": 2.560453999991296,
+    "minMs": 0.4513789999909932,
+    "meanMs": 1.1818196074998923
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.1558325000005425,
+    "p95Ms": 3.338793999995687,
+    "minMs": 1.9429479999962496,
+    "meanMs": 2.4571026599999457
+   },
+   "resultHash": "443bdfdf",
+   "resultLen": 29028
+  },
+  {
+   "case": "50KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.490401999995811,
+    "p95Ms": 1.7733450000087032,
+    "minMs": 1.007990999991307,
+    "meanMs": 1.4247369074999734
+   },
+   "resultHash": "443bdfdf",
+   "resultLen": 29028
+  },
+  {
+   "case": "50KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.7921615000013844,
+    "p95Ms": 1.3236929999984568,
+    "minMs": 0.5676879999955418,
+    "meanMs": 0.8735466050000832
+   },
+   "resultHash": "443bdfdf",
+   "resultLen": 29028
+  },
+  {
+   "case": "50KB-100",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 27,
+    "medianMs": 50.02215299999807,
+    "p95Ms": 79.132196999999,
+    "minMs": 41.627129999993485,
+    "meanMs": 55.70107225925798
+   },
+   "resultHash": "285d638f",
+   "resultLen": 36657
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 300,
+    "medianMs": 4.730046999997285,
+    "p95Ms": 7.194997999991756,
+    "minMs": 4.567846000005375,
+    "meanMs": 5.023796940000078
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 183,
+    "medianMs": 6.606976999988547,
+    "p95Ms": 18.207500999997137,
+    "minMs": 3.4632759999949485,
+    "meanMs": 8.203513852458656
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 240,
+    "medianMs": 5.918920000010985,
+    "p95Ms": 8.915322000015294,
+    "minMs": 5.553524000017205,
+    "meanMs": 6.272197045833673
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 142,
+    "medianMs": 8.884419000009075,
+    "p95Ms": 21.889002000010805,
+    "minMs": 4.279050000011921,
+    "meanMs": 10.657394922535389
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.122226999999839,
+    "p95Ms": 3.0672530000156257,
+    "minMs": 1.8451679999998305,
+    "meanMs": 2.3676904825004748
+   },
+   "resultHash": "bf273ac5",
+   "resultLen": 32685
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.6756449999957113,
+    "p95Ms": 3.9033459999773186,
+    "minMs": 2.2777139999961946,
+    "meanMs": 2.8479772250007227
+   },
+   "resultHash": "bf273ac5",
+   "resultLen": 32685
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.5381805000070017,
+    "p95Ms": 2.3630340000090655,
+    "minMs": 0.8665749999927357,
+    "meanMs": 1.6162038650004251
+   },
+   "resultHash": "bf273ac5",
+   "resultLen": 32685
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 163,
+    "medianMs": 8.699347999994643,
+    "p95Ms": 12.725971000007121,
+    "minMs": 8.1226280000119,
+    "meanMs": 9.279750509200971
+   },
+   "resultHash": "9f43dd1d",
+   "resultLen": 111954
+  },
+  {
+   "case": "200KB-10",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.6535280000098282,
+    "p95Ms": 2.2535870000137947,
+    "minMs": 1.369596000004094,
+    "meanMs": 1.787046567499856
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 0.4997704999987036,
+    "p95Ms": 0.7626070000114851,
+    "minMs": 0.3273849999823142,
+    "meanMs": 0.5388034500005596
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "200KB-10",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.1779835000052117,
+    "p95Ms": 3.241405000007944,
+    "minMs": 1.947478999994928,
+    "meanMs": 2.444945024999033
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.1451615000114543,
+    "p95Ms": 1.7214629999944009,
+    "minMs": 0.7429399999964517,
+    "meanMs": 1.2123730100004468
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 125,
+    "medianMs": 12.468353999982355,
+    "p95Ms": 13.961284999997588,
+    "minMs": 8.431555000017397,
+    "meanMs": 12.086202447999735
+   },
+   "resultHash": "834fdf7e",
+   "resultLen": 111925
+  },
+  {
+   "case": "200KB-10",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 387,
+    "medianMs": 3.3897999999753665,
+    "p95Ms": 5.079104999982519,
+    "minMs": 3.0347489999840036,
+    "meanMs": 3.879639124031659
+   },
+   "resultHash": "834fdf7e",
+   "resultLen": 111925
+  },
+  {
+   "case": "200KB-10",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.8061764999874867,
+    "p95Ms": 2.6427089999779128,
+    "minMs": 1.5174359999946319,
+    "meanMs": 2.0137779125008093
+   },
+   "resultHash": "834fdf7e",
+   "resultLen": 111925
+  },
+  {
+   "case": "200KB-10",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 145,
+    "medianMs": 9.613328000006732,
+    "p95Ms": 14.171716000011656,
+    "minMs": 9.018018000002485,
+    "meanMs": 10.393402158620502
+   },
+   "resultHash": "66a7de9c",
+   "resultLen": 113410
+  },
+  {
+   "case": "200KB-100",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.6765120000054594,
+    "p95Ms": 3.0674829999916255,
+    "minMs": 1.7839919999823906,
+    "meanMs": 2.451045957500028
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.0893535000068368,
+    "p95Ms": 2.776211999997031,
+    "minMs": 0.5471510000061244,
+    "meanMs": 1.3150124574998336
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "200KB-100",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 3.3202499999897555,
+    "p95Ms": 4.32471399998758,
+    "minMs": 2.494425000011688,
+    "meanMs": 3.3951199999996606
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 1.4928524999850197,
+    "p95Ms": 3.6438640000123996,
+    "minMs": 0.7393480000027921,
+    "meanMs": 1.8352953250004065
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 123,
+    "medianMs": 12.737350999988848,
+    "p95Ms": 15.595849000004819,
+    "minMs": 8.307938000012655,
+    "meanMs": 12.287519097562436
+   },
+   "resultHash": "88c98964",
+   "resultLen": 113019
+  },
+  {
+   "case": "200KB-100",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 374,
+    "medianMs": 3.6425579999922775,
+    "p95Ms": 5.348818999977084,
+    "minMs": 3.2440389999828767,
+    "meanMs": 4.019175847593174
+   },
+   "resultHash": "88c98964",
+   "resultLen": 113019
+  },
+  {
+   "case": "200KB-100",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.4300474999909056,
+    "p95Ms": 2.740380000002915,
+    "minMs": 1.6280689999985043,
+    "meanMs": 2.290404627499738
+   },
+   "resultHash": "88c98964",
+   "resultLen": 113019
+  },
+  {
+   "case": "200KB-100",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a",
+   "impl": "diff3",
+   "stats": {
+    "n": 58,
+    "medianMs": 25.062233500008006,
+    "p95Ms": 33.64861699999892,
+    "minMs": 21.015199000015855,
+    "meanMs": 26.12147458620793
+   },
+   "resultHash": "398e7caf",
+   "resultLen": 121644
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a",
+   "impl": "dt",
+   "stats": {
+    "n": 211,
+    "medianMs": 6.592788999987533,
+    "p95Ms": 9.604105999984313,
+    "minMs": 5.957652999990387,
+    "meanMs": 7.134394966825204
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a",
+   "impl": "proto",
+   "stats": {
+    "n": 169,
+    "medianMs": 6.679839999997057,
+    "p95Ms": 21.722217000002274,
+    "minMs": 4.304740999999922,
+    "meanMs": 8.975107644968418
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b",
+   "impl": "diff3",
+   "skipped": "不適用"
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 158,
+    "medianMs": 8.519483500014758,
+    "p95Ms": 13.143008000013651,
+    "minMs": 7.622517999989213,
+    "meanMs": 9.514106841772998
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 163,
+    "medianMs": 7.860476000001654,
+    "p95Ms": 19.511100000003353,
+    "minMs": 4.621861999999965,
+    "meanMs": 9.249801588955549
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c",
+   "impl": "diff3",
+   "stats": {
+    "n": 142,
+    "medianMs": 9.789030999992974,
+    "p95Ms": 13.476548000006005,
+    "minMs": 8.417000999994343,
+    "meanMs": 10.585984119720974
+   },
+   "resultHash": "c62d2c43",
+   "resultLen": 117546
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c",
+   "impl": "dt",
+   "stats": {
+    "n": 270,
+    "medianMs": 5.150994500014349,
+    "p95Ms": 7.7044370000076015,
+    "minMs": 4.784325999993598,
+    "meanMs": 5.559093770371207
+   },
+   "resultHash": "c62d2c43",
+   "resultLen": 117546
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c",
+   "impl": "proto",
+   "stats": {
+    "n": 400,
+    "medianMs": 2.9494360000098823,
+    "p95Ms": 4.254151999979513,
+    "minMs": 2.0777729999972507,
+    "meanMs": 3.143841532498991
+   },
+   "resultHash": "c62d2c43",
+   "resultLen": 117546
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c-agree",
+   "impl": "dt~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "automerge-paper",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 400,
+    "medianMs": 3.156526999984635,
+    "p95Ms": 4.782418999995571,
+    "minMs": 2.658408999996027,
+    "meanMs": 3.535878102500865
+   },
+   "resultHash": "7148b7e2",
+   "resultLen": 104852
+  },
+  {
+   "case": "automerge-paper",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 54,
+    "medianMs": 25.00345400000515,
+    "p95Ms": 40.91952300001867,
+    "minMs": 22.70453700001235,
+    "meanMs": 27.96382581481669
+   },
+   "resultHash": "7148b7e2",
+   "resultLen": 104852
+  },
+  {
+   "case": "automerge-paper",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "automerge-paper",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "seph-blog1",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 280,
+    "medianMs": 5.803100999997696,
+    "p95Ms": 6.89042799998424,
+    "minMs": 3.616171999979997,
+    "meanMs": 5.362727757143044
+   },
+   "resultHash": "11f8ff92",
+   "resultLen": 56769
+  },
+  {
+   "case": "seph-blog1",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 84,
+    "medianMs": 18.421677499994985,
+    "p95Ms": 21.06566200000816,
+    "minMs": 8.872250000014901,
+    "meanMs": 17.934560119047266
+   },
+   "resultHash": "11f8ff92",
+   "resultLen": 56769
+  },
+  {
+   "case": "seph-blog1",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "seph-blog1",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "friendsforever",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 123,
+    "medianMs": 10.914203000022098,
+    "p95Ms": 16.317867000005208,
+    "minMs": 10.339134000008926,
+    "meanMs": 12.262566861787402
+   },
+   "resultHash": "91df976a",
+   "resultLen": 21362
+  },
+  {
+   "case": "friendsforever",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 50,
+    "medianMs": 29.541880999997375,
+    "p95Ms": 48.592533999995794,
+    "minMs": 15.397198999999091,
+    "meanMs": 30.356225599996396
+   },
+   "resultHash": "91df976a",
+   "resultLen": 21362
+  },
+  {
+   "case": "friendsforever",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "friendsforever",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "clownschool",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 71,
+    "medianMs": 22.94315700000152,
+    "p95Ms": 25.896658000012394,
+    "minMs": 14.23898399999598,
+    "meanMs": 21.225644323944923
+   },
+   "resultHash": "df7043ad",
+   "resultLen": 21148
+  },
+  {
+   "case": "clownschool",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 19,
+    "medianMs": 89.19229300000006,
+    "p95Ms": 102.23537400001078,
+    "minMs": 40.94379799999297,
+    "meanMs": 81.04033531578821
+   },
+   "resultHash": "df7043ad",
+   "resultLen": 21148
+  },
+  {
+   "case": "clownschool",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "clownschool",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "node_nodecc",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 12,
+    "medianMs": 125.8764450000017,
+    "p95Ms": 166.35414599999785,
+    "minMs": 95.17338799999561,
+    "meanMs": 128.38183583333497
+   },
+   "resultHash": "b4dc529e",
+   "resultLen": 38142
+  },
+  {
+   "case": "node_nodecc",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 10,
+    "medianMs": 157.95056349999504,
+    "p95Ms": 198.1056839999801,
+    "minMs": 127.82881899998756,
+    "meanMs": 163.59234069999656
+   },
+   "resultHash": "b4dc529e",
+   "resultLen": 38142
+  },
+  {
+   "case": "node_nodecc",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "node_nodecc",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "git-makefile",
+   "op": "b",
+   "impl": "dt",
+   "stats": {
+    "n": 20,
+    "medianMs": 79.10943499999121,
+    "p95Ms": 90.05164700001478,
+    "minMs": 62.852080999989994,
+    "meanMs": 78.5650813500004
+   },
+   "resultHash": "51a60ff9",
+   "resultLen": 113676
+  },
+  {
+   "case": "git-makefile",
+   "op": "b",
+   "impl": "proto",
+   "stats": {
+    "n": 9,
+    "medianMs": 281.00767500000075,
+    "p95Ms": 346.48374100000365,
+    "minMs": 243.0310139999492,
+    "meanMs": 284.27529477777233
+   },
+   "resultHash": "16a7339f",
+   "resultLen": 113676
+  },
+  {
+   "case": "git-makefile",
+   "op": "b-correct",
+   "impl": "dt",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "git-makefile",
+   "op": "b-correct",
+   "impl": "proto",
+   "agreeWith": {
+    "endContent": false
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 126,
+    "medianMs": 10.354514999999992,
+    "p95Ms": 16.038048000000344,
+    "minMs": 8.461693000000196,
+    "meanMs": 11.977332611111146
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 17,
+    "medianMs": 77.49927199999911,
+    "p95Ms": 128.9472059999989,
+    "minMs": 69.1696950000005,
+    "meanMs": 88.67191499999974
+   },
+   "resultHash": "6ad0670a",
+   "resultLen": 5922
+  },
+  {
+   "case": "10KB-10",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 172,
+    "medianMs": 9.6896244999989,
+    "p95Ms": 10.859316000001854,
+    "minMs": 5.840161999996781,
+    "meanMs": 8.73997529651176
+   },
+   "resultHash": "4e1c00a4",
+   "resultLen": 5909
+  },
+  {
+   "case": "10KB-10",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-10",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 24,
+    "medianMs": 68.78429649999816,
+    "p95Ms": 81.88921499999924,
+    "minMs": 45.29213299999901,
+    "meanMs": 65.34189062499975
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 14,
+    "medianMs": 109.76153449999765,
+    "p95Ms": 123.12551099999837,
+    "minMs": 104.16238600000361,
+    "meanMs": 111.11811878571461
+   },
+   "resultHash": "8887dc3c",
+   "resultLen": 6407
+  },
+  {
+   "case": "10KB-100",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 203,
+    "medianMs": 6.493841999996221,
+    "p95Ms": 10.636822000000393,
+    "minMs": 5.981262000001152,
+    "meanMs": 7.427441270936658
+   },
+   "resultHash": "699b0ed9",
+   "resultLen": 5963
+  },
+  {
+   "case": "10KB-100",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-100",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 740.8105060000016,
+    "p95Ms": 862.3246029999937,
+    "minMs": 699.4887099999905,
+    "meanMs": 758.2579288888875
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 802.0166210000025,
+    "p95Ms": 832.8116509999963,
+    "minMs": 746.4678690000001,
+    "meanMs": 796.5937327777776
+   },
+   "resultHash": "5670fe10",
+   "resultLen": 20563
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 76,
+    "medianMs": 17.95892850000382,
+    "p95Ms": 27.698984000002383,
+    "minMs": 16.361996999999974,
+    "meanMs": 19.952564499999426
+   },
+   "resultHash": "db5380bd",
+   "resultLen": 13808
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "10KB-1000",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 41,
+    "medianMs": 34.8192670000135,
+    "p95Ms": 51.59179900000163,
+    "minMs": 32.125350999995135,
+    "meanMs": 36.707275634144914
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 3,
+    "medianMs": 2042.8933649999963,
+    "p95Ms": 2160.718777000002,
+    "minMs": 1913.871764999989,
+    "meanMs": 2039.161302333329
+   },
+   "resultHash": "fb1a3cb2",
+   "resultLen": 28162
+  },
+  {
+   "case": "50KB-10",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 49,
+    "medianMs": 28.009560000005877,
+    "p95Ms": 46.28105599999253,
+    "minMs": 26.313341000000946,
+    "meanMs": 31.174409673467864
+   },
+   "resultHash": "c4bd5479",
+   "resultLen": 28118
+  },
+  {
+   "case": "50KB-10",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-10",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 251.77066000000923,
+    "p95Ms": 286.4615300000005,
+    "minMs": 243.0268919999944,
+    "meanMs": 254.4176266666715
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 3,
+    "medianMs": 2453.876774000004,
+    "p95Ms": 2480.280732000014,
+    "minMs": 2326.7672209999873,
+    "meanMs": 2420.308242333335
+   },
+   "resultHash": "814e4b57",
+   "resultLen": 29462
+  },
+  {
+   "case": "50KB-100",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 45,
+    "medianMs": 31.914036000001943,
+    "p95Ms": 44.41657600001781,
+    "minMs": 29.90054100000998,
+    "meanMs": 33.803875000003934
+   },
+   "resultHash": "443bdfdf",
+   "resultLen": 29028
+  },
+  {
+   "case": "50KB-100",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-100",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 3,
+    "medianMs": 3098.814759000001,
+    "p95Ms": 3156.1417459999793,
+    "minMs": 2926.1546810000145,
+    "meanMs": 3060.3703953333315
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 3,
+    "medianMs": 5589.777211000008,
+    "p95Ms": 5767.2757700000075,
+    "minMs": 5321.662046000012,
+    "meanMs": 5559.571675666676
+   },
+   "resultHash": "7e538e57",
+   "resultLen": 39225
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 33,
+    "medianMs": 42.57638899999438,
+    "p95Ms": 65.00859700000728,
+    "minMs": 36.38744799999404,
+    "meanMs": 45.91394206060619
+   },
+   "resultHash": "bf273ac5",
+   "resultLen": 32685
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "50KB-1000",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 252.93023800000083,
+    "p95Ms": 311.26268000001437,
+    "minMs": 242.72175500000594,
+    "meanMs": 266.83274744445225
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 1,
+    "medianMs": 38240.224944999994,
+    "p95Ms": 38240.224944999994,
+    "minMs": 38240.224944999994,
+    "meanMs": 38240.224944999994,
+    "note": "太慢，只量一次"
+   },
+   "resultHash": "55ff9f32",
+   "resultLen": 111958
+  },
+  {
+   "case": "200KB-10",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 10,
+    "medianMs": 157.9092140000139,
+    "p95Ms": 184.47208700003102,
+    "minMs": 148.09928100003162,
+    "meanMs": 163.60116620000917
+   },
+   "resultHash": "834fdf7e",
+   "resultLen": 111925
+  },
+  {
+   "case": "200KB-10",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-10",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 1085.6336250000168,
+    "p95Ms": 1259.043799999985,
+    "minMs": 1015.0335700000287,
+    "meanMs": 1112.9212148888942
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 1,
+    "medianMs": 41583.80144399998,
+    "p95Ms": 41583.80144399998,
+    "minMs": 41583.80144399998,
+    "meanMs": 41583.80144399998,
+    "note": "太慢，只量一次"
+   },
+   "resultHash": "8f627c32",
+   "resultLen": 113408
+  },
+  {
+   "case": "200KB-100",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 10,
+    "medianMs": 154.97279099997832,
+    "p95Ms": 171.0278030000045,
+    "minMs": 144.66313400003128,
+    "meanMs": 156.6722500999982
+   },
+   "resultHash": "88c98964",
+   "resultLen": 113019
+  },
+  {
+   "case": "200KB-100",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-100",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a",
+   "impl": "ref",
+   "stats": {
+    "n": 1,
+    "medianMs": 10457.22929399996,
+    "p95Ms": 10457.22929399996,
+    "minMs": 10457.22929399996,
+    "meanMs": 10457.22929399996,
+    "note": "太慢，只量一次"
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "a-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 1,
+    "medianMs": 49135.756519999995,
+    "p95Ms": 49135.756519999995,
+    "minMs": 49135.756519999995,
+    "meanMs": 49135.756519999995,
+    "note": "太慢，只量一次"
+   },
+   "resultHash": "ec39df4f",
+   "resultLen": 122552
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "b-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c",
+   "impl": "ref",
+   "stats": {
+    "n": 10,
+    "medianMs": 154.49346050000167,
+    "p95Ms": 160.78226299997186,
+    "minMs": 144.36220800003503,
+    "meanMs": 152.71525740000652
+   },
+   "resultHash": "c62d2c43",
+   "resultLen": 117546
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c-agree",
+   "impl": "ref~dt",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "200KB-1000",
+   "op": "c-agree",
+   "impl": "ref~proto",
+   "agreeWith": {
+    "same": true
+   }
+  },
+  {
+   "case": "automerge-paper",
+   "op": "b",
+   "impl": "ref",
+   "skipped": "參考實作對 >3 萬操作需時數分鐘到數小時（每步線性掃描），未跑"
+  },
+  {
+   "case": "seph-blog1",
+   "op": "b",
+   "impl": "ref",
+   "skipped": "參考實作對 >3 萬操作需時數分鐘到數小時（每步線性掃描），未跑"
+  },
+  {
+   "case": "friendsforever",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 9,
+    "medianMs": 1269.553899999999,
+    "p95Ms": 1335.2923810000066,
+    "minMs": 1153.6108240000322,
+    "meanMs": 1253.7273499999947
+   },
+   "resultHash": "91df976a",
+   "resultLen": 21362
+  },
+  {
+   "case": "friendsforever",
+   "op": "b-correct",
+   "impl": "ref",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "clownschool",
+   "op": "b",
+   "impl": "ref",
+   "stats": {
+    "n": 3,
+    "medianMs": 1676.736475999991,
+    "p95Ms": 1763.2063590000034,
+    "minMs": 1641.8286229999503,
+    "meanMs": 1693.923819333315
+   },
+   "resultHash": "df7043ad",
+   "resultLen": 21148
+  },
+  {
+   "case": "clownschool",
+   "op": "b-correct",
+   "impl": "ref",
+   "agreeWith": {
+    "endContent": true
+   }
+  },
+  {
+   "case": "node_nodecc",
+   "op": "b",
+   "impl": "ref",
+   "skipped": "參考實作對 >3 萬操作需時數分鐘到數小時（每步線性掃描），未跑"
+  },
+  {
+   "case": "git-makefile",
+   "op": "b",
+   "impl": "ref",
+   "skipped": "參考實作對 >3 萬操作需時數分鐘到數小時（每步線性掃描），未跑"
+  }
+ ],
+ "mergedFrom": "out/node-old.json"
+}

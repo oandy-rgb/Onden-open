@@ -1,0 +1,277 @@
+/* D7 governance review block — sits atop the Inbox pane. Quiet but distinct
+   from the hygiene list below it: a faint accent-tinted card that reads as
+   "things the agent did that you haven't signed off on yet". */
+/* A box holding only module sections that rendered nothing. */
+.inbox-review:empty { display: none; }
+
+.inbox-review {
+  margin: 4px 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--ac-accent) 30%, var(--ac-line));
+  border-radius: var(--ac-radius-sm);
+  background: color-mix(in srgb, var(--ac-accent) 6%, var(--ac-surface));
+  overflow: hidden;
+}
+.inbox-review-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: var(--ac-fs-xs);
+  font-weight: 600;
+  color: var(--ac-ink);
+  border-bottom: 1px solid color-mix(in srgb, var(--ac-accent) 18%, var(--ac-line));
+}
+.inbox-review-title { flex: 1; }
+.inbox-review-count {
+  min-width: 18px;
+  text-align: center;
+  padding: 0 5px;
+  border-radius: var(--ac-radius-lg);
+  font-size: var(--ac-fs-xs);
+  background: var(--ac-accent);
+  color: var(--ac-accent-ink);
+}
+.inbox-review-list { list-style: none; margin: 0; padding: 0; }
+.inbox-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 10px;
+}
+.inbox-review-item + .inbox-review-item { border-top: 1px solid color-mix(in srgb, var(--ac-line) 60%, transparent); }
+
+/* card header: change-type icon + plain-English description */
+.inbox-review-top { display: flex; align-items: flex-start; gap: 6px; }
+.inbox-review-icon { color: var(--ac-accent); margin-top: 1px; flex-shrink: 0; display: inline-flex; }
+.inbox-review-desc { font-size: var(--ac-fs-caption); color: var(--ac-ink); line-height: 1.4; }
+.inbox-review-verb { color: var(--ac-muted); }
+.inbox-review-target { font-weight: 600; }
+
+/* Kind families — a long queue must scan by COLOR + edge, not by re-reading
+   prose. The colour per kind is the one every event view uses
+   (styles/event-kinds.css, lib/eventKinds.ts). */
+.inbox-review-item[class*="event-kind-"] {
+  border-left: 3px solid color-mix(in srgb, var(--event-color) 75%, transparent);
+  padding-left: 9px;
+}
+.inbox-review-item[class*="event-kind-"] .inbox-review-icon {
+  color: var(--event-color);
+  background: color-mix(in srgb, var(--event-color) 12%, transparent);
+  border-radius: var(--ac-radius-sm);
+  padding: 2px;
+  margin-top: 0;
+}
+.inbox-review-item[class*="event-kind-"] .inbox-review-verb {
+  color: var(--event-color);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--ac-fs-xs);
+  letter-spacing: 0.04em;
+}
+
+/* Bulk decisions over the filtered set — approve breezes, reject arms first */
+.inbox-bulk-bar {
+  display: flex;
+  flex-wrap: wrap; /* the sidebar rail is ~190px — buttons drop to a new row */
+  align-items: center;
+  gap: 4px 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ac-line) 60%, transparent);
+  background: color-mix(in srgb, var(--ac-surface) 60%, transparent);
+}
+.inbox-bulk-label { font-size: var(--ac-fs-xs); color: var(--ac-muted); flex-basis: 100%; }
+.inbox-bulk-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--ac-fs-xs); padding: 3px 9px; border-radius: var(--ac-radius-md);
+  border: 1px solid var(--ac-line); background: none; cursor: pointer; color: var(--ac-ink);
+  white-space: nowrap;
+  max-width: 100%;
+}
+.inbox-bulk-btn:disabled { opacity: 0.45; cursor: default; }
+.inbox-bulk-approve:hover:not(:disabled) { border-color: var(--ac-success); color: var(--ac-success); }
+.inbox-bulk-reject:hover:not(:disabled) { border-color: var(--ac-accent); color: var(--ac-accent); }
+.inbox-bulk-btn.inbox-bulk-reject.armed,
+.inbox-bulk-btn.inbox-bulk-reject.armed:hover:not(:disabled) {
+  border-color: var(--ac-danger); background: var(--ac-danger); color: var(--ac-bg); font-weight: 600;
+}
+
+/* actor + relative time — the "who / when" context the approval card needs */
+.inbox-review-meta { display: flex; align-items: center; gap: 8px; font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+.inbox-review-actor { display: inline-flex; align-items: center; gap: 3px; color: var(--ac-accent); font-weight: 600; }
+.inbox-review-time { font-variant-numeric: tabular-nums; }
+
+/* inline EVIDENCE — what actually changed, so the card is a decision surface */
+.inbox-ev { font-size: var(--ac-fs-xs); }
+.inbox-ev-link { border: none; background: none; color: var(--ac-accent); cursor: pointer; font-size: var(--ac-fs-xs); padding: 0; }
+.inbox-ev-link:hover { text-decoration: underline; }
+.inbox-ev-muted { font-size: var(--ac-fs-xs); color: var(--ac-muted); font-style: italic; }
+.inbox-ev-summary {
+  display: inline-flex; align-items: center; gap: 6px; border: none; background: none;
+  cursor: pointer; padding: 0; font-size: var(--ac-fs-xs); font-variant-numeric: tabular-nums;
+}
+.inbox-ev-chev { transition: transform 0.12s; color: var(--ac-muted); }
+.inbox-ev-chev.open { transform: rotate(180deg); }
+.inbox-ev-warn { color: var(--ac-warning); font-weight: 600; }
+.inbox-cascade-wait { margin: 0 0 4px; line-height: 1.4; overflow-wrap: anywhere; }
+.inbox-ev-diff { margin-top: 6px; min-width: 0; }
+
+/* Reveal-on-hover/focus — a long queue reads as a scannable feed, not a wall
+   of buttons; Approve/Reject surface when a row is hovered or holds focus.
+   focus-within keeps it keyboard-reachable; the disabled/held rows that can't
+   wait for a hover (true blockers) keep their actions pinned, see below. */
+.inbox-review-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.inbox-review-item:hover .inbox-review-actions,
+.inbox-review-item:focus-within .inbox-review-actions {
+  opacity: 1;
+}
+/* Held effects are the queue's only true blockers — never hide their actions. */
+.inbox-review-item-held .inbox-review-actions { opacity: 1; }
+/* Coarse-pointer (touch) has no hover — keep actions visible there. */
+@media (hover: none) {
+  .inbox-review-actions { opacity: 1; }
+}
+.inbox-review-approve,
+.inbox-review-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: var(--ac-fs-xs);
+  border-radius: var(--ac-radius-xs);
+  border: 1px solid var(--ac-line);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  cursor: pointer;
+}
+.inbox-review-approve { border-color: color-mix(in srgb, var(--ac-accent) 40%, var(--ac-line)); }
+.inbox-review-approve:hover:not(:disabled) { background: color-mix(in srgb, var(--ac-accent) 12%, var(--ac-surface)); }
+.inbox-review-reject:hover:not(:disabled) { background: color-mix(in srgb, var(--ac-danger) 10%, var(--ac-surface)); }
+.inbox-review-approve:disabled,
+.inbox-review-reject:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* D7 approve-BEFORE-apply — the held-effect cards. Visually heavier than the
+   applied-change cards: these are the queue's only true blockers. */
+.inbox-review-head-held { color: var(--ac-accent); }
+.inbox-review-item-held { border-left: 2px solid var(--ac-accent); }
+
+/* ── Filters + batch groups (feed-traffic upgrade) ───────────────────────── */
+
+.inbox-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 6px;
+}
+.inbox-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-full);
+  background: transparent;
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-xs);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.inbox-filter-chip.active {
+  background: var(--ac-ink);
+  color: var(--ac-surface);
+  border-color: var(--ac-ink);
+}
+.inbox-filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+.inbox-filter-type {
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-xs);
+  padding: 2px 4px;
+  max-width: 140px;
+}
+.inbox-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  cursor: pointer;
+}
+.inbox-review-item-group {
+  border-left: 2px solid var(--ac-line);
+}
+.inbox-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-xs);
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.inbox-group-members {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0 0 0 14px;
+  display: grid;
+  gap: 2px;
+}
+.inbox-group-member {
+  display: flex;
+  gap: 6px;
+  font-size: var(--ac-fs-xs);
+  min-width: 0;
+}
+.inbox-group-member-type {
+  color: var(--ac-muted);
+  flex-shrink: 0;
+}
+.inbox-group-member-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The owner's one line about failed background jobs (FailedJobsNotice):
+   a link to Settings › System status, never a card per job. */
+.failed-jobs-notice {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-warning);
+  font: inherit;
+  font-size: var(--ac-fs-caption);
+  text-align: left;
+  cursor: pointer;
+}
+.failed-jobs-notice:hover { color: var(--ac-ink); text-decoration: underline; }
+.failed-jobs-notice + .inbox-review-head { border-top: 1px solid var(--ac-line); }
+
+/* P1 cascade-preview notice on review cards */
+.inbox-cascade-list {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

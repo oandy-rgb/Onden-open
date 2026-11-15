@@ -1,0 +1,72 @@
+/* Fixed, so no layout of the shell has to make room: above the phone's bottom
+   nav, clear of the toast stack's corner. */
+.device-notices {
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+  transform: translateX(-50%);
+  z-index: var(--z-pane-top);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.device-notice {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: var(--ac-radius-full);
+  font-size: var(--ac-fs-small);
+  line-height: 1.4;
+  text-align: center;
+  color: var(--ac-accent-ink);
+  background: var(--ac-accent);
+  box-shadow: var(--ac-shadow-float);
+  pointer-events: auto;
+}
+.device-notice--action { padding: 0; }
+.device-notice--action button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: inherit;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.device-notice--action button:disabled { opacity: 0.6; cursor: default; }
+.device-notice--wide { max-width: 440px; border-radius: var(--ac-radius-lg); }
+.device-notice-retry {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--ac-radius-full);
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.device-notice-retry:disabled { opacity: 0.6; cursor: default; }
+/* 「這次更新」 sits under every dialog, sheet and palette (it is not in the top layer) and
+   below the toast stack. */
+.device-notices--whats-new { z-index: var(--z-pane-float); }
+/* 「這次更新」: a card, not a pill, so a few lines of text stay readable on a phone. */
+.device-notice-card {
+  width: 360px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  font-size: var(--ac-fs-small);
+  line-height: 1.5;
+  color: var(--ac-ink);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-float);
+  pointer-events: auto;
+}
+.device-notice-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.device-notice-card-head h2 { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; }
+.device-notice-card ul { margin: 4px 0 0; padding-left: 18px; list-style: disc; display: flex; flex-direction: column; gap: 4px; }
+.device-notice-card .ui-btn--ghost { margin-top: 4px; }

@@ -1,0 +1,16 @@
+{
+  "path": ["packages/backend/src", "packages/frontend/src", "packages/markdown/src", "packages/site/src", "packages/contract/src", "packages/pairing/src", "packages/relay/src"],
+  "format": ["typescript", "tsx", "javascript"],
+  "ignore": [
+    "**/*.test.*", "**/test/**", "**/__snapshots__/**", "**/*.d.ts", "**/vendor/**",
+    "**/i18n.*.ts", "**/*Labels.ts", "**/labels.ts", "**/*.generated.*", "**/migrations/**"
+  ],
+  "minTokens": 70,
+  "minLines": 5,
+  "mode": "strict",
+  "reporters": ["json", "console"],
+  "output": "./node_modules/.cache/jscpd",
+  "gitignore": true,
+  "silent": true,
+  "absolute": true
+}

@@ -1,0 +1,84 @@
+/* Same as quick capture: ui/Sheet on a phone, a centred card on desktop. */
+.quick-add-sheet {
+  width: 100%;
+  max-width: 480px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (width > 600px) {
+  .quick-add-sheet { background: var(--ac-bg); border-radius: var(--ac-radius-lg); box-shadow: var(--ac-shadow-sheet); }
+}
+
+.quick-add-row { display: flex; gap: 8px; align-items: stretch; }
+.quick-add-input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-surface); color: var(--ac-ink);
+  font-family: inherit; font-size: var(--ac-fs-input); /* 16px+: iOS does not zoom the page on focus */
+}
+.quick-add-input:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.quick-add-submit { min-height: 44px; min-width: 56px; }
+
+.quick-add-hint { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+.quick-add-preview { display: flex; flex-direction: column; gap: 6px; }
+.quick-add-preview-label { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.quick-add-preview-title { margin: 0; font-size: var(--ac-fs-ui-touch); color: var(--ac-ink); overflow-wrap: anywhere; }
+.quick-add-preview-title.is-empty { color: var(--ac-muted); font-style: italic; }
+
+.quick-add-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-add-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 12px; border-radius: var(--ac-radius-full);
+  border: 1px solid var(--ac-line); background: var(--ac-surface);
+  color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-caption);
+}
+span.quick-add-chip { min-height: 32px; color: var(--ac-muted); }
+.quick-add-chip.is-removable { cursor: pointer; }
+.quick-add-chip.is-removable:hover { background: var(--ac-overlay-hover); }
+.quick-add-chip.is-removable:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+
+.quick-add-added { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--ac-line); display: flex; flex-direction: column; gap: 6px; }
+.quick-add-added li { display: flex; flex-direction: column; gap: 2px; }
+.quick-add-added-title { color: var(--ac-ink); overflow-wrap: anywhere; }
+.quick-add-added-place { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+
+/* 「放在」: the space (and note) a task goes to, shown only when there is a choice. */
+.quick-add-sheet .quick-add-place { display: flex; justify-content: flex-start; gap: 10px; text-align: left; }
+.quick-add-place-label { flex: none; color: var(--ac-muted); }
+.quick-add-place-name { display: flex; align-items: center; flex: 1; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.quick-add-place-name > svg, .quick-add-place > svg { flex: none; color: var(--ac-muted); }
+.quick-add-place-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* A piece that looked like a date or time and was not understood: marked in the title and explained under the chips. */
+.quick-add-doubt-mark { background: var(--ac-warning-soft); color: inherit; border-bottom: 2px solid var(--ac-warning); padding: 0 2px; }
+.quick-add-doubt {
+  margin: 0; padding: 8px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  border: 1px solid var(--ac-warning); border-radius: var(--ac-radius-md); background: var(--ac-warning-soft);
+  font-size: var(--ac-fs-caption); color: var(--ac-ink);
+}
+.quick-add-doubt > span { flex: 1 1 12em; min-width: 0; }
+
+/* # and @ lists under the box. */
+.ui-popover.quick-add-suggest-popover { min-width: 220px; max-width: min(360px, 92vw); max-height: 260px; padding: 4px; overflow-y: auto; }
+.quick-add-suggest { margin: 0; padding: 0; list-style: none; }
+.quick-add-suggest-item { padding: 10px 10px; border-radius: var(--ac-radius-md); cursor: pointer; overflow-wrap: anywhere; font-size: var(--ac-fs-ui-touch); }
+.quick-add-suggest-item.is-active, .quick-add-suggest-item:hover { background: var(--ac-accent-tint-7); }
+
+/* In a timeline slot: when it is, how long, and the existing tasks that can take it. */
+.quick-add-slot-when { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); font-variant-numeric: tabular-nums; }
+.quick-add-slot { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.quick-add-slot-legend { padding: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.quick-add-slot-lengths { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-add-slot-length.is-selected { border-color: var(--ac-accent); background: var(--ac-accent-soft); }
+.quick-add-slot-clock { display: flex; flex-wrap: wrap; gap: 10px; }
+.quick-add-slot-part { display: flex; flex-direction: column; gap: 2px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.quick-add-slot-clock select { min-height: 40px; padding: 0 8px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-input); }
+.quick-add-slot-tasks { display: flex; flex-direction: column; gap: 2px; }
+.quick-add-slot-tasks-title { margin: 4px 0 0; font-size: var(--ac-fs-caption); font-weight: 600; color: var(--ac-muted); }
+.quick-add-slot-tasks ul { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow-y: auto; }
+.quick-add-slot-task { width: 100%; justify-content: space-between; gap: 8px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.quick-add-slot-task-when { flex: none; font-size: var(--ac-fs-caption); color: var(--ac-muted); }

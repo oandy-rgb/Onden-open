@@ -1,0 +1,278 @@
+{
+  "comment": "One tag-membership fixture, evaluated by both ends: frontend Bases file.hasTag (src/test/basesTagParity.test.ts) and the backend /api/query tags filter (packages/backend/src/test/tagMembershipParity.integration.test.ts). Members of a tag: itself, its child tags and the tags extending it, at any depth; every tag with the name counts. Names match case-insensitively on both ends. System machinery never lists on either end (frontend lib/systemNodes.isSystemNode, backend reservedNodes.NOT_SYSTEM_NODE_SQL): a source_type='system' note carrying a tag (sys1) and the workspace-config tag node itself, even when it carries a tag (wsConfig), stay out of every result. `members` (T4) is keyed by tag KEY, not name: the notes of one tag by id — itself, child tags (proof under algebra under course), extending tags and the children of extending tags (draftNested under lab) — as the tag page, the sidebar (frontend lib/nodeTags.ts tagMembers/tagMemberCounts) and saved views (backend tagHierarchy.memberTagIds) list them. Same-named tags (sharedA/sharedB, draftRoot/draftNested) stay apart there. A view module tag (calView, viewModule: its tag_schema.module is a view layout) has no members even though lab extends it: lab uses that view, it is not a kind of it (views-as-modules.md V4).",
+  "tags": [
+    {
+      "key": "course",
+      "name": "Course"
+    },
+    {
+      "key": "calView",
+      "name": "CalView",
+      "viewModule": "calendar"
+    },
+    {
+      "key": "algebra",
+      "name": "Algebra",
+      "parent": "course"
+    },
+    {
+      "key": "lab",
+      "name": "Lab",
+      "extends": [
+        "course",
+        "calView"
+      ]
+    },
+    {
+      "key": "seminar",
+      "name": "Seminar",
+      "extends": [
+        "lab"
+      ]
+    },
+    {
+      "key": "other",
+      "name": "Other"
+    },
+    {
+      "key": "sharedA",
+      "name": "Shared",
+      "parent": "course"
+    },
+    {
+      "key": "sharedB",
+      "name": "Shared",
+      "parent": "other"
+    },
+    {
+      "key": "kecheng",
+      "name": "課程"
+    },
+    {
+      "key": "proof",
+      "name": "Proof",
+      "parent": "algebra"
+    },
+    {
+      "key": "quiz",
+      "name": "Quiz",
+      "extends": [
+        "algebra"
+      ]
+    },
+    {
+      "key": "draftRoot",
+      "name": "Draft"
+    },
+    {
+      "key": "draftNested",
+      "name": "Draft",
+      "parent": "lab"
+    },
+    {
+      "key": "wsConfig",
+      "name": "workspace-config",
+      "reserved": "workspace-config",
+      "tags": [
+        "course",
+        "kecheng"
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "key": "n1",
+      "tags": [
+        "course"
+      ]
+    },
+    {
+      "key": "n2",
+      "tags": [
+        "algebra"
+      ]
+    },
+    {
+      "key": "n3",
+      "tags": [
+        "lab"
+      ]
+    },
+    {
+      "key": "n4",
+      "tags": [
+        "seminar"
+      ]
+    },
+    {
+      "key": "n5",
+      "tags": [
+        "other"
+      ]
+    },
+    {
+      "key": "n6",
+      "tags": []
+    },
+    {
+      "key": "n7",
+      "tags": [
+        "sharedB"
+      ]
+    },
+    {
+      "key": "n8",
+      "tags": [
+        "sharedA",
+        "other"
+      ]
+    },
+    {
+      "key": "n9",
+      "tags": [
+        "kecheng"
+      ]
+    },
+    {
+      "key": "n10",
+      "tags": [
+        "draftNested"
+      ]
+    },
+    {
+      "key": "n11",
+      "tags": [
+        "draftRoot"
+      ]
+    },
+    {
+      "key": "n12",
+      "tags": [
+        "proof"
+      ]
+    },
+    {
+      "key": "n13",
+      "tags": [
+        "quiz"
+      ]
+    },
+    {
+      "key": "sys1",
+      "tags": [
+        "course",
+        "kecheng"
+      ],
+      "system": true
+    }
+  ],
+  "expect": {
+    "Course": [
+      "n1",
+      "n10",
+      "n12",
+      "n13",
+      "n2",
+      "n3",
+      "n4",
+      "n8"
+    ],
+    "Lab": [
+      "n3",
+      "n4",
+      "n10"
+    ],
+    "Seminar": [
+      "n4"
+    ],
+    "Other": [
+      "n5",
+      "n7",
+      "n8"
+    ],
+    "Shared": [
+      "n7",
+      "n8"
+    ],
+    "Missing": [],
+    "course": [
+      "n1",
+      "n10",
+      "n12",
+      "n13",
+      "n2",
+      "n3",
+      "n4",
+      "n8"
+    ],
+    "sHaReD": [
+      "n7",
+      "n8"
+    ],
+    "課程": [
+      "n9"
+    ],
+    "Algebra": [
+      "n2",
+      "n12",
+      "n13"
+    ],
+    "Draft": [
+      "n10",
+      "n11"
+    ],
+    "CalView": []
+  },
+  "members": {
+    "course": [
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n8",
+      "n10",
+      "n12",
+      "n13"
+    ],
+    "algebra": [
+      "n2",
+      "n12",
+      "n13"
+    ],
+    "proof": [
+      "n12"
+    ],
+    "quiz": [
+      "n13"
+    ],
+    "lab": [
+      "n3",
+      "n4",
+      "n10"
+    ],
+    "seminar": [
+      "n4"
+    ],
+    "other": [
+      "n5",
+      "n7",
+      "n8"
+    ],
+    "sharedA": [
+      "n8"
+    ],
+    "sharedB": [
+      "n7"
+    ],
+    "draftRoot": [
+      "n11"
+    ],
+    "draftNested": [
+      "n10"
+    ],
+    "kecheng": [
+      "n9"
+    ],
+    "calView": []
+  }
+}

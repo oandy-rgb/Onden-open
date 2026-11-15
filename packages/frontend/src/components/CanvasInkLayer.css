@@ -1,0 +1,79 @@
+/* CanvasInkLayer — ink over the knowledge canvas.
+   The layer sits ABOVE the React Flow nodes (ink-on-top semantics) but is
+   pointer-transparent except in pen mode, so cards stay fully interactive
+   whenever the pen is down. */
+
+.canvas-ink-layer {
+  position: absolute;
+  inset: 0;
+  /* Above .react-flow__renderer (z 4) → above nodes/edges; level with
+     panels so Controls stay visible under their own stacking order. */
+  z-index: var(--z-local-5);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.canvas-ink-surface {
+  position: absolute;
+  inset: 0;
+}
+
+/* Committed surface canvas (appended by the renderer). */
+.canvas-ink-surface .ink-canvas--committed {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.canvas-ink-wet {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.canvas-ink-capture {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+/* Pen mode without spacebar-pan: the capture div owns the pointer. */
+.canvas-ink-layer--capturing .canvas-ink-capture {
+  pointer-events: auto;
+}
+
+.canvas-ink-capture--eraser { cursor: cell; }
+.canvas-ink-capture--hand { cursor: grab; }
+
+/* The pen's toolbar — the shared InkToolbar, docked at the bottom, centred and
+   right above the board's tool bar (CanvasMode.css, --board-toolbar-clearance). */
+.canvas-ink-toolbar {
+  position: absolute;
+  bottom: var(--board-toolbar-clearance, 76px);
+  left: 50%;
+  transform: translateX(-50%);
+  /* Never wider than the board: the toolbar then scrolls sideways. */
+  max-width: calc(100% - 20px);
+  pointer-events: auto;
+  box-shadow: var(--ac-shadow-sm);
+}
+
+/* The box around ink selected by area (a drag-select on the board). It takes
+   pointers, so dragging it moves the ink; the layer around it stays transparent. */
+.canvas-ink-selection {
+  position: absolute;
+  left: var(--ink-sel-x);
+  top: var(--ink-sel-y);
+  width: var(--ink-sel-w);
+  height: var(--ink-sel-h);
+  border: 1px dashed var(--ac-accent);
+  background: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+}

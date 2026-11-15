@@ -1,0 +1,82 @@
+/* Per-note header actions — the module header controls, the info button and
+   the "⋯" overflow. The menus themselves are ui/Popover surfaces (ui/ui.css);
+   only the trigger buttons and the sheet's own rows live here. */
+
+.note-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.note-actions-overflow {
+  position: relative;
+}
+
+/* ⋯ overflow trigger — quiet icon button, as tall as the 編輯｜並排｜預覽 switch beside it. */
+.note-actions-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.note-actions-more-btn:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+.note-actions-info-btn[aria-pressed="true"] { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+
+/* The ⋯ menu is a ui/Popover surface; only the width is its own. */
+.note-actions-pop {
+  min-width: 200px;
+  width: min(280px, calc(100vw - 32px));
+}
+.note-actions-export-options { display: flex; flex-direction: column; }
+
+/* Inline options stay reachable on touch and inside the menu's scroll area. */
+.note-actions-submenu { position: relative; }
+.note-actions-submenu-trigger {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.note-actions-submenu-caret { color: var(--ac-muted); }
+.note-actions-export-options {
+  margin: 4px 0 4px 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--ac-line);
+}
+.note-actions-export-help { padding: 4px 10px; margin: 0; color: var(--ac-muted); font-size: var(--ac-fs-caption); line-height: 1.6; }
+
+@media (max-width: 900px), (pointer: coarse) {
+  .note-actions-pop .ui-menu-item { min-height: 44px; font-size: var(--ac-fs-ui); }
+}
+
+/* Phone: the ⋯ is a bottom sheet (ui/Menu sheet). Tiles in one row, equal
+   width, icon over text; then rounded blocks for the copy and for Delete. */
+.note-sheet-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.note-actions-sheet .note-sheet-tile {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 72px;
+  padding: 10px 4px;
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-raised);
+  color: var(--ac-ink);
+  font-size: var(--ac-fs-small);
+}
+.note-actions-sheet .note-sheet-tile:hover,
+.note-actions-sheet .note-sheet-tile[aria-expanded="true"] { background: var(--ac-overlay-selected); }
+.note-sheet-group { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--ac-radius-lg); background: var(--ac-raised); }
+.note-sheet-group .ui-menu-item { min-height: 48px; }
+.note-sheet-export .note-actions-export-help { padding: 6px 14px 10px; }
+
+/* The top of ⋯: the note's length, and under it paragraphs, tasks and the day it was made. */
+.note-actions-stats { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 10px; border-bottom: 1px solid var(--ac-line); }
+.note-actions-stats-main { font-size: var(--ac-fs-small); color: var(--ac-ink); }
+.note-actions-stats-sub { font-size: var(--ac-fs-caption); color: var(--ac-muted); }

@@ -1,0 +1,2 @@
+/* TimeField: hour and minute side by side. Its own file: the task sheet and the quick-add slot both draw it. */
+.tk-time-field { display: inline-flex; align-items: center; gap: 4px; }

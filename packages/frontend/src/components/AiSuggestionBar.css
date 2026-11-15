@@ -1,0 +1,54 @@
+/* The bar above a note with AI suggestions, and the places drawn in its text
+   (components/AiSuggestionBar.tsx, lib/editorSuggestions.ts). Changes are told
+   by more than colour: a struck-through paragraph, a ＋ and a left bar. */
+.ai-bar {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 8px 0 12px; padding: 8px 12px;
+  border: 1px solid var(--ac-line); border-left: 3px solid var(--ac-accent);
+  border-radius: var(--ac-radius-md); background: var(--ac-raised);
+  font-size: var(--ac-fs-small); line-height: 1.5; color: var(--ac-ink);
+}
+.ai-bar-summary, .ai-bar-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.ai-bar-count { font-weight: 600; }
+.ai-bar-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ai-bar-row { padding-top: 8px; border-top: 1px solid var(--ac-line); }
+.ai-bar-row-text { flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ai-bar-row--changed .ai-bar-row-text { color: var(--ac-muted); }
+.ai-bar-who { margin-right: 8px; font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-accent); }
+.ai-bar-older, .cm-ai-older { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
+
+.cm-ai-del { text-decoration: line-through; text-decoration-thickness: 1px; background: var(--ac-danger-soft); }
+.cm-ai-place {
+  margin: 4px 0 10px; padding: 8px 10px;
+  border-left: 3px solid var(--ac-accent); border-radius: var(--ac-radius-sm);
+  background: var(--ac-raised); color: var(--ac-ink);
+  font-size: var(--ac-fs-small); line-height: 1.55;
+}
+.cm-ai-place--delete { border-left-color: var(--ac-danger); }
+.cm-ai-place--comment { border-left-style: dotted; }
+.cm-ai-place-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 4px; }
+.cm-ai-who { font-size: var(--ac-fs-xs); font-weight: 600; color: var(--ac-accent); }
+.cm-ai-hint { color: var(--ac-muted); }
+.cm-ai-add { display: flex; gap: 8px; padding: 4px 8px; border-radius: var(--ac-radius-sm); background: var(--ac-success-soft); }
+.cm-ai-sign { flex: none; font-weight: 700; color: var(--ac-success); }
+.cm-ai-text, .cm-ai-comment-text { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cm-ai-btn {
+  min-height: 36px; padding: 0 14px;
+  border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md);
+  background: var(--ac-bg); color: var(--ac-ink);
+  font: inherit; cursor: pointer;
+}
+.cm-ai-btn--accept { border-color: var(--ac-accent); color: var(--ac-accent); font-weight: 600; }
+.cm-ai-btn:disabled { opacity: 0.55; cursor: default; }
+@media (pointer: coarse) {
+  .cm-ai-btn { min-height: 44px; min-width: 44px; }
+}
+
+/* Which skill the suggestions came from (named, or picked by the AI) */
+.ai-bar-skill { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; font-size: var(--onden-text-sm, 12px); font-weight: 600; }
+.ai-bar-skill-reason { color: var(--ac-muted); font-weight: 400; }
+.ai-compare-owners { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.ai-compare-owner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ai-compare-owner-text { flex: 1 1 8em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-ink-2); }
+.ai-bar-compare { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

@@ -1,0 +1,64 @@
+{
+  "//": "Search snippets (D76): the server (/api/nodes/search) and the app's on-device index must give each of these the same { text, ranges } — @onden/markdown snippet.ts. Checked by markdown snippet.test.ts, frontend searchSnippets.test.ts and backend searchSnippets.integration.test.ts.",
+  "cases": [
+    {
+      "name": "escapes: & and < show literally",
+      "markdown": "Q&A: <tips> & <mark>tricks</mark> on kafka",
+      "query": "kafka",
+      "expected": {
+        "text": "Q&A: <tips> & <mark>tricks</mark> on kafka",
+        "ranges": [[37, 42]]
+      }
+    },
+    {
+      "name": "markdown: frontmatter, heading, emphasis and wikilink alias",
+      "markdown": "---\nstatus: draft\n---\n# Kafka notes\nUse **Kafka** with [[Stream Processing|streams]] and `kafka-cli`.",
+      "query": "kafka streams",
+      "expected": {
+        "text": "Kafka notes Use Kafka with streams and kafka-cli.",
+        "ranges": [
+          [0, 5],
+          [16, 21],
+          [27, 34],
+          [39, 44]
+        ]
+      }
+    },
+    {
+      "name": "cjk",
+      "markdown": "今天學習了分散式系統的共識演算法，重點是 Raft。共識很重要。",
+      "query": "共識",
+      "expected": {
+        "text": "今天學習了分散式系統的共識演算法，重點是 Raft。共識很重要。",
+        "ranges": [
+          [11, 13],
+          [26, 28]
+        ]
+      }
+    },
+    {
+      "name": "astral emoji before the match",
+      "markdown": "😀🎉 party 🎉 then kafka 😀 again",
+      "query": "kafka",
+      "expected": {
+        "text": "😀🎉 party 🎉 then kafka 😀 again",
+        "ranges": [[19, 24]]
+      }
+    },
+    {
+      "name": "long body: window with ellipses",
+      "markdown": "Intro paragraph that goes on for a while before anything relevant shows up at all. Then the kafka broker appears, followed by a lot of trailing words that the window cuts off somewhere around here and beyond.",
+      "query": "kafka",
+      "expected": {
+        "text": "…relevant shows up at all. Then the kafka broker appears, followed by a lot of trailing words that the window cuts off…",
+        "ranges": [[36, 41]]
+      }
+    },
+    {
+      "name": "the app's marks are not words: {task}, ^id and the task box are left out",
+      "markdown": "## 計畫\n- [ ] 15:00 作業二 {task} ^ffb6f7\n",
+      "query": "作業",
+      "expected": { "text": "計畫 15:00 作業二", "ranges": [[9, 11]] }
+    }
+  ]
+}

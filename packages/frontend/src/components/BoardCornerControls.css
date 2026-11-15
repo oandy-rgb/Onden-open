@@ -1,0 +1,39 @@
+.board-corner {
+  position: absolute;
+  left: 12px;
+  bottom: 16px;
+  z-index: var(--board-chrome-z, 12);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-sm);
+}
+.board-corner-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--ac-line); }
+.board-corner-zoom { min-width: 44px; text-align: center; color: var(--ac-muted); font-size: var(--ac-fs-caption); font-variant-numeric: tabular-nums; }
+
+/* Where the corner sits is decided by the board's own width (the panel, not the window: a side bar or a
+   portrait tablet narrows the board while the window stays wide). The tool bar (centred, ~390px) and this
+   corner (~260px) only share the bottom edge on a board wider than 900px. */
+.graph-panel { container: board / inline-size; }
+
+/* Narrower: the tool bar takes the bottom centre, so the corner moves up above it. */
+@container board (max-width: 900px) {
+  .board-corner { bottom: 70px; }
+  .graph-panel--pen-mode .board-corner { bottom: calc(var(--board-toolbar-clearance, 76px) + 64px); }
+}
+
+/* A phone's undo / redo: top-left, level with 「顯示」 and the full-screen button on the right. */
+.board-history {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: var(--board-chrome-z, 12);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-history .ui-btn { background: var(--ac-surface); }

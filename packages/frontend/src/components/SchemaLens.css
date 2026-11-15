@@ -1,0 +1,224 @@
+/* doc 01 P3 — the schema lens center body (a class_tag opened as a node). Sits in
+   the same col-2 the editor/canvas use; the SchemaEditor field rows bring their
+   own .schema-* styles from TagsPanel.css. */
+.schema-lens {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* The page column (styles/tokens.css), the same as the tab row above it and a wide view's start. */
+  padding: 30px var(--ac-page-gutter) 80px;
+}
+.schema-lens > * {
+  max-width: calc(var(--ac-page-column) - 2 * var(--ac-page-gutter));
+  margin-left: auto;
+  margin-right: auto;
+}
+.schema-lens-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+/* Pin and the ⋯ menu (export, merge, delete), at the end of the title line. */
+.schema-lens-head-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; align-self: center; }
+.schema-lens-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: var(--ac-radius-md);
+  background: none; color: var(--ac-muted); cursor: pointer;
+}
+.schema-lens-icon-btn:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+
+.tag-function-chip, .tag-function-quick {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border: 0; background: none;
+  font: inherit; font-size: var(--ac-fs-small); color: var(--ac-ink);
+}
+.tag-function-quick { cursor: pointer; }
+.tag-function-quick { border-left: 1px solid var(--ac-line); color: var(--ac-accent); font-weight: 500; }
+.tag-function-quick:hover:not(:disabled) { background: var(--ac-overlay-hover); }
+.schema-lens-title {
+  font-family: var(--onden-font-display, serif);
+  font-weight: 500;
+  font-size: var(--ac-fs-title);
+  letter-spacing: -0.015em;
+  margin: 0;
+  color: var(--ac-ink);
+}
+.schema-lens-hash { color: var(--ac-accent); }
+.schema-lens-parent-path { color: var(--ac-muted); font-weight: 400; }
+
+
+/* Functions and fields on the tag page (module library). */
+.tag-function-note { margin: 10px 0 0; font-size: var(--ac-fs-caption); line-height: 1.6; color: var(--ac-muted); }
+/* A function's settings (e.g. modules/review/ReviewSettings.tsx). */
+.function-settings { display: grid; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ac-line); }
+.function-settings label { display: grid; gap: 4px; font-size: var(--ac-fs-small); }
+.function-settings label > span { font-weight: 600; }
+.function-settings input { width: 8rem; max-width: 100%; padding: 4px 8px; font: inherit; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); }
+.function-settings small, .function-settings-note { color: var(--ac-muted); font-size: var(--ac-fs-caption); line-height: 1.5; margin: 0; }
+.function-settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.function-settings-actions button { padding: 4px 12px; border: 1px solid var(--ac-accent); border-radius: var(--ac-radius-md); background: transparent; color: var(--ac-accent); font: inherit; font-size: var(--ac-fs-caption); cursor: pointer; }
+.function-settings-actions button:disabled { opacity: 0.5; cursor: default; }
+
+/* Advanced › inherit from other tags. */
+.tag-ability-identity { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: var(--ac-fs-small); color: var(--ac-accent); }
+.tag-extends { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; font-size: var(--ac-fs-small); }
+.tag-extends-label { color: var(--ac-muted); }
+.tag-extends-none { color: var(--ac-muted); font-style: italic; }
+.tag-extends-chip { display: inline-flex; align-items: center; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-full); background: var(--ac-surface); overflow: hidden; }
+.tag-extends-chip.is-legacy { border-style: dashed; }
+.tag-extends-open { padding: 3px 10px; background: none; border: 0; font: inherit; color: var(--ac-ink); }
+button.tag-extends-open { cursor: pointer; }
+button.tag-extends-open:hover { color: var(--ac-accent); }
+.tag-extends-remove { padding: 3px 9px 3px 6px; background: none; border: 0; border-left: 1px solid var(--ac-line); font: inherit; color: var(--ac-muted); cursor: pointer; }
+.tag-extends-remove:hover:not(:disabled) { color: var(--ac-ink); }
+.tag-ability-message { margin: 0 0 12px; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.tag-module-review { margin-top: 18px; padding: 12px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); }
+.tag-member-count { color: var(--ac-muted); font: 12px var(--onden-font-ui, sans-serif); margin-left: 6px; }
+.tag-access { border: 0; margin: 0; padding: 0; min-width: 0; }
+.tag-access:disabled { opacity: 0.6; }
+.schema-lens button:disabled { opacity: .5; cursor: default; }
+.schema-lens-title { overflow-wrap: anywhere; min-width: 0; }
+.schema-lens-merge-select { max-width: 100%; min-width: 0; }
+.schema-lens-merge-pick, .schema-lens-delete-actions { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .schema-lens { padding: 20px 16px 80px; }
+  /* Title on the left; the pin and ⋯ stay on its row. */
+  .schema-lens-head { flex-wrap: nowrap; align-items: center; }
+  .schema-lens-title { flex: 1 1 auto; font-size: var(--ac-fs-title-sm); }
+  .schema-lens button, .function-settings input { min-height: 44px; }
+    .tag-module-review { padding: 8px; }
+}
+.schema-lens-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: none;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.schema-lens-action:hover { color: var(--ac-ink); }
+.schema-lens-pin.active { color: var(--ac-accent); }
+
+.schema-lens-meta {
+  font-family: var(--onden-font-mono, monospace);
+  font-size: var(--ac-fs-xs);
+  color: var(--ac-muted);
+}
+.schema-lens-hint {
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-small);
+  line-height: 1.6;
+  margin: 0 0 22px;
+}
+.schema-lens-hint strong { color: var(--ac-accent); font-weight: 500; }
+
+/* D6 — the lens now carries the WHOLE tag (fields / access / automation) so no
+   form surface exists outside the tag node itself. */
+.schema-lens-section { margin-top: 34px; }
+.schema-lens-section:first-of-type { margin-top: 18px; }
+.schema-lens-section-title {
+  font-family: var(--onden-font-display, serif);
+  font-weight: 500;
+  font-size: var(--ac-fs-h3);
+  margin: 0 0 4px;
+  color: var(--ac-ink);
+}
+.schema-lens-section .schema-lens-hint { margin-bottom: 14px; }
+
+/* Tagged-notes table — the Tana supertag-page instances view. */
+.schema-lens-instances { width: 100%; border-collapse: collapse; font-size: var(--ac-fs-caption); }
+.schema-lens-instances th {
+  text-align: left; padding: 6px 10px; color: var(--ac-muted); font-weight: 600;
+  border-bottom: 1px solid var(--ac-line); font-size: var(--ac-fs-xs); text-transform: uppercase; letter-spacing: 0.03em;
+}
+.schema-lens-instances td { padding: 7px 10px; border-bottom: 1px solid color-mix(in srgb, var(--ac-line) 55%, transparent); }
+.schema-lens-instances tbody tr { cursor: pointer; }
+.schema-lens-instances tbody tr:hover { background: color-mix(in srgb, var(--ac-accent) 6%, transparent); }
+.schema-lens-instance-title { font-weight: 600; }
+
+/* P2 tag merge — same look-before-you-leap family as safe-delete below;
+   the headline/list/note/actions rows reuse the .schema-lens-delete-* classes
+   so the two previews read as one design. */
+.schema-lens-merge-panel {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ac-faint);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-overlay-subtle);
+}
+.schema-lens-merge-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ac-fs-small);
+  font-weight: 600;
+}
+.schema-lens-merge-select {
+  font: inherit;
+  font-weight: 400;
+  padding: 3px 6px;
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-md);
+  background: transparent;
+  color: var(--ac-ink);
+}
+.schema-lens-merge-go { color: var(--ac-accent-ink); background: var(--ac-accent); }
+
+/* P2 safe-delete confirm panel */
+.schema-lens-delete-headline { font-weight: 600; margin: 0 0 6px; }
+.schema-lens-delete-list { margin: 0 0 8px; padding-left: 18px; font-size: var(--ac-fs-small); }
+.schema-lens-delete-sample { color: var(--ac-muted); }
+.schema-lens-delete-note { font-size: var(--ac-fs-caption); color: var(--ac-muted); margin: 0 0 8px; }
+.schema-lens-delete-actions { display: flex; gap: 8px; }
+.schema-lens-delete-go { color: var(--ac-accent-ink); background: var(--ac-accent); }
+
+
+/* 「上層 #X」 on the meta line. */
+.schema-lens-parent-link { padding: 0; border: 0; background: transparent; font: inherit; color: var(--ac-ink); cursor: pointer; }
+.schema-lens-parent-link:hover { text-decoration: underline; }
+
+/* 「升級成欄位」: properties the tag's notes use, offered as fields. */
+.tag-promote { margin-top: 10px; }
+.tag-promote-title { margin: 0 0 2px; font-size: var(--ac-fs-small); font-weight: 600; }
+
+
+/* The tag page opens on its notes. Its column is a note page's: same measure
+   and side padding as .obsidian-main.note-document (OverviewEditor.css), so the
+   tabs above line up with it. The tag tree lives in the sidebar. */
+.schema-lens.tag-page { padding: 24px var(--onden-note-gutter, 32px) 64px; }
+/* font-size gives the em measure its basis: the same column as a note at the same window size. */
+.schema-lens.tag-page > .tag-page-main { font-size: var(--onden-note-font); max-width: var(--onden-note-measure, 41.18em); }
+@media (max-width: 600px) { .schema-lens.tag-page { padding: 20px 16px 80px; } }
+.tag-page-crumbs { margin-bottom: 4px; color: var(--ac-muted); font-size: var(--ac-fs-caption); overflow-wrap: anywhere; }
+.tag-page-crumbs button { padding: 0; border: 0; background: none; color: var(--ac-accent); font: inherit; cursor: pointer; }
+.tag-page-crumbs button:hover { text-decoration: underline; }
+.tag-page-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 4px 0 10px; color: var(--ac-muted); font-size: var(--ac-fs-small); }
+/* 「已隱藏」 (D104): a hidden tag's page says so, with 取消隱藏. */
+.tag-page-hidden-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0 8px; padding: 6px 10px; border-radius: var(--ac-radius-md); background: var(--ac-overlay-subtle); color: var(--ac-muted); font-size: var(--ac-fs-small); }
+.tag-page-hidden-note button { margin-left: auto; padding: 3px 10px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-caption); cursor: pointer; }
+.tag-page-hidden-note button:hover { border-color: var(--ac-accent); }
+.tag-page-module-action { margin: 0 0 10px; }
+.tag-page-module-action .ui-btn { gap: 6px; }
+.tag-page-meta-item { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.tag-page-meta-none { color: var(--ac-muted); }
+.tag-page-meta .schema-lens-parent-link { color: var(--ac-ink); font-weight: 500; }
+.tag-page-functions .tag-function-chip, .tag-page-functions .tag-function-quick { padding: 2px 10px; font-size: var(--ac-fs-caption); }
+/* Quiet title row: pin and ⋯ are frameless 32px icon buttons. */
+/* The description: the tag's own body, edited in place by the owner. */
+.tag-description { display: block; box-sizing: border-box; width: 100%; max-width: 65ch; margin: 6px 0 18px; padding: 8px 0; border: 1px dashed transparent; border-radius: var(--ac-radius-md); background: none; color: var(--ac-ink); font: inherit; font-size: var(--ac-fs-ui); line-height: 1.6; text-align: left; white-space: pre-line; overflow-wrap: anywhere; }
+button.tag-description { cursor: text; border-color: transparent; }
+button.tag-description:not(.is-empty):hover { background: var(--ac-overlay-hover); }
+/* No description yet: one quiet line on the title's left edge, no box. */
+.tag-description.is-empty { color: var(--ac-muted); font-size: var(--ac-fs-small); margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-description.is-empty:hover { color: var(--ac-ink); }
+.tag-members-section .cv-root { padding-inline: 0; }
+textarea.tag-description { resize: vertical; padding-inline: 12px; border-style: solid; border-color: var(--ac-accent); background: var(--ac-surface); white-space: pre-wrap; }
+p.tag-description { padding-inline: 0; }

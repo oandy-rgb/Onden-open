@@ -1,0 +1,43 @@
+---
+export const prerender = false;
+
+import SiteMissing from "../../../components/SiteMissing.astro";
+import SiteLayout from "../../../components/SiteLayout.astro";
+import { TagFrame, movedTo, tagPageBySlug } from "../../../components/siteFrame";
+import { loadAllEnhancers } from "@onden/markdown";
+import { loadSite } from "../_siteLoad";
+import { publicUrl } from "../../../lib/siteOrigin";
+import { siteName } from "../../../lib/siteName";
+
+await loadAllEnhancers();
+
+const loaded = await loadSite();
+
+const raw = Astro.params.slug ?? "";
+let slug = raw;
+try { slug = decodeURIComponent(raw); } catch { /* keep the raw segment */ }
+
+const data = loaded.kind === "ok" ? loaded.data : null;
+const found = data ? tagPageBySlug(data.design, slug) : null;
+// A renamed tag's old address goes to its page now (GAP-240); a tag with no
+// page (no published member, or not shown on the site) is a 404.
+const moved = data && !found ? movedTo(data.redirects, `/site/tag/${slug}/`) : null;
+if (moved) return Astro.redirect(moved, 301);
+if (loaded.kind === "error") Astro.response.status = 503;
+else if (!found) Astro.response.status = 404;
+
+const brand = siteName(data?.site.brand, data?.title);
+---
+
+{data && found ? (
+  <SiteLayout
+    data={data}
+    pageTitle={`${found.page.name} — ${brand}`}
+    canonical={publicUrl(Astro.url, Astro.url.pathname)}
+    variant="index"
+  >
+    <TagFrame data={data} tagId={found.id} page={found.page} />
+  </SiteLayout>
+) : (
+  <SiteMissing data={data} canonical={publicUrl(Astro.url, Astro.url.pathname)} />
+)}

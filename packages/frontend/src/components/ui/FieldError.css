@@ -1,0 +1,11 @@
+/* ui/FieldError — the one inline error line. Colour is the error token only. */
+.ui-error {
+  display: block;
+  margin: 8px 0 0;
+  font-size: var(--ac-fs-small);
+  line-height: 1.5;
+  color: var(--ac-danger);
+  overflow-wrap: anywhere;
+}
+
+.ui-error-retry { background: none; border: 0; padding: 0; color: var(--ac-accent); text-decoration: underline; cursor: pointer; font: inherit; min-height: 44px; }

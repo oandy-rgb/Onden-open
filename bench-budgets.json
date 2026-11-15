@@ -1,0 +1,96 @@
+{
+  "about": "Budgets for `npm run bench:check`. `median` is the limit; `mainMedian` is the larger of two full runs on main (this machine, see docs/performance-budgets.md). Time budgets are mainMedian x 1.3 rounded up; bundle sizes are deterministic, so x 1.1. To tighten one after an improvement, rerun `npm run bench` twice and set `median` to the larger new median x 1.3 (x 1.1 for bundles); update `mainMedian` to match.",
+  "tightenAfter": {
+    "perf/d-measured-cuts": {
+      "backend.bootstrap_slim": "review #1: the per-node event metadata aggregate no longer scans every event",
+      "backend.bootstrap_lean": "review #1/#8: same aggregate, and the LIMIT no longer turns the plan into a nested loop",
+      "backend.served_site_load": "review #4: loadServedSite stops parsing and cloning the whole snapshot",
+      "backend.media_visibility_check": "review #5: the check stops scanning the snapshot jsonb",
+      "backend.tag_catalog": "review #9: usage_count becomes one aggregate",
+      "frontend.persist_bootstrap_into": "review #2: statements prepared once per table",
+      "frontend.apply_sync_delta_500_upserts": "review #3: one Map pass instead of O(N x U) copies",
+      "frontend.tag_member_counts_after_body_patch": "review #14: only if tagMemberCounts itself got cheaper; a memo in appStore is not measured here"
+    }
+  },
+  "pending": {
+    "backend.search_common_word": "needs pgroonga; run `npm run bench` on a Postgres that has it, then add a budget of median x 1.3",
+    "backend.search_rare_word": "same"
+  },
+  "budgets": {
+    "backend.bootstrap_lean": {
+      "unit": "ms",
+      "median": 14400,
+      "mainMedian": 11062.18
+    },
+    "backend.bootstrap_slim": {
+      "unit": "ms",
+      "median": 2500,
+      "mainMedian": 1913.65
+    },
+    "backend.sync_delta_empty": {
+      "unit": "ms",
+      "median": 48,
+      "mainMedian": 36.7
+    },
+    "backend.sync_delta_500_events": {
+      "unit": "ms",
+      "median": 180,
+      "mainMedian": 135.49
+    },
+    "backend.node_query_sort_attribute": {
+      "unit": "ms",
+      "median": 175,
+      "mainMedian": 133.62
+    },
+    "backend.tag_catalog": {
+      "unit": "ms",
+      "median": 165,
+      "mainMedian": 124.98
+    },
+    "backend.served_site_load": {
+      "unit": "ms",
+      "median": 1100,
+      "mainMedian": 819.36
+    },
+    "backend.media_visibility_check": {
+      "unit": "ms",
+      "median": 335,
+      "mainMedian": 254.84
+    },
+    "backend.event_list_page": {
+      "unit": "ms",
+      "median": 80,
+      "mainMedian": 59.59
+    },
+    "frontend.decode_bootstrap_wire": {
+      "unit": "ms",
+      "median": 105,
+      "mainMedian": 77.51
+    },
+    "frontend.persist_bootstrap_into": {
+      "unit": "ms",
+      "median": 6100,
+      "mainMedian": 4621.56
+    },
+    "frontend.apply_sync_delta_500_upserts": {
+      "unit": "ms",
+      "median": 1250,
+      "mainMedian": 947.72
+    },
+    "frontend.tag_member_counts_after_body_patch": {
+      "unit": "ms",
+      "median": 42,
+      "mainMedian": 31.65
+    },
+    "bundle.entry_chunk_gzip": {
+      "unit": "bytes",
+      "median": 17408,
+      "mainMedian": 15271
+    },
+    "bundle.login_path_gzip": {
+      "unit": "bytes",
+      "median": 179200,
+      "mainMedian": 162822
+    }
+  }
+}

@@ -1,0 +1,110 @@
+/* Layout and content styles of the website's home page parts (Every Layout
+   style). Everything is sized from the --s-* variables (@onden/site styleVars)
+   and reflows by its container's width: there are no media queries. */
+
+.site-scope {
+  font-family: var(--s-font-b);
+  font-size: var(--s-base);
+  line-height: var(--s-leading, 1.7);
+}
+.site-scope .s-slot { display: flex; flex-direction: column; gap: var(--s-space); min-inline-size: 0; }
+
+/* ── Parts ─────────────────────────────────────────────────────────────── */
+.s-part { padding-block: var(--s-space); box-sizing: border-box; }
+.s-part .s-part { padding-block: 0; }
+.s-part__heading, .s-view__heading {
+  font-family: var(--s-font-h);
+  font-size: var(--s-step2);
+  font-weight: var(--s-weight-h, 700);
+  line-height: 1.25;
+  margin: 0 0 var(--s-space);
+}
+.s-view__heading { font-size: var(--s-step1); }
+.s-part[data-heading="none"] .s-view__heading { display: none; }
+.s-tint {
+  background: var(--s-soft);
+  padding: var(--s-space);
+  border-radius: var(--s-radius);
+}
+
+/* sidebar: the side keeps its width, the main part wraps below when it would get narrower than 55% */
+.s-sidebar { display: flex; flex-wrap: wrap; gap: var(--s-space); --side-w: calc(var(--s-base) * 14); }
+.s-sidebar--m { --side-w: calc(var(--s-base) * 20); }
+.s-sidebar > .s-sidebar__aside { flex-basis: var(--side-w); flex-grow: 1; }
+.s-sidebar > .s-sidebar__main { flex-basis: 0; flex-grow: 999; min-inline-size: 55%; }
+.s-sidebar--right > .s-sidebar__aside { order: 2; }
+
+/* switcher: one row while the container is wider than 32em, one column below */
+.s-switcher { display: flex; flex-wrap: wrap; gap: var(--s-space); }
+.s-switcher > .s-slot { flex-grow: 1; flex-basis: calc((32em - 100%) * 999); }
+
+/* cards: as many columns as fit */
+.s-cards { --card-min: calc(var(--s-base) * 12); }
+.s-cards--l { --card-min: calc(var(--s-base) * 18); }
+.s-cards > .s-slot {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
+  gap: var(--s-space);
+}
+
+.s-cover { --cover-h: calc(var(--s-base) * 18); min-block-size: var(--cover-h); display: flex; align-items: center; }
+.s-cover--l { --cover-h: calc(var(--s-base) * 30); }
+.s-cover > .s-slot { inline-size: 100%; }
+
+.s-center { --measure: var(--s-measure, calc(var(--s-base) * 34)); max-inline-size: var(--measure); margin-inline: auto; }
+.s-center--l { --measure: calc(var(--s-base) * 60); }
+
+/* ── Content ───────────────────────────────────────────────────────────── */
+.s-note__body > :first-child { margin-block-start: 0; }
+.s-note__body > :last-child { margin-block-end: 0; }
+.s-note__body h1, .s-note__body h2, .s-note__body h3 { font-family: var(--s-font-h); font-weight: var(--s-weight-h, 700); }
+.s-note__body img { max-inline-size: 100%; block-size: auto; }
+.s-missing { opacity: 0.6; font-size: 0.9em; border: 1px dashed currentColor; border-radius: var(--s-radius); padding: 0.4em 0.8em; }
+
+.s-quote { margin: 0; padding-inline-start: var(--s-space); border-inline-start: 3px solid var(--s-accent); }
+.s-quote blockquote { margin: 0; font-size: var(--s-step1); }
+.s-quote__source { margin-block-start: 0.5em; font-size: 0.85em; opacity: 0.75; }
+.s-quote__source a { color: var(--s-link); }
+
+.s-card {
+  display: flex; flex-direction: column; gap: 0.5em;
+  color: inherit; text-decoration: none;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  overflow: hidden;
+  background: var(--s-surface);
+}
+.s-card__image { inline-size: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.s-card__body { padding: 0 var(--s-space) var(--s-space); }
+.s-card:not(:has(.s-card__image)) .s-card__body { padding-block-start: var(--s-space); }
+.s-card__title { font-family: var(--s-font-h); font-size: var(--s-step1); font-weight: var(--s-weight-h, 700); line-height: 1.3; margin: 0; }
+.s-card__excerpt { margin: 0.4em 0 0; font-size: 0.9em; opacity: 0.8; }
+.s-card:hover .s-card__title { color: var(--s-link); }
+.s-cardgrid {
+  --card-min: calc(var(--s-base) * 14);
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: var(--s-space);
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
+}
+
+.s-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5em; }
+.s-list li { display: flex; flex-wrap: wrap; gap: 0.25em 1em; align-items: baseline; justify-content: space-between; }
+.s-list a, .s-timeline a, .s-table a { color: inherit; text-decoration-color: var(--s-accent); text-underline-offset: 0.2em; }
+.s-list a:hover, .s-timeline a:hover, .s-table a:hover { color: var(--s-link); }
+.s-date { font-size: 0.85em; color: var(--s-muted); font-variant-numeric: tabular-nums; }
+
+.s-table { inline-size: 100%; border-collapse: collapse; }
+.s-table th, .s-table td { text-align: start; padding: 0.4em 0.8em 0.4em 0; border-block-end: 1px solid var(--s-border); }
+.s-table th { font-family: var(--s-font-h); font-size: 0.85em; opacity: 0.75; }
+
+.s-timeline { list-style: none; margin: 0; padding: 0 0 0 1.2em; border-inline-start: 2px solid color-mix(in srgb, var(--s-accent) 45%, transparent); display: flex; flex-direction: column; gap: var(--s-space); }
+.s-timeline li { position: relative; display: flex; flex-direction: column; gap: 0.15em; }
+.s-timeline li::before { content: ""; position: absolute; inset-inline-start: calc(-1.2em - 5px); inset-block-start: 0.6em; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--s-accent); }
+
+/* A note shown by its title only; and, in the studio, a note the page points at that is not published yet. */
+.s-note__title { font-family: var(--s-font-h); font-size: var(--s-step1); font-weight: var(--s-weight-h, 700); line-height: 1.3; margin: 0; }
+.s-note__title a { color: inherit; text-decoration-color: var(--s-accent); text-underline-offset: 0.2em; }
+.s-note__title a:hover { color: var(--s-link); }
+.s-draft { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4em 0.8em; }
+.s-draft__title { font-family: var(--s-font-h); font-size: var(--s-step1); font-weight: var(--s-weight-h, 700); line-height: 1.3; }
+.s-badge { font-size: 0.75em; padding: 0.1em 0.6em; border-radius: 999px; background: var(--s-chip-bg); color: var(--s-chip-text); white-space: nowrap; }

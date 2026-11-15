@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-cap/
+.cache/
+.astro/
+.env
+.env.local
+coverage/
+e2e/browser-app/failed-*.png

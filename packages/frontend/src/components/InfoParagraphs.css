@@ -1,0 +1,11 @@
+.info-paragraphs { margin-top: 16px; }
+/* The ancestor class outranks the shared row padding of the relations list. */
+.info-relations .info-paragraph-row {
+  padding-inline-start: calc(var(--depth, 0) * var(--ac-space-3, 12px));
+}
+.info-paragraph-note { margin-inline-start: auto; white-space: nowrap; }
+.info-paragraph-hint { margin-block-end: 4px; }
+.info-paragraph-lost { display: grid; gap: 4px; padding-block: 6px; }
+.info-paragraph-reassign { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.info-paragraph-reassign select { flex: 1; min-width: 0; }
+.info-paragraphs section > div + div { margin-top: 10px; }

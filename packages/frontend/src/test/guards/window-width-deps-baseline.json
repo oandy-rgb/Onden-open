@@ -1,0 +1,107 @@
+{
+  "about": "版面或行為跟著「視窗」而不是頁面自己寬度的地方，依畫面分組；只准變少（見 windowWidthDeps.guard.test.ts）",
+  "groups": {
+    "editor": {
+      "mediaWidth": 11,
+      "viewportUnit": 20,
+      "widthCheck": 8,
+      "fixedLayer": 0
+    },
+    "global-css": {
+      "mediaWidth": 10,
+      "viewportUnit": 43,
+      "widthCheck": 0,
+      "fixedLayer": 0
+    },
+    "graph-board": {
+      "mediaWidth": 5,
+      "viewportUnit": 10,
+      "widthCheck": 1,
+      "fixedLayer": 0
+    },
+    "history": {
+      "mediaWidth": 8,
+      "viewportUnit": 11,
+      "widthCheck": 2,
+      "fixedLayer": 0
+    },
+    "info-panel": {
+      "mediaWidth": 5,
+      "viewportUnit": 1,
+      "widthCheck": 6,
+      "fixedLayer": 0
+    },
+    "journal-today": {
+      "mediaWidth": 2,
+      "viewportUnit": 7,
+      "widthCheck": 4,
+      "fixedLayer": 0
+    },
+    "keyboard-insets": {
+      "mediaWidth": 0,
+      "viewportUnit": 0,
+      "widthCheck": 9,
+      "fixedLayer": 0
+    },
+    "notes-workspace": {
+      "mediaWidth": 14,
+      "viewportUnit": 1,
+      "widthCheck": 14,
+      "fixedLayer": 0
+    },
+    "other": {
+      "mediaWidth": 4,
+      "viewportUnit": 16,
+      "widthCheck": 7,
+      "fixedLayer": 0
+    },
+    "reading": {
+      "mediaWidth": 14,
+      "viewportUnit": 7,
+      "widthCheck": 1,
+      "fixedLayer": 0
+    },
+    "review": {
+      "mediaWidth": 3,
+      "viewportUnit": 2,
+      "widthCheck": 1,
+      "fixedLayer": 0
+    },
+    "settings": {
+      "mediaWidth": 9,
+      "viewportUnit": 12,
+      "widthCheck": 7,
+      "fixedLayer": 0
+    },
+    "shared-ui": {
+      "mediaWidth": 18,
+      "viewportUnit": 28,
+      "widthCheck": 7,
+      "fixedLayer": 6
+    },
+    "split-view": {
+      "mediaWidth": 0,
+      "viewportUnit": 2,
+      "widthCheck": 3,
+      "fixedLayer": 0
+    },
+    "tag-page": {
+      "mediaWidth": 9,
+      "viewportUnit": 4,
+      "widthCheck": 0,
+      "fixedLayer": 0
+    },
+    "tasks": {
+      "mediaWidth": 5,
+      "viewportUnit": 9,
+      "widthCheck": 3,
+      "fixedLayer": 0
+    },
+    "website-slides": {
+      "mediaWidth": 3,
+      "viewportUnit": 28,
+      "widthCheck": 3,
+      "fixedLayer": 1
+    }
+  }
+}

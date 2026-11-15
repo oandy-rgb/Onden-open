@@ -1,9 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
 import { writeTagSchema } from "../tagWrites.js";
 import { q } from "../../db.js";
-import { sqlInt } from "../../sqlText.js";
 import { isTagNameShape, tagNameTaken } from "../tagHierarchy.js";
-import { tagNameCommitted } from "../tagIdentity.js";
+import { applyTagIdentity, type TagIdentityColumns } from "../tagIdentity.js";
 import type { ActorCtx } from "../../types.js";
 import type { EventRow, RestoreError, RestoreResult } from "../restoreContract.js";
 import { recordRestore, requireRestoreTransaction } from "./record.js";
@@ -32,7 +31,8 @@ type Inspection = {
   refusal?: Refusal;
 };
 
-const identityColumns: Record<string, string> = { name: "title", slug: "slug", color: "tag_color" };
+// The tag node's own identity; applyTagIdentity (tagIdentity.ts) maps each to its column.
+const identityFields = ["name", "slug", "color"];
 // `extends` and `module` (module library) are schema values like the others,
 // and so are the schema's own `name`/`slug`; they are not the tag node's
 // identity.
@@ -60,7 +60,7 @@ async function inspectTag(row: EventRow, lock: boolean): Promise<Inspection | Re
     return { code: "unsupported", status: 422, detail: "initial tag schema creation cannot be reversed" };
   }
   if (!record(previous)) return historyIncomplete("tag history has no previous field values");
-  const allowed = schema ? schemaFields : Object.keys(identityColumns);
+  const allowed = schema ? schemaFields : identityFields;
   const changed = row.payload?.changed;
   if (!Array.isArray(changed) || !changed.length ||
       changed.some((key) => typeof key !== "string" || !allowed.includes(key)) ||
@@ -169,13 +169,7 @@ export async function restoreTagUpdate(row: EventRow, actorContext: ActorCtx): P
     // the tag had, and nearest-wins keeps it working (module-library.md).
     await writeTagSchema(row.workspace_id, row.target_id!, { merge: restored }, { restoring: true });
   } else {
-    const assignments = restoreFields.map((key, index) => `${identityColumns[key]} = $${sqlInt(index + 3)}`);
-    await q(
-      `UPDATE content_nodes SET ${assignments.join(", ")}, updated_at = now()
-        WHERE workspace_id = $1 AND id = $2 AND ${liveTagNodeSql()}`,
-      [row.workspace_id, row.target_id, ...restoreFields.map((key) => previous[key])],
-    );
-    if (restoreFields.includes("name")) await tagNameCommitted(row.workspace_id, row.target_id!);
+    await applyTagIdentity(row.workspace_id, row.target_id!, restored as TagIdentityColumns);
   }
   return recordRestore(row, actorContext, {
     eventType: row.event_type,

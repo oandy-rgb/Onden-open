@@ -47,6 +47,7 @@ import { joinDefaultSpace } from "../helpers/spaceFixtures.js";
 import { isTestDatabase } from "../helpers/testDatabase.js";
 import { checkAsync, PROPS_SEED } from "../helpers/propsConfig.js";
 import { seedQ } from "../helpers/seedQ.js";
+import { slugForTitle } from "../../services/nodes.js";
 
 vi.mock("../../auth.js", () => ({
   auth: {
@@ -791,6 +792,16 @@ const plan = fc.array(fc.record({ pick: fc.nat(30), again: fc.boolean(), any: fc
         }
         if (newEvents < 1) w.fail(`${tag}: reported success, but no restore event was recorded`);
         await w.expectVersionShape(marker, tag);
+        // A note whose title the undo changed ends with the slug an ordinary rename to that title gives it.
+        for (const k of noteKeys) {
+          if (!after.notes[k]?.live || after.notes[k]!.title === before.notes[k]?.title) continue;
+          const id = w.noteIds.get(k);
+          const stored = id && (await q<{ id: string; title: string; slug: string; node_type: string; reserved_key: string | null }>(
+            `SELECT id, title, slug, node_type, reserved_key FROM content_nodes WHERE id = $1`, [id])).rows[0];
+          if (stored && stored.slug !== await slugForTitle(workspaceId, stored, stored.title)) {
+            w.fail(`${tag}: note ${k} has title "${stored.title}" but slug "${stored.slug}", not what a rename to that title gives`);
+          }
+        }
         // Other writers' lines survive an undo of a body edit.
         if (e.body) {
           const keep = current.notes[e.body.note]!.liveLines.filter((l) => !e.body!.inserted.includes(l));

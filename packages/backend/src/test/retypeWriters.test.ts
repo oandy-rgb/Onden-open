@@ -18,7 +18,9 @@ const SRC = join(import.meta.dirname, "..");
 const WRITES = /(INSERT INTO|DELETE FROM)\s+node_tags\b|UPDATE\s+content_nodes\b[^`]*\bSET\b[^`]*\b(tag_schema|parent_id|deleted_at)\s*=/;
 /** Writers that build the column list at run time (set("parent_id", …), the
  *  undo's scalar fields): checked by name. */
-const DYNAMIC_WRITERS = ["services/nodeUpdate.ts", "services/eventRestore/restore.ts"];
+const DYNAMIC_WRITERS = ["services/nodeUpdate.ts"];
+/** The undo's scalar fields (a tag back under its old parent) go through the save's applyNodeColumns, which retypes. */
+const THROUGH_NODE_COLUMNS = ["services/eventRestore/restore.ts"];
 /** Writers whose rows no field governs differently afterwards. */
 const EXEMPT: Record<string, string> = {
   "services/siteConfig.ts": "tags the hidden Site Config row with its reserved tag; it has no attribute values to type",
@@ -46,6 +48,10 @@ describe("a write that changes which field governs a key retypes stored values (
     }
     const silent = writers.filter((path) => !RETYPES.test(readFileSync(path, "utf8"))).map(rel).filter((path) => !(path in EXEMPT));
     expect(silent).toEqual([]);
+  });
+
+  it("the event-history undo writes the note's columns through the function that retypes", () => {
+    for (const file of THROUGH_NODE_COLUMNS) expect(readFileSync(join(SRC, file), "utf8")).toMatch(/\bapplyNodeColumns\(/);
   });
 
   it("every exemption still names a writer", () => {

@@ -39,10 +39,8 @@ import { recordRestore, requireRestoreTransaction } from "./record.js";
 import { alreadyInState, historyIncomplete, stateConflict } from "./refusals.js";
 import { lastBodyHashBeforeSql } from "../history/index.js";
 import { nodeVisibilityCommitted } from "../../spine/nodeHooks.js";
-import { claimUploadedMedia, presentationText } from "../mediaOwners.js";
 import { applyBodyChange } from "../bodySideEffects.js";
 import { pool, q } from "../../db.js";
-import { sqlIdentifier } from "../../sqlText.js";
 import { enqueueBackup } from "../outbox.js";
 import { duplicateNote, NoteDuplicateError } from "../noteDuplicate.js";
 import { putBlob } from "../blobs.js";
@@ -68,8 +66,8 @@ import { assertTagNameAvailable, TagNameConflictError } from "../tagHierarchy.js
 import { FieldNameClashError } from "../tagFields.js";
 import { eventChain } from "../eventChain.js";
 import { restoreLive, restorePlan, trashLive, trashSubtreeIds } from "../nodeTrash.js";
-import { retypeGoverned } from "../attributeChange.js";
-import { reslug } from "../nodes.js";
+import { applyNodeColumns, type NodeColumns } from "../nodeUpdate.js";
+import { slugForTitle } from "../nodes.js";
 import { ReservedTagError } from "../reservedTags.js";
 import { liveNodeSql } from "../../spine/nodeSql.js";
 import { isTag } from "@onden/markdown/contract";
@@ -108,6 +106,7 @@ type NodeSnapshot = Record<NodeScalarField, unknown> & {
   title: string;
   markdown: string;
   slug: string;
+  reserved_key: string | null;
   deleted_at: string | null;
   parent_id: string | null;
 };
@@ -654,7 +653,7 @@ async function restoreNodeUpdated(
   }
 
   const node = await q<NodeSnapshot>(
-    `SELECT title, markdown, slug, deleted_at, parent_id, hidden, sort_order, presentation, node_type, source_type FROM content_nodes
+    `SELECT title, markdown, slug, reserved_key, deleted_at, parent_id, hidden, sort_order, presentation, node_type, source_type FROM content_nodes
       WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
     [row.workspace_id, row.target_id],
   );
@@ -796,36 +795,20 @@ async function restoreNodeUpdated(
       },
     },
     apply: async ({ eventId }) => {
-      const values: unknown[] = [row.workspace_id, row.target_id];
-      const sets: string[] = [];
-      for (const field of nodeScalarFields) {
-        if (!(field in prevFields)) continue;
-        values.push(prevFields[field]);
-        sets.push(`${sqlIdentifier(field)} = $${values.length}`);
+      // The same write as a save of these values (nodeUpdate.applyNodeColumns).
+      // The slug follows the restored title: the event never recorded the slug,
+      // and a title back over a later one's slug made a second note of that
+      // name link both. Named for the node_type the undo leaves.
+      const columns: NodeColumns = Object.fromEntries(nodeScalarFields.filter((field) => field in prevFields).map((field) => [field, prevFields[field]]));
+      if ("title" in prevFields) {
+        const slugNode = { id: row.target_id, node_type: String(columns.node_type ?? node.rows[0].node_type), slug: node.rows[0].slug, reserved_key: node.rows[0].reserved_key };
+        columns.slug = await slugForTitle(row.workspace_id, slugNode, nextTitle);
       }
-      if (inversePatch) {
-        values.push(nextBody);
-        sets.push(`markdown = $${values.length}`);
-      }
-      await q(
-        `UPDATE content_nodes
-            SET ${[...sets, "updated_at = now()"].join(", ")}
-          WHERE workspace_id = $1 AND id = $2`,
-        values,
-      );
-      // A tag back under its old parent inherits other fields again (D94).
-      if (isTag(node.rows[0]) && nextParentId !== currentParentId) {
-        await retypeGoverned(row.workspace_id, { tagIds: [row.target_id] });
-      }
-      // A restored page design claims what no note owns yet, like any save of
-      // one (services/mediaOwners.ts).
-      if ("presentation" in prevFields) {
-        await claimUploadedMedia(row.workspace_id, row.target_id, presentationText(prevFields.presentation));
-      }
-      // The slug follows the restored title (services/nodes.ts reslug): the
-      // event never recorded the slug, and a title back over a later one's
-      // slug made a second note of that name link both.
-      if ("title" in prevFields) await reslug(row.workspace_id, row.target_id);
+      if (inversePatch) columns.markdown = nextBody;
+      await applyNodeColumns(row.workspace_id, row.target_id, columns, {
+        before: { isTag: isTag(node.rows[0]), parentId: currentParentId },
+        touchUpdatedAt: true,
+      });
       // Undoing a hide or show moves who may see the note (the website).
       if ("hidden" in prevFields) {
         await nodeVisibilityCommitted({ workspaceId: row.workspace_id, actor: actorContext, nodeIds: [row.target_id] });

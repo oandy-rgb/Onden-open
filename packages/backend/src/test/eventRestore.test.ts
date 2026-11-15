@@ -285,7 +285,9 @@ describe("ER6 restoreEvent — NODE_UPDATED body revert", () => {
     expect(result).toMatchObject({ restored: true, restore_event_type: "NODE_UPDATED" });
     const updateCall = queries.find((q) => q.sql.includes("UPDATE content_nodes"));
     expect(updateCall?.params[2]).toBe("Old title");
-    expect(updateCall?.params[3]).toBe("Hello world");
+    // The slug follows the title in the same UPDATE (applyNodeColumns), then the body.
+    expect(updateCall?.params[3]).toBe("old-title");
+    expect(updateCall?.params[4]).toBe("Hello world");
   });
 
   // D79: with no post body there is nothing to merge against; patch_apply on
@@ -354,7 +356,7 @@ describe("node restore preserves edits outside its inverse", () => {
     resultQueue.push({ rows: [{ title: "C", markdown: "latest body", deleted_at: null }], rowCount: 1 });
     expect(await restoreEvent("1", { ...options, force: true })).toMatchObject({ restored: true });
     const update = queries.find(({ sql }) => sql.includes("UPDATE content_nodes"))!;
-    expect(update.params).toEqual(["ws-1", "n-1", "A"]);
+    expect(update.params).toEqual(["ws-1", "n-1", "A", "a"]); // the title and the slug that follows it
     expect(update.sql).not.toMatch(/markdown =|parent_id =/);
     expect(eventCalls[0].options?.txMeta?.prev_field_values).toEqual({ title: "C" });
   });

@@ -255,6 +255,53 @@ type NodeChangePlan = {
   within?: (ctx: { nodeId: string; eventId: string }) => Promise<void>;
 };
 
+/** The columns of a note's row that a save or an undo writes (the column
+ *  names are these literals, never request text). */
+export type NodeColumns = Partial<{
+  title: string; slug: string; markdown: string; node_type: string; source_type: string;
+  parent_id: string | null; hidden: boolean; sort_order: number; presentation: Record<string, unknown> | null;
+}>;
+const NODE_COLUMNS = ["title", "slug", "markdown", "node_type", "source_type", "parent_id", "hidden", "sort_order", "presentation"] as const;
+
+/** The one write of a note's row, shared by the ordinary save (saveNodeChange)
+ *  and the event-history undo (eventRestore/restore.ts), so what rides on a
+ *  column follows it from either: only the supplied columns are written; a tag
+ *  that moved to another parent retypes its notes' values (D94); a page design
+ *  claims the uploads no note owns yet (services/mediaOwners.ts). The caller
+ *  decides what a column becomes (an NFC title, the slug that follows a title,
+ *  the previous value of an undo), holds the event lock and records the event.
+ *  `touchUpdatedAt` false keeps "modified" (a reorder, housekeeping saves).
+ *  Returns the stored row. The visibility hook and the body's derived state
+ *  stay with the caller.
+ *
+ *  applyNodeColumns(ws, id, { title, slug }, { before: { isTag, parentId }, touchUpdatedAt: true }) */
+export async function applyNodeColumns(
+  workspaceId: string,
+  id: string,
+  columns: NodeColumns,
+  { before, touchUpdatedAt }: { before: { isTag: boolean; parentId: string | null }; touchUpdatedAt: boolean },
+): Promise<ServerNodeRow> {
+  const sets: string[] = [];
+  const vals: unknown[] = [workspaceId, id];
+  for (const column of NODE_COLUMNS) {
+    if (!(column in columns)) continue;
+    vals.push(columns[column]);
+    sets.push(`${sqlIdentifier(column)} = $${vals.length}`);
+  }
+  const r = await q<ServerNodeRow>(
+    `UPDATE content_nodes
+     SET ${(touchUpdatedAt ? [...sets, "updated_at = now()"] : sets).join(", ")}
+     WHERE workspace_id = $1 AND id = $2
+     RETURNING *`,
+    vals,
+  );
+  if (before.isTag && "parent_id" in columns && (columns.parent_id ?? null) !== before.parentId) {
+    await retypeGoverned(workspaceId, { tagIds: [id] });
+  }
+  if ("presentation" in columns) await claimUploadedMedia(workspaceId, id, presentationText(columns.presentation));
+  return r.rows[0]!;
+}
+
 /** The one save path behind updateNode and restoreNodeVersion. */
 async function saveNodeChange(
   workspaceId: string,
@@ -407,32 +454,17 @@ async function saveNodeChange(
       },
       apply: async ({ eventId }) => {
         // PATCH changes only explicitly supplied columns; other fields retain
-        // the state read inside this transaction. Column names are fixed literals.
-        const sets: string[] = [];
-        const vals: unknown[] = [workspaceId, id];
-        const set = (col: string, v: unknown) => { vals.push(v); sets.push(`${sqlIdentifier(col)} = $${vals.length}`); };
-        if ("title" in nodeInput) { set("title", next.title); set("slug", nextSlug); }
-        if ("markdown" in nodeInput) set("markdown", next.markdown);
-        if ("node_type" in nodeInput) set("node_type", next.node_type);
-        if ("source_type" in nodeInput) set("source_type", next.source_type);
-        if ("parent_id" in nodeInput) set("parent_id", nextParentId);
-        if ("hidden" in nodeInput) set("hidden", nextHidden);
-        if ("sort_order" in nodeInput) set("sort_order", nextSortOrder);
-        if ("presentation" in nodeInput) set("presentation", nextPresentation);
-        const r = await q<ServerNodeRow>(
-          `UPDATE content_nodes
-           SET ${(positionOnly || record.keepUpdatedAt ? sets : [...sets, "updated_at = now()"]).join(", ")}
-           WHERE workspace_id = $1 AND id = $2
-           RETURNING *`,
-          vals,
-        );
-        const updated = await withViews(workspaceId, r.rows[0]!);
-        // A tag under another parent inherits other fields: its notes' values
-        // follow (D94).
-        if (isTag && nextParentId !== (oldRow.parent_id ?? null)) await retypeGoverned(workspaceId, { tagIds: [id] });
-        // A page design's uploads belong to the note first saved with them,
-        // as a body's do (services/mediaOwners.ts).
-        if ("presentation" in nodeInput) await claimUploadedMedia(workspaceId, id, presentationText(nextPresentation));
+        // the state read inside this transaction.
+        const updated = await withViews(workspaceId, await applyNodeColumns(workspaceId, id, {
+          ...("title" in nodeInput ? { title: next.title, slug: nextSlug } : {}),
+          ...("markdown" in nodeInput ? { markdown: next.markdown as string } : {}),
+          ...("node_type" in nodeInput ? { node_type: next.node_type } : {}),
+          ...("source_type" in nodeInput ? { source_type: next.source_type } : {}),
+          ...("parent_id" in nodeInput ? { parent_id: nextParentId } : {}),
+          ...("hidden" in nodeInput ? { hidden: nextHidden } : {}),
+          ...("sort_order" in nodeInput ? { sort_order: nextSortOrder } : {}),
+          ...("presentation" in nodeInput ? { presentation: nextPresentation } : {}),
+        }, { before: { isTag, parentId: oldRow.parent_id ?? null }, touchUpdatedAt: !(positionOnly || record.keepUpdatedAt) }));
         // Overlapping concurrent edits: what each conflict left out, for the
         // inbox (the whole overridden body is also a version in history).
         if (bodyConflicts.length > 0) {

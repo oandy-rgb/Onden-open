@@ -237,8 +237,6 @@ const SERVICE_WRITE_HELPERS: Record<string, { why: string; functions: string[] }
   "services/dispatcherQueue.ts": { why: "dispatcher_pending: the post-commit work queue (a delivery intent, not domain state), enqueued with the event that caused it", functions: ["enqueueCascadeIntent", "queueDispatcher"] },
   "services/embeddings.ts": { why: "node_embeddings and semantic edges: a derived search index, recomputed from committed text (the suggested-link rewrite, writeSuggestedLinks, refuses outside a transaction: db.ts requireTransaction)", functions: ["embedNode", "writeSuggestedLinks"] },
   "services/eventRestore/attributes.ts": { why: "an undo writes the exact earlier attribute row inside restoreEvent's event transaction", functions: ["restoreAttribute"] },
-  "services/eventRestore/restore.ts": { why: "restoreNodeUpdated: the exact earlier node fields, inside restoreEvent's event transaction", functions: ["restoreNodeUpdated"] },
-  "services/eventRestore/tags.ts": { why: "an undo writes the earlier tag fields inside restoreEvent's event transaction", functions: ["restoreTagUpdate"] },
   "services/functionRefs.ts": { why: "function_refs rows: insertFunctionRefs inside the tag-pack import (tagPacks.ts), each in the caller's mutate() that records the event; touchTag bumps the tag row inside addFunction/removeFunction/setFunctionConfig's mutate(); restoreFunctionRef runs inside restoreEvent's event transaction; the other writers (addFunction, removeFunction, setFunctionConfig) call mutate() themselves", functions: ["insertFunctionRefs", "restoreFunctionRef", "touchTag"] },
   "services/eventReview.ts": { why: "recordReview: the one writer of event_reviews, in the review decision's transaction", functions: ["recordReview"] },
   "modules/importers/shared/identity.ts": { why: "the import stamp (_import_*), a derived index written inside the import's createNote/updateNode", functions: ["stamp", "stampImportedNote"] },
@@ -246,8 +244,9 @@ const SERVICE_WRITE_HELPERS: Record<string, { why: string; functions: string[] }
   "services/media.ts": { why: "storeMedia: the uploaded file's row, claimed by the saving note afterwards (mediaOwners.ts); storeGeneratedMedia: a published handwriting page's file and its upload row, written with the publish that records the snapshot's PUBLISH_SNAPSHOT_CREATED; removeMediaFiles: the one removal of an upload's record, inside the purge's NODES_PURGED or the publish that replaces a handwriting page", functions: ["removeMediaFiles", "storeGeneratedMedia", "storeMedia"] },
   "services/mediaOwners.ts": { why: "which note owns an uploaded file, claimed inside the saving note's mutate()", functions: ["claimUploadedMedia"] },
   "services/memberRemovals.ts": { why: "member_removals rows, written inside services/actors.ts's ACTOR_* mutate()s", functions: ["liftMemberRemoval", "recordMemberRemoval"] },
+  "services/nodeUpdate.ts": { why: "applyNodeColumns: the note's row, written inside a save's mutate() (updateNode) or an undo's (restoreNodeUpdated in restoreEvent's event transaction)", functions: ["applyNodeColumns"] },
+  "services/tagIdentity.ts": { why: "applyTagIdentity: a tag's name, slug and color, written inside writeTagIdentity's mutate() or the undo of a TAG_UPDATED (restoreTagUpdate in restoreEvent's event transaction)", functions: ["applyTagIdentity"] },
   "services/nodeTrash.ts": { why: "markTrashed / markLive: the trash flag, called inside nodeTrash's own mutate()s and event restore", functions: ["markLive", "markTrashed"] },
-  "services/nodes.ts": { why: "reslug: the slug follows a changed title inside the caller's transaction (refuses outside one: db.ts requireTransaction)", functions: ["reslug"] },
   "services/noteBlockRefs.ts": { why: "syncNoteBlockRefs: the `^id` index follows the note body, inside the body write's transaction (bodySideEffects.applyBodyChange, newNoteDerived.finishNewNote)", functions: ["syncNoteBlockRefs"] },
   "services/noteDuplicate.ts": { why: "recordCopiedTag: a copied relation with its TAG_APPLIED lineage, inside the duplicate's mutate()", functions: ["recordCopiedTag"] },
   "services/outbox.ts": { why: "the transactional outbox: effects enqueued inside their event's transaction, then settled by the reconciler", functions: ["approveHeldEffect", "dismissDeadEffects", "enqueueEffect", "reapOutbox", "rejectHeldEffect", "requeueDeadEffect", "runDrain", "watchAbandoned"] },
@@ -272,7 +271,7 @@ const SPINE_ENTRY = /\b(?:mutate|mutatePersonal|mutateRestore|withEventTransacti
 // db.ts requireTransaction(), so a bare call fails instead of committing the
 // row with no event and no lock. file#function -> the call must be in its body.
 const SERVICE_GUARDED_HELPERS = [
-  "services/nodes.ts#reslug", "services/boardStore.ts#writeSections", "services/boardStore.ts#clearSurface",
+  "services/boardStore.ts#writeSections", "services/boardStore.ts#clearSurface",
   "services/embeddings.ts#writeSuggestedLinks",
   "services/siteConfig.ts#patchSiteConfig", "services/siteConfig.ts#setChromeBlocks",
   "services/tagWrites.ts#insertTagRow", "services/wikilinkEdges.ts#syncWikilinkEdges",

@@ -43,9 +43,11 @@ describe("body write guard (D27)", () => {
     const writers = sourceFiles(srcDir)
       .filter((file) => WRITES_BODY.test(readFileSync(file, "utf8")))
       .map((file) => relative(srcDir, file).split(sep).join("/"));
-    expect(writers).toEqual(expect.arrayContaining([
-      "services/nodeUpdate.ts", "modules/importers/notion/database.ts",
-      "services/eventRestore/restore.ts",
-    ]));
+    expect(writers).toEqual(expect.arrayContaining(["modules/importers/notion/database.ts"]));
+    // A save and an event-history undo write the body through nodeUpdate's applyNodeColumns
+    // (a column list the scan above cannot see), then each runs applyBodyChange itself.
+    const read = (file: string) => readFileSync(join(srcDir, file), "utf8");
+    expect(read("services/nodeUpdate.ts")).toMatch(/NODE_COLUMNS = \[[^\]]*"markdown"[\s\S]*applyBodyChange\(/);
+    expect(readFileSync(join(srcDir, "services/eventRestore/restore.ts"), "utf8")).toMatch(/applyNodeColumns\([\s\S]*applyBodyChange\(/);
   });
 });

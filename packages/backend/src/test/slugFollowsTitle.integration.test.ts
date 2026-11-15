@@ -1,5 +1,5 @@
 // D55: a note's slug follows its title on every path that writes the title
-// or brings a note back (services/nodes.ts slugFor / slugForTitle / reslug):
+// or brings a note back (services/nodes.ts slugFor / slugForTitle):
 //   (a) an event-history undo of a rename puts the slug back with the title;
 //   (b) Trash › Restore keeps a tag's `tag-` slug (it used to make it `book`);
 //   (c) an event-history undo of a delete gives the same slug as (b);

@@ -94,26 +94,9 @@ export function slugFor(node: SlugNode, title: string): string {
 /** The free slug node `node.id` gets when it carries `title`: slugFor, unique
  *  in the node's space (its own current slug does not count as taken). For a
  *  write that sets the slug in its own UPDATE (nodeUpdate, tagIdentity,
- *  markLive); after a title-only UPDATE call reslug instead. */
+ *  markLive, the event-history undo). */
 export async function slugForTitle(workspaceId: string, node: SlugNode & { id: string }, title: string): Promise<string> {
   return uniqueSlug(workspaceId, slugFor(node, title), node.id);
-}
-
-/** Make node `id`'s slug follow its stored title (slugForTitle), after a write
- *  that changed the title without it — an event-history undo or a
- *  collection-item rename. In the caller's transaction, before the
- *  body pipeline (incoming [[links]] resolve by title or slug). Returns the
- *  slug; an unchanged one is not rewritten. */
-export async function reslug(workspaceId: string, id: string): Promise<string | null> {
-  requireTransaction("reslug");
-  const node = (await q<{ id: string; title: string; node_type: string; slug: string; reserved_key: string | null }>(
-    `SELECT id, title, node_type, slug, reserved_key FROM content_nodes WHERE workspace_id = $1 AND id = $2`,
-    [workspaceId, id],
-  )).rows[0];
-  if (!node) return null;
-  const slug = await slugForTitle(workspaceId, node, node.title);
-  if (slug !== node.slug) await q(`UPDATE content_nodes SET slug = $3 WHERE workspace_id = $1 AND id = $2`, [workspaceId, id, slug]);
-  return slug;
 }
 
 /** True iff e is the Postgres unique-violation (23505) on the slug index

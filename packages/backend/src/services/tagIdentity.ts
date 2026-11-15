@@ -7,6 +7,7 @@ import { mutate, requireActor } from "../spine/mutate.js";
 import { assertAuthority, type Authority } from "../spine/authority.js";
 import { normalizeText } from "@onden/markdown";
 import { q } from "../db.js";
+import { sqlInt } from "../sqlText.js";
 import { relinkTarget, slugForTitle } from "./nodes.js";
 import { nodeContentCommitted } from "./nodeCommits.js";
 import { assertTagNameAvailable, assertTagNameShape } from "./tagHierarchy.js";
@@ -89,25 +90,48 @@ export async function writeTagIdentity(
       },
     },
     apply: async ({ eventId }) => {
-      // Schema identity may intentionally differ (migration 074). A rename
-      // changes this node's identity and leaves the pack's identity alone.
-      const result = await q<TagIdentity>(
-        `UPDATE content_nodes SET title = $3, tag_color = $4, slug = $5, updated_at = now()
-          WHERE workspace_id = $1 AND id = $2 AND ${liveTagNodeSql()}
-          RETURNING id, title AS name, tag_color AS color, CASE WHEN tag_schema IS NOT NULL THEN id ELSE NULL END AS schema_id`,
-        [ws, id, after.name, after.color, after.slug],
-      );
-      if (renamed) await tagNameCommitted(ws, id, eventId);
-      return { tag: result.rows[0]!, eventId };
+      const tag = await applyTagIdentity(ws, id, { ...(renamed ? { name: after.name, slug: after.slug } : {}), color: after.color }, { eventId });
+      return { tag: tag!, eventId };
     },
   });
+}
+
+const IDENTITY_COLUMNS = { name: "title", slug: "slug", color: "tag_color" } as const;
+export type TagIdentityColumns = { name?: string; slug?: string; color?: string | null };
+
+/** The one UPDATE of a tag's name, slug and color, shared by writeTagIdentity
+ *  and the undo of a TAG_UPDATED (eventRestore/tags.ts): only the supplied
+ *  columns are written, and a supplied name also re-links `[[name]]` and
+ *  refreshes the tag's searchable text (tagNameCommitted). In the caller's
+ *  transaction; the caller records the event (`eventId` once it exists).
+ *  Schema identity may intentionally differ (migration 074): a rename changes
+ *  this node's identity and leaves the pack's alone. Null when the tag is
+ *  missing or deleted.
+ *
+ *  applyTagIdentity(ws, id, { name: "reading", slug: "tag-reading" }, { eventId }) */
+export async function applyTagIdentity(
+  ws: string,
+  id: string,
+  columns: TagIdentityColumns,
+  { eventId }: { eventId?: string } = {},
+): Promise<TagIdentity | null> {
+  const keys = (Object.keys(IDENTITY_COLUMNS) as Array<keyof typeof IDENTITY_COLUMNS>).filter((key) => key in columns);
+  const assignments = keys.map((key, index) => `${IDENTITY_COLUMNS[key]} = $${sqlInt(index + 3)}`);
+  const result = await q<TagIdentity>(
+    `UPDATE content_nodes SET ${[...assignments, "updated_at = now()"].join(", ")}
+      WHERE workspace_id = $1 AND id = $2 AND ${liveTagNodeSql()}
+      RETURNING id, title AS name, tag_color AS color, CASE WHEN tag_schema IS NOT NULL THEN id ELSE NULL END AS schema_id`,
+    [ws, id, ...keys.map((key) => columns[key])],
+  );
+  if ("name" in columns) await tagNameCommitted(ws, id, eventId);
+  return result.rows[0] ?? null;
 }
 
 /** A tag's name is part of its node's searchable text: after a rename (or the
  *  undo of one) the module content hooks see the new title, so the search
  *  embedding follows it the way a title edit of any note does, and the notes
  *  that `[[name]]` the tag are re-linked. In the write transaction. */
-export async function tagNameCommitted(ws: string, id: string, eventId?: string): Promise<void> {
+async function tagNameCommitted(ws: string, id: string, eventId?: string): Promise<void> {
   await relinkTarget(ws, [id]);
   const row = (await q<{ title: string; markdown: string | null }>(
     `SELECT title, markdown FROM content_nodes WHERE workspace_id = $1 AND id = $2`, [ws, id])).rows[0];

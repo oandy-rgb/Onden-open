@@ -16,11 +16,11 @@ import { fileURLToPath } from "node:url";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Files that write content_nodes.parent_id on an existing row. */
+/** Files that write content_nodes.parent_id on an existing row. The event-history undo
+ *  (eventRestore/restore.ts) writes it through nodeUpdate's applyNodeColumns, and is gated below. */
 const PARENT_WRITERS = new Set([
   "services/nodeUpdate.ts",
   "services/tagMerge.ts",
-  "services/eventRestore/restore.ts",
   "services/spaces.ts",
 ]);
 /** The writers that move a node within its space: each asks assertReparent. */
@@ -40,12 +40,13 @@ const rel = (path: string) => relative(SRC, path).split(sep).join("/");
 /** Ways a file writes parent_id on an existing row: a literal
  *  `UPDATE content_nodes … SET … parent_id =`, a column-list helper
  *  (`set("parent_id", …)`), or a scalar-field list that includes it and is
- *  turned into `${field} = $n` (or `${sqlIdentifier(field)} = $n`) assignments (eventRestore). */
+ *  turned into `${field} = $n` (or `${sqlIdentifier(field)} = $n`) assignments. */
 function writesParent(text: string): boolean {
   const literal = /UPDATE\s+content_nodes\b[^;`]*?\bSET\b[^;`]*?\bparent_id\s*=/i.test(text);
   const helper = /\bset\(\s*["']parent_id["']/.test(text);
   const scalarList = /Fields\s*=\s*\[[^\]]*["']parent_id["'][^\]]*\]/.test(text) && /\$\{(?:sqlIdentifier\()?field\)?\}\s*=\s*\$/.test(text);
-  return literal || helper || scalarList;
+  const columnList = /\b[A-Z_]*COLUMNS\s*=\s*\[[^\]]*["']parent_id["'][^\]]*\]/.test(text) && /\$\{sqlIdentifier\(column\)\}\s*=\s*\$/.test(text);
+  return literal || helper || scalarList || columnList;
 }
 
 describe("parent_id has known writers (D102)", () => {

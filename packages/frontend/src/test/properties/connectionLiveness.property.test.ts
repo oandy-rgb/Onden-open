@@ -67,7 +67,7 @@ afterEach(() => { net.reset(); restoreVisibility(); w.uninstall(); });
 
 // ── the fake server ──────────────────────────────────────────────────────────
 
-type Mode = "up" | "down" | "bad-gateway" | "slow" | "revoked";
+type Mode = "up" | "down" | "bad-gateway" | "slow" | "revoked" | "forbidden";
 const unreachable = (mode: Mode) => mode === "down" || mode === "bad-gateway";
 /** readWithDeadline gives a read up after this long (lib/api.ts): a server slower than that is "unreachable" to the sync engine. */
 
@@ -80,6 +80,8 @@ class Net {
   requests = 0;
   inflight = 0;
   applied = new Set<number>();
+  /** How many times each note save (by number) reached the server: a retry must not send one twice. */
+  sentCount = new Map<number, number>();
   log: string[] = [];
   /** The browser is online (`navigator.onLine`); a request made while it is not never leaves the page. */
   browserOnline = true;
@@ -91,7 +93,7 @@ class Net {
 
   reset(): void {
     Object.assign(this, { mode: "up", slowMs: 4_000, head: 10, clock: 0, requests: 0, inflight: 0, browserOnline: true, beforeAnswer: null, epoch: 0, readable: ["n0"] });
-    this.applied = new Set(); this.log = [];
+    this.applied = new Set(); this.sentCount = new Map(); this.log = [];
   }
 
   private json(payload: unknown, status = 200): Response {
@@ -104,7 +106,7 @@ class Net {
     const method = init.method ?? "GET";
     if (method === "PATCH" && /^\/api\/nodes\/[^/]+$/.test(path)) {
       const n = Number((/^v(\d+)$/.exec((JSON.parse(String(init.body ?? "{}")) as { markdown?: string }).markdown ?? "") ?? [])[1]);
-      if (Number.isFinite(n)) this.applied.add(n);
+      if (Number.isFinite(n)) { this.applied.add(n); this.sentCount.set(n, (this.sentCount.get(n) ?? 0) + 1); }
       this.head += 1;
       return this.json(this.row());
     }
@@ -145,6 +147,9 @@ class Net {
       case "revoked":
         note("401 membership_removed");
         return Promise.resolve(this.json({ error: "membership_removed" }, 401));
+      case "forbidden":
+        note("403 forbidden");
+        return Promise.resolve(this.json({ error: "forbidden" }, 403));
       case "slow": {
         note(`slow ${this.slowMs}ms`);
         this.inflight += 1;
@@ -335,6 +340,8 @@ const Refresh = cmd(() => "refresh()", async (run) => {
 }, { decides: true });
 const Sync = cmd(() => "sync()", async (run) => { begin(run, () => run.tab.mods.syncEngine.sync()); });
 const Advance = cmd((ms: number) => `advance(${ms}ms)`, async (run, ms) => { await advance(run, ms); });
+/** The account loses the note on the server (its membership epoch moves). */
+const ChangeMembership = cmd(() => "membership changes (note lost)", async (run) => { net.epoch += 1; net.readable = []; run.disturbedAt = net.clock; });
 const Write = cmd(() => "save a note", async (run) => {
   const tab = run.tab;
   if (tab.display("n0" as never) < 0) return;
@@ -378,6 +385,13 @@ function checkLive(run: Run): void {
     run.revokedSeen = { onlineBefore: run.onlineBefore };
     if (run.onlineBefore && browserOnline && !state.online) run.problems.push(`revoked: the account was removed while the app was online, and the app now reads as offline (t=${net.clock})`);
   }
+
+  // usable: a server that cannot be reached is offline, never a locked workspace (owner decision 2026-11-15)
+  if (browserOnline && unreachable(net.mode) && !revoked && settled && quiet >= 10_000 && state.membershipGated) {
+    run.problems.push(`usable: the browser is online, the server cannot be reached (${net.mode}) and the workspace is still locked behind the membership gate (t=${net.clock})\n${net.log.slice(-4).join("\n")}`);
+  }
+  // revoked, for good: once the server refused on purpose the shell keeps the notice over the workspace (BuilderWorkspace: inert while accessRevoked)
+  if (run.revokedSeen && !revoked) run.problems.push(`revoked: the removal notice went away after the server had refused the account (t=${net.clock})`);
 
   // liveness
   if (browserOnline && net.mode === "up" && !revoked && settled && quiet >= MINUTE) {
@@ -428,6 +442,7 @@ async function finish(run: Run): Promise<string[]> {
       if (rec.status === "queued" && !net.applied.has(rec.n)) run.problems.push(`writes: queued save #${rec.n} never reached the server`);
     }
   }
+  for (const [n, times] of net.sentCount) if (times > 1) run.problems.push(`writes: save #${n} reached the server ${times} times`);
   // dispose: nothing keeps going
   run.disposed = true;
   run.afterDispose = { boot: 0, reconnect: 0, sync: 0, wentOffline: 0 };
@@ -449,7 +464,7 @@ async function finish(run: Run): Promise<string[]> {
   return run.problems;
 }
 
-async function runCommands(commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN, prepare?: () => void): Promise<string[]> {
+async function runCommands(commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN, prepare?: () => void, inspect?: (run: Run) => Promise<void>): Promise<string[]> {
   w.install();
   net.reset();
   prepare?.();
@@ -459,6 +474,7 @@ async function runCommands(commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN
     const run = await openTab(null);
     run.includeKnown = includeKnown;
     await fc.asyncModelRun(() => ({ model: {}, real: run }), commands as never);
+    await inspect?.(run);
     const problems = await finish(run);
     const unexpected = [...run.tab.unexpected, ...w.tabs.flatMap((t) => t.unexpected)].map((e) => `unexpected: ${String(e)}`);
     const all = [...problems, ...unexpected];
@@ -577,5 +593,93 @@ describe("what the property found (minimal cases, fixed)", () => {
     expect(problems.filter((p) => !p.startsWith("liveness"))).toEqual([]);
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((entry) => entry.gated)).toBe(true);
+  });
+});
+
+
+// ── an unreachable server is offline; only a refusal locks (owner decision 2026-11-15) ──
+
+/** Time passes one second at a time, with the page's storage (and the digest hashing) settling between steps. */
+async function pass(run: Run, ms: number): Promise<void> {
+  for (let left = ms; left > 0; left -= 1_000) { await advance(run, Math.min(left, 1_000)); await settleStorage(); }
+}
+type Outcome = { online: boolean; gated: boolean; revoked: boolean; noteShown: boolean };
+const outcomeOf = (run: Run): Outcome => {
+  const s = appState(run);
+  return { online: s.online, gated: s.membershipGated, revoked: s.accessRevoked, noteShown: !s.membershipGated && !s.accessRevoked && run.tab.display("n0" as never) >= 0 };
+};
+
+describe("an unreachable server is offline, not locked", () => {
+  it("the browser comes back online but the server cannot be reached: offline, no gate, the note readable, a new save queued, then sent once", async () => {
+    let seen: Outcome | null = null; let queued = -1;
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), Write(), Advance(6_000)], true, undefined, async (run) => {
+      seen = outcomeOf(run); queued = await pendingRows(run);
+    });
+    expect(problems).toEqual([]);
+    expect(seen).toEqual({ online: false, gated: false, revoked: false, noteShown: true });
+    expect(queued).toBe(1);
+  });
+
+  it("the server comes back with the account intact: online again, the queue sent, each save once", async () => {
+    let seen: Outcome | null = null; let sent: number[] = [];
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Write(), Advance(6_000), SetServer("up", 0), Advance(16_000)], true, undefined, async (run) => {
+      seen = outcomeOf(run); sent = [...net.sentCount.values()];
+    });
+    expect(problems).toEqual([]);
+    expect(seen).toEqual({ online: true, gated: false, revoked: false, noteShown: true });
+    expect(sent).toEqual([1]);
+  });
+
+  it("the server comes back and says the account was removed: the notice, nothing of the workspace readable (fail-closed unchanged)", async () => {
+    let seen: Outcome | null = null;
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("revoked", 0), Advance(16_000)], true, undefined, async (run) => {
+      seen = outcomeOf(run);
+    });
+    expect(problems).toEqual([]);
+    expect(seen).toMatchObject({ revoked: true, noteShown: false });
+  });
+
+  it("the server comes back and the membership changed: the lost note is removed and the gate came up for the check", async () => {
+    let seen: Outcome | null = null;
+    const gates: boolean[] = [];
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), ChangeMembership(), SetServer("up", 0)], true, () => {
+      net.beforeAnswer = (path, tab) => { if (tab && path.startsWith("/api/sync/membership?")) gates.push(tab.mods.appStore.getAppState().membershipGated); };
+    }, async (run) => {
+      await pass(run, 16_000);
+      seen = outcomeOf(run);
+    });
+    expect(problems.filter((p) => !p.startsWith("liveness"))).toEqual([]);
+    expect(gates.length).toBeGreaterThan(0);
+    expect(gates.every(Boolean)).toBe(true);
+    expect(seen).toMatchObject({ noteShown: false });
+  });
+
+  it("the server answers but the membership keeps changing and never settles: the gate stays up (fail-closed unchanged)", async () => {
+    let seen: Outcome | null = null;
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("up", 0)], true, () => {
+      net.beforeAnswer = (path) => { if (path.startsWith("/api/sync/membership")) net.epoch += 1; };
+    }, async (run) => {
+      await pass(run, 16_000);
+      seen = outcomeOf(run);
+    });
+    expect(problems.filter((p) => !p.startsWith("liveness"))).toEqual([]);
+    expect(seen).toMatchObject({ gated: true, noteShown: false });
+  });
+
+  // Boot (a page reload over the same copy) and reconnect (the browser's `online` event) meet the same server: the same outcome.
+  it.each<Mode>(["down", "bad-gateway", "slow", "forbidden", "revoked"])("boot and reconnect end the same way against a server that is %s", async (mode) => {
+    const outcome = async (commands: Cmd[]): Promise<Outcome> => {
+      let seen: Outcome | null = null;
+      await runCommands(commands, true, undefined, async (run) => { await pass(run, 6_000); seen = outcomeOf(run); });
+      return seen!;
+    };
+    const viaBoot = await outcome([SetServer(mode, 20_000), Reload()]);
+    const viaReconnect = await outcome([BrowserOffline(), SetServer(mode, 20_000), BrowserOnline()]);
+    // Whether the store reads online while it is locked behind a refusal flaps with the retry; the gate, the notice and what is readable do not.
+    const { online: reconnectOnline, ...reconnectRest } = viaReconnect; const { online: bootOnline, ...bootRest } = viaBoot;
+    // Under the removal notice the gate's own value does not matter (the notice covers the workspace either way).
+    if (mode === "revoked") { reconnectRest.gated = bootRest.gated = false; }
+    expect(reconnectRest).toEqual(bootRest);
+    if (mode === "down" || mode === "bad-gateway" || mode === "slow") expect(reconnectOnline).toBe(bootOnline);
   });
 });

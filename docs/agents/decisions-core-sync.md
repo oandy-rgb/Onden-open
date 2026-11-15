@@ -251,3 +251,11 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   下載的請求排在核對前面）、本機副本的邊／任務／屬性分頁讀取（`loadLocalRest`）改在核對之後（重開時每次合併都重畫整個 store）。
 - 沒做：`persistBootstrap` 仍回傳整份 bootstrap（主執行緒反序列化），bootstrap 欄位格式與 API 不動；`localDbWorker` 沒有增加位元組（預算只剩 238 B）。
 
+
+## 連不到伺服器＝離線；只有明確拒絕才 fail-closed（業主 2026-11-15，「統一」）
+
+- **規則**：連不到伺服器（網路錯誤、逾時、閘道 502／503／504 且沒有伺服器自己的錯誤碼）一律當離線：不升成員資格遮罩、照常讀寫本機副本（寫入進佇列）、標示離線，稍後照 `connectivity.ts` 的 5 秒節奏再試。伺服器有回答（401／403、`accessRevoked`、成員資格版本一直變而核對沒收斂、其他非閘道的錯誤）則維持 fail-closed。
+- **單一判斷**：`writeErrors.isServerUnreachable` → `sync()` 的 `SyncResult.unreachable` → `syncEngine.serverNotReached`。開機（`runBoot`）與恢復連線（`reconnect`）都問這一個；離線的動作（`stayOffline`：標離線＋降遮罩）也是同一個。不另寫第二份。
+- **不放鬆**：沒有本機副本（`getLocalCopyState() === "none"`）的裝置連不到時仍停在遮罩後；`accessRevoked` 先判斷、不當離線；伺服器有回答時的檢查一字未動。
+- **現況**：重新核對的路徑——`reconnect()`（瀏覽器 `online`、伺服器更新後的 `protocolGate`、連不到後的重試）改用這條規則。SSE 成員資格通知（`membershipChanged`／`sync()` 的 `syncDirty` 重跑）是伺服器剛說過成員資格變了，連不到時維持遮罩（明確訊號，不是「連不到」）。
+- 測試：`src/test/properties/connectionLiveness.property.test.ts`（隨機序列含「恢復網路但伺服器不通」、開機與恢復連線參數化對照）、`src/test/serverUnreachable.test.ts`。

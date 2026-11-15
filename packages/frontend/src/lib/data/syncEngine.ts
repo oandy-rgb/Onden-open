@@ -892,6 +892,18 @@ export function liveStreamReconnected(): void {
  *  finish. */
 export type SyncResult = { ok: boolean; unreachable?: boolean; /** More events wait than one pass takes; the next pass resumes. Not a failure. */ partial?: boolean };
 
+/** The one rule for "the server did not answer" (owner decision 2026-11-15): a pass that failed because the server could
+ *  not be reached is offline, never a lock. Boot and reconnect both ask this; only an answer from the server (a refusal,
+ *  a membership change, a check that never converged) is fail-closed. */
+const serverNotReached = (result: SyncResult): boolean => !result.ok && result.unreachable === true;
+
+/** Offline mode with the cached copy usable: the indicator off and the membership gate down. Membership is re-checked on
+ *  the next reconnect (a person removed meanwhile is told then, the copy wiped). */
+function stayOffline(): void {
+  setOnline(false);
+  setMembershipGated(false);
+}
+
 export function sync(): Promise<SyncResult> {
   if (syncInFlight) return syncInFlight;
   const run = (async (): Promise<SyncResult> => {
@@ -1201,7 +1213,7 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
       // bootstrap (catch below — cached copy usable, gate lowered). Reached
       // but not confirmed (a refusal, membership churn): stay online behind
       // the gate, which MembershipGate keeps retrying (fail-closed).
-      if (!checked.ok && checked.unreachable) throw new Error("server unreachable during the boot sync");
+      if (serverNotReached(checked)) throw new Error("server unreachable during the boot sync");
       // A large workspace stays slim (its painted copy is): the offline body
       // download starts once the check is through. Started before it, its
       // requests to the mirror worker (one at a time) queued ahead of the
@@ -1252,11 +1264,10 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
     }
   } catch {
     if (getAppState().accessRevoked) return { endedOffline }; // removed, not offline (lib/accessRevoked.ts)
-    setOnline(false);
     // Offline cold start: we couldn't reconcile, so lower the gate-first GATE
     // and show the cached mirror. This is the accepted offline-first limit —
     // membership is re-checked (and revoked rows deleted) on reconnect.
-    setMembershipGated(false);
+    stayOffline();
     // LRU test caught this: the slim paint must survive a full-fetch
     // failure (connection dropping mid-boot) — only fall back to the
     // empty shell when NOTHING painted at all.
@@ -1349,19 +1360,18 @@ export async function reconnect(): Promise<boolean> {
     onIdle(() => { void downloadBodiesForOffline().then(() => downloadDrawingsForOffline()); });
     return true;
   }
-  // sync() did NOT confirm (server/SSE unreachable / membership reconcile
-  // couldn't run). Revert the online flip so writes QUEUE rather than
-  // direct-send into a dead server. While the browser is still online only
-  // the server is down: fail-closed, RAISE the membership gate so revoked
-  // content stays suppressed. When the browser itself went offline during
-  // this sync, wentOffline() already lowered the gate (offline-first: cached
-  // work stays usable, membership re-checks on the next reconnect); raising
-  // it again would lock the person out of their cached work while offline.
+  // sync() did NOT confirm. Revert the online flip so writes QUEUE rather than direct-send into a dead server.
   // Removed from the workspace while this ran (lib/accessRevoked.ts): the server answered and refused on purpose, which is
   // not "offline"; forgetWorkspace already lowered the gate and the notice replaces the app. connectivity.ts asks no more.
   if (getAppState().accessRevoked) return false;
-  setMembershipGated(isBrowserOnline());
-  setOnline(false);
+  // The server could not be reached (boot's rule, serverNotReached): offline, the cached copy readable and writable (writes
+  // queue), the gate down; connectivity.ts asks again after its back-off. Only with a copy on this device: without one there is
+  // nothing to show, and a device that never verified this account stays behind the gate.
+  // The server DID answer but the check did not confirm (a refusal, a membership that kept changing): fail-closed, the gate
+  // stays up while the browser is online. When the browser itself went offline during this sync, wentOffline() already lowered
+  // it (cached work stays usable; membership re-checks on the next reconnect).
+  if (serverNotReached(res) && getLocalCopyState() !== "none") stayOffline();
+  else { setMembershipGated(isBrowserOnline()); setOnline(false); }
   return false;
 }
 

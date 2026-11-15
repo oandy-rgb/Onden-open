@@ -5,6 +5,8 @@
 // worked out with Intl in the zone, not with the app's own helpers.
 // Seed and run count from PROPS_SEED / PROPS_RUNS.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "../helpers/offlineNetwork";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import fc from "fast-check";

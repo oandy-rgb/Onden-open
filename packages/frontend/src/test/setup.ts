@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom";
 import { afterAll, afterEach, beforeEach, vi } from "vitest";
 import { flushNanostoresUnmountTimers, trackNanostoresUnmountTimers } from "./helpers/nanostoresCleanup";
+import { assertNoRealNetwork, forbidRealNetwork } from "./helpers/noRealNetwork";
 // The app registers its translation tables at boot (bootApp); tests that switch
 // locale without booting the app get the same wording.
 import "../lib/i18n.app";
@@ -56,6 +57,9 @@ if (typeof HTMLDialogElement !== "undefined" && typeof HTMLDialogElement.prototy
   };
 }
 
+// A test never reaches the network (helpers/noRealNetwork.ts): a request nobody stubbed fails the test that made it.
+forbidRealNetwork();
+
 // ── Per-test reset ───────────────────────────────────────────────────────────
 // Tests run in a shuffled order (vitest.config.ts › sequence.shuffle), so no
 // test may lean on what an earlier one left behind. Each file already gets a
@@ -81,6 +85,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  assertNoRealNetwork();
   if (typeof document === "undefined") return;
   vi.useRealTimers();
   vi.restoreAllMocks();

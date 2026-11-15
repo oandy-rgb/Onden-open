@@ -3,6 +3,8 @@
 // bar offer where,
 // what is sent, and how the answers read — including the choice when links sit
 // in notes the person can't edit, and no menu action offline.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";

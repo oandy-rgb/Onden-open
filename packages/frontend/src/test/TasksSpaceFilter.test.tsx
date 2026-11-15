@@ -1,5 +1,7 @@
 // The task page lists every visible task; with two or more spaces a filter
 // narrows it to one space (a task is in its own space, else its note's).
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 

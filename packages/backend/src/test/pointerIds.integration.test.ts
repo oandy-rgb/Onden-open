@@ -141,6 +141,10 @@ describe("a pointer's id is worked out from its parent and target", { timeout: 6
   });
 });
 
+// File level, not in a describe: every describe of this file shares the pool, and one that closed it would break the others
+// that the shuffle runs after it.
+afterAll(async () => { await pool.end(); });
+
 describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("the migration over the real tables", () => {
   let ws = "";
   let space = "";
@@ -156,7 +160,6 @@ describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("the migration 
       notes.push(id);
     }
   });
-  afterAll(async () => { await pool.end(); });
 
   it("replaces the ids, keeps every other column and every row, and leaves the stamps untouched; a second run changes nothing", async () => {
     const [a, b, c, d] = notes as [string, string, string, string];

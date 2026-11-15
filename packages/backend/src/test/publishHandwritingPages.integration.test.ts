@@ -72,6 +72,10 @@ async function note(title: string, markdown: string, opts: { published?: boolean
 const served = async () => (await loadServedSite(ws)).payload.nodes as SiteNode[];
 const mediaOf = (markdown: string) => [...markdown.matchAll(/^!\[\]\[ink-page-(\d+)\]\n\n\[ink-page-\1\]: \/api\/media\/([^\s#]+)#ink-page-\1$/gm)].map((m) => ({ n: Number(m[1]), file: m[2]! }));
 
+// File level, not in a describe: every describe of this file shares the pool, and one that closed it would break the others
+// that the shuffle runs after it.
+afterAll(async () => { await pool.end(); });
+
 describe.skipIf(!isTestDb)("a published handwriting note draws its own pages (DB)", () => {
   let hand = "", plain = "", pdf = "", secret = "";
 
@@ -92,7 +96,6 @@ describe.skipIf(!isTestDb)("a published handwriting note draws its own pages (DB
     await q(`DELETE FROM outbox WHERE workspace_id = $1`, [ws]);
     await q(`DELETE FROM publish_snapshots WHERE workspace_id = $1`, [ws]);
     await seedQ(`DELETE FROM content_nodes WHERE workspace_id = $1`, [ws]);
-    await pool.end();
   });
 
   it("the candidate names the pages and holds the pictures aside; the payload stays small", async () => {

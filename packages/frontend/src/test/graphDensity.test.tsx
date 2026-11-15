@@ -1,3 +1,5 @@
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 vi.mock("@xyflow/react", () => ({ MarkerType: { ArrowClosed: "arrowclosed" } }));

@@ -3,6 +3,8 @@
 // the card menu's "Remove from canvas" does — the card comes off the board,
 // the note stays — for every selected card at once, with an Undo.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import type { ComponentProps } from "react";
 import type { ReactFlowProps } from "@xyflow/react";
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";

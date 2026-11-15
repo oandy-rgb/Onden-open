@@ -1,6 +1,8 @@
 // On a phone-width layout the same details are reachable: the strip above the
 // bottom bar (MobileNav) and the account sheet opened from the avatar
 // (AppTopbar). The layout is emulated, not a real device.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 

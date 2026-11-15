@@ -22,7 +22,9 @@
 //   3. cleaning is idempotent: cleaning a cleaned body changes nothing
 //   4. time grows about linearly with input size: inputs of unclosed tags at 10 KB, 100 KB and 1 MB;
 //      the test fails when ×10 the input costs more than ×40 the time (a ratio, not a wall-clock
-//      limit; linear is ×10, quadratic ×100), and prints the timings
+//      limit; linear is ×10, quadratic ×100), and prints the timings. The time is this thread's CPU time, the fastest of
+//      several repeats. It is not an operation count because the work is done by regular expressions (V8 reports no
+//      steps for them) and a hand-written scanner whose counters would sit in product code
 //   5. the conversion never throws, and a saved note keeps `<`, `$` and `[` as literal text: the
 //      Markdown, rendered with the app profile, shows the article's words
 //
@@ -44,6 +46,7 @@ import { extractArticleHtml, sanitizeFeedHtml } from "../../modules/rss/sanitize
 import { htmlToMarkdown } from "../../modules/rss/htmlToMarkdown.js";
 import { tokenizeHtml, urlSchemeOf, visibleText } from "../helpers/htmlTokens.js";
 import { checkAsync, check } from "../helpers/propsConfig.js";
+import { CLOCK_TICK_MS, typicalMs } from "../../../../markdown/src/linearTiming.testing.js";
 
 // ── The parts a document is made of ─────────────────────────────────────────
 
@@ -238,15 +241,13 @@ const BOUND = 40;
 const make = (unit: string, size: number) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
 
 type Sample = number | "threw";
+/** The function's CPU time on this thread, the median of three batches (linearTiming.testing.ts: typicalMs). Not the wall clock:
+ *  another test file's worker stretching one run of a 2-core runner made a linear function read as ×40 (2026-11-15), and under eight
+ *  busy loops the wall-clock version of this test failed six runs out of six. Not an operation count: the work is regular
+ *  expressions (V8 reports no steps for them) and a hand-written scanner whose counters would have to sit in product code. */
 function measure(fn: (html: string) => unknown, unit: string, size: number): Sample {
   const html = make(unit, size);
-  let best = Infinity;
-  for (let rep = 0; rep < (size <= 10_000 ? 3 : 1); rep++) {
-    const start = performance.now();
-    try { fn(html); } catch { return "threw"; }
-    best = Math.min(best, performance.now() - start);
-  }
-  return best;
+  try { return typicalMs(() => { fn(html); }, 3); } catch { return "threw"; }
 }
 
 type Fn = { name: string; run: (html: string) => unknown };
@@ -269,7 +270,7 @@ function growth(fn: Fn, unit: string): string[] {
     if (sample === "threw") { problems.push(`${fn.name} threw on ${size} bytes of ${JSON.stringify(unit)}`); break; }
     const before = samples[i - 1];
     if (typeof before === "number") {
-      const ratio = sample / Math.max(before, i === 1 ? 1 : 5);
+      const ratio = sample / Math.max(before, i === 1 ? CLOCK_TICK_MS : 5);
       if (ratio > BOUND) { problems.push(`${fn.name} on ${JSON.stringify(unit)}: ×10 input (${SIZES[i - 1]! / 1000} KB → ${size / 1000} KB) took ×${ratio.toFixed(0)} the time`); break; }
     }
   }

@@ -1,6 +1,8 @@
 // 「＋」 of a note's title strip, with the real shared hook (viewTabs/useAddView): the kinds
 // listed are the same for a note and a tag, choosing one writes the view and
 // opens its tab, and no second floating panel appears for a kind that needs none.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ViewTabs } from "../components/viewTabs";

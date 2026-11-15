@@ -1,6 +1,8 @@
 // The link trail: 「上一頁」 returns to the note a link was followed from,
 // 「下一頁」 to the one it returned from; the top bar's pair of buttons and
 // Alt+← / Alt+→ drive the same two operations (hooks/useWorkspaceFocus).
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";

@@ -51,6 +51,10 @@ describe.skipIf(!isTestDatabase())("migrations 195 and 196 on a production-shape
   let scheduleBefore: string[] = [];
   let cardsBefore: string[] = [];
   let previewBefore: Array<Record<string, unknown>> = [];
+  /** Where each previewed tag stood right after the first run of the two migrations. The preview is checked against this, not
+   *  against the database when the test runs: the shuffle may run "running both again" first, and a second run can trash a tag the
+   *  first one kept (one whose only reason to stay was an `extends` entry the first run removed). */
+  const afterFirstRun = new Map<string, { in_trash: boolean; module: string | null }>();
 
   async function moduleTag(key: string, workspace: string, module: string, over: { title?: string; markdown?: string; color?: string; parent?: string; schema?: object } = {}) {
     id[key] = (await seedQ<{ id: string }>(
@@ -81,14 +85,16 @@ describe.skipIf(!isTestDatabase())("migrations 195 and 196 on a production-shape
   const status = async () => (await (await app.request(`/api/review/status?now=${encodeURIComponent(NOW)}`)).json()) as ReviewStatus;
   const keyOf = (card: { node_id: string; block: { id: string } | null }) => card.block?.id ?? card.node_id;
   const schedules = async () => (await q<{ row: string }>(`SELECT row_to_json(s)::text AS row FROM review_states s WHERE workspace_id = $1 ORDER BY 1`, [ws])).rows.map((r) => r.row);
-  /** Everything the two migrations may touch, as text, so "changes nothing" is a comparison. */
+  /** Everything the two migrations may touch in these two workspaces, as text, so "changes nothing" is a comparison. The migrations
+   *  run over the whole shared database, and a module tag another file left in a third workspace can change on a second run
+   *  (a review tag that stayed only because it extended a removed tag is trashed then), so nothing outside the two is compared. */
   const snapshot = async () => ({
-    refs: (await q<{ r: string }>(`SELECT row_to_json(r)::text AS r FROM (SELECT id, workspace_id, function_id, instance, holder_node_id, holder_block_id, config FROM function_refs) r ORDER BY 1`)).rows.map((x) => x.r),
+    refs: (await q<{ r: string }>(`SELECT row_to_json(r)::text AS r FROM (SELECT id, workspace_id, function_id, instance, holder_node_id, holder_block_id, config FROM function_refs WHERE workspace_id IN ($1, $2)) r ORDER BY 1`, [ws, other])).rows.map((x) => x.r),
     tags: (await q<{ r: string }>(`SELECT row_to_json(t)::text AS r FROM (SELECT id, title, tag_schema, tag_color, deleted_at IS NOT NULL AS in_trash, parent_id FROM content_nodes WHERE node_type = 'class_tag' AND workspace_id IN ($1, $2)) t ORDER BY 1`, [ws, other])).rows.map((x) => x.r),
-    members: (await q<{ r: string }>(`SELECT row_to_json(m)::text AS r FROM (SELECT node_id, tag_id FROM node_tags) m ORDER BY 1`)).rows.map((x) => x.r),
-    blockMembers: (await q<{ r: string }>(`SELECT row_to_json(m)::text AS r FROM (SELECT block_node_id, tag_id FROM block_node_tags) m ORDER BY 1`)).rows.map((x) => x.r),
+    members: (await q<{ r: string }>(`SELECT row_to_json(m)::text AS r FROM (SELECT nt.node_id, nt.tag_id FROM node_tags nt JOIN content_nodes n ON n.id = nt.node_id WHERE n.workspace_id IN ($1, $2)) m ORDER BY 1`, [ws, other])).rows.map((x) => x.r),
+    blockMembers: (await q<{ r: string }>(`SELECT row_to_json(m)::text AS r FROM (SELECT block_node_id, tag_id FROM block_node_tags WHERE workspace_id IN ($1, $2)) m ORDER BY 1`, [ws, other])).rows.map((x) => x.r),
     schedules: await schedules(),
-    events: Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM domain_events`)).rows[0]!.n),
+    events: Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM domain_events WHERE workspace_id IN ($1, $2)`, [ws, other])).rows[0]!.n),
   });
   const refOf = async (holder: string, column: "holder_node_id" | "holder_block_id") =>
     (await q(`SELECT 1 FROM function_refs WHERE ${column} = $1 AND function_id = 'review' AND instance = ''`, [holder])).rowCount;
@@ -144,6 +150,9 @@ describe.skipIf(!isTestDatabase())("migrations 195 and 196 on a production-shape
     previewBefore = (await q<Record<string, unknown>>(PREVIEW)).rows;
     await seedQ(M195);
     await seedQ(M196);
+    for (const row of previewBefore) {
+      afterFirstRun.set(String(row.id), (await q<{ in_trash: boolean; module: string | null }>(`SELECT deleted_at IS NOT NULL AS in_trash, tag_schema->>'module' AS module FROM content_nodes WHERE id = $1`, [row.id])).rows[0]!);
+    }
   });
   afterAll(async () => {
     await seedQ(`DELETE FROM content_nodes WHERE workspace_id IN ($1, $2)`, [ws, other]);
@@ -211,7 +220,7 @@ describe.skipIf(!isTestDatabase())("migrations 195 and 196 on a production-shape
     expect(previewBefore.length).toBeGreaterThanOrEqual(15);
     for (const row of previewBefore) {
       expect(Object.keys(row)).not.toContain("title");
-      const now = (await q<{ in_trash: boolean; module: string | null }>(`SELECT deleted_at IS NOT NULL AS in_trash, tag_schema->>'module' AS module FROM content_nodes WHERE id = $1`, [row.id])).rows[0]!;
+      const now = afterFirstRun.get(String(row.id))!;
       const will = String(row.will_happen);
       if (will === "trash") expect(now.in_trash, `${row.module} ${will}`).toBe(true);
       else if (will.startsWith("keep")) { expect(now.in_trash, `${row.module} ${will} ${JSON.stringify(row)}`).toBe(false); expect(will === "keep (loses the module mark)" ? now.module === null : now.module === row.module, `${row.module} ${will}`).toBe(true); }

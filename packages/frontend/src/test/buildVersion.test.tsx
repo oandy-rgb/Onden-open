@@ -2,6 +2,8 @@
 // against this page's build id, the reload that saves the open draft first, and
 // the notice that offers it (components/DeviceNotices).
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 

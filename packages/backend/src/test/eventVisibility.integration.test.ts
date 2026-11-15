@@ -38,6 +38,10 @@ type Event = { event_type: string; target_type: string; target_id: string; tx_me
 const feed = async (actor: ActorCtx, filter: string) =>
   ((await (await appFor(actor).request(`/api/events?limit=200&${filter}`)).json()) as { events: Event[] }).events;
 
+// File level, not in a describe: every describe of this file shares the pool, and one that closed it would break the others
+// that the shuffle runs after it.
+afterAll(async () => { await pool.end(); });
+
 describe("auditedToolArgs", () => {
   it("keeps argument names and the ids they name, never text", () => {
     expect(auditedToolArgs({ id: "n1", markdown: "my diary", title: "Secret", tag_ids: ["t1"], query: "divorce" }))
@@ -70,7 +74,6 @@ describe.skipIf(!isTestDb)("event visibility", () => {
 
   afterAll(async () => {
     await seedQ(`DELETE FROM content_nodes WHERE workspace_id = $1 AND title LIKE $2`, [ws, `EV %${stamp}%`]);
-    await pool.end();
   });
 
   it("an agent's tool call is audited without its text; the owner sees it, another member does not", async () => {

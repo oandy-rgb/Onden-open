@@ -345,16 +345,23 @@ describe.skipIf(!isTestDb)("rss module (DB)", () => {
   });
 
   describe("a source that cannot be fetched backs off instead of being retried every tick", () => {
-    const outboxRows = (sourceId: string) => q<{ id: string; status: string; attempts: number; next_attempt_at: Date }>(
-      `SELECT id::text, status, attempts, next_attempt_at FROM outbox WHERE dedup_key = $1 ORDER BY outbox.id`,
+    const outboxRows = (sourceId: string) => q<{ id: string; status: string; attempts: number; next_attempt_at: Date; wait_seconds: number }>(
+      // wait_seconds: the backoff the row was given by its last failure, both ends read by the database in one statement,
+      // so how long this test took to get here changes nothing.
+      `SELECT id::text, status, attempts, next_attempt_at, EXTRACT(EPOCH FROM next_attempt_at - updated_at)::float8 AS wait_seconds
+         FROM outbox WHERE dedup_key = $1 ORDER BY outbox.id`,
       [`rss_fetch:${sourceId}`]);
-    /** Run the row until it has one more failed attempt or went dead (drainOutbox is a no-op while another drain is in flight, so poll). */
-    async function drainOneAttempt(sourceId: string, outboxId: string) {
+    /** Run the row until it has failed `atLeast` times (default: one more than now) or went dead (drainOutbox is a no-op while
+     *  another drain is in flight, so poll). The subscribe route files its own fire-and-forget drain, whose failed first attempt can
+     *  land before or after this reads the row: a count relative to "now" would then wait out the 2 s backoff and make a second
+     *  attempt, so a caller that means "the first failure" names the count. */
+    async function drainOneAttempt(sourceId: string, outboxId: string, atLeast?: number) {
       const start = (await outboxRows(sourceId)).rows.find((r) => r.id === outboxId)!;
+      const wanted = atLeast ?? start.attempts + 1;
       for (let i = 0; i < 100; i++) {
+        const seen = (await outboxRows(sourceId)).rows.find((r) => r.id === outboxId)!;
+        if (seen.status !== "pending" || seen.attempts >= wanted) return;
         await drainOutbox({ id: outboxId });
-        const row = (await outboxRows(sourceId)).rows.find((r) => r.id === outboxId)!;
-        if (row.status !== "pending" || row.attempts > start.attempts) return;
         await new Promise((res) => setTimeout(res, 30));
       }
       throw new Error("attempt never ran");
@@ -365,13 +372,16 @@ describe.skipIf(!isTestDb)("rss module (DB)", () => {
       const feed = FEEDS.get(source.url)!;
       FEEDS.delete(source.url);
       const first = (await outboxRows(source.id)).rows.at(-1)!;
-      await drainOneAttempt(source.id, first.id);
+      await drainOneAttempt(source.id, first.id, 1);
       return { ...source, feed, outboxId: first.id };
     }
 
     it("the next tick does not pull a failed fetch forward or reset its attempts", async () => {
       currentActor = admin;
       const src = await failingSource();
+      // The real first backoff is 2 s; on a slow machine that can pass before the ticks below run, and a row that is due is
+      // rightly retried. Fix the wait at an hour so this only asks what a tick does to a row that is backing off.
+      await q(`UPDATE outbox SET next_attempt_at = now() + interval '1 hour' WHERE id = $1::bigint`, [src.outboxId]);
       const before = (await outboxRows(src.id)).rows;
       expect(before).toHaveLength(1);
       expect(before[0]!.attempts).toBe(1);
@@ -380,17 +390,17 @@ describe.skipIf(!isTestDb)("rss module (DB)", () => {
       const after = (await outboxRows(src.id)).rows;
       expect(after).toHaveLength(1);
       expect(after[0]!.attempts).toBe(1);
-      expect(after[0]!.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
+      expect(after[0]!.next_attempt_at.getTime()).toBe(before[0]!.next_attempt_at.getTime());
     });
 
     it("the wait grows with each failure", async () => {
       currentActor = admin;
       const src = await failingSource();
-      const waitAfter = async () => (await outboxRows(src.id)).rows[0]!.next_attempt_at.getTime() - Date.now();
+      const waitAfter = async () => (await outboxRows(src.id)).rows[0]!.wait_seconds;
       const first = await waitAfter();
       await q(`UPDATE outbox SET next_attempt_at = now() WHERE id = $1::bigint`, [src.outboxId]);
       await enqueueDueRssFetches();
-      await drainOneAttempt(src.id, src.outboxId);
+      await drainOneAttempt(src.id, src.outboxId, 2);
       expect((await outboxRows(src.id)).rows[0]!.attempts).toBe(2);
       expect(await waitAfter()).toBeGreaterThan(first);
     });

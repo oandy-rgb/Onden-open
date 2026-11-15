@@ -1,5 +1,7 @@
 // 「放大畫面」 on the handwriting page: the same button and behaviour as the PDF
 // (components/ExpandPaneButton + hooks/useExpandedPane), also when read-only.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubPagesNearScreen } from "./helpers/nearScreen";
 import { fireEvent, render } from "@testing-library/react";

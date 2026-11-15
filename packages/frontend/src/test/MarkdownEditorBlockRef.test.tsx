@@ -1,3 +1,5 @@
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";

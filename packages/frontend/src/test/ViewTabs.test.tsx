@@ -1,6 +1,8 @@
 // The row of view tabs above a note or a tag (components/viewTabs/ViewTabs):
 // 「內容」 first, the page's views, 「＋」; rename, delete, move; the whiteboard
 // tab; what 「＋」 offers and says.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ViewTabs } from "../components/viewTabs";

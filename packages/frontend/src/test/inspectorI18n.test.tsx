@@ -1,3 +1,5 @@
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import NodeInspector from "../components/NodeInspector";
@@ -5,10 +7,11 @@ import { noWorkspaceData, type ContentNode, type NodeEdge } from "../lib/api";
 import { resetAppState } from "../lib/appStore";
 import { setLocalePref } from "../lib/i18n";
 import type { CanvasMembership } from "@onden/contract";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
 
 // The inspector loads its 功能 and AI tabs on use; load them now, so a slow run (the full suite under load)
 // does not finish a test while that load is still on its way and evaluate it after the environment is gone.
-await import("../components/InfoFunctions");
+await loadNoteFunctionModules();
 await import("../components/infoAi");
 
 // Regression: the right-side Inspector's section headers + row labels must run

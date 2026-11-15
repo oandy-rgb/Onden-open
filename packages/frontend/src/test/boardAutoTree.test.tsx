@@ -2,6 +2,8 @@
 // opening it draws the tree and writes nothing; the level setting, a branch
 // fold and the first dragged card are the writes, and each stores only what
 // the person changed. A board with cards of its own stays as it was.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { Canvas, ContentNode } from "../lib/api";

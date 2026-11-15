@@ -3,6 +3,8 @@
 // or another device picks it up), the clock is read off its start time, time
 // running out asks 「做了什麼？」 without ending anything, and the answer keeps
 // what was typed when the save fails.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

@@ -3,6 +3,8 @@
 // an undo toast afterwards. The tag goes through the tag writer, the one path
 // every membership change takes.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 

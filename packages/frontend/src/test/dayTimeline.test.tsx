@@ -4,6 +4,8 @@
 // page's part of it (3 天 / 週, planning, 收工) is test/dayPlanner.test.tsx. Layout maths has its own tests
 // (markdown dayItems.test.ts, lib/dayWindow.test.ts).
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 

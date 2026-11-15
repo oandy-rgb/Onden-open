@@ -1,5 +1,7 @@
 // Hints shown once per account (hooks/useHintOnce, lib/hintsSeenStore): the
 // device flags they replaced carry over, and a hint seen once stays seen.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";

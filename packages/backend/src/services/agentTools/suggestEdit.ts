@@ -2,6 +2,7 @@ import type { z } from "zod";
 import { assertAuthority } from "../../spine/authority.js";
 import { createSuggestions } from "../aiSuggestions.js";
 import type { AgentTool } from "./types.js";
+import { cardAdvice } from "./cardAdvice.js";
 import { EditArgs } from "./editArgs.js";
 
 export type SuggestEditResult = {
@@ -9,6 +10,8 @@ export type SuggestEditResult = {
   /** How many places the user will review (0: your text equals the note's). */
   places: number;
   note: string;
+  /** Present when the proposed body marks a review card that has no answer: what to change (see cardAdvice.ts). */
+  card_notes?: string[];
 };
 
 // The note is never changed here: the edit becomes pending places (a paragraph
@@ -37,8 +40,11 @@ export const suggestEdit: AgentTool<z.infer<typeof EditArgs>, SuggestEditResult>
       proposedMarkdown: args.markdown,
       proposedTitle: args.title,
     });
-    return saved.itemCount === 0
-      ? { status: "no_change", places: 0, note: "your text is the same as the note: nothing to suggest" }
-      : { status: "suggested", places: saved.itemCount, note: "saved as a suggestion for the user to review; the note itself is unchanged" };
+    if (saved.itemCount === 0) return { status: "no_change", places: 0, note: "your text is the same as the note: nothing to suggest" };
+    const cardNotes = args.markdown !== undefined ? await cardAdvice(workspaceId, args.base_markdown ?? "", args.markdown) : [];
+    return {
+      status: "suggested", places: saved.itemCount, note: "saved as a suggestion for the user to review; the note itself is unchanged",
+      ...(cardNotes.length ? { card_notes: cardNotes } : {}),
+    };
   },
 };

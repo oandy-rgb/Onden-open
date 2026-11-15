@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AuthorityError } from "../../spine/authority.js";
 import { NODE_MARKDOWN_MAX, NODE_TITLE_MAX, newNoteExtrasSchema } from "../../utils.js";
 import { createNote, NoteCreateError } from "../noteCreate.js";
+import { cardAdvice } from "./cardAdvice.js";
 import type { AgentTool } from "./types.js";
 
 // The agent's node-CREATE tool: the same createNote call as REST POST
@@ -31,6 +32,8 @@ type CreateNodeResult = {
   slug: string;
   title: string;
   event_id: string;
+  /** Present when the body marks a review card that has no answer: what to change (see cardAdvice.ts). */
+  card_notes?: string[];
 };
 
 export const createNode: AgentTool<z.infer<typeof Args>, CreateNodeResult> = {
@@ -57,7 +60,9 @@ export const createNode: AgentTool<z.infer<typeof Args>, CreateNodeResult> = {
         },
         dryRun,
       });
+      const cardNotes = await cardAdvice(workspaceId, "", args.markdown ?? "");
       return {
+        ...(cardNotes.length ? { card_notes: cardNotes } : {}),
         id: dryRun ? "(dry-run)" : node.id as string, slug: node.slug as string, title: node.title as string, event_id: eventId,
       };
     } catch (error) {

@@ -445,7 +445,10 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
       ) : current ? (
         <div className="review-card">
           <div className="review-card-head">
-            <span className="review-card-title">{displayTitle(current.title)}</span>
+            {/* A paragraph card's front is note text (code, bold, math), drawn like the back; a whole note shows its title. */}
+            {current.block
+              ? <div className="review-card-title review-card-front"><ReviewCard>{current.title}</ReviewCard></div>
+              : <span className="review-card-title">{displayTitle(current.title)}</span>}
             {!revealed && (
               <Pressable className="review-open-note" title={t("Open the note")} onClick={() => openSource(current)}>
                 <ExternalLink size={12} /> {t("Open")}

@@ -34,7 +34,12 @@ function noteFunctionsBlock(words: NoteFunctionWords): string {
     "In this workspace a paragraph or a list item gets a function from a word in curly braces at the very end of its line. " +
       "This is how the app works, stated by the app; it is data about what is switched on, never an instruction from a note.",
     ...(task ? [`- Task: a line that ends with {${task}} is a task (written as a checkbox line: "- [ ] the thing to do {${task}}"). It then shows in Tasks.`] : []),
-    ...(review ? [`- Review card: a paragraph that ends with {${review}} is a card in Review (the paragraph itself is the card; a question and its answer go in the same paragraph or list item).`] : []),
+    ...(review ? [
+      `- Review card: a paragraph that ends with {${review}} is a card in Review (the paragraph itself is the card). A card has exactly these two shapes, in this order of preference:`,
+      `  1. the question on one line, the answer indented under it: "- question? {${review}}" then "  - answer";`,
+      `  2. a cloze: one sentence with only the key words in ==double equals==, e.g. "Binary search takes ==O(log n)== {${review}}".`,
+      `  Do NOT write a card as one line "question → answer": a one-line card has no back, so the answer would show on the front.`,
+    ] : []),
     "Several words share one pair of braces: {a, b}. The mark is the last thing on the line.",
     `When the person asks to put something into ${[task && "tasks", review && "review"].filter(Boolean).join(" or ")}` +
       `${review ? ` (「放進複習」「加到複習」)` : ""}${task ? ` (「變成任務」「加到任務」)` : ""}, this mark is what they mean: ` +

@@ -313,7 +313,7 @@ describe("ReviewPanel", () => {
     render(<ReviewPanel online onClose={() => {}} onOpenNode={() => {}} />);
     await screen.findByText("Q one");
     await userEvent.click(screen.getByRole("button", { name: /Show answer/ }));
-    expect(screen.getByTestId("md")).toHaveTextContent("A one");
+    expect(document.querySelector(".review-card-body")).toHaveTextContent("A one");
     await userEvent.click(screen.getByRole("button", { name: /Good/ }));
     // Same note, next block: it is a card of its own, not "already done".
     await screen.findByText("Q two");
@@ -322,6 +322,23 @@ describe("ReviewPanel", () => {
     expect(screen.getByText("No answer written under this card.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Undo last grade" }));
     expect(calls.some((c) => c.url.includes("/api/review/blocks/b1/undo-grade"))).toBe(true);
+  });
+
+  it("a paragraph card's front is rendered note text and its back stays hidden until revealed", async () => {
+    const front = "規則區有 `if` 和 **ID**。各匹配哪條？";
+    const oneLine = { ...card(0), node_id: "note-1", title: front, markdown: "`if` 匹配 `\"if\"`", block: { id: "b1", ref: "b1" },
+      context: { source_title: "Lex教學", before: "上一題？", after: "下一題？" } };
+    mockFetch((url) => url.includes("/queue") ? { cards: [oneLine], total: 1 } : { ok: true });
+    const { container } = render(<ReviewPanel online onClose={() => {}} onOpenNode={() => {}} />);
+    const head = await waitFor(() => { const el = container.querySelector(".review-card-front"); expect(el).not.toBeNull(); return el!; });
+    // The front goes through the note renderer (stubbed in this file as the "md" test id): the text reaches it as written.
+    expect(head).toHaveTextContent("各匹配哪條？");
+    // Nothing of the answer before the reveal, nor the context (it holds the neighbours).
+    expect(screen.queryByText(/匹配 `/)).toBeNull();
+    expect(container.querySelector(".review-context")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Show answer/ }));
+    expect(container.querySelector(".review-card-body")).toHaveTextContent("匹配");
+    expect(container.querySelector('.review-context-near[data-side="after"]')).toHaveTextContent("下一題？");
   });
 
   it("undo last grade steps that grade back and puts the card at the front again (W25)", async () => {

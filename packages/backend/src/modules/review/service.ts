@@ -261,6 +261,8 @@ async function loadBlockCards(workspaceId: string, actor: ActorCtx, sourceIds: s
      ORDER BY b.created_at ASC,b.id ASC`, params);
   // A card's id is its anchor: the note's valid anchors say which block of the text it is.
   const anchorsByNote = bodies ? await validAnchorRangesByNote(workspaceId, [...new Set(rows.rows.map(row => row.note_id))]) : new Map<string, Array<{ id: string; from: number; to: number }>>();
+  const cardRefsByNote = new Map<string, Set<string>>();
+  for (const row of rows.rows) (cardRefsByNote.get(row.note_id) ?? cardRefsByNote.set(row.note_id, new Set()).get(row.note_id)!).add(row.block_ref);
   return rows.rows.map(row => {
     // The note's text is the source; the label stands in when the two have
     // drifted (a save in flight) or bodies were not read.
@@ -268,7 +270,7 @@ async function loadBlockCards(workspaceId: string, actor: ActorCtx, sourceIds: s
     return { node_id: row.note_id, title: sides?.front || row.label, markdown: sides?.back ?? "", ink_data: null,
       state: parseReviewState(row.state_raw), parent_id: row.note_id, module_tag_ids: sourceIds,
       block: { id: row.id, ref: row.block_ref }, created_at: row.created_at, hold: holdOf(row.state_raw),
-      neighbours: bodies ? blockNeighbours(row.markdown, row.block_ref, anchorsByNote.get(row.note_id) ?? []) : null,
+      neighbours: bodies ? blockNeighbours(row.markdown, row.block_ref, anchorsByNote.get(row.note_id) ?? [], cardRefsByNote.get(row.note_id)) : null,
       source_title: row.note_title };
   });
 }

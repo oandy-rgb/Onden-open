@@ -5,7 +5,8 @@ import { isModuleOwnedAttributeKey } from "../systemAttributes.js";
 import { nodeAttributeCommitted } from "../nodeCommits.js";
 import type { ActorCtx } from "../../types.js";
 import { q } from "../../db.js";
-import { encodeSnapshot, type AttributeState } from "../eventLog/index.js";
+import { encodeSnapshot, type AttributeState, type SnapshotScope } from "../eventLog/index.js";
+import { readInkValue } from "../inkChunks.js";
 import type { EventRow, RestoreError, RestoreResult } from "../restoreContract.js";
 import { recordRestore, requireRestoreTransaction } from "./record.js";
 import { historyIncomplete } from "./refusals.js";
@@ -24,13 +25,15 @@ export type AttributeRestorePreview = {
   conflict_code?: "state_conflict" | "history_incomplete" | "already_in_state";
 };
 
+const scopeOf = (row: EventRow): SnapshotScope => ({ workspaceId: row.workspace_id, nodeId: row.target_id });
+
 const valueTypes = new Set(["text", "number", "date", "bool", "node_ref"]);
 const sources = new Set(["ui", "markdown", "frontmatter", "dispatcher", "explicit", "derived"]);
 
 /** Missing fields are unknown history, not database defaults. In particular,
  * source controls whether a later derived write may replace this value.
  */
-async function decodeSnapshot(raw: unknown): Promise<{ state: AttributeState | null } | RestoreError> {
+async function decodeSnapshot(raw: unknown, scope: SnapshotScope): Promise<{ state: AttributeState | null } | RestoreError> {
   if (raw === null) return { state: null };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return historyIncomplete("attribute history has no complete snapshot");
   const snapshot = raw as Record<string, unknown>;
@@ -45,9 +48,9 @@ async function decodeSnapshot(raw: unknown): Promise<{ state: AttributeState | n
 
   let value: string;
   if (typeof snapshot.value_ref === "string" && snapshot.value_ref) {
-    const blob = await q<{ content: string }>(`SELECT content FROM blobs WHERE hash = $1`, [snapshot.value_ref]);
-    if (!blob.rows[0]) return historyIncomplete("the attribute history blob is unavailable");
-    value = blob.rows[0].content;
+    const stored = await readInkValue(scope.workspaceId, scope.nodeId, snapshot.value_ref);
+    if (stored === null) return historyIncomplete("the attribute history blob is unavailable");
+    value = stored;
     if (typeof snapshot.value === "string" && snapshot.value !== value) return historyIncomplete("attribute history has inconsistent inline and blob values");
   } else if (typeof snapshot.value === "string" && snapshot.value_ref == null) {
     value = snapshot.value;
@@ -118,7 +121,7 @@ async function inspectAttribute(row: EventRow, lock: boolean): Promise<Attribute
       rawBefore = null;
     }
   }
-  const before = await decodeSnapshot(rawBefore);
+  const before = await decodeSnapshot(rawBefore, scopeOf(row));
   if ("code" in before) return before;
   if (row.event_type === "ATTRIBUTE_SET" && row.tx_meta.inverse_op === "attribute.set" && before.state === null) {
     return historyIncomplete("attribute inverse contradicts its previous state");
@@ -139,7 +142,7 @@ async function inspectAttribute(row: EventRow, lock: boolean): Promise<Attribute
     return { ...inspection, refusal: { code: "already_in_state", status: 409, detail: "this attribute change is already restored or changed no state" } };
   }
 
-  const after = row.event_type === "ATTRIBUTE_DELETED" ? { state: null } : await decodeSnapshot(row.payload);
+  const after = row.event_type === "ATTRIBUTE_DELETED" ? { state: null } : await decodeSnapshot(row.payload, scopeOf(row));
   if ("code" in after) {
     // The before value is still safe to preview, but an incomplete after state
     // cannot prove that overwriting the current value preserves later edits.
@@ -168,8 +171,9 @@ export async function restoreAttribute(row: EventRow, actorContext: ActorCtx): P
   if ("code" in inspection) return inspection;
   if (inspection.refusal) return inspection.refusal;
   const { key, current, previous } = inspection;
-  const previousSnapshot = await encodeSnapshot(key, current);
-  const restoredSnapshot = await encodeSnapshot(key, previous);
+  const scope = scopeOf(row);
+  const previousSnapshot = await encodeSnapshot(key, current, scope);
+  const restoredSnapshot = await encodeSnapshot(key, previous, scope);
 
   if (previous === null) {
     await q(`DELETE FROM node_attributes WHERE workspace_id = $1 AND node_id = $2 AND key = $3`, [row.workspace_id, row.target_id, key]);

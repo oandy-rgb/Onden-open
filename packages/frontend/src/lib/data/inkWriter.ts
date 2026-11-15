@@ -13,6 +13,10 @@ const commit = makeWriteLifecycle(domainContext);
 
 export type InkSaveDoc = InkDocument | InkMultiPageDoc;
 
+/** What a save was made from, or is: a drawing, or the encoded text (the saver sends the value it merged, and names the
+ *  text the server answered with as the base: lib/ink/surfaceSaver). */
+export type InkSaveBase = InkSaveDoc | string;
+
 export type InkSaveOptions = {
   /** Which attribute holds the page: the note's own handwriting (`ink_data`, the default) or its
    *  whiteboard's pen layer (`board_ink`). The write, the merge and the offline queue are the same. */
@@ -21,6 +25,9 @@ export type InkSaveOptions = {
    *  remembered before anything is awaited and sent so that it outlives the
    *  page; one the page's own limit cannot carry is recovered on the next start. */
   keepalive?: boolean;
+  /** Called with what the server stored and the text this save sent as its value, when the server answered (not when only
+   *  the offline queue holds the save): a merge may have added another device's strokes to what it stored. */
+  onServerAnswer?: (stored: string, sent: string) => void;
 };
 
 /** Save a note's drawing — a handwriting/canvas page or a PDF's envelope
@@ -41,18 +48,20 @@ export type InkSaveOptions = {
  *  holds it (true), not whether it was refused, dropped or failed (false).
  *  The next save's base moves forward only on true: a refused save never
  *  reached the server, so a later save must not be made "from" it (the merge
- *  would read its strokes as deleted by the other side). It never rejects.
+ *  would read its strokes as deleted by the other side; lib/ink/surfaceSaver
+ *  sends the surface's drawing again when that happened). It never rejects.
  *
+ *  `doc` may be the encoded text itself (the saver sends the value it merged: lib/ink/surfaceSaver).
  *  A drawing that needs a newer version to edit (isInkReadOnly) is never
  *  saved: this is a no-op for it, whichever host asks. */
-export function saveInk(nodeId: string, doc: InkSaveDoc, base?: InkSaveDoc | null, options: InkSaveOptions = {}): Promise<boolean> {
-  if (isInkReadOnly(doc)) return Promise.resolve(false);
+export function saveInk(nodeId: string, doc: InkSaveBase, base?: InkSaveBase | null, options: InkSaveOptions = {}): Promise<boolean> {
+  if (typeof doc !== "string" && isInkReadOnly(doc)) return Promise.resolve(false);
   const attr = options.attr ?? INK_DATA_ATTR;
-  const value = encodeInk(doc);
+  const value = typeof doc === "string" ? doc : encodeInk(doc);
   const attribute = { value, value_type: "text", is_inheritable: false };
   // The whole value and its base are kept (also in the offline queue); what
   // goes over the wire is decided when it is sent (patchedBody.ts).
-  const body = JSON.stringify(base === undefined ? attribute : { ...attribute, base_value: base === null ? "" : encodeInk(base) });
+  const body = JSON.stringify(base === undefined ? attribute : { ...attribute, base_value: base === null ? "" : typeof base === "string" ? base : encodeInk(base) });
   // The local copy holds what the server stored once it answers: the merge
   // may have added another device's strokes.
   let mirrored = value;
@@ -62,7 +71,7 @@ export function saveInk(nodeId: string, doc: InkSaveDoc, base?: InkSaveDoc | nul
   }, {
     mirror: () => upsertAttribute(nodeId, attr, mirrored, "text", false, "ui"),
     accepted: (result) => {
-      if (result.status === "synced" && typeof result.value?.value === "string") mirrored = result.value.value;
+      if (result.status === "synced" && typeof result.value?.value === "string") { mirrored = result.value.value; options.onServerAnswer?.(mirrored, value); }
     },
   });
   runBackgroundWrite(write);

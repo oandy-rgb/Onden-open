@@ -33,6 +33,7 @@ import "./OverviewEditor.css";
 import "./TagsPanel.css";
 import { noteDoc, notePages, type InkPages } from "@onden/markdown/ink";
 import { useInkSurfaceSaver } from "../lib/ink";
+import { useDrawingRestoreSerial } from "../hooks/useDrawingRestoreSerial";
 import { readPdfInk, type InkMultiPageDoc } from "../lib/pdf";
 import { extractPdfText } from "../lib/pdf/extractText";
 import { useAiEnabled, useModuleFilter, useModuleStatus } from "../hooks/useModuleFilter";
@@ -423,6 +424,8 @@ export default function OverviewEditor({
   }, []);
 
   const { rebase: rebaseInk, save: saveSurfaceInk } = useInkSurfaceSaver();
+  // A version put back from History: the surface loads it again (hooks/useDrawingRestoreSerial).
+  const drawingRestored = useDrawingRestoreSerial(node?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -458,7 +461,7 @@ export default function OverviewEditor({
       }
     })();
     return () => { cancelled = true; };
-  }, [node?.id, rebaseInk]);
+  }, [node?.id, rebaseInk, drawingRestored]);
 
   // Saves from a surface go to the note that surface was loaded for — never to
   // node?.id, which may already be the next note when an unmount flush runs.

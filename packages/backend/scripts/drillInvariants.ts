@@ -74,6 +74,9 @@ const COUNTS: CountSpec[] = [
   { name: "ink_data_rows", label: "手寫頁／PDF 的筆跡屬性", rule: "equal", requires: ["node_attributes"], sql: `SELECT count(*) FROM node_attributes WHERE key = 'ink_data'` },
   { name: "note_ink_rows", label: "筆記手寫分頁的筆跡屬性", rule: "equal", requires: ["node_attributes"], sql: `SELECT count(*) FROM node_attributes WHERE key = 'note_ink'` },
   { name: "board_ink_rows", label: "白板筆跡屬性", rule: "equal", requires: ["node_attributes"], sql: `SELECT count(*) FROM node_attributes WHERE key = 'board_ink'` },
+  // A big drawing's earlier versions are chunks of its note (migration 203): none may be lost by a restore or an upgrade.
+  { name: "ink_manifests", label: "分塊存放的筆跡版本", rule: "equal", requires: ["ink_manifests"], sql: `SELECT count(*) FROM ink_manifests` },
+  { name: "ink_chunks", label: "筆跡的區塊", rule: "equal", requires: ["ink_chunks"], sql: `SELECT count(*) FROM ink_chunks` },
   { name: "edges", label: "連結", rule: "equal", requires: ["node_edges"], sql: `SELECT count(*) FROM node_edges` },
   { name: "node_tags", label: "標籤套用", rule: "equal", requires: ["node_tags"], sql: `SELECT count(*) FROM node_tags` },
   { name: "attributes", label: "屬性", rule: "equal", requires: ["node_attributes"], sql: `SELECT count(*) FROM node_attributes` },
@@ -123,6 +126,15 @@ const STRUCTURE: StructureSpec[] = [
   { name: "edges_missing_end", label: "連結的一端不存在", requires: ["node_edges"],
     sql: `SELECT e.id::text AS id FROM node_edges e WHERE NOT EXISTS (SELECT 1 FROM content_nodes n WHERE n.id = e.source_node_id)
              OR NOT EXISTS (SELECT 1 FROM content_nodes n WHERE n.id = e.target_node_id)` },
+  // Every drawing version an event names must still be readable: a whole `blobs` row or a manifest of its note with all its chunks.
+  { name: "ink_version_unreadable", label: "事件指到、但已經讀不到的筆跡版本", requires: ["blobs", "ink_manifests", "domain_events"],
+    sql: `SELECT DISTINCT e.id::text AS id FROM domain_events e, unnest(ARRAY[e.payload->>'value_ref', e.tx_meta->'prev_field_values'->>'value_ref']) AS r(ref)
+           WHERE e.event_type IN ('ATTRIBUTE_SET', 'ATTRIBUTE_DELETED') AND e.payload->>'key' IN ('ink_data', 'board_ink', 'note_ink') AND r.ref IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM blobs b WHERE b.hash = r.ref)
+             AND NOT EXISTS (SELECT 1 FROM ink_manifests m WHERE m.node_id::text = e.target_id AND m.hash = r.ref
+                               AND NOT EXISTS (SELECT 1 FROM generate_series(0, length(m.chunks) / 32 - 1) g
+                                                WHERE NOT EXISTS (SELECT 1 FROM ink_chunks c WHERE c.node_id = m.node_id
+                                                                    AND c.hash = encode(substring(m.chunks FROM g * 32 + 1 FOR 32), 'hex'))))` },
   { name: "attributes_missing_node", label: "屬性所屬筆記不存在", requires: ["node_attributes"],
     sql: `SELECT a.id::text AS id FROM node_attributes a WHERE NOT EXISTS (SELECT 1 FROM content_nodes n WHERE n.id = a.node_id)` },
 ];

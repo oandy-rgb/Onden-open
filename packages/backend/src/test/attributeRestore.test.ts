@@ -21,10 +21,13 @@ vi.mock("../db.js", () => {
   // putBlob writes on its own connection (pool.query); both go through here.
   const query = async (sql: string, params: unknown[] = []) => {
     state.queries.push({ sql, params });
-    if (sql.includes("SELECT content FROM blobs")) {
+    // (the ink readers use Kysely, which writes the statement in lower case)
+    if (sql.includes("SELECT content FROM blobs") || sql.includes('select "content" from "blobs"')) {
       const content = state.blobs.get(params[0] as string);
       return { rows: content === undefined ? [] : [{ content }], rowCount: content === undefined ? 0 : 1 };
     }
+    // A drawing stored as chunks (inkChunks.ts): these tests keep every drawing whole in `blobs`, so there are none.
+    if (sql.includes("FROM ink_manifests") || sql.includes('from "ink_manifests"')) return { rows: [], rowCount: 0 };
     if (sql.includes("INSERT INTO blobs")) {
       state.blobs.set(params[0] as string, params[1] as string);
       return { rows: [], rowCount: 1 };

@@ -1,11 +1,11 @@
 import { isInkReadOnly, loadInkPage, notifyInkReadOnly } from "../lib/ink/store";
 import { useReactFlow, useStore, useViewport } from "@xyflow/react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { saveInk } from "../lib/data";
 import { BOARD_INK_ATTR, inkHasContent } from "@onden/markdown/ink";
 import { createCommittedRenderer, type ICommittedRenderer } from "../lib/ink/committed";
 import { InkEngine } from "../lib/ink/engine";
-import { isEmptyInkClip, registerInkEdit, usePenShortcutTool, type InkClip, type InkSelection } from "../lib/ink";
+import { useDrawingRestoreSerial } from "../hooks/useDrawingRestoreSerial";
+import { InkSaver, isEmptyInkClip, registerInkEdit, usePenShortcutTool, type InkClip, type InkSelection } from "../lib/ink";
 import { flowInkTransform } from "../lib/ink/flowTransform";
 import type { InkActiveTool, InkDocument } from "../lib/ink/types";
 import type { BoardHistory } from "../hooks/useBoardHistory";
@@ -128,24 +128,25 @@ const CanvasInkLayer = forwardRef<CanvasInkHandle, Props>(function CanvasInkLaye
   // ── Load the canvas node's ink doc (canvas switch remounts via key) ──────
   // lib/ink/store decides server vs local mirror (the mirror while strokes are
   // still queued, so a reconnect can't load an older copy over them).
-  // The drawing the next save was made from (what loaded, then each save):
-  // the server merges a save into what another device stored meanwhile.
-  const inkBaseRef = useRef<InkDocument | null>(null);
-  // The last base the server is known to hold (what loaded, then each save it took).
-  const inkAcceptedRef = useRef<InkDocument | null>(null);
+  // The saver (lib/ink/surfaceSaver) remembers which drawing the next save is made from: the server merges a save into
+  // what another device stored meanwhile.
+  const inkSaver = useRef<InkSaver | null>(null);
+  inkSaver.current ??= new InkSaver(BOARD_INK_ATTR);
+  // A version put back from History: the pen layer loads it again, into the engine when it is already running.
+  const drawingRestored = useDrawingRestoreSerial(canvasId);
   useEffect(() => {
     let cancelled = false;
     void loadInkPage(canvasId, BOARD_INK_ATTR).then((page) => {
       if (cancelled) return;
-      inkBaseRef.current = page;
-      inkAcceptedRef.current = page;
+      inkSaver.current!.rebase(canvasId, page);
+      engineRef.current?.load(page);
       // Made with a newer version: the engine shows it and refuses edits, and
       // saveInk would not write it; tell the person once.
       if (isInkReadOnly(page)) notifyInkReadOnly();
       setDoc(page);
     });
     return () => { cancelled = true; };
-  }, [canvasId]);
+  }, [canvasId, drawingRestored]);
 
   // Ink saves ride the spine ATTRIBUTE_SET path on the CANVAS NODE — exactly
   // the route InkNodeView's parent uses, so event-log undo / inbox governance
@@ -156,15 +157,7 @@ const CanvasInkLayer = forwardRef<CanvasInkHandle, Props>(function CanvasInkLaye
   // mid-session). Replaces the raw fetch that silently dropped offline saves.
   const leavingRef = useRef(false);
   const persist = useCallback((next: InkDocument) => {
-    // The next save is made from this one at once (a stroke drawn then undone before the
-    // answer must read as removed); a save the server refused never reached it, so the base
-    // goes back to the last one it has.
-    const sent = saveInk(canvasId, next, inkBaseRef.current, { attr: BOARD_INK_ATTR, ...(leavingRef.current ? { keepalive: true } : {}) });
-    inkBaseRef.current = next;
-    void Promise.resolve(sent).then((saved) => {
-      if (saved) inkAcceptedRef.current = next;
-      else inkBaseRef.current = inkAcceptedRef.current;
-    });
+    inkSaver.current!.save(canvasId, next, leavingRef.current ? { keepalive: true } : undefined);
   }, [canvasId]);
   const persistRef = useRef(persist);
   useEffect(() => { persistRef.current = persist; }, [persist]);

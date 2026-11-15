@@ -12,6 +12,7 @@
 import fc from "fast-check";
 import { encodeValues } from "@onden/markdown";
 import { PROPS_SEED } from "./propsConfig.js";
+import { pdfInkSim } from "./pdfInkEnvelope.js";
 import { richSpec, withoutTrashed, type RichSpec } from "./roundTripRichSpec.js";
 
 // ── Text ─────────────────────────────────────────────────────────────────────
@@ -190,6 +191,9 @@ export type WorldOptions = {
   /** Give some notes an attribute outside the Markdown export's reach: an odd
    *  key and/or a multi-line value ("values": only the latter). */
   exotic?: boolean | "values";
+  /** Give some notes a drawing (`ink_data`) over the chunk threshold (services/inkChunks.ts): for the trips that carry a
+   *  note's attributes whole (a backup, a move); the Markdown export does not carry a drawing. */
+  bigInk?: boolean;
   canvas?: boolean;
   tagFunctions?: boolean;
   media?: boolean;
@@ -265,7 +269,9 @@ export function worldSpec(options: WorldOptions = {}): fc.Arbitrary<WorldSpec> {
       seen.add(titleIdentity(title));
       const parent = i > 0 && r.parentRoll < 45 ? r.parentRoll % i : null;
       const trashed = options.trashed ? r.trashRoll < 25 : false;
-      const attrs = [...r.attrs, ...(r.exotic ? [r.exotic] : [])];
+      // A drawing over the chunk threshold (services/inkChunks.ts): every trip must bring the whole value back, byte for byte.
+      const ink: AttrSpec[] = options.bigInk && r.trashRoll % 6 === 0 ? [{ key: "ink_data", value: bigInkValue(i + r.trashRoll), valueType: "text" }] : [];
+      const attrs = [...r.attrs, ...(r.exotic ? [r.exotic] : []), ...ink];
       notes.push({
         title, parent, blocks: blocks[i]!,
         tags: [...new Set(r.tagRolls)], attrs: [...new Map(attrs.map((a) => [a.key, a])).values()],
@@ -299,6 +305,13 @@ export function worldSpec(options: WorldOptions = {}): fc.Arbitrary<WorldSpec> {
       canvas: options.canvas ? { title: `${canvasTitle} board`, cards: [...new Set(canvasRoll)] } : null,
     };
   })));
+}
+
+/** A PDF drawing envelope of more than INK_CHUNK_THRESHOLD characters, the same for the same seed. */
+function bigInkValue(seed: number): string {
+  const sim = pdfInkSim({ seed: seed + 1, pages: 4 });
+  sim.drawStrokes(40);
+  return sim.value();
 }
 
 export const EXOTIC_ATTRIBUTE_KEYS: readonly string[] = EXOTIC_KEYS;

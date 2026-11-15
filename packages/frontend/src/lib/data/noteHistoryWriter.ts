@@ -7,6 +7,7 @@ import { makeWriteLifecycle, reconcileFields } from "./writeLifecycle";
 import type { DataCtx } from "./types";
 import type { RewindRequest, RunUndoResult } from "../history";
 import { nodeOf } from "../nodeIndex";
+import { announceDrawingRestored } from "../drawingChanges";
 import type { RestoreVersionRequest, RewindResult, RewindUndoResult } from "@onden/contract";
 
 export function makeNoteHistoryWriter(ctx: DataCtx) {
@@ -54,9 +55,11 @@ export function makeNoteHistoryWriter(ctx: DataCtx) {
     const path = `/api/nodes/${nodeId}/ink-versions/${encodeURIComponent(eventId)}/restore?kind=${kind}`;
     return onlineOperation(`node:${nodeId}`, t("Version restore needs a connection."), async (submit) => {
       const saved = await submit<{ key: string; value: string }>(path);
-      if ("deduped" in saved) return true;
+      if ("deduped" in saved) { announceDrawingRestored(nodeId); return true; }
       try { await upsertAttribute(nodeId, saved.key, saved.value, "text", false, "ui"); }
       catch { ctx.addToast(t("The change is saved, but its local copy could not be updated."), "error"); }
+      // The surface showing this drawing loads the restored version (what it shows is the one before).
+      announceDrawingRestored(nodeId);
       return true;
     });
   }

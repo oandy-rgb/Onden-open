@@ -76,6 +76,30 @@ describe("saving a drawing", () => {
     expect(second).toMatchObject({ value: JSON.stringify(next), base_value: JSON.stringify(base) });
   });
 
+  // 手寫存檔量 M1: a whole request too big for its base used to lose the base — the server then stored the value as sent and
+  // another device's strokes saved in between were overwritten. It is merged into what the server stores instead.
+  it("M1: a base the server cannot give back, on a drawing too big to carry it, is merged into the stored drawing and sent as a patch", async () => {
+    const base = drawing(15_000);
+    const mine: InkDocument = { ...base, strokes: [...base.strokes, stroke(90_001)] };
+    const theirs: InkDocument = { ...base, strokes: [...base.strokes, stroke(90_002)] };
+    expect(new TextEncoder().encode(JSON.stringify({ value: JSON.stringify(mine), base_value: JSON.stringify(base) })).length).toBeGreaterThan(MAX_REQUEST_BYTES - 1024 * 1024);
+    apiMock
+      .mockRejectedValueOnce(new ApiError(409, JSON.stringify({ error: "patch_base_unknown" })))
+      .mockResolvedValueOnce([{ key: "ink_data", value: JSON.stringify(theirs) }])
+      .mockResolvedValueOnce({});
+    saveInk(NODE, mine, base);
+    await vi.waitFor(() => expect(apiMock).toHaveBeenCalledTimes(3), { timeout: 30_000 });
+    expect(apiMock.mock.calls[1]![0]).toBe(`/api/nodes/${NODE}/attributes?keys=ink_data`);
+    const third = JSON.parse((apiMock.mock.calls[2]![1] as RequestInit).body as string) as { value?: string; base_value?: string; value_patch: never };
+    expect(third.value).toBeUndefined();
+    expect(third.base_value).toBeUndefined();
+    const stored = JSON.stringify(theirs);
+    const ids = (JSON.parse(applyPatch(stored, third.value_patch)) as InkDocument).strokes.map((x) => x.id);
+    expect(ids).toContain("s90001");
+    expect(ids).toContain("s90002");
+    expect(ids.length).toBe(15_002);
+  }, 120_000);
+
   it("a whole drawing too big to carry its base is sent without it (as before patches)", () => {
     const value = JSON.stringify(drawing(3));
     const filler = "x".repeat(MAX_REQUEST_BYTES);

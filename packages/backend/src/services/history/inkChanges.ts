@@ -14,6 +14,7 @@ import { q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
 import { sqlDayStart } from "../../localDay.js";
 import { canReadNode } from "../readPolicy.js";
+import { readInkValues } from "../inkChunks.js";
 import { setNodeAttribute, type AttributeWriteResult } from "../attributeWrites.js";
 import { inkEventSql, lastInkEventBeforeSql, startsNewEditSql } from "./bodyEvents.js";
 import { actorKindOf } from "./noteVersions.js";
@@ -26,14 +27,23 @@ const EVENT_ID = /^\d{1,18}$/;
  *  is no longer stored is missing from the map. */
 async function drawingsOf(workspaceId: string, eventIds: string[]): Promise<Map<string, string>> {
   if (eventIds.length === 0) return new Map();
-  const rows = await q<{ id: string; deleted: boolean; value: string | null }>(
-    `SELECT e.id::text AS id, e.event_type = 'ATTRIBUTE_DELETED' AS deleted, COALESCE(b.content, e.payload->>'value') AS value
+  const rows = await q<{ id: string; node_id: string; deleted: boolean; ref: string | null; inline: string | null }>(
+    `SELECT e.id::text AS id, e.target_id AS node_id, e.event_type = 'ATTRIBUTE_DELETED' AS deleted,
+            e.payload->>'value_ref' AS ref, e.payload->>'value' AS inline
        FROM domain_events e
-  LEFT JOIN blobs b ON b.hash = e.payload->>'value_ref'
       WHERE e.workspace_id = $1 AND e.id = ANY($2::bigint[]) AND ${inkEventSql("e")}`,
     [workspaceId, [...new Set(eventIds)]],
   );
-  return new Map(rows.rows.flatMap((r) => (r.deleted ? [[r.id, ""] as const] : r.value ? [[r.id, r.value] as const] : [])));
+  // The text of a ref: a `blobs` row or the note's chunks (inkChunks.ts); one read per note.
+  const refsOf = new Map<string, string[]>();
+  for (const r of rows.rows) if (!r.deleted && r.ref) refsOf.set(r.node_id, [...(refsOf.get(r.node_id) ?? []), r.ref]);
+  const texts = new Map<string, string>();
+  for (const [nodeId, refs] of refsOf) for (const [ref, text] of await readInkValues(workspaceId, nodeId, refs)) texts.set(`${nodeId}:${ref}`, text);
+  return new Map(rows.rows.flatMap((r) => {
+    if (r.deleted) return [[r.id, ""] as const];
+    const value = (r.ref ? texts.get(`${r.node_id}:${r.ref}`) : undefined) ?? r.inline;
+    return value ? [[r.id, value] as const] : [];
+  }));
 }
 
 /** For each (note, day): what the day changed in the note's drawing, from the last save before the day began

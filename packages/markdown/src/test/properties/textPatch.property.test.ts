@@ -35,4 +35,24 @@ describe("makePatch / applyPatch", () => {
       expect(carried).toBeLessThanOrEqual(next.length);
     }), fcOpts);
   });
+
+  // A drawing's JSON is one line: objects (strokes, records) side by side with no line to anchor a split on.
+  const jsonObjects = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `{"id":"s${from + i}","points":[[${i},1.5,0.5],[${i + 1},2.5,0.5]],"size":2}`);
+  const drawing = (sections: string[][]) => `{"pages":{${sections.map((s, i) => `"${i}":[${s.join(",")}]`).join(",")}},"tail":{"x":1}}`;
+
+  it("holds for one-line JSON where objects were added in several places, and sends only the added objects", () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 60, max: 120 }), fc.array(fc.nat(7), { minLength: 1, maxLength: 4 }),
+      (perSection, places) => {
+        const base = Array.from({ length: 8 }, (_, i) => jsonObjects(perSection, i * 1000));
+        const next = base.map((section, i) => (places.includes(i) ? [...section, ...jsonObjects(1, 90_000 + i)] : section));
+        const [a, b] = [drawing(base), drawing(next)];
+        const patch = makePatch(a, b);
+        expect(applyPatch(a, patch)).toBe(b);
+        const carried = patch.hunks.reduce((sum, h) => sum + h.ins.length, 0);
+        // What is sent stays close to the added objects, not the text between the places.
+        expect(carried).toBeLessThan(places.length * 400 + 200);
+      },
+    ), { ...fcOpts, numRuns: Math.min(PROPS_RUNS, 60) });
+  });
 });

@@ -59,3 +59,20 @@ describe("makePatch / applyPatch", () => {
     expect(isTextPatch(null)).toBe(false);
   });
 });
+
+describe("makePatch on one-line JSON (a drawing)", () => {
+  // Fixed counterexample of the PDF save: a stroke is added to page 1 and again at the end of `annotations`, with the whole of
+  // the text between them unchanged. Before the object split, the one hunk was everything from page 1 to the end.
+  const stroke = (id: number) => `{"id":"s${id}","points":[[1.234567890123,2.345678901234,0.5],[3.1,4.1,0.5]],"size":2.5}`;
+  const strokes = (from: number, n: number) => Array.from({ length: n }, (_, i) => stroke(from + i)).join(",");
+  const env = (page1: string, page2: string, notes: string) => `{"version":1,"pages":{"1":[${page1}],"2":[${page2}]},"annotations":[${notes}],"unitsFrom":"abc"}`;
+
+  it("a stroke added in two far-apart places is two small hunks, not the text between them", () => {
+    const base = env(strokes(0, 40), strokes(100, 200), strokes(300, 40));
+    const next = env(strokes(0, 40) + "," + stroke(900), strokes(100, 200), strokes(300, 40) + "," + stroke(901));
+    const patch = makePatch(base, next);
+    expect(applyPatch(base, patch)).toBe(next);
+    expect(patch.hunks.length).toBeGreaterThanOrEqual(2);
+    expect(patch.hunks.reduce((sum, h) => sum + h.ins.length, 0)).toBeLessThan(2 * stroke(900).length + 100);
+  });
+});

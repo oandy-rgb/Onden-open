@@ -10,7 +10,7 @@ import { isBrowserOnline } from "../browserNetwork";
 import { bumpPending, refreshPendingCount, STUCK_AFTER_ATTEMPTS, type SendFailureReason } from "./syncStatus";
 import { classifyWriteFailure, sendFailureReason, WriteStorageError, writeFailureMessage, reportWriteFailure, isHandledNoteExists } from "./writeErrors";
 import { onProtocolBlockChange } from "../protocolGate";
-import { patchedBody, wholeBody, isPatchBaseUnknown } from "./patchedBody";
+import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./patchedBody";
 import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable } from "./writeRecovery";
 import { PREFS, prefsAvailable } from "../prefs";
 import { onAppResume } from "../appResume";
@@ -53,7 +53,9 @@ async function sendWithDeadline<T>(path: string, init: RequestInit): Promise<T> 
   try { return await sendOnce<T>(path, { ...init, body: patched }); }
   catch (error) {
     if (!isPatchBaseUnknown(error)) throw error;
-    return sendOnce<T>(path, { ...whole, keepalive: false });
+    // Too big to carry its base: merge into what the server stores here, instead of losing the base (patchedBody.ts).
+    const rebased = wholeFitsRequest(init.method, path, init.body) ? null : await import("./rebasedPatch").then((m) => m.rebasedOnStored(init.method, path, init.body));
+    return sendOnce<T>(path, rebased === null ? { ...whole, keepalive: false } : { ...init, body: rebased, keepalive: false });
   }
 }
 

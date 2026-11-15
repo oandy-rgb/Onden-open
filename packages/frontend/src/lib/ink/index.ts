@@ -79,4 +79,4 @@ export { describeInkDiff, diffInk, isEmptyInkDiff, type InkDiff } from "./diff";
 export { mergeIntervals, eraseStrokeWithTrail, visibleRuns, isFullyErased } from "./erase";
 export { clamp01, invertLightness, themedStrokeColor } from "./color";
 export { decodeInk, encodeInk, inkReadOnlyMessage, isInkReadOnly, loadInkAttributes, notifyInkReadOnly } from "./store";
-export { useInkSurfaceSaver } from "./surfaceSaver";
+export { InkSaver, useInkSurfaceSaver } from "./surfaceSaver";

@@ -50,6 +50,8 @@ import { localDayId } from "../localDay.js";
 import { writePref } from "../services/actorPrefs.js";
 import { addCredential } from "../services/aiCredentials.js";
 import { createBlockLink } from "../services/blockLinks.js";
+import { setNodeAttribute } from "../services/attributeWrites.js";
+import { INK_CHUNK_THRESHOLD } from "../services/inkChunks.js";
 import { recordMemberRemoval } from "../services/memberRemovals.js";
 import { ensureSiteBundle } from "../modules/website/publishing/index.js";
 import { recordSnapshotMedia } from "../services/snapshotMedia.js";
@@ -545,6 +547,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     // ── the rest of the tables a workspace owns: the owner's own settings, a paragraph with a tag and a link to it, the
     //    published snapshot, focus, reading and feed state, and the bookkeeping rows the product writes behind a feature ──
     await writePref(A.owner, "dayNoteParent", open.note);
+    // a drawing big enough to be stored as chunks (services/inkChunks.ts): its chunks and its manifest are A's rows
+    const bigStrokes = Array.from({ length: Math.ceil(INK_CHUNK_THRESHOLD / 60) }, (_, i) => ({ id: `${canary("InkStroke")}-${i}`, points: [[i, i, 0.5], [i + 1, i + 2, 0.5]], color: "#000000", size: 2, toolId: "pen" }));
+    await setNodeAttribute({ workspaceId: A.ws, actor: A.owner, nodeId: open.note, attribute: { key: "ink_data", value: JSON.stringify({ version: 1, strokes: bigStrokes, erased: {}, page: { width: 1000 } }), value_type: "text" } });
     const apiKey = `sk-${canary("ApiKey")}`;
     await addCredential(A.ws, { label: canary("Credential"), apiKey, baseUrl: "https://api.example.test", protocol: "v1_messages" }, { actor: A.owner });
     await seedQ(

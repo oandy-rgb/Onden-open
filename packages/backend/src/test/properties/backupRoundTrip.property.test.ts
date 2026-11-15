@@ -66,7 +66,7 @@ const withoutTags = (s: WorldSnapshot): WorldSnapshot => ({ ...s, tags: [], note
 describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
   it("brings back every note, the trash, attributes, tasks, links, canvases and media references", async () => {
     await fc.assert(fc.asyncProperty(
-      worldSpec({ trashed: true, exotic: "values", canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: true }),
+      worldSpec({ trashed: true, exotic: "values", bigInk: true, canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: true }),
       async (spec) => {
         const { before, after, report } = await backupTrip(spec);
         expect(report, "restore report").toMatchObject({ created: expect.any(Number) });

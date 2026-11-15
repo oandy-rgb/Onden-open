@@ -603,3 +603,22 @@
 - **唯讀**：沒有編輯權限的成員看得到分頁與筆畫，顯示「你可以讀這則筆記但不能修改」（`InkNodeView` 的 `readOnlyNotice`）；「請更新 App」只給格式比較新的圖。
 - **AI**：`getNode` 的屬性不含筆跡屬性（`isInkPageAttr`）。
 - **不動**：舊的手寫／PDF 筆記種類（之後的 migration 189）；`![[筆記]]` 嵌入（仍顯示文字內容）；選取工具與嵌入（#1527 在改）。
+
+## 手寫存檔量：一筆只送、只存這一筆（2026-11-15）
+
+掃描 09-ink-pdf.md（未隨公開庫附上） S1（PDF 每畫一筆幾乎整份重傳、伺服器每次存檔永久留一份完整副本）。**先量再改**；量測方法與完整表格在
+[pdf-ink-save-measure-2026-11-15.md](../research/pdf-ink-save-measure-2026-11-15.md)。結論：PDF 的上傳與三種手寫的儲存都成立；手寫本與白板的上傳本來就只和一筆成正比。
+
+- **上傳**：一筆在 PDF 信封裡寫在四處（舊 `pages[n]`、舊 `annotations` 紀錄、頁面單位的 `units`、`unitsFrom`），文字是單行，`makePatch` 以前只切共同開頭與結尾，
+  一筆的 patch 是「那一頁之後的全部」。現在沒有行錨點時改以物件邊界（`},`）當錨點切成多個 hunk（`packages/markdown/src/textPatch.ts`）。只有用戶端做 patch，伺服器照舊套 hunk，**舊版用戶端不受影響、協定版本不動**。
+- **儲存**：墨水值每次存檔都存一整份在 `blobs`。現在超過 `INK_CHUNK_THRESHOLD`（192 K 字）的值依內容切成約 8 KB 的區塊存在該筆記自己的 `ink_chunks`，`ink_manifests` 記每次存檔的區塊清單（`services/inkChunks.ts`，migration 203，只新增）。
+  事件的 `value_ref` 仍是整份值的 sha256，歷史、「回到這個版本」、復原、patch 基底都照舊以同一個雜湊找值；讀取點（`readInkValues`／`readInkValue`／`readChunkedValues`）兩種格式都讀，舊的整份值不動。
+  區塊只屬於一則筆記（不跨筆記共用）：永久刪除時 `ON DELETE CASCADE` 一併帶走，清理不必去查別則筆記是否還用。寫入在存檔的交易內，回滾不留區塊。
+- **存檔基底（`lib/ink/surfaceSaver.ts` 的 `InkSaver`，手寫、PDF、白板三處共用，白板原本抄了一份）**：
+  - M3：後面的存檔是從「前一次被拒絕的存檔」做的，被接受後那些筆會被當成對方刪的。現在偵測到這種情況，等沒有存檔在途時，用伺服器現有的版本當基底把畫面上的筆跡再存一次。
+  - M2：另一台存過、伺服器回的是合併值時，下一次存檔先在本機用 `mergeInk` 合併（本機上次存的為基底、伺服器的回答為另一邊），再以伺服器的文字為基底送 patch：沒有第二個請求，也不會因為畫面上沒有別台的筆而把它們當成刪除。
+    **不能**直接把伺服器的回答當基底而不合併：畫面（引擎）還看不到別台的筆（M6），下一次存檔就會把它們刪掉。
+- M4：從歷史還原手寫版本後 `announceDrawingRestored(nodeId)`，開著的手寫頁／PDF／白板筆層重新載入（`hooks/useDrawingRestoreSerial`）。
+- M1：整份請求（值＋基底）超過上限時，以前丟掉基底、伺服器照單全收，另一台的筆被蓋掉。現在先讀伺服器現值、本機合併、以伺服器文字為基底送 patch（`patchedBody.ts` `rebasedOnStored`）；讀不到才退回舊做法。
+- **仍然沒有上限、也沒有清理**：區塊與清單隨存檔次數線性增加（清單 32 位元組／區塊，約每存一次 6 MB 的值多 12 KB），歷史版本沒有任何精簡；值本身仍沒有大小上限（只有 nginx 的 20 MB）。要精簡舊版本是刪資料，需要業主同意，見研究文件的選項。
+- **備份、還原、搬移工作區**：備份帶的是**當前的整份值**（`node_attributes`），不是區塊，也沒有墨水的版本歷史（`ink_chunks`／`ink_manifests` 在 `backupInventory` 列為「不在備份」）；還原後該筆記第一次存檔就是它自己的區塊。`backupRoundTrip`／`backupHostHop`／`backupRestoreRerun` 的世界產生器（`roundTripArb.ts`）現在有筆記帶超過 192 K 字的 `ink_data`，每趟都要逐字帶回來。還原演練（`scripts/drillInvariants.ts`）多兩個計數與一個結構檢查：區塊與清單的列數不減、事件指到的墨水版本沒有讀不到的。瀏覽器版（PGlite）：`e2e/browser-app/bigInk.mjs` 存兩份超過門檻的墨水、重新整理、備份再還原到另一個空間。本機鏡像（`MIRROR_SCHEMA_VERSION`）不變：墨水不在開機同步裡，沒有改任何同步欄位或 id。

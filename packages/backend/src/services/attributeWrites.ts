@@ -34,6 +34,7 @@ import { requirePerson } from "../spine/authority.js";
 import { dropParentSiteDefaultMark } from "./siteDefault.js";
 import { nodeAttributeWriting } from "../spine/nodeHooks.js";
 import { resolvePatched } from "./patchedValue.js";
+import { readInkValue } from "./inkChunks.js";
 
 import { INK_PAGE_ATTRS, type AttributeValueType } from "@onden/markdown";
 import { mergeInk, revertInkConflicts, type InkMergeConflict } from "@onden/markdown/ink";
@@ -237,7 +238,7 @@ export async function setNodeAttribute(input: {
           await event(
             workspaceId, "ATTRIBUTE_CONFLICT", "node", nodeId,
             {
-              ...await conflictRecord(key, row, previous),
+              ...await conflictRecord(workspaceId, nodeId, key, row, previous),
               server_updated_at: updatedAt, client_updated_at: seen, actor_id: actor.id,
               ...(merging && mergeConflicts ? { [mergeConflicts.field]: mergeConflicts.items } : {}),
             },
@@ -259,9 +260,9 @@ export async function setNodeAttribute(input: {
  *  the inbox polls these events every few seconds and must never download two
  *  drawings each time. The blob GC keeps what they reference
  *  (maintenance/prune.ts). */
-async function conflictRecord(key: string, incoming: AttributeState, overridden: AttributeState): Promise<Record<string, unknown>> {
+async function conflictRecord(workspaceId: string, nodeId: string, key: string, incoming: AttributeState, overridden: AttributeState): Promise<Record<string, unknown>> {
   const side = async (name: "incoming" | "overridden", state: AttributeState) => {
-    const snapshot = await encodeSnapshot(key, state);
+    const snapshot = await encodeSnapshot(key, state, { workspaceId, nodeId });
     return "value_ref" in snapshot
       ? { [`${name}_value_ref`]: snapshot.value_ref, [`${name}_value_len`]: snapshot.value_len }
       : { [`${name}_value`]: snapshot.value };
@@ -273,12 +274,12 @@ async function conflictRecord(key: string, incoming: AttributeState, overridden:
 }
 
 /** One side's value as the record holds it (records before D90: inline). */
-async function recordedValue(payload: Record<string, unknown>, name: "incoming" | "overridden"): Promise<string> {
+async function recordedValue(workspaceId: string, nodeId: string, payload: Record<string, unknown>, name: "incoming" | "overridden"): Promise<string> {
   const ref = payload[`${name}_value_ref`];
   const inline = payload[`${name}_value`];
   if (typeof ref === "string") {
-    const blob = await q<{ content: string }>(`SELECT content FROM blobs WHERE hash = $1`, [ref]);
-    if (blob.rows[0]) return blob.rows[0].content;
+    const stored = await readInkValue(workspaceId, nodeId, ref);
+    if (stored !== null) return stored;
   } else if (typeof inline === "string") {
     return inline;
   }
@@ -317,8 +318,8 @@ export async function revertAttributeConflict(input: {
     throw new AttributeWriteError(404, "not_found", "no such attribute conflict");
   }
   const nodeId = found.target_id;
-  const incoming = await recordedValue(found.payload, "incoming");
-  const overridden = await recordedValue(found.payload, "overridden");
+  const incoming = await recordedValue(workspaceId, nodeId, found.payload, "incoming");
+  const overridden = await recordedValue(workspaceId, nodeId, found.payload, "overridden");
 
   return withIdempotencyClaim(workspaceId, (claim) => withEventTransaction(workspaceId, async () => {
     // Claimed first: a retry of a revert that committed is answered as a

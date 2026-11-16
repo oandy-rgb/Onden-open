@@ -3,7 +3,7 @@
 #   scripts/guard-lane.sh
 # Runs, one at a time: the markdown package's tests (its guards scan frontend and backend source), the site
 # package's tests, the backend lint (the promise rules and the route-input rule only fail a PR here), the backend and frontend guard folders, the unused-code check (scripts/unusedCode.mjs: a production file nobody imports,
-# an export nobody uses; about two seconds), the third-party notices check (THIRD_PARTY_NOTICES.md matches the lockfile),
+# an export nobody uses; about two seconds), the licence check (scripts/thirdPartyNotices.mjs: every shipped package and every third-party file kept in the repo is under an allowed licence, our own packages say AGPL-3.0-only, and THIRD_PARTY_NOTICES.md matches),
 # and the ratchet and change-note checks.
 # A PR that ran only its own package's suite can still break these: on 2026-11-10 main carried a stale generated
 # types file, five red markdown guards and a red site test, each merged by a PR whose own suite was green.
@@ -29,7 +29,7 @@ NO_DB=ONDEN_TESTS_WITHOUT_DATABASE=1
 step "backend guards (no-database run)" in_package backend env $NO_DB npx vitest run src/test/guards
 step "frontend guards (no-database run)" in_package frontend env $NO_DB npx vitest run src/test/guards
 step "unused code" npm run -s unused:check
-step "third-party notices" npm run -s notices:check
+step "licences and third-party notices" npm run -s notices:check
 step "ratchet" npm run -s ratchet:check
 step "change notes" npm run -s changes:check
 if [ ${#failed[@]} -gt 0 ]; then

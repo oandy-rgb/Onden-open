@@ -38,7 +38,13 @@ if [ -n "$problems" ] && [ "${PUBLIC_PUSH_ALLOW:-}" != "1" ]; then
   printf 'NOT pushed. This push would make public:%b\n' "$problems"
   git reset -q --hard; git checkout -q "$back"; exit 1
 fi
+# The ratchet check reads `ratchet-override:` lines from the commits between main and HEAD (scripts/ratchetLib.mjs). The branch
+# arrives as one commit, so the lines the private commits carry go into its message, or the guard lane on the public CI would refuse
+# an addition the owner agreed to.
+overrides=$(git log --format=%B "$(git merge-base origin/main "$sha")..$sha" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]' | sort -u || true)
 c=$(git commit-tree "$tree" -p "$parent" -m "同步：私人庫 ${sha:0:9}（$ref）
+${overrides:+
+$overrides}
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ${PUBLIC_PUSH_TRAILER:-}")

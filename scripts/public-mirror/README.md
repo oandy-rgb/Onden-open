@@ -1,6 +1,6 @@
 # 公開庫（Onden-open）跟著私人庫
 
-> 狀態：現行（最後確認 2026-11-16）
+> 狀態：現行（最後確認 2026-11-17）
 
 業主 2026-11-15／16 的決定：分散式做完之前，私人庫開發、公開庫跑完整檢查；兩邊的程式必須一模一樣。
 之後公開庫會變成正本（切換另外公告）。
@@ -12,7 +12,14 @@
   看起來像金鑰或權杖的文字，任何一種都停下來不推（看過清單確定要公開，才用 `PUBLIC_PUSH_ALLOW=1`）。
 - `verify.sh`：只讀。證明公開庫的 main 等於它提交訊息裡寫的那個私人庫提交，差別只有被排除的檔案與指向它們的連結。
 - `.github/workflows/public-mirror.yml`：私人庫的 main 每次有新提交，自動跑上面兩個（密鑰 `PUBLIC_MIRROR_KEY`
-  是公開庫的一把只能寫公開庫的 deploy key）。任何一步失敗，這個工作就是紅的，公開庫停在上一版。
+  是公開庫的一把只能寫公開庫的 deploy key）。**2026-11-17 起先關掉**：私人庫的 Actions 額度用完，業主不提高上限
+  （每月重置）；同一天私人庫的 `CI` 也關掉，守門檢查改在公開庫手動執行時一起跑。
+- 沒有自動同步的期間：**誰合併到 main，誰接著跑** `bash scripts/public-mirror/public-push.sh origin/main main`
+  （它推完會印出公開庫的提交；再跑 `verify.sh` 確認）。
+- 擋住不一致的兩道關卡（都問 `verify.sh`，測試在 `packages/markdown/src/test/guards/publicMirror.guard.test.ts`）：
+  1. `public-push.sh` 推任何 main 以外的分支之前：公開庫的 main 不是私人庫現在的 main 就不推，並說要先同步。
+     每個 PR 合併前都要推到公開庫跑完整檢查，所以落後最多撐到下一次送檢。
+  2. `scripts/deploy-vps.sh build`：同樣的檢查，不一致就不建置（公開庫連不上時才用 `DEPLOY_WITHOUT_MIRROR=1`，並寫進部署紀錄）。
 
 規則：
 - 方向只有一個：私人庫 → 公開庫。不從公開庫拉任何東西回私人庫。

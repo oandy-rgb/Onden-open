@@ -101,9 +101,9 @@ describe("one conversation, two frames", () => {
     setPhone(false);
     render(<InfoAiTab node={note} onSelectNode={() => {}} />);
     expect(await screen.findByText("Summarize this note.")).toBeInTheDocument();
-    // The wide frame is the same component: the same box and the same chips.
+    // The wide frame is the same component: the same box, and no row of chips while this note is all the AI reads.
     expect(screen.getByLabelText("Ask the AI")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "What the AI will read" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "What the AI will read" })).toBeNull();
   });
 
   it("the info panel has no AI tab on a phone (the AI is the panel over the note), and keeps it beside the note", () => {
@@ -289,17 +289,20 @@ describe("the question box", () => {
     expect((await box()).getAttribute("rows")).toBe("1");
   });
 
-  it("the chips say what the AI will read: this note, fixed (no ✕); notes added with @ can be taken out", async () => {
+  it("the chips appear once something is added: this note, fixed (no ✕); notes added with @ can be taken out, and the row goes with the last of them", async () => {
     resetAppState({ data: { ...noWorkspaceData, nodes: [note, { ...note, id: "p", title: "專案計畫" }], tags: [] as never, actor_is_owner: true }, online: true });
     toggleNoteAi(note.id);
     phone();
-    const list = await screen.findByRole("list", { name: "What the AI will read" });
-    expect(within(list).getByText("今天")).toBeInTheDocument();
-    expect(within(list).queryByRole("button")).toBeNull();
+    await box();
+    // This note alone: the box already says what is asked about, so there is no row.
+    expect(screen.queryByRole("list", { name: "What the AI will read" })).toBeNull();
     await type("看看 @專案");
     fireEvent.click(within(await screen.findByRole("listbox")).getByRole("button", { name: /專案計畫/ }));
+    const list = await screen.findByRole("list", { name: "What the AI will read" });
+    expect(within(list).getByText("今天")).toBeInTheDocument();
+    expect(within(list).getAllByRole("button")).toHaveLength(1);
     fireEvent.click(within(list).getByRole("button", { name: "Remove 專案計畫 from the AI's reach" }));
-    expect(within(list).queryByText("專案計畫")).toBeNull();
+    expect(screen.queryByRole("list", { name: "What the AI will read" })).toBeNull();
   });
 });
 

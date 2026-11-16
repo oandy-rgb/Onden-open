@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { Trash2 } from "lucide-react";
 import { useT } from "../../lib/i18n";
 import { revealBlockInNote } from "../../lib/noteReveal";
 import { scrollToSuggestionBar } from "../../lib/noteChatDom";
@@ -89,14 +88,7 @@ export function NoteAiConversation({ node, ai, onSelectNode, onRevealNote }: {
 
   return (
     <section className="note-ai" aria-label={aiLabel()}>
-      {(headLine !== null || canClear) && <header className="note-ai-head">
-        {headLine ?? <span />}
-        {canClear && (
-          <Button variant="icon" size="sm" aria-label={t("Clear this conversation")} title={t("Clear this conversation")} disabled={!online} onClick={() => void clear()}>
-            <Trash2 size={14} aria-hidden="true" />
-          </Button>
-        )}
-      </header>}
+      {headLine !== null && <header className="note-ai-head">{headLine}</header>}
 
       {chat.entry.blocked && (
         <div className="note-ai-blocked" role="note">
@@ -125,6 +117,8 @@ export function NoteAiConversation({ node, ai, onSelectNode, onRevealNote }: {
             onDecide={(decision) => void chat.decide(turn, decision)} onJumpToSuggestions={jumpToSuggestions}
             onStop={() => void chat.cancel(turn.session_id)} />
         ))}
+        {/* Clearing is a small thing at the end of what was said, not a row of its own above the answers. */}
+        {canClear && <Button variant="ghost" size="sm" className="note-ai-clear" disabled={!online} onClick={() => void clear()}>{t("Clear this conversation")}</Button>}
       </div>
 
       {/* No AI can answer: the reason and the way to settings above say it all; a box to type in would only lead nowhere. */}

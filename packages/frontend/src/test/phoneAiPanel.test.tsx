@@ -338,4 +338,13 @@ describe("the panel's words", () => {
     expect(await screen.findByText("小助手")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/MCP/);
   });
+
+  it("an AI simply called AI is not named a second time under the panel's own title", async () => {
+    roles = { roles: [{ ...ROLES.roles[0]!, name: "AI" }] };
+    toggleNoteAi(note.id);
+    phone();
+    await screen.findByRole("textbox", { name: "Ask the AI" });
+    expect(document.querySelector(".note-ai-line")).toBeNull();
+    expect(document.querySelector(".note-ai-head")).toBeNull();
+  });
 });

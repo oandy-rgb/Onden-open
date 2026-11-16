@@ -10,7 +10,8 @@
 .note-ai-quiet { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
 
 .note-ai-thread { display: flex; flex-direction: column; gap: 20px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.note-ai-intro { display: flex; flex-direction: column; gap: 12px; margin-block: auto; }
+/* An empty conversation: the ways to start sit just above the box they lead to, not adrift in the middle of the panel. */
+.note-ai-intro { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-bottom: 4px; }
 .note-ai-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .note-ai-turn { display: flex; flex-direction: column; gap: 8px; }
 .note-ai-question { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -49,8 +50,9 @@
 .note-ai-send:not(:disabled) { background: var(--ac-accent); color: var(--ac-accent-ink); }
 .note-ai-send:not(:disabled):hover { background: var(--ac-accent); filter: brightness(1.08); }
 .note-ai-send:disabled { background: var(--ac-overlay-hover); color: var(--ac-faint); }
-/* A finger needs 44px at phone widths whatever the pointer reports. */
-@media (max-width: 900px) {
+/* A finger needs 44px: at phone widths whatever the pointer reports, and on any touch screen (a tablet is wide; the shared
+   button rule already makes this button 44px there, and in a 40px box at 4px from the corner it stuck out over the top edge). */
+@media (max-width: 900px), (pointer: coarse) {
   .note-ai-input { min-height: 44px; padding-right: 52px; }
   .note-ai-send { width: 44px; height: 44px; min-width: 44px; right: 0; bottom: 0; }
 }

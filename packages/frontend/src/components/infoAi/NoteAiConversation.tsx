@@ -74,23 +74,29 @@ export function NoteAiConversation({ node, ai, onSelectNode, onRevealNote }: {
     { label: t("Suggest improvements"), question: t("Suggest improvements to this note.") },
   ];
 
+  // Who answers. A choice when there is one to make; the AI's name when it has one of its own. An AI simply called "AI", one way
+  // to reach it: the tab (or the panel's header) already says it, so the line is left out instead of repeating the word.
+  const who = chat.entry.target ? targetLine(chat.entry.target) : null;
+  const headLine = chat.entry.target
+    ? (choices.length > 1
+      ? <Select className="note-ai-who" value={chosen} aria-label={t("Who answers")}
+          onChange={(event) => { const [roleId, runtime] = event.target.value.split("|"); chat.setPick({ roleId, runtime }); }}>
+          {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </Select>
+      : who !== aiLabel() ? <span className="note-ai-line">{who}</span> : null)
+    : <span className="note-ai-line">{chat.options ? t("No AI can answer") : t("Looking for an AI…")}</span>;
+  const canClear = chat.turns.length > 0 && !chat.busy;
+
   return (
     <section className="note-ai" aria-label={aiLabel()}>
-      <header className="note-ai-head">
-        {chat.entry.target
-          ? (choices.length > 1
-            ? <Select className="note-ai-who" value={chosen} aria-label={t("Who answers")}
-                onChange={(event) => { const [roleId, runtime] = event.target.value.split("|"); chat.setPick({ roleId, runtime }); }}>
-                {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </Select>
-            : <span className="note-ai-line">{targetLine(chat.entry.target)}</span>)
-          : <span className="note-ai-line">{chat.options ? t("No AI can answer") : t("Looking for an AI…")}</span>}
-        {chat.turns.length > 0 && !chat.busy && (
+      {(headLine !== null || canClear) && <header className="note-ai-head">
+        {headLine ?? <span />}
+        {canClear && (
           <Button variant="icon" size="sm" aria-label={t("Clear this conversation")} title={t("Clear this conversation")} disabled={!online} onClick={() => void clear()}>
             <Trash2 size={14} aria-hidden="true" />
           </Button>
         )}
-      </header>
+      </header>}
 
       {chat.entry.blocked && (
         <div className="note-ai-blocked" role="note">

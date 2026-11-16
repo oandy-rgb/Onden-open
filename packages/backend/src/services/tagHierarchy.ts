@@ -38,7 +38,7 @@ import type { ActorCtx } from "../types.js";
 import { viewLayouts } from "./viewLayouts.js";
 import { CodedStatusError } from "../statusError.js";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
-import { isTag } from "@onden/markdown/contract";
+import { isTag, isTagNameShape } from "@onden/markdown/contract";
 
 export class TagNameConflictError extends Error {
   constructor() {
@@ -111,29 +111,14 @@ export async function assertTagNameAvailable(
 }
 
 // ── The tag-name shape ──────────────────────────────────────────────────────
-// A tag name must be writable as a tag in a note. A note names a tag three
-// ways: `#name` (letters, digits, `_`, `-` only: lib/hashtags.ts), `{a, b}` at
-// the end of a block (packages/markdown blocks.ts: one line, split on `,`,
-// trimmed, an item with `:` is not a tag) and a path `#a/b` (split on `/`).
-// The `{…}` form is the widest — spaces and any script work there — so the
-// rule is: no `/`, `#`, `,`, `:`, `{`, `}` or control character (newline,
-// tab), no space at either end, not empty. `研究`, `reading list` and
-// `C++` are valid; `#研究` (the marker is not part of the name), `a/b`,
-// `C#`, `x, y` and `key:value` are not. Only a NEW
-// name is checked (create, rename, undo of a rename, pack install): a tag
-// whose name predates the rule still loads, and can be renamed to a valid one.
-const TAG_NAME_FORBIDDEN = /[/#,:{}\p{Cc}]/u;
+// The rule is @onden/markdown's isTagNameShape (sharedContract.ts): the same one decides which `{…}` in a note's text are tags,
+// so a name that is accepted here can always be written there, and nothing else can.
 
 export class TagNameShapeError extends CodedStatusError {
   constructor() {
-    super(400, "tag_name_invalid", "A tag name cannot contain / # , : { } or a line break, or start or end with a space.");
+    super(400, "tag_name_invalid", "A tag name cannot contain / # , : { } or program symbols such as ; ( ) [ ] = < > * | $ and quotes, or a line break, or start or end with a space.");
     this.name = "TagNameShapeError";
   }
-}
-
-/** Whether `name` can be a new tag's name (the rule above). */
-export function isTagNameShape(name: string): boolean {
-  return name.length > 0 && name.trim() === name && !TAG_NAME_FORBIDDEN.test(name);
 }
 
 /** Throw TagNameShapeError (→ 400 tag_name_invalid) unless `name` can be a

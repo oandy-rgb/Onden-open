@@ -276,3 +276,23 @@ export { reminderAfterMove, type ReminderPlacement } from "./taskReminder.js";
 
 // Same-level order keys (migration 200): the one place they are made and compared, shared by the app and the server.
 export { keyBetween, keysBetween, evenOrderKey, evenOrderKeys, isValidOrderKey, orderKeyNeedsRespace, compareOrdered, ORDER_KEY_RESPACE_LENGTH, ORDER_KEY_MAX_LENGTH } from "./orderKey.js";
+
+// ── The tag-name shape ──────────────────────────────────────────────────────
+// A tag name must be writable as a tag in a note, and what is written as a tag must not be mistaken for anything else.
+// A note names a tag three ways: `#name` (letters, digits, `_`, `-` only: text.ts HASHTAG_RE), `{a, b}` at the end of a block
+// (blocks.ts: one line, split on `,`, trimmed, an item with `:` is not a tag) and a path `#a/b` or `{a/b}` (split on `/`). The
+// `{…}` form is the widest — spaces and any script work there — so the rule is the one of that form:
+//   - no `/`, `#`, `,`, `:`, `{`, `}` or control character (newline, tab): they are the grammar's own marks;
+//   - none of `; ( ) [ ] = < > " ' \` * | \ $`: the marks of program text. `^[ \t]+ { indent(); ECHO; }` typed as a
+//     paragraph ends in braces too, and must stay text (the owner's Lex notes became tags, 2026-11-17);
+//   - no space at either end, not empty.
+// `研究`, `reading list`, `C++`, `Q&A` and `讀書（小說）` are valid; `#研究` (the marker is not part of the name), `a/b`,
+// `C#`, `x, y`, `key:value`, `f(x)` and `it's` are not. For a tag's NAME only a new one is checked (create, rename, undo
+// of a rename, pack install: the backend's assertTagNameShape): a tag whose name predates the rule still loads, and can
+// be renamed to a valid one.
+const TAG_NAME_FORBIDDEN = /[/#,:{};()[\]=<>"'`*|\\$\p{Cc}]/u;
+
+/** Whether `name` can be a tag's name (the rule above). */
+export function isTagNameShape(name: string): boolean {
+  return name.length > 0 && name.trim() === name && !TAG_NAME_FORBIDDEN.test(name);
+}

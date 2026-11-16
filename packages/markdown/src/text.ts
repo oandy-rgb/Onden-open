@@ -12,6 +12,7 @@ import { parseInkRegion } from "./inkRegion.js";
 import { nodeRefId } from "./nodeRef.js";
 import { linkSlug } from "./slug.js";
 import { normalizeText, WORD_CHARS } from "./word.js";
+import { isTagNameShape } from "./sharedContract.js";
 
 /** One `[[…]]` in a text: its span and the body between the brackets. */
 export type WikilinkMatch = { start: number; end: number; body: string };
@@ -158,6 +159,25 @@ export const TAG_NAME_CHAR = `[${WORD_CHARS}_-]`;
  *  suggestions and paragraph block tags, not "which notes carry tag X". Global: use it with matchAll/replace only (both reset
  *  lastIndex), never with .test/.exec. */
 export const HASHTAG_RE = new RegExp(String.raw`(^|\s)#(${TAG_NAME_CHAR}+)`, "gu");
+
+/** What a `{…}` at a line's end must hold to be a block's tags and not text (`inner` is what is between the braces):
+ *  between its commas nothing but tags — a name (isTagNameShape, sharedContract.ts) or a path of names `a/b` — and
+ *  `key: value` pairs of two names. One entry that is none of these makes the whole `{…}` text: `{ indent(); ECHO; }`
+ *  ending a line of program text is words. blocks.ts (tagBraces) and every cheap string test that drops a trailing
+ *  `{…}` from shown text ask this. */
+export function isTagList(inner: string): boolean {
+  return inner.split(",").every((entry) => {
+    const item = entry.trim();
+    if (item === "" || isTagPath(item)) return true;
+    const colon = item.indexOf(":");
+    return colon > 0 && isTagNameShape(item.slice(0, colon).trim()) && (item.slice(colon + 1).trim() === "" || isTagNameShape(item.slice(colon + 1).trim()));
+  });
+}
+
+/** A tag as a block's `{…}` names it: a name, or a path of names (`Course/Week1`). */
+export function isTagPath(entry: string): boolean {
+  return entry.split("/").every((segment) => isTagNameShape(segment.trim()));
+}
 
 /** Whether `target` (the part of a link before `|`) can be a path into a note: it has a `/` that is not escaped as part of a name. */
 export function hasLinkPath(target: string): boolean {

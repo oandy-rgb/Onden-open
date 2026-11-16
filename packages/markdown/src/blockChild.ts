@@ -21,7 +21,7 @@ import { drawnWikilinks } from "./wikilinkSpans.js";
 import { frontmatterLength } from "./frontmatter.js";
 import { headingAnchors, headingSections } from "./headingAnchors.js";
 import { parserFor } from "./parsers.js";
-import { linkNameKey } from "./text.js";
+import { isTagList, linkNameKey } from "./text.js";
 import { plainInline, stripLineMarker } from "./plainText.js";
 import { linkSlug } from "./slug.js";
 import { NODE_REF_PREFIX } from "./nodeRef.js";
@@ -138,7 +138,8 @@ export function planSelectionMove(markdown: string, from: number, to: number, an
 
   const start = first.type === "paragraph" && from > first.start ? from : first.start;
   let end = last.type === "paragraph" && to < last.end ? to : last.end;
-  if (end < last.end && /^\s*(?:\{[^{}\n]*\}\s*)?$/.test(markdown.slice(end, last.end))) end = last.end;
+  const rest = /^\s*(?:\{([^{}\n]*)\}\s*)?$/.exec(markdown.slice(end, last.end));
+  if (end < last.end && rest && (rest[1] === undefined || isTagList(rest[1]))) end = last.end;
 
   const lineStart = markdown.lastIndexOf("\n", start - 1) + 1;
   const midLine = !/^[ \t]*$/.test(markdown.slice(lineStart, start));
@@ -192,7 +193,7 @@ function cutSpans(text: string, start: number, end: number, cuts: Span[]): strin
 function titleOf(body: string): string {
   let line = (body.split("\n").find((l) => l.trim() !== "") ?? "").trim();
   // A selection keeps the `{tags}` it was cut with: not words of the title.
-  line = line.replace(/\s+\{[^{}\n]*\}$/, "");
+  line = line.replace(/\s+\{([^{}\n]*)\}$/, (whole, inner: string) => (isTagList(inner) ? "" : whole));
   line = plainInline(stripLineMarker(line).replace(/\s+#+$/, ""))
     .replace(/[[\]|#^\\=]/g, " ")
     .replace(/\s+/g, " ").trim();
@@ -204,7 +205,7 @@ function titleOf(body: string): string {
 // ── The way back ────────────────────────────────────────────────────────────
 
 export type BlockExpandRefusal =
-  | "child_has_frontmatter" | "child_empty" | "child_not_one_block" | "note_too_long";
+  | "child_has_frontmatter" | "child_empty" | "child_not_one_block" | "child_tag_not_writable" | "note_too_long";
 
 /** A line that is only an embed of a whole note (`![[child]]`, no `#` part),
  *  for `isChild` to say which names the child. Code is left out. */
@@ -236,7 +237,12 @@ export function planBlockExpand(
   if (body.trim() === "") return { refused: "child_empty" };
   if (!oneBlock(body)) return { refused: "child_not_one_block" };
 
-  for (const tag of opts.tags) body = addBlockTag(body, 0, tag) ?? body;
+  for (const tag of opts.tags) {
+    // A tag the `{…}` grammar cannot hold (a name older than the name rule) would be lost without a word: refuse.
+    const tagged = addBlockTag(body, 0, tag);
+    if (tagged === null) return { refused: "child_tag_not_writable" };
+    body = tagged;
+  }
   const indented = body.split("\n").map((line, i) => (i > 0 && line !== "" ? embed.indent + line : line)).join("\n");
   return {
     markdown: markdown.slice(0, embed.start) + indented + markdown.slice(embed.end),

@@ -41,6 +41,10 @@
       {
         "from": "stage/web",
         "to": "web"
+      },
+      {
+        "from": "stage/ai-answerer",
+        "to": "ai-answerer"
       }
     ],
     "linux": {

@@ -285,7 +285,8 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - `runner_never_seen`／`runner_offline` 不再是「不可用」的理由，併進 mcp 的「上次來」（`last_seen_at`＝輪詢時間與金鑰最近使用時間較晚者）。
   `chooseRuntime` 不再有「離線也照樣排隊」的例外：mcp 只在沒有金鑰或角色停用時才拒絕，其餘一律排隊等用戶端來領。
 - 前端「加入 AI 角色」兩個選項：API（選金鑰、模型、token 上限；建好後直接設成 API）、MCP（發金鑰，顯示一次）。兩者都設 @名稱並啟用。
-- 自動領工作的做法：`docs/self-host/ai-client-on-a-machine.md`。
+- 自動領工作的做法：`docs/self-host/ai-client-on-a-machine.md`；程式是 `packages/ai-answerer`（2026-11-15 起取代手寫輪詢腳本）。AI 命令列工具一律被關起來執行（無內建工具、不讀個人設定、空資料夾、只用 session 金鑰連 Onden 的 MCP），旗標由 `adapters/safety.guard.test.ts` 鎖住。
+- 桌面版的「用這台電腦上的 AI 回答」按鈕（2026-11-15）：設計見 [desktop-ai-answering-2026-11-15.md](../architecture/proposals/desktop-ai-answering-2026-11-15.md)；連線碼只存在桌面版的加密儲存，網頁只能經 `window.ondenDesktop.ai` 那幾個動作要求開／關。
 
 ## AI 建議多一個「比較」看法（2026-11-02，`feat/text-compare`）
 

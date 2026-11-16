@@ -12,6 +12,7 @@ import AiEditor from "./AiEditor";
 import ChangeConnectionFlow from "./ChangeConnectionFlow";
 import ConnectionCodeSteps from "./ConnectionCodeSteps";
 import { CodeCard, KeyCard } from "./ConnectionCards";
+import ThisComputerAnswering from "./ThisComputerAnswering";
 import FirstUse from "./FirstUse";
 import NewAiFlow from "./NewAiFlow";
 import NewConnectionFlow from "./NewConnectionFlow";
@@ -102,6 +103,8 @@ export default function AiSettings({ ctx }: { ctx: SettingContext }) {
           </section>
         </>
       )}
+
+      {layout !== "first-use" && <ThisComputerAnswering data={data} aiOn={aiOn} online={ctx.online} onChanged={() => void reload()} />}
 
       {dialog?.kind === "connection" && (
         <Modal label={t("New connection")} className="confirm-dialog-backdrop" onClose={close}>

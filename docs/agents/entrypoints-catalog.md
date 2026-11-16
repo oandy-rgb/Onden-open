@@ -391,7 +391,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（107）
+## 共用邏輯（108）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1263,6 +1263,12 @@ export const key = keyBetween("a0", "a1"); // strictly between the two; null = n
 - 取代：自己挑整數 sort_order、重編鄰居、用語系排序比鍵
 - 守門：`guard:orderKeyWriters`
 - 為什麼：鍵永遠放得進任兩個值之間，所以搬動或插入只寫一列，兩台離線各排也不會用同一個數字指兩則筆記；比較一律逐位元組（資料庫 COLLATE "C"、JS 用 <）。
+
+### 要讓使用者電腦上已登入的 AI 命令列工具領 Onden 的問題並回答（前景、背景服務、桌面版）
+
+- 入口：`ai-answerer/src/index.mjs`（`createClient`、`runLoop`、`createAdapters`）　項目 `ai-answering-program`
+- 取代：手寫輪詢腳本，或另寫一套「領問題、跑 AI 工具、交回答案」的流程
+- 為什麼：領取協定、一次一件、取消與期限、交回重試，以及 AI 工具被關起來執行的安全旗標（無內建工具、不讀個人設定、空資料夾、金鑰只在 0600 檔）都在這一處；有守門測試鎖住旗標。
 
 ### 模組的整頁要把「頁裡的位置」放進網址（複習頁的哪一組），讓重新載入與返回都留在那裡
 

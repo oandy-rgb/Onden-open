@@ -1,9 +1,13 @@
 // The wire form of a stamped snapshot: lines of JSON (NDJSON), one message each, so neither side holds more than a page.
 //
-//   {"kind":"hello","workspaceId":…,"source":…,"cut":…,"person":…}     first
+//   {"kind":"hello","dataShape":1,"workspaceId":…,"source":…,"cut":…,"person":…}     first
 //   {"kind":"page","page":{…}}  × N                                    pages of services/stampedSnapshot.ts
 //   {"kind":"manifest","pages":N,"digest":[…]}                         last: what the pages must add up to
 //   {"kind":"error","code":…}                                          instead of the manifest, when the source gave up half way
+//
+// EVERY LINE STARTS WITH `"kind":` (`line()` builds it first, stampedSnapshotTwoProcess.integration.test.ts fails when one does not): a reader may
+// look at the first bytes of a line to tell its kind apart without parsing a page. The `dataShape` of the hello is the version of what the
+// pages mean (spine/syncDataShape.ts); a file that names none, or another one, is refused at its first line (`join_data_shape`).
 //
 // exportSnapshotStream is the source side (owner only), importSnapshotStream the receiver's (owner of the empty workspace only):
 // it starts a join on the hello, applies each page, and finishes on the manifest; a refusal or a stream that ends early abandons
@@ -16,37 +20,60 @@
 // machine. The person must be a human of the snapshot (checked at the end); no other person gets a sign-in. A person without a sign-in
 // here (an administrator with no login) is refused, because nobody could open the workspace afterwards.
 
-import { db } from "../dbKysely.js";
 import { log } from "../logger.js";
 import { CodedStatusError } from "../statusError.js";
 import { AuthorityError, isWorkspaceOwner, requirePerson } from "../spine/authority.js";
+import { requireActor } from "../spine/mutate.js";
+import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import type { ActorCtx } from "../types.js";
 import type { StampedPage, TableDigest } from "../spine/snapshotSql.js";
-import { readStampedPages } from "./stampedSnapshot.js";
-import { abandonJoin, applyJoinPage, finishJoin, joinProgress, joinRefused, startJoin } from "./stampedJoin.js";
+import { consumeFreshProof } from "./freshProof.js";
+import { readStampedPages, snapshotSourceNode } from "./stampedSnapshot.js";
+import { abandonJoin, applyJoinPage, databaseJoinReadiness, finishJoin, JOIN_NO_LOGIN, joinLoginOf, joinProgress, joinRefused, startJoin, type JoinReadiness } from "./stampedJoin.js";
 
 /** One line may not be longer than this: a page is about 4 MiB plus one row; more is not a page. */
 const MAX_SNAPSHOT_LINE_BYTES = 64 * 1024 * 1024;
 
 type Message =
-  | { kind: "hello"; workspaceId: string; source: string; cut: number; person: string }
+  | { kind: "hello"; dataShape: number; workspaceId: string; source: string; cut: number; person: string }
   | { kind: "page"; page: StampedPage }
   | { kind: "manifest"; pages: number; digest: TableDigest[] }
   | { kind: "error"; code: string };
 
-const encoder = new TextEncoder();
-const line = (message: Message) => encoder.encode(`${JSON.stringify(message)}\n`);
-
-async function requireOwner(actor: ActorCtx): Promise<void> {
+async function requireSnapshotOwner(actor: ActorCtx): Promise<void> {
   requirePerson(actor, "snapshot");
   if (!(await isWorkspaceOwner(actor))) throw new AuthorityError("snapshot", "only the owner of the workspace can copy it to another device");
 }
 
+/** Whether this database would accept a snapshot now, and what that would delete; changes nothing (GET /api/snapshot/readiness). While a join runs the
+ *  answer is `join_in_progress` for anyone (there is no owner to ask, and a page must know to hold the app back); otherwise owner only, like the join
+ *  itself. A person with no sign-in here is answered with the refusal the import gives before it reads a line. Two refusals depend on the file and come
+ *  when it is read: a file made on this very device (`join_from_self`) and another data shape (`join_data_shape`). */
+export async function snapshotReadiness(actor: ActorCtx | null): Promise<JoinReadiness> {
+  const answer = await databaseJoinReadiness();
+  if (!answer.ready && answer.code === "join_in_progress") return answer;
+  const person = requireActor(actor);
+  await requireSnapshotOwner(person);
+  return (await joinLoginOf(person.id)) === null && "holds" in answer ? { ready: false, code: JOIN_NO_LOGIN.code, kind: null, holds: answer.holds } : answer;
+}
+
+const encoder = new TextEncoder();
+// `kind` is written first by construction: the object is made with it in front, and a later key cannot move it.
+const line = ({ kind, ...rest }: Message) => encoder.encode(`${JSON.stringify({ kind, ...rest })}\n`);
+
 /** The snapshot of `workspaceId` as the owner reads it, as a stream of lines. A refusal before the first page (not the owner, a
  *  database with another node's stamps …) is thrown here, so the route answers it with its status; one after it ends the stream
  *  with an `error` line instead of a manifest, which an importer takes as "not complete". */
-export async function exportSnapshotStream(actor: ActorCtx, workspaceId: string): Promise<ReadableStream<Uint8Array>> {
-  await requireOwner(actor);
+export async function exportSnapshotStream(actor: ActorCtx, workspaceId: string, freshProofTicket: string | null | undefined): Promise<ReadableStream<Uint8Array>> {
+  await requireSnapshotOwner(actor);
+  // A ticket is spent only when the data is about to leave: whatever can be refused before that (a database that holds another device's stamps) is
+  // refused first, so it does not use up the password the person just typed. The same check opens the read itself (services/stampedSnapshot.ts).
+  await snapshotSourceNode(workspaceId);
+  // The owner's own session is not enough for the whole workspace: it must carry a ticket from a fresh confirmation (services/freshProof.ts), spent here,
+  // after the owner check (a non-owner burns nobody's ticket) and before anything is read.
+  // A ticket spent here is NOT given back if the stream then fails: the person confirms again. That is deliberate (a refund would make a failing
+  // request a way to keep a ticket alive); do not change it to refund on failure.
+  await consumeFreshProof(actor, "snapshot_export", freshProofTicket);
   // The whole workspace in plain text leaves here: the server's log says who and when (a backup download leaves no event either, so this is the record).
   log.info("snapshot", "the owner read a snapshot of the workspace", { workspaceId, actorId: actor.id });
   // A few lines may wait in the stream before the consumer reads (a readable side of size 0 would not let the first line out before a reader came).
@@ -58,7 +85,7 @@ export async function exportSnapshotStream(actor: ActorCtx, workspaceId: string)
   const run = readStampedPages(actor, workspaceId, { since: null, layer: "rows" }, async (page) => {
     if (!sentHello) {
       sentHello = true;
-      await writer.write(line({ kind: "hello", workspaceId, source: page.source, cut: page.cut, person: actor.id }));
+      await writer.write(line({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, source: page.source, cut: page.cut, person: actor.id }));
     }
     await writer.write(line({ kind: "page", page }));
     first();
@@ -96,12 +123,10 @@ async function* linesOf(body: ReadableStream<Uint8Array>): AsyncGenerator<string
 
 /** Fill this database's empty workspace from a snapshot stream (see the top). Returns how many pages and rows were applied. */
 export async function importSnapshotStream(actor: ActorCtx, body: ReadableStream<Uint8Array> | null): Promise<{ pages: number; rows: number }> {
-  await requireOwner(actor);
+  await requireSnapshotOwner(actor);
   if (!body) throw joinRefused("join_no_body", "the upload has no body", 400);
-  // The sign-in this person uses here: the snapshot names the person's row, never a login (it cannot make anyone else's).
-  const login = (await db.selectFrom("actors").select("external_id").where("id", "=", actor.id).executeTakeFirst())?.external_id ?? null;
-  // Without a sign-in of its own there is nobody who could open the workspace after the import: refused, not silently filled.
-  if (login === null) throw joinRefused("join_no_login", "this person has no sign-in on this device, so nobody could open the workspace afterwards", 409);
+  const login = await joinLoginOf(actor.id);
+  if (login === null) throw joinRefused(JOIN_NO_LOGIN.code, JOIN_NO_LOGIN.message, 409);
   let join: { workspaceId: string } | null = null;
   let done = false;
   let pages = 0;
@@ -111,6 +136,12 @@ export async function importSnapshotStream(actor: ActorCtx, body: ReadableStream
       try { message = JSON.parse(text) as Message; } catch { throw joinRefused("join_bad_line", "a line of the upload is not a message"); }
       if (message.kind === "hello") {
         if (join) throw joinRefused("join_bad_line", "a second hello");
+        // The first line says which data shape the pages have; nothing is read or written before it is the one this node speaks.
+        if (message.dataShape !== SYNC_DATA_SHAPE_VERSION) {
+          throw joinRefused("join_data_shape", message.dataShape === undefined
+            ? "the file does not say which data shape it has, so it was not made by a version that can be read here"
+            : `the file has data shape ${String(message.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: make the file again on a device with the same version`, 409);
+        }
         await startJoin({ workspaceId: message.workspaceId, sourceNode: message.source, cutSeq: message.cut, personActorId: message.person, shellPersonId: actor.id });
         join = { workspaceId: message.workspaceId };
       } else if (message.kind === "page") {

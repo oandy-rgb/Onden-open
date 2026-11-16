@@ -193,6 +193,14 @@
   "class": "node-local",
   "note": "counters of this server"
  },
+ "fresh_proofs": {
+  "class": "node-local",
+  "note": "short-lived single-use tickets of this server (services/freshProof.ts); a ticket proves a confirmation made here, and means nothing on another device"
+ },
+ "fresh_proof_attempts": {
+  "class": "node-local",
+  "note": "how many wrong passwords a person typed on this server and until when they wait (services/freshProof.ts); about this server's own door"
+ },
  "backup_restore_jobs": {
   "class": "node-local",
   "note": "belongs to the node on duty"

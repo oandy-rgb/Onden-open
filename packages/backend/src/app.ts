@@ -26,6 +26,7 @@ import syncRouter from "./routes/sync.js";
 import bootstrapRouter from "./routes/bootstrap.js";
 import workspaceRouter from "./routes/workspace.js";
 import stampedSnapshotRouter from "./routes/stampedSnapshot.js";
+import freshProofRouter from "./routes/freshProof.js";
 import manifestsRouter from "./routes/manifests.js";
 import versionsRouter from "./routes/versions.js";
 import historyRouter from "./routes/history.js";
@@ -44,7 +45,7 @@ import { eventActorType } from "./types.js";
 import { resolveBearerActor, parseBearer } from "./services/agentTokens.js";
 import { actorForSession } from "./services/actors.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./spine/systemActor.js";
-import { withRequestDevice } from "./requestContext.js";
+import { withRequestDevice, withRequestSession } from "./requestContext.js";
 // The assembled Hono instance — pure assembly, no listening port, no migrations,
 // no background jobs, no top-level await — so any environment can import it:
 // vitest drives it via app.request(), server.ts (Node boot) serves it, and a
@@ -206,7 +207,8 @@ app.use("*", async (c, next) => {
   const inviteToken = !bearerActor && c.req.method === "POST" && c.req.path === "/api/invites/claim"
     ? await readJsonBody(c).then((b) => (typeof (b as { token?: unknown } | null)?.token === "string" ? (b as { token: string }).token : ""), () => "")
     : null;
-  const sessionActor = bearerActor ?? await getCurrentActor(c.req.raw, inviteToken);
+  const signedIn = bearerActor ? null : await getCurrentActor(c.req.raw, inviteToken);
+  const sessionActor = bearerActor ?? signedIn?.actor ?? null;
   const isNative = ALLOW_NATIVE_BYPASS && NATIVE_ORIGINS.has(c.req.header("origin") ?? "");
   const actor: ActorCtx | null = sessionActor
     ?? (isNative ? await getNativeActor() : null);
@@ -232,7 +234,8 @@ app.use("*", async (c, next) => {
   if (actor?.tokenScope && !c.req.path.startsWith("/api/mcp") && !PUBLIC_PATHS.has(c.req.path) && !isPublicRead) {
     return c.json({ error: "token_scope", detail: "this token is an MCP agent credential, valid only on /api/mcp/*" }, 403);
   }
-  return next();
+  // The session rides the request (requestContext.ts) so a fresh-proof ticket is bound to the session it was handed to.
+  return signedIn?.sessionId ? withRequestSession(signedIn.sessionId, next) : next();
 });
 
 // Which device a write came from (X-Onden-Device-Id) rides the request so the event it appends records it (db.ts).
@@ -301,17 +304,17 @@ async function getNativeActor(): Promise<ActorCtx | null> {
 }
 
 // ── Session helper: resolve current actor from Better Auth session ────────
-async function getCurrentActor(req: Request, inviteToken: string | null = null): Promise<ActorCtx | null> {
+async function getCurrentActor(req: Request, inviteToken: string | null = null): Promise<{ actor: ActorCtx | null; sessionId: string | null }> {
   const session = await auth.api.getSession({ headers: req.headers });
   // An older tab may still have work for A after another tab logs in as B.
   // Compare against the authenticated user before actor lookup/creation. The
   // header can only narrow a request, never select or impersonate an actor.
   const expectedUserId = req.headers.get("X-Onden-Expected-User");
   if (expectedUserId && session?.user?.id !== expectedUserId) throw new UnauthorizedError("account_changed");
-  if (!session?.user) return null;
+  if (!session?.user) return { actor: null, sessionId: null };
   // Lookup, invite claim and first-login creation live with the other member
   // operations (services/actors.ts, audit D110).
-  return actorForSession(session.user, await getWorkspaceId(), { inviteToken });
+  return { actor: await actorForSession(session.user, await getWorkspaceId(), { inviteToken }), sessionId: session.session?.id ?? null };
 }
 
 app.get("/health", async (c) => {
@@ -322,6 +325,7 @@ app.get("/health", async (c) => {
 app.route("/api/bootstrap", bootstrapRouter);
 app.route("/api/workspace", workspaceRouter);
 app.route("/api/snapshot", stampedSnapshotRouter);
+app.route("/api/fresh-proof", freshProofRouter);
 
 app.route("/api/nodes", nodeRouter);
 app.route("/api/nodes", blockLinkRouter);

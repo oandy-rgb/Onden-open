@@ -197,7 +197,8 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
   "POST /api/mcp/sessions/:id/finish": (o) => ({ params: { id: o.session }, json: { status: "failed", fail_code: "sweep" } }),
 
   // ── backup and restore ───────────────────────────────────────────────────
-  "POST /api/snapshot": () => ({ raw: { bytes: Buffer.from('{"kind":"hello","workspaceId":"00000000-0000-4000-8000-000000000001","source":"sweep-source","cut":0,"person":"00000000-0000-4000-8000-000000000002"}\n'), contentType: "application/x-ndjson" } }),
+  "POST /api/fresh-proof": () => ({ json: { purpose: "snapshot_export", evidence: { kind: "acknowledgement" } } }),
+  "POST /api/snapshot": () => ({ raw: { bytes: Buffer.from('{"kind":"hello","dataShape":1,"workspaceId":"00000000-0000-4000-8000-000000000001","source":"sweep-source","cut":0,"person":"00000000-0000-4000-8000-000000000002"}\n'), contentType: "application/x-ndjson" } }),
   "POST /api/backup/restore/upload": (o) => ({ raw: { bytes: Buffer.from(o.backupZipBase64, "base64"), contentType: "application/zip" } }),
   "POST /api/backup/restore/:id/apply": (o, r) => ({ params: { id: o.upload }, json: { space_id: r.space, mode: "empty" } }),
   "DELETE /api/backup/restore/:id": (o) => ({ params: { id: o.upload } }),
@@ -247,6 +248,7 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
 /** Routes whose request cannot succeed inside the test, each with the reason. Only shrinks (ratchet). */
 // ratchet:list sweepWriteNoPositive
 export const NO_POSITIVE: Array<{ route: string; reason: string }> = [
+  { route: "POST /api/fresh-proof", reason: "needs an account with a password: this sweep runs with a stand-in for the sign-in library that has none, so the only answer here is 403 fresh_proof_no_password; the granted case is in freshProof.integration.test.ts with a real account" },
   { route: "POST /api/nodes/:id/block-links", reason: "answers 409 'the part changed': it checks the posted text against a paragraph of the source note at that offset, which the world's one-line notes do not give (the request passes validation, so the cross passes reach the lookup)" },
   { route: "POST /api/agent-sessions", reason: "needs a note whose text holds an @mention of the agent's handle at the given block; the world's notes have none" },
   { route: "POST /api/bookmark/preview", reason: "fetches the page at the URL: the test has no network" },

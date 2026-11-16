@@ -596,6 +596,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     await recordSnapshotMedia(snapshotId, snapshotPayload);
     await ensureSiteBundle({ workspaceId: A.ws });
     await seedQ(`INSERT INTO push_reminder_sent (task_id, moment) VALUES ($1, $2)`, [open.task, `${day}T09:00`]);
+    // a ticket of a fresh confirmation (services/freshProof.ts): the table is keyed by the person it was handed to
+    await seedQ(`INSERT INTO fresh_proofs (ticket_hash, actor_id, purpose, expires_at) VALUES ($1, $2, 'snapshot_export', now() + interval '2 minutes')`, [canary("FreshProof"), A.owner.id]);
+    await seedQ(`INSERT INTO fresh_proof_attempts (actor_id, failures) VALUES ($1, 1)`, [A.owner.id]);
     await mutatePersonal({ actor: A.owner, workspaceId: A.ws, apply: () => markSeen([article], A.owner.id, true) });
     await muteKeyword(A.owner, A.ws, canary("MutedWord"));
     await awaitAllDispatchers();

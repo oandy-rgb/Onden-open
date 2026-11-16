@@ -1465,7 +1465,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（54）
+## 後端（55）
 
 ### 要寫日誌
 
@@ -1939,3 +1939,16 @@ export async function copyWorkspace(owner: ActorCtx, workspaceId: string, pages:
 - 取代：用備份（不帶標記、每列重新蓋章）複製工作區，或在別處另寫一套逐表匯出匯入與比對
 - 守門：`guard:stampedImport`、`guard:stampTablesServerSide`
 - 為什麼：快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。
+
+### 要求「剛剛再確認過是本人」才給整個工作區或做不可逆的事（再輸入一次密碼）
+
+- 入口：`backend/src/services/freshProof.ts`（`issueFreshProof`、`consumeFreshProof`、`FRESH_PROOF_HEADER`、`FRESH_PROOF_PURPOSES`）　項目 `be-fresh-proof`
+- 寫法：`import type { ActorCtx } from "./types.js";
+import { consumeFreshProof, FRESH_PROOF_HEADER, issueFreshProof } from "./services/freshProof.js";
+export async function example(actor: ActorCtx, password: string, request: Request) {
+  await issueFreshProof(actor, "snapshot_export", { kind: "password", password });
+  await consumeFreshProof(actor, "snapshot_export", request.headers.get(FRESH_PROOF_HEADER));
+}`
+- 取代：只在頁面上要求再輸入密碼、伺服器不查
+- 守門：`guard:freshProof`
+- 為什麼：票限時 2 分鐘、只能用一次、綁人與用途；伺服器只存雜湊、不寫入日誌。新的受保護路由在 FRESH_PROOF_PURPOSES 加一行用途即可。

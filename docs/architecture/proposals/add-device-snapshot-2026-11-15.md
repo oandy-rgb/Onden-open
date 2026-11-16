@@ -341,3 +341,17 @@ await uploadFinalManifest(keys, { pages, cut, nextSession });        // 既有�
 - 24 張「未決定」表的分類只依表名與 migration 檔頭，沒有逐張讀寫入程式。
 - **事件／版本是否會被修剪**（影響「基底還在嗎」）沒查；第 5 節的「找不到基底就不自動合」是對這個不確定性的保險。
 - 沒有請獨立的人審這份提案；審查者（note-cf）的審查（PR #1702 留言）未審第 1 節畫面文字與第 7 節 Android 外殼。
+
+## 伺服器端的三道門（2026-11-16）
+
+`routes/stampedSnapshot.ts` 現在替「加入另一台裝置」的畫面把三件事放在伺服器，頁面不再各自判斷：
+
+- **這台能不能加入、加入會刪掉什麼**：`GET /api/snapshot/readiness`（只有擁有者、不改任何東西）。答案與 `beginJoin` 共用同一個 `decideJoin`（`spine/stampedImport.ts`），所以兩邊不會不一致；`holds` 是這個資料庫裡「人自己的內容」的數量（筆記、垃圾桶、標籤、空間、檔案、偏好），只有數字。
+- **檔案說自己是哪一版資料形狀**：第一行 hello 帶 `dataShape`（`spine/syncDataShape.ts`），接收端看到沒有或不同的版本就在第一行拒絕（`join_data_shape`）。
+- **再輸入一次密碼由伺服器強制**：`GET /api/snapshot` 要帶 `X-Onden-Fresh-Proof` 票（`POST /api/fresh-proof` 換，2 分鐘、一次、綁人與用途；`services/freshProof.ts`）。瀏覽器版只有一個本機的人、密碼是公開的，伺服器能查的只有「兩分鐘內有第二次明確請求」，不是身分。
+
+同一類、尚未套用這張票的路由（是否套用由擁有者決定；服務不用改）見 PR 說明。
+
+**待決定，票擴大到備份之前必須有答案（2026-11-16 審查 note-96）**：只用 Google／GitHub 登入的擁有者沒有密碼，現在拿不到票（`fresh_proof_no_password`）。對「加入裝置」也許可以接受；但擁有者已決定同一張票之後要擋下載完整備份、匯出全部 Markdown、轉移擁有者，那時這類帳號會被鎖在自己的備份外面。對等的證明是「重新走一次登入提供者、要求重新驗證」之後發票。這要在票套用到那三個路由之前完成，並且走同一個 `issueFreshProof`（新增一種證據），不另開第二條路。
+
+**密碼嘗試的鎖（同日補）**：錯密碼在資料庫裡計數（`fresh_proof_attempts`），計數在檢查之前，所以並行的猜測過不了；連續錯 5 次鎖 15 分鐘，鎖結束後每多錯一次加倍（最多一天），對的密碼清零；鎖住的那次留一筆 `FRESH_PROOF_LOCKED` 事件給擁有者看。確認（`acknowledgement`）只在瀏覽器版（`ONDEN_BROWSER_APP`）且是那個本機帳號時接受，伺服器上一律要密碼。

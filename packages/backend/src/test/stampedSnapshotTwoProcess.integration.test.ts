@@ -18,6 +18,7 @@ import { buildDatabase } from "./helpers/databaseBuild.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
 import { compareRowHashes, type TableHashes } from "./helpers/stampedRowHashes.js";
 import { compareDigests, type StampedPage, type TableDigest } from "../spine/snapshotSql.js";
+import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
 import { NO_OWN_SHELL_CASE, SHELL_CASES } from "./helpers/stampedShellCases.js";
 
@@ -173,6 +174,58 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
     expect(receiver.login).toBe("login-of-local");
   });
 
+  describe("the route gates the add-device screens lean on (services/freshProof.ts, routes/stampedSnapshot.ts)", () => {
+    type Answer = { status: number; error: string | null };
+    const gates = () => (source as unknown as { gates: { noTicket: Answer; spent: Answer; again: Answer; unknown: Answer; expired: Answer; friend: Answer; friendUnspent: boolean[]; token: Answer; ownerTicketAsFriend: Answer; ownerAfterFriend: Answer; readiness: { owner: Record<string, unknown>; friend: number } } }).gates;
+    const imported = () => receiver as unknown as { shape: { none: Answer; other: Answer; text: Answer; changed: boolean; readyAfter: Record<string, unknown> }; readyBefore: Record<string, unknown>; hello: Record<string, unknown>; joinedProbe: Record<string, unknown>; foreign: Answer & { unspent: boolean[] } };
+
+    it("the export needs a ticket, spends it once, and says why when it refuses", () => {
+      const g = gates();
+      expect(g.noTicket).toEqual({ status: 403, error: "fresh_proof_required" });
+      expect(g.spent).toEqual({ status: 200, error: null });
+      expect(g.again).toEqual({ status: 403, error: "fresh_proof_used" });
+      expect(g.unknown).toEqual({ status: 403, error: "fresh_proof_invalid" });
+      expect(g.expired).toEqual({ status: 403, error: "fresh_proof_expired" });
+    });
+
+    it("the ticket is checked after the owner: a member or a token is refused and burns nothing, and the owner's ticket in someone else's request is not honoured", () => {
+      const g = gates();
+      expect(g.friend.status).toBe(403);
+      expect(g.friend.error).not.toMatch(/^fresh_proof_/);
+      expect(g.friendUnspent).toEqual([true]);
+      expect(g.token.status).toBe(403);
+      expect(g.ownerTicketAsFriend.status).toBe(403);
+      expect(g.ownerAfterFriend).toEqual({ status: 200, error: null }); // the friend's try spent nothing
+    });
+
+    it("every line of the file starts with the kind, and the first one is the hello that names the data shape", () => {
+      const lines = source.stream.trim().split("\n");
+      expect(lines.length).toBeGreaterThan(2);
+      for (const line of lines) expect(line.startsWith('{"kind":"'), line.slice(0, 60)).toBe(true);
+      expect(JSON.parse(lines[0]!)).toMatchObject({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION });
+      expect(SYNC_DATA_SHAPE_VERSION).toBe(1);
+    });
+
+    it("an importer refuses a file whose first line has no data shape, or another one, with join_data_shape, before a join starts; the empty database is still ready", () => {
+      const r = imported();
+      for (const answer of [r.shape.none, r.shape.other, r.shape.text]) expect(answer).toEqual({ status: 409, error: "join_data_shape" });
+      expect(r.shape.changed, "a refused file changed the database").toBe(false);
+      expect(r.shape.readyAfter).toMatchObject({ ready: true });
+    });
+
+    it("the probe says ready for the empty database before the join (nothing of a person's own held), and join_already_done after it", () => {
+      const r = imported();
+      expect(r.readyBefore).toMatchObject({ ready: true, holds: { own_notes: 0, trash: 0, own_tags: 0, spaces: 0, files: 0, prefs: 0 } });
+      expect(r.joinedProbe).toMatchObject({ ready: false, code: "join_already_done" });
+    });
+
+    it("a device that joined cannot make a file: A exports, B joins, B's export is refused with snapshot_foreign_origin, and the ticket is not spent", () => {
+      const r = imported();
+      expect(r.foreign).toMatchObject({ status: 409, error: "snapshot_foreign_origin" });
+      expect(r.foreign.unspent).toEqual([true]);
+    });
+  });
+
   for (const [name, d] of Object.entries(DAMAGE)) {
     it(`refuses ${name}, and leaves nothing of the workspace behind`, () => {
       const result = refused.find((r) => r.name === name)!;
@@ -204,6 +257,17 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(shells.after).toEqual({ persons: "1", again: null });
     });
 
+    it("the probe agrees with the join on every one of those cases: the same refusal, with a stable code as the kind; ready and nothing held for the clean shell; join_no_login without a sign-in", () => {
+      const probed = shells.results as unknown as Array<{ name: string; refusal: string | null; probe: { ready: boolean; code?: string; kind?: string | null } }>;
+      const disagree = probed.filter((r) => r.probe.ready || r.probe.code !== r.refusal);
+      expect(disagree, JSON.stringify(disagree)).toEqual([]);
+      for (const r of probed) expect(r.probe.kind ?? "", r.name).toMatch(/^[a-z_]+$/);
+      const readiness = (shells as unknown as { readiness: { clean: unknown; unchanged: boolean; noLogin: unknown } }).readiness;
+      expect(readiness.clean).toMatchObject({ ready: true, holds: { own_notes: 0, trash: 0, own_tags: 0, spaces: 0, files: 0, prefs: 0 } });
+      expect(readiness.unchanged, "asking changed the database").toBe(true);
+      expect(readiness.noLogin).toMatchObject({ ready: false, code: "join_no_login", kind: null });
+    });
+
     it("has a case for every table a snapshot carries and every table that must be empty, or says why not", () => {
       const reasons = new Set(SHELL_CASES.map((c) => c.reason));
       // (the tables the snapshot does not carry that must be empty are the bare `SELECT 1 FROM <table>` probes of the shell checks)
@@ -219,6 +283,9 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       await worked(names.crash, ["half", join(dir, "source.json"), join(dir, "half.json")], keep).then(() => { if (!onPglite) throw new Error("the half-way process was not killed"); }, (e) => { if (onPglite) throw e; });
       const half = JSON.parse(readFileSync(join(dir, "half.json"), "utf8")) as { person: string; write: { status?: number; code?: string } };
       expect(half.write.code, "a workspace that is being joined takes no ordinary write").toBe("workspace_joining");
+      // while the join runs the probe answers anyone with that one fact and nothing else
+      const running = (half as unknown as { running: { noOne: unknown; person: unknown } }).running;
+      expect(running).toEqual({ noOne: { ready: false, code: "join_in_progress" }, person: { ready: false, code: "join_in_progress" } });
       await worked(names.crash, ["boot", join(dir, "boot.json")], keep);
       const boot = JSON.parse(readFileSync(join(dir, "boot.json"), "utf8")) as { ws: string; people: Array<{ id: string; external_id: string | null; owner: boolean }>; joins: number; workspaces: string; accepts: string | null };
       expect(boot.joins).toBe(0);

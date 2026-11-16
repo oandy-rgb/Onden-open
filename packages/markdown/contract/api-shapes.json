@@ -2581,6 +2581,22 @@
         ]
       }
     },
+    "GET /api/snapshot/readiness": {
+      "status": 200,
+      "shape": {
+        "code": "string",
+        "holds": {
+          "files": "number",
+          "own_notes": "number",
+          "own_tags": "number",
+          "prefs": "number",
+          "spaces": "number",
+          "trash": "number"
+        },
+        "kind": "string",
+        "ready": "boolean"
+      }
+    },
     "GET /api/snapshots": {
       "status": 200,
       "shape": [

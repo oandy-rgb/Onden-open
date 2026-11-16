@@ -9,20 +9,25 @@
 //                                   in a database (helpers/stampedShellCases.ts), one at a time and rolled back, makes it not empty
 //   half <out.json>                 a person signs in, a join starts, one page is applied, and the process is killed (SIGKILL; PGlite: just ends)
 //   boot <out.json>                 the next start of that database: what it holds now, and whether a write is accepted
+// The route gates (the ticket, the first line, the readiness probe) are answered inside these modes, on the engine of the run: export (`gates`), import
+// (`shape`, `readyBefore`, `joinedProbe`, `foreign`), shells (`readiness`, a `probe` per case) and half (`running`).
 // The two ways are independent: the digest (hashes of what the snapshot code reads) and the rows and stamps read back as JSON.
 import { readFileSync, writeFileSync } from "node:fs";
 import { getWorkspaceId, migrate, q, withSavepoint, withTransaction } from "../../db.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { stampTransaction } from "../../spine/stamps.js";
-import { abandonJoin, applyJoinPage, startJoin } from "../../services/stampedJoin.js";
+import { abandonJoin, applyJoinPage, databaseJoinReadiness, startJoin } from "../../services/stampedJoin.js";
+import { FRESH_PROOF_HEADER } from "../../services/freshProof.js";
+import { ticketWithoutEvidence } from "./freshProofTicket.js";
 import { markJoinDone, mergeUnitsIntoWorkspace } from "../../spine/stampedImport.js";
 import { readUnit } from "../../spine/stampedMerge/dbUnits.js";
 import { conflictsOf } from "../../spine/stampedMerge/unit.js";
 import type { StampedPage, TableDigest } from "../../spine/snapshotSql.js";
+import type { ActorCtx } from "../../types.js";
 import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
 import { persistActor } from "./persistActor.js";
 import { seedQ } from "./seedQ.js";
-import { buildSourceWorld, capture, digestAs, fillFrom, headsOfWorkspace, makeCaller, notCarriedOnPurpose, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace } from "./stampedWorld.js";
+import { buildSourceWorld, capture, digestAs, exportAs, fillFrom, headsOfWorkspace, makeCaller, notCarriedOnPurpose, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace } from "./stampedWorld.js";
 import { independentRowHashes } from "./stampedRowHashes.js";
 
 const [mode, first, second] = process.argv.slice(2);
@@ -32,6 +37,40 @@ const [mode, first, second] = process.argv.slice(2);
 async function start(): Promise<void> {
   await migrate();
   if (process.env.ONDEN_DB_DRIVER === "pglite") await ensureOwnNodeId();
+}
+
+
+type GateAnswer = { status: number; error: string | null };
+/** GET /api/snapshot as `actor`, with `ticket` in its header when there is one: the status, and the refusal's code. */
+async function getSnapshot(actor: ActorCtx | null, ticket?: string): Promise<GateAnswer> {
+  const res = await snapshotApp(actor).request("/api/snapshot", { headers: ticket ? { [FRESH_PROOF_HEADER]: ticket } : {} });
+  if (res.status === 200) { await res.text(); return { status: 200, error: null }; }
+  return { status: res.status, error: ((await res.json()) as { error: string }).error };
+}
+const unspent = async (actor: ActorCtx) => (await q<{ used_at: string | null }>(`SELECT used_at FROM fresh_proofs WHERE actor_id = $1`, [actor.id])).rows.map((r) => r.used_at === null);
+async function readinessRoute(actor: ActorCtx | null): Promise<unknown> {
+  return (await snapshotApp(actor).request("/api/snapshot/readiness")).json();
+}
+const counts = async () => Object.fromEntries(await Promise.all(["sync_join", "workspaces", "content_nodes", "sync_stamps", "actors", "domain_events", "fresh_proofs"].map(async (t) => [t, (await q<{ n: string }>(`SELECT count(*)::text AS n FROM ${t}`)).rows[0]!.n] as const)));
+
+/** What the ticket gate of GET /api/snapshot does (services/freshProof.ts says what a ticket is; the answers are checked in stampedSnapshotTwoProcess.integration.test.ts). */
+async function gateCases(world: Awaited<ReturnType<typeof buildSourceWorld>>) {
+  const noTicket = await getSnapshot(world.owner);
+  const ticket = await ticketWithoutEvidence(world.owner);
+  const spent = await getSnapshot(world.owner, ticket);
+  const again = await getSnapshot(world.owner, ticket);
+  const unknown = await getSnapshot(world.owner, "not-a-ticket");
+  const old = await ticketWithoutEvidence(world.owner);
+  await q(`UPDATE fresh_proofs SET expires_at = now() - interval '1 second' WHERE actor_id = $1 AND used_at IS NULL`, [world.owner.id]);
+  const expired = await getSnapshot(world.owner, old);
+  const friendTicket = await ticketWithoutEvidence(world.friend);
+  const friend = await getSnapshot(world.friend, friendTicket);
+  const friendUnspent = await unspent(world.friend);
+  const token = await getSnapshot({ ...world.owner, tokenScope: { access: "read", allowedTools: [], tokenId: "t" } as never }, await ticketWithoutEvidence(world.owner));
+  const ownerTicket = await ticketWithoutEvidence(world.owner);
+  const ownerTicketAsFriend = await getSnapshot(world.friend, ownerTicket);
+  const ownerAfterFriend = await getSnapshot(world.owner, ownerTicket);
+  return { noTicket, spent, again, unknown, expired, friend, friendUnspent, token, ownerTicketAsFriend, ownerAfterFriend, readiness: { owner: await readinessRoute(world.owner), friend: (await snapshotApp(world.friend).request("/api/snapshot/readiness")).status } };
 }
 
 async function exportHalf(out: string): Promise<void> {
@@ -46,13 +85,13 @@ async function exportHalf(out: string): Promise<void> {
   const merged = await mergeUnitsIntoWorkspace(world.ws, [{ address: { table: "content_nodes", row: root, field: "title" }, unit: [{ stamp: { origin: "genesis", seq: 0, wall: 0, counter: 0, author: null, device: null }, saw: {}, deleted: false, value: "Grandchild, from a backup" }] }]);
   if (merged.events[0]?.result.outcome !== "conflict") throw new Error("the source world has no unit with two heads");
   const cap = await capture(null, world, 12_000);
-  const res = await snapshotApp(world.owner).request("/api/snapshot");
+  const res = await exportAs(world.owner);
   if (res.status !== 200) throw new Error(`GET /api/snapshot answered ${res.status}`);
   const stream = await res.text();
   const hidden = await outOfScopeIds(null, world);
   writeFileSync(out, JSON.stringify({
     world: { ws: world.ws, owner: world.owner, secretNote: world.secretNote }, headNote: root,
-    summary: cap.summary, unstamped, pages: cap.pages.length, stream, hidden, pagesRaw: cap.pages,
+    summary: cap.summary, unstamped, pages: cap.pages.length, stream, hidden, pagesRaw: cap.pages, gates: await gateCases(world),
     rows: await rowsOf(null, world), stamps: await stampsOfWorkspace(null, world, hidden), heads: await headsOfWorkspace(null, world),
     // WHOLE tables, hashed by SQL that does not use the digest or the snapshot's selection: what the receiver may lack is only what is left out on purpose
     wholeTables: await independentRowHashes(notCarriedOnPurpose(world)),
@@ -106,6 +145,20 @@ async function importHalf(from: string, out: string): Promise<void> {
   // the one local person of an empty database: the owner of it, with the sign-in of this device
   const local = await persistActor(ws, { id: "", name: "Local", role: "admin", type: "human" });
   await seedQ(`UPDATE actors SET external_id = 'login-of-local' WHERE id = $1`, [local.id]);
+  // The first line names the data shape: a file with none, another one, or one that is not a number is refused at that line, before a join starts.
+  const lines = source.stream.trim().split("\n");
+  const hello = JSON.parse(lines[0]!) as Record<string, unknown>;
+  const withHello = (edit: (h: Record<string, unknown>) => void) => { const h = { ...hello }; edit(h); return [JSON.stringify(h), ...lines.slice(1)].join("\n") + "\n"; };
+  const post = async (body: string): Promise<GateAnswer> => { const r = await snapshotApp(local).request("/api/snapshot", { method: "POST", body }); return { status: r.status, error: ((await r.json()) as { error: string }).error }; };
+  const countsBefore = await counts();
+  const readyBefore = await readinessRoute(local);
+  const shape = {
+    none: await post(withHello((h) => { delete h.dataShape; })),
+    other: await post(withHello((h) => { h.dataShape = Number(h.dataShape) + 1; })),
+    text: await post(withHello((h) => { h.dataShape = String(h.dataShape); })),
+    changed: JSON.stringify(await counts()) !== JSON.stringify(countsBefore),
+    readyAfter: await readinessRoute(local),
+  };
   const res = await snapshotApp(local).request("/api/snapshot", { method: "POST", body: source.stream });
   const answer = await res.json();
   if (res.status !== 200) throw new Error(`POST /api/snapshot answered ${res.status}: ${JSON.stringify(answer)}`);
@@ -118,6 +171,10 @@ async function importHalf(from: string, out: string): Promise<void> {
     wholeTables: await independentRowHashes(null),
     node: (await q<{ node_id: string }>(`SELECT node_id FROM sync_node`)).rows[0]!.node_id,
     login: (await q<{ external_id: string | null }>(`SELECT external_id FROM actors WHERE id = $1`, [source.world.owner.id])).rows[0]?.external_id ?? null,
+    shape, readyBefore, hello,
+    // a device that joined: its probe says so, and it cannot make a file (its rows carry the source's stamps); the ticket is not spent by that refusal
+    joinedProbe: await readinessRoute(source.world.owner as never),
+    foreign: await (async () => { const answered = await getSnapshot(source.world.owner as never, await ticketWithoutEvidence(source.world.owner as never)); return { ...answered, unspent: await unspent(source.world.owner as never) }; })(),
     // last, because it writes: the receiver goes on as a node of its own, and its write has seen both heads of the unit (the value it was written over and the one from before stamps)
     settled: await (async () => {
       await makeCaller(source.world.owner as never)("PATCH", `/api/nodes/${source.headNote}`, { title: "Grandchild, settled on the copy" });
@@ -172,7 +229,18 @@ async function shellsHalf(out: string): Promise<void> {
   const systemActor = (await q<{ id: string }>(`SELECT id::text FROM actors WHERE type = 'agent' AND external_id = 'system'`)).rows[0]?.id ?? null;
   const ctx = { ws, caller: person.id, defaultSpace, systemActor, tag: titled, siteConfig: () => titled("Site Config") };
   const withPerson = await askJoin(ws, person.id);
-  const results: { name: string; table: string; baseline: string | null; refusal: string | null; error?: string }[] = [];
+  // the probe (GET /api/snapshot/readiness) on the clean shell: ready, nothing of a person's own held, and nothing changed by asking
+  const countsBefore = await counts();
+  const readiness = await (async () => {
+    const clean = await readinessRoute(person);
+    const unchanged = JSON.stringify(await counts()) === JSON.stringify(countsBefore);
+    let noLogin: unknown = null;
+    try {
+      await withTransaction(async () => { await q(`UPDATE actors SET external_id = NULL WHERE id = $1`, [person.id]); noLogin = await readinessRoute(person); throw new RollBack(); });
+    } catch (e) { if (!(e instanceof RollBack)) throw e; }
+    return { clean, unchanged, noLogin };
+  })();
+  const results: { name: string; table: string; baseline: string | null; refusal: string | null; probe?: unknown; error?: string }[] = [];
   for (const c of SHELL_CASES) {
     try {
       await withTransaction(async () => {
@@ -182,14 +250,14 @@ async function shellsHalf(out: string): Promise<void> {
         const baseline = await askJoin(ws, person.id);
         await c.seed(ctx);
         const refusal = await askJoin(ws, person.id);
-        results.push({ name: c.name, table: c.reason, baseline, refusal });
+        results.push({ name: c.name, table: c.reason, baseline, refusal, probe: await databaseJoinReadiness() });
         throw new RollBack();
       });
     } catch (e) { if (!(e instanceof RollBack)) results.push({ name: c.name, table: c.reason, baseline: null, refusal: null, error: String((e as Error).message ?? e) }); }
   }
   // the database is as it was: the same person, one workspace, still accepted
   const after = { persons: (await q<{ n: string }>(`SELECT count(*)::text AS n FROM actors WHERE type = 'human'`)).rows[0]!.n, again: await askJoin(ws, person.id) };
-  writeFileSync(out, JSON.stringify({ fresh, withPerson, results, after }));
+  writeFileSync(out, JSON.stringify({ fresh, withPerson, readiness, results, after }));
 }
 
 /** A person signs in, a join starts and one page is applied; then the process dies without giving up. */
@@ -208,7 +276,9 @@ async function halfHalf(from: string, out: string): Promise<void> {
       throw new RollBack();
     });
   } catch (e) { if (!(e instanceof RollBack)) throw e; }
-  writeFileSync(out, JSON.stringify({ person: person.id, write }));
+  // while it runs, the probe answers anyone with the one fact and nothing else (the shell's owner is gone by now)
+  const running = { noOne: await readinessRoute(null), person: await readinessRoute(person) };
+  writeFileSync(out, JSON.stringify({ person: person.id, write, running }));
   if (process.env.ONDEN_DB_DRIVER === "pglite") process.exit(0); // an in-memory database cannot outlive its process: see the test
   process.kill(process.pid, "SIGKILL");
 }

@@ -20,6 +20,8 @@ import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
 import { readStampedPages } from "../../services/stampedSnapshot.js";
 import type { StampedPage } from "../../spine/snapshotSql.js";
 import { abandonJoin, applyJoinPage, finishJoin, startJoin } from "../../services/stampedJoin.js";
+import { FRESH_PROOF_HEADER } from "../../services/freshProof.js";
+import { ticketWithoutEvidence } from "./freshProofTicket.js";
 import type { ActorCtx } from "../../types.js";
 import { persistActor } from "./persistActor.js";
 import { makeSpace } from "./spaceFixtures.js";
@@ -66,6 +68,13 @@ export function snapshotApp(actor: ActorCtx | null): Hono<{ Variables: { actor: 
   app.use("*", async (c, next) => { c.set("actor", actor); await next(); });
   app.route("/api/snapshot", stampedSnapshotRouter);
   return app;
+}
+
+/** GET /api/snapshot as `actor`, carrying a ticket from a fresh confirmation. The evidence behind a ticket is tested in freshProof.integration.test.ts;
+ *  a test that is about the file's content takes a ticket without it (helpers/freshProofTicket.ts). Run it inside onNode of the database that is read. */
+export async function exportAs(actor: ActorCtx): Promise<Response> {
+  const ticket = await ticketWithoutEvidence(actor);
+  return snapshotApp(actor).request("/api/snapshot", { headers: { [FRESH_PROOF_HEADER]: ticket } });
 }
 
 /** Everyday data on `node`: nested notes, tags and their use, attributes, links, board positions and sections, two spaces with a

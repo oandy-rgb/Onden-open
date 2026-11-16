@@ -31,7 +31,7 @@ import { nativeBypassEnabled } from "../nativeBypass.js";
 import { CodedStatusError } from "../statusError.js";
 import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
-import { notTagNodeSql } from "./nodeSql.js";
+import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
 import { storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
 import { bundleRefused, normalizeHave } from "./stampedBundle.js";
@@ -67,50 +67,106 @@ const INSTALL_TABLES = ["workspaces", "actors", "spaces", "space_members", "cont
  *    - a row in any carried table that a fresh install leaves empty, or a note that is neither a tag nor made by the system.
  *  What it cannot see: a database whose history was pruned and whose people-made rows all carry genesis stamps (made before
  *  stamps existed, kept by migration 202) and sit only in the install-time tables above, as unedited tags or spaces. */
-async function shellIsEmpty(workspaceId: string): Promise<{ empty: true } | { empty: false; kind: string }> {
-  const checks = [
-    ...SHELL_EMPTY_CHECKS.map((check) => ({ kind: check.kind, sql: check.sql.replace("{systemExternalId}", SYSTEM_EXTERNAL_ID_SQL).replace("{notTag}", notTagNodeSql()) })),
+/** The codes of the checks that name a table by something a person recognises (the rest are `rows_of_<table>`). */
+const TABLE_CHECK_CODES: Record<string, string> = { actor_prefs: "prefs" };
+
+/** The signs that someone wrote in a workspace (each query finds any row = not empty), with the table-by-table ones a snapshot carries. */
+function shellChecks(): { code: string; sql: string }[] {
+  return [
+    ...SHELL_EMPTY_CHECKS.map((check) => ({ code: check.code, sql: check.sql.replace("{systemExternalId}", SYSTEM_EXTERNAL_ID_SQL).replace("{notTag}", notTagNodeSql()) })),
     ...SNAPSHOT_SPECS.filter((spec) => !INSTALL_TABLES.includes(spec.table))
-      .map((spec) => ({ kind: `rows of ${spec.table}`, sql: `SELECT 1 FROM "${spec.table}"` })), // the WHOLE table, not the rows a snapshot would select (a suggestion that was decided is not carried, but a shell that holds one was used)
+      .map((spec) => ({ code: TABLE_CHECK_CODES[spec.table] ?? `rows_of_${spec.table}`, sql: `SELECT 1 FROM "${spec.table}"` })), // the WHOLE table, not the rows a snapshot would select (a suggestion that was decided is not carried, but a shell that holds one was used)
   ];
-  for (const check of checks) if ((await snapshotRows(`${check.sql} LIMIT 1`, [workspaceId])).rows.length > 0) return { empty: false, kind: check.kind };
+}
+
+async function shellIsEmpty(workspaceId: string): Promise<{ empty: true } | { empty: false; code: string }> {
+  for (const check of shellChecks()) if ((await snapshotRows(`${check.sql} LIMIT 1`, [workspaceId])).rows.length > 0) return { empty: false, code: check.code };
   return { empty: true };
 }
 
-/** Start joining: the workspace the database made for itself is empty (else refused) and is removed, a join record says what is
- *  being filled. Until `markJoinDone` the database is not a working one (it has no workspace). */
+/** What a database holds that is a person's own, all of which a join deletes: COUNTS only, by kinds a person recognises (never a title or a text), so a
+ *  confirmation can say what is about to go. A database a join accepts holds none of it. Each count is one of the signs shellIsEmpty looks for
+ *  (`of` names the check by its code), so "what makes a database not empty" and "what a join deletes" are one definition and the install's own rows are in neither. */
+export type JoinRemoval = { own_notes: number; trash: number; own_tags: number; spaces: number; files: number; prefs: number };
+const REMOVAL_COUNTS: { key: keyof JoinRemoval; of: string; and?: () => string }[] = [
+  { key: "own_notes", of: "own_notes", and: () => liveNodeSql() },
+  { key: "trash", of: "own_notes", and: () => `NOT (${liveNodeSql()})` },
+  { key: "own_tags", of: "own_tags" },
+  { key: "spaces", of: "spaces" },
+  { key: "files", of: "files" },
+  { key: "prefs", of: "prefs" },
+];
+
+/** The one answer to "would this database accept a join": `beginJoin` acts on it and the read-only probe (services/stampedJoin.ts
+ *  `joinReadiness`) returns it, so the two cannot disagree. `incoming` is the snapshot the join is for; the probe has none yet, so the one
+ *  check that needs it (a snapshot made on this very node) is left to `beginJoin`.
+ *  `kind` is the STABLE CODE of what made a database not empty: the `code` of a check in spine/snapshotTables.json `$shellEmptyChecks`
+ *  (person_writes, person_events, more_than_one_person, other_agent, access_token, ai_connection, files, own_tags, spaces, own_function_refs,
+ *  module_switch, applied_tag, own_notes, …), `prefs` for actor_prefs, `rows_of_<table>` for the other tables, or `more_than_one_workspace`.
+ *  A screen words it from the code; the code is never shown. The counts of JoinRemoval use the same codes (`trash` is the notes of `own_notes` in the trash). */
+type JoinDecision =
+  | { ready: true; shellIds: string[] }
+  | { ready: false; code: "join_in_progress" | "join_already_done" | "join_from_self" | "join_not_empty"; kind: string | null; message: string };
+
+export async function decideJoin(incoming: { sourceNode: string } | null): Promise<JoinDecision> {
+  const no = (code: Extract<JoinDecision, { ready: false }>["code"], message: string, kind: string | null = null): JoinDecision => ({ ready: false, code, kind, message });
+  if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE state = 'joining'`)).rows.length > 0) return no("join_in_progress", "a join is already running");
+  // ANY finished join, not only this snapshot's workspace: a database that was joined holds a working workspace, never an empty shell.
+  if ((await snapshotRows(`SELECT 1 FROM sync_join`)).rows.length > 0) return no("join_already_done", "this database was already joined");
+  if (incoming && incoming.sourceNode === (await localNodeId().catch(() => null))) return no("join_from_self", "a snapshot made on this node is not joined to this node");
+  const shells = (await snapshotRows<{ id: string }>(`SELECT id::text FROM workspaces`)).rows;
+  // A shell may carry the same id (copies of one packaged database do): it is empty, so it is replaced like any other.
+  // The invariant the rest of this file leans on: from here until the join ends the database holds exactly ONE workspace (the one being
+  // filled). More than one is refused here, the shell is deleted by beginJoin, no route or service makes a workspace, and writes into the
+  // joining one are refused (stamps.ts stampTransaction). So a row without a workspace column (node_tags, node_edges…) can only
+  // belong to it, and the page check does not look workspace by workspace for them.
+  if (shells.length > 1) return no("join_not_empty", "this database holds more than one workspace (more_than_one_workspace)", "more_than_one_workspace");
+  for (const shell of shells) {
+    const found = await shellIsEmpty(shell.id);
+    if (!found.empty) return no("join_not_empty", `this database already holds content of its own (${found.code})`, found.code);
+  }
+  return { ready: true, shellIds: shells.map((s) => s.id) };
+}
+
+/** What a join would delete (see JoinRemoval) from the workspace(s) the database holds now; reads only. */
+export async function readJoinRemoval(): Promise<JoinRemoval> {
+  const checks = shellChecks();
+  const shells = (await snapshotRows<{ id: string }>(`SELECT id::text FROM workspaces`)).rows;
+  const removal: JoinRemoval = { own_notes: 0, trash: 0, own_tags: 0, spaces: 0, files: 0, prefs: 0 };
+  for (const { key, of, and } of REMOVAL_COUNTS) {
+    const check = checks.find((c) => c.code === of);
+    if (!check) throw new Error(`no shell check named "${of}"`);
+    const sql = check.sql.replace(/^SELECT 1 FROM/, "SELECT count(*)::text AS n FROM") + (and ? ` AND ${and()}` : "");
+    // a check that names no workspace (an uploaded file) counts the whole table once
+    for (const shell of sql.includes("$1") ? shells : shells.filter((_, at) => at === 0)) removal[key] += Number((await snapshotRows<{ n: string }>(sql, [shell.id])).rows[0]!.n);
+  }
+  return removal;
+}
+
+/** Start joining: the workspace the database made for itself is empty (else refused, by `decideJoin`) and is removed, a join record says
+ *  what is being filled. Until `markJoinDone` the database is not a working one (it has no workspace). */
 export async function beginJoin(input: JoinInput): Promise<void> {
   if (!Number.isSafeInteger(input.cutSeq) || input.cutSeq < 0) throw refuse("join_bad_cut", "the cut is a whole number of at least 0");
   await withTransaction(async () => {
-    if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE state = 'joining'`)).rows.length > 0) throw refuse("join_in_progress", "a join is already running", 409);
-    if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE workspace_id = $1`, [input.workspaceId])).rows.length > 0) throw refuse("join_already_done", "this workspace was already joined", 409);
-    if (input.sourceNode === (await localNodeId().catch(() => null))) throw refuse("join_from_self", "a snapshot made on this node is not joined to this node");
-    const shells = (await snapshotRows<{ id: string }>(`SELECT id::text FROM workspaces`)).rows;
-    // A shell may carry the same id (copies of one packaged database do): it is empty, so it is replaced like any other.
-    // The invariant the rest of this file leans on: from here until the join ends the database holds exactly ONE workspace (the one being
-    // filled). More than one is refused here, the shell is deleted below, no route or service makes a workspace, and writes into the
-    // joining one are refused (stamps.ts stampTransaction). So a row without a workspace column (node_tags, node_edges…) can only
-    // belong to it, and the page check does not look workspace by workspace for them.
-    if (shells.length > 1) throw refuse("join_not_empty", "this database holds more than one workspace", 409);
+    const decision = await decideJoin({ sourceNode: input.sourceNode });
+    if (!decision.ready) throw refuse(decision.code, decision.message, decision.code === "join_from_self" ? 422 : 409);
     let shellPerson: ShellPerson | null = null;
-    for (const shell of shells) {
-      const found = await shellIsEmpty(shell.id);
-      if (!found.empty) throw refuse("join_not_empty", `this database already holds notes of its own (${found.kind})`, 409);
+    for (const shellId of decision.shellIds) {
       if (input.shellPersonId) {
         shellPerson = (await snapshotRows<ShellPerson>(
           `SELECT a.id::text, a.name, a.external_id, a.write_mode, COALESCE((SELECT w.owner_actor_id = a.id FROM workspaces w WHERE w.id = a.workspace_id), false) AS owner
-             FROM actors a WHERE a.id::text = $1 AND a.workspace_id = $2 AND a.type = 'human'`, [input.shellPersonId, shell.id])).rows[0] ?? null;
+             FROM actors a WHERE a.id::text = $1 AND a.workspace_id = $2 AND a.type = 'human'`, [input.shellPersonId, shellId])).rows[0] ?? null;
       }
       // Everything the empty workspace owns goes with it (the foreign keys cascade). The cascade runs the stamp triggers, which leave
       // tombstones and a clock behind: they go last, so the workspace that replaces it (maybe under the same id) starts clean.
       // Its events go too: the only ones an empty shell has are the sign-in's own (ACTOR_CREATED, which the first sign-in of every person writes),
       // and the table lets an event go only inside a transaction that opts in (db.ts pruneEvents, migration 051): this one, for this delete only.
       await snapshotRows(`SELECT set_config('myapp.allow_event_prune', 'on', true)`);
-      await snapshotRows(`DELETE FROM workspaces WHERE id = $1`, [shell.id]);
+      await snapshotRows(`DELETE FROM workspaces WHERE id = $1`, [shellId]);
       await snapshotRows(`SELECT set_config('myapp.allow_event_prune', '', true)`);
-      await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [shell.id]);
-      await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1`, [shell.id]);
-      await snapshotRows(`DELETE FROM sync_clock WHERE workspace_id = $1`, [shell.id]);
+      await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [shellId]);
+      await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1`, [shellId]);
+      await snapshotRows(`DELETE FROM sync_clock WHERE workspace_id = $1`, [shellId]);
     }
     await snapshotRows(
       `INSERT INTO sync_join (workspace_id, source_node, cut_seq, person_actor_id, shell_person) VALUES ($1, $2, $3, $4, $5::jsonb)`,

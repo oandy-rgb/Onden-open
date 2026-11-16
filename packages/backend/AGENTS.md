@@ -18,6 +18,7 @@
 | 路徑中的 bigint id | `routes/params.ts` 的 `parseBigintId`（其他請求輸入也各有一個讀取者） | `dupSweep.guard.test.ts`、`dup-b2-input.guard.test.ts` |
 | 新筆記預設落點（個人空間或預設空間） | `services/spaces.ts` | `dupSweep.guard.test.ts` |
 | 排序已存檢視 | `services/tagViews.ts` 的 `byPinThenName` | `dupSweep.guard.test.ts` |
+| 要求「剛剛再確認過是本人」才給整個工作區或做不可逆的事（再輸入一次密碼；伺服器強制，不只頁面） | `services/freshProof.ts` 的 `issueFreshProof`／`consumeFreshProof`；新的受保護路由在 `FRESH_PROOF_PURPOSES` 加一個用途 | `freshProof.guard.test.ts` |
 | 「只准人、不准 token」 | `spine/authority.ts` 的 `requirePerson` | `dup-b2-responses.guard.test.ts` |
 | 拒絕請求 | 丟 `StatusError`（`statusError.ts`），由 `httpError.ts` 映射；不手寫 4xx 回應本體 | `dup-b2-responses.guard.test.ts` |
 | 新的拒絕類別 | 繼承 `StatusError`，不直接 `extends Error` | `dup-b2-responses.guard.test.ts` |

@@ -57,6 +57,16 @@ class SnapshotForeignOrigin extends CodedStatusError {
 
 const sizeOf = (item: SnapshotItem) => new TextEncoder().encode(JSON.stringify(item)).length;
 
+/** This node's id, when a snapshot of `workspaceId` can be made here: refused (409 `snapshot_foreign_origin`) when the database holds stamps made on another node,
+ *  which this first stage cannot vouch for. The one definition: the read opens with it, and the route asks it before it spends a fresh-proof ticket. */
+export async function snapshotSourceNode(workspaceId: string): Promise<string> {
+  const node = (await snapshotRows<{ node_id: string }>(`SELECT node_id FROM sync_node WHERE singleton`)).rows[0]?.node_id;
+  if (!node) throw new Error("this database has no node id yet");
+  const foreign = await snapshotRows(`SELECT 1 FROM sync_stamps WHERE workspace_id = $1 AND origin NOT IN ($2, 'genesis') LIMIT 1`, [workspaceId, node]);
+  if (foreign.rows.length > 0) throw new SnapshotForeignOrigin();
+  return node;
+}
+
 export async function readStampedPages(
   authenticated: ActorCtx, workspaceId: string, options: ReadStampedPagesOptions, emit: (page: StampedPage) => Promise<void>,
 ): Promise<SnapshotSummary> {
@@ -69,10 +79,7 @@ export async function readStampedPages(
 
   return withActorReadSnapshot(authenticated, workspaceId, async (actor) => {
     await snapshotRows(`SELECT set_config('TimeZone', 'UTC', true)`);
-    const node = (await snapshotRows<{ node_id: string }>(`SELECT node_id FROM sync_node WHERE singleton`)).rows[0]?.node_id;
-    if (!node) throw new Error("this database has no node id yet");
-    const foreign = await snapshotRows(`SELECT 1 FROM sync_stamps WHERE workspace_id = $1 AND origin NOT IN ($2, 'genesis') LIMIT 1`, [workspaceId, node]);
-    if (foreign.rows.length > 0) throw new SnapshotForeignOrigin();
+    const node = await snapshotSourceNode(workspaceId);
     const cut = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
     const scopeOf = await snapshotScopeFor(actor);
 

@@ -59,7 +59,8 @@ vi.mock("../auth.js", () => ({
           ? { user: { id: sessionExternalId, name: "Write Matrix", email: `${sessionExternalId}@matrix.test` } }
           : null),
     },
-    $context: Promise.resolve({ runMigrations: async () => {} }),
+    // internalAdapter: the people here have no password account, which is what POST /api/fresh-proof asks the library about (409 fresh_proof_no_password)
+    $context: Promise.resolve({ runMigrations: async () => {}, internalAdapter: { findAccounts: async () => [] } }),
   },
 }));
 
@@ -213,6 +214,7 @@ const BODY_FILL: Record<string, BodyFill> = {
   "POST /api/agent-sessions/runners/:actor_id/enabled": json(() => ({ enabled: true })),
   "POST /api/backup/restore/:id/apply": json((g) => ({ space_id: g.space, mode: "merge" })),
   "POST /api/backup/restore/upload": none,
+  "POST /api/fresh-proof": json(() => ({ purpose: "snapshot_export", evidence: { kind: "acknowledgement" } })),
   "POST /api/snapshot": none,
   "POST /api/bookmark": json((g) => ({ url: "https://example.invalid/", space_id: g.space })),
   "POST /api/bookmark/preview": json(() => ({ url: "https://example.invalid/" })),

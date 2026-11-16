@@ -202,6 +202,7 @@ describe("spine gate — modules/*/ mutate through mutate(), not raw event()", (
 // never up. Shares the statement recogniser with eslint onden/no-route-writes.
 const SERVICE_WRITE_HELPERS: Record<string, { why: string; functions: string[] }> = {
   "modules/index.ts": { why: "workspaces.modules backfill at boot (the registry's own column)", functions: ["backfillModuleImports"] },
+  "services/freshProof.ts": { why: "fresh_proofs: a short-lived, single-use ticket that says the person proved it is them a moment ago (password, or a second explicit confirmation on the browser-only version); credential bookkeeping like rate_limit_hits, node-local, never workspace state, so no event", functions: ["consumeFreshProof", "grantFreshProof"] },
   "modules/review/seam.ts": { why: "review_states: the card's schedule copied when its text moves between a block and a child note, inside that operation's event transaction (the source rows stay, so undo finds them)", functions: ["copyProgress"] },
   "modules/review/settings.ts": { why: "actor_module_settings: the caller's own review settings, not shared knowledge", functions: ["clearPersonalSettings", "mergePersonalSettings", "replacePersonalSettings"] },
   "modules/review/state.ts": { why: "review_states: the caller's own review progress, written inside the grade's event transaction", functions: ["lockReviewState", "saveGradedState", "stepBackReviewState"] },

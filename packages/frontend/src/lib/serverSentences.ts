@@ -213,6 +213,21 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   mint_replayed: "The new site access tokens were made, but the reply was lost, so they can't be shown. Make new ones.",
   too_many_ids: "Too many items in one request.",
   bad_idempotency_key: "The request wasn't valid.",
+  fresh_proof_wrong_password: "That password is not right.",
+  fresh_proof_no_password: "This account has no password, so it cannot be confirmed here.",
+  fresh_proof_password_needed: "Type your password to confirm that it is you.",
+  fresh_proof_required: "Confirm that it is you first, then try again.",
+  fresh_proof_invalid: "That confirmation is not valid. Confirm again.",
+  fresh_proof_expired: "The confirmation ran out of time. Confirm again.",
+  fresh_proof_used: "That confirmation was already used. Confirm again.",
+  fresh_proof_locked: "Too many wrong passwords. Wait a while before trying again.",
+  join_data_shape: "This file was made by a different version of Onden. Update both devices, then make the file again.",
+  join_in_progress: "Notes are being added to this device right now. Try again when that has finished.",
+  join_already_done: "This device already holds notes brought from another device.",
+  join_not_empty: "This device already has notes of its own, so the notes from another device cannot be added.",
+  join_no_login: "This account could not open the notes after they are added, so nothing was added.",
+  join_from_self: "This file was made on this very device.",
+  snapshot_foreign_origin: "This device got its notes from another device, so it cannot make a file for a third one yet.",
 };
 
 /** The wording for a coded refusal that is not in the boot table, or null. */

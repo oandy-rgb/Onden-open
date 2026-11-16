@@ -5045,6 +5045,28 @@
         "guard:stampTablesServerSide"
       ],
       "why": "快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。"
+    },
+    {
+      "id": "be-fresh-proof",
+      "need": "要求「剛剛再確認過是本人」才給整個工作區或做不可逆的事（再輸入一次密碼）",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/services/freshProof.ts",
+          "exports": [
+            "issueFreshProof",
+            "consumeFreshProof",
+            "FRESH_PROOF_HEADER",
+            "FRESH_PROOF_PURPOSES"
+          ]
+        }
+      ],
+      "use": "import type { ActorCtx } from \"./types.js\";\nimport { consumeFreshProof, FRESH_PROOF_HEADER, issueFreshProof } from \"./services/freshProof.js\";\nexport async function example(actor: ActorCtx, password: string, request: Request) {\n  await issueFreshProof(actor, \"snapshot_export\", { kind: \"password\", password });\n  await consumeFreshProof(actor, \"snapshot_export\", request.headers.get(FRESH_PROOF_HEADER));\n}",
+      "replaces": "只在頁面上要求再輸入密碼、伺服器不查",
+      "rules": [
+        "guard:freshProof"
+      ],
+      "why": "票限時 2 分鐘、只能用一次、綁人與用途；伺服器只存雜湊、不寫入日誌。新的受保護路由在 FRESH_PROOF_PURPOSES 加一行用途即可。"
     }
   ]
 }

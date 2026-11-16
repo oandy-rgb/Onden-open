@@ -13,9 +13,9 @@ import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { getWorkspaceId, migrate, q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, digestAs, fillFrom, makeCaller, openNode, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace, type Capture, type SourceWorld } from "./helpers/stampedWorld.js";
+import { buildSourceWorld, capture, digestAs, exportAs, fillFrom, makeCaller, openNode, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace, type Capture, type SourceWorld } from "./helpers/stampedWorld.js";
 import { readStampedPages } from "../services/stampedSnapshot.js";
-import { abandonJoin, applyJoinPage, finishJoin, joinProgress, startJoin } from "../services/stampedJoin.js";
+import { abandonJoin, applyJoinPage, databaseJoinReadiness, finishJoin, joinProgress, startJoin } from "../services/stampedJoin.js";
 import { computeSnapshotDigest, compareDigests, type StampedPage } from "../spine/snapshotSql.js";
 import { SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
 import { markJoinDone, readJoinProgress } from "../spine/stampedImport.js";
@@ -241,7 +241,20 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
   afterEach(async () => { for (const n of opened.splice(0)) await n.close(); });
   afterAll(async () => { await src?.close(); });
 
-  const join = (node: RealNode, c: Capture = cap) => onNode(node, () => startJoin({ workspaceId: world.ws, sourceNode: c.summary.source, cutSeq: c.summary.cut, personActorId: world.owner.id }));
+  // EVERY refusal case of this file goes through `join`, so each one is also a check that the read-only probe (what GET /api/snapshot/readiness answers)
+  // said the same thing the join then did: ready when the join went through, the same code (and, for a not-empty database, the same kind) when it refused.
+  const join = async (node: RealNode, c: Capture = cap) => {
+    const probe = await onNode(node, () => databaseJoinReadiness());
+    try {
+      await onNode(node, () => startJoin({ workspaceId: world.ws, sourceNode: c.summary.source, cutSeq: c.summary.cut, personActorId: world.owner.id }));
+    } catch (error) {
+      const refused = error as { code?: string; message: string };
+      expect(probe, `the probe said ${JSON.stringify(probe)} but the join refused with ${refused.code}`).toMatchObject({ ready: false, code: refused.code });
+      if (!probe.ready && "kind" in probe && probe.kind !== null) expect(refused.message).toContain(probe.kind);
+      throw error;
+    }
+    expect(probe.ready, `the probe refused (${JSON.stringify(probe)}) but the join went through`).toBe(true);
+  };
   const apply = (node: RealNode, page: StampedPage) => onNode(node, () => applyJoinPage(page));
   const finish = (node: RealNode, c: Capture = cap, pages = c.pages.length) => onNode(node, () => finishJoin({ workspaceId: world.ws, pages, digest: c.summary.digest, localLogin: null }));
   const abandon = (node: RealNode) => onNode(node, () => abandonJoin(world.ws));
@@ -346,7 +359,7 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
       const space = (await q<{ id: string }>(`SELECT id::text FROM spaces WHERE workspace_id = $1 AND is_default`, [ws])).rows[0]!.id;
       await makeCaller(actor)("POST", "/api/nodes", { title: "My own note", markdown: "mine", space_id: space });
     });
-    await expect(join(node)).rejects.toThrow(/notes of its own/);
+    await expect(join(node)).rejects.toThrow(/content of its own/);
     await onNode(node, async () => {
       expect((await q<{ n: string }>(`SELECT count(*)::text AS n FROM content_nodes WHERE title = 'My own note'`)).rows[0]!.n).toBe("1");
     });
@@ -417,7 +430,7 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
         const ws = (await q<{ id: string }>(`SELECT id::text FROM workspaces WHERE slug = 'default'`)).rows[0]!.id;
         await write(ws, await persistActor(ws, { id: "", name: "Local", role: "admin", type: "human" }));
       });
-      await expect(join(node), what).rejects.toThrow(/notes of its own/);
+      await expect(join(node), what).rejects.toThrow(/content of its own/);
       await onNode(node, async () => { expect((await q<{ n: string }>(`SELECT count(*)::text AS n FROM workspaces`)).rows[0]!.n, what).toBe("1"); });
     }
   }, 120_000);
@@ -429,7 +442,7 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
       const actor = await persistActor(ws, { id: "", name: "Local", role: "admin", type: "human" });
       await seedQ(`INSERT INTO actor_prefs (actor_id, key, value) VALUES ($1, 'language', '"zh-TW"'::jsonb)`, [actor.id]);
     });
-    await expect(join(lone)).rejects.toThrow(/rows of actor_prefs/);
+    await expect(join(lone)).rejects.toThrow(/prefs/);
     const worked = await receiver("system-work");
     await onNode(worked, async () => {
       const ws = (await q<{ id: string }>(`SELECT id::text FROM workspaces WHERE slug = 'default'`)).rows[0]!.id;
@@ -544,7 +557,7 @@ describe.skipIf(!isTestDb)("the snapshot routes", () => {
     src = await openNode("route-source");
     dst = await openNode("route-receiver");
     world = await buildSourceWorld(src);
-    const res = await onNode(src, async () => appFor(world.owner).request("/api/snapshot"));
+    const res = await onNode(src, async () => exportAs(world.owner));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     text = await onNode(src, () => res.text());

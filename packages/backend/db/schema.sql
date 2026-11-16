@@ -3917,6 +3917,7 @@ INSERT INTO schema_migrations (version) VALUES ('203_ink_chunks') ON CONFLICT (v
 INSERT INTO schema_migrations (version) VALUES ('204_stamped_snapshot_join') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('205_stamp_saw_heads') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('206_sync_change_bundles') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('207_fresh_proofs') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5615,3 +5616,18 @@ BEGIN
   IF p_table = 'content_nodes' AND NOT p_deleted AND NOT v_quiet AND p_field NOT IN ('*', 'sort') THEN PERFORM sync_touch_updated_at(p_ws, p_key); END IF;
 END;
 $$ LANGUAGE plpgsql;
+-- 207: single-use tickets for "just proved who they are" (db/migrations/207_fresh_proofs.sql)
+CREATE TABLE IF NOT EXISTS fresh_proofs (
+  ticket_hash text PRIMARY KEY,
+  actor_id    uuid NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  purpose     text NOT NULL,
+  session_id  text,
+  expires_at  timestamptz NOT NULL,
+  used_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS fresh_proofs_expires_idx ON fresh_proofs (expires_at);
+CREATE TABLE IF NOT EXISTS fresh_proof_attempts (
+  actor_id     uuid PRIMARY KEY REFERENCES actors(id) ON DELETE CASCADE,
+  failures     integer NOT NULL DEFAULT 0,
+  locked_until timestamptz
+);

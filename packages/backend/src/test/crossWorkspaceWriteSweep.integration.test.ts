@@ -39,7 +39,8 @@ vi.mock("../auth.js", () => ({
       getSession: vi.fn(async () =>
         sessionExternalId ? { user: { id: sessionExternalId, name: "Sweep", email: `${sessionExternalId}@sweep.test` } } : null),
     },
-    $context: Promise.resolve({ runMigrations: async () => {} }),
+    // internalAdapter: the people here have no password account, which is what POST /api/fresh-proof asks the library about (409 fresh_proof_no_password)
+    $context: Promise.resolve({ runMigrations: async () => {}, internalAdapter: { findAccounts: async () => [] } }),
   },
 }));
 vi.mock("../db.js", async (original) => {

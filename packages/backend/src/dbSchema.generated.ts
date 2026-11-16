@@ -524,6 +524,21 @@ export interface FocusSessions {
   workspace_id: string;
 }
 
+export interface FreshProofAttempts {
+  actor_id: string;
+  failures: Generated<number>;
+  locked_until: Timestamp | null;
+}
+
+export interface FreshProofs {
+  actor_id: string;
+  expires_at: Timestamp;
+  purpose: string;
+  session_id: string | null;
+  ticket_hash: string;
+  used_at: Timestamp | null;
+}
+
 export interface FunctionRefs {
   config: Generated<Json>;
   created_at: Generated<Timestamp>;
@@ -992,6 +1007,8 @@ export interface DB {
   external_calendar_events: ExternalCalendarEvents;
   external_calendars: ExternalCalendars;
   focus_sessions: FocusSessions;
+  fresh_proof_attempts: FreshProofAttempts;
+  fresh_proofs: FreshProofs;
   function_refs: FunctionRefs;
   id_rewrites: IdRewrites;
   idempotency_keys: IdempotencyKeys;

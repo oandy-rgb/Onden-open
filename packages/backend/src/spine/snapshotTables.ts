@@ -66,7 +66,7 @@ const fill = (template: string, s: Scope) => template.replace(/\{(row|node|space
  *  tables a fresh install already holds rows in are checked for any row that is NOT one an install makes (a tag whose name is not one of the
  *  built-in ones, a space that is not the default, system, restricted or a person's own, a function reference that is not the task one, a module
  *  switch, a tag applied to anything but the Site Config note), whatever the row's stamp says — a row of an older database carries only a genesis stamp. `{systemExternalId}` and `{notTag}` are filled in by spine/stampedImport.ts. */
-export const SHELL_EMPTY_CHECKS: { kind: string; sql: string }[] = (data as unknown as Record<string, { kind: string; sql: string }[]>)["$shellEmptyChecks"]!;
+export const SHELL_EMPTY_CHECKS: { code: string; sql: string }[] = (data as unknown as Record<string, { code: string; sql: string }[]>)["$shellEmptyChecks"]!;
 
 export const SNAPSHOT_SPECS: SnapshotSpec[] = Object.entries(data as unknown as Record<string, Entry>).filter(([table]) => !table.startsWith("$")).map(([table, e]) => ({
   table, pk: e.pk, order: e.order, where: (s) => fill(e.where, s), exclude: e.exclude, placeholders: e.placeholders, deferred: e.deferred, stamps: e.stamps,

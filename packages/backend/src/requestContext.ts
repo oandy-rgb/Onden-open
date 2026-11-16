@@ -111,3 +111,9 @@ export function createSerialContextProvider(): ContextProvider {
 const requestDevice = createContextSlot<string>();
 export const withRequestDevice = <R>(deviceId: string, fn: () => R): R => requestDevice.run(deviceId, fn);
 export const currentDeviceId = (): string | undefined => requestDevice.getStore();
+
+/** The sign-in session (better-auth's session id) the request arrived with, set by the actor middleware in app.ts for a person's request. Bearer tokens, native
+ *  requests and background work have none. Read by services/freshProof.ts, which binds a ticket to the session it was handed to. */
+const requestSession = createContextSlot<string>();
+export const withRequestSession = <R>(sessionId: string, fn: () => R): R => requestSession.run(sessionId, fn);
+export const currentSessionId = (): string | undefined => requestSession.getStore();

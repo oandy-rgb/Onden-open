@@ -50,7 +50,7 @@ import { anchorRowsForNotes } from "./blockAnchors/index.js";
 import { noteInkFiles, withInkEmbeds } from "./exportInk.js";
 import { holderViewsSql } from "./functionRefSql.js";
 import type { TaskListLang } from "./taskListFile.js";
-import { attributeValues, bundleMedia, linkNameKey, replaceWikilinks, linkSlug, splitWikilink, wikilinkNames, encodeValues, entryFor, entryValue, CHILD_KEY_PREFIX, isListValue, mediaRefs, readFrontmatter, writeFrontmatter, type FrontmatterEntry, type FrontmatterValue, isUuid, isSystemAttr, PUBLISH_OFF_KEY, PUBLISH_OFF_FALLBACK_KEY, publishOffEntry, fieldValue, UUID_SOURCE, INK_PAGE_ATTRS, parseInkRegion, writeLegacyIds, type PartLinkExportMode } from "@onden/markdown";
+import { attributeValues, bundleMedia, rewriteMediaRefs, linkNameKey, replaceWikilinks, linkSlug, splitWikilink, wikilinkNames, encodeValues, entryFor, entryValue, CHILD_KEY_PREFIX, isListValue, mediaRefs, readFrontmatter, writeFrontmatter, type FrontmatterEntry, type FrontmatterValue, isUuid, isSystemAttr, PUBLISH_OFF_KEY, PUBLISH_OFF_FALLBACK_KEY, publishOffEntry, fieldValue, UUID_SOURCE, INK_PAGE_ATTRS, parseInkRegion, writeLegacyIds, type PartLinkExportMode } from "@onden/markdown";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
 import { isTag, isCanvas } from "@onden/markdown/contract";
 
@@ -403,8 +403,9 @@ export function vaultBases(index: VaultIndexRow[], backup: boolean): Map<string,
   for (const n of files) {
     if (!n.deleted) continue;
     let base = `.trash/${vaultName(n)}`;
-    if (takenBases.has(base)) base = `${base}-${n.id.slice(0, 6)}`;
-    takenBases.add(base);
+    // Compared in lower case: a vault unzipped on Windows or macOS would let `note.md` overwrite `Note.md`.
+    if (takenBases.has(base.toLowerCase())) base = `${base}-${n.id.slice(0, 6)}`;
+    takenBases.add(base.toLowerCase());
     baseById.set(n.id, base);
   }
   return baseById;
@@ -499,6 +500,18 @@ export async function writeVault(
     return true;
   };
 
+  // A link becomes `<up>attachments/<file>` only when that file is in the archive. One
+  // the person cannot read or whose file is gone keeps the address it had (and is counted
+  // in the left-out report): a path to a file that is not there is worse than a dead link.
+  const mediaSkipped = new Set<string>();
+  const bundleCopiedMedia = async (text: string, up: string): Promise<{ content: string; copied: string[] }> => {
+    const copied = new Set<string>();
+    for (const ref of mediaRefs(text)) {
+      if (await copyMedia(ref)) copied.add(ref); else mediaSkipped.add(ref);
+    }
+    return { content: rewriteMediaRefs(text, (file, match) => (copied.has(file) ? `${up}attachments/${file}` : match)), copied: [...copied] };
+  };
+
   const inkNames = new Set<string>();
   let notes = 0;
   for (let at = 0; at < index.length; at += BATCH) {
@@ -541,11 +554,11 @@ export async function writeVault(
         const body = wikilinksByFileName(rewriteLinks(text, baseById, up), links, baseById, titleById);
         // One bundle pass over the whole file, frontmatter included: a PDF
         // note's pdf_url and a media field travel like a body link.
-        const { content, ids: refs } = bundleMedia(
+        const { content, copied } = await bundleCopiedMedia(
           exportedNoteFile({ ...n, tags }, withFileNameAlias(relationsAsLinks(attributes, titleById), deleted.has(id) ? null : fileNameAlias(base, n.title)), body),
-          (file) => `${up}attachments/${file}`,
+          up,
         );
-        for (const ref of refs) if (await copyMedia(ref)) media.add(ref);
+        for (const ref of copied) media.add(ref);
         file = `${base}.md`;
         // A drawing travels as pictures in a Markdown export. A backup keeps the
         // note's text as stored and carries the strokes themselves in its sidecar.
@@ -570,12 +583,10 @@ export async function writeVault(
     taken: new Set([...baseById.values()].map((base) => `${base}.md`.toLowerCase())),
     noteFile: async (markdown) => {
       const up = toRoot(1);
-      const { content, ids: refs } = bundleMedia(rewriteLinks(markdown, baseById, up), (file) => `${up}attachments/${file}`);
-      for (const ref of refs) await copyMedia(ref);
-      return content;
+      return (await bundleCopiedMedia(rewriteLinks(markdown, baseById, up), up)).content;
     },
   });
-  if (!backup) await writeLeftOutReport(out, actor, workspaceId, options.lang ?? "zh-TW");
+  if (!backup) await writeLeftOutReport(out, actor, workspaceId, options.lang ?? "zh-TW", mediaSkipped.size);
   return { notes, attachments: mediaCopied.size, tasks };
 }
 

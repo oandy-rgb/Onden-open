@@ -118,5 +118,29 @@ describe.skipIf(!enabled)("Notion database CSV + pages → import", () => {
       }
     }), roundTripRuns());
   }, 300_000);
-});
 
+  // Scan 14 #5. A database whose tag name is already taken (the same export imported again) is not made; the import says
+  // so for each of them instead of reporting only the loose pages that came in because of it.
+  const databaseConflicts = (report: { conflicts: Array<{ path: string; reason: string }> }) => report.conflicts.filter((c) => c.reason === "database_unavailable");
+
+  it("importing a Notion export a second time lists every database it could not create", async () => {
+    await fc.assert(fc.asyncProperty(notionSpec("none"), async (spec) => {
+      const { files } = notionFiles(spec);
+      const w = await freshWorkspace("rt-notion-again");
+      const first = await importFiles(w.ws, w.actor, files);
+      expect(databaseConflicts(first), "first import").toEqual([]);
+      const second = await importFiles(w.ws, w.actor, files);
+      const listed = databaseConflicts(second).map((c) => c.path.split("/")[0]!.replace(/(_all)?\.csv$/, "")).sort();
+      expect(listed).toEqual(spec.databases.map((d) => d.name).sort());
+      expect(second.skipped, "skipped counts them").toBeGreaterThanOrEqual(spec.databases.length);
+    }), roundTripRuns({ maxRuns: 6 }));
+  }, 300_000);
+
+  it("a CSV whose name is a tag already there is listed as not created (fixed case)", async () => {
+    const files = [{ path: "Books.csv", content: "Name,Status\nDune,s1\n" }];
+    const w = await freshWorkspace("rt-notion-taken");
+    await importFiles(w.ws, w.actor, files);
+    const again = await importFiles(w.ws, w.actor, files);
+    expect(databaseConflicts(again)).toEqual([{ path: "Books.csv", reason: "database_unavailable" }]);
+  }, 120_000);
+});

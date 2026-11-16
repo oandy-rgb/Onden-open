@@ -7,7 +7,7 @@ import { Button, Checkbox, FieldError, FileInput, Select, TextField } from "../.
 import { DataRow } from "../../settings/DataRow";
 import type { SettingContext } from "../../lib/settingsTypes";
 import DrawingImportReport from "./DrawingImportReport";
-import { MAX_REQUEST_BYTES, importedMediaKind, uploadFolderImport, type FolderImportFile, type ImportResult, type SkippedNoteReason } from "./folderImport";
+import { MAX_REQUEST_BYTES, importedMediaKind, isHiddenImportPath, uploadFolderImport, type FolderImportFile, type ImportResult, type SkippedNoteReason } from "./folderImport";
 import type { ImportSource } from "@onden/contract";
 
 // 「匯入資料夾」 in Your Data › Import: one chosen folder goes to POST
@@ -84,7 +84,7 @@ export default function FolderImportSetting({ ctx }: { ctx: SettingContext }) {
           trash.push({ path: [TRASH_FOLDER, ...inner.slice(1)].join("/"), content: await file.text() });
           continue;
         }
-        if (rel.split("/").some((part) => part.startsWith("."))) { hidden++; continue; }
+        if (isHiddenImportPath(rel)) { hidden++; continue; }
         const path = pathParts.length > 1 ? pathParts.slice(1).join("/") : rel;
         const ext = extLower(file.name);
         if (ext === ".md" || ext === ".csv") files.push({ path, content: await file.text() });
@@ -163,6 +163,7 @@ export default function FolderImportSetting({ ctx }: { ctx: SettingContext }) {
     unavailable:"Note unavailable or permission denied; nothing replaced",
     invalid_tag_name:"One of its tags has a name a tag can't have (/ # , : { }); not imported",
     folder_unavailable:"Its folder could not be created or reused; not imported",
+    database_unavailable:"A tag with this name already exists or is not allowed, so the database was not created",
     too_large:"Over the {max}-character note limit; not imported",
     invalid_text:"Contains a character that can't be saved (an empty or broken character); not imported",
   }[reason], { max: NODE_MARKDOWN_MAX.toLocaleString("en-US") });

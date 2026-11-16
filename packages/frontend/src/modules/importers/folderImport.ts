@@ -14,6 +14,8 @@
 //     a database as `X.csv` (and maybe `X_all.csv`) plus a folder `X/` of
 //     pages, and a row takes its body from a page in its own request. Each
 //     database is one batch; one too large for a request is listed, not sent.
+//   • a parent note `X.md` goes with the notes under `X/`, and a task list `X/X.md` with its task notes
+//     (noteFamilies): the server finds those only among one request's files.
 
 import { MAX_REQUEST_BYTES as PROXY_MAX_REQUEST_BYTES, MEDIA_TYPES } from "@onden/markdown";
 import { convertDrawings, mergeDrawingReports, type DrawingImportFile, type DrawingReport } from "./drawingImport";
@@ -33,7 +35,15 @@ export function importedMediaKind(name: string): ImportedMediaKind | null {
   const kind = MEDIA_TYPES[ext]!.kind;
   return kind === "image" || kind === "pdf" ? kind : "media";
 }
-export type SkippedNoteReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "folder_unavailable" | "too_large" | "invalid_text";
+/** Whether a chosen file is hidden: a name starting with a dot anywhere under the chosen folder. The chosen folder's
+ *  own name does not count (`~/.notes` is a fine folder to import); `rel` is `webkitRelativePath`, its first part the
+ *  folder, or a bare file name when files were chosen one by one. */
+export function isHiddenImportPath(rel: string): boolean {
+  const parts = rel.split("/");
+  return (parts.length > 1 ? parts.slice(1) : parts).some(part => part.startsWith("."));
+}
+
+export type SkippedNoteReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "folder_unavailable" | "database_unavailable" | "too_large" | "invalid_text";
 export type ImportResult = Partial<DrawingReport> & {
   source?: ImportSource;
   /** Every skipped note with its reason (skipped === conflicts.length). */
@@ -92,6 +102,37 @@ export type TooLarge = { path: string; kind: "file" | "collection" };
  *  lowercased — the key the server dedups `X.csv` and `X_all.csv` on. */
 const collectionKey = (csvPath: string) => csvPath.toLowerCase().replace(/(?:_all)?\.csv$/, "");
 
+/** `files` grouped so notes that belong together stay together: a parent note `X.md` with every file under `X/`,
+ *  and a task list `X/X.md` with the files in its folder (its task notes). Case-insensitive, like the server's
+ *  path matching; a file in no such family is a group of one. Order of first appearance is kept. */
+function noteFamilies(files: FolderImportFile[]): FolderImportFile[][] {
+  const root = new Map<string, string>(); // lowercase path -> the family's root path
+  const lower = files.map(file => file.path.toLowerCase());
+  const owners = new Set<string>(); // folders that have a parent note or a task list
+  for (const path of lower) {
+    if (!path.endsWith(".md")) continue;
+    const stem = path.slice(0, -3);
+    owners.add(stem); // `X.md` owns `X/`
+    const slash = stem.lastIndexOf("/");
+    if (slash >= 0 && stem.slice(slash + 1) === stem.slice(stem.lastIndexOf("/", slash - 1) + 1, slash)) owners.add(stem.slice(0, slash)); // `X/X.md` owns `X/`
+  }
+  const find = (key: string): string => { let at = key; while (root.has(at) && root.get(at) !== at) at = root.get(at)!; return at; };
+  const join = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) root.set(rb, ra); };
+  for (const path of lower) root.set(path, path);
+  for (const path of lower) {
+    for (let slash = path.indexOf("/"); slash >= 0; slash = path.indexOf("/", slash + 1)) {
+      const folder = path.slice(0, slash);
+      if (owners.has(folder)) join(`${folder}.md`, path);
+    }
+  }
+  const groups = new Map<string, FolderImportFile[]>();
+  files.forEach((file, index) => {
+    const key = find(lower[index]!);
+    groups.set(key, [...groups.get(key) ?? [], file]);
+  });
+  return [...groups.values()];
+}
+
 /** Split files into request-sized batches: images first, then each CSV
  *  database with the pages in its folder (the innermost database owns a
  *  nested folder), then the remaining text. A file, or a database, that alone
@@ -99,19 +140,26 @@ const collectionKey = (csvPath: string) => csvPath.toLowerCase().replace(/(?:_al
 export function planImportBatches(files: FolderImportFile[], targetBytes = BATCH_TARGET_BYTES, maxRequestBytes = MAX_REQUEST_BYTES) {
   const tooLarge: TooLarge[] = [];
   const batches: FolderImportFile[][] = [];
-  const pack = (group: FolderImportFile[]) => {
+  // A unit is files that must arrive in one request (see noteFamilies). One too big to keep whole is split file by file.
+  const pack = (units: FolderImportFile[][]) => {
     let current: FolderImportFile[] = [], size = 0;
-    for (const file of group) {
-      const bytes = fileBytes(file);
-      if (bytes > maxRequestBytes) { tooLarge.push({ path: file.path, kind: "file" }); continue; }
+    const add = (file: FolderImportFile[], bytes: number) => {
       if (current.length && size + bytes > targetBytes) { batches.push(current); current = []; size = 0; }
-      current.push(file); size += bytes;
+      current.push(...file); size += bytes;
+    };
+    for (const unit of units) {
+      const unitBytes = unit.reduce((sum, file) => sum + fileBytes(file), 0);
+      if (unit.length > 1 && unitBytes <= maxRequestBytes) { add(unit, unitBytes); continue; }
+      for (const file of unit) {
+        const bytes = fileBytes(file);
+        if (bytes > maxRequestBytes) tooLarge.push({ path: file.path, kind: "file" }); else add([file], bytes);
+      }
     }
     if (current.length) batches.push(current);
   };
   const images = files.filter(file => "base64" in file);
   const text = files.filter(file => !("base64" in file));
-  pack(images);
+  pack(images.map(file => [file]));
 
   // Databases: each CSV (with its _all twin) and the pages under its folder.
   const collections = new Map<string, FolderImportFile[]>();
@@ -139,7 +187,7 @@ export function planImportBatches(files: FolderImportFile[], targetBytes = BATCH
     }
     batches.push(group);
   }
-  pack(loose);
+  pack(noteFamilies(loose));
   return { batches, tooLarge };
 }
 

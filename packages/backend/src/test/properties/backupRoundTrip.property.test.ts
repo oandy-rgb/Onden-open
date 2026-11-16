@@ -27,6 +27,7 @@ import { fullBackup, restoreBackup } from "../helpers/roundTripApi.js";
 import { makeSpace } from "../helpers/spaceFixtures.js";
 import { zipEntries } from "../helpers/zipEntries.js";
 import { seedQ } from "../helpers/seedQ.js";
+import { q } from "../../db.js";
 import { readApp, appDifferences, APP_PARTS, type AppPart } from "../helpers/roundTripRich.js";
 import { RICH_LOSSES, inkValue, minimalWorld, type RichLoss } from "../helpers/roundTripRichSpec.js";
 import { registerShippedModules } from "../helpers/registerShippedModules.js";
@@ -34,7 +35,6 @@ import { workspaceSwitch } from "../helpers/workspaceSwitch.js";
 import { stageBackupUpload } from "../../services/backupFile.js";
 import { measureFullBackup } from "../../services/backupArchive.js";
 import { Readable } from "node:stream";
-import { q } from "../../db.js";
 import { setNodeAttribute } from "../../services/attributeWrites.js";
 
 registerShippedModules();
@@ -254,5 +254,67 @@ describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
     expect((await measureFullBackup(a.actor, a.ws)).bytes).toBeGreaterThan(0);
     const zip = await fullBackup(a.ws, a.actor);
     await expect(stageBackupUpload(a.actor.id, Readable.from([zip]), zip.length, { maxBytes: zip.length - 1 })).rejects.toMatchObject({ code: "backup_too_large" });
+  }, 120_000);
+
+  // Scan 14 #7. A partial backup (`note=`) records only the links between notes it holds; a restore must not delete the
+  // links the restored note's text has to a note that is not in the backup. A `[[title]]` resolves inside the note's own
+  // space, so the notes outside the backup must be in the space restored into: the backed-up notes are removed for good
+  // from their own workspace and the backup is merged back (a session written elsewhere, brought home).
+  // Property: the links from the restored notes to notes outside the backup are the same as before the notes were removed.
+  const outsideLinks = async (ws: string, titles: string[]) => (await q<{ pair: string }>(
+    `SELECT s.title || ' → ' || t.title AS pair FROM node_edges e
+       JOIN content_nodes s ON s.id = e.source_node_id JOIN content_nodes t ON t.id = e.target_node_id
+      WHERE e.workspace_id = $1 AND e.origin = 'wikilink' AND s.title = ANY($2::text[]) AND NOT (t.title = ANY($2::text[])) AND t.deleted_at IS NULL
+      ORDER BY 1`, [ws, titles])).rows.map((r) => r.pair);
+
+  /** Back up the flat live notes picked by `flips` as a partial backup, remove them from their workspace and merge the backup back. */
+  async function partialBackupHome(spec: WorldSpec, flips: boolean[]) {
+    const a = await freshWorkspace("rt-part");
+    const built = await buildWorld(spec, a);
+    const hasChild = (i: number) => spec.notes.some((n) => n.parent === i);
+    const picked = spec.notes.map((n, i) => !n.trashed && n.parent === null && !hasChild(i) && !!flips[i % flips.length]);
+    const titles = spec.notes.filter((_n, i) => picked[i]).map((n) => n.title);
+    const before = await outsideLinks(a.ws, titles);
+    const zip = await fullBackup(a.ws, a.actor, spec.notes.flatMap((_n, i) => (picked[i] ? [`note=${built.noteIds[i]}`] : [])).join("&"));
+    const ids = spec.notes.flatMap((_n, i) => (picked[i] ? [built.noteIds[i]!] : []));
+    const kept = spec.notes.findIndex((n, i) => !picked[i] && !n.trashed);
+    const space = kept < 0 ? null : (await q<{ space_id: string }>(`SELECT space_id::text FROM content_nodes WHERE id = $1`, [built.noteIds[kept]])).rows[0]!.space_id;
+    return { a, titles, before, zip, ids, space };
+  }
+
+  it("a partial backup merged back keeps the links that point outside the backup", async () => {
+    const worth = (s: WorldSpec) => s.notes.some((n) => !n.trashed && n.blocks.some((b) => b.kind === "link" && b.via === "wikilink"));
+    await fc.assert(fc.asyncProperty(worldSpec({ maxNotes: 5 }).filter(worth), fc.array(fc.boolean(), { minLength: 5, maxLength: 5 }), async (spec, flips) => {
+      const { a, titles, before, zip, ids, space } = await partialBackupHome(spec, flips);
+      if (before.length === 0 || space === null) return;
+      await seedQ(`DELETE FROM content_nodes WHERE id = ANY($1::uuid[])`, [ids]);
+      await restoreBackup(a.ws, a.actor, zip, space, "merge");
+      expect(await outsideLinks(a.ws, titles)).toEqual(before);
+    }), roundTripRuns({ maxRuns: 8 }));
+  }, 600_000);
+
+  it("a note merged back from a partial backup is still linked to the note outside it (fixed case)", async () => {
+    const note = (title: string, blocks: WorldSpec["notes"][number]["blocks"]) => ({ title, parent: null, blocks, tags: [], attrs: [], trashed: false, media: false });
+    const { a, before, zip, ids, space } = await partialBackupHome({ tags: [], canvas: null, notes: [note("Algorithms", []), note("Session", [{ kind: "link", target: 0, alias: null, via: "wikilink" }])] }, [false, true]);
+    expect(before).toEqual(["Session → Algorithms"]);
+    await seedQ(`DELETE FROM content_nodes WHERE id = ANY($1::uuid[])`, [ids]);
+    await restoreBackup(a.ws, a.actor, zip, space!, "merge");
+    expect(await outsideLinks(a.ws, ["Session"])).toEqual(["Session → Algorithms"]);
+  }, 120_000);
+
+  // Review of the fix above: the link step must not grow a query with the size of the restore (a Postgres query takes at most
+  // 65,535 parameters; a 16 GB backup holds more notes than that). Fixed case: a restore of 70,000 notes' ids in one call.
+  it("the link step works when the restore made more notes than one query may name", async () => {
+    const note = (title: string, blocks: WorldSpec["notes"][number]["blocks"]) => ({ title, parent: null, blocks, tags: [], attrs: [], trashed: false, media: false });
+    const a = await freshWorkspace("rt-part-many");
+    const built = await buildWorld({ tags: [], canvas: null, notes: [note("Inside", []), note("Outside", []), note("Source", [
+      { kind: "link", target: 0, alias: null, via: "wikilink" }, { kind: "link", target: 1, alias: null, via: "wikilink" }])] }, a);
+    const { settleWikilinkEdges } = await import("../../services/backupLinks.js");
+    const [inside, , source] = built.noteIds as [string, string, string];
+    const many = new Set([inside, source, ...Array.from({ length: 70_000 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`)]);
+    const { withTransaction } = await import("../../db.js");
+    await withTransaction(() => settleWikilinkEdges(a.ws, [{ id: source, deleted: false, targets: [] }], many));
+    // `Inside` is among the restored notes and the backup recorded no link to it: gone. `Outside` is not: kept.
+    expect(await outsideLinks(a.ws, ["Source"])).toEqual(["Source → Outside"]);
   }, 120_000);
 });

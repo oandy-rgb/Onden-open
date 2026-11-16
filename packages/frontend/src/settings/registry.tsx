@@ -1,6 +1,6 @@
 import { Bell, Blocks, Bot, CalendarDays, Clock, Home, History, Info, Keyboard, Languages, NotebookPen, PanelBottom, PenLine, Palette, Shield, UserRound, Users, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getApiBase, setApiBase, reloadPage, pageOrigin } from "../lib/api";
+import { getApiBase, markdownExportUrl, setApiBase, reloadPage, pageOrigin } from "../lib/api";
 import { confirmDialog } from "../components/ConfirmDialog";
 import {
   getStoragePref,
@@ -218,7 +218,7 @@ function MarkdownExportWidget(_: { ctx: SettingContext }) {
     <DataRow
       title={tr("Export as Markdown")}
       hint={tr("For Obsidian, Logseq or any text editor.")}
-      action={<Link className={buttonClass("secondary")} href={`${getApiBase()}/api/export/markdown.zip`} download="onden-export.zip">{tr("Export")}</Link>}
+      action={<Link className={buttonClass("secondary")} href={markdownExportUrl()} download="onden-export.zip">{tr("Export")}</Link>}
     />
   );
 }

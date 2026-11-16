@@ -1246,6 +1246,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Choose another folder": "改選資料夾",
   "Files not imported ({count})": "未匯入的檔案（{count}）",
   "Its folder could not be created or reused; not imported": "無法建立或沿用所在資料夾，未匯入",
+  "A tag with this name already exists or is not allowed, so the database was not created": "已有同名的標籤，或沒有權限建立，所以沒有建立這個資料庫",
   "Image too large": "圖片太大",
   "Over the {max}-character note limit; not imported": "超過筆記 {max} 字元上限，未匯入",
   "Titles shortened to {max} characters ({count})": "標題已縮短為 {max} 字元（{count}）",

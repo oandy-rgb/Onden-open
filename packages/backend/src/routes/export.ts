@@ -20,6 +20,8 @@ router.get("/markdown.zip", async (c) => {
   const archive = await buildMarkdownExport(c.get("actor") ?? null, workspaceId, { lang });
   return c.body(Readable.toWeb(archive) as ReadableStream, 200, {
     ...attachmentHeaders("onden-export.zip", "application/zip"),
+    // Like the backup download: a person's notes are not for a shared cache or the back button.
+    "Cache-Control": "no-store",
   });
 });
 

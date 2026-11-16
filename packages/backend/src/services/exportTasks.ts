@@ -6,14 +6,14 @@
 import { localDayId } from "../localDay.js";
 import type { ActorCtx } from "../types.js";
 import type { ArchiveSink } from "./archiveStream.js";
+import { vaultName } from "./vaultPath.js";
 import { readableStandaloneTasks } from "./standaloneTasks.js";
 import { DONE_AT_KEY, STATUS_KEY, TASK_FOLDER, renderTaskList, type TaskListItem, type TaskListLang } from "./taskListFile.js";
 
-/** A file name for a task's note: its title without what a file name or a
- *  `[[link]]` cannot carry. */
+/** A file name for a task's note: the one rule every note's file name follows (vaultName: unsafe
+ *  characters, 200 bytes, Windows reserved names). */
 function noteStem(title: string): string {
-  const stem = title.replace(/[\\/:*?"<>|#^[\]\r\n]/g, " ").replace(/\s+/g, " ").replace(/^[\s.]+|[\s.]+$/g, "");
-  return stem || "task";
+  return vaultName({ id: "task", title, slug: null });
 }
 
 /** Write the task list and the task notes into `out`; returns how many

@@ -21,8 +21,9 @@ describe("Settings zip export link (lossless route)", () => {
     expect(link, "export widget should render a download link").toBeTruthy();
 
     // Robust to whatever getApiBase() resolves to (empty same-origin in tests):
-    // assert the path, and explicitly reject the lossy bare endpoint.
-    expect(link!.getAttribute("href")).toMatch(/\/api\/export\/markdown\.zip$/);
+    // assert the path (it carries the app's language: "?lang=en" in an English interface),
+    // and explicitly reject the lossy bare endpoint.
+    expect(link!.getAttribute("href")).toMatch(/\/api\/export\/markdown\.zip(\?lang=en)?$/);
     expect(link!.getAttribute("href")).not.toMatch(/\/api\/export$/);
   });
 });

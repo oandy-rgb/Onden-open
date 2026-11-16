@@ -28,6 +28,8 @@ import { seedClassTag } from "./helpers/seedClassTag.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 import { seedQ } from "./helpers/seedQ.js";
+import sharp from "sharp";
+import { storeMedia } from "../services/media.js";
 
 registerShippedModules();
 
@@ -64,7 +66,7 @@ describe.skipIf(!isTestDatabase())("single-note Markdown export = the zip's file
   let ws = "";
   const stamp = Date.now();
   const alice: ActorCtx = { id: "", name: "Alice", role: "admin", type: "human" };
-  let note = "", target = "", tag = "";
+  let note = "", target = "", tag = "", cover = "";
 
   beforeAll(async () => {
     ownWorkspace = (await q<{ id: string }>(`INSERT INTO workspaces (name, slug) VALUES ('Test', $1) RETURNING id::text`, [`single-export-${ownWorkspaceUuid()}`])).rows[0]!.id;
@@ -75,10 +77,14 @@ describe.skipIf(!isTestDatabase())("single-note Markdown export = the zip's file
     // test's in the shared database (whose size would otherwise set its cost).
     await q(`DELETE FROM space_members m USING spaces s WHERE s.id = m.space_id AND s.workspace_id = $1 AND s.is_default AND m.actor_id = $2`, [ws, alice.id]);
     const app = appFor(alice);
+    // A real stored attachment: the zip points a link at `attachments/` only for a file it copies.
+    const stored = await storeMedia(await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 9, b: 9 } } }).png().toBuffer(), ".png", { actor: alice, workspaceId: ws, origin: "upload" });
+    if (!stored.ok) throw new Error(`media: ${stored.reason}`);
+    cover = stored.filename;
     target = (await (await app.request("/api/nodes", json("POST", { title: `D52 target ${stamp}`, markdown: "" }))).json() as { id: string }).id;
     note = (await (await app.request("/api/nodes", json("POST", {
       title: `D52 book ${stamp}`,
-      markdown: `---\nstatus: draft\n---\nSee [the target](onden://node/${target}) and ![](/api/media/${stamp}-cover.png).\n`,
+      markdown: `---\nstatus: draft\n---\nSee [the target](onden://node/${target}) and ![](/api/media/${cover}).\n`,
     }))).json() as { id: string }).id;
     await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'status', 'draft', 'frontmatter')
              ON CONFLICT DO NOTHING`, [ws, note]);
@@ -112,8 +118,8 @@ describe.skipIf(!isTestDatabase())("single-note Markdown export = the zip's file
     const targetTitle = (await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [target])).rows[0]!.title;
     expect(file).toContain(`[the target](./${targetTitle.replace(/ /g, "%20")}.md)`);
     // The media link stays the server path; the client makes it absolute.
-    expect(file).toContain(`![](/api/media/${stamp}-cover.png)`);
-    expect(zipped).toContain(`![](./attachments/${stamp}-cover.png)`);
+    expect(file).toContain(`![](/api/media/${cover})`);
+    expect(zipped).toContain(`![](./attachments/${cover})`);
   });
 
   it("exports the caller's unsaved text, without writing it", async () => {
@@ -121,5 +127,17 @@ describe.skipIf(!isTestDatabase())("single-note Markdown export = the zip's file
     expect(file).toContain("A draft not saved yet");
     expect(file).toContain("status: done");
     expect((await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [note])).rows[0]!.markdown).not.toContain("not saved");
+  });
+
+  // Scan 14 #9: a link to a file the zip does not hold keeps its address, so the zip's file is the note as it is.
+  it("keeps the server path in the zip for an attachment that is not stored", async () => {
+    const lost = `${stamp}-lost.png`;
+    const app = appFor(alice);
+    const id = (await (await app.request("/api/nodes", json("POST", { title: `D52 lost ${stamp}`, markdown: `![](/api/media/${lost})\n` }))).json() as { id: string }).id;
+    try {
+      const zip = unzip(Buffer.from(await (await app.request("/api/export/markdown.zip")).arrayBuffer()));
+      expect(zip.get(`D52 lost ${stamp}.md`)).toContain(`![](/api/media/${lost})`);
+      expect(zip.get(`D52 lost ${stamp}.md`)).not.toContain("attachments/");
+    } finally { await seedQ(`DELETE FROM content_nodes WHERE id = $1`, [id]); }
   });
 });

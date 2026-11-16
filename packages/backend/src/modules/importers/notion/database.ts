@@ -48,6 +48,8 @@ export type MdFile = { path: string; content: string };
 export type NotionDbImportResult = {
   /** Number of database tags created (one per CSV database). */
   collections: number;
+  /** CSV files whose database was not made (a refused schema: permission, or a tag of that name already there). */
+  databasesSkipped: string[];
   /** Number of rows turned into notes. */
   rows: number;
   /** Rows skipped (bad data, or dedup'd by Notion page id). */
@@ -204,6 +206,7 @@ export async function importNotionDatabases(
 ): Promise<NotionDbImportResult> {
   const result: NotionDbImportResult = {
     collections: 0,
+    databasesSkipped: [],
     rows: 0,
     rowsSkipped: 0,
     bodiesAttached: 0,
@@ -269,6 +272,7 @@ export async function importNotionDatabases(
       // A refused schema (permission, name collision) skips this database and
       // keeps the rest; any other failure stops the import.
       if (!isImportRefusal(error)) throw error;
+      result.databasesSkipped.push(file.path);
       continue;
     }
     result.collections++;

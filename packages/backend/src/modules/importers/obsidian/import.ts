@@ -134,7 +134,7 @@ export async function importObsidian(authenticated: ActorCtx | null, readInput: 
   // attributes around setNodeAttribute, is gone: nothing asked for it.)
   const csvFilesAll = files.filter((f) => "content" in f && isCsvPath(f.path)) as Array<{ path: string; content: string }>;
   const mdFilesAll = files.filter((f) => "content" in f && isMarkdownPath(f.path)) as Array<{ path: string; content: string }>;
-  let deepCollections = 0, deepRows = 0, deepRowsSkipped = 0, deepBodies = 0;
+  let databasesSkipped: string[] = [], deepCollections = 0, deepRows = 0, deepRowsSkipped = 0, deepBodies = 0;
   let deepBodiesSkipped: Array<{ path: string; reason: "too_large" }> = [];
   // Titles cut to the note cap (services/noteSize.ts): a note's file name or
   // frontmatter title (path), a database row's title cell (path + row).
@@ -150,6 +150,7 @@ export async function importObsidian(authenticated: ActorCtx | null, readInput: 
       deepCollections = deep.collections;
       deepRows = deep.rows;
       deepRowsSkipped = deep.rowsSkipped;
+      databasesSkipped = deep.databasesSkipped;
       deepBodies = deep.bodiesAttached;
       deepBodiesSkipped = deep.bodiesSkipped;
       titlesTruncated.push(...deep.titlesTruncated);
@@ -174,9 +175,11 @@ export async function importObsidian(authenticated: ActorCtx | null, readInput: 
   // Every skipped note is listed in `conflicts` with its reason, so
   // skipped === conflicts.length; nothing is dropped without saying why.
   let imported = 0, skipped = 0, updated = 0, unchanged = 0;
-  const conflicts: Array<{ path: string; reason: ImportConflictReason | "folder_unavailable" }> = [];
+  const conflicts: Array<{ path: string; reason: ImportConflictReason | "folder_unavailable" | "database_unavailable" }> = [];
   // A database row's page body over the cap: the row is in, its body is not.
   for (const body of deepBodiesSkipped) { skipped++; conflicts.push(body); }
+  // A database that was not made (its name is taken, or it is not allowed): its CSV is listed, not dropped quietly.
+  for (const path of databasesSkipped) { skipped++; conflicts.push({ path, reason: "database_unavailable" }); }
   for (const conflict of taskLists.conflicts) { skipped++; conflicts.push(conflict); }
   titlesTruncated.push(...taskLists.titlesTruncated);
   const written: Array<{ path: string; nodeId: string; content: string }> = [];

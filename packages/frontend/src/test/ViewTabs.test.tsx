@@ -3,6 +3,8 @@
 // tab; what 「＋」 offers and says.
 // The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
 import "./helpers/offlineNetwork";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ViewTabs } from "../components/viewTabs";
@@ -13,6 +15,7 @@ import { takeViewSettingsRequest } from "../lib/viewSettingsRequest";
 import { clearPhoneLayout, setPhoneLayout } from "./phoneMedia";
 import { SplitDropHint } from "../components/splitView";
 import { onSplitDrop, splitDrag } from "../lib/splitViewStore";
+import { ZH_TW_LATE } from "../lib/i18n.zh-TW.late";
 
 vi.mock("../lib/localDb", async (original) => ({ ...await original<typeof import("../lib/localDb")>(), getPendingWrites: vi.fn(async () => []) }));
 
@@ -22,6 +25,8 @@ vi.mock("../lib/data/domainWriters", async (load) => {
   return { ...actual, viewWriter: { create: writes.create, update: writes.update, remove: writes.remove } };
 });
 const confirm = vi.hoisted(() => vi.fn(async () => true));
+const toasts: string[] = [];
+vi.mock("../lib/appStore", async (original) => ({ ...await original<typeof import("../lib/appStore")>(), addToast: (message: string) => { toasts.push(message); } }));
 vi.mock("../components/ConfirmDialog", async (load) => ({ ...await load<typeof import("../components/ConfirmDialog")>(), confirmDialog: confirm }));
 
 const NODE = "00000000-0000-4000-8000-00000000a001";
@@ -79,7 +84,8 @@ describe("ViewTabs", () => {
       if (phone) {
         fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
         fireEvent.contextMenu(tab("Content"));
-        expect(screen.queryByRole("menu")).toBeNull(); // nothing else in it: a phone has no 「開在右邊」
+        // A phone has no 「開在右邊」: 「內容」's menu is only the removal, which one who may change the note has.
+        expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Remove tab"]);
       }
     } finally { clearPhoneLayout(); }
   });
@@ -453,12 +459,12 @@ describe("ViewTabs", () => {
       expect(tab("B")).toHaveAttribute("draggable", "true");
     });
 
-    it("「內容」 can be held, but its menu offers only 「開在右邊」: it has nothing to rename, move or delete", async () => {
+    it("「內容」 can be held, but its menu offers only 「開在右邊」 and the removal: it has nothing to rename or move", async () => {
       await two();
       touch("pointerdown", 20, 10, tab("Content"));
       await hold();
       touch("pointerup", 20, 10);
-      expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Open on the right"]);
+      expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Open on the right", "Remove tab"]);
     });
 
     it("the browser's own long-press contextmenu is swallowed while held", async () => {
@@ -509,5 +515,152 @@ describe("ViewTabs", () => {
     renderTabs({ activeKey: "v1" });
     await waitFor(() => tab("Shelf"));
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+// 「內容」 can be removed from any note's row (a record of layout content says it is hidden) and added back from 「＋」;
+// the text is never touched. The strip, the phone's row and the whiteboard drawer's list are this one component.
+describe("ViewTabs: removing and adding back 「內容」", () => {
+  beforeEach(() => {
+    resetAppState({ online: true }); resetOwnerViews(); localStorage.clear(); setModules(null);
+    reply.views = [];
+    for (const fn of [onSelect, writes.create, writes.update, writes.remove, confirm]) fn.mockClear();
+    toasts.length = 0;
+  });
+  const hiddenRecord = (extra: Record<string, unknown> = {}) => saved("c1", "Content", "content", { layout_config: { hidden: true }, pin_order: 1, ...extra });
+  const openMenuOf = (name: string) => { fireEvent.contextMenu(tab(name)); return screen.getByRole("menu"); };
+
+  it("an existing note (no record): 「內容」 stays first, and its menu offers 「Remove tab」, which asks once in plain words and then hides it", async () => {
+    reply.views = [saved("v1", "Shelf", "table")];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "Shelf"]));
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Remove tab" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const message = String((confirm.mock.calls[0] as unknown[])[0]);
+    expect(message).toBe("Remove the “Content” tab? The text is still there; only the tab is hidden. Search, publishing and export still include it.");
+    expect(ZH_TW_LATE[message.replace("“Content”", "“{name}”")]).toContain("文字還在，只是分頁看不見；搜尋、發布、匯出仍然包含它");
+    // Only the record is written: a hidden tab of layout content; the note's text has no writer here at all.
+    // Stored under the English word whatever the interface language is, and never as a second record's name.
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ name: "Content", layout: "content", layout_config: { hidden: true } }));
+    expect(writes.update).not.toHaveBeenCalled();
+  });
+
+  it("offline, the first removal (it makes the record) is refused before anything is asked: one sentence, nothing changes", async () => {
+    resetAppState({ online: false });
+    reply.views = [saved("v1", "Shelf", "table")];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "Shelf"]));
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Remove tab" }));
+    await waitFor(() => expect(toasts).toEqual(["Removing the tab needs a connection."]));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(writes.create).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("removing the last other tab while 「內容」 is hidden shows 「內容」 again in the same removal", async () => {
+    reply.views = [saved("h1", "Handwriting", "handwriting"), hiddenRecord()];
+    renderTabs({ activeKey: "h1" });
+    await waitFor(() => expect(tabNames()).toEqual(["Handwriting"]));
+    fireEvent.click(within(openMenuOf("Handwriting")).getByRole("menuitem", { name: "Delete view" }));
+    await waitFor(() => expect(writes.remove).toHaveBeenCalledWith({ kind: "node", id: NODE }, "h1"));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "c1", { layout_config_patch: { hidden: null }, pin_order: 1 }));
+  });
+
+  it("declining the question changes nothing; removing the open 「內容」 moves the page to the tab it opens on", async () => {
+    reply.views = [saved("v1", "Shelf", "table")];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "Shelf"]));
+    confirm.mockResolvedValueOnce(false);
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Remove tab" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(writes.create).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Remove tab" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(onSelect).toHaveBeenCalledWith("v1");
+  });
+
+  it("a note whose only tab is 「內容」 cannot remove it (no menu), and a read-only member has no removal anywhere", async () => {
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content"]));
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.contextMenu(tab("Content"));
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "Remove tab" })).toBeNull();
+  });
+
+  it.each([["wide", false], ["phone", true]])("%s: read-only members get no remove and no ＋, even with 「內容」 hidden", async (_name, phone) => {
+    setPhoneLayout(phone);
+    try {
+      reply.views = [saved("v1", "Shelf", "table"), hiddenRecord()];
+      renderTabs({ canManage: false });
+      await waitFor(() => expect(tabNames()).toEqual(["Shelf"]));
+      expect(screen.queryByRole("button", { name: "Add a view" })).toBeNull();
+      fireEvent.contextMenu(tab("Shelf"));
+      const items = screen.queryByRole("menu") ? within(screen.getByRole("menu")).queryAllByRole("menuitem").map((i) => i.textContent) : [];
+      expect(items.filter((text) => /Remove|Delete|Rename|Move/.test(text ?? ""))).toEqual([]);
+    } finally { clearPhoneLayout(); }
+  });
+
+  it("a record that says hidden leaves 「內容」 out; the first tab showing is first; 「＋」 lists 「內容」 first and choosing it shows it again, last", async () => {
+    reply.views = [saved("v1", "Shelf", "table"), saved("v2", "Month", "calendar", { pin_order: 2 }), hiddenRecord()];
+    renderTabs({ activeKey: "v1" });
+    await waitFor(() => expect(tabNames()).toEqual(["Shelf", "Month"]));
+    const panel = await openAdd();
+    expect(within(panel).getAllByRole("button")[0]!.textContent).toBe("Content");
+    fireEvent.click(within(panel).getByRole("button", { name: "Content" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledTimes(1));
+    // The hidden flag goes by itself (another device's other settings are kept) and the tab takes the place after the last one.
+    expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "c1", { layout_config_patch: { hidden: null }, pin_order: 3 });
+    expect(writes.create).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("content"));
+  });
+
+  it("a note whose 「內容」 shows is not offered it in 「＋」", async () => {
+    reply.views = [saved("v1", "Shelf", "table"), hiddenRecord({ layout_config: {}, pin_order: 1 })];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Shelf", "Content"]));
+    const panel = await openAdd();
+    expect(within(panel).queryByRole("button", { name: "Content" })).toBeNull();
+  });
+
+  it("with a record, 「內容」 is a tab like the others: it moves, and removing it only sets the flag", async () => {
+    reply.views = [saved("v1", "Shelf", "table"), hiddenRecord({ layout_config: {}, pin_order: 1 })];
+    renderTabs({ activeKey: "content" });
+    await waitFor(() => expect(tabNames()).toEqual(["Shelf", "Content"]));
+    const menu = openMenuOf("Content");
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(expect.arrayContaining(["Move left", "Remove tab"]));
+    // 「內容」 keeps its name: the question, 「＋」 and the removal all call it that.
+    expect(within(menu).queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Move left" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "c1", { pin_order: 0 }));
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Remove tab" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "c1", { layout_config_patch: { hidden: true } }));
+    expect(writes.remove).not.toHaveBeenCalled();
+  });
+
+  it("an open 「內容」 that a record hides (here or on another device) falls back to the first tab showing, not to 「內容」", async () => {
+    reply.views = [saved("v1", "Shelf", "table"), hiddenRecord()];
+    renderTabs({ activeKey: "content" });
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("v1"));
+    expect(onSelect).not.toHaveBeenCalledWith("content");
+  });
+
+  it("the same row serves the strip, the phone's row and the whiteboard drawer's list", async () => {
+    for (const phone of [false, true]) {
+      setPhoneLayout(phone);
+      try {
+        reply.views = [saved("v1", "Shelf", "table"), hiddenRecord()];
+        const { unmount } = render(<div className={phone ? "phone-view-tabs" : "center-lens-bar"}>
+          <ViewTabs owner={{ kind: "node", id: NODE, name: "Reading list" }} activeKey="v1" earnsWhiteboard={false} canManage fields={[]} onSelect={onSelect} /></div>);
+        await waitFor(() => expect(tabNames()).toEqual(["Shelf"]));
+        expect((await openAdd())).toBeInTheDocument();
+        unmount();
+        resetOwnerViews();
+      } finally { clearPhoneLayout(); }
+    }
+    // Where NotesWorkspace draws it: the strip, the phone's row and the board drawer's sheet are all this component.
+    const source = readFileSync(join(__dirname, "../components/workspace/NotesWorkspace.tsx"), "utf8");
+    expect(source.match(/<ViewTabs /g)).toHaveLength(3);
   });
 });

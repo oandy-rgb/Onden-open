@@ -2,6 +2,7 @@
 // that keeps its name and place; services/viewLayouts.ts). No database.
 import { beforeAll, describe, expect, it } from "vitest";
 import { assertLayoutForTag, viewCreateSchema, viewPatchSchema } from "../services/tagViews.js";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
 import { isNoteOnlyViewLayout, isStoredViewLayout, isViewLayout, viewLayouts, WHITEBOARD_LAYOUT } from "../services/viewLayouts.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 
@@ -32,6 +33,15 @@ describe("stored view layouts", () => {
     expect(() => assertLayoutForTag("slides")).toThrowError(expect.objectContaining({ status: 422, code: "view_layout_not_for_tags" }));
     expect(() => assertLayoutForTag("canvas")).not.toThrow();
     expect(() => assertLayoutForTag(undefined)).not.toThrow();
+  });
+
+  it("a note's own 「內容」 tab is a stored layout of a note's views: not a view module, and a tag's views refuse it", () => {
+    expect(CONTENT_LAYOUT).toBe("content");
+    expect(isStoredViewLayout(CONTENT_LAYOUT)).toBe(true);
+    expect(isViewLayout(CONTENT_LAYOUT)).toBe(false);
+    expect(isNoteOnlyViewLayout(CONTENT_LAYOUT)).toBe(true);
+    expect(viewCreateSchema.parse({ name: "Content", layout: "content", pin_order: 3 })).toMatchObject({ layout: "content", pin_order: 3, visible_fields: [] });
+    expect(() => assertLayoutForTag(CONTENT_LAYOUT)).toThrowError(expect.objectContaining({ status: 422, code: "view_layout_not_for_tags" }));
   });
 
   it("an unknown layout is still refused, and the old list layout is a table", () => {

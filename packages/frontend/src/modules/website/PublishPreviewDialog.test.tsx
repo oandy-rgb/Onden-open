@@ -1,6 +1,6 @@
 // The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
 import "../../test/helpers/offlineNetwork";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PublishPreviewDialog from "./PublishPreviewDialog";
 import type { PendingPublish } from "./publishPreview";
@@ -235,6 +235,24 @@ describe("publish preview dialog", () => {
       fireEvent.click(putBack[0]!);
       await waitFor(() => expect(onChanged).toHaveBeenCalled());
       expect(putOnSiteSpy).toHaveBeenCalledWith(expect.objectContaining({ id: "c" }));
+    });
+
+    it("asks the server again only after the write went through, and not when it failed", async () => {
+      spaceState.spaces = [everyone];
+      const space = { id: "sp-all", kind: "shared" as const, is_default: true, name: "共用" };
+      const onChanged = vi.fn();
+      let finish!: (ok: boolean) => void;
+      putOnSiteSpy.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+      render(<PublishPreviewDialog pending={pending({ ...base, left_out: [{ node_id: "c", title: "Child", reason: "kept_off_by_parent", space }] })}
+        publishing={false} online onConfirm={() => {}} onCancel={() => {}} onChanged={onChanged} />);
+      fireEvent.click(screen.getByRole("button", { name: "Put back on the site" }));
+      await act(async () => { await Promise.resolve(); });
+      expect(onChanged).not.toHaveBeenCalled(); // the write has not gone out yet
+      await act(async () => { finish(false); });
+      expect(onChanged).not.toHaveBeenCalled(); // it failed: the list stays as the server last said
+      putOnSiteSpy.mockImplementationOnce(async () => true);
+      fireEvent.click(screen.getByRole("button", { name: "Put back on the site" }));
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     });
   });
 });

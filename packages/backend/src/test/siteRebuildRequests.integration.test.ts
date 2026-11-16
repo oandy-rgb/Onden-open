@@ -58,6 +58,15 @@ describe.skipIf(!isTestDatabase())("what asks the site for a re-push", () => {
     expect(await pending()).toBe("0");
   });
 
+  // Scan 13 中等 3, NOT FIXED (needs a decision, see the PR): emptying a note's text takes it off the live site
+  // (publishedSet BLANK_SQL) but asks for no re-push, so the static copy keeps the old page.
+  it.fails("emptying the text of a note the site shows asks for a re-push", async () => {
+    const id = await note("To be emptied");
+    await reset();
+    expect((await send(`/api/nodes/${id}`, "PATCH", { markdown: "" })).status).toBe(200);
+    expect(await pending()).toBe("1");
+  });
+
   it("trashing notes the site shows asks once, however many", async () => {
     const [a, b] = [await note("A"), await note("B")];
     await reset();

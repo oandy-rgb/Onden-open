@@ -15,7 +15,7 @@ export { StaticSiteUnavailable } from "./staticSite.js";
 export { ensureSiteBundle, storedSiteBundle, readSearchIndexFile } from "./siteBundle.js";
 export { loadServedSite, servedSiteVersion, publishedUrlFor, siteShowsMedia, singleNoteExport } from "./servedSite.js";
 export { noteSiteState, type NoteSiteState } from "./noteSiteState.js";
-export { overlaySiteConfig, leftOutNotes } from "./publishedSet.js";
+export { overlaySiteConfig, leftOutNotes, blockedFromSite } from "./publishedSet.js";
 export { scrubStoredSnapshot } from "./redaction.js";
 export { md2html } from "./htmlUtils.js";
 export { buildSingleNoteHtml } from "./singleNoteHtml.js";

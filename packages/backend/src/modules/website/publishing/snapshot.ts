@@ -10,7 +10,7 @@ import { event, q, withTransaction } from "../../../db.js";
 import { eventActorType, type ActorCtx } from "../../../types.js";
 import { CodedStatusError } from "../../../statusError.js";
 import { enqueueSiteOutput } from "../../../services/outbox.js";
-import { expectedPagesUrl } from "./githubPages.js";
+import { staticSiteUrl } from "./cname.js";
 import { overlaySiteConfig, publishedNodeIds, uniquePublishedSlugs } from "./publishedSet.js";
 import { scrubUnpublishedParents, attachPublishedTags, linkAliasesBySlug, publishedAliases, publishedNames, redactPayloadNodes } from "./redaction.js";
 import { readerHash, type PayloadEdge, type PayloadNode } from "./siteDiff.js";
@@ -289,7 +289,7 @@ export async function buildAndEnqueueSnapshot(
     const candidate = await buildCandidate(workspaceId, { ...opts, actor: opts.actor ?? asReader(actor) });
     if (opts.expectedHash !== undefined && candidateHash(candidate) !== opts.expectedHash) throw new PublishPreviewStale();
     const { homeNodeId } = candidate;
-    const artifactRef = expectedPagesUrl() ?? "/site/";
+    const artifactRef = (await staticSiteUrl(workspaceId)) ?? "/site/";
 
     const snapshot = await q<Record<string, unknown> & { id: string; artifact_ref: string }>(
       `INSERT INTO publish_snapshots (workspace_id, title, home_node_id, event_cursor, payload, artifact_ref)
@@ -339,7 +339,10 @@ export async function listSnapshots(workspaceId: string) {
      LIMIT 20`,
     [workspaceId],
   );
-  return result.rows;
+  // The link is the address the site is at now: a custom domain set or cleared since a publish
+  // changes where the static copy lives, and the stored value (made at publish) would not follow.
+  const address = (await staticSiteUrl(workspaceId)) ?? "/site/";
+  return result.rows.map((row) => ({ ...row, artifact_ref: address }));
 }
 
 // Take down what the live workspace removed since the last publish: push the

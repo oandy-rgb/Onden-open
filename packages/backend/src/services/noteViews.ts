@@ -11,6 +11,8 @@
 // Routes (routes/nodes.ts) only parse the request and shape the response.
 
 import { attributeValues, encodeValues, isListValue, isUuid } from "@onden/markdown";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
+import { CodedStatusError } from "../statusError.js";
 import { randomUUID } from "node:crypto";
 import { pool, q } from "../db.js";
 import type { ActorCtx } from "../types.js";
@@ -100,6 +102,11 @@ export async function createNoteView(actor: ActorCtx, workspaceId: string, nodeI
   return withEventTransaction(workspaceId, async () => {
     if (!(await readableNoteUnderLock(actor, workspaceId, nodeId))) return null;
     await assertLayoutImported(workspaceId, v.layout);
+    // A note has one 「內容」 record: two devices removing the tab at once, or a retry, get the one already there.
+    if (v.layout === CONTENT_LAYOUT) {
+      const existing = (await viewRecordsOf("note", workspaceId, nodeId)).find((record) => record.layout === CONTENT_LAYOUT);
+      if (existing) return { id: existing.id };
+    }
     const viewId = randomUUID();
     await mutate({
       actor,
@@ -138,6 +145,10 @@ export async function updateNoteView(actor: ActorCtx, workspaceId: string, nodeI
     if (!(await readableNoteUnderLock(actor, workspaceId, nodeId))) return false;
     const prev = await viewRecordById("note", workspaceId, nodeId, viewId);
     if (!prev) return false;
+    // The 「內容」 record is made as one (createNoteView keeps it single); no other view turns into a second one.
+    if (updates.layout === CONTENT_LAYOUT && prev.layout !== CONTENT_LAYOUT) {
+      throw new CodedStatusError(422, "view_layout_not_changeable", `a view cannot become the "${CONTENT_LAYOUT}" tab`);
+    }
     await assertLayoutImported(workspaceId, updates.layout);
     await mutate({
       actor,

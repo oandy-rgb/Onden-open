@@ -48,9 +48,3 @@ export const opensOnWhiteboardView = (view: { layout_config?: Record<string, unk
 export function isWhiteboardNote(node: NodeViews): boolean {
   return isRetiredBoardKind(node) || whiteboardTabOf(node) !== null;
 }
-
-/** The note opens on its whiteboard until the person chooses another tab. */
-export function opensOnWhiteboard(node: NodeViews): boolean {
-  if (isRetiredBoardKind(node)) return true;
-  return opensOnWhiteboardView(whiteboardTabOf(node));
-}

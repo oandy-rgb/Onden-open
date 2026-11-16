@@ -29,7 +29,7 @@ export function homePublishBody(settings: SiteSettings, homeOverride?: string | 
  *  (the write itself succeeded for the rest). True when none failed. */
 export function reportIncluded(result: { failed?: unknown[] } | { deduped: true }): boolean {
   const failed = "failed" in result && Array.isArray(result.failed) ? result.failed.length : 0;
-  if (failed > 0) addToast(t("{n} notes could not be published together: their space does not publish.", { n: failed }), "error");
+  if (failed > 0) addToast(t("{n} notes could not be published together: they are hidden or in a space that does not publish.", { n: failed }), "error");
   return failed === 0;
 }
 

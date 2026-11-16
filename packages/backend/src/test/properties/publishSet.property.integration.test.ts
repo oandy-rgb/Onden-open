@@ -24,7 +24,8 @@
 // Replay: PROPS_SEED=<seed> PROPS_RUNS=<n> (helpers/propsConfig).
 // SAFETY: skips entirely unless DATABASE_URL points at a *_test database.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
 import fc from "fast-check";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -39,6 +40,20 @@ import { modelPublished, worldArb, type World } from "../helpers/publishSetModel
 import { createNote } from "../../services/noteCreate.js";
 import { persistActor } from "../helpers/persistActor.js";
 import { setWorkspaceOwner } from "../helpers/setOwner.js";
+import { apiOnError } from "../../httpError.js";
+import publishRouter from "../../modules/website/routes.js";
+import { registerShippedModules } from "../helpers/registerShippedModules.js";
+import type { ActorCtx } from "../../types.js";
+
+// 10 drives POST /api/publish/include as the workspace owner of the run's own workspace.
+let includeWorkspace = "";
+let includeActor: ActorCtx | null = null;
+vi.mock("../../db.js", async (original) => ({ ...await original<typeof import("../../db.js")>(), getWorkspaceId: async () => includeWorkspace }));
+registerShippedModules();
+const includeApp = new Hono<{ Variables: { actor: ActorCtx | null } }>();
+includeApp.onError(apiOnError);
+includeApp.use("*", async (c, next) => { c.set("actor", includeActor); await next(); });
+includeApp.route("/api", publishRouter);
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const DEFAULT_RUNS = 25;
@@ -228,4 +243,44 @@ describe.skipIf(!isTestDb)("空間發布 properties (publishedNodeIds)", () => {
       })(await build(world, identity(world.notes.length)));
     }), runsCap(15));
   }, 600_000);
+
+  // Scan 13 中等 10: 「一起發布」 used to answer "published" for a note that marking cannot put on the site
+  // (its space does not publish, or it is hidden, trashed or machinery).
+  it("10: 「一起發布」 publishes exactly the notes marking can put on the site (as the model says) and reports the others as failed, writing nothing for them", async () => {
+    await checkAsync(fc.asyncProperty(worldArb, fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (world, picks) => {
+      if (world.notes.length === 0) return;
+      const chosen = [...new Set(picks.map((p) => p % world.notes.length))];
+      await (async (b: Built) => {
+        const actor = await persistActor(b.ws, { id: "", name: `Owner ${b.ws.slice(0, 6)}`, type: "human", role: "admin" });
+        await setWorkspaceOwner(b.ws, actor.id);
+        for (const spaceId of b.spaceIds) await seedQ(`INSERT INTO space_members (space_id, actor_id, permission) VALUES ($1, $2::uuid, 'edit')`, [spaceId, actor.id]);
+        includeWorkspace = b.ws; includeActor = { ...actor, role: "admin" };
+        const res = await includeApp.request("/api/publish/include", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteIds: chosen.map((i) => b.noteIds[i]) }) });
+        expect(res.status).toBe(200);
+        const { published, failed } = await res.json() as { published: string[]; failed: Array<{ noteId: string }> };
+        // The model's own words: the same world with the chosen notes marked 「發布」; a chosen note is wanted on the site iff it is then in the set.
+        const marked = modelPublished(world.spaces, world.notes.map((n, i) => (chosen.includes(i) ? { ...n, flag: "true" as const } : n)));
+        const ok = chosen.filter((i) => marked.has(i));
+        expect(new Set(published), "published").toEqual(new Set(ok.map((i) => b.noteIds[i])));
+        expect(new Set(failed.map((f) => f.noteId)), "failed").toEqual(new Set(chosen.filter((i) => !marked.has(i)).map((i) => b.noteIds[i])));
+        for (const i of chosen.filter((i) => !marked.has(i))) {
+          const flag = (await q<{ value: string }>(`SELECT value FROM node_attributes WHERE node_id = $1 AND key = '_published'`, [b.noteIds[i]])).rows[0]?.value ?? null;
+          expect(flag, `note ${i} that cannot reach the site was marked`).toBe(world.notes[i]!.flag);
+        }
+      })(await build(world, identity(world.notes.length)));
+    }), runsCap(15));
+  }, 600_000);
+
+  it("10 (fixed): a hidden note, and one in a space that does not publish, are reported failed, not published", async () => {
+    const note = { parent: null, markdown: "text", deleted: false, flag: null, sourceType: "manual" as const, hasKeptAttr: false };
+    const world: World = { spaces: [{ publish: false }, { publish: true }], notes: [{ ...note, space: 0, hidden: false }, { ...note, space: 1, hidden: true }, { ...note, space: 1, hidden: false }] };
+    const b = await build(world, [0, 1, 2]);
+    const actor = await persistActor(b.ws, { id: "", name: `Owner ${b.ws.slice(0, 6)}`, type: "human", role: "admin" });
+    await setWorkspaceOwner(b.ws, actor.id);
+    for (const spaceId of b.spaceIds) await seedQ(`INSERT INTO space_members (space_id, actor_id, permission) VALUES ($1, $2::uuid, 'edit')`, [spaceId, actor.id]);
+    includeWorkspace = b.ws; includeActor = { ...actor, role: "admin" };
+    const res = await includeApp.request("/api/publish/include", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteIds: b.noteIds }) });
+    expect(await res.json()).toEqual({ published: [b.noteIds[2]], failed: [{ noteId: b.noteIds[0], error: "space_not_published" }, { noteId: b.noteIds[1], error: "hidden" }] });
+    expect((await q(`SELECT 1 FROM node_attributes WHERE node_id = ANY($1::uuid[]) AND key = '_published'`, [[b.noteIds[0], b.noteIds[1]]])).rows).toHaveLength(0);
+  });
 });

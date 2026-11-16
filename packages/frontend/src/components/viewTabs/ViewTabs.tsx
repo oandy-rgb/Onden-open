@@ -3,7 +3,7 @@ import { FileText, LayoutDashboard, Plus, Table2, type LucideIcon } from "lucide
 import type { FieldDef } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import { classNames } from "../../lib/utils";
-import { CANVAS_TAB, CONTENT_TAB, type ViewTab } from "../../lib/viewTabs";
+import { CANVAS_TAB, defaultTabKey, isFixedFirstTab, type ViewTab } from "../../lib/viewTabs";
 import { NOTE_VIEW_MODULES, VIEW_MODULES } from "../../modules";
 import type { ViewOwner } from "../../lib/data";
 import { Menu, MenuItem, MenuSeparator, Pressable, Tab, TabList, usePopover } from "../ui";
@@ -97,20 +97,23 @@ export default function ViewTabs({ owner, activeKey, earnsWhiteboard, canManage,
   const liftedRef = useRef<string | null>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
-  // The open tab is gone (deleted here or elsewhere, a module turned off, an
-  // old link): fall back to 「內容」 instead of showing a page no tab names.
+  // The open tab is gone (deleted or hidden here or elsewhere, a module turned off, an
+  // old link, a tab remembered from before 「內容」 was removed): fall back to the page's
+  // default tab instead of showing a page no tab names.
   // Not before the views are known: a saved tab id is valid until they say otherwise.
   const known = tabs.some((tab) => tab.key === activeKey);
   useEffect(() => {
     if (status === "loading" || known) return;
     if (status === "failed" && activeKey !== CANVAS_TAB) return;
-    onSelect(CONTENT_TAB);
-  }, [status, known, activeKey, onSelect]);
+    onSelect(defaultTabKey(tabs));
+  }, [status, known, activeKey, onSelect, tabs]);
   useEffect(() => { activeRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [activeKey, tabs.length]);
 
-  const movable = tabs.filter((tab) => tab.kind !== "content");
-  // 「內容」 has only 「開在右邊」, which a phone does not offer: then there is no menu to open.
-  const openMenu = (tab: ViewTab, x: number, y: number) => { if (tab.editable || canSplitHere) setMenu({ tab, x, y }); };
+  const movable = tabs.filter((tab) => !isFixedFirstTab(tab));
+  // 「Remove tab」 is a view's delete or the whiteboard's or 「內容」's hide; the built-in 「內容」 has nothing else but 「開在右邊」,
+  // which a phone does not offer: then there is no menu to open.
+  const canRemove = (tab: ViewTab) => (tab.kind === "content" ? tab.hideable : tab.editable);
+  const openMenu = (tab: ViewTab, x: number, y: number) => { if (tab.editable || canRemove(tab) || canSplitHere) setMenu({ tab, x, y }); };
   const startRename = (tab: ViewTab) => { setDraft(tab.name); setRenaming(tab.key); };
   const finishRename = (tab: ViewTab, commit: boolean) => {
     setRenaming(null);
@@ -130,7 +133,8 @@ export default function ViewTabs({ owner, activeKey, earnsWhiteboard, canManage,
     // Only the finger's x counts: the row is hit at its middle, so a finger drifting off it still lands on a tab.
     const box = listEl()?.getBoundingClientRect();
     const key = elementAtPoint(x, box ? box.top + box.height / 2 : 0)?.closest<HTMLElement>("[data-tab-key]")?.dataset.tabKey ?? null;
-    return key && key !== CONTENT_TAB ? key : null;
+    const target = tabs.find((tab) => tab.key === key);
+    return target && !isFixedFirstTab(target) ? target.key : null;
   };
   const endTouchDrag = () => { autoScroll.stop(); liftedRef.current = null; setLiftedKey(null); setOverKey(null); };
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>, tab: ViewTab) => {
@@ -183,14 +187,14 @@ export default function ViewTabs({ owner, activeKey, earnsWhiteboard, canManage,
             draggable={!actions.busy && !touchPress}
             title={tab.inheritedName !== null ? t("via #{name}", { name: tab.inheritedName }) : undefined}
             onClick={() => onSelect(tab.key)}
-            onDoubleClick={() => { if (tab.editable) startRename(tab); }}
+            onDoubleClick={() => { if (tab.editable && tab.kind !== "content") startRename(tab); }}
             onContextMenu={(event) => { if (touchGuard.swallow(event)) return; event.preventDefault(); openMenu(tab, event.clientX, event.clientY); }}
             onKeyDown={(event) => onKeyDown(event, tab)}
             onPointerDown={(event) => onPointerDown(event, tab)}
             onDragStart={(event) => { if (touchPress) { event.preventDefault(); return; } setDragKey(tab.key); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", tab.key);
               // Dragged out of the row to the right half it opens beside (lib/splitViewStore); inside the row it only reorders.
               splitDrag.begin({ kind: "note", id: owner.id, tab: tab.key }, "tab"); }}
-            onDragOver={(event) => { if (dragKey && tab.kind !== "content") { event.preventDefault(); setOverKey(tab.key); } }}
+            onDragOver={(event) => { if (dragKey && !isFixedFirstTab(tab)) { event.preventDefault(); setOverKey(tab.key); } }}
             onDrop={(event) => { event.preventDefault(); dropOn(tabs.find((candidate) => candidate.key === dragKey), tab); }}
             onDragEnd={() => { setDragKey(null); setOverKey(null); splitDrag.cancel(); }}
           >
@@ -209,7 +213,8 @@ export default function ViewTabs({ owner, activeKey, earnsWhiteboard, canManage,
           {canSplitHere && <MenuItem onSelect={() => requestSplitOpen({ kind: "note", id: owner.id, tab: menu.tab.key }, "right")}>{t("Open on the right")}</MenuItem>}
           {menu.tab.editable && (
             <>
-          <MenuItem onSelect={() => startRename(menu.tab)}>{t("Rename")}</MenuItem>
+          {/* 「內容」 keeps its name: 「＋」, the question and the removal all call it that. */}
+          {menu.tab.kind !== "content" && <MenuItem onSelect={() => startRename(menu.tab)}>{t("Rename")}</MenuItem>}
           <MenuItem disabled={menuIndex <= 0} onSelect={() => void actions.move(menu.tab, menuIndex - 1)}>{t("Move left")}</MenuItem>
           <MenuItem disabled={menuIndex < 0 || menuIndex >= movable.length - 1} onSelect={() => void actions.move(menu.tab, menuIndex + 1)}>{t("Move right")}</MenuItem>
           {menu.tab.kind === "view" && (
@@ -218,12 +223,16 @@ export default function ViewTabs({ owner, activeKey, earnsWhiteboard, canManage,
               void actions.duplicate(tab).then((id) => { if (id) { requestViewSettings(id); onSelect(id); } });
             }}>{t("Make a variation…")}</MenuItem>
           )}
-          <MenuSeparator />
+            </>
+          )}
+          {canRemove(menu.tab) && (
+            <>
+          {(menu.tab.editable || canSplitHere) && <MenuSeparator />}
           <MenuItem danger onSelect={() => {
             const { tab } = menu;
-            // The open tab is left once the removal is confirmed, before it is written.
-            void actions.remove(tab, () => { if (tab.key === activeKey) onSelect(CONTENT_TAB); });
-          }}>{menu.tab.kind === "canvas" ? t("Remove tab") : t("Delete view")}</MenuItem>
+            // The open tab is left once the removal is confirmed, before it is written: for the tab the page then opens on.
+            void actions.remove(tab, () => { if (tab.key === activeKey) onSelect(defaultTabKey(tabs.filter((other) => other.key !== tab.key))); });
+          }}>{menu.tab.kind === "view" ? t("Delete view") : t("Remove tab")}</MenuItem>
             </>
           )}
         </Menu>

@@ -1,10 +1,16 @@
 // A note's saved views live in the local mirror too: a board opened from the
 // cached copy (a reload, offline) still knows its whiteboard tab and opens there
-// (lib/whiteboardNote opensOnWhiteboard). Found by the e2e sweep 2026-11-01: a
+// (lib/viewTabs defaultTabKey). Found by the e2e sweep 2026-11-01: a
 // deep link to a board this browser had seen opened on 內容.
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { Bootstrap, ContentNode } from "../lib/api";
-import { opensOnWhiteboard } from "../lib/whiteboardNote";
+import { isRetiredBoardKind } from "../lib/whiteboardNote";
+import { buildViewTabs, defaultTabKey } from "../lib/viewTabs";
+
+const opensOnWhiteboard = (node: ContentNode) => defaultTabKey(buildViewTabs({
+  views: (node.collection_views ?? []) as never, canvasImported: true, earnsWhiteboard: isRetiredBoardKind(node), canManage: false, contentName: "", whiteboardName: "",
+}), isRetiredBoardKind(node)) === "canvas";
+
 
 const disk = vi.hoisted(() => ({ bytes: null as ArrayBuffer | null }));
 vi.mock("../lib/indexedDbStorage", () => ({

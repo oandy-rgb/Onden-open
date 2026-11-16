@@ -1,3 +1,4 @@
+import { confirmDialog } from "./ConfirmDialog";
 import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { nodeOf } from "../lib/nodeIndex";
 import { openNoteColorDialog } from "./NoteColorDialog";
@@ -126,6 +127,7 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
     boards: { selectCanvas: canvasWriter.select, createCanvas: canvasWriter.create },
     canvasImported,
     setCanvasNavStack: menus.setCanvasNavStack,
+    confirm: confirmDialog,
   });
   const {
     selectedNode, selectedTag,

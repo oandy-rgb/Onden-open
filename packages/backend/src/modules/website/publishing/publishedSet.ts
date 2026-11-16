@@ -1,7 +1,9 @@
 // Published-site data loaders: the set of notes on the site (by space, with
 // each note's 「不發布」) and the live siteConfig overlay.
 
+import { sql } from "kysely";
 import { q } from "../../../db.js";
+import { db } from "../../../dbKysely.js";
 import { LISTED_NODE_SQL } from "../../../spine/reservedNodes.js";
 import { PUBLISHED_KEY } from "../../../services/systemAttributes.js";
 import { publiclyReadableNodeIds, readableNodeIdSet } from "../../../services/readPolicy.js";
@@ -109,6 +111,29 @@ export async function publishedNodeIds(workspaceId: string): Promise<Set<string>
   );
   const publicReadable = await publiclyReadableNodeIds(workspaceId);
   return new Set(r.rows.map((row) => row.id).filter((id) => publicReadable.has(id)));
+}
+
+/** Of `ids`, the notes that marking 「發布」 (`_published` 'true') would NOT put
+ *  on the site, with why: `hidden` (never a page), `space_not_published` (its
+ *  space's switch is off, or the space is not the owner's to publish), or
+ *  `not_a_page` (trashed, a tag definition, system machinery). The rule is
+ *  publishedNodeIds's own: PAGE_SQL, then publiclyReadableNodeIds; the flag
+ *  itself does not matter, since 'true' overrides blank and saved-article. */
+export async function blockedFromSite(workspaceId: string, ids: readonly string[]): Promise<Map<string, "hidden" | "space_not_published" | "not_a_page">> {
+  const pages = await sql<{ id: string; hidden: boolean }>`
+    SELECT n.id, n.hidden FROM content_nodes n
+     WHERE n.workspace_id = ${workspaceId} AND n.id = ANY(${[...ids]}::uuid[])
+       AND ${sql.raw(liveNodeSql("n"))} AND ${sql.raw(LISTED_NODE_SQL("n"))}`.execute(db);
+  const page = new Map(pages.rows.map((r) => [r.id, r]));
+  const publicReadable = await publiclyReadableNodeIds(workspaceId);
+  const blocked = new Map<string, "hidden" | "space_not_published" | "not_a_page">();
+  for (const id of ids) {
+    const row = page.get(id);
+    if (!row) blocked.set(id, "not_a_page");
+    else if (row.hidden) blocked.set(id, "hidden");
+    else if (!publicReadable.has(id)) blocked.set(id, "space_not_published");
+  }
+  return blocked;
 }
 
 /** The notes publishedNodeIds leaves out that the owner may want to know

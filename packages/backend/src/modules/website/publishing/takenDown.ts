@@ -13,6 +13,7 @@
 import { sql } from "kysely";
 import { db } from "../../../dbKysely.js";
 import { publishedNodeIds } from "./publishedSet.js";
+import { latestSnapshotPayload, latestSnapshotRow } from "./latestSnapshot.js";
 import { withCurrentIds, withFormerIds } from "../../../services/idRewrites.js";
 
 /** Add to the latest snapshot's `taken_down` every note it carries that the
@@ -25,7 +26,7 @@ export async function recordTakedowns(workspaceId: string): Promise<void> {
               SELECT n->>'id' FROM jsonb_array_elements(coalesce(p.payload->'nodes', '[]'::jsonb)) n
                WHERE NOT (n->>'id' = ANY(${allowed}::text[]))
                  AND NOT (coalesce(p.payload->'taken_down', '[]'::jsonb) @> to_jsonb(n->>'id'))) AS gone
-       FROM publish_snapshots p WHERE p.workspace_id = ${workspaceId} ORDER BY p.created_at DESC LIMIT 1`.execute(db)).rows[0];
+       FROM ${latestSnapshotRow(workspaceId)} p`.execute(db)).rows[0];
   if (!latest || latest.gone.length === 0) return;
   await sql`UPDATE publish_snapshots
                SET payload = jsonb_set(payload, '{taken_down}', coalesce(payload->'taken_down', '[]'::jsonb) || to_jsonb(${latest.gone}::text[]))
@@ -37,7 +38,7 @@ export async function recordTakedowns(workspaceId: string): Promise<void> {
 export async function takenDownSinceLastPublish(workspaceId: string): Promise<Set<string>> {
   const r = await sql<{ id: string }>`
     SELECT jsonb_array_elements_text(coalesce(payload->'taken_down', '[]'::jsonb)) AS id
-      FROM (SELECT payload FROM publish_snapshots WHERE workspace_id = ${workspaceId} ORDER BY created_at DESC LIMIT 1) l`.execute(db);
+      FROM (SELECT ${latestSnapshotPayload(workspaceId)} AS payload) l`.execute(db);
   // (a record made before migration 201 names a note by its old id: it is taken down under the new one too)
   return withCurrentIds(workspaceId, new Set(r.rows.map((row) => row.id)));
 }

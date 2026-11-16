@@ -14,6 +14,8 @@ import { pool, q } from "../../../db.js";
 import { dayClock } from "../../../localDay.js";
 import { overlaySiteConfig, publishedNodeIds } from "./publishedSet.js";
 import { servedNodeIds } from "./takenDown.js";
+import { storedNote } from "./latestSnapshot.js";
+import { staticSiteUrl } from "./cname.js";
 import { findConfigNodeId } from "../../../services/siteConfig.js";
 import { anonymousMediaOwners } from "../../../services/mediaOwners.js";
 import { keepServedQueryRows, keepShownTags, publishedAliases, publishedNames, inertUnpublishedWikilinks, siteShowsTagSql, redactPayloadNodes, scrubUnpublishedParents } from "./redaction.js";
@@ -122,7 +124,11 @@ export async function loadServedSite(workspaceId: string): Promise<ServedSite> {
        FROM publish_snapshots WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1`,
     [workspaceId, [...allowed]],
   );
-  if (snapshot.rows[0]) return withTimeZone(await applyTakedown(workspaceId, snapshot.rows[0], allowed) as ServedSite);
+  if (snapshot.rows[0]) {
+    // The address is what the static host serves at NOW (custom domain included), not what it was when the snapshot was made.
+    const row = { ...snapshot.rows[0], artifact_ref: (await staticSiteUrl(workspaceId)) ?? "/site/" };
+    return withTimeZone(await applyTakedown(workspaceId, row, allowed) as ServedSite);
+  }
   return withTimeZone({
     id: null,
     title: "Onden Site",
@@ -159,7 +165,13 @@ export async function servedPages(workspaceId: string): Promise<ServedPage[]> {
  *  the last Publish, or taken down since. What the app's Copy link hands out
  *  (D42) — the live slug can differ (a clash renamed, a rename after Publish). */
 export async function publishedUrlFor(workspaceId: string, nodeId: string): Promise<string | null> {
-  return sitePathFor(nodeId, await servedPages(workspaceId));
+  // The same answer as sitePathFor over servedPages, without loading and
+  // redacting the whole site (tens of MB on a large one) to look up one slug:
+  // a page is served exactly when the snapshot carries it and servedNodeIds holds it.
+  if (!(await servedNodeIds(workspaceId)).has(nodeId)) return null;
+  const stored = await storedNote(workspaceId, nodeId);
+  const slug = stored?.node.slug;
+  return typeof slug === "string" ? sitePathFor(nodeId, [{ id: nodeId, slug }]) : null;
 }
 
 /** The single-note HTML export of `note` (its current text, which may differ

@@ -21,7 +21,12 @@ import { randomUUID } from "node:crypto";
 type CapturedFile = { path: string; content: string | Buffer };
 
 // Capture what performPagesPush would deploy, without touching GitHub.
-const h = vi.hoisted(() => ({ captured: null as Array<{ path: string; content: string | Buffer }> | null }));
+const h = vi.hoisted(() => ({ captured: null as Array<{ path: string; content: string | Buffer }> | null, domain: "" }));
+// The custom domain is read live from siteConfig; setting it for real would append events to the workspace this file deletes.
+vi.mock("../services/siteConfig.js", async (original) => {
+  const real = await original<typeof import("../services/siteConfig.js")>();
+  return { ...real, getSiteConfig: async (ws: string) => ({ ...(await real.getSiteConfig(ws)), custom_domain: h.domain }) };
+});
 vi.mock("../modules/website/publishing/githubPages.js", () => ({
   pushToGitHubPages: async (files: Array<{ path: string; content: string | Buffer }>) => {
     h.captured = files;
@@ -32,6 +37,10 @@ vi.mock("../modules/website/publishing/githubPages.js", () => ({
 
 import { pool, q } from "../db.js";
 import { enqueuePagesPush, drainOutbox, type OutboxEffectKind } from "../services/outbox.js";
+import fc from "fast-check";
+import { listSnapshots } from "../modules/website/publishing/snapshot.js";
+import { loadServedSite } from "../modules/website/publishing/servedSite.js";
+import { staticSiteUrl, normalizeCustomDomain } from "../modules/website/publishing/cname.js";
 import { performPagesPush } from "../modules/website/publishing/pagesPush.js";
 import { MEDIA_DIR } from "../services/mediaStore.js";
 import { makeSpace, putInSpace } from "./helpers/spaceFixtures.js";
@@ -163,6 +172,49 @@ describe.skipIf(!isTestDb)("pages_push outbox effect (DB)", () => {
       expect(String(files.find((f) => f.path === "robots.txt")!.content)).toContain("Sitemap: https://example.test/site/sitemap.xml");
     } finally {
       await q(`DELETE FROM publish_snapshots WHERE id = $1`, [snapshotId]);
+    }
+  });
+
+  // Scan 13 中等 7: with a custom domain the CNAME makes the copy live at that
+  // domain, so its canonical links, sitemap and robots must name it, not github.io.
+  it("names the custom domain, not github.io, in the static copy and the publish log link", async () => {
+    const home = await publishedNode("# Hi");
+    const snap = await q<{ id: string }>(
+      `INSERT INTO publish_snapshots (workspace_id, title, home_node_id, event_cursor, payload, artifact_ref)
+       VALUES ($1,'Test Site',NULL,0,$2,'/x/') RETURNING id`,
+      [WS, { nodes: [{ id: home, node_type: "content", title: "Home", slug: "home", markdown: "# Hi" }], edges: [], presentation: { template: "clean-docs", site: { brand: "B" } }, settings_frozen: true }],
+    );
+    try {
+      h.domain = "blog.example.com";
+      expect(await staticSiteUrl(WS)).toBe("https://blog.example.com/");
+      h.captured = null;
+      await performPagesPush({ snapshotId: snap.rows[0]!.id, workspaceId: WS });
+      const files = h.captured!;
+      expect(String(files.find((f) => f.path === "site/home/index.html")!.content)).toContain("https://blog.example.com/site/");
+      expect(String(files.find((f) => f.path === "robots.txt")!.content)).toContain("Sitemap: https://blog.example.com/site/sitemap.xml");
+      expect(files.some((f) => typeof f.content === "string" && f.content.includes("example.test"))).toBe(false);
+      expect(files.find((f) => f.path === "CNAME")!.content).toBe("blog.example.com\n");
+
+      // The publish log's link and the served site's address follow the setting NOW, not the one at publish time
+      // (the snapshot above was stored with "/x/"): set after a publish, and cleared again.
+      const address = async () => [(await listSnapshots(WS))[0]!.artifact_ref, (await loadServedSite(WS)).artifact_ref];
+      expect(await address()).toEqual(["https://blog.example.com/", "https://blog.example.com/"]);
+      h.domain = "";
+      expect(await address()).toEqual(["https://example.test/", "https://example.test/"]);
+      h.domain = "blog.example.com";
+
+      // Any valid domain wins over the github.io address; an invalid or empty one leaves it.
+      const hosts = fc.stringMatching(/^[a-z][a-z0-9]{0,8}(\.[a-z][a-z0-9]{0,8}){1,2}\.(com|org|tw)$/);
+      await fc.assert(fc.asyncProperty(fc.oneof(hosts, fc.constantFrom("", "not a domain", "https://")), async (domain) => {
+        h.domain = domain;
+        const url = await staticSiteUrl(WS);
+        const want = normalizeCustomDomain(domain) ? `https://${normalizeCustomDomain(domain)}/` : "https://example.test/";
+        expect(url).toBe(want);
+        expect((await listSnapshots(WS))[0]!.artifact_ref).toBe(want);
+      }), { numRuns: process.env.PROPS_RUNS ? Number(process.env.PROPS_RUNS) : 15 });
+    } finally {
+      h.domain = "";
+      await q(`DELETE FROM publish_snapshots WHERE id = $1`, [snap.rows[0]!.id]);
     }
   });
 

@@ -103,8 +103,15 @@ const POOL = ["n1", "n2", "n3", "n4"] as const;
 const TABS = ["content", "v1", "v2"] as const;
 const MARKER = "ondenTestSheet";
 
-type NodeRow = { id: string; sort_order: number };
-const row = (n: NodeRow) => ({ id: n.id, title: n.id, node_type: "content", parent_id: null, hidden: false, markdown: "", source_type: "manual", slug: n.id, sort_order: n.sort_order, created_at: "2026-11-14T00:00:00Z" });
+type NodeRow = { id: string; sort_order: number; /** The note's 「內容」 tab was removed (its record says hidden; a table view is the tab it opens on instead). */ contentRemoved?: boolean };
+const REMOVED_CONTENT_VIEWS = [
+  { id: "c1", layout: "content", name: "Content", layout_config: { hidden: true }, pin_order: 1, filters: [], sorts: [], group_by: null, visible_fields: [] },
+  { id: "v1", layout: "table", name: "v1", layout_config: {}, pin_order: 0, filters: [], sorts: [], group_by: null, visible_fields: [] },
+];
+const row = (n: NodeRow) => ({ id: n.id, title: n.id, node_type: "content", parent_id: null, hidden: false, markdown: "", source_type: "manual", slug: n.id, sort_order: n.sort_order, created_at: "2026-11-14T00:00:00Z",
+  ...(n.contentRemoved ? { collection_views: REMOVED_CONTENT_VIEWS } : {}) });
+/** The tab a note opens on (lib/viewTabs defaultTabKey): 「內容」, or the first tab showing once it was removed. */
+const openingTab = (run: { nodes: NodeRow[] }, id: string | null): string => (run.nodes.find((n) => n.id === id)?.contentRemoved ? "v1" : "content");
 
 /** BuilderWorkspace's wiring of the location hooks, plus a sheet that uses useHistoryEntry. */
 function makeShell(m: Mods, phone: boolean, initial: ReturnType<Mods["url"]["readLocation"]>) {
@@ -113,7 +120,7 @@ function makeShell(m: Mods, phone: boolean, initial: ReturnType<Mods["url"]["rea
     const focus = m.focus.useWorkspaceFocus({
       ui, initialLocation: initial,
       boards: { selectCanvas: (async () => {}) as never, createCanvas: (async () => null) as never },
-      canvasImported: false, setCanvasNavStack: () => {},
+      canvasImported: false, setCanvasNavStack: () => {}, confirm: async () => false,
     });
     const stored = m.split.useSplit();
     const right = phone ? null : stored.right; // useSplitView: a phone shows none, and keeps the stored one for later
@@ -265,6 +272,13 @@ function checkLeavable(run: Run, name: string): void {
   if (!noteExists(run, node)) problem(run, name, `the screen is note ${node}, which no longer exists: a loading pane nothing ends`);
 }
 
+/** After every command: a note whose 「內容」 was removed never shows it (the page opens, goes back, reloads on the tab it opens on). */
+function checkContentTabShown(run: Run, name: string): void {
+  const now = observe(run);
+  if (now.view !== "notes" || now.node === null || now.info || now.tab !== null || shell(run).ui.notesView !== "editor") return;
+  if (openingTab(run, now.node) !== "content") problem(run, name, `${now.node} shows 「內容」, which was removed from its tabs`);
+}
+
 function pushScreen(run: Run, next: Screen): void {
   run.entries.length = run.index + 1;
   run.entries.push(next);
@@ -277,7 +291,7 @@ type Cmd = fc.AsyncCommand<object, Run>;
 function cmd<A extends unknown[]>(name: (...a: A) => string, exec: (run: Run, ...a: A) => Promise<void> | void) {
   return (...args: A): Cmd => ({
     check: () => true,
-    async run(_m, run) { run.log.push(`> ${name(...args)}`); await exec(run, ...args); },
+    async run(_m, run) { run.log.push(`> ${name(...args)}`); await exec(run, ...args); checkContentTabShown(run, name(...args)); },
     toString: () => name(...args),
   });
 }
@@ -341,6 +355,28 @@ const SwitchTab = cmd((k: number) => `switch to tab ${TABS[k]}`, async (run, k) 
   const before = top(run);
   checkAfterMove(run, `switch to tab ${TABS[k]}`, { view: before.view, node: before.node, info: false, sheet: false });
 });
+/** 「內容」 is removed from a note's tabs (its text stays; a table view is what is left). The tab row moves the page off a
+ *  tab no row names (ViewTabs: onSelect(defaultTabKey)), which `selectTab` stands for here. */
+const RemoveContentTab = cmd((i: number) => `remove 「內容」 from the tabs of note #${i}`, async (run, i) => {
+  if (!free(run)) return;
+  const id = pick(run, i);
+  if (run.nodes.find((n) => n.id === id)?.contentRemoved) return;
+  run.nodes = run.nodes.map((n) => (n.id === id ? { ...n, contentRemoved: true } : n));
+  await act(async () => { run.m.store.setData((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? row(run.nodes.find((r) => r.id === id)!) as never : n)) })); });
+  const now = observe(run);
+  if (now.view === "notes" && now.node === id && !now.info && now.tab === null && shell(run).ui.notesView === "editor") {
+    await act(async () => { shell(run).focus.selectTab("v1"); });
+    run.entries[run.index] = observe(run);
+  }
+});
+/** 「內容」 is added back from 「＋」: the tab shows again, the page stays where it is. */
+const AddContentTabBack = cmd((i: number) => `add 「內容」 back to the tabs of note #${i}`, async (run, i) => {
+  if (!free(run)) return;
+  const id = pick(run, i);
+  if (!run.nodes.find((n) => n.id === id)?.contentRemoved) return;
+  run.nodes = run.nodes.map((n) => (n.id === id ? { ...n, contentRemoved: false } : n));
+  await act(async () => { run.m.store.setData((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? row(run.nodes.find((r) => r.id === id)!) as never : n)) })); });
+});
 const OpenInfo = cmd(() => "open the phone's Info screen", async (run) => {
   if (!run.phone || !free(run) || selectedNote(run) === null || observe(run).info) return;
   await act(async () => { shell(run).ui.setOverviewMobileTab("info"); });
@@ -393,7 +429,9 @@ const RemovedBySync = cmd((i: number) => `note #${i} is removed by a sync`, asyn
 
 /** An entry whose note is gone shows the list in its place: no note, so no tab and no Info screen. */
 function livingScreen(run: Run, entry: Screen): Screen {
-  return noteExists(run, entry.node) ? entry : { ...entry, node: null, tab: null, info: false };
+  if (!noteExists(run, entry.node)) return { ...entry, node: null, tab: null, info: false };
+  // An entry that showed 「內容」 of a note that has since had it removed arrives on the tab the note opens on.
+  return entry.tab === null && entry.node !== null ? { ...entry, tab: openingTab(run, entry.node) === "content" ? null : openingTab(run, entry.node) } : entry;
 }
 /** Where Back goes: the page before, passing the entries whose note is gone (the first entry has nothing behind it and stays). */
 function backTarget(run: Run): number {
@@ -494,6 +532,8 @@ const commandArbs = weighted([
   { weight: 2, arbitrary: poolIndex.map((i) => OpenSplit(i)) },
   { weight: 1, arbitrary: fc.constant(CloseSplit()) },
   { weight: 3, arbitrary: fc.nat(TABS.length - 1).map((k) => SwitchTab(k)) },
+  { weight: 2, arbitrary: poolIndex.map((i) => RemoveContentTab(i)) },
+  { weight: 2, arbitrary: poolIndex.map((i) => AddContentTabBack(i)) },
   { weight: 2, arbitrary: fc.constant(OpenInfo()) },
   { weight: 2, arbitrary: fc.constant(OpenSheet()) },
   { weight: 2, arbitrary: fc.constant(DeleteOpen()) },

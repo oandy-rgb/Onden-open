@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isTagBoard } from "../lib/nodeTags";
-import { SESSION_KEYS, readSession } from "../lib/sessionPrefs";
+import { SESSION_KEYS, readSession, removeSession } from "../lib/sessionPrefs";
 import { getAppState, isNoteGone, setSelectedId, useAppSelector, getNode, useNode, useOnline, useSelectedId } from "../lib/appStore";
 import { runBackgroundWrite } from "../lib/data";
 import type { canvasWriter } from "../lib/data";
@@ -11,9 +11,12 @@ import { decideCanvasView } from "../lib/canvasViewDecision";
 import { recordOpen } from "../lib/frecency";
 import { t } from "../lib/i18n";
 import type { NodeLens } from "../lib/nodeLens";
-import { CANVAS_TAB, CONTENT_TAB, activeTabKey, locationOfTab, rememberTab, rememberedTab } from "../lib/viewTabs";
-import { peekOwnerViews } from "../lib/ownerViews";
-import { opensOnWhiteboard, ownsBoard } from "../lib/whiteboardNote";
+import { CANVAS_TAB, CONTENT_TAB, activeTabKey, buildViewTabs, contentTabIn, defaultTabKey, locationOfTab, rememberTab, rememberedTab } from "../lib/viewTabs";
+import { peekOwnerViews, type SavedView } from "../lib/ownerViews";
+import { useIsOwner } from "../lib/capabilities";
+import { useModuleFilter } from "./useModuleFilter";
+import { hiddenNoteViewLayouts } from "../modules";
+import { isRetiredBoardKind, ownsBoard } from "../lib/whiteboardNote";
 import { useStableCallback } from "./useStableCallback";
 import type { useUiMode } from "./useUiMode";
 import { markBackNavigation } from "../lib/pageScrollRestore";
@@ -42,6 +45,9 @@ type Options = {
   /** Without the whiteboard module no board opens and the canvas lens closes. */
   canvasImported: boolean;
   setCanvasNavStack: (stack: string[]) => void;
+  /** The shell's question dialog (components/ConfirmDialog): asked once when a jump into the text meets a note whose 「內容」
+   *  was removed (lib/contentTab ensureContentTab). */
+  confirm: (message: string, options?: { confirmLabel?: string }) => Promise<boolean>;
 };
 
 /**
@@ -60,10 +66,12 @@ type Options = {
  * Opening never reads or writes note content; board reads go through the
  * canvas writer in the background, like every other board view.
  */
-export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported, setCanvasNavStack }: Options) {
+export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported, setCanvasNavStack, confirm }: Options) {
   const { mode, setMode, notesView, setNotesView, viewTab, setViewTab, setOverviewMobileTab } = ui;
   const { selectCanvas, createCanvas } = boards;
   const selectedId = useSelectedId();
+  const selectedIdNow = useRef(selectedId);
+  selectedIdNow.current = selectedId;
   const data = useAppSelector((s) => s.data);
   const online = useOnline();
   const activeCanvas = useAppSelector((s) => s.activeCanvas);
@@ -87,11 +95,31 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
       ? { [initialLocation.nodeId]: activeTabKey({ lens: initialLocation.lens, viewTab: initialLocation.viewTab ?? null }) }
       : {},
   );
-  /** The tab a note opens on when no tab was chosen: its whiteboard for a
-   *  board that was converted into a note (its tab says so), else 「內容」. */
+  const moduleFilter = useModuleFilter();
+  const isOwner = useIsOwner();
+  /** The note's saved views: as the tab row last read them, else as the note's own row carries them. */
+  const storedViewsOf = (node: NonNullable<ReturnType<typeof getNode>>): readonly SavedView[] => {
+    const read = peekOwnerViews({ kind: "node", id: node.id });
+    return read.length > 0 ? read : Array.isArray(node.collection_views) ? node.collection_views as unknown as SavedView[] : [];
+  };
+  /** The tabs the note shows, in order (names are the tab row's business). */
+  const tabsOf = (id: string) => {
+    const node = getNode(id);
+    return buildViewTabs({
+      views: node ? storedViewsOf(node) : [], canvasImported, earnsWhiteboard: ownsWhiteboard(id), canManage: false, ownerKind: "node",
+      contentName: "", whiteboardName: "", hiddenLayouts: hiddenNoteViewLayouts(moduleFilter, "node"),
+    });
+  };
+  /** 「內容」 was removed from the note's tab row: the text is still its body, but no tab shows it. */
+  const contentRemoved = (id: string) => {
+    const node = getNode(id);
+    return !!node && !!contentTabIn(storedViewsOf(node)) && !tabsOf(id).some((tab) => tab.kind === "content");
+  };
+  /** The tab a note opens on when no tab was chosen: lib/viewTabs defaultTabKey, the one rule (the tab row and the
+   *  side-by-side pane ask the same). */
   const defaultTabOf = (id: string) => {
     const node = getNode(id);
-    return canvasImported && node && opensOnWhiteboard(node) ? CANVAS_TAB : CONTENT_TAB;
+    return node ? defaultTabKey(tabsOf(id), canvasImported && isRetiredBoardKind(node)) : CONTENT_TAB;
   };
   /** The note has a whiteboard of its own: the tab (as stored, or as just
    *  read by the tab row), cards on its board, or the retired kind 'canvas'. */
@@ -102,7 +130,11 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
     return ownsBoard(node, state.data.canvas_memberships, peekOwnerViews({ kind: "node", id }));
   };
   /** The tab a node was last left on, if any. */
-  const tabOf = (id: string) => tabByNode.current[id] ?? rememberedTab(id);
+  const tabOf = (id: string) => {
+    const key = tabByNode.current[id] ?? rememberedTab(id);
+    // A tab remembered as 「內容」 from before it was removed opens the default tab, not a tab that is not there.
+    return key === CONTENT_TAB && contentRemoved(id) ? null : key;
+  };
   /** Show a tab of the focused node: the lens and the saved view it means. */
   const showTab = (_id: string, key: string) => {
     const place = locationOfTab(key);
@@ -126,7 +158,7 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
     // citation jump is a read action, not a lens switch.
     const hasPending = !!readSession(SESSION_KEYS.pendingCursor(selectedId));
     const remembered = tabOf(selectedId);
-    if (hasPending) {
+    if (hasPending && !contentRemoved(selectedId)) {
       showTab(selectedId, CONTENT_TAB);
     } else if (arrivedFromHistory) {
       // Back, Forward or a tab tap: the entry's own address named the tab it showed, and it is already on screen.
@@ -134,8 +166,8 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
       // Keep a card's current board lens.
     } else if (remembered) {
       showTab(selectedId, remembered);
-    } else if (defaultTabOf(selectedId) === CANVAS_TAB) {
-      showTab(selectedId, CANVAS_TAB);
+    } else if (defaultTabOf(selectedId) !== CONTENT_TAB) {
+      showTab(selectedId, defaultTabOf(selectedId));
     } else {
       // A tag first opens its functions and members, a note its content.
       const isTag = !!data.tags?.some(tag => tag.id === selectedId);
@@ -148,6 +180,22 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
     recordOpen(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore only when the focused node changes
   }, [selectedId]);
+  // A page never shows 「內容」 of a note that has had it removed from its tabs, however it got there (Back onto an earlier
+  // page, a palette command, a remembered tab, another device's change): it shows the tab the note opens on. A caret waiting for
+  // the text asks first (askToAddContent), whichever way the page was reached. The tab row does the same for a tab the person
+  // removes while looking at it (ViewTabs), and for the other tabs that can go.
+  useEffect(() => {
+    if (!selectedId || ui.mode !== "notes" || !contentRemoved(selectedId)) return;
+    const onContent = activeTabKey({ lens: notesView, viewTab }) === CONTENT_TAB;
+    const waiting = !!readSession(SESSION_KEYS.pendingCursor(selectedId));
+    if (!onContent && !waiting) return;
+    if (onContent) showTab(selectedId, defaultTabOf(selectedId)); // at once, so the editor does not open on the text and take the caret
+    // What to say or ask is lib/contentTab's (a chunk of its own; lib/offlineWarmup keeps it for offline); a chunk that cannot load drops the jump.
+    const id = selectedId;
+    void import("../lib/contentTab").then((mod) => mod.settleRemovedContent({ id, waiting, isOwner, confirm, show: (key) => showTab(id, key), stillOn: () => selectedIdNow.current === id }))
+      .catch(() => removeSession(SESSION_KEYS.pendingCursor(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the page, its tab or the note's own tab records change
+  }, [selectedId, ui.mode, notesView, viewTab, selectedNode?.collection_views]);
   // The focused note has arrived after it was focused: it opens on its
   // whiteboard if it would have, unless a tab was chosen in the meantime.
   useEffect(() => {
@@ -155,7 +203,7 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
     if (!id || id !== selectedId || !selectedNode) return;
     undecidedDefault.current = null;
     if (tabOf(id)) return;
-    if (defaultTabOf(id) === CANVAS_TAB) showTab(id, CANVAS_TAB);
+    if (defaultTabOf(id) !== CONTENT_TAB) showTab(id, defaultTabOf(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the focused note's row appears
   }, [selectedNode?.id]);
 
@@ -248,7 +296,8 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
     // the tab it was left on.
     canvasCardSelection.current = null;
     autoCanvasRef.current = null;
-    const key = opts.content ? CONTENT_TAB : id === selectedId ? defaultTabOf(id) : tabOf(id) ?? defaultTabOf(id);
+    // The text itself is asked for; a note whose 「內容」 was removed has no such tab, so it opens as it would by itself.
+    const key = opts.content && !contentRemoved(id) ? CONTENT_TAB : id === selectedId ? defaultTabOf(id) : tabOf(id) ?? defaultTabOf(id);
     tabByNode.current[id] = key;
     // Asking for the text itself (a followed link, the note already open) is a choice of its tab like any other: a reload shows it too.
     if (opts.content || id === selectedId) rememberTab(id, key, defaultTabOf(id));

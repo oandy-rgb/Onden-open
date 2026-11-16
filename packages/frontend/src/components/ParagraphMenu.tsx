@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import type { EditorView } from "@codemirror/view";
 import { GripVertical, Hash } from "lucide-react";
-import { isTagNameShape } from "@onden/markdown";
+import { isTagNameShape } from "@onden/markdown/contract";
 import { lazyWithReload } from "../lib/lazyWithReload";
 import type { HandToAi } from "../hooks/useHandToAi";
 import { addToast } from "../lib/appStore";

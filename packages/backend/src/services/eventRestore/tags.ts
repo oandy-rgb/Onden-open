@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { writeTagSchema } from "../tagWrites.js";
 import { q } from "../../db.js";
-import { isTagNameShape } from "@onden/markdown";
+import { isTagNameShape } from "@onden/markdown/contract";
 import { tagNameTaken } from "../tagHierarchy.js";
 import { applyTagIdentity, type TagIdentityColumns } from "../tagIdentity.js";
 import type { ActorCtx } from "../../types.js";

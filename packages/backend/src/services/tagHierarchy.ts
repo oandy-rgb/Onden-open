@@ -24,7 +24,7 @@
 //   - Obsidian nested tags: in-memory recursive lookup. Onden uses SQL
 //     recursive CTE for descendantsOf (set semantics, single query).
 
-import { isTagNameShape, normalizeText } from "@onden/markdown";
+import { normalizeText } from "@onden/markdown";
 import { pool, q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { insertTagRow } from "./tagWrites.js";
@@ -38,7 +38,7 @@ import type { ActorCtx } from "../types.js";
 import { viewLayouts } from "./viewLayouts.js";
 import { CodedStatusError } from "../statusError.js";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
-import { isTag } from "@onden/markdown/contract";
+import { isTag, isTagNameShape } from "@onden/markdown/contract";
 
 export class TagNameConflictError extends Error {
   constructor() {
@@ -111,7 +111,7 @@ export async function assertTagNameAvailable(
 }
 
 // ── The tag-name shape ──────────────────────────────────────────────────────
-// The rule is @onden/markdown's isTagNameShape (text.ts): the same one decides which `{…}` in a note's text are tags,
+// The rule is @onden/markdown's isTagNameShape (sharedContract.ts): the same one decides which `{…}` in a note's text are tags,
 // so a name that is accepted here can always be written there, and nothing else can.
 
 export class TagNameShapeError extends CodedStatusError {

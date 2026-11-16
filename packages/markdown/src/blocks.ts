@@ -30,7 +30,7 @@ import type { Root, RootContent, Parent, Heading, ListItem, Blockquote, Paragrap
 import { frontmatterLength } from "./frontmatter.js";
 import { cutToUnits } from "./graphemes.js";
 import { parserFor } from "./parsers.js";
-import { HASHTAG_RE, isTagList, isTagNameShape } from "./text.js";
+import { HASHTAG_RE, isTagList, isTagPath } from "./text.js";
 import { BLOCK_ID, trailingBlockId } from "./blockId.js";
 import { stripCalloutMarker } from "./callouts.js";
 
@@ -845,8 +845,8 @@ export function blockTagSlotsIn(markdown: string, from: number, to: number): Blo
 export function addBlockTag(markdown: string, offset: number, name: string): string | null {
   const tag = name.trim().replace(/^#/, "").replace(/[{},]/g, "");
   const slot = blockTagSlot(markdown, offset);
-  // A name the `{…}` grammar cannot hold (isTagNameShape) would be written as text, not as a tag: refuse instead.
-  if (!slot || !isTagNameShape(tag)) return null;
+  // A name the `{…}` grammar cannot hold (isTagPath) would be written as text, not as a tag: refuse instead.
+  if (!slot || !isTagPath(tag)) return null;
   if (slot.tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return markdown;
   if (slot.braces) {
     const close = slot.braces.to - 1;

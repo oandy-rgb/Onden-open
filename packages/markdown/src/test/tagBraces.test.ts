@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { addBlockTag, blockTagSlot, parseBlocks } from "../blocks.js";
 import { withoutLineTrailers } from "../blockId.js";
-import { isTagList, isTagNameShape } from "../text.js";
+import { isTagList } from "../text.js";
+import { isTagNameShape } from "../sharedContract.js";
 import { planBlockExpand } from "../blockChild.js";
 
 const tagsOf = (markdown: string): string[][] => parseBlocks(markdown).map((block) => block.tags);
@@ -16,6 +17,8 @@ describe("which `{…}` are tags", () => {
     ["考點, 複習", true],
     ["my tag", true],
     ["讀書（小說）", true],
+    ["Course/Week1", true],
+    ["a/b/c, d", true],
     ["50%", true],
     ["what next?", true],
     ["C++", true],
@@ -34,7 +37,8 @@ describe("which `{…}` are tags", () => {
     ["a | b", false],
     ["$x", false],
     ["task, f()", false],
-    ["area/work", false],
+    ["a/f()", false],
+    ["a//b", false],
     ["it's", false],
     ["C#", false],
     ["key: f()", false],

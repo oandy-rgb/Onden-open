@@ -7,7 +7,7 @@ import { nodeNeedsBody } from "../../lib/api";
 import { useCapabilities } from "../../lib/capabilities";
 import { useT } from "../../lib/i18n";
 import { displayTitle } from "../../lib/noteLabel";
-import { CANVAS_TAB, CONTENT_TAB } from "../../lib/viewTabs";
+import { CANVAS_TAB, CONTENT_TAB, defaultTabKey } from "../../lib/viewTabs";
 import { isModClick, type PaneTarget } from "../../lib/splitView";
 import { splitDrag } from "../../lib/splitViewStore";
 import { viewLabel } from "../../hooks/shellNavigation";
@@ -61,7 +61,13 @@ export default function SplitPane({ target, outlet, onOpenNoteLeft, onChangeTarg
   const info = useViewOwner(node, tag);
   const ownerRef = useMemo(() => (info ? { kind: info.owner.kind, id: info.owner.id } : null), [info?.owner.kind, info?.owner.id]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed by the owner's identity
   const activeKey = target.kind === "note" ? target.tab : CONTENT_TAB;
-  const { tabs } = useOwnerTabs(ownerRef, { earnsWhiteboard: info?.hasBoard ?? false, canManage: info?.canManage ?? false, activeKey });
+  const { tabs, status } = useOwnerTabs(ownerRef, { earnsWhiteboard: info?.hasBoard ?? false, canManage: info?.canManage ?? false, activeKey });
+  // 「內容」 was removed from the note's tab row (here or on the left, which read the same views): this side shows the
+  // note's default tab instead of a tab no row names. Once the views are known; a saved view's id stays valid until they say otherwise.
+  const tabGone = target.kind === "note" && !!info && status === "ready" && !tabs.some((tab) => tab.key === activeKey);
+  useEffect(() => {
+    if (tabGone && target.kind === "note" && target.tab === CONTENT_TAB) onChangeTarget({ ...target, tab: defaultTabKey(tabs) });
+  }, [tabGone, target, tabs, onChangeTarget]);
   const [viewMenu, setViewMenu] = useState(false);
   const pop = usePopover<HTMLButtonElement>({ open: viewMenu, onClose: () => setViewMenu(false), placement: "bottom-start" });
 

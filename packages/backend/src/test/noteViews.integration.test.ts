@@ -174,6 +174,26 @@ describe.skipIf(!isTestDb)("a note's views of its children (DB)", () => {
     expect(Number(children.rows[0]!.n)).toBeGreaterThan(0);
   });
 
+  it("the 「內容」 tab is a stored tab too: its place and hidden flag are written key by key, and the text is not touched", async () => {
+    const { parent } = await family();
+    as(owner);
+    await seedQ(`UPDATE content_nodes SET markdown = 'still here' WHERE id = $1`, [parent]);
+    const table = ((await (await post(parent, { name: "Shelf", pin_order: 0 })).json()) as { id: string }).id;
+    const created = await post(parent, { name: "Content", layout: "content", pin_order: 1, layout_config: { hidden: true } });
+    expect(created.status).toBe(201);
+    const contentId = ((await created.json()) as { id: string }).id;
+    const read = async () => ((await (await list(parent)).json()) as { views: Array<{ id: string; layout: string; pin_order: number; layout_config: Record<string, unknown> }> }).views;
+    expect((await read()).map((v) => [v.layout, v.layout_config.hidden ?? null])).toEqual([["table", null], ["content", true]]);
+    // Two devices change different keys of the one record: neither overwrites the other.
+    expect((await patch(parent, contentId, { layout_config_patch: { opens_first: true } })).status).toBe(200);
+    expect((await patch(parent, contentId, { layout_config_patch: { hidden: null }, pin_order: 0 } as never)).status).toBe(200);
+    expect((await patch(parent, table, { pin_order: 1 })).status).toBe(200);
+    const after = await read();
+    expect(after.map((v) => v.layout)).toEqual(["content", "table"]);
+    expect(after[0]!.layout_config).toEqual({ opens_first: true });
+    expect((await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [parent])).rows[0]!.markdown).toBe("still here");
+  });
+
   it("a canvas tab is accepted whatever the stored module list says: the whiteboard is always on", async () => {
     const { parent } = await family();
     as(owner);

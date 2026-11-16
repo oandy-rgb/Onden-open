@@ -529,7 +529,7 @@
       "packages/frontend/src/lib/utils.ts": ["noteAliases"],
       "packages/frontend/src/lib/webPush.ts": ["PushStatus", "_resetPushForTests"],
       "packages/frontend/src/lib/whatsNew.ts": ["parseChange", "parseChanges"],
-      "packages/frontend/src/lib/whiteboardNote.ts": ["opensOnWhiteboardView", "whiteboardTabOf"],
+      "packages/frontend/src/lib/whiteboardNote.ts": ["whiteboardTabOf"],
       "packages/frontend/src/lib/wikilinkTargets.ts": ["LINK_TARGET_ROWS", "LinkTargetQuery"],
       "packages/frontend/src/lib/workspaceClock.ts": ["ClockChangeResult"],
       "packages/frontend/src/lib/workspaceTime.ts": ["formatOffset"],

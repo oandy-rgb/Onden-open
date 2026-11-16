@@ -1,6 +1,7 @@
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
 import { getPrefJson, PREFS, setPrefJson } from "./prefs";
 import type { SavedView } from "./ownerViews";
-import { isWhiteboardLayout, whiteboardTabIn } from "./whiteboardNote";
+import { isWhiteboardLayout, opensOnWhiteboardView, whiteboardTabIn } from "./whiteboardNote";
 
 // The row of tabs above a note or a tag: 「內容」 first, then the ways of seeing
 // it — the whiteboard, table, calendar, board, cards — then 「＋」.
@@ -17,6 +18,15 @@ import { isWhiteboardLayout, whiteboardTabIn } from "./whiteboardNote";
 // record until its tab is renamed, moved or hidden. A note whose tab says it
 // opens first (`layout_config.opens_first`; every board that existed before
 // 138) opens on the whiteboard until the person chooses another tab.
+//
+// 「內容」 has two shapes, and a note is in exactly one of them:
+//   · no record (every note made before the tab could be hidden): the built-in
+//     tab, always first, never moved or renamed, as it has always been; it can
+//     only be removed, which gives the note a record that says it is hidden;
+//   · a record (a saved view of layout "content"): the tab is placed by its
+//     `pin_order` like the others, and `layout_config.hidden` hides it. The text
+//     is the note's body either way, so search, publishing and export do not
+//     look at the tab. Added back from 「＋」 it goes last.
 
 export const CONTENT_TAB = "content";
 export const CANVAS_TAB = "canvas";
@@ -32,10 +42,19 @@ export type ViewTab = {
   inheritedName: string | null;
   /** Rename, move and delete are offered (the owner may change views). */
   editable: boolean;
+  /** 「Remove tab」 is offered (only 「內容」 sets it: it hides the tab and keeps the text). */
+  hideable: boolean;
 };
 
-/** A whiteboard record only keeps that the tab is gone; the board is kept. */
-export const isWhiteboardHidden = (view: SavedView) => view.layout_config?.hidden === true;
+/** The saved view that places or hides the note's 「內容」 tab, if it has one. */
+export const contentTabIn = <V extends { layout?: string }>(views: readonly (V | null | undefined)[] | null | undefined): V | null =>
+  (views ?? []).find((view): view is V => view?.layout === CONTENT_LAYOUT) ?? null;
+
+/** The tab keeps its place at the front and has no menu of moves: the built-in 「內容」 with no record. */
+export const isFixedFirstTab = (tab: Pick<ViewTab, "kind" | "view">): boolean => tab.kind === "content" && !tab.view;
+
+/** A record of the whiteboard or of 「內容」 only keeps that the tab is gone; the board and the text are kept. */
+export const isTabHidden = (view: SavedView) => view.layout_config?.hidden === true;
 
 type TabsInput = {
   views: readonly SavedView[];
@@ -46,6 +65,8 @@ type TabsInput = {
   earnsWhiteboard: boolean;
   /** The person may change this owner's views. */
   canManage: boolean;
+  /** The page is a note and the person may change it: its 「內容」 tab may be removed. */
+  contentHideable?: boolean;
   /** The translated names of 「內容」 and 「白板」. */
   contentName: string;
   whiteboardName: string;
@@ -54,31 +75,55 @@ type TabsInput = {
   hiddenLayouts?: ReadonlySet<string>;
 };
 
-/** The tabs in order: 「內容」, then the stored views in the order the server
- *  keeps them, with a whiteboard that has no record first among them. */
+/** The tabs in order: 「內容」 (first when it has no record, else where its record puts it), then the stored views in
+ *  the order the server keeps them, with a whiteboard that has no record first among them. */
 export function buildViewTabs(input: TabsInput): ViewTab[] {
-  const { views, canvasImported, earnsWhiteboard, canManage } = input;
-  const tabs: ViewTab[] = [{ key: CONTENT_TAB, kind: "content", name: input.contentName, view: null, inheritedName: null, editable: false }];
+  const { views, canvasImported, canManage } = input;
+  const contentRecord = contentTabIn(views);
+  const showsContent = !contentRecord || !isTabHidden(contentRecord);
+  const tabs: ViewTab[] = [];
+  const contentTab = (): ViewTab => contentRecord
+    ? { key: CONTENT_TAB, kind: "content", name: contentRecord.name === "Content" ? input.contentName : contentRecord.name, view: contentRecord, inheritedName: null, editable: canManage, hideable: false }
+    : { key: CONTENT_TAB, kind: "content", name: input.contentName, view: null, inheritedName: null, editable: false, hideable: false };
+  if (!contentRecord) tabs.push(contentTab());
   const stored = whiteboardTabIn(views);
-  const showsWhiteboard = canvasImported && (stored ? !isWhiteboardHidden(stored) : earnsWhiteboard);
+  const showsWhiteboard = canvasImported && (stored ? !isTabHidden(stored) : input.earnsWhiteboard);
   if (showsWhiteboard && !stored) {
-    tabs.push({ key: CANVAS_TAB, kind: "canvas", name: input.whiteboardName, view: null, inheritedName: null, editable: canManage });
+    tabs.push({ key: CANVAS_TAB, kind: "canvas", name: input.whiteboardName, view: null, inheritedName: null, editable: canManage, hideable: false });
   }
   for (const view of views) {
     if (input.hiddenLayouts?.has(view.layout)) continue;
+    if (view.layout === CONTENT_LAYOUT) {
+      if (view === contentRecord && showsContent) tabs.push(contentTab());
+      continue;
+    }
     if (isWhiteboardLayout(view)) {
       if (view !== stored || !showsWhiteboard) continue;
       // A record made by the server's own conversion is named in English; show it in the person's language.
-      tabs.push({ key: CANVAS_TAB, kind: "canvas", name: view.name === "Canvas" ? input.whiteboardName : view.name, view, inheritedName: null, editable: canManage });
+      tabs.push({ key: CANVAS_TAB, kind: "canvas", name: view.name === "Canvas" ? input.whiteboardName : view.name, view, inheritedName: null, editable: canManage, hideable: false });
       continue;
     }
     tabs.push({
       key: view.id, kind: "view", name: view.name, view,
       inheritedName: view.inherited_from ? view.inherited_name ?? "" : null,
-      editable: canManage && !view.inherited_from,
+      editable: canManage && !view.inherited_from, hideable: false,
     });
   }
+  // A page always shows at least one tab: with nothing else showing, 「內容」 stays (it cannot be hidden then).
+  if (tabs.length === 0) tabs.push(contentTab());
+  if (input.contentHideable && tabs.length > 1) {
+    const content = tabs.find((tab) => tab.kind === "content");
+    if (content) content.hideable = true;
+  }
   return tabs;
+}
+
+/** The tab a page opens on when none was chosen or the one remembered is gone: the whiteboard that opens first, else
+ *  the first tab showing. A note with the built-in 「內容」 (no record) opens on it, as it always has. */
+export function defaultTabKey(tabs: readonly ViewTab[]): string {
+  if (tabs.some(isFixedFirstTab)) return CONTENT_TAB;
+  const opensFirst = tabs.find((tab) => tab.kind === "canvas" && opensOnWhiteboardView(tab.view));
+  return opensFirst?.key ?? tabs[0]?.key ?? CONTENT_TAB;
 }
 
 /** The tab the page is on, from where the location says it is. */
@@ -119,11 +164,11 @@ export function nameAfterViewChange(name: string, before: ViewNameParts, after: 
   return next === name ? null : next;
 }
 
-/** `pin_order` for every tab but 「內容」 after `key` is dropped at `index` among
+/** `pin_order` for every tab but the built-in 「內容」 after `key` is dropped at `index` among
  *  them: all get their new place, so a tie never decides the order. Only the
  *  tabs whose stored place changes (or that are not stored yet) are returned. */
 export function reorderTabs(tabs: readonly ViewTab[], key: string, index: number): Array<{ tab: ViewTab; pinOrder: number }> {
-  const movable = tabs.filter((tab) => tab.kind !== "content");
+  const movable = tabs.filter((tab) => !isFixedFirstTab(tab));
   const from = movable.findIndex((tab) => tab.key === key);
   if (from < 0) return [];
   const next = movable.slice();

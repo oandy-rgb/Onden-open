@@ -3551,7 +3551,6 @@ export const ZH_TW_LATE: Record<string, string> = {
   "The note the link starts from no longer exists.": "連結所在的筆記已不存在。",
   "The note the link points to no longer exists, or you can't see it.": "連結指向的筆記已不存在，或你看不到它。",
   "You can't change the note this link is written in.": "你不能修改這個連結所在的筆記。",
-  "You can't change this note.": "你不能修改這篇筆記。",
   "That part of the note changed. Select it again.": "那一段已經改變，請重新選取。",
   "You can't change the note this link points to.": "你不能修改這個連結指向的筆記。",
   "There is nothing to link to at that place.": "那個位置沒有可以連結的內容。",
@@ -3869,4 +3868,8 @@ export const ZH_TW_LATE: Record<string, string> = {
   "The AI service answered with an error. Try again later.": "AI 服務回了錯誤，請稍後再試。",
   "That doesn't look like a valid API key.": "這看起來不是 API 金鑰。",
   "Only notes can have this view.": "只有筆記能用這種檢視。",
+  // ── The removed 「內容」 tab: adding it back, and the question before a jump into the text (lib/contentTab) ──
+  "This note has no content tab. Add it?": "這則筆記沒有內容分頁，要加上嗎？",
+  "You can't change this note.": "你不能修改這篇筆記。",
+  "Add tab": "加上分頁",
 };

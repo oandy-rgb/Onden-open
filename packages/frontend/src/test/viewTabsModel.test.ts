@@ -1,7 +1,7 @@
 // The model behind the row of view tabs (lib/viewTabs): which tabs a page
 // has, which one is open, how a tab maps to a location, how a drag reorders.
 import { beforeEach, describe, expect, it } from "vitest";
-import { CANVAS_TAB, CONTENT_TAB, activeTabKey, buildViewTabs, freeViewName, locationOfTab, rememberTab, rememberedTab, reorderTabs } from "../lib/viewTabs";
+import { CANVAS_TAB, CONTENT_TAB, activeTabKey, buildViewTabs, contentTabIn, defaultTabKey, freeViewName, locationOfTab, rememberTab, rememberedTab, reorderTabs } from "../lib/viewTabs";
 import type { SavedView } from "../lib/ownerViews";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { parseLocation, locationToSearch } from "../hooks/useUrlLocation";
@@ -111,5 +111,63 @@ describe("names and memory", () => {
     expect(rememberedTab("w1")).toBe(CONTENT_TAB);
     rememberTab("w1", CANVAS_TAB, CANVAS_TAB);
     expect(rememberedTab("w1")).toBeNull();
+  });
+});
+
+
+describe("「內容」 that can be removed from the tabs (a record of layout content)", () => {
+  const content = (extra: Partial<SavedView> = {}) => view("c", "content", { name: "Content", ...extra });
+  const tabsOf = (views: SavedView[], more: Partial<Parameters<typeof buildViewTabs>[0]> = {}) => buildViewTabs({ views, ...base, contentHideable: true, ...more });
+
+  it("a note with no record keeps 「內容」 fixed first, as every note made before did; it can be removed when another tab shows", () => {
+    const alone = tabsOf([]);
+    expect(alone.map((tab) => [tab.key, tab.view, tab.editable, tab.hideable])).toEqual([[CONTENT_TAB, null, false, false]]);
+    const withViews = tabsOf([view("a", "table")]);
+    expect(withViews.map((tab) => tab.key)).toEqual([CONTENT_TAB, "a"]);
+    expect(withViews[0]).toMatchObject({ editable: false, hideable: true });
+    // Read-only, and a tag's first tab (its list): not removable.
+    expect(tabsOf([view("a", "table")], { contentHideable: false })[0]!.hideable).toBe(false);
+  });
+
+  it("a record that says hidden takes 「內容」 out of the row; the others keep their order", () => {
+    const tabs = tabsOf([content({ layout_config: { hidden: true } }), view("a", "table"), view("b", "calendar", { pin_order: 1 })]);
+    expect(tabs.map((tab) => tab.key)).toEqual(["a", "b"]);
+  });
+
+  it("a record that does not say hidden puts 「內容」 where its pin_order says, and it can be moved, renamed and hidden", () => {
+    const tabs = tabsOf([view("a", "table"), content({ pin_order: 1 }), view("b", "calendar", { pin_order: 2 })]);
+    expect(tabs.map((tab) => tab.key)).toEqual(["a", CONTENT_TAB, "b"]);
+    expect(tabs[1]).toMatchObject({ editable: true, hideable: true, kind: "content", name: "內容" });
+    expect(buildViewTabs({ views: [content({ name: "正文" })], ...base })[0]!.name).toBe("正文");
+    // It moves among the others like any tab: dropping it first puts the table second.
+    expect(reorderTabs(tabs, CONTENT_TAB, 0).map(({ tab, pinOrder }) => [tab.key, pinOrder])).toEqual([[CONTENT_TAB, 0], ["a", 1]]);
+  });
+
+  it("the built-in 「內容」 is not part of a move; a 「內容」 with a record is", () => {
+    const builtIn = tabsOf([view("a", "table"), view("b", "calendar", { pin_order: 1 })]);
+    expect(reorderTabs(builtIn, "b", 0).map(({ tab }) => tab.key)).toEqual(["b", "a"]);
+    expect(reorderTabs(builtIn, CONTENT_TAB, 1)).toEqual([]);
+  });
+
+  it("a page always shows one tab: with nothing else, a hidden 「內容」 still shows, and cannot be removed", () => {
+    const tabs = tabsOf([content({ layout_config: { hidden: true } })]);
+    expect(tabs.map((tab) => [tab.key, tab.hideable])).toEqual([[CONTENT_TAB, false]]);
+    // A module that is off takes its tab out of the row; the last one left stays.
+    expect(tabsOf([content({ layout_config: { hidden: true } }), view("s", "slides")], { hiddenLayouts: new Set(["slides"]) }).map((tab) => tab.key)).toEqual([CONTENT_TAB]);
+  });
+
+  it("the default tab: the built-in 「內容」; else the whiteboard that opens first; else the first tab showing", () => {
+    expect(defaultTabKey(tabsOf([view("a", "table")]))).toBe(CONTENT_TAB);
+    expect(defaultTabKey(tabsOf([content({ layout_config: { hidden: true } }), view("a", "table"), view("b", "calendar", { pin_order: 1 })]))).toBe("a");
+    expect(defaultTabKey(tabsOf([content({ layout_config: { hidden: true } }), view("a", "table"), view("w", "canvas", { pin_order: 1, layout_config: { opens_first: true } })]))).toBe(CANVAS_TAB);
+    // A hidden whiteboard does not open first; 「內容」 shown but not first: the first tab is the default, no flag needed.
+    expect(defaultTabKey(tabsOf([view("a", "table"), content({ pin_order: 1 })]))).toBe("a");
+    expect(defaultTabKey(tabsOf([content({ layout_config: { hidden: true } }), view("a", "table"), view("w", "canvas", { layout_config: { opens_first: true, hidden: true } })]))).toBe("a");
+    expect(defaultTabKey([])).toBe(CONTENT_TAB);
+  });
+
+  it("a view list finds the record whether it is hidden or not", () => {
+    expect(contentTabIn([view("a", "table")])).toBeNull();
+    expect(contentTabIn([view("a", "table"), content()])?.id).toBe("c");
   });
 });

@@ -310,6 +310,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Already here": "已有",
   "Remove tab": "移除分頁",
   "Remove the “{name}” tab? The board and its cards stay; only the tab goes.": "移除「{name}」分頁？白板和上面的卡片都會保留，只是不再顯示這個分頁。",
+  "Remove the “{name}” tab? The text is still there; only the tab is hidden. Search, publishing and export still include it.": "移除「{name}」分頁？文字還在，只是分頁看不見；搜尋、發布、匯出仍然包含它。",
   "Edit fields": "編輯欄位",
   "There is no date field yet. Use Created date or Last edited date, or add a Date field first.": "還沒有日期欄位。可以用「建立時間」或「最後編輯日期」，或先新增一個日期欄位。",
   "A board needs a field to split into columns. Give the sub-notes a tag that has a Select field (for example “Status”), then come back.": "看板需要一個欄位來分欄。請先替子筆記加上有「選項」欄位的標籤（例如「狀態」），再回來新增看板。",

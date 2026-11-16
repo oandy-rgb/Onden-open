@@ -14,13 +14,13 @@ import { taskHostLiveSql } from "../spine/taskIdentity.js";
 import type { TaskListLang } from "./taskListFile.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
 
-export type LeftOut = { trashed: number; canvases: number; tagsWithSettings: number };
+export type LeftOut = { trashed: number; canvases: number; tagsWithSettings: number; /** Attachments the notes link to that are not in the archive (not readable, or the file is gone). */ attachments: number };
 
 export const LEFT_OUT_FILE: Record<TaskListLang, string> = { "zh-TW": "未匯出的內容.txt", en: "left-out.txt" };
 
 /** How many notes in the trash, whiteboards (a note's whiteboard tab) and tags with fields or a colour
  *  `actor` can read that the Markdown export does not carry. */
-export async function readLeftOut(actor: ActorCtx | null, workspaceId: string): Promise<LeftOut> {
+export async function readLeftOut(actor: ActorCtx | null, workspaceId: string, attachments = 0): Promise<LeftOut> {
   const params: unknown[] = [workspaceId];
   const live = readableScopeSql(actor, "cn", params);
   const retained = spaceScopeSql(actor, "cn", params);
@@ -38,15 +38,16 @@ export async function readLeftOut(actor: ActorCtx | null, workspaceId: string): 
     params,
   );
   const row = rows[0]!;
-  return { trashed: Number(row.trashed), canvases: Number(row.canvases), tagsWithSettings: Number(row.tags) };
+  return { trashed: Number(row.trashed), canvases: Number(row.canvases), tagsWithSettings: Number(row.tags), attachments };
 }
 
-const WORDS: Record<TaskListLang, { title: string; trashed: (n: number) => string; canvases: (n: number) => string; tags: (n: number) => string; hint: string }> = {
+const WORDS: Record<TaskListLang, { title: string; trashed: (n: number) => string; canvases: (n: number) => string; tags: (n: number) => string; attachments: (n: number) => string; hint: string }> = {
   "zh-TW": {
     title: "這份匯出沒有包含下列內容：",
     trashed: (n) => `垃圾桶裡的筆記：${n} 篇`,
     canvases: (n) => `白板上的卡片位置與連線：${n} 張白板`,
     tags: (n) => `標籤的欄位、說明與顏色：${n} 個標籤`,
+    attachments: (n) => `沒有附上的附件（讀不到或檔案已不在）：${n} 個，筆記裡的連結維持原本的位址`,
     hint: "想把這些一起帶走，請改用「完整備份」。",
   },
   en: {
@@ -54,6 +55,7 @@ const WORDS: Record<TaskListLang, { title: string; trashed: (n: number) => strin
     trashed: (n) => `Notes in the trash: ${n}`,
     canvases: (n) => `Card positions and connections on whiteboards: ${n} whiteboard${n === 1 ? "" : "s"}`,
     tags: (n) => `Tag fields, descriptions and colours: ${n} tag${n === 1 ? "" : "s"}`,
+    attachments: (n) => `Attachments not included (not readable, or the file is gone): ${n}; their links keep the original address`,
     hint: "To take these along, use the full backup instead.",
   },
 };
@@ -65,11 +67,12 @@ export function leftOutText(left: LeftOut, lang: TaskListLang): string | null {
     left.trashed > 0 ? words.trashed(left.trashed) : null,
     left.canvases > 0 ? words.canvases(left.canvases) : null,
     left.tagsWithSettings > 0 ? words.tags(left.tagsWithSettings) : null,
+    left.attachments > 0 ? words.attachments(left.attachments) : null,
   ].filter((line): line is string => line !== null);
   return lines.length === 0 ? null : `${words.title}\n${lines.map((line) => `- ${line}`).join("\n")}\n\n${words.hint}\n`;
 }
 
-export async function writeLeftOutReport(out: ArchiveSink, actor: ActorCtx | null, workspaceId: string, lang: TaskListLang): Promise<void> {
-  const text = leftOutText(await readLeftOut(actor, workspaceId), lang);
+export async function writeLeftOutReport(out: ArchiveSink, actor: ActorCtx | null, workspaceId: string, lang: TaskListLang, attachments = 0): Promise<void> {
+  const text = leftOutText(await readLeftOut(actor, workspaceId, attachments), lang);
   if (text !== null) await out.addText(LEFT_OUT_FILE[lang], text);
 }

@@ -17,9 +17,18 @@ import fc from "fast-check";
 import { isTestDatabase } from "../helpers/testDatabase.js";
 import { roundTripRuns, worldSpec, type WorldSpec } from "../helpers/roundTripArb.js";
 import { buildWorld, freshWorkspace, snapshotWorkspace } from "../helpers/roundTripWorld.js";
-import { exportMarkdown, importFiles, zipFiles } from "../helpers/roundTripApi.js";
-import { danglingLinks, expectNotesSurvive, expectSameExport, fileTitle, liveNotes, noteFiles } from "../helpers/roundTripCompare.js";
+import { exportMarkdown, fullBackup, importFiles, zipFiles } from "../helpers/roundTripApi.js";
+import { danglingAttachments, unportableEntries, danglingLinks, expectNotesSurvive, expectSameExport, fileTitle, liveNotes, noteFiles } from "../helpers/roundTripCompare.js";
 import { seedQ } from "../helpers/seedQ.js";
+import { zipEntries } from "../helpers/zipEntries.js";
+import { MEDIA_DIR } from "../../services/mediaStore.js";
+import { LEFT_OUT_FILE } from "../../services/exportLeftOut.js";
+import { rmSync } from "node:fs";
+import { Hono } from "hono";
+import exportRouter from "../../routes/export.js";
+import { workspaceSwitch } from "../helpers/workspaceSwitch.js";
+import type { ActorCtx } from "../../types.js";
+import { join } from "node:path";
 
 
 vi.mock("../../db.js", async (original) => {
@@ -149,4 +158,89 @@ describe.skipIf(!enabled)("Markdown export → import into an empty workspace", 
       expect(other, "an entry that lists what was left out").not.toEqual([]);
     }), roundTripRuns({ maxRuns: 4 }));
   }, 300_000);
+
+  // Scan 14 #9. A link becomes `./attachments/<file>` only when the file is in the archive; one whose file is gone from
+  // the disk keeps its address and is counted in the left-out report. Any subset of the media files may be missing.
+  it("no exported link points at an attachment that is not in the archive, and the missing ones are reported", async () => {
+    const hasMedia = (s: WorldSpec) => s.notes.some((n) => n.media && !n.trashed);
+    await fc.assert(fc.asyncProperty(
+      worldSpec({ maxNotes: 4, trashed: true, media: true }).filter(hasMedia), fc.array(fc.boolean(), { minLength: 4, maxLength: 4 }),
+      async (spec, lose) => {
+        const a = await freshWorkspace("rt-a");
+        const built = await buildWorld(spec, a);
+        const lost = [...built.mediaFiles].filter(([index]) => lose[index % lose.length] && !spec.notes[index]!.trashed);
+        for (const [, file] of lost) rmSync(join(MEDIA_DIR, file), { force: true });
+        const zip = await exportMarkdown(a.ws, a.actor);
+        expect(danglingAttachments(zip)).toEqual([]);
+        if (lost.length > 0) expect(zip.get(LEFT_OUT_FILE["zh-TW"])?.toString("utf8") ?? "", "the left-out report names the lost attachments").toContain("沒有附上的附件");
+      },
+    ), roundTripRuns({ maxRuns: 6 }));
+  }, 300_000);
+
+  it("a note whose image file is gone keeps the image's original address (fixed case)", async () => {
+    const a = await freshWorkspace("rt-a");
+    const built = await buildWorld({ tags: [], canvas: null, notes: [{ title: "Pic", parent: null, blocks: [], tags: [], attrs: [], trashed: false, media: true }] }, a);
+    const file = built.mediaFiles.get(0)!;
+    rmSync(join(MEDIA_DIR, file), { force: true });
+    const zip = await exportMarkdown(a.ws, a.actor);
+    const text = noteFiles(zip).map(([, data]) => data.toString("utf8")).join("\n");
+    expect(text).toContain(`/api/media/${file}`);
+    expect(text).not.toContain(`attachments/${file}`);
+    expect(zip.get(LEFT_OUT_FILE["zh-TW"])?.toString("utf8")).toContain("沒有附上的附件");
+  }, 120_000);
+
+  // Scan 14 #12, #14. Every entry of an export can be unzipped on any system: a task's note file name is cut like a
+  // note's (200 bytes), and trashed notes whose titles differ only in case do not share a `.trash/` name.
+  it("every export entry name is at most 255 bytes and unique apart from case", async () => {
+    await fc.assert(fc.asyncProperty(
+      worldSpec({ maxNotes: 4, trashed: true, standaloneTasks: 3 }), fc.array(fc.integer({ min: 0, max: 150 }), { minLength: 3, maxLength: 3 }),
+      async (base, extra) => {
+        const spec: WorldSpec = {
+          ...base,
+          notes: base.notes.map((n, i) => (n.trashed ? { ...n, title: i % 2 ? "Note" : "note" } : n)),
+          tasks: (base.tasks ?? []).map((t, i) => ({ ...t, title: `${t.title}${"任".repeat(extra[i % extra.length]!)}`, body: t.body.length ? t.body : ["內文"] })),
+        };
+        const a = await freshWorkspace("rt-a");
+        await buildWorld(spec, a);
+        expect(unportableEntries(await exportMarkdown(a.ws, a.actor)), "markdown export").toEqual([]);
+        expect(unportableEntries(zipEntries(await fullBackup(a.ws, a.actor))), "full backup").toEqual([]);
+      },
+    ), roundTripRuns({ maxRuns: 8 }));
+  }, 300_000);
+
+  it("a task with a 100-character title keeps a file name a disk accepts (fixed case)", async () => {
+    const a = await freshWorkspace("rt-a");
+    await buildWorld({ tags: [], canvas: null, notes: [], tasks: [{ title: "任".repeat(100), status: "todo", when: null, whenKey: "_task_when", deadline: null, recur: null, recurMode: null, evening: false, someday: false, remindAt: null, trashed: false, body: ["內文"] }] } as WorldSpec, a);
+    const zip = await exportMarkdown(a.ws, a.actor);
+    expect([...zip.keys()].some((name) => name.startsWith("任務/任")), "the task note is written").toBe(true);
+    expect(unportableEntries(zip)).toEqual([]);
+  }, 120_000);
+
+  it("trashed notes titled Note and note get different .trash names (fixed case)", async () => {
+    const trashed = (title: string) => ({ title, parent: null, blocks: [], tags: [], attrs: [], trashed: true, media: false });
+    const a = await freshWorkspace("rt-a");
+    await buildWorld({ tags: [], canvas: null, notes: [trashed("Note"), trashed("note")] }, a);
+    expect(unportableEntries(zipEntries(await fullBackup(a.ws, a.actor)))).toEqual([]);
+  }, 120_000);
+
+  // Scan 14 #22. `?lang=en` names the task list and the left-out file in English, for any world; the download is no-store.
+  it("an English export holds no Chinese-named task list or left-out file", async () => {
+    await fc.assert(fc.asyncProperty(worldSpec({ maxNotes: 3, trashed: true, standaloneTasks: 2 }), async (spec) => {
+      const a = await freshWorkspace("rt-a");
+      await buildWorld(spec, a);
+      const zip = await exportMarkdown(a.ws, a.actor, { lang: "en" });
+      expect([...zip.keys()].filter((name) => name.startsWith("任務/") || name === LEFT_OUT_FILE["zh-TW"])).toEqual([]);
+    }), roundTripRuns({ maxRuns: 5 }));
+  }, 300_000);
+
+  it("the Markdown download is not cached (fixed case)", async () => {
+    const a = await freshWorkspace("rt-a");
+    workspaceSwitch.ws = a.ws;
+    const hono = new Hono<{ Variables: { actor: ActorCtx } }>();
+    hono.use("*", async (c, next) => { c.set("actor", a.actor); await next(); });
+    hono.route("/api/export", exportRouter);
+    const res = await hono.request("/api/export/markdown.zip");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    await res.arrayBuffer();
+  }, 120_000);
 });

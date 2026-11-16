@@ -1,7 +1,7 @@
 import { ensureSentenceWording, fieldClashMessage, serverErrorMessage } from "./serverErrors";
 import { boundAccountId, matchesAccountStorageServer } from "./accountStorage";
 import { PREFS, getPref, removePref, setPref } from "./prefs";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { pageOrigin } from "./pageUrl";
 
 export { pageOrigin };
@@ -37,6 +37,11 @@ export function pageHref(): string {
 /** Reload the page. Callers that must be testable keep their own seam (`pageLifecycle`, `chunkReloadPage`) around this. */
 export function reloadPage(): void {
   window.location.reload();
+}
+
+/** The Markdown export download, in the language the app is shown in (it names the task list and the "left out" file). */
+export function markdownExportUrl(): string {
+  return `${getApiBase()}/api/export/markdown.zip${getLocale() === "en" ? "?lang=en" : ""}`;
 }
 
 export function getApiBase(): string {

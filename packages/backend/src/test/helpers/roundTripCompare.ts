@@ -83,6 +83,30 @@ export function danglingLinks(zip: Zip): Array<{ file: string; link: string }> {
   return out;
 }
 
+/** Archive entries that cannot be unzipped everywhere: a name over 255 bytes, or two entries that differ only in case
+ *  (Windows and macOS would let one overwrite the other). */
+export function unportableEntries(zip: Zip): string[] {
+  const out: string[] = [];
+  const seen = new Map<string, string>();
+  for (const name of zip.keys()) {
+    if (name.split("/").some((part) => Buffer.byteLength(part) > 255)) out.push(`too long: ${name}`);
+    const key = name.toLowerCase();
+    if (seen.has(key)) out.push(`same name apart from case: ${seen.get(key)} / ${name}`); else seen.set(key, name);
+  }
+  return out;
+}
+
+/** `attachments/<file>` links in a note file whose file is not in the zip. */
+export function danglingAttachments(zip: Zip): Array<{ file: string; link: string }> {
+  const out: Array<{ file: string; link: string }> = [];
+  for (const [file, data] of noteFiles(zip)) {
+    for (const m of data.toString("utf8").matchAll(/(?:\.\.?\/)+attachments\/([^)\s"']+)/g)) {
+      if (!zip.has(`attachments/${m[1]!}`)) out.push({ file, link: m[0] });
+    }
+  }
+  return out;
+}
+
 /** A zip with each attachment named by its content: an import stores a copy of
  *  every media file under a new id (a workspace keeps its own copy), so two
  *  exports of the same notes name their attachments differently. The links in

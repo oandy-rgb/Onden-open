@@ -1,6 +1,6 @@
 import { randomUUID } from "../lib/uuid";
 import { boardSpaceId } from "../lib/boardLayout";
-import { getApiBase, nodeNeedsBody, type Bootstrap, type Canvas, type ContentNode } from "../lib/api";
+import { markdownExportUrl, nodeNeedsBody, type Bootstrap, type Canvas, type ContentNode } from "../lib/api";
 import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, sendWrite, writeErrors, pins } from "../lib/data";
 import type { CreateNote, DayNoteSeed } from "../lib/data";
 import { addToast, getAppState, getNode } from "../lib/appStore";
@@ -161,7 +161,7 @@ export function useNodeCreation({
   // zip. We trigger the download via a hidden anchor so the browser's
   // native progress UI handles large workspaces.
   function exportMarkdown() {
-    const url = `${getApiBase()}/api/export/markdown.zip`;
+    const url = markdownExportUrl();
     const a = document.createElement("a");
     a.href = url;
     a.download = "onden-export.zip";

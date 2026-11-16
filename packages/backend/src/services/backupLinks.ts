@@ -24,10 +24,18 @@ export type RestoredLinks = {
   targets: string[] | undefined;
 };
 
-export async function settleWikilinkEdges(workspaceId: string, notes: RestoredLinks[]): Promise<void> {
+/** `restoredIds`: every note this restore made (not only `notes`, one batch of them). It is only looked up in
+ *  memory: a query naming it would grow with the restore and pass the 65,535-parameter limit on a big backup. */
+export async function settleWikilinkEdges(workspaceId: string, notes: RestoredLinks[], restoredIds: ReadonlySet<string>): Promise<void> {
   for (const note of notes) {
     if (note.targets) {
-      await db.deleteFrom("node_edges").where("workspace_id", "=", workspaceId).where("source_node_id", "=", note.id).where("origin", "=", "wikilink").execute();
+      // The backup only records links between notes it contains (a partial backup
+      // cannot name the rest). For a live note, the edges createNote derived to
+      // notes outside this restore are the only record of them: keep those.
+      // A trashed note keeps none to a note outside (see the header).
+      const own = db.selectFrom("node_edges").select(["id", "target_node_id"]).where("workspace_id", "=", workspaceId).where("source_node_id", "=", note.id).where("origin", "=", "wikilink");
+      const drop = (await own.execute()).filter((edge) => note.deleted || restoredIds.has(edge.target_node_id)).map((edge) => edge.id);
+      if (drop.length > 0) await db.deleteFrom("node_edges").where("id", "in", drop).execute();
       for (const target of new Set(note.targets)) {
         if (target === note.id) continue;
         const exists = await db.selectFrom("content_nodes").select("id").where("id", "=", target).where("workspace_id", "=", workspaceId).executeTakeFirst();

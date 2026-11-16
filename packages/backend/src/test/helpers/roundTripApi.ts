@@ -50,21 +50,22 @@ export async function importFiles(ws: string, actor: ActorCtx, files: ImportFile
   return body;
 }
 
-export async function fullBackup(ws: string, actor: ActorCtx): Promise<Buffer> {
+/** `query`: the part of the workspace to back up, e.g. `note=<id>&note=<id>` (routes/backup.ts selectionQuery). */
+export async function fullBackup(ws: string, actor: ActorCtx, query = ""): Promise<Buffer> {
   workspaceSwitch.ws = ws;
-  const res = await app(actor).request("/api/backup/full.zip");
+  const res = await app(actor).request(`/api/backup/full.zip${query ? `?${query}` : ""}`);
   if (res.status !== 200) throw new Error(`backup: ${res.status} ${await res.text()}`);
   return Buffer.from(await res.arrayBuffer());
 }
 
-/** Upload `zip` and restore it into the empty space `spaceId` of `ws`. */
-export async function restoreBackup(ws: string, actor: ActorCtx, zip: Buffer, spaceId: string): Promise<Record<string, unknown>> {
+/** Upload `zip` and restore it into the space `spaceId` of `ws` (`empty`: it must hold no notes; `merge`: beside what is there). */
+export async function restoreBackup(ws: string, actor: ActorCtx, zip: Buffer, spaceId: string, mode: "empty" | "merge" = "empty"): Promise<Record<string, unknown>> {
   workspaceSwitch.ws = ws;
   const hono = app(actor);
   const up = await hono.request("/api/backup/restore/upload", { method: "POST", headers: { "content-type": "application/zip" }, body: new Uint8Array(zip) });
   if (up.status !== 200) throw new Error(`restore upload: ${up.status} ${await up.text()}`);
   const { upload_id } = await up.json() as { upload_id: string };
-  const res = await applyAndWait(hono, upload_id, spaceId, "empty");
+  const res = await applyAndWait(hono, upload_id, spaceId, mode);
   const body = await res.json() as Record<string, unknown>;
   if (res.status !== 200) throw new Error(`restore: ${res.status} ${JSON.stringify(body)}`);
   return body;

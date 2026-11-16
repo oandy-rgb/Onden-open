@@ -1024,6 +1024,7 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
 
   // ── Links between restored notes ──
   const made = run.items.filter((i) => run.createdIds.has(i.id));
+  const madeIds = new Set(made.map((item) => run.createdIds.get(item.id)!));
   for (let at = 0; at < made.length; at += LINK_BATCH) {
     await progress("links", at, made.length);
     await batch(run, async (actor) => {
@@ -1131,7 +1132,7 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
           targets: full.wikilinks && !copy ? full.wikilinks.map((target) => run.ids.get(target)).filter((target): target is string => !!target) : undefined,
         });
       }
-      await settleWikilinkEdges(run.workspaceId, links);
+      await settleWikilinkEdges(run.workspaceId, links, madeIds);
     });
   }
 

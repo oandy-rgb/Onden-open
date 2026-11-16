@@ -114,13 +114,24 @@ describe.skipIf(!enabled)("a shorter query finds at least what the longer one fo
     process.stdout.write(`${describeCoverage(coverage)}\n`);
   }, TIMEOUT);
 
-  it.skipIf(needsPgroonga)("MR-S2 pgroonga engine: a typable one-grapheme query does not depend on the grapheme's class", async () => {
+  // Only Han on both sides: a single Latin letter or digit is a whole token for pgroonga, so it is found next to a Han character
+  // and NOT inside a longer word — the same grapheme in the same place gives another answer than a Han one would (the fixed example
+  // below; first real-Postgres run, PROPS_SEED=20261023). What is left is the comparison that crosses the "length 2" boundary:
+  // a BMP Han character (1 UTF-16 unit) against one of Extension B (2 units).
+  const oneHan = (g: string): boolean => /^\p{Script=Han}$/u.test(g);
+  it.skipIf(needsPgroonga)("MR-S2 pgroonga engine: a one-character Han query does not depend on which Han block the character is in", async () => {
     await metamorphic({
-      name: "MR-S2 pgroonga", source: prefixCases({ classWeights: { han: 12, hanExtB: 6 } }),
+      name: "MR-S2 pgroonga", source: prefixCases({ classWeights: { han: 12, hanExtB: 6 }, swapFrom: ["han", "hanExtB"] }),
       setup: (input: PrefixCase) => openWorld("pgroonga", [...input.notes, ...withSwap(input.notes, input.fragment[0]!, input.swap)]),
-      relation: (world, input) => oneGraphemeIgnoresItsClass(world, input, { untypable: (g) => (typable(g) ? null : NOT_TYPABLE) }),
-      minCompared: 0.1, skipShare: { [NOT_TYPABLE]: 0.9, "the swap grapheme is already in the corpus": 0.05, "neither grapheme was found": 0.1 },
+      relation: (world, input) => oneGraphemeIgnoresItsClass(world, input, { untypable: (g) => (oneHan(g) ? null : NOT_TYPABLE) }),
+      minCompared: 0.45, skipShare: { [NOT_TYPABLE]: 0.5, "the swap grapheme is already in the corpus": 0.05, "neither grapheme was found": 0.1 },
     });
+  }, TIMEOUT);
+
+  it.skipIf(needsPgroonga)("pgroonga today: a single Latin letter is found as a whole token, not inside a longer word; a Han character is found in both places", async () => {
+    const world = await openWorld("pgroonga", [{ title: "筆筆", body: "" }, { title: "筆\u{20000}\u{20000}筆", body: "" }, { title: "qq", body: "" }, { title: "q\u{20000}\u{20000}q", body: "" }]);
+    expect(exactIndices(await world.search("筆"))).toEqual(new Set([0, 1]));
+    expect(exactIndices(await world.search("q")), "q inside the word qq is not a token").toEqual(new Set([3]));
   }, TIMEOUT);
 
   // ── fixed examples: what the portable engine does today with Unicode spellings (portable-backend.md §4: no normalisation) ──

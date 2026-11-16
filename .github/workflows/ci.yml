@@ -143,7 +143,10 @@ jobs:
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 60); do
-            if docker exec onden-pg pg_isready -U onden -d onden >/dev/null 2>&1; then
+            # Over TCP on purpose: while the image initialises, a temporary server answers on the unix socket only and
+            # is then shut down. Accepting that one let the next step start loading the schema into a server that was
+            # stopping ("the database system is shutting down", twice on 2026-11-15/16). The real server listens on TCP.
+            if docker exec onden-pg pg_isready -h 127.0.0.1 -U onden -d onden >/dev/null 2>&1; then
               echo "Postgres ready"; exit 0
             fi
             sleep 2

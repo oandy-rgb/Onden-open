@@ -64,7 +64,8 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 // 內容), timelineDrag.mjs (the timeline page was reworked with Today). measure.mjs, profileWorker.mjs and
 // saveUnderWrites.mjs measure and take no pass/fail; touchHold.mjs and the slide scripts have their own npm scripts.
 const FEATURES = [
-  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["endRoomNoJump.mjs"], ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
+  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
+  ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["todayPage.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
 ];

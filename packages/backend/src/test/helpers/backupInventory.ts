@@ -81,6 +81,8 @@ export const NODE_TABLES: Record<string, Coverage> = {
   focus_sessions: restored("a workspace move only (extras.focus)"),
   rss_subscriptions: restored("a workspace move only (extras.rss)"),
   actor_module_settings: restored("a workspace move only (extras.moduleSettings)"),
+  ink_chunks: notInBackup("the earlier versions of a big drawing, kept for History (migration 203); a backup carries the drawing as it is now, in node_attributes, and no version history of drawings"),
+  ink_manifests: notInBackup("the list of chunks of each earlier version of a big drawing (migration 203): History, as ink_chunks"),
   note_pointers: notInBackup("sidebar pointers (a note shown under another) are not in a backup yet: found by this inventory, not one of the audit's four gaps"),
   node_embeddings: notInBackup("a search projection computed from the text, written again by the outbox"),
   board_copy_folds: notInBackup("bookkeeping of migration 139 (its undo script), not content"),

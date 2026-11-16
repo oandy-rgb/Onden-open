@@ -3,6 +3,7 @@ import { updateNode as saveNode } from "../nodeUpdate.js";
 import type { BodyConflict } from "../eventLog/index.js";
 import type { AgentTool } from "./types.js";
 import { EditArgs as Args } from "./editArgs.js";
+import { cardAdvice } from "./cardAdvice.js";
 import { suggestEdit, type SuggestEditResult } from "./suggestEdit.js";
 
 type UpdateNodeResult = {
@@ -19,6 +20,8 @@ type UpdateNodeResult = {
    *  body holds the agent's text there; the other writer's is each conflict's
    *  `current`, and BODY_CONFLICT puts it in the inbox. Empty when all merged. */
   conflicts: BodyConflict[];
+  /** Present when this body marks a review card that has no answer: what to change (see cardAdvice.ts). */
+  card_notes?: string[];
 };
 
 export const updateNode: AgentTool<z.infer<typeof Args>, UpdateNodeResult | SuggestEditResult> = {
@@ -48,11 +51,13 @@ export const updateNode: AgentTool<z.infer<typeof Args>, UpdateNodeResult | Sugg
       ...(args.markdown !== undefined ? { baseMarkdown: args.base_markdown } : {}),
       // No editor session writes the agent's `^id`s, so the save does, base or not.
     });
+    const cardNotes = args.markdown !== undefined ? await cardAdvice(workspaceId, args.base_markdown ?? "", node.markdown as string) : [];
     return {
       id: node.id as string, slug: node.slug as string, title: node.title as string,
       markdown: node.markdown as string,
       updated_at: dryRun ? "(dry-run)" : String(node.updated_at), event_id: eventId,
       conflicts: bodyConflicts,
+      ...(cardNotes.length ? { card_notes: cardNotes } : {}),
     };
   },
 };

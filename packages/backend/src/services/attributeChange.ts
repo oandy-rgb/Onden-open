@@ -200,11 +200,11 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
         type: attributeEventType(row),
         targetType: "node",
         targetId: nodeId,
-        payload: { key, ...(row ? await encodeSnapshot(key, row) : {}), ...change.payload },
+        payload: { key, ...(row ? await encodeSnapshot(key, row, { workspaceId, nodeId }) : {}), ...change.payload },
         ...(change.triggeredBy ? { triggeredBy: change.triggeredBy } : {}),
         txMeta: {
           inverse_op: previous ? "attribute.set" : "attribute.deleted",
-          prev_field_values: await encodeSnapshot(key, previous),
+          prev_field_values: await encodeSnapshot(key, previous, { workspaceId, nodeId }),
           ui_context: change.uiContext,
         },
       },

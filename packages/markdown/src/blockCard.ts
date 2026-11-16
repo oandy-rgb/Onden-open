@@ -14,8 +14,8 @@
 //
 // The `{…}` marker never shows on either side.
 
-import { parseBlocks, type AnchorAt } from "./blocks.js";
-import { stripLineMarker } from "./plainText.js";
+import { parseBlocks, type AnchorAt, type ParsedBlock } from "./blocks.js";
+import { plainInline, stripLineMarker } from "./plainText.js";
 import { blockText, blocksOf } from "./linkContext.js";
 import { ellipsize } from "./graphemes.js";
 
@@ -29,7 +29,10 @@ export const CLOZE_GAP = "［⋯］";
  *  `anchors`: the note's valid anchors (a block's identity is not in its text). */
 export function blockCardSides(markdown: string, ref: string, anchors: readonly AnchorAt[]): BlockCardSides | null {
   const block = parseBlocks(markdown, anchors).find((b) => b.ref === ref);
-  if (!block) return null;
+  return block ? sidesOfBlock(markdown, block) : null;
+}
+
+function sidesOfBlock(markdown: string, block: ParsedBlock): BlockCardSides {
   // The block's text with its own markers cut out (offsets from the end, so
   // the earlier cut doesn't move the later one).
   const cuts = [block.marks.ref, block.marks.tags].filter((s): s is NonNullable<typeof s> => !!s)
@@ -43,7 +46,11 @@ export function blockCardSides(markdown: string, ref: string, anchors: readonly 
     text = text.slice(0, from) + text.slice(span.to);
     end -= span.to - from;
   }
-  const scope = text.slice(block.start, end).replace(/\s+$/, "");
+  return sidesOfText(text.slice(block.start, end), block.kind);
+}
+
+function sidesOfText(source: string, kind: ParsedBlock["kind"]): BlockCardSides {
+  const scope = source.replace(/\s+$/, "");
   const lines = scope.split("\n");
   const head = lines[0]!;
   const rest = dedent(lines.slice(1)).join("\n").trim();
@@ -51,7 +58,7 @@ export function blockCardSides(markdown: string, ref: string, anchors: readonly 
 
   if (CLOZE.test(scope)) {
     CLOZE.lastIndex = 0;
-    const plain = block.kind === "listItem" ? [firstLine, rest].filter(Boolean).join("\n") : stripMarker(scope);
+    const plain = kind === "listItem" ? [firstLine, rest].filter(Boolean).join("\n") : stripMarker(scope);
     return { front: plain.replace(CLOZE, CLOZE_GAP), back: plain.replace(CLOZE, "**$1**") };
   }
   return { front: firstLine, back: rest };
@@ -74,17 +81,25 @@ function dedent(lines: string[]): string[] {
 /** The paragraphs just before and just after a block card's own, as plain
  *  prose (shown with the answer, so a card is read in its place). Nested
  *  lines of the card itself are not "after". Null when the note has no such
- *  block node; a side with nothing there is null. */
+ *  block node; a side with nothing there is null.
+ *
+ *  A neighbour that is itself a card (`cards`: refs the reader has enrolled)
+ *  shows only its FRONT, by the same rules as `blockCardSides`: its answer is
+ *  not known yet, and the next card must not be read while reviewing this
+ *  one. Done here, beside the rules that decide a front, so the two cannot
+ *  drift; the service only says which refs are cards. */
 export type BlockNeighbours = { before: string | null; after: string | null };
 const NEIGHBOUR_MAX = 400;
 
-export function blockNeighbours(markdown: string, ref: string, anchors: readonly AnchorAt[]): BlockNeighbours | null {
-  const block = parseBlocks(markdown, anchors).find((b) => b.ref === ref);
+export function blockNeighbours(markdown: string, ref: string, anchors: readonly AnchorAt[], cards: ReadonlySet<string> = new Set()): BlockNeighbours | null {
+  const parsed = parseBlocks(markdown, anchors);
+  const block = parsed.find((b) => b.ref === ref);
   if (!block) return null;
   const spans = blocksOf(markdown);
   const prose = (span: { start: number; end: number } | undefined): string | null => {
     if (!span) return null;
-    const text = blockText(markdown, span, [], () => false);
+    const card = parsed.find((b) => b.ref !== null && cards.has(b.ref) && b.start >= span.start && b.start <= span.end);
+    const text = card ? plainInline(sidesOfBlock(markdown, card).front).replace(/\s+/g, " ").trim() : blockText(markdown, span, [], () => false);
     return text ? ellipsize(text, NEIGHBOUR_MAX) : null;
   };
   return {

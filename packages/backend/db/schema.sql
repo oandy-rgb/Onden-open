@@ -3913,6 +3913,7 @@ INSERT INTO schema_migrations (version) VALUES ('199_stamps_s3') ON CONFLICT (ve
 INSERT INTO schema_migrations (version) VALUES ('200_order_keys') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('201_derived_ids_function_ref_stamps') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('202_stamps_genesis') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('203_ink_chunks') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5087,3 +5088,25 @@ BEGIN
   RETURN QUERY SELECT v_stamps, v_lines, v_n, v_skips;
 END
 $fn$ LANGUAGE plpgsql;
+-- 203: a big drawing stored as chunks (db/migrations/203_ink_chunks.sql)
+CREATE TABLE IF NOT EXISTS ink_chunks (
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  node_id uuid NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
+  hash text NOT NULL,
+  content text NOT NULL,
+  size_bytes integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (node_id, hash)
+);
+CREATE INDEX IF NOT EXISTS ink_chunks_workspace_idx ON ink_chunks (workspace_id);
+
+CREATE TABLE IF NOT EXISTS ink_manifests (
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  node_id uuid NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
+  hash text NOT NULL,
+  chunks bytea NOT NULL,
+  size_bytes bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (node_id, hash)
+);
+CREATE INDEX IF NOT EXISTS ink_manifests_workspace_idx ON ink_manifests (workspace_id);

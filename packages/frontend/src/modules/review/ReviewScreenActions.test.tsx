@@ -124,7 +124,7 @@ describe("review screen: after the answer", () => {
     const reads = calls.filter(call => call.url.includes("/queue")).length;
     queued = [{ ...blockCard(), markdown: "A small, fast store inside the CPU." }];
     await userEvent.click(screen.getByRole("button", { name: "close sheet" }));
-    await waitFor(() => expect(screen.getByTestId("md")).toHaveTextContent("A small, fast store inside the CPU."));
+    await waitFor(() => expect(document.querySelector(".review-card-body")).toHaveTextContent("A small, fast store inside the CPU."));
     expect(calls.filter(call => call.url.includes("/queue")).length).toBeGreaterThan(reads);
     expect(screen.queryByRole("dialog", { name: "edit sheet" })).toBeNull();
   });

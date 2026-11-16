@@ -35,6 +35,30 @@ describe("blockCardSides (B3)", () => {
   });
 });
 
+describe("a one-line card has no back", () => {
+  it("an arrow in the line is just text: the whole line is the front", () => {
+    for (const line of ["問題 → 答案", "A -> B", "A => B", "a :: b", "問題？：：答案"]) {
+      expect(sides(`${line} {複習} ^p1\n`, "p1")).toEqual({ front: line, back: "" });
+    }
+  });
+});
+
+describe("blockNeighbours with cards", () => {
+  // Cards by the existing rules: a paragraph's first line asks, the rest answers.
+  const md = "前言。\n\n問一\n答一 {複習} ^a\n\n問二\n答二 {複習} ^b\n\n問三\n答三 {複習} ^c\n\n尾聲\n也不是卡。\n";
+  const near = (ref: string, cards: string[]) => { const x = anchored(md); return blockNeighbours(x.markdown, ref, x.anchors, new Set(cards)); };
+  it("a neighbouring card shows its front only", () => {
+    expect(near("b", ["a", "b", "c"])).toEqual({ before: "問一", after: "問三" });
+  });
+  it("a neighbour that is not a card shows as before", () => {
+    expect(near("c", ["c"])).toEqual({ before: "問二 答二", after: "尾聲 也不是卡。" });
+  });
+  it("a cloze neighbour shows its gap and the front is plain prose: code marks are gone", () => {
+    const x = anchored("`if` 是 ==關鍵字== {複習} ^a\n\n自己 {複習} ^b\n");
+    expect(blockNeighbours(x.markdown, "b", x.anchors, new Set(["a", "b"]))!.before).toBe(`if 是 ${CLOZE_GAP}`);
+  });
+});
+
 describe("blockNeighbours", () => {
   const near = (legacy: string, ref: string) => { const a = anchored(legacy); return blockNeighbours(a.markdown, ref, a.anchors); };
 

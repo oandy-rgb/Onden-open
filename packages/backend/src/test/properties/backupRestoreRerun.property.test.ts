@@ -111,7 +111,7 @@ describe.skipIf(!enabled)("a restore that failed part way, run again", () => {
   for (const mode of ["empty", "merge", "workspace"] as const) {
     it(`${mode}: ends where a restore that went through at once ends`, async () => {
       await fc.assert(fc.asyncProperty(
-        worldSpec({ maxNotes: 5, trashed: true, exotic: "values", canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: 2, rich: true }),
+        worldSpec({ maxNotes: 5, trashed: true, exotic: "values", bigInk: true, canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: 2, rich: true }),
         worldSpec({ maxNotes: 3 }),
         faultArb,
         async (spec, other, injected) => {

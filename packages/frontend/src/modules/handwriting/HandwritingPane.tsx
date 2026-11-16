@@ -5,6 +5,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { NOTE_INK_ATTR, isInkReadOnly, noteDoc, notePages, type InkPages } from "@onden/markdown/ink";
 import { lazyWithReload } from "../../lib/lazyWithReload";
+import { useDrawingRestoreSerial } from "../../hooks/useDrawingRestoreSerial";
 import { decodeInk, loadInkAttributes, notifyInkReadOnly, useInkSurfaceSaver } from "../../lib/ink";
 import type { InkSaveOptions } from "../../lib/data";
 import { useT } from "../../lib/i18n";
@@ -20,6 +21,8 @@ export default function HandwritingPane({ node, canEdit }: NoteViewPaneProps) {
   const nodeId = node.id;
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const { rebase, save } = useInkSurfaceSaver(NOTE_INK_ATTR);
+  // A version put back from History: this pane loads it again.
+  const drawingRestored = useDrawingRestoreSerial(nodeId);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +40,7 @@ export default function HandwritingPane({ node, canEdit }: NoteViewPaneProps) {
       setLoaded({ nodeId, pages, readOnly });
     })();
     return () => { cancelled = true; };
-  }, [nodeId, rebase]);
+  }, [nodeId, rebase, drawingRestored]);
 
   if (!loaded || loaded.nodeId !== nodeId) return <div className="handwriting-pane" aria-busy="true" />;
   // The surface hands over a settled document (debounced inside the pages' session, flushed when the view goes away).

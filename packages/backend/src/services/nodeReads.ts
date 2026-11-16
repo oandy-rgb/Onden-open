@@ -8,16 +8,15 @@ import { nodeRowColumnsSql, nodeEventMetaJoinSql } from "./nodeRowProjection.js"
 import { bodyEventSql, inkEventSql } from "./history/index.js";
 import type { InkKind } from "@onden/markdown/ink";
 import { liveNodeSql } from "../spine/nodeSql.js";
+import { readInkValues } from "./inkChunks.js";
 
 /** Saved versions of one of a note's drawings (newest 50). Older saves stored the value inline, hence the COALESCE. */
 export async function listInkVersionRows(actor: ActorCtx, workspaceId: string, nodeId: string, kind: InkKind) {
   if (!(await canReadNode(actor, nodeId))) return null;
-  const result = await pool.query(
-    `SELECT e.id,
-            COALESCE(b.content, e.payload->>'value') AS ink_data,
+  const result = await pool.query<{ id: string; ink_data: string | null; value_ref: string | null; changed_at: string; actor_name: string | null; actor_type: string }>(
+    `SELECT e.id, e.payload->>'value' AS ink_data, e.payload->>'value_ref' AS value_ref,
             e.created_at AS changed_at, a.name AS actor_name, e.actor_type
        FROM domain_events e
-  LEFT JOIN blobs b ON b.hash = e.payload->>'value_ref'
   LEFT JOIN actors a ON a.id::text = e.actor_id
       WHERE e.target_id = $1 AND e.workspace_id = $2
         AND e.event_type = 'ATTRIBUTE_SET'
@@ -26,7 +25,9 @@ export async function listInkVersionRows(actor: ActorCtx, workspaceId: string, n
       LIMIT 50`,
     [nodeId, workspaceId],
   );
-  return result.rows;
+  // The drawing of each save: a `blobs` row or the note's chunks (inkChunks.ts).
+  const texts = await readInkValues(workspaceId, nodeId, result.rows.flatMap((r) => (r.value_ref ? [r.value_ref] : [])));
+  return result.rows.map(({ value_ref, ...row }) => ({ ...row, ink_data: (value_ref ? texts.get(value_ref) : undefined) ?? row.ink_data }));
 }
 
 /** Lightweight body-save history of a note (newest 50), derived from the event log. */

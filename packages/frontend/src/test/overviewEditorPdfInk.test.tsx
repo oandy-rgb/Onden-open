@@ -79,8 +79,8 @@ describe("PDF drawing state", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Highlight" }, { timeout: 10_000 }));
     fireEvent.click(screen.getByRole("button", { name: "Highlight on exit" }));
     const [ordinary, onExit] = vi.mocked(saveInk).mock.calls;
-    expect(ordinary![3]).toBeUndefined();
-    expect(onExit![3]).toEqual({ keepalive: true });
+    expect(ordinary![3]?.keepalive).toBeUndefined();
+    expect(onExit![3]).toMatchObject({ keepalive: true });
   });
 
   it("folds a PDF's legacy pdf_annotations into the envelope", { timeout: 20_000 }, async () => {
@@ -122,7 +122,7 @@ describe("handwriting page", () => {
     expect(doc).toMatchObject({ version: 1, strokes: [{ id: "s1" }], erased: { s1: [[0, 0]] }, page: { width: 1000 } });
     expect(doc).not.toHaveProperty("pages");
     expect(base).toMatchObject({ strokes: [{ id: "s1" }] });
-    expect(options).toEqual({ keepalive: true });
+    expect(options).toMatchObject({ keepalive: true });
   });
 
   // The whiteboard's pen layer is the note's board_ink. Drawing on the board must not turn the

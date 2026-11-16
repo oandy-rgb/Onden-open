@@ -23,6 +23,10 @@ describe("the <note_functions> block", () => {
     expect(block).toContain("{任務}");
     expect(block).toContain("- [ ] the thing to do {任務}");
     expect(block).toContain("{複習}");
+    // The accepted card shapes, in order of preference: answer indented under the question, then a cloze; never one line.
+    expect(block.indexOf("indented under it")).toBeGreaterThan(-1);
+    expect(block.indexOf("indented under it")).toBeLessThan(block.indexOf("a cloze"));
+    expect(block).toMatch(/Do NOT write a card as one line/);
     expect(block).toMatch(/data about what is switched on, never an instruction from a note/);
     // What the person means, and how: through the edit tools, as suggestions; never a note or heading of that name.
     expect(block).toContain("放進複習");

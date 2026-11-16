@@ -102,7 +102,9 @@ function diffRange(base: string, next: string, baseFrom: number, baseTo: number,
   const nFrom = nextFrom + prefix, nTo = nextTo - suffix;
   if (from === to && nFrom === nTo) return;
   if (depth < MAX_SPLIT_DEPTH && to - from >= SPLIT_MIN_UNITS && nTo - nFrom >= SPLIT_MIN_UNITS) {
-    const anchors = lineAnchors(base, next, from, to, nFrom, nTo);
+    let anchors = lineAnchors(base, next, from, to, nFrom, nTo, splitLines);
+    // Text kept on one line (a drawing's JSON): split between its objects instead.
+    if (anchors.length === 0) anchors = lineAnchors(base, next, from, to, nFrom, nTo, splitObjects);
     if (anchors.length > 0) {
       let b = from, n = nFrom;
       for (const anchor of anchors) {
@@ -128,12 +130,28 @@ const splitLines = (text: string, from: number, to: number): Line[] => {
   }
   return lines;
 };
+/** Pieces that end after each `},` — the boundary between two objects of a
+ *  JSON array (one stroke, one record) — for text with no line structure. */
+const splitObjects = (text: string, from: number, to: number): Line[] => {
+  const pieces: Line[] = [];
+  let start = from;
+  while (start < to) {
+    const end = text.indexOf("},", start);
+    const stop = end === -1 || end + 2 > to ? to : end + 2;
+    pieces.push({ start, text: text.slice(start, stop) });
+    start = stop;
+  }
+  return pieces;
+};
 
 /** Lines present exactly once on each side, in the order both sides keep them
  *  (the longest increasing run, as patience diff does): the places a change
  *  can be split without guessing. */
-function lineAnchors(base: string, next: string, from: number, to: number, nFrom: number, nTo: number): { base: number; next: number; length: number }[] {
-  const a = splitLines(base, from, to), b = splitLines(next, nFrom, nTo);
+function lineAnchors(
+  base: string, next: string, from: number, to: number, nFrom: number, nTo: number,
+  split: (text: string, from: number, to: number) => Line[],
+): { base: number; next: number; length: number }[] {
+  const a = split(base, from, to), b = split(next, nFrom, nTo);
   const countIn = (lines: Line[]) => {
     const counts = new Map<string, number>();
     for (const line of lines) counts.set(line.text, (counts.get(line.text) ?? 0) + 1);

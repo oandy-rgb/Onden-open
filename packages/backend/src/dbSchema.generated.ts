@@ -560,6 +560,24 @@ export interface ImportedMedia {
   workspace_id: string;
 }
 
+export interface InkChunks {
+  content: string;
+  created_at: Generated<Timestamp>;
+  hash: string;
+  node_id: string;
+  size_bytes: number;
+  workspace_id: string;
+}
+
+export interface InkManifests {
+  chunks: Buffer;
+  created_at: Generated<Timestamp>;
+  hash: string;
+  node_id: string;
+  size_bytes: Int8;
+  workspace_id: string;
+}
+
 export interface MediaUploads {
   created_at: Generated<Timestamp>;
   filename: string;
@@ -934,6 +952,8 @@ export interface DB {
   id_rewrites: IdRewrites;
   idempotency_keys: IdempotencyKeys;
   imported_media: ImportedMedia;
+  ink_chunks: InkChunks;
+  ink_manifests: InkManifests;
   media_uploads: MediaUploads;
   member_removals: MemberRemovals;
   node_attributes: NodeAttributes;

@@ -209,7 +209,9 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
         WHERE c.contype = 'f' AND c.confrelid IN ('content_nodes'::regclass, 'spaces'::regclass)`)).rows;
     expect(fks.length).toBeGreaterThan(30);
     const header = previewQuery();
-    for (const { t, c } of fks) expect(header, `${t}.${c}`).toContain(`'${t}.${c}'`);
+    // Tables made by a migration after 201: the id rewrite ran before they existed, so it has nothing of theirs to move.
+    const AFTER_201 = new Set(["ink_chunks", "ink_manifests"]);
+    for (const { t, c } of fks) if (!AFTER_201.has(t)) expect(header, `${t}.${c}`).toContain(`'${t}.${c}'`);
   });
 
   it("each purpose now has the derived id, the same one the TypeScript side computes", async () => {

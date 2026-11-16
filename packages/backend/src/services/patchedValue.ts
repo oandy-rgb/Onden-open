@@ -1,5 +1,6 @@
 import { applyPatch, isTextPatch, TextPatchError, type TextPatch } from "@onden/markdown";
 import { q } from "../db.js";
+import { readChunkedValues } from "./inkChunks.js";
 import { sha256Hex } from "../utils.js";
 import { CodedStatusError, StatusError } from "../statusError.js";
 
@@ -38,7 +39,9 @@ export async function keptText(workspaceId: string, nodeId: string, hash: string
              AND $1 IN (e.payload->>'body_hash', e.payload->>'value_ref', e.tx_meta->'prev_field_values'->>'value_ref'))`,
     [hash, workspaceId, nodeId],
   );
-  return found.rows[0]?.content ?? null;
+  if (found.rows[0]) return found.rows[0].content;
+  // A drawing stored as chunks (inkChunks.ts) is the note's own: its chunks are only looked up under this note.
+  return (await readChunkedValues(workspaceId, nodeId, [hash])).get(hash) ?? null;
 }
 
 /** The text `patch` describes and the text it was made from. `current` is the

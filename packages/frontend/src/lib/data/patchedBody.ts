@@ -37,11 +37,11 @@ const BASE_BUDGET_BYTES = MAX_REQUEST_BYTES - 1024 * 1024;
  *  as small as the patch's envelope: nothing to save, so it is sent as is. */
 export const MIN_PATCH_UNITS = 2048;
 
-const routeOf = (method: string | undefined, path: string): PatchRoute | undefined =>
+export const routeOf = (method: string | undefined, path: string): PatchRoute | undefined =>
   ROUTES.find((route) => route.method === method?.toUpperCase() && route.path.test(path));
 
-type Fields = Record<string, unknown>;
-function parseFields(body: BodyInit | null | undefined): Fields | null {
+export type Fields = Record<string, unknown>;
+export function parseFields(body: BodyInit | null | undefined): Fields | null {
   if (typeof body !== "string") return null;
   try {
     const parsed = JSON.parse(body) as unknown;
@@ -69,11 +69,24 @@ export function patchedBody(method: string | undefined, path: string, body: Body
  *  server's merge (it stores the value as sent, as before patches). */
 export function wholeBody(method: string | undefined, path: string, body: BodyInit | null | undefined): BodyInit | null | undefined {
   const route = routeOf(method, path);
-  if (!route?.dropsBaseWhenTooBig || typeof body !== "string" || new TextEncoder().encode(body).length <= BASE_BUDGET_BYTES) return body;
+  if (!route?.dropsBaseWhenTooBig || typeof body !== "string" || wholeFitsRequest(method, path, body)) return body;
   const fields = parseFields(body);
   if (!fields) return body;
   const { [route.base]: _base, ...rest } = fields;
   return JSON.stringify(rest);
+}
+
+/** Is the whole request (value and base) small enough to be sent as it is? */
+export function wholeFitsRequest(method: string | undefined, path: string, body: BodyInit | null | undefined): boolean {
+  const route = routeOf(method, path);
+  return !route?.dropsBaseWhenTooBig || typeof body !== "string" || new TextEncoder().encode(body).length <= BASE_BUDGET_BYTES;
+}
+
+/** `fields` (a whole request) with its value and base replaced by a patch of `value` against `stored`, the text the server holds
+ *  (lib/data/rebasedPatch.ts). */
+export function bodyPatchedAgainst(route: PatchRoute, fields: Fields, stored: string, value: string): string {
+  const { [route.value]: _whole, [route.base]: _base, ...rest } = fields;
+  return JSON.stringify({ ...rest, [route.patch]: makePatch(stored, value) });
 }
 
 /** The server cannot give back the base a patch names. */

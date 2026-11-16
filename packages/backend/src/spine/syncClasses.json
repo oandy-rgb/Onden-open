@@ -201,6 +201,14 @@
   "class": "separate",
   "note": "keyed by content hash, cannot conflict; whether every node keeps a copy is decided after launch"
  },
+ "ink_chunks": {
+  "class": "separate",
+  "note": "the earlier versions of a big drawing as chunks of one note, content-addressed within the note (note, hash), cannot conflict; History's copy like blobs, decided after launch. Not stamped (no trigger, no genesis pass): the drawing itself is the stamped node_attributes row, a chunk is only a copy a version names"
+ },
+ "ink_manifests": {
+  "class": "separate",
+  "note": "which chunks make up each earlier version of a big drawing, keyed by (note, content hash), cannot conflict; as ink_chunks"
+ },
  "media_uploads": {
   "class": "separate",
   "note": "attachments, after launch"

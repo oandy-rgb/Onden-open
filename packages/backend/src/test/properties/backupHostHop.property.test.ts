@@ -210,7 +210,7 @@ const edit: fc.Arbitrary<Edit> = fc.oneof(
   { weight: 2, arbitrary: fc.record({ kind: fc.constant("space" as const), text: word }) },
 );
 const routeOf = (rich: boolean): fc.Arbitrary<Route> => fc.record({
-  spec: worldSpec({ maxNotes: 5, trashed: true, exotic: "values", canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: 2, ...(rich ? { rich } : {}) }),
+  spec: worldSpec({ maxNotes: 5, trashed: true, exotic: "values", bigInk: true, canvas: true, tagFunctions: true, media: true, linksToTrashed: true, standaloneTasks: 2, ...(rich ? { rich } : {}) }),
   from: fc.nat({ max: 2 }),
   hops: fc.array(fc.record({ edits: fc.array(edit, { maxLength: 5 }), to: fc.nat({ max: 2 }) }), { minLength: 2, maxLength: 4 }),
 });

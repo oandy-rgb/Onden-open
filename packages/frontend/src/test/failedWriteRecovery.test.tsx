@@ -281,6 +281,17 @@ describe("recovery shows only what the user typed", () => {
     expect(document.body.textContent).not.toMatch(/65025fb8/);
   });
 
+  it("a refused note save holding text the newer refusal lacks stays its own entry; one it covers collapses", async () => {
+    vi.mocked(storeRejectedWrite).mockImplementation(async (request, rejection) => ({ ...request, id: ++storeId, attempts: 0, rejection }));
+    render(<FailedWriteRecovery />);
+    const save = (fields: object, key: string) => direct("/api/nodes/n1", JSON.stringify(fields), key, "PATCH");
+    await save({ title: "T".repeat(501), markdown: "typed before the reload" }, "n1");
+    await save({ title: "T".repeat(501), markdown: "typed before the reload\nand a bit more" }, "n2");
+    expect(screen.getAllByText("This change was rejected"), "the newer copy holds all the older text").toHaveLength(1);
+    await save({ title: "T".repeat(501) }, "n3");
+    expect(screen.getAllByText("This change was rejected"), "a title-only refusal does not hide the typed body").toHaveLength(2);
+  });
+
   it("repeated refusals of one number cell collapse into one entry that can be dismissed", async () => {
     const rows: Array<{ id: number; method: string; path: string; body: string | null; idem_key: string; attempts: number; rejection: string }> = [];
     vi.mocked(storeRejectedWrite).mockImplementation(async (request, rejection) => {
@@ -294,7 +305,8 @@ describe("recovery shows only what the user typed", () => {
     expect(screen.getByText("1,200")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/value_type/);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove recovery copy" })); });
-    expect(dismissRejectedWrite).toHaveBeenCalledTimes(3);
+    // The second "abc" is the same refusal as the first: kept once.
+    expect(dismissRejectedWrite).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("This change was rejected")).toBeNull();
   });
 

@@ -21,10 +21,10 @@
 //   4 the open note's editor text equals the server (unless its save was refused)
 //   5 pagehide / background never leaves the newest typing unprotected
 //   6 a refused save is in recovery once and is not sent again
-//   (1 also covers saves the CLIENT refuses before sending: a title over 500 characters, NUL, half a surrogate
+//   (1 also covers saves the CLIENT refuses before sending: a title over 500 characters, a body over the cap, NUL, half a surrogate
 //    pair, the note gone from the store; the generator types them, deletes the open note elsewhere, and reloads)
 //
-// STATUS (fix/save-keepalive-resend): #1–#3, #5, #6 hold on 20 extra seeds x 5000
+// STATUS (fix/save-keepalive-resend; seed 7 below is open): #1–#3, #5, #6 hold on 20 extra seeds x 5000
 // runs; the only open one is #4 (a rename from the other device that arrives
 // while the user types never reaches the editor; fixed, see the nightly 2026-11-13 cases).
 // Older note: these failed on main (review 2026-10-24 data-integrity #1 #2 #3 #11
@@ -356,6 +356,8 @@ const C = {
   type: (op: LineOp) => cmd(`type ${fmt(op)}`, (e) => e.type(op)),
   rename: () => cmd("rename", (e) => e.rename()),
   typeRefused: (op: LineOp, unsendable: "\u0000" | "\ud83d") => cmd(`type ${fmt(op)} with ${unsendable === "\u0000" ? "a NUL" : "half a surrogate pair"}`, (e) => e.type(op, unsendable)),
+  /** A body over the 2,000,000-character cap: the app refuses the save itself, like the long title. */
+  typeTooLong: (op: LineOp) => cmd(`type ${fmt(op)} into a body over the length cap`, (e) => e.type(op, "y".repeat(2_000_001))),
   longTitle: () => cmd("paste a 501-character title", (e) => e.pasteLongTitle()),
   vanish: () => cmd("the open note is deleted on another device", (e) => e.vanish()),
   reload: () => cmd("reload the page", (e) => e.reload()),
@@ -383,6 +385,7 @@ const commandKinds: Array<[kind: string, weight: number, arb: fc.Arbitrary<Cmd>]
   ["type", 4, lineOp.map(C.type)],
   ["rename", 2, fc.constant(C.rename())],
   ["typeRefused", 1, fc.tuple(lineOp, fc.constantFrom<"\u0000" | "\ud83d">("\u0000", "\ud83d")).map(([op, bad]) => C.typeRefused(op, bad))],
+  ["typeTooLong", 1, lineOp.map((op) => C.typeTooLong(op))],
   ["longTitle", 1, fc.constant(C.longTitle())],
   ["vanish", 1, fc.constant(C.vanish())],
   ["reload", 1, fc.constant(C.reload())],
@@ -446,10 +449,10 @@ describe("save path under random timing", () => {
     }, 20_000);
 
   // Nightly 2026-11-15, PROPS_SEED=765832 PROPS_RUNS=5000 (found at run 1292). Invariant: text typed in the editor is in the body, a conflict or a recovery copy.
-  // Likely cause: the over-length-title refusal after a reload drops the typed text of the earlier session instead of keeping a recovery copy.
-  regression("nightly 2026-11-15: a refused long title after a reload loses text typed before the reload (seed 765832)", [
+  // Cause (fixed, #1737): the text was kept, but the second refusal (title only) was folded over the first in the recovery panel and hid it.
+  regression("nightly 2026-11-15: a refused long title after a reload keeps the text typed before the reload (seed 765832)", [
     C.longTitle(), C.type({ kind: "append", k: 0 }), C.reload(), C.longTitle(),
-  ], /gone from note/, true);
+  ], /gone from note/);
 
   // Review #1: save in flight, type more, switch away and back — the draft is
   // rebuilt from the first save's text and the next save deletes the second.
@@ -580,6 +583,20 @@ describe("save path under random timing", () => {
   regression("rename during typing, pagehide flush, the page stays (seeds 111, 222)", [
     C.remoteRename("a"), C.type({ kind: "append", k: 0 }), C.sync(), C.pagehide(), C.deliver(),
   ], /#4/);
+  // Nightly 2026-11-15 (seed 765832): a long title pasted, body typed, reload, the long title pasted again. The second
+  // refusal carries less text than the first; it used to hide the first one behind itself in the recovery panel.
+  // Still open (seed 7, found while checking the fix above; the same on main): reload with the keepalive save
+  // still in flight, rename, and the server then refuses that first save. The rename carries the first save's
+  // text as its body AND as its base, so the server keeps no body change while the client counts the text as
+  // saved and drops the refused copy (settleRefusedNoteText). The simulated reload keeps the in-memory store (the
+  // optimistic body), which a real reload does not: confirm in a real reload before fixing.
+  regression("open (seed 7): reload with a keepalive save in flight, rename, then that save is refused", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.rename(), C.failPermanent(0),
+  ], /#1/, true);
+  regression("nightly 2026-11-15: long title, typing, reload, long title again keeps the typing in recovery (seed 765832)", [
+    C.longTitle(), C.type({ kind: "append", k: 0 }), C.reload(), C.longTitle(),
+  ], /#1/);
+
   // A save the app itself refuses before sending (lib/data/noteWriter.ts) keeps the typed text in the same
   // recovery store as a server refusal: it survives opening another note and a reload (the durable row).
   // Each case: type, let the autosave be refused, open the other note, then look at recovery.

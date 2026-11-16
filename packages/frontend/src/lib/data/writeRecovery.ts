@@ -120,12 +120,23 @@ export function hasUserText(body: string | null): boolean {
   return previewOf(body) !== "";
 }
 
-// Refusals of the same request on the same target are one problem, not several.
-// A create (POST) is a separate intent per typed text; a replace (PUT/PATCH)
-// on one target is superseded by its latest attempt.
-function sameRefusal(a: RejectedWrite, b: RejectedWrite): boolean {
-  return a.method === b.method && a.path === b.path && a.rejection === b.rejection
-    && (a.method !== "POST" || previewOf(a.body) === previewOf(b.body));
+// Refusals of the same request on the same target are one problem (a field or cell: the latest value replaces
+// the older; a note: when the newer one still holds everything the older
+// one did (typing on after a refusal makes a longer copy of the same text)). A create (POST) is a separate intent per
+// typed text. When the older one holds a line the newer lacks (the page was reloaded and the same refusal came again
+// with less text), hiding it behind the newer entry would lose that text from the panel: it stays its own entry.
+const NOTE_SAVE_PATH = /^\/api\/nodes\/[^/]+$/;
+function textLines(body: string | null): Set<string> {
+  return new Set(previewOf(body).split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+}
+
+function newerCoversOlder(newer: RejectedWrite, older: RejectedWrite): boolean {
+  if (newer.method !== older.method || newer.path !== older.path || newer.rejection !== older.rejection) return false;
+  if (newer.method === "POST") return previewOf(newer.body) === previewOf(older.body);
+  // A field or a cell is replaced by its latest value; only a note save is text that accumulates.
+  if (!NOTE_SAVE_PATH.test(newer.path)) return true;
+  const kept = textLines(newer.body);
+  return [...textLines(older.body)].every((line) => kept.has(line));
 }
 
 /** `{ noteText }` for a body that carries a note save, else nothing. */
@@ -215,7 +226,7 @@ function receiveRejected(rows: RejectedWrite[]): void {
   rejectedRows = rows;
   const groups: RejectedWrite[][] = [];
   for (const row of [...rows].reverse()) {
-    const group = groups.find(g => sameRefusal(g[0], row));
+    const group = groups.find(g => newerCoversOlder(g[0], row));
     if (group) group.push(row); else groups.push([row]);
   }
   rejectedGroups = new Map();
@@ -263,6 +274,12 @@ export async function preserveDirectRejection(request: OfflineQueueFailedDetail 
   persist(existing ? current.map(write => write.id === existing.id ? entry : write) : [...current, entry]);
   // The entry is on screen from here on (even if durable storage then fails).
   markRecoveryEntryShown(refusal);
+  // The same refusal of the same text is already kept (the page was reloaded and the same save was refused again):
+  // one durable copy is enough, and discarding it must not leave a second one behind.
+  if (rejectedRows.some((row) => row.method === request.method && row.path === request.path && row.body === request.body && row.rejection === reason)) {
+    confirmRecoveredWrite(request.idemKey);
+    return;
+  }
   let row: RejectedWrite;
   try { row = await storeRejectedWrite({ method: request.method, path: request.path, body: request.body, idem_key: request.idemKey }, reason); }
   catch (cause) { throw new WriteStorageError(cause); }

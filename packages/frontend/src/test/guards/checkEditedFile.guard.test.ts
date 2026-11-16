@@ -94,5 +94,7 @@ describe("hook input", () => {
     });
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-  });
+    // A real Node process that loads tsx: a second or two here, over the default 5 s on a hosted runner busy with the other
+    // guard files (it timed out there on 2026-11-16). The budget is for starting a process, not for waiting on anything.
+  }, 60_000);
 });

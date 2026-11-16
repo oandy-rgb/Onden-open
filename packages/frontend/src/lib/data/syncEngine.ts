@@ -1344,6 +1344,8 @@ export async function reconnect(): Promise<boolean> {
   // not the online flag, so it works here. Only once the server is caught up
   // do we go online and pull deltas.
   await flushPendingWrites();
+  // The drain was answered "removed from the workspace" (lib/accessRevoked.ts): the notice has replaced the app; do not flip online or sync.
+  if (getAppState().accessRevoked) return false;
   // With the fail-closed display gate already raised, setOnline(true) FIRST:
   // the online-flip rule in connectivity.ts keys off the false→true flip
   // to run a full read-policy-filtered refresh(), and sync() (next) runs the

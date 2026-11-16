@@ -314,7 +314,7 @@ async function check(run: Run): Promise<string[]> {
   const reader = live[0]!;
   // What recovery holds (refused / unconfirmed writes), seen from one live tab.
   await w.drive(w.start(reader, () => reader.mods.writeRecovery.refreshRecoveryWrites()), "deliver");
-  // The raw rows too: the panel shows only the newest refusal of one note (writeRecovery sameRefusal), which is by design.
+  // The raw rows too: the panel shows only the newest refusal of one note (writeRecovery newerCoversOlder) when it holds all the older text.
   const rejectedRows = await w.drive(w.start(reader, () => reader.mods.localDb.getRejectedWrites()) as Promise<Array<{ body: string | null }>>, "deliver");
   const recovered = new Set(versionsIn([...reader.mods.writeRecovery.getRecoveryWrites(), ...rejectedRows].map((x) => x.body)));
 

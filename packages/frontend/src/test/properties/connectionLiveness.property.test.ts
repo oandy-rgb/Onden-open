@@ -90,9 +90,11 @@ class Net {
   readable = ["n0"];
   /** Runs when a request is about to be answered: a test that needs the network to change at an exact step. */
   beforeAnswer: ((path: string, tab: Tab | undefined) => void) | null = null;
+  /** Called as the server answers "removed", before the app sees it: the moment the "was it online?" question is about. */
+  onRemovedAnswer: ((tab: Tab | undefined) => void) | null = null;
 
   reset(): void {
-    Object.assign(this, { mode: "up", slowMs: 4_000, head: 10, clock: 0, requests: 0, inflight: 0, browserOnline: true, beforeAnswer: null, epoch: 0, readable: ["n0"] });
+    Object.assign(this, { mode: "up", slowMs: 4_000, head: 10, clock: 0, requests: 0, inflight: 0, browserOnline: true, beforeAnswer: null, onRemovedAnswer: null, epoch: 0, readable: ["n0"] });
     this.applied = new Set(); this.sentCount = new Map(); this.log = [];
   }
 
@@ -146,6 +148,7 @@ class Net {
         return Promise.resolve(new Response("<html>Bad Gateway</html>", { status: 502 }));
       case "revoked":
         note("401 membership_removed");
+        this.onRemovedAnswer?.(tab);
         return Promise.resolve(this.json({ error: "membership_removed" }, 401));
       case "forbidden":
         note("403 forbidden");
@@ -289,6 +292,10 @@ function cmd<A extends unknown[]>(name: (...a: A) => string, exec: (run: Run, ..
     check: () => true,
     async run(_m, run) {
       run.onlineBefore = appState(run).online;
+      // "Online just before the removal" is asked at the moment the server's answer leaves, not at the start of the command: within one
+      // command the app may first find the server too slow and go offline (which is right), then be told it was removed on the retry.
+      let removalAnswered = false;
+      net.onRemovedAnswer = (tab) => { if (!removalAnswered && tab === run.tab) { removalAnswered = true; run.onlineBefore = appState(run).online; } };
       const outageBefore = unreachable(net.mode) && run.tab.online;
       const acted = await exec(run, ...args);
       await quiet(run);
@@ -545,8 +552,11 @@ describe("what the property found (minimal cases, fixed)", () => {
   });
 
   // Nightly 2026-11-15, PROPS_SEED=765832 PROPS_RUNS=5000 (found at run 894). Invariant: an account removed while the app was online does not read as offline.
-  // Likely cause: the revoked answer reaches a reconnect that was already in flight (syncEngine reconnect() setOnline(false)); same family as the case above, no Refresh needed.
-  it.fails("revoked-while-reconnecting again: slow server, back online, account removed, server up reads as offline (seed 765832)", async () => {
+  // What happened (traced 2026-11-16): the first reconnect flips online, finds the server too slow and goes offline (the unreachable rule, correct);
+  // the retry's first request, the queue drain, is answered "removed" while the app is offline. Two things were wrong: the check asked "online before
+  // the command", not "online when the removal was answered" (fixed in cmd() above), and reconnect() went on to flip online and start a sync after
+  // the drain had been told the account was removed (fixed: it stops there).
+  it("revoked-while-reconnecting again: slow server, back online, account removed, server up reads as offline (seed 765832)", async () => {
     expect(await runCommands([BrowserOffline(), Advance(1_000), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), SetServer("up", 0)], true)).toEqual([]);
   });
 

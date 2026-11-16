@@ -6,6 +6,13 @@ ref=$1; branch=$2; here=$(dirname "$0")
 [ -z "$(git status --porcelain)" ] || { echo "worktree not clean"; exit 1; }
 sha=$(git rev-parse "$ref"); back=$(git rev-parse --abbrev-ref HEAD); [ "$back" != HEAD ] || back=$(git rev-parse HEAD)
 git fetch -q open
+# A branch goes up only while public main IS private main: a stale public main is two repos that differ, and a check that
+# runs against an old base. Whoever finds it stale brings it up to date first (the same script, with `origin/main main`).
+if [ "$branch" != main ]; then
+  git fetch -q origin main
+  bash "$here/verify.sh" "$(git rev-parse origin/main)" > /dev/null \
+    || { echo "NOT pushed: public main is not private main. First: bash scripts/public-mirror/public-push.sh origin/main main"; exit 1; }
+fi
 git checkout -q --detach "$sha"
 git ls-files docs | grep -iE '\.(png|jpe?g|webp|gif)$' | tr '\n' '\0' | xargs -0 -r git rm -q
 [ -d docs/research/scan-2026-11-14 ] && git rm -rq docs/research/scan-2026-11-14

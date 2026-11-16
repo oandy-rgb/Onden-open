@@ -312,7 +312,7 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
       }));
       // P0-4 conflict UX: the server replayed our edit onto ANOTHER
       // writer's copy — say so instead of silently morphing the text.
-      addToast(t("Merged with another writer's changes — review the result"), "info");
+      addToast(t("This note also changed somewhere else while you were typing. Both changes are kept; please check the result."), "info");
     }
     return true;
   };

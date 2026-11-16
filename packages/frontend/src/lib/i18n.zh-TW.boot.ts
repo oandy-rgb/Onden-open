@@ -150,7 +150,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "{n} change(s) are still waiting on this device's local storage, so the page can't reload yet. Try again in a moment.": "有 {n} 筆變更還在等這台裝置的本機儲存，所以暫時不重新載入。請稍後再試。",
   "The note changed just now, so the page didn't reload. Press reload again once it's saved.": "筆記剛剛又有修改，所以沒有重新載入。等它存好後再按一次。",
   "Couldn't confirm your text is saved, so the page can't reload. Try again in a moment.": "無法確認文字都已儲存，所以先不重新載入。請稍後再試。",
-  "Merged with another writer's changes — review the result": "已與另一位寫入者的變更合併——請檢查結果",
+  "This note also changed somewhere else while you were typing. Both changes are kept; please check the result.": "你輸入的同時，這則筆記在別處（另一個分頁、裝置或 AI）也有更動。兩邊的修改都保留了，請看一下結果。",
   "Someone changed the same text at the same time. Your version is saved in the note's history.": "另一邊同時改了同一段文字，你的版本已存到這篇筆記的歷史。",
 
   // ── Failed-write recovery (offline queue persist failure) ──

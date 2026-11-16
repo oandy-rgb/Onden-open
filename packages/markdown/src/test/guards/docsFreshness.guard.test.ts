@@ -423,6 +423,20 @@ describe("public mirror: paths the mirror removes are not stale in the mirror tr
     const root = fixture({ "scripts/public-mirror/removed-paths.json": JSON.stringify(rules), "docs/guide.md": `${cur}\n\`docs/deploy-log.md\` \`docs/nope.md\`\n`, "docs/deploy-log.md": "log\n", "src/a.ts": "x\n" });
     expect(messages(checkDocs(root, { baseline }).problems.codeRefs)).toEqual(["missing path -> docs/nope.md"]);
   });
+  // What the public repo's CI checks out: the stripped tree IS the commit, so HEAD no longer knows the folder that held
+  // only images (first real public run of this check, 43967397937: day-timeline.md and site-boxes named such folders).
+  it("passes on the mirror's own commit: an image-only folder is gone from HEAD too", () => {
+    const root = mirror();
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "public");
+    const r = checkDocs(root, { baseline });
+    expect(messages(r.problems.codeRefs)).toEqual([]);
+  });
+  it("in the private tree a folder that is in neither the files nor HEAD still fails, images root or not", () => {
+    const root = fixture({ "scripts/public-mirror/removed-paths.json": JSON.stringify(rules), "docs/guide.md": `${cur}\n\`docs/never-was/\`\n`, "docs/deploy-log.md": "log\n", "src/a.ts": "x\n" });
+    git(root, "init", "-q", "-b", "main"); git(root, "add", "-A"); git(root, "commit", "-q", "-m", "private");
+    expect(messages(checkDocs(root, { baseline }).problems.codeRefs)).toEqual(["missing path -> docs/never-was/"]);
+  });
   it("a list entry for a document the mirror removes is not 'gone' in the mirror", () => {
     const root = mirror();
     const r = checkDocs(root, { baseline: { noCoverage: ["docs/research/scan/one.md", "docs/real.md"] } });

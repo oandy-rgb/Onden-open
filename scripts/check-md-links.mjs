@@ -227,10 +227,18 @@ export function removedByMirror(root, rules, path) {
   if (isRemovedPath(rules, path)) return true;
   try {
     const inHead = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", path.replace(/\/$/, "")], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\n").filter(Boolean);
-    return inHead.length > 0 && inHead.every((p) => isRemovedPath(rules, p));
+    if (inHead.length > 0) return inHead.every((p) => isRemovedPath(rules, p));
   } catch {
     return false;
   }
+  // HEAD 裡也沒有這個資料夾。在公開庫的樹裡（HEAD 就是鏡像的那個 commit），只放圖片的資料夾是整個不存在的，這裡
+  // 分不出「鏡像拿掉了」和「真的沒有」；這一項在推送時查過了（public-push.sh 在還看得到私人 HEAD 的樹上跑同一支檢查器）。
+  return inMirrorTree(root, rules) && path.endsWith("/") && rules.imagesUnder.some((x) => path.startsWith(x));
+}
+
+/** 這棵樹是不是公開庫的鏡像：清單上逐一點名的檔案（部署紀錄）一個都不在。私人庫裡它們一定在。 */
+export function inMirrorTree(root, rules) {
+  return rules.files.length > 0 && rules.files.every((f) => !existsSync(join(root, f)));
 }
 
 /** ctx.superseded：被取代清單；ctx.removed：鏡像拿掉的路徑規則（見 removedByMirror）。 */

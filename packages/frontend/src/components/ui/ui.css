@@ -3,7 +3,11 @@
    offsets and z-index (var(--z-*)); it takes the class from `layerClass` (ui/layer.ts).
    `--fill` also covers the window; `--narrow` pins only at phone and tablet widths, where a
    bar docks to the screen edge and on a wide window it flows in the page. */
-.ui-layer { position: fixed; }
+/* `--fill` is a promise to cover the window, so its `position` must not depend on which stylesheet
+   loads last: a component's own `position: relative` (one class, same weight) used to win once the
+   component's chunk loaded after this file, and the enlarged PDF stayed the size of the note column.
+   Two classes of weight make `--fill` win whatever order the files arrive in. */
+.ui-layer, .ui-layer.ui-layer--fill { position: fixed; }
 .ui-layer--fill { inset: 0; }
 @media (max-width: 900px) { .ui-layer--narrow { position: fixed; } }
 

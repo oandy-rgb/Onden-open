@@ -44,6 +44,10 @@
    spans the whole window, so the right side starts under it; otherwise the bar
    covers the side's name and buttons. */
 .split-root--on > .split-pane { top: 48px; margin-top: 48px; height: calc(100dvh - 48px); }
+/* A sticky pane is its own stacking context, so an enlarged pane inside it (ExpandPaneButton.css, z-index
+   --z-pane-expand) only competed with its neighbours and stayed under the fixed top bar. While one is enlarged the
+   whole side takes the enlarged pane's level instead; the left side has no such context and needs nothing. */
+.split-pane:has(.pane--expanded) { z-index: var(--z-pane-expand); }
 .split-pane-head {
   flex: none;
   display: flex;

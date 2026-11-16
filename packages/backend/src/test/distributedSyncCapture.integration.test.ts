@@ -36,7 +36,7 @@ describe.skipIf(!enabled)("capture", () => {
     const atGenesis = await cluster.on("A", async () => (await q<{ last_event_id: string }>("SELECT last_event_id FROM ds_capture_cursor")).rows[0]!.last_event_id);
     await cluster.on("A", async () => {
       await updateNode(ws, plan, { title: "Plan 2", markdown: "a\nb\nc" }, { actor: alice });          // carried: a title op and a body op
-      await updateNode(ws, plan, { sort_order: 5 }, { actor: alice });                                 // not carried
+      await updateNode(ws, plan, { order_key: "a5" }, { actor: alice });                                 // not carried
       await createNote({ actor: alice, workspaceId: ws, title: "Board", nodeType: "canvas", spaceId: team, event: { uiContext: "t", type: "CANVAS_CREATED" } }); // not carried
       await updateSpace(alice, ws, team, { name: "team 2" });                                          // not carried
     });

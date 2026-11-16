@@ -30,7 +30,7 @@ export const writeErrors = {
 export const noteStructure = {
   get run() { return structure.runStructureOperation; },
   get createChildren() { return structure.createChildNotes; },
-  /** A parent's children in display order (sort_order, then created). */
+  /** A parent's children in display order (order_key, order_stamp, id). */
   get children() { return structure.childrenOf; },
   /** Reorder one parent's children; writes only the rows that must change. */
   get reorder() { return structure.reorderChildren; },

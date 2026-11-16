@@ -15,7 +15,7 @@ import { nodeOf } from "../nodeIndex";
 import { settleNodeToServer } from "./serverTruth";
 import { isNote } from "@onden/markdown/contract";
 
-export type NotePatch = Partial<Pick<ContentNode, "title" | "markdown" | "parent_id" | "hidden" | "slug" | "presentation" | "sort_order">>;
+export type NotePatch = Partial<Pick<ContentNode, "title" | "markdown" | "parent_id" | "hidden" | "slug" | "presentation" | "order_key">>;
 type CursorState = { anchor: number; head: number };
 type NoteWriteOptions = { cursorState?: CursorState; baseMarkdown?: string; keepalive?: boolean;
   /** The editor's own edits since the base (lib/editorChangeLog.ts); the server uses them to move block anchors. */
@@ -167,7 +167,7 @@ export function makeNoteWriter(ctx: DataCtx) {
       slug: slugify(input.title),
       source_type: input.source_type ?? "manual", node_type: input.node_type ?? "content",
       // Newest among its siblings until the server's own time replaces it
-      // (lib/childOrder: equal sort_order sorts by creation).
+      // (lib/childOrder: a row with no key yet sorts last).
       created_at: new Date().toISOString(),
       ...(input.parent_id !== undefined ? { parent_id: input.parent_id } : {}),
       ...(input.space_id ? { space_id: input.space_id } : {}),

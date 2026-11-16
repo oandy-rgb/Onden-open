@@ -51,8 +51,8 @@ const slim = {
   last_event_id: "5",
   workspace: { id: "ws", name: "T", slug: "default", home_node_id: null },
   nodes: [
-    { id: "n1", title: "Server title", slug: "n-1", markdown: "", body_len: 50, node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0 },
-    { id: "n2", title: "Other", slug: "n-2", markdown: "", body_len: 5, node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 1 },
+    { id: "n1", title: "Server title", slug: "n-1", markdown: "", body_len: 50, node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0" },
+    { id: "n2", title: "Other", slug: "n-2", markdown: "", body_len: 5, node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a1" },
   ],
   edges: [], tasks: [], suggestions: [], events: [], actor_role: "admin", tags: [],
 };

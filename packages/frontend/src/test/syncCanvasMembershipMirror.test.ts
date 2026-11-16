@@ -43,7 +43,7 @@ async function coldStart(): Promise<Bootstrap> {
   return await ok("loadBootstrap") as Bootstrap;
 }
 
-const node = (id: string, node_type = "content") => ({ id, source_type: "manual", node_type, title: id, slug: id, markdown: "", parent_id: null, hidden: false, sort_order: 0 });
+const node = (id: string, node_type = "content") => ({ id, source_type: "manual", node_type, title: id, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const on = (canvas_id: string, node_id: string, canvas_title = canvas_id.toUpperCase()): CanvasMembership => ({ canvas_id, canvas_title, node_id });
 const bootstrap = {
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",

@@ -41,7 +41,7 @@ export function nodeEventMetaJoinSql(alias: string): string {
  *  list with the table. */
 export const NODE_COLUMNS_WITHOUT_MARKDOWN = [
   "id", "workspace_id", "source_type", "node_type", "title", "slug", "created_at", "updated_at",
-  "parent_id", "hidden", "sort_order", "presentation", "deleted_at", "deleted_by_event_id",
+  "parent_id", "hidden", "order_key", "order_stamp", "presentation", "deleted_at", "deleted_by_event_id",
   "tag_color", "tag_schema", "collection_views", "reserved_key", "anchor_form", "space_id",
 ] as const;
 

@@ -391,7 +391,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（106）
+## 共用邏輯（107）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -653,9 +653,9 @@ if (isTemporarySession()) { /* 不寫任何持久儲存 */ }`
 
 - 入口：`frontend/src/lib/childOrder.ts`（`compareChildren`、`sortChildren`、`planSiblingOrder`）　項目 `child-order`
 - 寫法：`import { sortChildren } from "./lib/childOrder";`
-- 取代：手寫 a.sort_order - b.sort_order 或 localeCompare
+- 取代：手寫 a.sort_order - b.sort_order、a.order_key.localeCompare、自己重編鄰居的整數
 - 守門：`guard:dup-owners`
-- 為什麼：同一層子筆記排序用它，跟側欄、子筆記清單、匯出的順序才會一樣。
+- 為什麼：同一層子筆記排序（order_key，逐位元組，再依 order_stamp、id）用它，跟側欄、子筆記清單、匯出、已發布網站的順序才會一樣；搬動一則只寫一列。
 
 ### 要依標題篩選或排序比對筆記
 
@@ -1255,6 +1255,15 @@ export async function load(fetchList: () => Promise<string[]>, show: (rows: stri
 - 取代：自己組 X25519、HKDF、AEAD 或分塊加密，或在別處再導一次權杖與檔案金鑰
 - 為什麼：配對與加密只在 @onden/pairing 一處：只用 @noble 的 X25519、HKDF-SHA256、ChaCha20-Poly1305，金鑰與權杖都由同一把共用金鑰按用途導出；解密端拒絕亂序、重放、缺塊、截斷、別的工作階段或檔案的塊與不在最終清單上的項目。上線前需要人工安全審查；威脅模型見 docs/architecture/send-to-phone-crypto.md。只在使用者進入這個功能時才載入，不進開機路徑。
 
+### 要產生同一層的排序鍵、比較兩個鍵、判斷鍵合不合法
+
+- 入口：`markdown/src/orderKey.ts`（`keyBetween`、`keysBetween`、`isValidOrderKey`、`compareOrdered`、`evenOrderKeys`）　項目 `order-key`
+- 寫法：`import { keyBetween } from "@onden/markdown/contract";
+export const key = keyBetween("a0", "a1"); // strictly between the two; null = no neighbour on that side`
+- 取代：自己挑整數 sort_order、重編鄰居、用語系排序比鍵
+- 守門：`guard:orderKeyWriters`
+- 為什麼：鍵永遠放得進任兩個值之間，所以搬動或插入只寫一列，兩台離線各排也不會用同一個數字指兩則筆記；比較一律逐位元組（資料庫 COLLATE "C"、JS 用 <）。
+
 ### 模組的整頁要把「頁裡的位置」放進網址（複習頁的哪一組），讓重新載入與返回都留在那裡
 
 - 入口：`frontend/src/lib/moduleAddress.ts`（`setModuleAddress`、`useModuleAddress`、`getModuleAddress`）　項目 `module-page-address`
@@ -1450,7 +1459,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（52）
+## 後端（53）
 
 ### 要寫日誌
 
@@ -1876,6 +1885,16 @@ export async function syncOnce(workspaceId: string, msg: SyncMessage) {
 - 入口：`relay/src/handler.ts`（`createRelayHandler`）　項目 `send-to-phone-relay`
 - 取代：在 Worker 或另一個伺服器裡再寫一份權杖、上限、到期與速率限制的判斷
 - 為什麼：碰面點的規則（只驗權杖、200 MB 與每塊上限、2 小時到期、速率限制、只收 octet-stream、錯誤不洩漏工作階段是否存在）寫在平台無關的 sessionCore／limiterCore／handler；worker.ts 只把它們放到 Durable Object 上，memory.ts 用同一份規則跑測試。不碰任何 Onden 資料庫。
+
+### 後端要寫或讀同層排序（新筆記放最後、舊整數翻成鍵、復原時的鍵、鍵太長重配）
+
+- 入口：`backend/src/services/orderKeys.ts`（`appendOrderKey`、`assertOrderKey`、`translateLegacySortOrder`、`keyForRestore`、`respaceIfTooLong`、`SIBLING_ORDER_N`、`UNSORTED_ORDER_N`）　項目 `order-key-write`
+- 寫法：`import { appendOrderKey, SIBLING_ORDER_N } from "./services/orderKeys.js";
+export const appendFor = appendOrderKey;
+export const orderBy = SIBLING_ORDER_N; // n.order_key COLLATE "C", n.order_stamp COLLATE "C", n.id`
+- 取代：自己寫 sort_order 的 INSERT／UPDATE、ORDER BY sort_order、不指定 COLLATE 的鍵比較
+- 守門：`guard:orderKeyWriters`
+- 為什麼：寫入排序鍵的地方只有清單上的幾個檔案，鍵都從這裡來；讀取的 ORDER BY 用同一個片段，資料庫與前端的順序才一致。
 
 ### 要把筆記的版本歷史寫進備份、算出它有多大，或把備份裡的版本歷史帶進新工作區
 

@@ -1,4 +1,6 @@
+import { db } from "../dbKysely.js";
 import { withViews } from "./functionRefs.js";
+import { appendOrderKey, assertOrderKey, respaceIfTooLong, translateLegacySortOrder } from "./orderKeys.js";
 import { isDeepStrictEqual } from "node:util";
 import type { z } from "zod";
 import { q, event } from "../db.js";
@@ -50,7 +52,7 @@ export class BodyConflictError extends NodeUpdateError {
 export type NodeChanges = Partial<z.infer<typeof DraftNode>>;
 type StoredNode = Record<string, unknown> & {
   id: string; title: string; slug: string; markdown: string; node_type: string;
-  parent_id: string | null; hidden: boolean; sort_order: number;
+  parent_id: string | null; hidden: boolean; order_key: string;
   presentation: Record<string, unknown> | null;
 };
 
@@ -221,11 +223,22 @@ function differingKeys(oldRow: StoredNode, nodeInput: NodeChanges, body: string)
       case "title": return normalizeText(String(value)) !== normalizeText(oldRow.title);
       case "parent_id": return (value === oldRow.id ? null : (value ?? null)) !== (oldRow.parent_id ?? null);
       case "hidden": return (value ?? false) !== (oldRow.hidden ?? false);
-      case "sort_order": return (value ?? 0) !== (oldRow.sort_order ?? 0);
+      case "order_key": return value !== oldRow.order_key;
       case "presentation": return !isDeepStrictEqual(value ?? null, oldRow.presentation ?? null);
       default: return value !== old[key];
     }
   });
+}
+
+/** The input with its place as a key: the one the caller sent (checked), an older client's `sort_order` translated, and
+ *  for a move to another parent with no place named, last under the new parent. */
+async function withOrderKey(workspaceId: string, oldRow: StoredNode, input: NodeChanges): Promise<NodeChanges> {
+  const { sort_order: legacy, ...rest } = input;
+  const parentId = "parent_id" in rest ? (rest.parent_id === oldRow.id ? null : (rest.parent_id ?? null)) : (oldRow.parent_id ?? null);
+  if (rest.order_key !== undefined) { assertOrderKey(rest.order_key); return rest; }
+  if (legacy !== undefined) return { ...rest, order_key: await translateLegacySortOrder("content_nodes", workspaceId, parentId, oldRow.id, legacy) };
+  if (parentId !== (oldRow.parent_id ?? null)) return { ...rest, order_key: await appendOrderKey("content_nodes", workspaceId, parentId) };
+  return rest;
 }
 
 /** What one save writes and how it is recorded, decided from the row read
@@ -259,9 +272,9 @@ type NodeChangePlan = {
  *  names are these literals, never request text). */
 export type NodeColumns = Partial<{
   title: string; slug: string; markdown: string; node_type: string; source_type: string;
-  parent_id: string | null; hidden: boolean; sort_order: number; presentation: Record<string, unknown> | null;
+  parent_id: string | null; hidden: boolean; order_key: string; presentation: Record<string, unknown> | null;
 }>;
-const NODE_COLUMNS = ["title", "slug", "markdown", "node_type", "source_type", "parent_id", "hidden", "sort_order", "presentation"] as const;
+const NODE_COLUMNS = ["title", "slug", "markdown", "node_type", "source_type", "parent_id", "hidden", "order_key", "presentation"] as const;
 
 /** The one write of a note's row, shared by the ordinary save (saveNodeChange)
  *  and the event-history undo (eventRestore/restore.ts), so what rides on a
@@ -279,7 +292,7 @@ export async function applyNodeColumns(
   workspaceId: string,
   id: string,
   columns: NodeColumns,
-  { before, touchUpdatedAt }: { before: { isTag: boolean; parentId: string | null }; touchUpdatedAt: boolean },
+  { before, touchUpdatedAt, actor }: { before: { isTag: boolean; parentId: string | null }; touchUpdatedAt: boolean; actor: ActorCtx },
 ): Promise<ServerNodeRow> {
   const sets: string[] = [];
   const vals: unknown[] = [workspaceId, id];
@@ -299,7 +312,12 @@ export async function applyNodeColumns(
     await retypeGoverned(workspaceId, { tagIds: [id] });
   }
   if ("presentation" in columns) await claimUploadedMedia(workspaceId, id, presentationText(columns.presentation));
-  return r.rows[0]!;
+  let written = r.rows[0]!;
+  // A key that grew past the length limit: this group gets fresh keys now, inside this write (one stamp).
+  if (columns.order_key !== undefined && await respaceIfTooLong("content_nodes", workspaceId, columns.parent_id !== undefined ? columns.parent_id : before.parentId, columns.order_key, { actor, nodeId: id })) {
+    written = { ...written, ...(await db.selectFrom("content_nodes").select(["order_key", "order_stamp"]).where("id", "=", id).executeTakeFirstOrThrow()) };
+  }
+  return written;
 }
 
 /** The one save path behind updateNode and restoreNodeVersion. */
@@ -323,7 +341,8 @@ async function saveNodeChange(
     await assertAuthority(actor, writeAuthority);
     const { input: planned, baseMarkdown, ...record } = await plan(oldRow);
     // Titles are stored in NFC (D58), as createNote stores them.
-    const input = planned.title != null ? { ...planned, title: normalizeText(planned.title) } : planned;
+    const named = planned.title != null ? { ...planned, title: normalizeText(planned.title) } : planned;
+    const input = await withOrderKey(workspaceId, oldRow, named);
     // A tag's identity activates policies on its members. Ordinary note editing
     // cannot disable those policies, even for admins; schema administration owns it.
     if (oldRow.node_type === TAG_NODE_TYPE && input.node_type !== undefined) {
@@ -349,7 +368,7 @@ async function saveNodeChange(
     if (!isTag && nextHidden && !(oldRow.hidden ?? false)) {
       throw new NodeUpdateError("only_tags_can_be_hidden", 400);
     }
-    const nextSortOrder = "sort_order" in nodeInput ? (nodeInput.sort_order ?? 0) : (oldRow.sort_order ?? 0);
+    const nextOrderKey = "order_key" in nodeInput ? nodeInput.order_key! : oldRow.order_key;
     const nextPresentation = "presentation" in nodeInput ? (nodeInput.presentation ?? null) : (oldRow.presentation ?? null);
     // Only recalculate slug when title actually changes to avoid concurrent-PATCH race conditions.
     // Every autosave re-sends the title, so "changes" is compared in NFC (D58):
@@ -362,7 +381,7 @@ async function saveNodeChange(
     // updated_at ("modified", the site's dates, recent lists) and its event
     // carries no body_hash, so it is no version in the note's history. The event
     // still syncs the move and undoes it (prev_field_values).
-    const positionOnly = changedKeys.length > 0 && changedKeys.every((k) => k === "sort_order");
+    const positionOnly = changedKeys.length > 0 && changedKeys.every((k) => k === "order_key");
 
     // Capture the actual predecessor under the event lock: both merge and undo
     // must describe the state this write replaces, including earlier queued edits.
@@ -447,7 +466,8 @@ async function saveNodeChange(
         type: record.eventType,
         targetType: "node",
         targetId: id,
-        payload: { title: next.title, ...record.payload, ...(bodyHash !== null ? { body_hash: bodyHash } : {}) },
+        // The forward value of the place is the key (an older client's integer became one above): restores compare against it.
+        payload: { title: next.title, ...(({ sort_order: _legacyPlace, ...rest }) => rest)(record.payload), ...("order_key" in nodeInput ? { order_key: nextOrderKey } : {}), ...(bodyHash !== null ? { body_hash: bodyHash } : {}) },
         txMeta: { inverse_patch: inversePatch, prev_field_values: prevFieldValues, ...record.txMeta },
         // The body the editor started from; without one the write is based on the body it replaced.
         ...(bodyHash !== null && baseMarkdown !== undefined ? { baseHash: sha256Hex(baseMarkdown) } : {}),
@@ -462,9 +482,9 @@ async function saveNodeChange(
           ...("source_type" in nodeInput ? { source_type: next.source_type } : {}),
           ...("parent_id" in nodeInput ? { parent_id: nextParentId } : {}),
           ...("hidden" in nodeInput ? { hidden: nextHidden } : {}),
-          ...("sort_order" in nodeInput ? { sort_order: nextSortOrder } : {}),
+          ...("order_key" in nodeInput ? { order_key: nextOrderKey } : {}),
           ...("presentation" in nodeInput ? { presentation: nextPresentation } : {}),
-        }, { before: { isTag, parentId: oldRow.parent_id ?? null }, touchUpdatedAt: !(positionOnly || record.keepUpdatedAt) }));
+        }, { before: { isTag, parentId: oldRow.parent_id ?? null }, touchUpdatedAt: !(positionOnly || record.keepUpdatedAt), actor }));
         // Overlapping concurrent edits: what each conflict left out, for the
         // inbox (the whole overridden body is also a version in history).
         if (bodyConflicts.length > 0) {

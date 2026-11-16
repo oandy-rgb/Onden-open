@@ -107,9 +107,9 @@ describe.skipIf(!isTestDb)("slim bootstrap + lazy-body door (P0-3)", () => {
     }
   });
 
-  it("the slim column list covers every content_nodes column except markdown", async () => {
+  it("the slim column list covers every content_nodes column except markdown and the frozen sort_order (migration 200)", async () => {
     const cols = (await q<{ column_name: string }>(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'content_nodes' AND column_name <> 'markdown'`,
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'content_nodes' AND column_name NOT IN ('markdown', 'sort_order')`,
     )).rows.map((r) => r.column_name);
     expect([...NODE_COLUMNS_WITHOUT_MARKDOWN].sort()).toEqual(cols.sort());
   });

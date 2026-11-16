@@ -5,6 +5,7 @@
 
 | 要做的事 | 一律用 | 守門 |
 | --- | --- | --- |
+| 同層排序鍵（放在兩者之間、比較、合法性、重新平均配鍵） | `orderKey.ts` 的 `keyBetween`／`keysBetween`／`compareOrdered`／`isValidOrderKey`／`evenOrderKeys`（比較一律逐位元組） | `orderKeyWriters.guard.test.ts`（後端）、`dup-owners.guard.test.ts`（前端） |
 | 去掉強調、刪除線、行內程式碼記號 | `plainText.ts` 的 `plainInline` | `dup-b2-text.guard.test.ts` |
 | 去掉標題 `#`、清單與任務記號 | `plainText.ts` 的 `stripLineMarker` | `dup-b2-text.guard.test.ts` |
 | 判斷 `[ ]`／`[x]` 任務框 | `plainText.ts` 的 `checklistLine` | `dup-b2-text.guard.test.ts` |

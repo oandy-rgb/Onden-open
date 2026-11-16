@@ -39,7 +39,7 @@ export function registerDictionary(locale: Exclude<AppLocale, "en">, dict: Recor
   if (registered.has(dict)) return;
   registered.add(dict);
   DICTIONARIES[locale] = { ...DICTIONARIES[locale], ...dict };
-  if (current === locale) for (const l of listeners) l();
+  if (current === locale) { wordingVersion++; for (const l of listeners) l(); }
 }
 
 type LateLoader = () => Promise<Record<string, string>>;
@@ -90,6 +90,8 @@ export function resolveLocale(pref: LocalePref = getLocalePref()): AppLocale {
 
 let current: AppLocale = resolveLocale();
 const listeners = new Set<() => void>();
+/** Counts wording registered for the active language, so a component that rendered before a late part arrived renders again. */
+let wordingVersion = 0;
 
 export function setLocalePref(pref: LocalePref): void {
   setPref(PREFS.locale, pref);
@@ -138,8 +140,10 @@ function subscribe(listener: () => void): () => void {
 export const subscribeLocale = subscribe;
 
 /** Subscribe a component to locale changes; returns t. Use this (not a bare
- *  t import) inside components so a Settings language switch re-renders them. */
+ *  t import) inside components so a Settings language switch re-renders them,
+ *  and so does wording that is registered after they first rendered. */
 export function useT(): typeof t {
+  useSyncExternalStore(subscribe, () => wordingVersion, () => 0);
   useSyncExternalStore(subscribe, getLocale, () => "en");
   return t;
 }

@@ -30,7 +30,7 @@ vi.mock("../lib/api", async (orig) => ({ ...await orig<typeof import("../lib/api
 import { persistBootstrap, applySync, setLastEventId } from "../lib/localDb";
 import { refresh, sync, refreshMeta } from "../lib/data/syncEngine";
 
-const note = (id: unknown) => ({ id, source_type: "manual", node_type: "content", title: "t", slug: "t", markdown: "", parent_id: null, hidden: false, sort_order: 0 });
+const note = (id: unknown) => ({ id, source_type: "manual", node_type: "content", title: "t", slug: "t", markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const goodBootstrap = (over: Record<string, unknown> = {}) => ({
   workspace: { id: "ws", name: "T", slug: "t", home_node_id: null }, last_event_id: "100",
   nodes: [note("n1")], edges: [], tasks: [], suggestions: [], events: [], tags: [], ...over,

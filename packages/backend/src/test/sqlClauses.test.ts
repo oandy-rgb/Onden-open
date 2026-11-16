@@ -43,7 +43,7 @@ describe("appendFilterClauses — one operator set for the SQL query paths", () 
 
   it("built-in range ops cast typed columns to their column type", () => {
     // Round-1 casts the (text) param to the built-in column's type
-    // (updated_at/created_at → timestamptz, sort_order → numeric) so the
+    // (updated_at/created_at → timestamptz, sort_order is the order key, text) so the
     // comparison uses the column's native ordering, not lexicographic text.
     const { where, params } = compile([{ field: "updated_at", op: "gte", value: "2020-01-01" }]);
     expect(where).toEqual(["n.updated_at >= $2::timestamptz"]);
@@ -115,7 +115,6 @@ describe("appendFilterClauses — one operator set for the SQL query paths", () 
       { field: "updated_at", op: "gt", value: "2026-13-01" },
       { field: "created_at", op: "lte", value: "yesterday" },
       { field: "updated_at", op: "eq", value: "2026-02-30" },
-      { field: "sort_order", op: "gte", value: "ten" },
       { field: "updated_at", op: "lt", value: "" },
     ] as FilterClause[]) {
       expect(compile([clause]), JSON.stringify(clause)).toEqual({ where: ["FALSE"], params: ["ws"] });
@@ -123,7 +122,8 @@ describe("appendFilterClauses — one operator set for the SQL query paths", () 
     // ne: nothing equals it, so every row stays.
     expect(compile([{ field: "created_at", op: "ne", value: "soon" }])).toEqual({ where: ["TRUE"], params: ["ws"] });
     // A real value still casts once; text columns and contains are untouched.
-    expect(compile([{ field: "sort_order", op: "gt", value: "-1.5" }]).where).toEqual(["n.sort_order > $2::numeric"]);
+    // Manual order is the order key: text, compared by byte (the column is COLLATE "C"), whatever the value looks like.
+    expect(compile([{ field: "sort_order", op: "gt", value: "a1" }]).where).toEqual(["n.order_key > $2"]);
     expect(compile([{ field: "updated_at", op: "eq", value: "2026-10-01" }]).where).toEqual(["n.updated_at = $2::timestamptz"]);
     expect(compile([{ field: "updated_at", op: "contains", value: "2026-13" }]).where).toEqual(["n.updated_at::text ILIKE $2"]);
     expect(compile([{ field: "title", op: "gt", value: "2026-13-01" }]).where).toEqual(["n.title > $2"]);

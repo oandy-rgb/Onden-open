@@ -15,6 +15,7 @@
 //       return skew.user ? { user: skew.user } : null; }) },
 //     $context: Promise.resolve({ runMigrations: async () => {} }) } }));
 
+import { CLIENT_PROTOCOL } from "@onden/markdown";
 import { randomUUID } from "node:crypto";
 import { q } from "../../db.js";
 import { app } from "../../app.js";
@@ -58,7 +59,7 @@ export class Run {
       headers: {
         ...(body !== undefined && body !== null ? { "content-type": "application/json" } : {}),
         "x-onden-expected-user": skew.user!.id,
-        "x-onden-client-protocol": "3", // a current page (clientGate.ts)
+        "x-onden-client-protocol": String(CLIENT_PROTOCOL), // a current page (clientGate.ts); the writes replayed are older, the page is not
         ...headers,
       },
       ...(body !== undefined && body !== null ? { body: typeof body === "string" ? body : JSON.stringify(body) } : {}),

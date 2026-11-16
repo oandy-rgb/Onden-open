@@ -1,5 +1,5 @@
 // D64: an offline cold start lists notes in the sibling order every other
-// surface uses (sort_order, then created_at — lib/childOrder), not in the
+// surface uses (order_key, then stamp, then id — lib/childOrder), not in the
 // order the local database happens to hold its rows. A synced edit rewrites
 // the row (and used to move it last).
 import { beforeEach, describe, it, expect, vi } from "vitest";
@@ -36,8 +36,8 @@ async function openWorker() {
 }
 
 const at = (i: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString();
-const note = (id: string, sort_order: number, created: number, title = id) =>
-  ({ id, source_type: "manual", node_type: "content", title, slug: id, markdown: "", parent_id: "p", hidden: false, sort_order, created_at: at(created) });
+const note = (id: string, place: number, created: number, title = id) =>
+  ({ id, source_type: "manual", node_type: "content", title, slug: id, markdown: "", parent_id: "p", hidden: false, order_key: `a${place}`, created_at: at(created) });
 // Shipped out of order on purpose: the mirror must not depend on it.
 const bootstrap = {
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
@@ -52,7 +52,7 @@ beforeEach(async () => {
 });
 
 describe("local mirror sibling order", () => {
-  it("boots offline in sort_order, then created_at order, keeping created_at", async () => {
+  it("boots offline in key order (ties by id), keeping created_at", async () => {
     await ok("flushLocalDbSync");
     await openWorker();
     const loaded = await ok("loadBootstrap") as Bootstrap;

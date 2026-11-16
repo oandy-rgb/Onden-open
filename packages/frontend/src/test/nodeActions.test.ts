@@ -45,9 +45,9 @@ describe("nodeActions", () => {
   });
 
   describe("the focused note is deleted", () => {
-    const at = (id: string, parent_id: string | null, sort_order: number) =>
-      ({ id, title: id, node_type: "content", parent_id, sort_order }) as unknown as ContentNode;
-    const tree = [at("p", null, 0), at("a", "p", 0), at("b", "p", 1), at("c", "p", 2)];
+    const at = (id: string, parent_id: string | null, order_key: string) =>
+      ({ id, title: id, node_type: "content", parent_id, order_key }) as unknown as ContentNode;
+    const tree = [at("p", null, "a0"), at("a", "p", "a0"), at("b", "p", "a1"), at("c", "p", "a2")];
 
     it("opens the next sibling", async () => {
       const h = harness("b", tree);
@@ -63,7 +63,7 @@ describe("nodeActions", () => {
     });
 
     it("opens the parent when it had no siblings", async () => {
-      const h = harness("a", [at("p", null, 0), at("a", "p", 0)]);
+      const h = harness("a", [at("p", null, "a0"), at("a", "p", "a0")]);
       await h.actions.delete("a");
       expect(h.selection.select).toHaveBeenCalledExactlyOnceWith("p");
     });

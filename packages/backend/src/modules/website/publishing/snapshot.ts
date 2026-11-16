@@ -123,10 +123,10 @@ function unmarkReferencedBlocks(rows: Array<{ id?: unknown; markdown?: unknown; 
 async function frozenPublishedNodes(
   workspaceId: string, publishedIds: string[], actor: ActorCtx | null, onlyNoteId?: string,
 ) {
-  // sort_order + created_at: the site lists siblings in the workspace's order
+  // order_key + order_stamp: the site lists siblings in the workspace's order
   // (frontend lib/childOrder), not by title (D64).
   const nodes = await q<{ id: string; slug: string; title: string }>(
-    `SELECT id, node_type, title, slug, updated_at, parent_id, sort_order, created_at,
+    `SELECT id, node_type, title, slug, updated_at, parent_id, order_key, order_stamp, created_at,
             CASE WHEN $3::uuid IS NULL OR id = $3::uuid THEN markdown ELSE '' END AS markdown
      FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])
      ORDER BY created_at ASC, id ASC`,

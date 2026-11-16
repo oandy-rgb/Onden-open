@@ -258,7 +258,7 @@ describe.skipIf(!isTestDb)("write stamps on attributes, tags, edges, pointers an
       const [parent, target] = [await note(), await note()];
       const { id } = await ok("POST", "/api/pointers", { target_id: target, parent_id: parent });
       const created = (await stampsOf("note_pointers", id)).get("*")!;
-      await stamped(() => q(`UPDATE note_pointers SET sort_order = 5 WHERE id = $1`, [id]));
+      await stamped(() => q(`UPDATE note_pointers SET order_key = 'a5' WHERE id = $1`, [id]));
       await stamped(() => q(`UPDATE note_pointers SET display_prefix = 'x', created_at = now() WHERE id = $1`, [id]));
       const after = await stampsOf("note_pointers", id);
       expect([...after.keys()].sort()).toEqual(["*", "prefix", "sort"]);

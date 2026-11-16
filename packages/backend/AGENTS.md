@@ -9,6 +9,7 @@
 | 要做的事 | 一律用 | 守門 |
 | --- | --- | --- |
 | 新的資料庫查詢（有型別；舊手寫 `q()` 只減不增） | `dbKysely.ts` 的 `db`；改 migration 後跑 `npm run db:types`（[怎麼寫新查詢](../../docs/architecture/portable-backend.md)） | `allowlist.guard.test.ts`（`be-raw-sql`）、`dbTypes.guard.test.ts` |
+| 同層排序：寫（新筆記放最後、舊整數翻成鍵、復原時的鍵、鍵太長重配）與 ORDER BY 片段 | `services/orderKeys.ts`（鍵本身用 `@onden/markdown` 的 `keyBetween`）；欄位 `order_key`／`order_stamp` 逐位元組比較，`sort_order` 已凍結不讀不寫 | `orderKeyWriters.guard.test.ts` |
 | SHA-256 十六進位摘要 | `utils.ts` 的 `sha256Hex` | `dupSweep.guard.test.ts` |
 | 事件附加鎖 | `spine/eventLock.ts` 的 `lockEventAppend` | `dupSweep.guard.test.ts` |
 | 新的區塊 id | `services/blockNodes.ts` 的 `newBlockId` | `dupSweep.guard.test.ts` |

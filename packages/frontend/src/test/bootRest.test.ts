@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import type { Bootstrap, ContentNode, NodeEdge } from "../lib/api";
 import { mergeAttributeRows, mergeBootstrapRelations } from "../lib/data/bootRest";
 
-const note = (id: string, attrs?: Record<string, string>): ContentNode => ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0, ...(attrs ? { attrs } : {}) } as ContentNode);
+const note = (id: string, attrs?: Record<string, string>): ContentNode => ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0", ...(attrs ? { attrs } : {}) } as ContentNode);
 const edge = (id: string, a: string, b: string): NodeEdge => ({ id, source_node_id: a, target_node_id: b, edge_type: "link", status: "active" });
 const store = (nodes: ContentNode[], more: Partial<Bootstrap> = {}): Bootstrap => ({ nodes, edges: [], tasks: [], suggestions: [], events: [], pointers: [], graph_positions: [], ...more } as unknown as Bootstrap);
 const none = { edges: [], pointers: [], tasks: [], suggestions: [], graph_positions: [] };

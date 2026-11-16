@@ -460,7 +460,7 @@ export function useSidebarDrag({ nodes, online, selectedNodeId, selectedNodePare
     const newParentId = tgtNode.parent_id ?? null;
 
     // Only the target's siblings are renumbered, and only the rows whose
-    // sort_order must change (noteStructure.reorder).
+    // order_key must change (noteStructure.reorder).
     const ids = noteStructure.children(newParentId).map((n) => n.id).filter((id) => id !== srcId);
     const idx = ids.indexOf(targetId);
     if (idx < 0) return;

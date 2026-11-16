@@ -63,7 +63,7 @@ async function settle() {
   await vi.advanceTimersByTimeAsync(20_000);
 }
 const entries = () => [...journal.rows.values()] as JournalEntry[];
-const node = { id: "n", source_type: "manual", node_type: "content", title: "Note", slug: "note", markdown: "body", parent_id: null, hidden: false, sort_order: 0 };
+const node = { id: "n", source_type: "manual", node_type: "content", title: "Note", slug: "note", markdown: "body", parent_id: null, hidden: false, order_key: "a0" };
 const bootstrap = { workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
   nodes: [node], tasks: [], edges: [], suggestions: [], events: [] };
 const bodies = async () => ((await ok("getPendingWrites")) as Array<{ body: string }>).map(w => w.body);

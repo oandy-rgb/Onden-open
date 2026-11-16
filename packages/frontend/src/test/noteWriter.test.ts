@@ -309,8 +309,8 @@ describe("note write lifecycle", () => {
   it("a rejected deletion also restores the note's tag row and pointers", async () => {
     const h = harness();
     const tag = { id: note.id, name: "Tag", color: "#fff" } as NonNullable<typeof ownerData.tags>[number];
-    const pointer = { id: "p1", parent_id: "root", target_id: note.id, sort_order: 0, display_prefix: null };
-    const other = { id: "p2", parent_id: "root", target_id: "elsewhere", sort_order: 1, display_prefix: null };
+    const pointer = { id: "p1", parent_id: "root", target_id: note.id, order_key: "a0", display_prefix: null };
+    const other = { id: "p2", parent_id: "root", target_id: "elsewhere", order_key: "a1", display_prefix: null };
     h.ctx.setData((state) => ({ ...state, tags: [tag], pointers: [pointer, other] }));
     mocks.api.mockRejectedValue(new ApiError(409, "tag in use"));
     await expect(h.writer.remove(note.id)).rejects.toMatchObject({ status: 409 });

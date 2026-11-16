@@ -443,8 +443,8 @@ describe("moving existing day notes under the parent", () => {
     const patches = sendOrQueue.mock.calls.filter(([method]) => method === "PATCH")
       .map(([, path, body]) => [path, JSON.parse(body as string)]);
     expect(patches).toEqual([
-      ["/api/nodes/2026-10-01", { parent_id: "Journal", sort_order: 0 }],
-      ["/api/nodes/2026-10-02", { parent_id: "Journal", sort_order: 1 }],
+      ["/api/nodes/2026-10-01", { parent_id: "Journal", order_key: expect.any(String) }],
+      ["/api/nodes/2026-10-02", { parent_id: "Journal", order_key: expect.any(String) }],
     ]);
     // Moved (optimistically): nothing is left to offer.
     expect(screen.queryByRole("button", { name: /existing day note/ })).toBeNull();

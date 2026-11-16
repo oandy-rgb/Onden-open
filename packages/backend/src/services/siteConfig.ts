@@ -149,8 +149,8 @@ export async function ensureConfigNodeId(workspaceId: string, actor: ActorCtx): 
       apply: async () => {
         await q(
           `INSERT INTO content_nodes
-             (id, workspace_id, source_type, node_type, title, slug, markdown, hidden, sort_order, space_id)
-           VALUES ($1, $2, 'system', 'content', 'Site Config', '_workspace_config', '', true, -1, $3)`,
+             (id, workspace_id, source_type, node_type, title, slug, markdown, hidden, space_id)
+           VALUES ($1, $2, 'system', 'content', 'Site Config', '_workspace_config', '', true, $3)`,
           [nodeId, workspaceId, spaceId],
         );
         await q(`INSERT INTO node_tags (node_id, tag_id) VALUES ($1, $2)`, [nodeId, tagId]);

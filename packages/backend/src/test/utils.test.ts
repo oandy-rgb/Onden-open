@@ -98,7 +98,8 @@ describe("DraftNode", () => {
     if (result.success) {
       expect(result.data.markdown).toBe("");
       expect(result.data.hidden).toBe(false);
-      expect(result.data.sort_order).toBe(0);
+      expect(result.data.sort_order).toBeUndefined();
+      expect(result.data.order_key).toBeUndefined();
     }
   });
 

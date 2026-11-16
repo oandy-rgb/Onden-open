@@ -340,7 +340,9 @@ CREATE TABLE public.content_nodes (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     parent_id uuid,
     hidden boolean DEFAULT false NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
+    sort_order integer,
+    order_key text COLLATE "C" DEFAULT 'a0'::text NOT NULL,
+    order_stamp text COLLATE "C" DEFAULT ''::text NOT NULL,
     presentation jsonb,
     deleted_at timestamp with time zone,
     deleted_by_event_id bigint,
@@ -802,7 +804,9 @@ CREATE TABLE public.note_pointers (
     workspace_id uuid NOT NULL,
     parent_id uuid,
     target_id uuid NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
+    sort_order integer,
+    order_key text COLLATE "C" DEFAULT 'a0'::text NOT NULL,
+    order_stamp text COLLATE "C" DEFAULT ''::text NOT NULL,
     display_prefix text,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1590,7 +1594,7 @@ CREATE INDEX node_tags_tag_idx ON public.node_tags USING btree (tag_id);
 -- Name: note_pointers_parent_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX note_pointers_parent_idx ON public.note_pointers USING btree (workspace_id, parent_id, sort_order);
+CREATE INDEX note_pointers_parent_idx ON public.note_pointers USING btree (workspace_id, parent_id, order_key);
 
 
 --
@@ -3906,6 +3910,7 @@ INSERT INTO schema_migrations (version) VALUES ('195_review_into_function_refs')
 INSERT INTO schema_migrations (version) VALUES ('196_remove_module_tags') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('198_stamps_s4') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('199_stamps_s3') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('200_order_keys') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('201_derived_ids_function_ref_stamps') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('202_stamps_genesis') ON CONFLICT (version) DO NOTHING;
 
@@ -4795,6 +4800,55 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 200: same-level order keys (db/migrations/200_order_keys.sql); the columns are in the tables above
+CREATE INDEX IF NOT EXISTS content_nodes_order_idx ON content_nodes (workspace_id, parent_id, order_key) WHERE deleted_at IS NULL;
+
+-- order_stamp: the stamp of the write that set the key, copied by the database itself (the same stamp the stamp trigger
+-- puts in sync_stamps, a foreign node's stamp when one is being adopted), so the tie rule is an ordinary ORDER BY and
+-- travels with the row to every node.
+CREATE OR REPLACE FUNCTION order_stamp_set() RETURNS trigger AS $$
+DECLARE s jsonb;
+BEGIN
+  IF TG_OP = 'INSERT' OR NEW.order_key IS DISTINCT FROM OLD.order_key THEN
+    s := sync_stamp_current(NEW.workspace_id);
+    NEW.order_stamp := lpad(s->>'wall', 15, '0') || lpad(s->>'counter', 6, '0');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER content_nodes_order_stamp BEFORE INSERT OR UPDATE OF order_key ON content_nodes
+  FOR EACH ROW EXECUTE FUNCTION order_stamp_set();
+CREATE OR REPLACE TRIGGER note_pointers_order_stamp BEFORE INSERT OR UPDATE OF order_key ON note_pointers
+  FOR EACH ROW EXECUTE FUNCTION order_stamp_set();
+
+-- The stamp triggers watch order_key now; the stamp field keeps its name, 'sort'.
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_insert AFTER INSERT ON content_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=space_id,deleted=deleted_at',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_update AFTER UPDATE ON content_nodes FOR EACH ROW
+  WHEN (OLD.title IS DISTINCT FROM NEW.title OR OLD.markdown IS DISTINCT FROM NEW.markdown
+     OR OLD.parent_id IS DISTINCT FROM NEW.parent_id OR OLD.order_key IS DISTINCT FROM NEW.order_key
+     OR OLD.hidden IS DISTINCT FROM NEW.hidden OR OLD.space_id IS DISTINCT FROM NEW.space_id
+     OR (OLD.deleted_at IS NULL) IS DISTINCT FROM (NEW.deleted_at IS NULL))
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=space_id,deleted=deleted_at',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_delete AFTER DELETE ON content_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=space_id,deleted=deleted_at',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+
+-- note_pointers: the arguments of 194 with the order column swapped.
+CREATE OR REPLACE TRIGGER note_pointers_sync_stamp_insert AFTER INSERT ON note_pointers FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('note_pointers', 'id', 'workspace_id', 'sort=order_key,prefix=display_prefix', '', '', '');
+CREATE OR REPLACE TRIGGER note_pointers_sync_stamp_update AFTER UPDATE ON note_pointers FOR EACH ROW
+  WHEN (OLD.order_key IS DISTINCT FROM NEW.order_key OR OLD.display_prefix IS DISTINCT FROM NEW.display_prefix)
+  EXECUTE FUNCTION sync_stamp_trigger('note_pointers', 'id', 'workspace_id', 'sort=order_key,prefix=display_prefix', '', '', '');
+CREATE OR REPLACE TRIGGER note_pointers_sync_stamp_delete AFTER DELETE ON note_pointers FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('note_pointers', 'id', 'workspace_id', 'sort=order_key,prefix=display_prefix', '', '', '');
 -- 201: derived ids for what Onden makes by itself, function_refs write stamps (db/migrations/201_derived_ids_function_ref_stamps.sql; the id rewrite of existing rows is data, not schema)
 -- ---------------------------------------------------------------------------------------------------------------------
 -- 1. The id derivation, in SQL (the TypeScript side is utils.ts uuidV5; src/test checks the two agree).

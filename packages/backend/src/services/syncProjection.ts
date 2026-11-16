@@ -21,7 +21,7 @@ export function attributeColumnsSql(alias: string): string {
 
 /** NotePointer on the client. */
 export function pointerColumnsSql(alias: string): string {
-  return `${alias}.id, ${alias}.parent_id, ${alias}.target_id, ${alias}.sort_order, ${alias}.display_prefix`;
+  return `${alias}.id, ${alias}.parent_id, ${alias}.target_id, ${alias}.order_key, ${alias}.order_stamp, ${alias}.display_prefix`;
 }
 
 /** Workspace on the client (bootstrap, and the sync delta when it changed).

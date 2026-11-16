@@ -119,7 +119,7 @@ export class Server {
 
   row(id: string) {
     const note = this.notes.get(id)!;
-    return { id, title: id, slug: id, markdown: noteText(note.n), node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0, updated_at: "2026-10-24T00:00:00.000Z" };
+    return { id, title: id, slug: id, markdown: noteText(note.n), node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0", updated_at: "2026-10-24T00:00:00.000Z" };
   }
 
   /** Another device saves a newer text. */

@@ -38,7 +38,7 @@ async function openWorker() {
 
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const note = (n: number, extra: object = {}) => ({ id: id(n), source_type: "manual", node_type: "content", title: `n${n}`, slug: `n${n}`, markdown: `body ${n}`, parent_id: null, hidden: false, sort_order: n, ...extra });
+const note = (n: number, extra: object = {}) => ({ id: id(n), source_type: "manual", node_type: "content", title: `n${n}`, slug: `n${n}`, markdown: `body ${n}`, parent_id: null, hidden: false, order_key: "a0", ...extra });
 const boot = (nodes: object[], more: object = {}) => ({
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
   nodes, edges: [], tasks: [], suggestions: [], events: [], pointers: [], ...more,

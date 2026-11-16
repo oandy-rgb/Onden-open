@@ -344,6 +344,8 @@ export interface ContentNodes {
   id: Generated<string>;
   markdown: Generated<string>;
   node_type: string;
+  order_key: Generated<string>;
+  order_stamp: Generated<string>;
   parent_id: string | null;
   presentation: Json | null;
   /**
@@ -351,7 +353,7 @@ export interface ContentNodes {
    */
   reserved_key: string | null;
   slug: string;
-  sort_order: Generated<number>;
+  sort_order: number | null;
   source_type: string;
   space_id: string | null;
   /**
@@ -656,8 +658,10 @@ export interface NotePointers {
   created_at: Generated<Timestamp>;
   display_prefix: string | null;
   id: Generated<string>;
+  order_key: Generated<string>;
+  order_stamp: Generated<string>;
   parent_id: string | null;
-  sort_order: Generated<number>;
+  sort_order: number | null;
   target_id: string;
   workspace_id: string;
 }

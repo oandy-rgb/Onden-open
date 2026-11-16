@@ -32,7 +32,7 @@ export async function settleNodeToServer(id: string, setData: SetData): Promise<
     return false;
   }
   // Where the note is (not its text).
-  const place: Partial<ContentNode> = { parent_id: row.parent_id ?? null, sort_order: row.sort_order, ...(row.hidden === undefined ? {} : { hidden: row.hidden }) };
+  const place: Partial<ContentNode> = { parent_id: row.parent_id ?? null, order_key: row.order_key, order_stamp: row.order_stamp, ...(row.hidden === undefined ? {} : { hidden: row.hidden }) };
   setData((state) => patchNode(state, id, place));
   // Text a person still has queued is projected onto the stored row by the worker.
   await persistRemoteNode(row).catch(() => null);

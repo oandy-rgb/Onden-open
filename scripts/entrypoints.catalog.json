@@ -1482,11 +1482,11 @@
         }
       ],
       "use": "import { sortChildren } from \"./lib/childOrder\";",
-      "replaces": "手寫 a.sort_order - b.sort_order 或 localeCompare",
+      "replaces": "手寫 a.sort_order - b.sort_order、a.order_key.localeCompare、自己重編鄰居的整數",
       "rules": [
         "guard:dup-owners"
       ],
-      "why": "同一層子筆記排序用它，跟側欄、子筆記清單、匯出的順序才會一樣。"
+      "why": "同一層子筆記排序（order_key，逐位元組，再依 order_stamp、id）用它，跟側欄、子筆記清單、匯出、已發布網站的順序才會一樣；搬動一則只寫一列。"
     },
     {
       "id": "title-match",
@@ -4872,6 +4872,54 @@
       "rules": [],
       "why": "碰面點的規則（只驗權杖、200 MB 與每塊上限、2 小時到期、速率限制、只收 octet-stream、錯誤不洩漏工作階段是否存在）寫在平台無關的 sessionCore／limiterCore／handler；worker.ts 只把它們放到 Durable Object 上，memory.ts 用同一份規則跑測試。不碰任何 Onden 資料庫。",
       "useLang": "none"
+    },
+    {
+      "id": "order-key",
+      "need": "要產生同一層的排序鍵、比較兩個鍵、判斷鍵合不合法",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/markdown/src/orderKey.ts",
+          "exports": [
+            "keyBetween",
+            "keysBetween",
+            "isValidOrderKey",
+            "compareOrdered",
+            "evenOrderKeys"
+          ]
+        }
+      ],
+      "use": "import { keyBetween } from \"@onden/markdown/contract\";\nexport const key = keyBetween(\"a0\", \"a1\"); // strictly between the two; null = no neighbour on that side",
+      "replaces": "自己挑整數 sort_order、重編鄰居、用語系排序比鍵",
+      "rules": [
+        "guard:orderKeyWriters"
+      ],
+      "why": "鍵永遠放得進任兩個值之間，所以搬動或插入只寫一列，兩台離線各排也不會用同一個數字指兩則筆記；比較一律逐位元組（資料庫 COLLATE \"C\"、JS 用 <）。"
+    },
+    {
+      "id": "order-key-write",
+      "need": "後端要寫或讀同層排序（新筆記放最後、舊整數翻成鍵、復原時的鍵、鍵太長重配）",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/services/orderKeys.ts",
+          "exports": [
+            "appendOrderKey",
+            "assertOrderKey",
+            "translateLegacySortOrder",
+            "keyForRestore",
+            "respaceIfTooLong",
+            "SIBLING_ORDER_N",
+            "UNSORTED_ORDER_N"
+          ]
+        }
+      ],
+      "use": "import { appendOrderKey, SIBLING_ORDER_N } from \"./services/orderKeys.js\";\nexport const appendFor = appendOrderKey;\nexport const orderBy = SIBLING_ORDER_N; // n.order_key COLLATE \"C\", n.order_stamp COLLATE \"C\", n.id",
+      "replaces": "自己寫 sort_order 的 INSERT／UPDATE、ORDER BY sort_order、不指定 COLLATE 的鍵比較",
+      "rules": [
+        "guard:orderKeyWriters"
+      ],
+      "why": "寫入排序鍵的地方只有清單上的幾個檔案，鍵都從這裡來；讀取的 ORDER BY 用同一個片段，資料庫與前端的順序才一致。"
     },
     {
       "id": "be-backup-history",

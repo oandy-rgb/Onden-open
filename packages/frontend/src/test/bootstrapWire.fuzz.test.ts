@@ -75,7 +75,7 @@ function decodeText(text: string): { state: Bootstrap } | { error: unknown } | "
 
 const row = fc.record({
   id: fc.uuid(), title: anyString, slug: anyString, markdown: anyString,
-  parent_id: fc.option(fc.uuid(), { nil: null }), hidden: fc.boolean(), sort_order: fc.integer({ min: -3, max: 3 }),
+  parent_id: fc.option(fc.uuid(), { nil: null }), hidden: fc.boolean(), order_key: fc.constantFrom("a0", "a1", "Zz", "a0V"), order_stamp: fc.constantFrom("", "000001700000000000000001"),
   source_type: fc.constantFrom("manual", "system", "import"), node_type: fc.constantFrom("content", "class_tag", "task"),
   space_id: fc.option(fc.uuid(), { nil: null }), last_actor: fc.option(anyString, { nil: null }),
   class_tag_ids: fc.array(fc.uuid(), { maxLength: 3 }), label_tag_ids: fc.array(fc.uuid(), { maxLength: 3 }), recent_actors: fc.array(anyString, { maxLength: 3 }),
@@ -97,7 +97,7 @@ describe("bootstrap wire fuzz", () => {
       expect(out.nodes.map((n) => n.id)).toEqual(nodes.map((n) => n.id));
       for (const [i, n] of nodes.entries()) {
         const got = out.nodes[i] as unknown as Record<string, unknown>;
-        for (const key of ["title", "slug", "markdown", "parent_id", "hidden", "sort_order", "source_type", "node_type", "space_id", "last_actor", "class_tag_ids", "label_tag_ids", "recent_actors"] as const) {
+        for (const key of ["title", "slug", "markdown", "parent_id", "hidden", "order_key", "order_stamp", "source_type", "node_type", "space_id", "last_actor", "class_tag_ids", "label_tag_ids", "recent_actors"] as const) {
           expect(got[key], `${n.id} ${key}`).toEqual(n[key]);
         }
       }

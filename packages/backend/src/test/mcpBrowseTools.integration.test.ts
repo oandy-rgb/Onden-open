@@ -288,9 +288,9 @@ describe.skipIf(!isTestDb)("listChildren / listSpaces", () => {
     await mk(w, "A1", a);
     const gone = await mk(w, "Gone", root);
     await seedQ(`UPDATE content_nodes SET deleted_at = now() WHERE id = $1`, [gone]);
-    await seedQ(`UPDATE content_nodes SET sort_order = 3 WHERE id = $1`, [a]);
-    await seedQ(`UPDATE content_nodes SET sort_order = 1 WHERE id = $1`, [b]);
-    await seedQ(`UPDATE content_nodes SET sort_order = 2 WHERE id = $1`, [c]);
+    await seedQ(`UPDATE content_nodes SET order_key = 'a3' WHERE id = $1`, [a]);
+    await seedQ(`UPDATE content_nodes SET order_key = 'a1' WHERE id = $1`, [b]);
+    await seedQ(`UPDATE content_nodes SET order_key = 'a2' WHERE id = $1`, [c]);
     const r = await call("listChildren", { id: root }, w.agent, w.ws) as Kids;
     expect(r.nodes.map((n) => n.title)).toEqual(["B", "C", "A"]);
     expect(r.nodes.find((n) => n.title === "A")!.hasChildren).toBe(true);
@@ -322,7 +322,7 @@ describe.skipIf(!isTestDb)("listChildren / listSpaces", () => {
     // The big parent sorts first by id: a shared LIMIT over both parents would be used up by it alone.
     const big = (await createNote({ actor: w.owner, workspaceId: w.ws, title: "Big", markdown: "", parentId: root, id: "00000000-0000-4000-8000-000000000001", event: { uiContext: "test" } })).node.id as string;
     const small = (await createNote({ actor: w.owner, workspaceId: w.ws, title: "Small", markdown: "", parentId: root, id: "ffffffff-ffff-4fff-8fff-ffffffffffff", event: { uiContext: "test" } })).node.id as string;
-    await seedQ(`UPDATE content_nodes SET sort_order = CASE id WHEN $1::uuid THEN 1 ELSE 2 END WHERE id IN ($1::uuid, $2::uuid)`, [big, small]);
+    await seedQ(`UPDATE content_nodes SET order_key = CASE id WHEN $1::uuid THEN 'a1' ELSE 'a2' END WHERE id IN ($1::uuid, $2::uuid)`, [big, small]);
     await bulkChildren(w, big, 250, "big-");
     await mk(w, "only-child", small);
     const r = await call("listChildren", { id: root, depth: 2 }, w.agent, w.ws) as Kids;
@@ -339,7 +339,7 @@ describe.skipIf(!isTestDb)("listChildren / listSpaces", () => {
     const root = await mk(w, "Root3");
     const parents: string[] = [];
     for (let i = 0; i < 12; i++) parents.push(await mk(w, `P${String(i).padStart(2, "0")}`, root));
-    for (const [i, p] of parents.entries()) await seedQ(`UPDATE content_nodes SET sort_order = $2 WHERE id = $1`, [p, i]);
+    for (const [i, p] of parents.entries()) await seedQ(`UPDATE content_nodes SET order_key = $2 WHERE id = $1`, [p, `a${i}`]);
     for (const p of parents) await bulkChildren(w, p, 20, "c-");
     const r = await call("listChildren", { id: root, depth: 2 }, w.agent, w.ws) as Kids;
     const listed = r.nodes.reduce((n, p) => n + 1 + (p.children?.length ?? 0), 0);

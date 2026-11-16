@@ -73,6 +73,8 @@ type Note = {
 };
 type World = { fields: Field[]; notes: Note[] };
 
+/** The note's manual number as the key the table keeps now (migration 200): the same order, byte order, one key per number. */
+const keyOfSortOrder = (sortOrder: number): string => `a${sortOrder + 1}`;
 const BUILT_INS = ["title", "slug", "updated_at", "created_at", "sort_order"] as const;
 const FIELD_POOL: Array<[string, FieldKind]> = [
   ["作者", "text"], ["price", "number"], ["到期", "date"], ["done", "boolean"], ["狀態", "select"],
@@ -204,9 +206,9 @@ async function build(world: World): Promise<Built> {
   await withTransaction(async () => {
     for (const [i, n] of world.notes.entries()) {
       await q(
-        `INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, sort_order, created_at, updated_at, hidden, deleted_at)
+        `INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, order_key, created_at, updated_at, hidden, deleted_at)
          VALUES ($1, $2, 'manual', 'content', $3, $4, '', $5, $6::timestamptz, $7::timestamptz, $8, ${n.fate === "trashed" ? "now()" : "NULL"})`,
-        [ids[i], ws, n.title, slugs[i], n.sortOrder, n.createdAt, n.updatedAt, n.fate === "hidden"]);
+        [ids[i], ws, n.title, slugs[i], keyOfSortOrder(n.sortOrder), n.createdAt, n.updatedAt, n.fate === "hidden"]);
       await q(`INSERT INTO node_tags (node_id, tag_id) VALUES ($1, $2)`, [ids[i], n.fate === "other-tag" ? otherTag : tagId]);
       for (const [key, a] of Object.entries(n.attrs)) {
         await q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type) VALUES ($1, $2, $3, $4, $5)`, [ws, ids[i], key, a.raw, a.type]);
@@ -368,7 +370,7 @@ async function checkRuns(world: World, b: Built, view: View): Promise<void> {
 /** Whether two rows tie on every key of the view's order (K2: only then the order is not decided by the view). */
 function hasTies(world: World, b: Built, ids: string[], sorts: Sort[]): boolean {
   const noteOf = new Map(b.ids.map((id, i) => [id, world.notes[i]!]));
-  const keys = sorts.length > 0 ? sorts.map((s) => s.field) : ["sort_order", "title"];
+  const keys = sorts.length > 0 ? sorts.map((s) => s.field) : ["title"];
   // The keys the SQL orders by: a built-in column's value, else attributeSortSql's three (typed number, ISO date text, raw text).
   const keyOf = (id: string) => {
     const n = noteOf.get(id)!;

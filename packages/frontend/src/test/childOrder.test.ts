@@ -1,73 +1,80 @@
-// Children are ordered like the backend lists them: sort_order, then creation
-// time. Merge used the title as the tie-break, so equal sort_order children
-// were folded back in alphabetical rather than creation order.
+// Children are ordered like the backend lists them: order_key (by byte), then the stamp of the write that set it,
+// then id. Moving one note between two others writes one note: its key goes between theirs.
 import { describe, it, expect } from "vitest";
+import { evenOrderKey, evenOrderKeys } from "@onden/markdown/contract";
 import { planSiblingOrder, sortChildren } from "../lib/childOrder";
 import { computeTreeLayout } from "../lib/treeLayout";
 import type { ContentNode } from "../lib/api";
 
-const child = (id: string, title: string, sort_order: number, created_at?: string) =>
-  ({ id, title, slug: id, parent_id: "root", node_type: "content", source_type: "manual", markdown: "", hidden: false, sort_order, created_at }) as ContentNode;
+const child = (id: string, order_key: string | undefined, order_stamp = "") =>
+  ({ id, title: id, slug: id, parent_id: "root", node_type: "content", source_type: "manual", markdown: "", hidden: false, order_key, order_stamp }) as ContentNode;
 
 describe("child order", () => {
-  it("ties on sort_order break by creation time, not title", () => {
-    const rows = [child("b", "Alpha", 0, "2026-10-02T00:00:00Z"), child("a", "Zulu", 0, "2026-10-01T00:00:00Z"), child("c", "Mid", -1)];
-    expect(sortChildren(rows).map((r) => r.id)).toEqual(["c", "a", "b"]);
+  it("sorts by key, then stamp, then id; never by title or creation time", () => {
+    const rows = [child("b", "a0", "2"), child("a", "a0", "2"), child("z", "a0", "1"), child("first", "Zz"), child("late", "a1")];
+    expect(sortChildren(rows).map((r) => r.id)).toEqual(["first", "z", "a", "b", "late"]);
   });
 
-  it("keeps input order among equals without created_at", () => {
-    const rows = [child("x", "Zed", 1), child("y", "Abe", 1)];
-    expect(sortChildren(rows).map((r) => r.id)).toEqual(["x", "y"]);
+  it("does not depend on the order rows arrive in", () => {
+    const rows = [child("b", "a1"), child("a", "a1"), child("c", "a0")];
+    expect(sortChildren([...rows].reverse()).map((r) => r.id)).toEqual(sortChildren(rows).map((r) => r.id));
+  });
+
+  it("a note the server has not answered yet (no key) sorts last", () => {
+    expect(sortChildren([child("new", undefined), child("a", "a0"), child("b", "a1")]).map((r) => r.id)).toEqual(["a", "b", "new"]);
   });
 
   it("the canvas tree layout uses the same order", () => {
-    const root = { ...child("root", "Root", 0), parent_id: null } as ContentNode;
-    const nodes = [root, child("late", "A late", 0, "2026-10-03T00:00:00Z"), child("early", "B early", 0, "2026-10-01T00:00:00Z")];
+    const root = { ...child("root", "a0"), parent_id: null } as ContentNode;
+    const nodes = [root, child("late", "a5"), child("early", "a1")];
     const pos = computeTreeLayout("root", nodes);
     expect(pos.get("early")!.y).toBeLessThan(pos.get("late")!.y);
   });
 });
 
-// D64: a reorder renumbers as few siblings as it can.
+// A reorder writes as few siblings as it can: one, for a move.
 describe("planSiblingOrder", () => {
-  const at = (i: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString();
-  // n children all at sort_order 0, created in order: c0, c1, …
-  const fresh = (n: number) => Array.from({ length: n }, (_, i) => child(`c${i}`, `c${i}`, 0, at(i)));
-  const apply = (rows: ContentNode[], changes: Map<string, number>) =>
-    sortChildren(rows.map((r) => (changes.has(r.id) ? { ...r, sort_order: changes.get(r.id)! } : r))).map((r) => r.id);
+  const fresh = (n: number) => evenOrderKeys(n).map((key, i) => child(`c${i}`, key));
+  const apply = (rows: ContentNode[], changes: Map<string, string>) =>
+    sortChildren(rows.map((r) => (changes.has(r.id) ? { ...r, order_key: changes.get(r.id)! } : r))).map((r) => r.id);
 
-  it("moving one note to the top of 200 untouched siblings writes that note only", () => {
-    const rows = fresh(200);
-    const ids = rows.map((r) => r.id);
-    const order = ["c2", ...ids.filter((id) => id !== "c2")];
+  it.each([100, 2000])("moving one note to the top of %i siblings writes that note only", (n) => {
+    const rows = fresh(n);
+    const order = ["c2", ...rows.map((r) => r.id).filter((id) => id !== "c2")];
     const changes = planSiblingOrder(rows, order, "c2");
     expect([...changes.keys()]).toEqual(["c2"]);
     expect(apply(rows, changes)).toEqual(order);
   });
 
-  it("moving a later note between two earlier ties writes at most two notes", () => {
+  it("moving a later note between two earlier ones writes that note only", () => {
     const rows = fresh(200);
     const ids = rows.map((r) => r.id).filter((id) => id !== "c150");
     const order = [...ids.slice(0, 1), "c150", ...ids.slice(1)];
     const changes = planSiblingOrder(rows, order, "c150");
-    expect(changes.size).toBeLessThanOrEqual(2);
+    expect([...changes.keys()]).toEqual(["c150"]);
     expect(apply(rows, changes)).toEqual(order);
   });
 
-  it("a note coming from another parent always gets a value", () => {
-    const rows = [child("a", "a", 0, at(1)), child("b", "b", 1, at(2))];
-    const changes = planSiblingOrder(rows, ["a", "x", "b"], "x", [child("x", "x", 5, at(9))]);
-    expect(changes.has("x")).toBe(true);
-    expect(changes.has("a") || changes.has("b")).toBe(false);
-    expect(changes.get("x")).toBeGreaterThanOrEqual(0);
-    expect(changes.get("x")).toBeLessThanOrEqual(1);
+  it("a note coming from another parent always gets a key, and nobody else changes", () => {
+    const rows = [child("a", "a0"), child("b", "a1")];
+    const changes = planSiblingOrder(rows, ["a", "x", "b"], "x");
+    expect([...changes.keys()]).toEqual(["x"]);
+    expect(changes.get("x")! > "a0" && changes.get("x")! < "a1").toBe(true);
   });
 
-  it("swapping two neighbours renumbers the dragged one, not its neighbour", () => {
-    const rows = [child("a", "a", 0, at(1)), child("b", "b", 1, at(2)), child("c", "c", 2, at(3))];
+  it("swapping two neighbours rekeys the dragged one, not its neighbour", () => {
+    const rows = [child("a", "a0"), child("b", "a1"), child("c", "a2")];
     const changes = planSiblingOrder(rows, ["a", "c", "b"], "c");
     expect([...changes.keys()]).toEqual(["c"]);
     expect(apply(rows, changes)).toEqual(["a", "c", "b"]);
+  });
+
+  it("siblings with the same key (two devices inserted at one place) are separated once", () => {
+    const rows = [child("a", "a0"), child("b", "a0"), child("c", "a0")];
+    const order = sortChildren(rows).map((r) => r.id);
+    const changes = planSiblingOrder(rows, order);
+    expect(changes.size).toBe(2);
+    expect(apply(rows, changes)).toEqual(order);
   });
 
   it("any order of any siblings comes out as asked", () => {
@@ -75,20 +82,14 @@ describe("planSiblingOrder", () => {
     const rand = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
     for (let round = 0; round < 300; round++) {
       const n = 1 + rand(12);
-      const rows = Array.from({ length: n }, (_, i) => child(`r${i}`, `r${i}`, rand(4) - 1, rand(5) ? at(rand(30)) : undefined));
+      const rows = Array.from({ length: n }, (_, i) => child(`r${i}`, rand(5) ? evenOrderKey(rand(6)) : undefined, String(rand(3))));
       const order = sortChildren(rows).map((r) => r.id);
-      // Move one row somewhere else.
       const [movedId] = order.splice(rand(n), 1);
-      order.splice(rand(n), 0, movedId);
+      order.splice(rand(n), 0, movedId!);
       const changes = planSiblingOrder(rows, order, movedId);
-      // Rows without created_at only keep their place when they differ by
-      // sort_order, so compare the planned order with the comparator itself.
-      const planned = order.map((id) => ({ ...rows.find((r) => r.id === id)!, sort_order: changes.get(id) ?? rows.find((r) => r.id === id)!.sort_order }));
+      const planned = order.map((id) => ({ ...rows.find((r) => r.id === id)!, order_key: changes.get(id) ?? rows.find((r) => r.id === id)!.order_key }));
       for (let i = 1; i < planned.length; i++) {
-        const prev = planned[i - 1], cur = planned[i];
-        const strictlyAfter = (cur.sort_order ?? 0) > (prev.sort_order ?? 0)
-          || ((cur.sort_order ?? 0) === (prev.sort_order ?? 0) && !!prev.created_at && !!cur.created_at && prev.created_at < cur.created_at);
-        expect(strictlyAfter, `round ${round}: ${prev.id} before ${cur.id}`).toBe(true);
+        expect(planned[i - 1]!.order_key! < planned[i]!.order_key!, `round ${round}: ${planned[i - 1]!.id} before ${planned[i]!.id}`).toBe(true);
       }
       expect(changes.size).toBeLessThanOrEqual(n);
     }

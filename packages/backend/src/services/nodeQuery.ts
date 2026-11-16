@@ -45,6 +45,7 @@ import { FILTER_OP_NAMES, isSystemAttr } from "@onden/markdown";
 import { z } from "zod";
 import { q } from "../db.js";
 import { sqlIdentifier } from "../sqlText.js";
+import { MANUAL_ORDER_CN_ASC, MANUAL_ORDER_CN_DESC, UNSORTED_ORDER_CN } from "./orderKeys.js";
 import type { ActorCtx } from "../types.js";
 import { memberTagIdsNamed } from "./tagHierarchy.js";
 import { attributeSortSql } from "./collectionViewQuery.js";
@@ -128,13 +129,13 @@ export async function runNodeQuery(
   // Built-in columns sort directly; any other field sorts by that
   // node_attribute's value (parameterised, missing → last), matching
   // executeView so the two query surfaces agree.
-  let orderBy = "cn.sort_order ASC";
+  let orderBy = UNSORTED_ORDER_CN;
   if (body.sort) {
     const desc = body.sort.startsWith("-");
     const field = desc ? body.sort.slice(1) : body.sort;
     const dir = desc ? "DESC" : "ASC";
     if (SORT_WHITELIST.has(field) || BUILT_IN_FIELDS.has(field)) {
-      orderBy = `cn.${sqlIdentifier(field)} ${dir} NULLS LAST`;
+      orderBy = field === "sort_order" ? (dir === "DESC" ? MANUAL_ORDER_CN_DESC : MANUAL_ORDER_CN_ASC) : `cn.${sqlIdentifier(field)} ${dir} NULLS LAST`;
     } else if (field) {
       // Typed like a saved view's sort (numbers as numbers, dates as dates).
       orderBy = attributeSortSql(field, dir, params, "cn").join(", ");

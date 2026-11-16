@@ -7,6 +7,7 @@
 // retry-safe with client-minted ids used as idempotency keys, and a failed
 // run removes the children it created.
 
+import { keyBetween } from "@onden/markdown/contract";
 import { randomUUID } from "../uuid";
 import { addToast, getAppState, getNode } from "../appStore";
 import type { ContentNode } from "../api";
@@ -17,7 +18,7 @@ import { noteWriter, onlineOperation } from "./domainWriters";
 import { classifyWriteFailure } from "./writeErrors";
 import { isTag } from "@onden/markdown/contract";
 
-export type ChildNoteInput = { title: string; markdown: string; sort_order: number };
+export type ChildNoteInput = { title: string; markdown: string };
 
 /** Run `work` as one online operation (onlineWrite.ts: online, nothing
  *  queued, a key per intent reused on retry, a failure reported once). Each
@@ -74,12 +75,11 @@ export async function deleteNotes(submit: OnlineSubmit, ids: string[]): Promise<
 }
 
 // ── Sibling order (depth audit D64) ──
-// The one writer of sort_order for a reorder. It renumbers only one parent's
-// children, and only the rows whose value has to change (planSiblingOrder),
-// so a drag in a long list is a PATCH or two, not one per note. Each row goes
-// through the note writer: shown at once, queued offline, rolled back alone
-// if refused. A sort_order-only PATCH leaves the note's updated_at alone on
-// the server (services/nodeUpdate.ts).
+// The one writer of order_key for a reorder. Moving one note is one key between its
+// neighbours' keys (planSiblingOrder), so a drag in a list of any length is one PATCH.
+// Each row goes through the note writer: shown at once, queued offline, rolled
+// back alone if refused. An order_key-only PATCH leaves the note's updated_at
+// alone on the server (services/nodeUpdate.ts).
 
 const childRows = (parentId: string | null) =>
   getAppState().data.nodes.filter((n) => (n.parent_id ?? null) === parentId && !isTag(n));
@@ -94,16 +94,13 @@ export function childrenOf(parentId: string | null): ContentNode[] {
  *  the person dragged (it is the one renumbered when there is a choice).
  *  Resolves with the number of notes written. */
 export async function reorderChildren(parentId: string | null, orderedIds: readonly string[], moved?: string): Promise<number> {
-  const nodes = getAppState().data.nodes;
-  const ids = new Set(orderedIds);
-  const incoming = nodes.filter((n) => ids.has(n.id) && (n.parent_id ?? null) !== parentId);
-  const changes = planSiblingOrder(childRows(parentId), orderedIds, moved, incoming);
+  const changes = planSiblingOrder(childRows(parentId), orderedIds, moved);
   const writes: Promise<unknown>[] = [];
-  for (const [id, sortOrder] of changes) {
+  for (const [id, orderKey] of changes) {
     const node = getNode(id);
     if (!node) continue;
     const reparent = (node.parent_id ?? null) !== parentId;
-    writes.push(noteWriter.patch(id, { sort_order: sortOrder, ...(reparent ? { parent_id: parentId } : {}) }).catch(() => null));
+    writes.push(noteWriter.patch(id, { order_key: orderKey, ...(reparent ? { parent_id: parentId } : {}) }).catch(() => null));
   }
   await Promise.all(writes);
   return writes.length;
@@ -112,5 +109,5 @@ export async function reorderChildren(parentId: string | null, orderedIds: reado
 /** Move a note under `parentId` as its last child. */
 export async function appendChild(parentId: string, id: string): Promise<void> {
   const last = childrenOf(parentId).filter((n) => n.id !== id).at(-1);
-  await noteWriter.patch(id, { parent_id: parentId, sort_order: last ? (last.sort_order ?? 0) + 1 : 0 }).catch(() => null);
+  await noteWriter.patch(id, { parent_id: parentId, order_key: keyBetween(last?.order_key ?? null, null) }).catch(() => null);
 }

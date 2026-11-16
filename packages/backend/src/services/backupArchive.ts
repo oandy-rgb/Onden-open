@@ -79,7 +79,11 @@ export type BackupNote = {
   parent_id: string | null;
   space_id: string | null;
   hidden: boolean;
-  sort_order: number;
+  /** Where it sits among its siblings (a fractional-index key). Backups made before order keys (migration 200) have only `sort_order`. */
+  order_key?: string;
+  /** The same place as a rank among its siblings in the backup (0, 1, 2…). Still written, so an older server that restores this
+   *  archive keeps the order: it does not know `order_key`. A restore here uses the key, and this only when there is none. */
+  sort_order?: number;
   source_type: string;
   created_at: string;
   updated_at: string;
@@ -365,6 +369,10 @@ async function readBackupFiles(actor: ActorCtx, workspaceId: string, scratch: st
     `SELECT task_id::text, block_ref FROM block_nodes WHERE workspace_id = $1 AND task_id IS NOT NULL`, [workspaceId],
   )).rows.map((r) => [r.task_id, r.block_ref]));
   const side = await readSidecarRows(workspaceId, ids);
+  // Each note's rank among its siblings in this backup, in the order the app shows them (the key, then its stamp, then id).
+  const siblingRank = new Map((await sql<{ id: string; rank: number }>`
+    SELECT id::text, (row_number() OVER (PARTITION BY parent_id ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id) - 1)::int AS rank
+      FROM content_nodes WHERE workspace_id = ${workspaceId} AND id = ANY(${ids}::uuid[])`.execute(db)).rows.map((r) => [r.id, r.rank]));
   const indexById = new Map(index.map((n) => [n.id, n]));
   const counts: BackupManifest["counts"] = { notes: 0, deleted_notes: 0, tags: 0, tasks: 0, canvases: 0, drawings: 0, attachments: 0, spaces: 0 };
   const tagPaths = new Map<string, string>();
@@ -373,7 +381,7 @@ async function readBackupFiles(actor: ActorCtx, workspaceId: string, scratch: st
     const isTask = n.hidden && attributes.some((a) => a.key === TASK_ATTR.status);
     const sidecar: BackupNote = {
       id: n.id, node_type: n.node_type, title: n.title, slug: n.slug, parent_id: n.parent_id,
-      space_id: n.space_id, hidden: n.hidden, sort_order: n.sort_order, source_type: n.source_type,
+      space_id: n.space_id, hidden: n.hidden, order_key: n.order_key, sort_order: siblingRank.get(n.id) ?? 0, source_type: n.source_type,
       created_at: n.created_at, updated_at: n.updated_at, deleted_at: n.deleted_at,
       markdown: n.markdown, presentation: n.presentation ?? null,
       attributes: attributes.map((a) => ({ key: a.key, value: a.value, value_type: a.value_type, is_inheritable: a.is_inheritable, source: a.source })),

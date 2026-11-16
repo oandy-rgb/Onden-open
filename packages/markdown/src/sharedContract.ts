@@ -208,12 +208,13 @@ export function isEditorStorageAttr(key: string): boolean {
  *  The older side is the one to update: a server refuses an older client (426 `client_too_old`: reload) and a newer
  *  one (426 `server_too_old`: the server needs updating); a client holds back from a server on either side the same way.
  *  Raise CLIENT_PROTOCOL when the shape of what sync carries changes (bootstrap, delta, membership) or a write means
- *  something else than before (3: paragraph identity lives in block_anchors, the text carries no `^id`). A new
+ *  something else than before (3: paragraph identity lives in block_anchors, the text carries no `^id`; 4: a note's
+ *  place among its siblings is the key `order_key`, not the integer `sort_order`). A new
  *  optional field, a new route or a bug fix does not need it: raising it locks everyone out until both sides update.
  *  A request with no header (MCP, tokens, health checks, the public site) is not asked. */
 export const CLIENT_PROTOCOL_HEADER = "X-Onden-Client-Protocol";
 export const SERVER_PROTOCOL_HEADER = "X-Onden-Server-Protocol";
-export const CLIENT_PROTOCOL = 3;
+export const CLIENT_PROTOCOL = 4;
 
 /** The requests that carry what sync builds a copy from (bootstrap, delta, bodies, drawings, membership, grants), by
  *  path. Some are POSTs that only read, so "is it a write" is not the question: the server refuses a client
@@ -272,3 +273,6 @@ export function isCanvas(node: { readonly node_type?: unknown } | null | undefin
 // A rule both sides apply to the same change: where a task's reminder goes when its day or time moves (the server on the
 // write, the client on its optimistic copy). Offered here, not from the root entry, which only gets narrower.
 export { reminderAfterMove, type ReminderPlacement } from "./taskReminder.js";
+
+// Same-level order keys (migration 200): the one place they are made and compared, shared by the app and the server.
+export { keyBetween, keysBetween, evenOrderKey, evenOrderKeys, isValidOrderKey, orderKeyNeedsRespace, compareOrdered, ORDER_KEY_RESPACE_LENGTH, ORDER_KEY_MAX_LENGTH } from "./orderKey.js";

@@ -11,7 +11,7 @@ import { assertBootstrapShape, assertSyncDeltaShape, WireShapeError } from "./wi
 
 const node: ContentNode = {
   id: "n1", workspace_id: "w", source_type: "manual", node_type: "content", title: "T", slug: "t", markdown: "",
-  created_at: "2026-10-01T08:00:00.000Z", updated_at: "2026-10-01T08:00:00.000Z", parent_id: null, hidden: false, sort_order: 0,
+  created_at: "2026-10-01T08:00:00.000Z", updated_at: "2026-10-01T08:00:00.000Z", parent_id: null, hidden: false, order_key: "a0", order_stamp: "",
   presentation: null, collection_views: null, deleted_at: null, deleted_by_event_id: null, tag_color: null, tag_schema: null,
   reserved_key: null, space_id: null, class_tag_ids: [], label_tag_ids: [], last_actor: null, last_modified_at: null, recent_actors: [],
 };

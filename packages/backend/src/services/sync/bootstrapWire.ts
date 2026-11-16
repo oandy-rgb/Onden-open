@@ -8,7 +8,7 @@
 //
 // What is left out, none of it information:
 //   • nodes[].workspace_id (the workspace row carries it once);
-//   • null fields, `false` hidden, sort_order 0, source_type "manual",
+//   • null fields, `false` hidden, an empty order_stamp, source_type "manual",
 //     node_type "content" and empty tag / actor lists — the decoder puts the
 //     same defaults back (WIRE_NODE_NULLABLE below is the list it restores);
 //   • repeated strings: space ids, tag ids, actor ids, attribute keys, types
@@ -82,7 +82,7 @@ function encodeNode(workspaceId: string, row: Row, dict: Dict): Row {
     if (value === null || value === undefined) continue;
     if (key === "workspace_id" && value === workspaceId) continue;
     if (key === "hidden" && value === false) continue;
-    if (key === "sort_order" && value === 0) continue;
+    if (key === "order_stamp" && value === "") continue;
     if (key === "source_type" && value === "manual") continue;
     if (key === "node_type" && value === "content") continue;
     if ((DICT_SCALARS as readonly string[]).includes(key)) { out[key] = dict.ref(String(value)); continue; }

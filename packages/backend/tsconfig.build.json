@@ -10,6 +10,6 @@
   // The production emit must not compile @onden/markdown's sources into
   // dist/ (that would move dist/index.js): it reads the package's built
   // declarations; the Dockerfile builds the package first.
-  "compilerOptions": { "paths": { "@onden/markdown": ["../markdown/dist/index.d.ts"], "@onden/markdown/block-id": ["../markdown/dist/blockId.d.ts"], "@onden/site": ["../site/dist/index.d.ts"], "@onden/contract": ["../contract/dist/index.d.ts"] } },
+  "compilerOptions": { "paths": { "@onden/markdown": ["../markdown/dist/index.d.ts"], "@onden/markdown/block-id": ["../markdown/dist/blockId.d.ts"], "@onden/markdown/contract": ["../markdown/dist/sharedContract.d.ts"], "@onden/site": ["../site/dist/index.d.ts"], "@onden/contract": ["../contract/dist/index.d.ts"] } },
   "exclude": ["src/test/**", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

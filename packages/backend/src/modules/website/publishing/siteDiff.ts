@@ -17,12 +17,14 @@
 // site's dates, sitemap lastmod and feed pubDate then show.
 
 import { compareText, compareTitles } from "@onden/markdown";
+import { compareOrdered } from "@onden/markdown/contract";
 import { sha256Hex } from "../../../utils.js";
 import type { PreviewNote } from "@onden/contract";
 
 export type PayloadNode = {
   id: string; title?: string; slug?: string; markdown?: string; parent_id?: string | null; tags?: string[];
-  sort_order?: number; created_at?: unknown;
+  /** The place among siblings: a key since migration 200 (and the stamp that breaks a tie); a snapshot from before has the integer. */
+  order_key?: string; order_stamp?: string; sort_order?: number; created_at?: unknown;
   /** A published drawing's picture, as the notes embedding it show it (drawingEmbeds.ts). */
   drawing_svg?: string;
   /** Pictures of the parts of it that published notes quote (drawingEmbeds.ts). */
@@ -90,14 +92,15 @@ export function noteViewChanged(
 
 /** The whole site as readers see it: each note's view, and each parent's
  *  children in the order the site lists them — the site's nav rule
- *  (frontend lib/childOrder): sort_order, then created_at, then title; a
- *  snapshot from before D64 carries no sort_order and is listed by title. */
+ *  (frontend lib/childOrder): order_key, then its stamp, then id; a snapshot
+ *  from before order keys has sort_order then created_at, one from before D64 neither and is listed by title. */
 function readerSite(payload: Payload) {
   const nodes = nodesOf(payload);
   const ids = new Set(nodes.map((n) => n.id));
   const edges = edgesOf(payload);
   const views = new Map<string, ReaderView>(nodes.map((n) => [n.id, readerView(n, ids, edges)]));
   const ordered = nodes.some((n) => n.sort_order !== undefined && n.sort_order !== null);
+  const keyed = nodes.some((n) => n.order_key);
   const children = new Map<string, PayloadNode[]>();
   for (const n of nodes) {
     const parent = views.get(n.id)!.parent ?? "";
@@ -105,7 +108,9 @@ function readerSite(payload: Payload) {
   }
   const order = new Map<string, string[]>();
   for (const [parent, list] of children) {
-    const sorted = [...list].sort((a, b) => (ordered
+    const sorted = [...list].sort((a, b) => (keyed
+      ? compareOrdered(a, b)
+      : ordered
       ? (a.sort_order ?? 0) - (b.sort_order ?? 0) || (iso(a.created_at) && iso(b.created_at) ? compareText(iso(a.created_at), iso(b.created_at)) : 0)
       : 0) || compareTitles(a.title ?? "", b.title ?? ""));
     order.set(parent, sorted.map((n) => n.id));

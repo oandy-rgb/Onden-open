@@ -48,11 +48,11 @@ describe("a blank title is named in one place", () => {
 });
 
 describe("siblings are ordered in one place", () => {
-  const PATTERN = /sort_order.*(?:\) - \(|localeCompare)|\bsort_order\s*-\s*\w+\.sort_order/;
+  const PATTERN = /(?:sort_order|order_key).*(?:\) - \(|localeCompare)|\bsort_order\s*-\s*\w+\.sort_order|\border_key\s*[<>]=?\s*\w+\.order_key/;
   // ratchet:list PENDING2
   const PENDING: Record<string, string> = {
   };
-  it("only lib/childOrder.ts compares sort_order", () => {
+  it("only lib/childOrder.ts compares order keys", () => {
     const uses = findUses(files, PATTERN, ["lib/childOrder.ts", ...Object.keys(PENDING)]);
     expect(uses, entryHint("child-order")).toEqual([]);
   });
@@ -63,6 +63,8 @@ describe("siblings are ordered in one place", () => {
     expect(PATTERN.test("(a.sort_order ?? 0) - (b.sort_order ?? 0) || a.title.localeCompare(b.title)")).toBe(true);
     expect(PATTERN.test("a.sort_order - b.sort_order")).toBe(true);
     expect(PATTERN.test("rows.sort((a, b) => a.sort_order - b.sort_order)")).toBe(true);
+    expect(PATTERN.test("rows.sort((a, b) => (a.order_key ?? \"\") < (b.order_key ?? \"\") ? -1 : 1)")).toBe(false);
+    expect(PATTERN.test("a.order_key < b.order_key ? -1 : 1")).toBe(true);
     expect(PATTERN.test("sortChildren(rows)")).toBe(false);
   });
 });

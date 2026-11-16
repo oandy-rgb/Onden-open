@@ -12,7 +12,7 @@ function nodeRow(over: Row = {}): Row {
   return {
     id: randomUUID(), workspace_id: WS, source_type: "manual", node_type: "content", title: "Note", slug: "note",
     markdown: "", created_at: "2026-10-01T08:00:00.000Z", updated_at: "2026-10-02T09:30:00.000Z",
-    parent_id: null, hidden: false, sort_order: 0, presentation: null, deleted_at: null, deleted_by_event_id: null,
+    parent_id: null, hidden: false, order_key: "a0", order_stamp: "", presentation: null, deleted_at: null, deleted_by_event_id: null,
     tag_color: null, tag_schema: null, collection_views: null, reserved_key: null,
     space_id: "22222222-2222-4222-8222-222222222222", body_len: 120,
     class_tag_ids: [], label_tag_ids: [], last_actor: null, last_modified_at: null, recent_actors: [],
@@ -22,10 +22,10 @@ function nodeRow(over: Row = {}): Row {
 
 describe("encodeBootstrapNodes", () => {
   it("drops workspace-constant, null and default fields and keeps the rest", () => {
-    const [node] = encodeBootstrapNodes(WS, [nodeRow({ id: "n1", parent_id: "p1", sort_order: 3 })], []).nodes;
+    const [node] = encodeBootstrapNodes(WS, [nodeRow({ id: "n1", parent_id: "p1", order_key: "a3" })], []).nodes;
     expect(node).toEqual({
       id: "n1", title: "Note", slug: "note", markdown: "", created_at: "2026-10-01T08:00:00.000Z",
-      updated_at: "2026-10-02T09:30:00.000Z", parent_id: "p1", sort_order: 3, space_id: 0, body_len: 120,
+      updated_at: "2026-10-02T09:30:00.000Z", parent_id: "p1", order_key: "a3", space_id: 0, body_len: 120,
     });
   });
 
@@ -89,7 +89,7 @@ describe("size of a 20k-note slim bootstrap (shape from docs/archive/research/pe
       const actor = i % 5 === 0 ? null : users[i % users.length]!;
       const row = nodeRow({
         id: randomUUID(), title: `Note ${i} about topic ${i % 97}`, slug: `note-${i}-about-topic-${i % 97}`,
-        parent_id: i % 4 === 0 ? null : randomUUID(), sort_order: i % 7 === 0 ? i : 0, space_id: space,
+        parent_id: i % 4 === 0 ? null : randomUUID(), order_key: i % 7 === 0 ? `a${i % 10}` : "a0", order_stamp: i % 3 === 0 ? "000001700000000000000001" : "", space_id: space,
         created_at: new Date(1.76e12 + i * 61_000).toISOString(), updated_at: new Date(1.76e12 + i * 97_000).toISOString(),
         body_len: 200 + (i % 3000),
         label_tag_ids: i % 2 === 0 ? [labels[i % 40]!] : [labels[i % 40]!, labels[(i + 7) % 40]!],

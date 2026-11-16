@@ -30,7 +30,7 @@ const queued = (id = 1) => ({ id, method: "PATCH", path: "/api/nodes/n", body: i
   ...(id === 23 ? {} : { targets: [{ kind: "node", id: "n" }] }) });
 const refused = () => ({ ...queued(), rejection: "Denied" });
 const input = '{"markdown":"撤權之後也不能遺失的文字"}';
-const node = { id: "n", source_type: "manual", node_type: "content", title: "Private note", slug: "private-note", markdown: "old body", parent_id: null, hidden: false, sort_order: 0 };
+const node = { id: "n", source_type: "manual", node_type: "content", title: "Private note", slug: "private-note", markdown: "old body", parent_id: null, hidden: false, order_key: "a0" };
 const empty = { last_event_id: 7, nodes: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, edges: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null };
 const bootstrap = { workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
   nodes: [node], tasks: [], edges: [], suggestions: [], events: [] };

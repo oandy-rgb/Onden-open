@@ -130,7 +130,9 @@ export type NotePointer = {
   id: string;
   parent_id: string | null;
   target_id: string;
-  sort_order: number;
+  /** Where among its siblings (@onden/markdown keyBetween); ties by order_stamp, then id. */
+  order_key: string;
+  order_stamp?: string;
   display_prefix: string | null;
 };
 

@@ -2,6 +2,7 @@
 // Through the real assembled app (app.ts), so the header middleware is part of what is tested.
 // SAFETY: only runs against a *_test database; skips otherwise.
 
+import { CLIENT_PROTOCOL } from "@onden/markdown";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { DEVICE_ID_HEADER } from "@onden/markdown";
@@ -29,7 +30,7 @@ async function call(method: string, path: string, body?: unknown, device?: strin
     headers: {
       "content-type": "application/json",
       "x-onden-expected-user": session.user!.id,
-      "x-onden-client-protocol": "3",
+      "x-onden-client-protocol": String(CLIENT_PROTOCOL),
       "idempotency-key": randomUUID(),
       ...(device !== undefined ? { [DEVICE_ID_HEADER]: device } : {}),
     },

@@ -94,7 +94,7 @@ router.post("/", async (c) => {
       actor: requireActor(c.get("actor")), workspaceId,
       id: input.id, title: input.title, markdown: input.markdown,
       sourceType: input.source_type, parentId: input.parent_id, spaceId: extras.space_id,
-      hidden: input.hidden, sortOrder: input.sort_order,
+      hidden: input.hidden, orderKey: input.order_key, legacySortOrder: input.sort_order,
       event: { uiContext: "node.create" },
       tagIds: extras.tag_ids, attributes: extras.attributes,
     });

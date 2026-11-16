@@ -38,13 +38,13 @@ const json = (value: unknown) => (value ? JSON.stringify(value) : null);
 export function upsertNodeInto(d: MirrorDb, n: ContentNode, { from, bodiesOmitted = false, index = true }: NodeRowOrigin): void {
   const slim = isSlimRow(n, bodiesOmitted);
   d.run(
-    `INSERT INTO nodes (id, source_type, node_type, title, slug, markdown, parent_id, hidden, sort_order, presentation, tag_schema, class_tag_ids, label_tag_ids, updated_at, body_len, space_id, created_at, collection_views)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO nodes (id, source_type, node_type, title, slug, markdown, parent_id, hidden, order_key, order_stamp, presentation, tag_schema, class_tag_ids, label_tag_ids, updated_at, body_len, space_id, created_at, collection_views)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        source_type=excluded.source_type, node_type=excluded.node_type, title=excluded.title,
        slug=excluded.slug,
        markdown=CASE WHEN ? = 1 THEN nodes.markdown ELSE excluded.markdown END,
-       parent_id=excluded.parent_id, hidden=excluded.hidden, sort_order=excluded.sort_order,
+       parent_id=excluded.parent_id, hidden=excluded.hidden, order_key=excluded.order_key, order_stamp=excluded.order_stamp,
        presentation=excluded.presentation,
        tag_schema=excluded.tag_schema, class_tag_ids=excluded.class_tag_ids,
        label_tag_ids=excluded.label_tag_ids, updated_at=excluded.updated_at,
@@ -54,7 +54,7 @@ export function upsertNodeInto(d: MirrorDb, n: ContentNode, { from, bodiesOmitte
        collection_views=CASE WHEN ? = 1 THEN excluded.collection_views ELSE nodes.collection_views END`,
     [
       n.id, n.source_type, n.node_type, n.title, n.slug, n.markdown ?? "",
-      n.parent_id ?? null, n.hidden ? 1 : 0, n.sort_order ?? 0,
+      n.parent_id ?? null, n.hidden ? 1 : 0, n.order_key ?? null, n.order_stamp ?? "",
       json(n.presentation), json(n.tag_schema), json(n.class_tag_ids), json(n.label_tag_ids),
       n.updated_at ?? null,
       slim ? (n.body_len ?? null) : (n.markdown ?? "").length,
@@ -91,10 +91,10 @@ export function upsertEdgeInto(d: MirrorDb, e: NodeEdge): void {
 
 export function upsertPointerInto(d: MirrorDb, p: NotePointer): void {
   d.run(
-    `INSERT INTO pointers (id, parent_id, target_id, sort_order, display_prefix) VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO pointers (id, parent_id, target_id, order_key, order_stamp, display_prefix) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id, target_id=excluded.target_id,
-       sort_order=excluded.sort_order, display_prefix=excluded.display_prefix`,
-    [p.id, p.parent_id, p.target_id, p.sort_order ?? 0, p.display_prefix ?? null],
+       order_key=excluded.order_key, order_stamp=excluded.order_stamp, display_prefix=excluded.display_prefix`,
+    [p.id, p.parent_id, p.target_id, p.order_key ?? null, p.order_stamp ?? "", p.display_prefix ?? null],
   );
 }
 

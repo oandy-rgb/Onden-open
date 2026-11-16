@@ -2,6 +2,7 @@
 // /api/bootstrap (which pulls every body into the heap) is SKIPPED, so the LRU
 // keeps evicting and the session never goes bodies==='full'. Below the
 // threshold the full fetch lands as before (no behaviour change).
+import { evenOrderKey } from "@onden/markdown/contract";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
@@ -50,7 +51,7 @@ import { getAppState, resetAppState } from "../lib/appStore";
 const slimNode = (i: number) => ({
   id: `n${i}`, title: `Note ${i}`, slug: `n-${i}`, markdown: "",
   body_len: 50, node_type: "content", source_type: "manual",
-  parent_id: null, hidden: false, sort_order: i,
+  parent_id: null, hidden: false, order_key: evenOrderKey(i),
 });
 function slimBoot(n: number) {
   return {

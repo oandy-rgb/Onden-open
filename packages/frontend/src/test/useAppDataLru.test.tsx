@@ -3,6 +3,7 @@
 // with body_len kept → nodeNeedsBody stays true, re-open re-hydrates).
 // Full-bootstrap sessions are NEVER evicted — emptying a full-mode row would
 // read as the real body (the wipe hazard).
+import { evenOrderKey } from "@onden/markdown/contract";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
@@ -55,7 +56,7 @@ const N = HYDRATED_BODY_CAP + 2;
 const slimNode = (i: number) => ({
   id: `n${i}`, title: `Note ${i}`, slug: `n-${i}`, markdown: "",
   body_len: 50, node_type: "content", source_type: "manual",
-  parent_id: null, hidden: false, sort_order: i,
+  parent_id: null, hidden: false, order_key: evenOrderKey(i),
 });
 const slimBoot = {
   bodies: "none",

@@ -43,7 +43,7 @@ async function reload(): Promise<Bootstrap> {
 
 const VIEWS = [{ id: "tab-1", layout: "canvas", layout_config: { opens_first: true } }];
 const note = (id: string, extra: Partial<ContentNode> = {}) =>
-  ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, sort_order: 0, ...extra }) as ContentNode;
+  ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0", ...extra }) as ContentNode;
 const bootstrap = {
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
   nodes: [note("board", { collection_views: VIEWS }), note("plain", { collection_views: null })],

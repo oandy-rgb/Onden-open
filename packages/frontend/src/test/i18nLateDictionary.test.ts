@@ -2,7 +2,8 @@
 // fetched after boot, and dictionariesReady() (awaited by lazyWithReload) resolves
 // once it is in. Until then t() shows the English literal.
 import { afterEach, describe, expect, it } from "vitest";
-import { dictionariesReady, registerDictionary, setLateDictionary, setLocalePref, t } from "../lib/i18n";
+import { act, renderHook } from "@testing-library/react";
+import { dictionariesReady, registerDictionary, setLateDictionary, setLocalePref, t, useT } from "../lib/i18n";
 import { ZH_TW } from "../lib/i18n.zh-TW";
 import { ZH_TW_BOOT } from "../lib/i18n.zh-TW.boot";
 import { ZH_TW_LATE } from "../lib/i18n.zh-TW.late";
@@ -36,5 +37,13 @@ describe("late dictionary", () => {
     setLocalePref("zh-TW");
     await expect(dictionariesReady()).resolves.toBeUndefined();
     expect(t("Never loaded")).toBe("Never loaded");
+  });
+
+  it("a component that rendered before the late wording arrived renders again with it", () => {
+    setLocalePref("zh-TW");
+    const { result } = renderHook(() => useT()("Wording that arrives after the first render"));
+    expect(result.current).toBe("Wording that arrives after the first render");
+    act(() => registerDictionary("zh-TW", { "Wording that arrives after the first render": "第一次畫面之後才到的字" }));
+    expect(result.current).toBe("第一次畫面之後才到的字");
   });
 });

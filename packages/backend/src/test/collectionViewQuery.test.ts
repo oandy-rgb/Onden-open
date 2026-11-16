@@ -57,14 +57,14 @@ describe("M3.2 executeView — base query", () => {
     expect(sql).toMatch(/n\.id = ANY\(\$3::uuid\[\]\)/);
   });
 
-  it("default order is sort_order ASC then title ASC", async () => {
+  it("default order is title, then id (not the manual order)", async () => {
     primeDescendants();
     resultQueue.push({ rows: [], rowCount: 0 });
     await executeView({
       workspaceId: "ws-1", tagId: "tag-1", readableIds: ["allow-1"],
       filters: [], sorts: [], visibleFields: [],
     });
-    expect(mainQuery().sql).toMatch(/ORDER BY n\.sort_order ASC, n\.title ASC/);
+    expect(mainQuery().sql).toMatch(/ORDER BY n\.title ASC, n\.id\b/);
   });
 });
 
@@ -215,7 +215,7 @@ describe("M3.2 range ops — built-in fields", () => {
     expect(mainQuery().params).toContain("2026-01-01");
   });
 
-  it("lte on sort_order casts the param to numeric", async () => {
+  it("lte on sort_order (Manual order) compares the order key as text, by byte", async () => {
     primeDescendants();
     resultQueue.push({ rows: [], rowCount: 0 });
     await executeView({
@@ -223,7 +223,7 @@ describe("M3.2 range ops — built-in fields", () => {
       filters: [{ field: "sort_order", op: "lte", value: "10" }],
       sorts: [], visibleFields: [],
     });
-    expect(mainQuery().sql).toMatch(/n\.sort_order <= \$4::numeric/);
+    expect(mainQuery().sql).toMatch(/n\.order_key <= \$4(?!::)/);
   });
 
   it("gte on text column (title) compares lexicographically, no cast", async () => {

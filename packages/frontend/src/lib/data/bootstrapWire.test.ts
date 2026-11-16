@@ -11,7 +11,7 @@ function node(over: Record<string, unknown>) {
   return {
     id: "n0", workspace_id: WS, source_type: "manual", node_type: "content", title: "T", slug: "t", markdown: "",
     created_at: "2026-10-01T08:00:00.000Z", updated_at: "2026-10-02T09:30:00.000Z", parent_id: null, hidden: false,
-    sort_order: 0, presentation: null, deleted_at: null, deleted_by_event_id: null, tag_color: null, tag_schema: null,
+    order_key: "a0", order_stamp: "", presentation: null, deleted_at: null, deleted_by_event_id: null, tag_color: null, tag_schema: null,
     collection_views: null, reserved_key: null, space_id: SPACE, body_len: 42,
     class_tag_ids: [], label_tag_ids: [], last_actor: null, last_modified_at: null, recent_actors: [], ...over,
   };
@@ -19,7 +19,7 @@ function node(over: Record<string, unknown>) {
 
 const nodes = [
   node({ id: "n1", title: "Plain" }),
-  node({ id: "n2", parent_id: "n1", sort_order: 4, hidden: true, label_tag_ids: ["t1", "t2"], class_tag_ids: ["c1"],
+  node({ id: "n2", parent_id: "n1", order_key: "a4", hidden: true, label_tag_ids: ["t1", "t2"], class_tag_ids: ["c1"],
     last_actor: "u1", last_modified_at: "2026-10-02T09:30:00Z", recent_actors: ["u1", "u2"], presentation: { icon: "x" } }),
   node({ id: "tag1", node_type: "class_tag", source_type: "system", tag_color: "#abc", tag_schema: { fields: [] },
     collection_views: [{ id: "v" }], reserved_key: "k", space_id: null, body_len: 0 }),

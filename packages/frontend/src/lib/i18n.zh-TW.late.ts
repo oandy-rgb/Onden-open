@@ -3689,6 +3689,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "This task isn't in a note.": "這個任務不在任何筆記裡。",
   "A task can only go into a note.": "任務只能放進筆記。",
   "That place in the note no longer exists.": "筆記裡那個位置已經不存在了。",
+  "That place in the list isn't one Onden can use. Reload and try moving it again.": "這個排序位置無法使用，請重新載入後再移動一次。",
   "A tag with this name already exists in this parent. Choose another name or parent.": "同一父層已有同名標籤，請換個名稱或移到其他父層。",
   "The system space has no members to manage.": "系統空間沒有成員可以管理。",
   "One of the chosen spaces no longer exists.": "選擇的空間中有一個已經不存在。",

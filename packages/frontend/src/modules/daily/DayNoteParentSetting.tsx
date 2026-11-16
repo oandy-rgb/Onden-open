@@ -10,6 +10,7 @@
 // explicit click (「把現有的 N 篇日記移到這裡」): each is an ordinary reparent
 // through the note writer (evented, undoable), never done automatically.
 
+import { keyBetween } from "@onden/markdown/contract";
 import { useMemo, useState } from "react";
 import { addToast, useAppSelector, useAllNodes } from "../../lib/appStore";
 import { dayNotesOutside, noteStructure, noteWriter, usableDayNoteParent } from "../../lib/data";
@@ -48,12 +49,13 @@ export default function DayNoteParentSetting(_props: { ctx: SettingContext }) {
     setMoving(true);
     // Oldest first, after the parent's current children.
     const last = noteStructure.children(usable).at(-1);
-    let next = last ? (last.sort_order ?? 0) + 1 : 0;
+    let after: string | null = last?.order_key ?? null;
     let moved = 0;
     for (const day of outside) {
       try {
-        await noteWriter.patch(day.id, { parent_id: usable, sort_order: next });
-        next += 1;
+        const next = keyBetween(after, null);
+        await noteWriter.patch(day.id, { parent_id: usable, order_key: next });
+        after = next;
         moved += 1;
       } catch {
         // The note writer reported it; the others still move.

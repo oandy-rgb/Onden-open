@@ -1,5 +1,6 @@
 import type { Database } from "sql.js";
 import { CLIENT_PROTOCOL } from "@onden/markdown/contract";
+import { evenOrderKey } from "@onden/markdown/contract";
 import { LocalDbError } from "./localDbErrors";
 import { migrateWorkspaceMirror } from "./workspaceMirror";
 import { migrateTaskMirror } from "./taskMirror";
@@ -25,7 +26,6 @@ export function prepareLocalDatabase(database: Database): void {
     markdown TEXT NOT NULL DEFAULT '',
     parent_id TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
-    sort_order INTEGER NOT NULL DEFAULT 0,
     presentation TEXT,
     tag_schema TEXT,
     class_tag_ids TEXT,
@@ -47,6 +47,7 @@ export function prepareLocalDatabase(database: Database): void {
   for (const col of ["tag_schema TEXT", "class_tag_ids TEXT", "label_tag_ids TEXT", "body_len INTEGER", "space_id TEXT", "created_at TEXT", "collection_views TEXT"]) {
     try { database.run(`ALTER TABLE nodes ADD COLUMN ${col}`); } catch { /* column exists */ }
   }
+  migratePlaceKeys(database);
   database.run(`CREATE TABLE IF NOT EXISTS edges (
     id TEXT PRIMARY KEY,
     source_node_id TEXT NOT NULL,
@@ -86,9 +87,9 @@ export function prepareLocalDatabase(database: Database): void {
     id TEXT PRIMARY KEY,
     parent_id TEXT,
     target_id TEXT NOT NULL,
-    sort_order INTEGER NOT NULL DEFAULT 0,
     display_prefix TEXT
   )`);
+  migratePlaceKeys(database);
   // The boards each note is on ("Appears on canvases") and hand-placed
   // global-graph positions (D98): the bootstrap's canvas_memberships and
   // graph_positions, so an offline warm start shows them too. Memberships
@@ -204,6 +205,34 @@ export function prepareLocalDatabase(database: Database): void {
   stampCopyProtocol(database);
 }
 
+/** Order keys (server migration 200). A copy made before them has the integer `sort_order` and no key: the column is
+ *  added and every row gets a key in the order older builds listed it (sort_order, then created_at, then id) — only when
+ *  the column was just added, so a row written later with no key (a note not yet answered by the server) is never
+ *  renumbered. The keys are placeholders with the same order: the whole bootstrap that MIRROR_SCHEMA_VERSION 4 asks for
+ *  replaces them with the server's. The old column stays in the copy, unread. */
+function migratePlaceKeys(database: Database): void {
+  const tables: Array<{ table: "nodes" | "pointers"; order: string }> = [
+    { table: "nodes", order: "sort_order, created_at IS NULL, created_at, id" },
+    { table: "pointers", order: "sort_order, id" },
+  ];
+  for (const { table, order } of tables) {
+    const hasTable = database.exec(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='${table}'`)[0]?.values.length;
+    if (!hasTable) continue;
+    let added = false;
+    try { database.run(`ALTER TABLE ${table} ADD COLUMN order_key TEXT`); added = true; } catch { /* column exists */ }
+    try { database.run(`ALTER TABLE ${table} ADD COLUMN order_stamp TEXT NOT NULL DEFAULT ''`); } catch { /* column exists */ }
+    const hasOld = database.exec(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = 'sort_order'`)[0]?.values.length;
+    if (!added || !hasOld) continue;
+    const rows = database.exec(`SELECT id, parent_id FROM ${table} ORDER BY parent_id IS NULL, parent_id, ${order}`)[0]?.values ?? [];
+    let group: unknown = Symbol("none"), rank = 0;
+    for (const [id, parent] of rows) {
+      rank = parent === group ? rank + 1 : 0;
+      group = parent;
+      database.run(`UPDATE ${table} SET order_key = ? WHERE id = ?`, [evenOrderKey(rank), id as string]);
+    }
+  }
+}
+
 /** Raise this when an upgrade above adds a column (or changes what a column
  *  holds) that only a whole bootstrap fills in: rows from before it stay NULL
  *  until the next one, which otherwise comes up to a day later.
@@ -211,8 +240,11 @@ export function prepareLocalDatabase(database: Database): void {
  *  fail to unpin (the server no longer has them) and could show a pin twice, so every copy reads them again.
  *  3: the server's migration 201 gave the personal, default and system spaces and four built-in tags new ids. The notes
  *  in those spaces kept their own ids, so the membership check (which compares the set of ids) saw nothing to fetch and a
- *  copy kept the old space id and old tag ids on them: the sidebar listed the personal space's notes under "Other". */
-export const MIRROR_SCHEMA_VERSION = 3;
+ *  copy kept the old space id and old tag ids on them: the sidebar listed the personal space's notes under "Other".
+ *  4: order keys (server migration 200) replace the integer order. The backfill wrote a key on every existing row without an
+ *  event, so a copy made before it holds no key (or the placeholders an upgrade makes); the whole bootstrap this version asks
+ *  for reads every row's real key and stamp again. */
+export const MIRROR_SCHEMA_VERSION = 4;
 
 /** Record the schema version this mirror was prepared with; a different one
  *  forgets when the last whole bootstrap was stored, so the next open does one. */

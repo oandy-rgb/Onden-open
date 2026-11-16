@@ -13,6 +13,7 @@
 import { requireActor } from "../spine/mutate.js";
 import { Hono } from "hono";
 import { z } from "zod";
+import { isValidOrderKey } from "@onden/markdown/contract";
 import { getWorkspaceId } from "../services/workspaceId.js";
 import { type ActorCtx } from "../types.js";
 import { canReadNode } from "../services/readPolicy.js";
@@ -25,9 +26,11 @@ const router = new Hono<{ Variables: { actor: ActorCtx | null } }>();
 router.post("/", async (c) => {
   const actor = requireActor(c.get("actor"));
   const workspaceId = await getWorkspaceId();
-  const { target_id, parent_id, sort_order, display_prefix } = await parseBody(c, z.object({
+  const { target_id, parent_id, order_key, sort_order, display_prefix } = await parseBody(c, z.object({
     target_id: z.string().uuid(),
     parent_id: z.string().uuid().nullable().optional(),
+    order_key: z.string().refine(isValidOrderKey, { message: "invalid_order_key" }).optional(),
+    /** LEGACY integer of an older app (translated to a key); see services/orderKeys.ts. */
     sort_order: z.number().int().optional(),
     display_prefix: z.string().optional(),
   }));
@@ -61,7 +64,7 @@ router.post("/", async (c) => {
 
   try {
     const row = await createPointer(actor, workspaceId, {
-      targetId: target_id, parentId: parent_id ?? null, sortOrder: sort_order, displayPrefix: display_prefix,
+      targetId: target_id, parentId: parent_id ?? null, orderKey: order_key, legacySortOrder: sort_order, displayPrefix: display_prefix,
     });
     return c.json({ id: row.id, target_id, parent_id: parent_id ?? null }, 201);
   } catch (err) {

@@ -26,10 +26,10 @@ function freshDb(): Database {
   db.run(`CREATE TABLE nodes (
     id TEXT PRIMARY KEY, source_type TEXT NOT NULL, node_type TEXT NOT NULL,
     title TEXT NOT NULL, slug TEXT NOT NULL, markdown TEXT NOT NULL DEFAULT '',
-    parent_id TEXT, hidden INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+    parent_id TEXT, hidden INTEGER NOT NULL DEFAULT 0, order_key TEXT, order_stamp TEXT NOT NULL DEFAULT '',
     presentation TEXT, tag_schema TEXT, class_tag_ids TEXT, label_tag_ids TEXT, updated_at TEXT, body_len INTEGER, space_id TEXT, created_at TEXT, collection_views TEXT)`);
   db.run(`CREATE TABLE edges (id TEXT PRIMARY KEY, source_node_id TEXT NOT NULL, target_node_id TEXT NOT NULL, edge_type TEXT NOT NULL, status TEXT NOT NULL, origin TEXT)`);
-  db.run(`CREATE TABLE pointers (id TEXT PRIMARY KEY, parent_id TEXT, target_id TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, display_prefix TEXT)`);
+  db.run(`CREATE TABLE pointers (id TEXT PRIMARY KEY, parent_id TEXT, target_id TEXT NOT NULL, order_key TEXT, order_stamp TEXT NOT NULL DEFAULT '', display_prefix TEXT)`);
   db.run(`CREATE TABLE tasks (id TEXT PRIMARY KEY, node_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'todo', due_date TEXT, recur TEXT)`);
   db.run(`CREATE TABLE suggestions (id TEXT PRIMARY KEY, target_id TEXT NOT NULL, suggestion_type TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, reasoning TEXT)`);
   db.run(`CREATE TABLE node_attributes (node_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, value_type TEXT NOT NULL DEFAULT 'text', is_inheritable INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'explicit', updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (node_id, key))`);
@@ -56,7 +56,7 @@ function node(id: string, over: Partial<ContentNode> = {}): ContentNode {
   return {
     id, source_type: "user", node_type: "note", title: `node ${id}`,
     slug: `node-${id}`, markdown: "", parent_id: null, hidden: false,
-    sort_order: 0, presentation: null, updated_at: "2026-01-01T00:00:00Z",
+    order_key: "a0", presentation: null, updated_at: "2026-01-01T00:00:00Z",
     attrs: {}, ...over,
   } as unknown as ContentNode;
 }
@@ -109,8 +109,8 @@ describe("persistBootstrapInto — non-clobber on slim/partial bootstrap", () =>
 
   it("a whole bootstrap leaves a pin once, under the id the server now has, when the copy held the id from before migration 194", () => {
     const db = freshDb();
-    persistBootstrapInto(db, bootstrap({ nodes: [node("parent"), node("target")], pointers: [{ id: "old-id", parent_id: "parent", target_id: "target", sort_order: 0, display_prefix: null }] }));
-    persistBootstrapInto(db, bootstrap({ nodes: [node("parent"), node("target")], pointers: [{ id: "derived-id", parent_id: "parent", target_id: "target", sort_order: 0, display_prefix: null }] }));
+    persistBootstrapInto(db, bootstrap({ nodes: [node("parent"), node("target")], pointers: [{ id: "old-id", parent_id: "parent", target_id: "target", order_key: "a0", display_prefix: null }] }));
+    persistBootstrapInto(db, bootstrap({ nodes: [node("parent"), node("target")], pointers: [{ id: "derived-id", parent_id: "parent", target_id: "target", order_key: "a0", display_prefix: null }] }));
     expect(rows(db, "SELECT id FROM pointers WHERE parent_id = 'parent' AND target_id = 'target'")).toEqual([{ id: "derived-id" }]);
     db.close();
   });

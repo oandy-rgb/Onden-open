@@ -9,8 +9,8 @@ import { loadBootstrapRelations, loadAttributePage, getLastFullRefresh } from ".
 import { hydrateFullBootstrap } from "../lib/data/syncEngine";
 
 const cachedNodes = [
-  { id: "n1", title: "Cached", slug: "cached", markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0 },
-  { id: "n2", title: "Other", slug: "other", markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 1 },
+  { id: "n1", title: "Cached", slug: "cached", markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0" },
+  { id: "n2", title: "Other", slug: "other", markdown: "", node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a1" },
 ];
 const cached = {
   bodies: "full",

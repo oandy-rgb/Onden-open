@@ -91,7 +91,7 @@ const sorted = <T>(rows: T[] | undefined, key: (row: T) => string) => [...(rows 
 function view(store: any) {
   const note = (n: any) => ({
     id: n.id, title: n.title, slug: n.slug, markdown: n.markdown, body_len: n.body_len ?? null, node_type: n.node_type, source_type: n.source_type,
-    parent_id: n.parent_id ?? null, hidden: n.hidden ?? false, sort_order: n.sort_order ?? 0, space_id: n.space_id ?? null,
+    parent_id: n.parent_id ?? null, hidden: n.hidden ?? false, order_key: n.order_key ?? "", order_stamp: n.order_stamp ?? "", space_id: n.space_id ?? null,
     deleted_at: n.deleted_at ?? null, tag_color: n.tag_color ?? null,
     class_tag_ids: [...(n.class_tag_ids ?? [])].sort(), label_tag_ids: [...(n.label_tag_ids ?? [])].sort(),
     attrs: n.attrs ?? {},

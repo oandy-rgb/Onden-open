@@ -26,6 +26,7 @@ import type { ServerNodeRow } from "@onden/contract";
 import { assertParentKind } from "./parentKind.js";
 import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
+import { appendOrderKey, assertOrderKey, respaceIfTooLong, translateLegacySortOrder } from "./orderKeys.js";
 import { normalizeText, slugify } from "@onden/markdown";
 import { mutate } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
@@ -80,7 +81,10 @@ export type NewNote = {
    *  space (newNoteSpace). */
   spaceId?: string | null;
   hidden?: boolean;
-  sortOrder?: number;
+  /** Where among its siblings: a key between its neighbours' keys. Default: last. */
+  orderKey?: string;
+  /** LEGACY integer from an older client (translated, services/orderKeys.ts). `orderKey` wins when both are given. */
+  legacySortOrder?: number;
   /** A fixed slug instead of one from the title (a canvas: canvas-<id>). */
   slug?: string;
   /** The slug the note had (a restore): used when free in its space, else the
@@ -137,6 +141,13 @@ export type DryRunNote = { node: Pick<ServerNodeRow, "id" | "slug" | "title">; e
  *  to shorten: clampNoteTitle).
  *  Example: createNote({ actor, workspaceId, title: "Plan", markdown: "",
  *    event: { uiContext: "node.create" } }). */
+/** The key a new note takes under `parentId`: the one the caller chose, an older client's integer translated, or last. */
+async function newNoteOrderKey(workspaceId: string, parentId: string | null, id: string, input: Pick<NewNote, "orderKey" | "legacySortOrder">): Promise<string> {
+  if (input.orderKey !== undefined) { assertOrderKey(input.orderKey); return input.orderKey; }
+  if (input.legacySortOrder !== undefined) return translateLegacySortOrder("content_nodes", workspaceId, parentId, id, input.legacySortOrder);
+  return appendOrderKey("content_nodes", workspaceId, parentId);
+}
+
 export async function createNote(input: NewNote & { dryRun: true }): Promise<DryRunNote>;
 export async function createNote(input: NewNote & { dryRun?: false }): Promise<CreatedNote>;
 export async function createNote(input: NewNote): Promise<CreatedNote | DryRunNote>;
@@ -190,13 +201,15 @@ export async function createNote(input: NewNote): Promise<CreatedNote | DryRunNo
         txMeta: { inverse_op: "node.deleted", ui_context: event.uiContext, ...event.txMeta },
       },
       apply: async ({ eventId }) => {
+        const orderKey = await newNoteOrderKey(workspaceId, parentId, id, input);
         const node = (await q<ServerNodeRow>(
-          `INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, parent_id, hidden, sort_order, space_id)
+          `INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, parent_id, hidden, order_key, space_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING *`,
           [id, workspaceId, input.sourceType ?? "manual", input.nodeType ?? "content", title, slug, markdown,
-            parentId, input.hidden ?? false, input.sortOrder ?? 0, spaceId],
+            parentId, input.hidden ?? false, orderKey, spaceId],
         )).rows[0]!;
+        await respaceIfTooLong("content_nodes", workspaceId, parentId, orderKey, { actor, nodeId: id });
         if (parentId) {
           await applyChildPrefixAttributes(workspaceId, parentId, id, actor);
           if (input.siteDefault !== false) await applyParentSiteDefault(workspaceId, parentId, id, actor, eventId);

@@ -8,7 +8,7 @@ import { dayNoteDate } from "@onden/markdown";
 import { isNote } from "@onden/markdown/contract";
 import { isShownNote } from "../../lib/nodeTags";
 
-type Row = Pick<ContentNode, "id" | "title" | "slug" | "hidden" | "node_type" | "parent_id" | "space_id" | "sort_order" | "created_at"> & { deleted_at?: string | null };
+type Row = Pick<ContentNode, "id" | "title" | "slug" | "hidden" | "node_type" | "parent_id" | "space_id" | "order_key" | "order_stamp" | "created_at"> & { deleted_at?: string | null };
 
 /** The person's day notes, by date: live, visible notes titled with a date in
  *  their personal space (the findDayNode rule, for every date). The first one
@@ -34,7 +34,7 @@ export function parentsWithCaptures(nodes: readonly Row[]): Set<string> {
 }
 
 /** What a day shows under its body: its visible content children, in the
- *  sidebar's order (sort_order, then created). */
+ *  sidebar's order (order_key, order_stamp, id). */
 export function dayChildren<T extends Row>(nodes: readonly T[], dayId: string): T[] {
   return nodes
     .filter((n) => n.parent_id === dayId && isCapture(n))

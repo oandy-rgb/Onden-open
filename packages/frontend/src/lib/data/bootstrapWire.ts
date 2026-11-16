@@ -54,7 +54,7 @@ export function decodeBootstrapWire(data: Bootstrap): Bootstrap {
   const nodes = wire.nodes.map((n) => {
     if (n === null || typeof n !== "object" || typeof n.id !== "string") throw new BootstrapFormatError("node without an id");
     const node: Record<string, unknown> = {
-      workspace_id: workspaceId, source_type: "manual", node_type: "content", hidden: false, sort_order: 0,
+      workspace_id: workspaceId, source_type: "manual", node_type: "content", hidden: false, order_stamp: "",
       ...n,
     };
     for (const key of NODE_NULLABLE) if (node[key] === undefined) node[key] = null;

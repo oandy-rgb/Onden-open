@@ -41,10 +41,10 @@ const send = async (url: string, method: string, body: unknown = {}) => {
 };
 const create = async (body: Record<string, unknown>) => ((await (await send("/nodes", "POST", body)).json()) as { id: string }).id;
 const patch = (id: string, body: Record<string, unknown>) => send(`/nodes/${id}`, "PATCH", body);
-type Row = { title: string; slug: string; markdown: string; parent_id: string | null; hidden: boolean; sort_order: number;
+type Row = { title: string; slug: string; markdown: string; parent_id: string | null; hidden: boolean; order_key: string;
   presentation: unknown; node_type: string; source_type: string; updated_at: Date };
 const row = async (id: string) => (await q<Row>(
-  `SELECT title, slug, markdown, parent_id, hidden, sort_order, presentation, node_type, source_type, updated_at
+  `SELECT title, slug, markdown, parent_id, hidden, order_key, presentation, node_type, source_type, updated_at
      FROM content_nodes WHERE id = $1`, [id])).rows[0]!;
 const lastEvent = async (id: string) => (await q<{ id: string }>(
   `SELECT id::text FROM domain_events WHERE target_id = $1 AND event_type = 'NODE_UPDATED' ORDER BY domain_events.id DESC LIMIT 1`, [id])).rows[0]!.id;
@@ -125,20 +125,22 @@ describe.skipIf(!isTestDb)("undoing a NODE_UPDATED writes the same columns an or
     expect(visibilityCalls.flat()).toContain(tag);
   });
 
-  it("sort_order: the position comes back; an undo, unlike the reorder itself, moves updated_at", async () => {
+  it("order_key: the position comes back; an undo, unlike the reorder itself, moves updated_at", async () => {
     const id = await create({ title: "Column order" });
-    await patch(id, { sort_order: 7 });
+    const original = (await row(id)).order_key;
+    await patch(id, { order_key: "a7" });
     const afterReorder = await row(id);
+    expect(afterReorder.order_key).toBe("a7");
     await undo(id);
     const restored = await row(id);
-    expect(restored.sort_order).toBe(0);
+    expect(restored.order_key).toBe(original);
     expect(restored.updated_at.getTime()).toBeGreaterThan(afterReorder.updated_at.getTime());
   });
 
   it("an ordinary reorder keeps updated_at (the reference the undo above differs from)", async () => {
     const id = await create({ title: "Column order control" });
     const first = await row(id);
-    await patch(id, { sort_order: 7 });
+    await patch(id, { order_key: "a7" });
     expect((await row(id)).updated_at.getTime()).toBe(first.updated_at.getTime());
   });
 

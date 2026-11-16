@@ -1,4 +1,5 @@
 import { viewRecordsOf, withViews } from "./functionRefs.js";
+import { appendOrderKey } from "./orderKeys.js";
 import { addNoteLayoutTab } from "./boardStore.js";
 import { randomUUID } from "node:crypto";
 import { assertParentKind } from "./parentKind.js";
@@ -141,9 +142,9 @@ export async function duplicateNote(options: DuplicateNoteOptions) {
       },
       apply: async ({ eventId }) => {
         const node = (await q<Record<string, unknown>>(
-          `INSERT INTO content_nodes(id,workspace_id,source_type,node_type,title,slug,markdown,parent_id,space_id)
-           VALUES($1,$2,'manual','content',$3,$4,$5,$6,$7) RETURNING *`,
-          [newNodeId, workspaceId, title, slug, markdown, source.parent_id, copySpace],
+          `INSERT INTO content_nodes(id,workspace_id,source_type,node_type,title,slug,markdown,parent_id,space_id,order_key)
+           VALUES($1,$2,'manual','content',$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [newNodeId, workspaceId, title, slug, markdown, source.parent_id, copySpace, await appendOrderKey("content_nodes", workspaceId, source.parent_id)],
         )).rows[0]!;
         // Made under the same note as its source: that note's site default applies (siteDefault.ts).
         if (source.parent_id) await applyParentSiteDefault(workspaceId, source.parent_id, newNodeId, actor);

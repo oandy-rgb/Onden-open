@@ -31,6 +31,9 @@ const needed = (m: { version: string }) => m.version.startsWith("162_") || m.ver
 // as `leftOut` and smoke.mjs reads it from there.
 const FIRST_LEFT_OUT = 192;
 const leftOut = new Set(all.filter((m) => !needed(m) && Number.parseInt(m.version, 10) >= FIRST_LEFT_OUT).map((m) => m.version));
+// The one exception while the notes are written: migration 200 (order keys) is applied first, because today's code writes order_key.
+// downgradeOrderKeys() takes it out again before the copy is saved, so the saved copy is exactly `kept` and the upgrade runs 200 on it.
+const orderKeys = (m: { version: string }) => m.version.startsWith("200_");
 // A migration can make a table IF NOT EXISTS and then index its columns: a table of that name without those columns
 // fails the index. Found in the SQL, so this keeps working as migrations are added.
 const indexedNewTable = (m: { sql: string }) => [...m.sql.matchAll(/CREATE INDEX IF NOT EXISTS \w+ ON (\w+) \(/g)]
@@ -39,7 +42,7 @@ const indexedNewTable = (m: { sql: string }) => [...m.sql.matchAll(/CREATE INDEX
 const poisonFrom = mode === "poisoned" ? all.filter((m) => !needed(m) && indexedNewTable(m)).pop() : undefined;
 if (poisonFrom) leftOut.add(poisonFrom.version);
 const kept = all.filter((m) => !leftOut.has(m.version));
-useMigrationSource(async () => kept);
+useMigrationSource(async () => [...kept, ...all.filter(orderKeys)]);
 
 const { migrate, pglite, q } = await import("../db.js");
 const { sqlIdentifier } = await import("../sqlText.js");
@@ -119,6 +122,45 @@ if (mode === "newer") await q(`INSERT INTO schema_migrations (version) VALUES ('
 if (mode === "poisoned") {
   if (!poisonFrom) throw new Error("no migration creates and indexes a table");
   await q(`CREATE TABLE ${sqlIdentifier(indexedNewTable(poisonFrom)!)} (poison int)`);
+}
+
+await downgradeOrderKeys();
+
+/** Take the database back to what the kept migrations left: the integer order in sort_order, no order_key / order_stamp, the
+ *  stamp triggers of 190 (194 is left out, so the pointer triggers do not exist yet), and no row for 200 in schema_migrations.
+ *  What an older app saved is exactly this; the upgrade then runs migration 200 on it. */
+async function downgradeOrderKeys(): Promise<void> {
+  const database = await pglite!.database();
+  const text = (prefix: string) => all.find((m) => m.version.startsWith(prefix))?.sql ?? "";
+  const triggersOf = (sql: string, table: string) => [...sql.matchAll(new RegExp(`CREATE OR REPLACE TRIGGER ${table}_sync_stamp_\\w+[\\s\\S]*?;\\n`, "g"))].map((hit) => hit[0]);
+  const restored = [
+    ...triggersOf(text("190_"), "content_nodes"),
+    ...(kept.some((m) => m.version.startsWith("194_")) ? triggersOf(text("194_"), "note_pointers") : []),
+  ];
+  await database.exec(`
+    DROP TRIGGER IF EXISTS content_nodes_order_stamp ON content_nodes;
+    DROP TRIGGER IF EXISTS note_pointers_order_stamp ON note_pointers;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_insert ON content_nodes;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_update ON content_nodes;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_delete ON content_nodes;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_insert ON note_pointers;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_update ON note_pointers;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_delete ON note_pointers;
+    DROP FUNCTION IF EXISTS order_stamp_set();
+    UPDATE content_nodes c SET sort_order = r.rank FROM (SELECT id, row_number() OVER (PARTITION BY workspace_id, parent_id ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id) - 1 AS rank FROM content_nodes) r WHERE c.id = r.id;
+    UPDATE note_pointers p SET sort_order = r.rank FROM (SELECT id, row_number() OVER (PARTITION BY workspace_id, parent_id ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id) - 1 AS rank FROM note_pointers) r WHERE p.id = r.id;
+    ALTER TABLE content_nodes ALTER COLUMN sort_order SET DEFAULT 0;
+    ALTER TABLE content_nodes ALTER COLUMN sort_order SET NOT NULL;
+    ALTER TABLE note_pointers ALTER COLUMN sort_order SET DEFAULT 0;
+    ALTER TABLE note_pointers ALTER COLUMN sort_order SET NOT NULL;
+    DROP INDEX IF EXISTS content_nodes_order_idx;
+    DROP INDEX IF EXISTS note_pointers_parent_idx;
+    CREATE INDEX IF NOT EXISTS note_pointers_parent_idx ON note_pointers (workspace_id, parent_id, sort_order);
+    ALTER TABLE content_nodes DROP COLUMN order_key, DROP COLUMN order_stamp;
+    ALTER TABLE note_pointers DROP COLUMN order_key, DROP COLUMN order_stamp;
+    ${restored.join("\n")}
+    DELETE FROM schema_migrations WHERE version = '200_order_keys';
+  `);
 }
 
 const dump = await (await pglite!.database()).dumpDataDir("gzip");

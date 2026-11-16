@@ -28,6 +28,7 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   bad_request: "The request wasn't valid.",
   invalid_args: "The request wasn't valid.",
   invalid_time_setting: "That time zone or start hour isn't one Onden can use.",
+  invalid_order_key: "That place in the list isn't one Onden can use. Reload and try moving it again.",
   tag_name_conflict: "A tag with this name already exists in this parent. Choose another name or parent.",
   focus_running: "A focus session is already running. End it first.",
   focus_too_long: "A focus session can't be longer than 24 hours.",

@@ -51,7 +51,7 @@ describe("sync projection contract", () => {
   it("the column lists match what the client mirror stores", () => {
     expect(edgeColumnsSql("e").replace(/\s+/g, " ")).toBe("e.id, e.source_node_id, e.target_node_id, e.edge_type, e.status, e.origin, e.created_at");
     expect(attributeColumnsSql("a")).toBe("a.node_id, a.key, a.value, a.value_type, a.is_inheritable, a.source");
-    expect(pointerColumnsSql("p")).toBe("p.id, p.parent_id, p.target_id, p.sort_order, p.display_prefix");
+    expect(pointerColumnsSql("p")).toBe("p.id, p.parent_id, p.target_id, p.order_key, p.order_stamp, p.display_prefix");
     // The owner's module decisions, which workspaceWireRow turns into the
     // `modules` and `modules_to_confirm` the client mirrors, and the workspace's
     // calendar clock (time_zone, day_start_hour) the client's "today" reads.

@@ -6,6 +6,7 @@ import { notATaskNodeSql } from "../tasksStore.js";
 import { edgeColumnsSql, pointerColumnsSql } from "../syncProjection.js";
 import type { NodeEdge, NotePointer } from "@onden/contract";
 import { liveNodeSql } from "../../spine/nodeSql.js";
+import { SIBLING_ORDER_P } from "../orderKeys.js";
 
 /** Live edges touching `ids`, with the bootstrap's endpoint rule: both ends
  *  alive and neither a task node (bootstrap only returns non-task nodes, so a
@@ -35,7 +36,7 @@ export async function pointerRowsTouching(workspaceId: string, ids: string[]): P
      WHERE p.workspace_id = $1
        AND (p.parent_id IS NULL OR (${liveNodeSql("pa")} AND ${notATaskNodeSql("pa")}))
        AND (p.target_id = ANY($2::uuid[]) OR p.parent_id = ANY($2::uuid[]))
-     ORDER BY p.sort_order ASC`,
+     ORDER BY ${SIBLING_ORDER_P}`,
     [workspaceId, ids],
   );
   return res.rows;

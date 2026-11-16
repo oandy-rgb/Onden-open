@@ -20,7 +20,7 @@ const anchor = (id: string, note: string, from: number, over: Partial<NoteAnchor
   ({ anchor_id: id, note_id: note, from, to: from + 10, status: "valid", candidate_from: null, candidate_to: null, quote: "", ...over });
 const note = (id: string) => ({
   id, source_type: "user", node_type: "note", title: id, slug: id, markdown: "x", parent_id: null, hidden: false,
-  sort_order: 0, presentation: null, updated_at: "2026-11-01T00:00:00Z", attrs: {},
+  order_key: "a0", presentation: null, updated_at: "2026-11-01T00:00:00Z", attrs: {},
 } as unknown as ContentNode);
 function bootstrap(nodes: ContentNode[], note_anchors: NoteAnchor[] | undefined, slim = false): Bootstrap {
   return {

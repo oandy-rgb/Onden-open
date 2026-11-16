@@ -29,6 +29,7 @@
 
 import { q } from "../db.js";
 import { sqlIdentifier } from "../sqlText.js";
+import { MANUAL_ORDER_N_ASC, MANUAL_ORDER_N_DESC, UNSORTED_ORDER_N } from "./orderKeys.js";
 import { memberTagIds } from "./tagHierarchy.js";
 
 import { appendFilterClauses, BUILT_IN_FIELDS, type FilterClause } from "./filter/index.js";
@@ -131,7 +132,7 @@ export async function executeView(opts: ExecOptions): Promise<Page<ExecRow> & {
   for (const s of opts.sorts) {
     const dir = s.dir === "desc" ? "DESC" : "ASC";
     if (SORT_WHITELIST.has(s.field)) {
-      orderParts.push(`n.${sqlIdentifier(s.field)} ${dir} NULLS LAST`);
+      orderParts.push(s.field === "sort_order" ? (dir === "DESC" ? MANUAL_ORDER_N_DESC : MANUAL_ORDER_N_ASC) : `n.${sqlIdentifier(s.field)} ${dir} NULLS LAST`);
     } else {
       // Attribute sort: order by the attribute value, treating missing
       // as last. Number/date fields must sort by their TYPED value, not
@@ -147,11 +148,12 @@ export async function executeView(opts: ExecOptions): Promise<Page<ExecRow> & {
       orderParts.push(...attributeSortSql(s.field, dir, params, "n"));
     }
   }
-  if (orderParts.length === 0) orderParts.push(`n.sort_order ASC`, `n.title ASC`);
+  // No sort set: by title, then id (a table whose rows share one manual number always listed that way); the manual order is not the default.
+  if (orderParts.length === 0) orderParts.push(UNSORTED_ORDER_N);
   // Equal sort values would leave the order of their rows to the planner, and
   // each page is its own query: "load more" could repeat or skip them. The id
   // is the unique last key (nodeQuery.ts does the same).
-  orderParts.push(`n.id ASC`);
+  else orderParts.push(`n.id ASC`);
 
   // Route callers parse ?limit/&offset with services/paging.parsePage; this
   // clamp keeps internal callers (agent tools) in range too.

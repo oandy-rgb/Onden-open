@@ -22,7 +22,7 @@ async function ok(op: string, ...args: unknown[]) {
   return reply.result;
 }
 
-const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, sort_order: 0 });
+const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const edge = (id: string, source: string, target: string): NodeEdge =>
   ({ id, source_node_id: source, target_node_id: target, edge_type: "knowledge_link", status: "active" });
 const linkAB = edge("ab", "a", "b"), linkAC = edge("ac", "a", "c"), linkCA = edge("ca", "c", "a"), linkXY = edge("xy", "x", "y");

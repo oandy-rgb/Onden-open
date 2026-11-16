@@ -100,10 +100,10 @@ describe.skipIf(!isTestDb)("node contract: real responses match @onden/contract"
     expect(created.status).toBe(201);
     expect(CreatedNode.strict().parse(await created.json()).id).toBe(id);
 
-    const patched = await req(`/api/nodes/${id}`, { method: "PATCH", json: { title: "Contract renamed", markdown: "second", sort_order: 3 } });
+    const patched = await req(`/api/nodes/${id}`, { method: "PATCH", json: { title: "Contract renamed", markdown: "second", order_key: "a3" } });
     expect(patched.status).toBe(200);
     const row = ServerNodeRow.strict().parse(await patched.json());
-    expect(row).toMatchObject({ title: "Contract renamed", markdown: "second", sort_order: 3 });
+    expect(row).toMatchObject({ title: "Contract renamed", markdown: "second", order_key: "a3" });
 
     const same = await req(`/api/nodes/${id}`, { method: "PATCH", json: { title: "Contract renamed" } });
     expect(same.status).toBe(200);

@@ -1,14 +1,19 @@
-// The order of one parent's children, shared by the app and the published site
-// so a note sits in the same place on both: sort_order, then creation time,
-// then id (the backend lists children ORDER BY sort_order, created_at).
+// The order of one parent's children, shared by the app and the published site so a note sits in the same place on
+// both: order_key, then order_stamp, then id (orderKey.ts compareOrdered; the backend lists children
+// ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id). A site published before order keys carries only the
+// integer sort_order: rows that all have no key fall back to it (then creation time, then id, as they always did).
 
-export type OrderedChild = { id?: string; sort_order?: number | null; created_at?: string | null };
+import { compareOrdered } from "./orderKey.js";
 
-/** A row without created_at (an optimistic note the server has not answered
- *  yet) stays where it was among equals, since Array.prototype.sort is stable.
- *  Two rows with the same created_at fall to id, so the order never depends on
- *  the order the rows arrived in. */
+export type OrderedChild = { id?: string; order_key?: string | null; order_stamp?: string | null; sort_order?: number | null; created_at?: string | null };
+
+/** A row without a key (an optimistic row the server has not answered yet, or a snapshot from before order keys)
+ *  compares by the legacy rule when the other has none either; a row without one sorts last (a new note not yet answered by the server). */
 export function compareChildren(a: OrderedChild, b: OrderedChild): number {
+  if (a.order_key || b.order_key) {
+    if (!a.order_key || !b.order_key) return a.order_key ? -1 : 1;
+    return compareOrdered(a, b);
+  }
   const bySort = (a.sort_order ?? 0) - (b.sort_order ?? 0);
   if (bySort) return bySort;
   if (!a.created_at || !b.created_at) return 0;

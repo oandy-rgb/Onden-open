@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MediaServing } from "../lib/browserAppMedia";
 import { Button, Modal } from "../components/ui";
 import { addToast } from "../lib/appStore";
-import { t } from "../lib/i18n";
+import { useT } from "../lib/i18n";
 import { announceDownload } from "../lib/browserAppBridge";
 import { makeSessionBackupBlob, trialBackupFileName } from "../lib/browserAppBackup";
 import { downloadBlob } from "../lib/download";
@@ -16,6 +16,7 @@ import type { WorkerClient } from "../lib/browserAppWorker";
 // written has not been downloaded. Nothing here is written to the browser (lib/temporarySession.ts).
 
 export default function TemporaryNotice({ client, media }: { client: WorkerClient; media: MediaServing }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Changes seen when the page opened or when the last download was made; anything beyond it was not downloaded.
@@ -27,7 +28,7 @@ export default function TemporaryNotice({ client, media }: { client: WorkerClien
 
   useEffect(() => client.onSaveState((state) => setChanges(state.changes)), [client]);
   useEffect(() => warnBeforeLeaving(() => unsentNow.current), []);
-  useEffect(() => { addToast(t("This is a temporary session. What you write here is not kept on this computer. Download it before you close the tab."), "info"); }, []);
+  useEffect(() => { addToast(t("This is a temporary session. What you write here is not kept on this computer. Download it before you close the tab."), "info"); }, [t]);
 
   const line = t("Temporary · not kept on this computer · everything is in your last download");
   const trouble = unsent ? t("Not kept on this computer · download before you close the tab") : null;

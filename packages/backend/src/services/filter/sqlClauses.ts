@@ -50,7 +50,6 @@ const NUMBER_RE = new RegExp(NUMBER_PATTERN);
 const TYPED_BUILT_INS: Record<string, { cast: string; accepts: (value: string) => boolean; expects: string }> = {
   updated_at: { cast: "timestamptz", accepts: isCalendarDate, expects: "a date (YYYY-MM-DD, optionally with a time)" },
   created_at: { cast: "timestamptz", accepts: isCalendarDate, expects: "a date (YYYY-MM-DD, optionally with a time)" },
-  sort_order: { cast: "numeric", accepts: (value) => NUMBER_RE.test(value), expects: "a number" },
 };
 
 /** Ops that compare the value as the column's type (contains/empty/nempty read text). */
@@ -94,8 +93,9 @@ export function appendFilterClauses(
   alias: string,
 ): void {
   for (const f of filters) {
-    const key = f.field;
-    if (BUILT_IN_FIELDS.has(key)) {
+    // "Manual order" (sort_order, the name saved views keep) is the order key now, compared as text by byte.
+    const key = f.field === "sort_order" ? "order_key" : f.field;
+    if (BUILT_IN_FIELDS.has(f.field)) {
       const typed = TYPED_BUILT_INS[key];
       if (typed && TYPED_OPS.has(f.op) && !typed.accepts(f.value ?? "")) {
         // A value the column's type cannot take (a date still being typed in

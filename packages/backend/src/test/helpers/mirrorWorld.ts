@@ -11,6 +11,7 @@
 // no-op; a 5xx is a finding and is reported by the caller.
 
 import { CLIENT_PROTOCOL, CLIENT_PROTOCOL_HEADER } from "@onden/markdown";
+import { evenOrderKey } from "@onden/markdown/contract";
 import { randomUUID } from "node:crypto";
 import { q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
@@ -130,7 +131,7 @@ export async function createWorld(app: App): Promise<World> {
       case "moveNote": {
         const n = pick(pools.notes, o.note);
         const parent = o.parent === null ? null : pick(pools.notes, o.parent);
-        if (n && parent !== n) await call("owner", "PATCH", `/api/nodes/${n}`, { parent_id: parent ?? null, sort_order: o.sort });
+        if (n && parent !== n) await call("owner", "PATCH", `/api/nodes/${n}`, { parent_id: parent ?? null, order_key: evenOrderKey(o.sort + 3) });
         break;
       }
       case "deleteNote": { const n = pick(pools.notes, o.note); if (n && ok(await call("owner", "DELETE", `/api/nodes/${n}`))) pools.trashed.add(n); break; }

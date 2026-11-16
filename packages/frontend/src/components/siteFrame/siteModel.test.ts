@@ -44,7 +44,7 @@ describe("page helpers", () => {
   });
 
   it("previous/next: siblings first, then the first tag page's order", () => {
-    const nodes = [n("p"), n("a", { parent_id: "p", sort_order: 1 }), n("b", { parent_id: "p", sort_order: 2 }), n("c", { parent_id: "p", sort_order: 3 })];
+    const nodes = [n("p"), n("a", { parent_id: "p", order_key: "a1" }), n("b", { parent_id: "p", order_key: "a2" }), n("c", { parent_id: "p", order_key: "a3" })];
     expect(adjacentNotes(nodes[2]!, nodes, design)).toMatchObject({ prev: { id: "a" }, next: { id: "c" } });
     const solo = n("solo", { tags: ["T"] });
     const tagged = { ...design, tag_pages: { t: { name: "T", slug: "t", viewKind: "list" as const, rows: [rowOf("x"), rowOf("solo")] } } };
@@ -53,11 +53,11 @@ describe("page helpers", () => {
     expect(adjacentNotes(n("alone"), [n("alone")], design)).toEqual({ prev: null, next: null });
   });
 
-  it("siblings come in the app's order: ties on sort_order go by creation time, never by title", () => {
+  it("siblings come in the app's order: ties on the key go by stamp then id, never by title", () => {
     const kids = [
-      n("c", { parent_id: "p", title: "Alpha", sort_order: 0, created_at: "2026-10-03T00:00:00Z" }),
-      n("a", { parent_id: "p", title: "Zulu", sort_order: 0, created_at: "2026-10-01T00:00:00Z" }),
-      n("b", { parent_id: "p", title: "Mid", sort_order: 0, created_at: "2026-10-02T00:00:00Z" }),
+      n("c", { parent_id: "p", title: "Alpha", order_key: "a0", created_at: "2026-10-03T00:00:00Z" }),
+      n("a", { parent_id: "p", title: "Zulu", order_key: "a0", created_at: "2026-10-01T00:00:00Z" }),
+      n("b", { parent_id: "p", title: "Mid", order_key: "a0", created_at: "2026-10-02T00:00:00Z" }),
     ];
     const nodes = [n("p"), ...kids];
     const appOrder = sortChildren(kids).map((k) => k.id);

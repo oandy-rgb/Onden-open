@@ -159,12 +159,12 @@ export async function createImportedRow(
   tagId: string,
   row: {
     title: string; data: Record<string, unknown>;
-    fieldTypes: ReadonlyArray<{ name: string; type: string }>; sortOrder: number; actor: ActorCtx;
+    fieldTypes: ReadonlyArray<{ name: string; type: string }>; actor: ActorCtx;
   },
 ): Promise<{ id: string }> {
   const types = new Map(row.fieldTypes.map((f) => [f.name, f.type]));
   const { node } = await createNote({
-    actor: row.actor, workspaceId, title: row.title, sortOrder: row.sortOrder,
+    actor: row.actor, workspaceId, title: row.title,
     event: { uiContext: "import.notion.row", payload: { schema_id: tagId } },
     within: async ({ nodeId, eventId, current }) => {
       // Importing a row IS applying the tag: held to the same tag-apply policy
@@ -302,7 +302,7 @@ export async function importNotionDatabases(
       try {
         const created = await createImportedRow(workspaceId, schemaId, {
           title: importedRowTitle(titleField ? item.data[titleField] : undefined),
-          data: item.data, fieldTypes: collectionFields, sortOrder: r, actor,
+          data: item.data, fieldTypes: collectionFields, actor,
         });
         result.rows++;
         const titleCell = titleField ? item.data[titleField] : undefined;

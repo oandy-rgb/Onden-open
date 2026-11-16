@@ -57,7 +57,7 @@ describe.skipIf(!isTestDatabase())("migration 144 — starter pack template chil
   }
   async function liveTitles(parent: string): Promise<string[]> {
     return (await q<{ title: string }>(
-      `SELECT title FROM content_nodes WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY sort_order`, [notes[parent]],
+      `SELECT title FROM content_nodes WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id`, [notes[parent]],
     )).rows.map((r) => r.title);
   }
   const templateTitles = async (tag: string) => (await q<{ t: string[] }>(

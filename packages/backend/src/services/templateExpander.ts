@@ -38,6 +38,7 @@ import { applyParentSiteDefault } from "./siteDefault.js";
 import { finishNewNote } from "./newNoteDerived.js";
 import { recordAttributeChange } from "./attributeChange.js";
 import { attachTagInTx } from "./tagMembershipWrites.js";
+import { appendOrderKey } from "./orderKeys.js";
 import { applyTemplateVars, slugify } from "@onden/markdown";
 import { localDateTimeId, localDayId } from "../localDay.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
@@ -157,9 +158,9 @@ export async function expandTemplate(
                 const markdown = slotBody;
                 await q(
                   `INSERT INTO content_nodes
-                     (id, workspace_id, source_type, node_type, title, slug, markdown, parent_id, hidden, sort_order)
+                     (id, workspace_id, source_type, node_type, title, slug, markdown, parent_id, hidden, order_key)
                    VALUES ($1, $2, 'manual', 'content', $3, $4, $5, $6, false, $7)`,
-                  [childId, workspaceId, title, slug, markdown, parentNodeId, i],
+                  [childId, workspaceId, title, slug, markdown, parentNodeId, await appendOrderKey("content_nodes", workspaceId, parentNodeId)],
                 );
                 // Reserved key — the attribute panel hides `_`-prefixed entries.
                 // source='derived' because the value is computed from the tag/slot

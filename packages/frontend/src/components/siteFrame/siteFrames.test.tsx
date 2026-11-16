@@ -28,11 +28,11 @@ const node = (id: string, title: string, markdown: string, extra: Partial<Publis
 const nodes: PublishedNode[] = [
   node("home", "首頁", "# 首頁\n\n歡迎來到我的花園。\n\n第二段。\n\n![封面](/api/media/cover.png)"),
   node("guide", "園藝入門", "# 園藝入門\n\n![封面](/api/media/cover.png)\n\n## 土壤\n\n看 [[堆肥]] 與 [[不存在]]。\n\n### 酸鹼\n\n內文\n\n## 澆水\n\n結尾", {
-    tags: ["文章", "花園"], parent_id: "series", sort_order: 2,
+    tags: ["文章", "花園"], parent_id: "series", order_key: "a2",
   }),
-  node("compost", "堆肥", "# 堆肥\n\n落葉與廚餘。", { tags: ["花園"], parent_id: "series", sort_order: 3 }),
-  node("seed", "播種", "# 播種\n\n春天。\n\n^quote1", { tags: ["文章"], parent_id: "series", sort_order: 1 }),
-  node("series", "系列", "# 系列\n\n一組筆記。", { sort_order: 1 }),
+  node("compost", "堆肥", "# 堆肥\n\n落葉與廚餘。", { tags: ["花園"], parent_id: "series", order_key: "a3" }),
+  node("seed", "播種", "# 播種\n\n春天。\n\n^quote1", { tags: ["文章"], parent_id: "series", order_key: "a1" }),
+  node("series", "系列", "# 系列\n\n一組筆記。", { order_key: "a1" }),
   node("tag-garden", "花園", "# 花園\n\n與植物有關的筆記。"),
 ];
 

@@ -23,7 +23,7 @@ vi.mock("../lib/api", async (original) => ({
 vi.mock("../lib/localDb", () => ({ getPendingWrites: vi.fn(async () => pending) }));
 const { createChildNotes, deleteNotes, runStructureOperation } = await import("../lib/data/noteStructure");
 
-const kids = [0, 1, 2].map((i) => ({ title: `s${i}`, markdown: `body ${i}`, sort_order: i }));
+const kids = [0, 1, 2].map((i) => ({ title: `s${i}`, markdown: `body ${i}` }));
 
 beforeEach(() => {
   calls.length = 0; failCreateAt = -1; failCreateWith = () => new ApiError(422, JSON.stringify({ error: "invalid_args" })); failDelete = new Set(); pending = [];

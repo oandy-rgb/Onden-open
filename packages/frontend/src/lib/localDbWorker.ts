@@ -454,11 +454,11 @@ async function loadBootstrapCore(listOnly: boolean): Promise<Bootstrap | null> {
   // notes they are most of this query); md_len stands in for a NULL body_len.
   const slimPaint = (qry<{ n: number }>("SELECT COUNT(*) AS n FROM nodes")[0]?.n ?? 0) >= SLIM_MODE_NODE_THRESHOLD;
   const queuedIds = queuedNoteIds(pending);
-  // In sibling order (lib/childOrder: sort_order, then created_at), like the
-  // server's bootstrap; a row without created_at (older builds) goes last.
+  // In sibling order (lib/childOrder: order_key, order_stamp, id) like the server's bootstrap, by byte (SQLite's
+  // default collation); a row with no key (written locally and not yet answered by the server) goes last.
   const stored = qry<ContentNode & { body_len: number | null; created_at: string | null; md_len: number }>(
-    `SELECT id, source_type, node_type, title, slug, ${slimPaint ? "CASE WHEN id IN (SELECT value FROM json_each(?)) THEN markdown ELSE '' END" : "markdown"} AS markdown, parent_id, CAST(hidden AS INTEGER) as hidden, sort_order, presentation, tag_schema, class_tag_ids, label_tag_ids, updated_at, body_len, space_id, created_at, collection_views, LENGTH(markdown) AS md_len FROM nodes`
-    + " ORDER BY sort_order ASC, created_at IS NULL, created_at ASC",
+    `SELECT id, source_type, node_type, title, slug, ${slimPaint ? "CASE WHEN id IN (SELECT value FROM json_each(?)) THEN markdown ELSE '' END" : "markdown"} AS markdown, parent_id, CAST(hidden AS INTEGER) as hidden, order_key, order_stamp, presentation, tag_schema, class_tag_ids, label_tag_ids, updated_at, body_len, space_id, created_at, collection_views, LENGTH(markdown) AS md_len FROM nodes`
+    + " ORDER BY order_key IS NULL, order_key ASC, order_stamp ASC, id ASC",
     slimPaint ? [JSON.stringify([...queuedIds])] : [],
   );
   const nodes: ContentNode[] = stored.map(({ body_len, created_at, md_len, ...rest }) => {
@@ -530,7 +530,7 @@ async function loadBootstrapCore(listOnly: boolean): Promise<Bootstrap | null> {
 function readBootstrapRelations() {
   return {
     edges: qry<NodeEdge>("SELECT * FROM edges"),
-    pointers: qry<NotePointer>("SELECT id, parent_id, target_id, sort_order, display_prefix FROM pointers ORDER BY sort_order ASC"),
+    pointers: qry<NotePointer>("SELECT id, parent_id, target_id, order_key, order_stamp, display_prefix FROM pointers ORDER BY order_key IS NULL, order_key ASC, order_stamp ASC, id ASC"),
     tasks: qry<Record<string, unknown>>("SELECT * FROM tasks").map(decodeTaskRow),
     suggestions: qry<AiSuggestion>("SELECT id, target_id, suggestion_type, payload, status, reasoning FROM suggestions")
       .map((s) => ({ ...s, payload: JSON.parse(s.payload as unknown as string) })),

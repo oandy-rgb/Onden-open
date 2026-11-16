@@ -185,7 +185,7 @@ describe.skipIf(!isTestDb)("tag membership restore lineage", () => {
     const capture = vi.spyOn(membership, "recordedTagMembership").mockRejectedValueOnce(new Error("injected capture failure"));
     try {
       await expect(createImportedRow(workspaceId, p.tagId, {
-        title: "Must not survive", data: {}, fieldTypes: [], sortOrder: 0, actor: admin,
+        title: "Must not survive", data: {}, fieldTypes: [], actor: admin,
       })).rejects.toThrow("capture failure");
     } finally { capture.mockRestore(); }
     expect((await q(`SELECT id FROM content_nodes WHERE workspace_id=$1`, [workspaceId])).rowCount).toBe(beforeCount);

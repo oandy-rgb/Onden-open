@@ -32,8 +32,8 @@ export async function extractCardsFromNote(node: ContentNode): Promise<number> {
   // card on the server (a note that already is one answers "unchanged"), so a run that failed half-way is finished by running it again.
   const questions = new Set(all.map((c2) => c2.question));
   const earlier = existingChildren.filter((n) => questions.has((n.title ?? "").trim()));
-  const createdIds = await noteStructure.run(async (submit) => noteStructure.createChildren(submit, node.id, fresh.map((card, i) => ({
-    title: cutToUnits(card.question, 300), markdown: cardBody(card, node.title ?? ""), sort_order: i,
+  const createdIds = await noteStructure.run(async (submit) => noteStructure.createChildren(submit, node.id, fresh.map((card) => ({
+    title: cutToUnits(card.question, 300), markdown: cardBody(card, node.title ?? "")
   }))));
   if (!createdIds) return 0;
   const { changed, failed } = await makeReviewCards([...createdIds, ...earlier.map((n) => n.id)]);

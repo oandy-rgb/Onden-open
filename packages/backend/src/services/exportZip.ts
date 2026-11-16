@@ -355,7 +355,7 @@ export type VaultNote = ExportNode & {
   parent_id: string | null;
   space_id: string | null;
   hidden: boolean;
-  sort_order: number;
+  order_key: string;
   source_type: string;
   presentation: unknown;
   created_at: string;
@@ -506,7 +506,7 @@ export async function writeVault(
     const rows = (await q<VaultNote>(
       `SELECT id, slug, title, COALESCE(markdown, '') AS markdown, updated_at::text AS updated_at,
               created_at::text AS created_at, deleted_at::text AS deleted_at, node_type, parent_id::text,
-              space_id::text, hidden, sort_order, source_type, presentation, tag_color, tag_schema,
+              space_id::text, hidden, order_key, source_type, presentation, tag_color, tag_schema,
               ${holderViewsSql("content_nodes")} AS collection_views, reserved_key
          FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`,
       [workspaceId, ids],

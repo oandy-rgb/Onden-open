@@ -207,9 +207,9 @@ scenario("note.move to top level", [{ node: ID.child, fields: { parent_id: null 
   return (makeNodeMutations as any)(ctx).assignToGroup(ID.child, null);
 });
 
-scenario("note.patch sort_order", [{ node: ID.beta, fields: { sort_order: 5 } }], async ({ ctx, load }) => {
+scenario("note.patch order_key", [{ node: ID.beta, fields: { order_key: "a5" } }], async ({ ctx, load }) => {
   const { makeNoteWriter } = await load("data/noteWriter");
-  return (makeNoteWriter as any)(ctx).patch(ID.beta, { sort_order: 5 });
+  return (makeNoteWriter as any)(ctx).patch(ID.beta, { order_key: "a5" });
 });
 
 scenario("note.promote (show a hidden note again)", [{ node: ID.gone, fields: { hidden: false } }], async ({ ctx, load }) => {

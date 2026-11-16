@@ -89,7 +89,8 @@ import { noteAnchorRanges, restoreBackupAnchors, type AdoptAnchor } from "./bloc
 import { restoreBackupBindings } from "./blockLinks.js";
 import { randomUUID } from "node:crypto";
 import { sha256Hex } from "../utils.js";
-import { attributeValues, encodeValues, isCalendarDay, TASK_STATUSES, isListValue, isMediaId, mediaUrl, isUuid, isSystemAttr, UUID_SOURCE, hasLegacyIds, stripLegacyIds, legacyIdShift } from "@onden/markdown";
+import { attributeValues, encodeValues, isCalendarDay, TASK_STATUSES, isListValue, isMediaId, mediaUrl, isUuid, isSystemAttr, UUID_SOURCE, HANDWRITING_LAYOUT, hasLegacyIds, stripLegacyIds, legacyIdShift } from "@onden/markdown";
+import { isValidOrderKey } from "@onden/markdown/contract";
 import { db } from "../dbKysely.js";
 import { q, withSavepoint } from "../db.js";
 import { sql } from "kysely";
@@ -191,6 +192,8 @@ type Item = {
   task: null | { lineRef: string | null };
   tag: BackupNote["tag"] | null;
   fingerprint: string;
+  /** Only for a note of a version 2 archive (no key): its integer order and creation time. */
+  legacyOrder: { sort_order: number; created_at: string } | null;
   media: string[];
   /** The files on disk its title, body or restored attributes reference by
    *  the rule ownership uses (ownershipRefs); empty in a preview. */
@@ -259,11 +262,23 @@ async function readItems(reader: BackupReader, onDisk?: Map<string, string>): Pr
       deleted: n.deleted_at !== null, task: isTask ? { lineRef: n.task?.line_ref ?? null } : null,
       tag: isTag(n) ? n.tag ?? { path: n.title, color: null, schema: null, views: null, reserved_key: null } : null,
       fingerprint: contentFingerprint(n.title, n.markdown, n.attributes),
+      legacyOrder: isValidOrderKey(n.order_key) ? null : { sort_order: n.sort_order ?? 0, created_at: n.created_at },
       media: n.media.filter((m) => reader.attachments.has(m)),
       refs: onDisk ? ownershipRefs([n.title, n.markdown, ...n.attributes.filter(restoredAttribute).map((a) => a.value)].join("\n"), onDisk) : [],
     });
   }
   return items;
+}
+
+/** Version 2 archives carry an integer `sort_order` and no key: sort those notes by it (then creation time, then id, the
+ *  order the app showed) so that making them one after another, each last among its siblings, keeps that order. Notes
+ *  that carry a key are left where they are: their key says it. */
+function inLegacyOrder(items: Item[]): Item[] {
+  if (items.every((i) => i.legacyOrder === null)) return items;
+  const rank = (i: Item) => i.legacyOrder?.sort_order ?? Number.NEGATIVE_INFINITY;
+  const made = (i: Item) => i.legacyOrder?.created_at ?? "";
+  return [...items].sort((a, b) => (rank(a) < rank(b) ? -1 : rank(a) > rank(b) ? 1 : 0)
+    || (made(a) < made(b) ? -1 : made(a) > made(b) ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Parents before children; a row whose parent chain loops is a root. */
@@ -972,7 +987,8 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
   }
 
   // ── Notes, parents first ──
-  const notes = parentsFirst(run.items).filter((i) => !isTag(i));
+  // A version 2 archive has an integer order, not keys: its notes are made in that order, each last among its siblings.
+  const notes = parentsFirst(inLegacyOrder(run.items)).filter((i) => !isTag(i));
   for (let at = 0; at < notes.length; at += RESTORE_BATCH) {
     await progress("notes", at, notes.length);
     await batch(run, async (actor) => {
@@ -1280,7 +1296,7 @@ async function restoreNote(run: RestoreRun, actor: ActorCtx, item: Item): Promis
       sourceType, parentId, spaceId: parentId ? null : noteSpace,
       // A restored note keeps the place on the site the backup gave it (restoreSystemAttrs), never a new note's default.
       siteDefault: false,
-      hidden: full.hidden, sortOrder: full.sort_order,
+      hidden: full.hidden, ...(isValidOrderKey(full.order_key) ? { orderKey: full.order_key } : {}),
       event: { uiContext: "backup.restore", payload: { restored_from_backup: item.id } },
     });
     if (restored.adopt.length + restored.known.length > 0) {

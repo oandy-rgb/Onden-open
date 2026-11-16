@@ -8,8 +8,10 @@ export type PublishedNode = {
   slug: string;
   markdown: string;
   updated_at?: string;
-  /** Sibling order (lib/childOrder). Snapshots from before D64 carry neither
-   *  and are listed by title. */
+  /** Sibling order (lib/childOrder): the key, and the stamp that breaks a tie. A snapshot from before order keys
+   *  carries the integer `sort_order` instead, one from before D64 neither (listed by title). */
+  order_key?: string;
+  order_stamp?: string;
   sort_order?: number;
   created_at?: string;
   /** Hierarchy for explorer-tree / breadcrumb components. The backend nulls

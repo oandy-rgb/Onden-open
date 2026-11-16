@@ -3,7 +3,7 @@ import { flattenSidebarTree, groupRootsBySpace, sidebarWindow } from "../lib/sid
 import type { ContentNode, NotePointer } from "../lib/api";
 
 const n = (id: string, parent: string | null = null) =>
-  ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: parent, hidden: false, sort_order: 0 }) as unknown as ContentNode;
+  ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: parent, hidden: false, order_key: "a0" }) as unknown as ContentNode;
 
 describe("flattenSidebarTree (④ virtualization)", () => {
   const a = n("a"), b = n("b", "a"), c = n("c", "a"), d = n("d", "b"), e = n("e");

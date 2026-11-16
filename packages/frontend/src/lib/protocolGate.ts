@@ -17,9 +17,6 @@ import { protocolMismatch } from "@onden/markdown";
 
 export type ProtocolBlock = "page_old" | "server_old";
 
-/** A server that sends no protocol header predates the header, which began at protocol 3. */
-const PROTOCOL_BEFORE_HEADER = 3;
-
 /** How long to wait before asking the server again whether it was updated; the last wait repeats. */
 export const PROTOCOL_PROBE_DELAYS_MS: readonly number[] = [15_000, 30_000, 60_000];
 
@@ -77,7 +74,10 @@ export function noteRefusedAsTooOld(): void { setBlock("page_old"); }
  *  server). `header` is its X-Onden-Server-Protocol, null when absent. */
 export function noteServerProtocol(header: string | null): void {
   if (block === "page_old") return;
-  const mismatch = protocolMismatch(header ?? String(PROTOCOL_BEFORE_HEADER));
+  // No header says nothing: every server since protocol 3 sends one, so a response without it is a proxy's, a stub's or a
+  // server older than the gate (which does not refuse a page either way). It neither stops the page nor lifts a stop.
+  if (header === null) return;
+  const mismatch = protocolMismatch(header);
   setBlock(mismatch === "older" ? "server_old" : mismatch === "newer" ? "page_old" : null);
 }
 

@@ -19,6 +19,7 @@ import { getCanvasMemberships } from "../canvasMemberships.js";
 import { readableNodeIdSet } from "../readPolicy.js";
 import { workspaceWireRow } from "../workspaceModules.js";
 import { edgeColumnsSql, attributeColumnsSql, pointerColumnsSql, workspaceColumnsSql } from "../syncProjection.js";
+import { SIBLING_ORDER_N, SIBLING_ORDER_P } from "../orderKeys.js";
 import { dayClock } from "../../localDay.js";
 import type { ServerNode } from "@onden/contract";
 import { nodeRowColumnsSql, NODE_EVENT_META_COLUMNS_SQL } from "../nodeRowProjection.js";
@@ -167,7 +168,7 @@ async function readBootstrap(actor: ActorCtx, workspaceId: string, slimBodies: b
      LEFT JOIN evt_meta em ON em.target_id = n.id::text
      WHERE n.workspace_id = $1 AND n.id = ANY($2::uuid[]) AND ${liveNodeSql("n")}
        AND ${notATaskNodeSql("n")}
-     ORDER BY n.sort_order ASC, n.created_at ASC
+     ORDER BY ${SIBLING_ORDER_N}
      ${slimBodies ? "" : "LIMIT $3"}`,
     // Slim mode ships EVERY node skeleton (no LIMIT) — bodies are stripped below,
     // so the set is small even at tens of thousands and no node is invisible.
@@ -205,7 +206,7 @@ async function readBootstrap(actor: ActorCtx, workspaceId: string, slimBodies: b
      WHERE p.workspace_id = $1
        AND p.target_id = ANY($2::uuid[])
        AND (p.parent_id IS NULL OR p.parent_id = ANY($2::uuid[]))
-     ORDER BY p.sort_order ASC`,
+     ORDER BY ${SIBLING_ORDER_P}`,
     [workspaceId, returnedNodeIds],
   );
   // Typed attributes of the returned nodes, so the client mirror keeps each

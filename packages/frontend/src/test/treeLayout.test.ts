@@ -31,8 +31,8 @@ describe("computeTreeLayout", () => {
   it("stacks siblings vertically by NODE_H + ROW_GAP", () => {
     const pos = computeTreeLayout("r", [
       node("r"),
-      node("c0", { parent_id: "r", sort_order: 0 }),
-      node("c1", { parent_id: "r", sort_order: 1 }),
+      node("c0", { parent_id: "r", order_key: "a0" }),
+      node("c1", { parent_id: "r", order_key: "a1" }),
     ]);
     expect(pos.get("c0")!.y).toBe(0);
     expect(pos.get("c1")!.y).toBe(260); // 200 + 60
@@ -41,18 +41,18 @@ describe("computeTreeLayout", () => {
   it("centers a parent on its children's vertical span", () => {
     const pos = computeTreeLayout("r", [
       node("r"),
-      node("c0", { parent_id: "r", sort_order: 0 }),
-      node("c1", { parent_id: "r", sort_order: 1 }),
+      node("c0", { parent_id: "r", order_key: "a0" }),
+      node("c1", { parent_id: "r", order_key: "a1" }),
     ]);
     // child centers: 100 and 360 → span center 230 → parentY = 230 - 100
     expect(pos.get("r")!.y).toBe(130);
   });
 
-  it("orders siblings by sort_order, not array order", () => {
+  it("orders siblings by order_key, not array order", () => {
     const pos = computeTreeLayout("r", [
       node("r"),
-      node("late", { parent_id: "r", sort_order: 5 }),
-      node("early", { parent_id: "r", sort_order: 1 }),
+      node("late", { parent_id: "r", order_key: "a5" }),
+      node("early", { parent_id: "r", order_key: "a1" }),
     ]);
     expect(pos.get("early")!.y).toBeLessThan(pos.get("late")!.y);
   });

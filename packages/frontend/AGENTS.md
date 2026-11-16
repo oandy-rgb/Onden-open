@@ -9,7 +9,7 @@
 | 要做的事 | 一律用 | 守門 |
 | --- | --- | --- |
 | 顯示筆記標題（沒標題時的「未命名」） | `lib/noteLabel.ts` 的 `displayTitle`／`untitledTitle` | `dup-owners.guard.test.ts` |
-| 同層筆記排序 | `lib/childOrder.ts` 的 `compareChildren`／`sortChildren` | `dup-owners.guard.test.ts` |
+| 同層筆記排序、搬動時算新鍵 | `lib/childOrder.ts` 的 `compareChildren`／`sortChildren`／`planSiblingOrder`（鍵用 `@onden/markdown` 的 `keyBetween`；不挑整數、不重編鄰居） | `dup-owners.guard.test.ts` |
 | 依標題過濾、排名 | `lib/noteSearch.ts` 的 `matchTitle`／`rankByTitle`（搜尋整體走 `lib/data/noteSearch.ts`） | `dup-owners.guard.test.ts`、`noteSearch.guard.test.ts` |
 | 「這則筆記有標籤 X」 | `lib/nodeTags.ts` 的 `nodeHasTag`／`nodeTagIds` | `dup-owners.guard.test.ts` |
 | 標籤名去掉開頭 `#` | `lib/hashtags.ts` 的 `tagName`／`tagQuery` | `dup-owners.guard.test.ts` |

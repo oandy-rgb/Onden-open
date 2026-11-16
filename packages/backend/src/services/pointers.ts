@@ -6,6 +6,7 @@ import { mutate } from "../spine/mutate.js";
 import type { Authority } from "../spine/authority.js";
 import type { ActorCtx } from "../types.js";
 import { StatusError } from "../statusError.js";
+import { appendOrderKey, assertOrderKey, respaceIfTooLong, translateLegacySortOrder } from "./orderKeys.js";
 import { assertModuleTagEdge, assertParentKind } from "./parentKind.js";
 import { isTag } from "@onden/markdown/contract";
 
@@ -19,7 +20,7 @@ import { isTag } from "@onden/markdown/contract";
  *  descendant: the target itself stays where it is. */
 export async function createPointer(
   actor: ActorCtx, workspaceId: string,
-  p: { targetId: string; parentId: string | null; sortOrder?: number; displayPrefix?: string },
+  p: { targetId: string; parentId: string | null; orderKey?: string; legacySortOrder?: number; displayPrefix?: string },
 ): Promise<{ id: string }> {
   return mutate<{ id: string }>({
     actor,
@@ -41,13 +42,20 @@ export async function createPointer(
         await assertParentKind(workspaceId, target.node_type, p.parentId);
         if (isTag(target)) await assertModuleTagEdge(workspaceId, { id: p.targetId }, p.parentId);
       }
+      // The place among the parent's pointers: the key the caller chose, an older client's integer translated, or last.
+      // A pointer's id is derived from (parent, target) by the database, so translation excludes no row of its own.
+      let orderKey: string;
+      if (p.orderKey !== undefined) { assertOrderKey(p.orderKey); orderKey = p.orderKey; }
+      else if (p.legacySortOrder !== undefined) orderKey = await translateLegacySortOrder("note_pointers", workspaceId, p.parentId, "00000000-0000-0000-0000-000000000000", p.legacySortOrder);
+      else orderKey = await appendOrderKey("note_pointers", workspaceId, p.parentId);
       const res = await q<{ id: string }>(
         `INSERT INTO note_pointers
-           (workspace_id, parent_id, target_id, sort_order, display_prefix)
+           (workspace_id, parent_id, target_id, order_key, display_prefix)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [workspaceId, p.parentId, p.targetId, p.sortOrder ?? 0, p.displayPrefix ?? null],
+        [workspaceId, p.parentId, p.targetId, orderKey, p.displayPrefix ?? null],
       );
+      await respaceIfTooLong("note_pointers", workspaceId, p.parentId, orderKey, { actor, nodeId: p.targetId });
       return res.rows[0]!;
     },
   });

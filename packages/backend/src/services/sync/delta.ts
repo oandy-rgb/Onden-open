@@ -10,6 +10,7 @@ import { anchorRowsForNotes } from "../blockAnchors/index.js";
 import { bindingRowsForNotes } from "../blockLinks.js";
 import { isUuid } from "@onden/markdown";
 import { q } from "../../db.js";
+import { db } from "../../dbKysely.js";
 import type { ActorCtx } from "../../types.js";
 import { readableNodeIdSet, readableTrashedNodeIds, restrictRowsToScope } from "../readPolicy.js";
 import { taskNodeIdsAmong, taskRowReadable, taskRowsByIds, notATaskNodeSql } from "../tasksStore.js";
@@ -25,6 +26,7 @@ import { isWorkspaceOwner } from "../../spine/authority.js";
 import { readSiteSettings } from "./bootstrap.js";
 import type { AttributeDelta, NodeEdge, SyncDelta, Workspace } from "@onden/contract";
 import { liveNodeSql, tagNodeSql } from "../../spine/nodeSql.js";
+import type { RespacedGroup } from "../orderKeys.js";
 
 // Bound the POST payload so a client can't ask the server to diff an unbounded
 // id list. The native app holds at most the workspace's node count; 50k is a
@@ -148,6 +150,8 @@ export async function buildSyncDelta(
     let workspaceChanged = false;
     let siteSettingsChanged = false;
     const purges: Array<{ spaceId: string; at: number; nodes: string[]; tasks: string[] }> = [];
+    // Sibling groups whose keys were all rewritten by one write (services/orderKeys.ts respaceIfTooLong).
+    const respacedGroups: RespacedGroup[] = [];
     // The id of the last event in this page that brings an id back (created,
     // updated, undeleted…). A purge earlier in the page must not delete what
     // a later event recreated with the same id — a backup restore does that
@@ -175,6 +179,11 @@ export async function buildSyncDelta(
         // An anchor confirmed or created on its own changes nothing else of the note, but its anchors ship with it.
         || type.startsWith("BLOCK_ANCHOR_")) {
         nodeUpsert.add(id); nodeDelete.delete(id);
+        const group = (ev.payload as { order_respaced?: Partial<RespacedGroup> } | null)?.order_respaced;
+        if (group && (group.table === "content_nodes" || group.table === "note_pointers")
+          && (group.parent_id === null || (typeof group.parent_id === "string" && isUuid(group.parent_id)))) {
+          respacedGroups.push({ table: group.table, parent_id: group.parent_id });
+        }
       } else if (type === "NODE_DELETED" || type === "NODE_PURGED") {
         // NODE_PURGED is the hard, unrecoverable removal (prune). It must reach the
         // client as a delete too — otherwise a purged node lingered locally forever
@@ -233,6 +242,18 @@ export async function buildSyncDelta(
         // Only the lifecycle events above bring a note back.
         if (!nodeDelete.has(id)) nodeUpsert.add(id);
       }
+    }
+
+    // A respace rewrote the keys of rows its event does not name: ship the whole live group, so every copy ends with the
+    // server's keys. For pointers the group is shipped with its parent (pointer rows travel with the notes they sit under).
+    for (const group of respacedGroups) {
+      if (group.table === "note_pointers") {
+        if (group.parent_id !== null) { nodeUpsert.add(group.parent_id); nodeDelete.delete(group.parent_id); }
+        continue;
+      }
+      const siblings = await db.selectFrom("content_nodes").select("id").where("workspace_id", "=", workspaceId)
+        .where("deleted_at", "is", null).where("parent_id", group.parent_id === null ? "is" : "=", group.parent_id).execute();
+      for (const { id } of siblings) if (!nodeDelete.has(id)) nodeUpsert.add(id);
     }
 
     // A tag is a node and its schema determines every direct member's tag

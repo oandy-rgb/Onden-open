@@ -24,11 +24,11 @@ const node = (id: string, title: string, markdown: string, extra: Partial<Publis
 const nodes: PublishedNode[] = [
   node("home", "首頁", "# 首頁\n\n我在這裡種花也寫字。第二句。\n\n第二段。"),
   node("guide", "園藝入門", "# 園藝入門\n\n開始前先看註腳[^a]。\n\n## 土壤\n\n看 [[堆肥]]。\n\n## 澆水\n\n內文\n\n## 光線\n\n結尾[^b]\n\n[^a]: 第一個註腳。\n[^b]: 第二個註腳。", {
-    tags: ["文章", "花園", "常青"], parent_id: "series", sort_order: 2, updated_at: "2025-12-20T04:00:00Z", created_at: "2025-12-01T04:00:00Z",
+    tags: ["文章", "花園", "常青"], parent_id: "series", order_key: "a2", updated_at: "2025-12-20T04:00:00Z", created_at: "2025-12-01T04:00:00Z",
   }),
-  node("compost", "堆肥", "# 堆肥\n\n落葉與廚餘，見 [[園藝入門]]。", { tags: ["花園", "精選", "幼苗"], parent_id: "series", sort_order: 3, updated_at: "2026-03-05T04:00:00Z" }),
-  node("seed", "播種", "# 播種\n\n春天。", { tags: ["文章"], parent_id: "series", sort_order: 1, updated_at: "2026-01-10T04:00:00Z" }),
-  node("series", "系列", "# 系列\n\n一組筆記。", { sort_order: 1, updated_at: "2026-01-02T04:00:00Z" }),
+  node("compost", "堆肥", "# 堆肥\n\n落葉與廚餘，見 [[園藝入門]]。", { tags: ["花園", "精選", "幼苗"], parent_id: "series", order_key: "a3", updated_at: "2026-03-05T04:00:00Z" }),
+  node("seed", "播種", "# 播種\n\n春天。", { tags: ["文章"], parent_id: "series", order_key: "a1", updated_at: "2026-01-10T04:00:00Z" }),
+  node("series", "系列", "# 系列\n\n一組筆記。", { order_key: "a1", updated_at: "2026-01-02T04:00:00Z" }),
   node("tag-garden", "花園", "# 花園\n\n與植物有關的筆記。"),
 ];
 const row = (id: string, date: string) => {

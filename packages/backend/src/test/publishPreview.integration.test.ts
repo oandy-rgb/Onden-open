@@ -250,20 +250,20 @@ describe.skipIf(!isTestDb)("publish preview + hash confirmation (DB)", () => {
     const parent = await note("Shelf", "a shelf", true);
     const first = await note("Shelf first", "1", true);
     const second = await note("Shelf second", "2", true);
-    await seedQ(`UPDATE content_nodes SET parent_id = $1, sort_order = CASE id WHEN $2 THEN 0 ELSE 1 END WHERE id = ANY($3::uuid[])`,
+    await seedQ(`UPDATE content_nodes SET parent_id = $1, order_key = CASE id WHEN $2 THEN 'a0' ELSE 'a1' END WHERE id = ANY($3::uuid[])`,
       [parent, first, [first, second]]);
     expect((await post("/api/publish", { title: "Site", preview_hash: (await preview()).hash })).status).toBe(201);
     const before = await preview();
     expect(before.diff.moved).toEqual([]);
 
-    await seedQ(`UPDATE content_nodes SET sort_order = 2 WHERE id = $1`, [first]);
+    await seedQ(`UPDATE content_nodes SET order_key = 'a2' WHERE id = $1`, [first]);
     const after = await preview();
     expect(after.hash).not.toBe(before.hash);
     expect(after.diff.moved.map((n) => n.id)).toHaveLength(1);
     expect([first, second]).toContain(after.diff.moved[0]!.id);
     expect(after.diff.changed).toEqual([]);
-    // Renumbering that keeps the order is no change at all.
-    await seedQ(`UPDATE content_nodes SET sort_order = sort_order + 10 WHERE id = ANY($1::uuid[])`, [[first, second]]);
+    // Rekeying that keeps the order is no change at all.
+    await seedQ(`UPDATE content_nodes SET order_key = CASE id WHEN $2 THEN 'a5' ELSE 'a4' END WHERE id = ANY($1::uuid[])`, [[first, second], first]);
     expect((await preview()).hash).toBe(after.hash);
   });
 
@@ -292,10 +292,10 @@ describe.skipIf(!isTestDb)("publish preview + hash confirmation (DB)", () => {
   });
 
   it("the candidate carries each note's sibling order (D64)", async () => {
-    await seedQ(`UPDATE content_nodes SET sort_order = 4 WHERE id = $1`, [other]);
-    const nodes = (await buildCandidate(WS, { title: "Site" })).payload.nodes as Array<{ id: string; sort_order: number; created_at: unknown }>;
+    await seedQ(`UPDATE content_nodes SET order_key = 'a4' WHERE id = $1`, [other]);
+    const nodes = (await buildCandidate(WS, { title: "Site" })).payload.nodes as Array<{ id: string; order_key: string; created_at: unknown }>;
     const row = nodes.find((n) => n.id === other)!;
-    expect(row.sort_order).toBe(4);
+    expect(row.order_key).toBe("a4");
     expect(row.created_at).toBeTruthy();
   });
 });

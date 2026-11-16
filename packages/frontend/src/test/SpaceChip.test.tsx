@@ -11,7 +11,7 @@ import type { ContentNode } from "../lib/api";
 // first previews who gains and loses access, then sends the confirmed epoch.
 
 const node = { id: "n1", title: "Draft", node_type: "content", source_type: "manual", slug: "draft", markdown: "",
-  parent_id: null, hidden: false, sort_order: 0, space_id: "everyone" } as unknown as ContentNode;
+  parent_id: null, hidden: false, order_key: "a0", space_id: "everyone" } as unknown as ContentNode;
 const spaces = [
   { id: "everyone", name: "共用", kind: "shared", is_default: true, owner_actor_id: null, capabilities: {}, permission: "edit", can_manage: true },
   { id: "mine", name: "personal", kind: "personal", is_default: false, owner_actor_id: "me", capabilities: {}, permission: "edit", can_manage: true },

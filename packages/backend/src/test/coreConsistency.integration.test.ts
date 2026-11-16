@@ -91,16 +91,16 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
     await locked.promise;
     let pending: Promise<Response> | undefined;
     try {
-      pending = patch(id, { sort_order: 73 }, editor);
+      pending = patch(id, { order_key: "a73" }, editor);
       await waitingWriters(1);
     } finally { changePolicy.release(); }
     await policyWrite;
     const response = await pending!;
     assert.equal(response.status, 403);
     await assert.rejects(() => assertAuthority(editor, { kind: "node", nodeId: id, op: "write_node" }), AuthorityError);
-    const row = (await q("SELECT sort_order FROM content_nodes WHERE id=$1", [id])).rows[0];
-    assert.equal(row.sort_order, 0);
-    const fresh = await patch(id, { sort_order: 74 }, editor);
+    const row = (await q("SELECT order_key FROM content_nodes WHERE id=$1", [id])).rows[0];
+    assert.equal(row.order_key, "a0");
+    const fresh = await patch(id, { order_key: "a74" }, editor);
     assert.equal(fresh.status, 403);
     assert.equal((await q("SELECT count(*)::int AS n FROM domain_events WHERE target_id=$1 AND event_type='NODE_UPDATED'", [id])).rows[0].n, 0);
   }, 15000);
@@ -123,7 +123,7 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
       pending = mutate({ actor: editor, workspaceId: ws,
         authority: { kind: "node", nodeId: id, op: "write_node" },
         event: { type: "NODE_UPDATED", targetType: "node", targetId: id },
-        apply: async () => { await seedQ("UPDATE content_nodes SET sort_order=73 WHERE id=$1", [id]); },
+        apply: async () => { await seedQ("UPDATE content_nodes SET order_key='a73' WHERE id=$1", [id]); },
       }).then(() => new Response(null, { status: 200 }), error => {
         assert(error instanceof AuthorityError);
         return new Response(null, { status: 403 });
@@ -134,9 +134,9 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
     const response = await pending!;
     assert.equal(response.status, 403);
     await assert.rejects(() => assertAuthority(editor, { kind: "node", nodeId: id, op: "write_node" }), AuthorityError);
-    const row = (await q("SELECT sort_order FROM content_nodes WHERE id=$1", [id])).rows[0];
-    assert.equal(row.sort_order, 0);
-    const fresh = await patch(id, { sort_order: 74 }, editor);
+    const row = (await q("SELECT order_key FROM content_nodes WHERE id=$1", [id])).rows[0];
+    assert.equal(row.order_key, "a0");
+    const fresh = await patch(id, { order_key: "a74" }, editor);
     assert.equal(fresh.status, 403);
     assert.equal((await q("SELECT count(*)::int AS n FROM domain_events WHERE target_id=$1 AND event_type='NODE_UPDATED'", [id])).rows[0].n, 0);
   }, 15000);
@@ -311,22 +311,22 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
     await locked.promise;
     let a: Promise<Response> | undefined, b: Promise<Response> | undefined;
     try {
-      a = patch(id, { sort_order: 5 });
+      a = patch(id, { order_key: "a5" });
       await waitingWriters(1);
-      b = patch(id, { sort_order: 9 });
+      b = patch(id, { order_key: "a9" });
       await waitingWriters(2);
     } finally { release.release(); }
     await blocker;
     assert.deepEqual((await Promise.all([a!, b!])).map(r => r.status), [200, 200]);
-    // sort_order, not hidden: only a tag can be hidden since D104.
-    const history = (await q<{ id: string; tx_meta: { prev_field_values: { sort_order: number } } }>(
+    // order_key, not hidden: only a tag can be hidden since D104.
+    const history = (await q<{ id: string; tx_meta: { prev_field_values: { order_key: string } } }>(
       "SELECT id::text, tx_meta FROM domain_events WHERE target_id=$1 AND event_type='NODE_UPDATED' ORDER BY domain_events.id", [id],
     )).rows;
-    assert.deepEqual(history.map(e => e.tx_meta.prev_field_values.sort_order), [0, 5]);
+    assert.deepEqual(history.map(e => e.tx_meta.prev_field_values.order_key), ["a0", "a5"]);
     assert.equal("restored" in await restoreEvent(history[1].id, { workspaceId: ws, actor: admin }), true);
-    assert.equal((await q("SELECT sort_order FROM content_nodes WHERE id=$1", [id])).rows[0].sort_order, 5);
+    assert.equal((await q("SELECT order_key FROM content_nodes WHERE id=$1", [id])).rows[0].order_key, "a5");
     assert.equal("restored" in await restoreEvent(history[0].id, { workspaceId: ws, actor: admin }), true);
-    assert.equal((await q("SELECT sort_order FROM content_nodes WHERE id=$1", [id])).rows[0].sort_order, 0);
+    assert.equal((await q("SELECT order_key FROM content_nodes WHERE id=$1", [id])).rows[0].order_key, "a0");
   }, 15000);
 
   it.skipIf(needsSecondConnection)("agent title-only edits preserve a queued body edit and share durable save effects", async () => {
@@ -403,8 +403,8 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
 
   it("keeps ordinary content type PATCH compatible for editors", async () => {
     const id = await seedNode("same-type");
-    assert.equal((await patch(id, { node_type: "content", sort_order: 4 }, editor)).status, 200);
-    assert.equal((await q("SELECT sort_order FROM content_nodes WHERE id=$1", [id])).rows[0].sort_order, 4);
+    assert.equal((await patch(id, { node_type: "content", order_key: "a4" }, editor)).status, 200);
+    assert.equal((await q("SELECT order_key FROM content_nodes WHERE id=$1", [id])).rows[0].order_key, "a4");
   });
 
   beforeAll(async () => {

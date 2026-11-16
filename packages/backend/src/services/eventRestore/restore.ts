@@ -35,6 +35,7 @@
 //   - Events whose target entity no longer exists (e.g., ATTRIBUTE_SET on
 //     a node that was later purged). 410 Gone.
 
+import { keyForRestore, respaceIfTooLong, translateLegacySortOrder } from "../orderKeys.js";
 import { recordRestore, requireRestoreTransaction } from "./record.js";
 import { alreadyInState, historyIncomplete, stateConflict } from "./refusals.js";
 import { lastBodyHashBeforeSql } from "../history/index.js";
@@ -52,6 +53,8 @@ import { authorizeRestore } from "./policy.js";
 import { restoreAttribute, previewAttributeRestore, type AttributeRestorePreview } from "./attributes.js";
 import { restoreTagUpdate, previewTagUpdate, type TagUpdatePreview } from "./tags.js";
 import { mutateRestore, runRestore } from "../../spine/mutate.js";
+import { sql } from "kysely";
+import { db } from "../../dbKysely.js";
 import { isDeepStrictEqual } from "node:util";
 import {
   restoreHandlerFor, restoreBlockedError, LEGACY_NODE_EVENT_TYPES,
@@ -100,7 +103,7 @@ interface RestoreOptions {
 // These are the scalar fields written by the ordinary node PATCH. Keep the
 // inverse scoped to exactly the fields this event changed: a body undo must
 // not make a later title edit part of its redo metadata.
-const nodeScalarFields = ["title", "parent_id", "hidden", "sort_order", "presentation", "node_type", "source_type"] as const;
+const nodeScalarFields = ["title", "parent_id", "hidden", "order_key", "presentation", "node_type", "source_type"] as const;
 type NodeScalarField = typeof nodeScalarFields[number];
 type NodeSnapshot = Record<NodeScalarField, unknown> & {
   title: string;
@@ -111,8 +114,37 @@ type NodeSnapshot = Record<NodeScalarField, unknown> & {
   parent_id: string | null;
 };
 
+/** Whether a respace rewrote the keys of one of these sibling groups (live notes under that parent; null = the top level)
+ *  in an event after `eventId` (services/orderKeys.ts respaceIfTooLong records it). A place recorded before that is a key of
+ *  the old numbering. */
+async function groupRespacedSince(workspaceId: string, eventId: string, parentIds: Array<string | null>): Promise<boolean> {
+  const named = parentIds.filter((id): id is string => id !== null);
+  const result = await sql<{ found: number }>`
+    SELECT 1 AS found FROM domain_events
+     WHERE workspace_id = ${workspaceId} AND id > ${eventId} AND event_type = 'NODE_UPDATED'
+       AND payload->'order_respaced'->>'table' = 'content_nodes'
+       AND ((payload->'order_respaced'->>'parent_id') = ANY (${named}::text[])
+            OR (${parentIds.includes(null)}::boolean AND payload->'order_respaced'->>'parent_id' IS NULL))
+     LIMIT 1`.execute(db);
+  return result.rows.length > 0;
+}
+
+/** The event with its recorded old place taken out when the sibling group's keys were all rewritten after it (a respace,
+ *  services/orderKeys.ts): the old key no longer belongs to the group's current keys, and writing it back would put the note at
+ *  a position no one chose. Same answer as an event from before migration 200 (which recorded an integer): the place is not
+ *  restored, and an event that only moved the note says "a later edit already took this change back". */
+async function withoutStalePlace(row: EventRow, current: { parent_id: string | null }): Promise<EventRow> {
+  const prev = row.tx_meta?.prev_field_values as Record<string, unknown> | undefined;
+  if (typeof prev?.order_key !== "string") return row;
+  const parents = [current.parent_id, ...("parent_id" in prev ? [prev.parent_id as string | null] : [])];
+  if (!await groupRespacedSince(row.workspace_id, String(row.id), parents)) return row;
+  const { order_key: _stale, ...rest } = prev;
+  return { ...row, tx_meta: { ...row.tx_meta, prev_field_values: rest } };
+}
+
 function nodeRestoreFields(row: EventRow): Record<string, unknown> {
-  return (row.tx_meta?.prev_field_values as Record<string, unknown> | undefined) ?? {};
+  const { sort_order: _legacyPlace, ...fields } = (row.tx_meta?.prev_field_values as Record<string, unknown> | undefined) ?? {};
+  return fields;
 }
 
 /** The edit changed the text but could not record how to undo it (a body the
@@ -456,7 +488,7 @@ export async function previewEventRestore(
     if (inversePatch === NO_INVERSE_PATCH) return noInversePatch;
     const prevFields = (txMeta.prev_field_values as Record<string, unknown> | undefined) ?? {};
     const node = await pool.query<NodeSnapshot>(
-      `SELECT title, markdown, deleted_at, parent_id, hidden, sort_order, presentation, node_type, source_type FROM content_nodes
+      `SELECT title, markdown, deleted_at, parent_id, hidden, order_key, presentation, node_type, source_type FROM content_nodes
         WHERE workspace_id = $1 AND id = $2`,
       [row.workspace_id, row.target_id],
     );
@@ -465,11 +497,12 @@ export async function previewEventRestore(
       return { code: "target_gone", status: 410, detail: "node is currently soft-deleted" };
     }
     const current = node.rows[0];
+    const placed = await withoutStalePlace(row, current);
     const reverted = inversePatch
       ? await revertedBody(row, current.markdown ?? "", inversePatch)
       : { body: current.markdown ?? "", conflicts: 0 };
     if ("code" in reverted) return reverted;
-    const unchanged = nodeUpdateChangesNothing(row, current, reverted.body);
+    const unchanged = nodeUpdateChangesNothing(placed, current, reverted.body);
     if (unchanged) return unchanged;
     const restoredTitle = typeof prevFields.title === "string" ? (prevFields.title as string) : current.title;
     const cursorState = (txMeta.cursor_state as { anchor: number; head: number } | undefined) ?? undefined;
@@ -484,7 +517,7 @@ export async function previewEventRestore(
         current_body: current.markdown ?? "",
         restored_title: restoredTitle,
         restored_body: reverted.body,
-        can_apply_cleanly: reverted.conflicts === 0 && conflictingNodeFields(row, current).length === 0,
+        can_apply_cleanly: reverted.conflicts === 0 && conflictingNodeFields(placed, current).length === 0,
         ...(cursorState ? { cursor_state: cursorState } : {}),
       },
     };
@@ -645,7 +678,8 @@ async function restoreNodeUpdated(
   const txMeta = row.tx_meta ?? {};
   const inversePatch = (txMeta.inverse_patch as string | undefined) ?? "";
   if (inversePatch === NO_INVERSE_PATCH) return noInversePatch;
-  const prevFields = (txMeta.prev_field_values as Record<string, unknown> | undefined) ?? {};
+  // An event made before migration 200 recorded the place as the integer `sort_order`; it is turned into a key below.
+  const { sort_order: legacyPlace, ...prevFields } = (txMeta.prev_field_values as Record<string, unknown> | undefined) ?? {};
 
   const unsupported = Object.keys(prevFields).filter((field) => !nodeScalarFields.includes(field as NodeScalarField));
   if (unsupported.length) {
@@ -653,7 +687,7 @@ async function restoreNodeUpdated(
   }
 
   const node = await q<NodeSnapshot>(
-    `SELECT title, markdown, slug, reserved_key, deleted_at, parent_id, hidden, sort_order, presentation, node_type, source_type FROM content_nodes
+    `SELECT title, markdown, slug, reserved_key, deleted_at, parent_id, hidden, order_key, presentation, node_type, source_type FROM content_nodes
       WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
     [row.workspace_id, row.target_id],
   );
@@ -692,6 +726,9 @@ async function restoreNodeUpdated(
   if (priorRestore.rows[0]) {
     return { code: "already_in_state", status: 409, detail: "this event was already restored" };
   }
+
+  row = await withoutStalePlace(row, node.rows[0]);
+  if (typeof prevFields.order_key === "string" && typeof (row.tx_meta?.prev_field_values as Record<string, unknown> | undefined)?.order_key !== "string") delete prevFields.order_key;
 
   const currentBody = node.rows[0].markdown ?? "";
   const currentTitle = node.rows[0].title;
@@ -732,6 +769,13 @@ async function restoreNodeUpdated(
   const currentParentId = node.rows[0].parent_id;
   const hasPrevParent = "parent_id" in prevFields;
   const nextParentId = hasPrevParent ? (prevFields.parent_id as string | null) : currentParentId;
+  // The place it had: its own key when that is free among the siblings now, else a fresh key just before the one that
+  // took it (never two rows on one key, never a move of anyone else); an old integer is translated.
+  if (typeof prevFields.order_key === "string") {
+    prevFields.order_key = await keyForRestore("content_nodes", row.workspace_id, nextParentId, row.target_id, prevFields.order_key);
+  } else if (typeof legacyPlace === "number" && Object.keys(prevFields).length > 0) {
+    prevFields.order_key = await translateLegacySortOrder("content_nodes", row.workspace_id, nextParentId, row.target_id, legacyPlace);
+  }
 
   if (hasPrevParent && nextParentId !== currentParentId) {
     // Putting the node back under its previous parent is a move like any
@@ -808,6 +852,7 @@ async function restoreNodeUpdated(
       await applyNodeColumns(row.workspace_id, row.target_id, columns, {
         before: { isTag: isTag(node.rows[0]), parentId: currentParentId },
         touchUpdatedAt: true,
+        actor: actorContext,
       });
       // Undoing a hide or show moves who may see the note (the website).
       if ("hidden" in prevFields) {

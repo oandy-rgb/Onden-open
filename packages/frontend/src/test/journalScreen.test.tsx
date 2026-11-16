@@ -83,7 +83,7 @@ describe("journal data", () => {
   it("a day note is found by its date; children are captures, not tasks", () => {
     const nodes = [
       note("2026-10-01"), note("2026-10-03", { space_id: "shared" }), note("2026-10-02", { hidden: true }),
-      note("2026-09-30"), note("cap-b", { parent_id: "2026-10-01", sort_order: 2 }), note("cap-a", { parent_id: "2026-10-01", sort_order: 1 }),
+      note("2026-09-30"), note("cap-b", { parent_id: "2026-10-01", order_key: "a2" }), note("cap-a", { parent_id: "2026-10-01", order_key: "a1" }),
       note("task", { parent_id: "2026-10-01", hidden: true }),
     ];
     const byDate = dayNotesByDate(nodes, SPACE);
@@ -94,11 +94,11 @@ describe("journal data", () => {
 });
 
 describe("journal order", () => {
-  it("a day's captures sit in the sidebar's order, including ties on creation time", () => {
-    const at = (id: string, created_at: string) => note(id, { parent_id: "2026-10-01", sort_order: 0, created_at });
+  it("a day's captures sit in the sidebar's order, including ties on the key (the id decides)", () => {
+    const at = (id: string, created_at: string) => note(id, { parent_id: "2026-10-01", order_key: "a0", created_at });
     const nodes = [at("b", "2026-10-01T09:00:00Z"), at("z", "2026-10-01T08:00:00Z"), at("a", "2026-10-01T08:00:00Z")];
     expect(dayChildren(nodes, "2026-10-01").map((n) => n.id)).toEqual(sortChildren(nodes).map((n) => n.id));
-    expect(dayChildren(nodes, "2026-10-01").map((n) => n.id)).toEqual(["a", "z", "b"]);
+    expect(dayChildren(nodes, "2026-10-01").map((n) => n.id)).toEqual(["a", "b", "z"]);
   });
 });
 

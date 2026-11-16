@@ -56,7 +56,7 @@ const flushIdle = () => { const q = idleQueue; idleQueue = []; for (const cb of 
 const slimBoot = {
   bodies: "none",
   workspace: { id: "ws", name: "T", slug: "default", home_node_id: null },
-  nodes: [{ id: "n1", title: "Note 1", slug: "n-1", markdown: "", body_len: 50, node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0 }],
+  nodes: [{ id: "n1", title: "Note 1", slug: "n-1", markdown: "", body_len: 50, node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0" }],
   edges: [], tasks: [], suggestions: [], events: [], actor_role: "admin", tags: [],
 };
 

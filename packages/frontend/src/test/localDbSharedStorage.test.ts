@@ -244,7 +244,10 @@ describe("a copy written by a newer protocol", () => {
 
   /** What a newer build leaves on disk: a queued change not sent yet, inside a stored snapshot. */
   async function newerBuildStoresACopy() {
-    vi.doMock("@onden/markdown/contract", async (original) => ({ ...await original<typeof import("@onden/markdown/contract")>(), CLIENT_PROTOCOL: 4 }));
+    vi.doMock("@onden/markdown/contract", async (original) => {
+      const real = await original<typeof import("@onden/markdown/contract")>();
+      return { ...real, CLIENT_PROTOCOL: real.CLIENT_PROTOCOL + 1 };
+    });
     try {
       const newer = await openTab();
       await newer.send("addPendingWrite", "PATCH", "/api/nodes/n", '{"markdown":"typed, not sent"}', "unsent-key");
@@ -288,7 +291,10 @@ describe("a copy written by a newer protocol", () => {
     const older = await openTab({ expectOpen: false });
     for (const [op, ...args] of [["initLocalDb"], ...everyOp] as Array<[string, ...unknown[]]>) await older.attempt(op, ...args);
     await settle();
-    vi.doMock("@onden/markdown/contract", async (original) => ({ ...await original<typeof import("@onden/markdown/contract")>(), CLIENT_PROTOCOL: 4 }));
+    vi.doMock("@onden/markdown/contract", async (original) => {
+      const real = await original<typeof import("@onden/markdown/contract")>();
+      return { ...real, CLIENT_PROTOCOL: real.CLIENT_PROTOCOL + 1 };
+    });
     try { expect(await queued(await openTab())).toEqual(["unsent-key"]); }
     finally { vi.doUnmock("@onden/markdown/contract"); }
   });

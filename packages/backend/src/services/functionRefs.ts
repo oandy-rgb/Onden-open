@@ -605,7 +605,9 @@ export async function removeView(workspaceId: string, holderId: string, viewId: 
  *  寫入的回應、事件的節點列都要經過這裡（或用 nodeRowColumnsSql），否則客戶端會用 NULL 蓋掉 store 裡的檢視。 */
 export async function withViews<T extends { id: string; node_type: string }>(workspaceId: string, row: T): Promise<T & { collection_views: ViewRecord[] | null }> {
   const views = await viewRecordsOf(isTag(row) ? "tag" : "note", workspaceId, row.id);
-  return { ...row, collection_views: views.length > 0 ? views : null };
+  // sort_order is the integer order frozen by migration 200: nothing reads it, so it is not sent either.
+  const { sort_order: _frozenSortOrder, ...sent } = row as T & { sort_order?: unknown };
+  return { ...(sent as unknown as T), collection_views: views.length > 0 ? views : null };
 }
 
 /** 讓同步的標籤目錄看到變化（標籤列的更新時間；筆記的檢視事件指向筆記，由事件帶出）。 */

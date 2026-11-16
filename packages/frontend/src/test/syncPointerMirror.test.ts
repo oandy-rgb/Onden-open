@@ -36,9 +36,9 @@ async function openWorker() {
   await ok("initLocalDb");
 }
 
-const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, sort_order: 0 });
+const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const pointer = (id: string, parent: string | null, target: string): NotePointer =>
-  ({ id, parent_id: parent, target_id: target, sort_order: 0, display_prefix: null });
+  ({ id, parent_id: parent, target_id: target, order_key: "a0", display_prefix: null });
 const pinAUnderB = pointer("ab", "b", "a"), pinCUnderA = pointer("ca", "a", "c"), pinYUnderX = pointer("yx", "x", "y");
 const bootstrap = {
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",

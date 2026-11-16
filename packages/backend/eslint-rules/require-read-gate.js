@@ -97,6 +97,7 @@ const GATED = {
 // relative path → documented reason the FROM/JOIN content_nodes is NOT a served,
 // actor-facing read (so it's exempt from a read-policy primitive).
 const INTERNAL = {
+  "browser/makeOldCopy.ts": "test tool: makes the saved copy an older app would have left (and takes migration 200 back out of it); runs once offline with no actor, serves nothing",
   "services/selectionDelivery.ts": "write path: reads the note body only to splice the model's text into the proposal it hands to createSuggestions, which asserts write_node for the agent under the event lock; nothing is served",
   "services/aiSessionStart.ts": "write path: reads the note's space under the event lock AFTER the spine asserted the sender\'s authority (write_node for a selection, read for an info-panel question); only the space id is read, nothing is served",
   "services/agentSessions.ts": "write path: reads the note under the event lock AFTER the spine asserted write_node for the sender (start) or the agent (reply); the text is parsed for a mention or spliced, never served",

@@ -339,7 +339,7 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
     workspaceSwitch.ws = ws; // placeTask asks for the deployment's workspace, which the sweep's mock answers from here
     await placeTask(actor, o.placedTask, { note_id: o.note });
   }
-  if (need.has("pointer")) o.pointer = (await createPointer(actor, ws, { targetId: o.otherNote, parentId: o.child, sortOrder: 0, displayPrefix: undefined })).id;
+  if (need.has("pointer")) o.pointer = (await createPointer(actor, ws, { targetId: o.otherNote, parentId: o.child, displayPrefix: undefined })).id;
   // An ENDED focus session (written directly): a person has one running at a time, and a running one would make
   // every later POST /api/tasks/focus of the same caller a 409.
   if (need.has("focus")) {

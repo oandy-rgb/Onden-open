@@ -38,7 +38,7 @@ import type { Bootstrap } from "../lib/api";
 import { SLIM_MODE_NODE_THRESHOLD } from "../lib/slimMode";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const slimNote = (n: number, bodyLen: number) => ({ id: id(n), source_type: "manual", node_type: "content", title: `n${n}`, slug: `n${n}`, markdown: "", body_len: bodyLen, parent_id: null, hidden: false, sort_order: n, updated_at: `2026-10-0${n % 10}T00:00:00Z` });
+const slimNote = (n: number, bodyLen: number) => ({ id: id(n), source_type: "manual", node_type: "content", title: `n${n}`, slug: `n${n}`, markdown: "", body_len: bodyLen, parent_id: null, hidden: false, order_key: "a0", updated_at: `2026-10-0${n % 10}T00:00:00Z` });
 const slimBoot = (nodes: ReturnType<typeof slimNote>[]) => ({
   bodies: "none", workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "editor",
   nodes, edges: [], tasks: [], suggestions: [], events: [],

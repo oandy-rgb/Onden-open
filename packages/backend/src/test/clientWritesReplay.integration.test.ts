@@ -44,6 +44,7 @@
 // mocked session — the same actor kind as the owner's real browser.
 // SAFETY: only runs against a *_test database; skips otherwise.
 
+import { isValidOrderKey } from "@onden/markdown/contract";
 import { holderViewsSql } from "../services/functionRefSql.js";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -151,6 +152,10 @@ async function judge(run: Run, scenario: Scenario): Promise<string[]> {
         if (key === "node_type" && value === "canvas") {
           const tab = Array.isArray(row.collection_views) && (row.collection_views as Array<{ layout?: string }>).some((v) => v.layout === "canvas");
           same("note is a board (node_type canvas, or a note with a whiteboard tab)", row.node_type === "canvas" || (row.node_type === "content" && tab), true);
+        } else if (key === "sort_order") {
+          // A release from before migration 200 sent the place as an integer. The server turns it into a key (services/orderKeys.ts
+          // translateLegacySortOrder): the note carries a valid key and the frozen integer column is left alone.
+          same("note has a valid order key (the old integer was translated)", typeof row.order_key === "string" && isValidOrderKey(row.order_key), true);
         } else same(`note.${key}`, row[key] ?? null, value);
       }
     } else if ("node" in wanted && "contains" in wanted) {

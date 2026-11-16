@@ -25,6 +25,7 @@
 //
 // SAFETY: skips entirely unless DATABASE_URL points at a *_test database.
 
+import { evenOrderKey } from "@onden/markdown/contract";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fc from "fast-check";
@@ -54,7 +55,7 @@ type Who = "owner" | "member";
 type SpaceKey = "A" | "B";
 
 type MNode = {
-  id: string; title: string; body: string; parent: string | null; space: SpaceKey; sort: number;
+  id: string; title: string; body: string; parent: string | null; space: SpaceKey; sort: string;
   /** Creation order: the tie-break of equal sort orders. */
   seq: number;
   deleted: boolean;
@@ -129,11 +130,14 @@ function refusalProblem(label: string, res: Res): string | null {
 
 type Row = {
   id: string; parent_id: string | null; title: string; markdown: string; space_id: string | null;
-  sort_order: number; deleted: boolean; updated_at: string; node_type: string;
+  order_key: string; deleted: boolean; updated_at: string; node_type: string;
 };
 
+/** The generator picks small numbers; the API takes keys. */
+const keyOf = (sort: number): string => evenOrderKey(Math.abs(sort) % 40);
+
 const rowsOfRun = async (m: Model): Promise<Row[]> => (await q<Row>(
-  `SELECT id::text, parent_id::text, title, markdown, space_id::text, sort_order, node_type,
+  `SELECT id::text, parent_id::text, title, markdown, space_id::text, order_key, node_type,
           deleted_at IS NOT NULL AS deleted, updated_at::text
      FROM content_nodes WHERE workspace_id = $1 AND title LIKE $2 ORDER BY id`,
   [fx.ws, `${m.prefix}%`])).rows;
@@ -245,7 +249,7 @@ async function verify(m: Model, after: string): Promise<void> {
     if (r.title !== n.title) problems.push(`${label} has title "${r.title}", model says "${n.title}"`);
     if (r.markdown !== n.body) problems.push(`${label} has body ${JSON.stringify(r.markdown)}, model says ${JSON.stringify(n.body)}`);
     if (r.space_id !== spaceId(n.space)) problems.push(`${label} is in another space than the model's ${n.space}`);
-    if (r.sort_order !== n.sort) problems.push(`${label} has sort order ${r.sort_order}, model says ${n.sort}`);
+    if (r.order_key !== n.sort) problems.push(`${label} has order key ${r.order_key}, model says ${n.sort}`);
   }
   for (const r of rows) {
     if (r.parent_id === fx.tagId) problems.push(`${r.title.slice(m.prefix.length)} is parented to a tag`);
@@ -323,7 +327,7 @@ class Create extends Cmd {
     const body = makeBody(m, this.body);
     const parent = this.parent.k === "note" ? pick(allNodes(m), this.parent.i) : null;
     const send = () => call(this.who, "POST", "/api/nodes", {
-      id, title, markdown: body, sort_order: this.sort,
+      id, title, markdown: body, order_key: keyOf(this.sort),
       ...(this.parent.k === "root" ? { parent_id: null, space_id: fx.spaces[this.parent.space] } : {}),
       ...(this.parent.k === "tag" ? { parent_id: fx.tagId } : {}),
       ...(parent ? { parent_id: parent.id } : {}),
@@ -331,7 +335,7 @@ class Create extends Cmd {
     const space = this.parent.k === "root" ? this.parent.space : parent?.space;
     if (!space || parent?.deleted || !can(this.who, space)) return expectRefused(m, this.toString(), send);
     await expectOk(this.toString(), send, 201);
-    addNode(m, { id, title, body, parent: parent?.id ?? null, space, sort: this.sort });
+    addNode(m, { id, title, body, parent: parent?.id ?? null, space, sort: keyOf(this.sort) });
   }
   toString() { return `${this.who} creates a note (${this.body.sections} sections, ${this.body.lines} lines) at ${describeRef(this.parent)}`; }
 }
@@ -363,8 +367,11 @@ class Move extends Cmd {
     const ok = !n.deleted && can(this.who, n.space)
       && (toTop || (target !== null && !target.deleted && !below.includes(target) && target.space === n.space));
     if (!ok) return expectRefused(m, this.toString(), send);
-    await expectOk(this.toString(), send);
-    n.parent = toTop ? null : target!.id;
+    const answer = await expectOk(this.toString(), send);
+    const newParent = toTop ? null : target!.id;
+    // A move to another parent that names no place puts the note last there: the server's key is the model's.
+    if (newParent !== n.parent) n.sort = answer.order_key;
+    n.parent = newParent;
   }
   toString() {
     const t = this.target;
@@ -376,10 +383,10 @@ class Reorder extends Cmd {
   constructor(readonly who: Who, readonly node: number, readonly sort: number) { super(); }
   async exec(m: Model) {
     const n = pick(allNodes(m), this.node);
-    const send = () => call(this.who, "PATCH", `/api/nodes/${n.id}`, { sort_order: this.sort });
+    const send = () => call(this.who, "PATCH", `/api/nodes/${n.id}`, { order_key: keyOf(this.sort) });
     if (n.deleted || !can(this.who, n.space)) return expectRefused(m, this.toString(), send);
     await expectOk(this.toString(), send);
-    n.sort = this.sort;
+    n.sort = keyOf(this.sort);
   }
   toString() { return `${this.who} sets the sort order of note #${this.node} to ${this.sort}`; }
 }
@@ -434,7 +441,7 @@ class Duplicate extends Cmd {
     if (n.deleted || !can(this.who, n.space)) return expectRefused(m, this.toString(), send);
     const copy = await expectOk(this.toString(), send, 201);
     // Where the copy sits among its siblings is not pinned here: take its sort order.
-    addNode(m, { id: copy.id, title: n.title + COPY_SUFFIX, body: n.body, parent: n.parent, space: n.space, sort: copy.sort_order });
+    addNode(m, { id: copy.id, title: n.title + COPY_SUFFIX, body: n.body, parent: n.parent, space: n.space, sort: copy.order_key });
   }
   toString() { return `${this.who} duplicates note #${this.node}`; }
 }

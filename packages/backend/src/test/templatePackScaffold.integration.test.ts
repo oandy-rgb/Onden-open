@@ -49,7 +49,7 @@ describe.skipIf(!isTestDb)("Meeting template with the Meeting pack: the template
     });
     const id = node.id as string;
     const children = await q<{ title: string }>(
-      `SELECT title FROM content_nodes WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY sort_order`, [id]);
+      `SELECT title FROM content_nodes WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id`, [id]);
     expect(children.rows).toEqual([]);
     const body = await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [id]);
     expect(body.rows[0]!.markdown).toContain("## Agenda");

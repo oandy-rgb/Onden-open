@@ -38,7 +38,7 @@ async function openWorker() {
   await ok("initLocalDb");
 }
 
-const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, sort_order: 0 });
+const note = (id: string) => ({ id, source_type: "manual", node_type: "content", title: id, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const bootstrap = {
   workspace: { id: "w", name: "Test", slug: "test", home_node_id: null }, actor_role: "admin",
   nodes: [note("a")], edges: [], tasks: [], suggestions: [], events: [],

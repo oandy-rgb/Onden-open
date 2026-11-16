@@ -16,7 +16,7 @@ import { projectBootstrapForPaint } from "../lib/data/bootPaint";
 import { membershipDigestOf, webCryptoSha256 } from "../lib/data/membershipDigest";
 
 const note = (id: string, markdown: string) => ({
-  id, title: id, slug: id, markdown, body_len: markdown.length, node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0,
+  id, title: id, slug: id, markdown, body_len: markdown.length, node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0",
 });
 const bootstrap = (nodes: ReturnType<typeof note>[], bodies = "full") => ({
   bodies, workspace: { id: "ws", name: "T", slug: "default", home_node_id: null },

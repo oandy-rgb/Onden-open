@@ -45,7 +45,7 @@ describe("mirror schema version", () => {
     db.run("INSERT INTO sync_state (key, value) VALUES ('full_refresh_at', ?)", [String(Date.now())]); // a refresh this very hour
     db.run("INSERT INTO pointers (id, parent_id, target_id) VALUES ('old-pointer-id', 'parent', 'target')");
     prepareLocalDatabase(db);
-    expect(MIRROR_SCHEMA_VERSION).toBeGreaterThanOrEqual(3);
+    expect(MIRROR_SCHEMA_VERSION).toBeGreaterThanOrEqual(4);
     expect(state(db, "full_refresh_at")).toBeNull(); // the next open fetches a whole bootstrap
     db.close();
   });

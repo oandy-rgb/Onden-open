@@ -8,7 +8,7 @@ import { projectBootstrapForPaint, reconcilePersistedBootstrap } from "../lib/da
 import { missingPendingNoteCreations, projectPendingNoteText } from "../lib/pendingNoteProjection";
 
 const note = (id: string, title: string, markdown: string): ContentNode => ({
-  id, title, slug: id, markdown, body_len: markdown.length, node_type: "content", source_type: "manual", parent_id: null, hidden: false, sort_order: 0,
+  id, title, slug: id, markdown, body_len: markdown.length, node_type: "content", source_type: "manual", parent_id: null, hidden: false, order_key: "a0",
 } as ContentNode);
 const boot = (nodes: ContentNode[]): Bootstrap => ({ bodies: "none", nodes, edges: [], tasks: [], suggestions: [], events: [], tags: [] } as unknown as Bootstrap);
 const patch = (id: string, body: object, n = 1): PendingWrite =>

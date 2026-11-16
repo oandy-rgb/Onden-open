@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { NODE_MARKDOWN_MAX, NODE_TITLE_MAX } from "@onden/markdown";
+import { isValidOrderKey } from "@onden/markdown/contract";
 
 /** A string Postgres can store: U+0000 is refused with a 400 instead of
  *  failing later as an unmapped database error (22021). */
@@ -26,7 +27,12 @@ export const DraftNode = z.object({
   source_type: z.enum(["manual", "rss", "ai"]).default("manual"),
   parent_id: z.string().uuid().nullable().optional(),
   hidden: z.boolean().default(false),
-  sort_order: z.number().int().default(0),
+  /** Where the note sits among its siblings: a key between its neighbours' keys (@onden/markdown keyBetween). Absent on
+   *  a create = last among its siblings. */
+  order_key: z.string().refine(isValidOrderKey, { message: "invalid_order_key" }).optional(),
+  /** LEGACY (before order keys, migration 200): the integer an older app or a queued offline write still sends. The
+   *  server turns it into a key (services/orderKeys.ts translateLegacySortOrder); nothing sends or reads it any more. */
+  sort_order: z.number().int().optional(),
   presentation: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 /** What the server reads after defaults. */
@@ -58,7 +64,9 @@ export const ServerNodeRow = z.object({
   updated_at: z.string(),
   parent_id: z.string().nullable(),
   hidden: z.boolean(),
-  sort_order: z.number(),
+  order_key: z.string(),
+  /** The stamp of the write that set `order_key` ('' when none): ties on the key are ordered by it, then by id. */
+  order_stamp: z.string(),
   presentation: z.record(z.string(), z.unknown()).nullable(),
   collection_views: z.array(NodeViewRecord).nullable(),
   /** Soft-delete tombstone; null while the note is live. */

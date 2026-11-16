@@ -227,7 +227,7 @@ function noteView(n: Record<string, unknown>) {
   const markdown = String(n.markdown ?? "");
   return {
     title: n.title, slug: n.slug, node_type: n.node_type, source_type: n.source_type,
-    parent_id: n.parent_id ?? null, hidden: Boolean(n.hidden), sort_order: Number(n.sort_order ?? 0), space_id: n.space_id ?? null,
+    parent_id: n.parent_id ?? null, hidden: Boolean(n.hidden), order_key: String(n.order_key ?? ""), order_stamp: String(n.order_stamp ?? ""), space_id: n.space_id ?? null,
     class_tag_ids: ids(n.class_tag_ids), label_tag_ids: ids(n.label_tag_ids),
     presentation: jsonOf(n.presentation), tag_schema: jsonOf(n.tag_schema), updated_at: n.updated_at ?? null,
     markdown, body_len: n.body_len === undefined || n.body_len === null ? null : Number(n.body_len),

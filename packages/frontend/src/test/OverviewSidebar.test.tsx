@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
 import "./helpers/offlineNetwork";
+import { evenOrderKey } from "@onden/markdown/contract";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import OverviewSidebar from "../components/OverviewSidebar";
@@ -390,15 +391,15 @@ describe("generated items in the note list", () => {
 describe("OverviewSidebar sibling order", () => {
   const at = (i: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString();
   const family = () => [
-    makeNode({ id: "p", title: "P", sort_order: 0, created_at: at(0) }),
-    ...["a", "b", "c"].map((id, i) => makeNode({ id, title: id.toUpperCase(), parent_id: "p", sort_order: i, created_at: at(1 + i) })),
+    makeNode({ id: "p", title: "P", order_key: "a0", created_at: at(0) }),
+    ...["a", "b", "c"].map((id, i) => makeNode({ id, title: id.toUpperCase(), parent_id: "p", order_key: evenOrderKey(i), created_at: at(1 + i) })),
   ];
   const childRows = (container: HTMLElement) =>
     [...container.querySelectorAll("[data-sb-id]")].map((el) => el.getAttribute("data-sb-id")).filter((id) => id !== "p");
   const expanded = () => sidebarGroups({ tree: { expandedGroups: new Set(["p"]) } });
 
   it("lists a new child where the canvas and a reload put it", () => {
-    const nodes = [...family(), makeNode({ id: "d", title: "D", parent_id: "p", sort_order: 0, created_at: at(9) })];
+    const nodes = [...family(), makeNode({ id: "d", title: "D", parent_id: "p", order_key: "a0", created_at: at(9) })];
     seed(nodes);
     const { container } = render(<OverviewSidebar {...expanded()} />);
     const canvas = sortChildren(nodes.filter((n) => n.parent_id === "p")).map((n) => n.id);
@@ -438,7 +439,7 @@ describe("OverviewSidebar phone list windowing", () => {
     window.requestAnimationFrame = originalRaf;
   });
   const many = (count: number) => Array.from({ length: count }, (_, i) =>
-    makeNode({ id: `n${i}`, title: `Note ${i}`, sort_order: i, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
+    makeNode({ id: `n${i}`, title: `Note ${i}`, order_key: evenOrderKey(i), created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
   const rowIds = (container: HTMLElement) => [...container.querySelectorAll(".obsidian-page-list [data-sb-id]")].map((el) => el.getAttribute("data-sb-id"));
 
   it("draws a window of a long list, not every row, and keeps the list a non-scroller", () => {

@@ -276,14 +276,10 @@ async function moveToChildNote(
         cascadeLabel: "block.move_to_child.cascade", backupPrefix: "NODE_UPDATED",
       },
       within: async () => {
-        const sort = (await q<{ next: number }>(
-          `SELECT coalesce(max(sort_order), -1) + 1 AS next FROM content_nodes WHERE workspace_id = $1 AND parent_id = $2 AND ${liveNodeSql()}`,
-          [workspaceId, noteId],
-        )).rows[0]!.next;
         // The moved text was on no page of the site if its note was kept off; the child must not make it public:
         // createNote gives a note made under a kept-off one the same default (siteDefault.ts).
         const created = await createNote({
-          actor, workspaceId, id: input.childId, title, markdown: body, parentId: noteId, sortOrder: sort, tagIds: childTagIds,
+          actor, workspaceId, id: input.childId, title, markdown: body, parentId: noteId, tagIds: childTagIds,
           adoptAnchors: carriedAnchors(note.markdown, anchors, plan, body),
           event: { uiContext: "block.move_to_child.child", txMeta },
         });

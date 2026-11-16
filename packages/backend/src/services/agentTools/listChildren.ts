@@ -8,7 +8,7 @@ import { notATaskNodeSql } from "../tasksStore.js";
 import type { AgentTool } from "./types.js";
 
 // The notes under a note, or at the top of a space, in the order the sidebar shows
-// them (pinned first, then sort_order, created_at, id: @onden/markdown compareChildren).
+// them (pinned first, then order_key, order_stamp, id: @onden/markdown compareChildren).
 // Read rule: a note's children live in its space, so a note the caller can read
 // has readable children, and a space the caller can read has readable top-level
 // notes; the ids returned are still checked once more with readableAmong.
@@ -59,7 +59,7 @@ async function childRows(workspaceId: string, where: { spaceId: string }, limit:
     .select(["id", "parent_id", "title", "slug", "node_type", "hidden"])
     .where("workspace_id", "=", workspaceId).where("deleted_at", "is", null).where(LISTED_SQL)
     .where("space_id", "=", where.spaceId).where("parent_id", "is", null)
-    .orderBy(PINNED_SQL, "desc").orderBy("sort_order").orderBy("created_at").orderBy("id")
+    .orderBy(PINNED_SQL, "desc").orderBy(sql`order_key COLLATE "C"`).orderBy(sql`order_stamp COLLATE "C"`).orderBy("id")
     .limit(limit).offset(offset).execute() as Promise<Row[]>;
 }
 
@@ -68,7 +68,7 @@ async function childRows(workspaceId: string, where: { spaceId: string }, limit:
 async function childRowsOf(workspaceId: string, parentIds: string[], perParent: number, offset = 0): Promise<Row[]> {
   return db.selectFrom((eb) => eb.selectFrom("content_nodes")
     .select(["id", "parent_id", "title", "slug", "node_type", "hidden"])
-    .select(sql<number>`row_number() OVER (PARTITION BY parent_id ORDER BY ${PINNED_SQL} DESC, sort_order, created_at, id)`.as("rn"))
+    .select(sql<number>`row_number() OVER (PARTITION BY parent_id ORDER BY ${PINNED_SQL} DESC, order_key COLLATE "C", order_stamp COLLATE "C", id)`.as("rn"))
     .where("workspace_id", "=", workspaceId).where("deleted_at", "is", null).where(LISTED_SQL)
     .where("parent_id", "in", parentIds).as("c"))
     .select(["c.id", "c.parent_id", "c.title", "c.slug", "c.node_type", "c.hidden"])

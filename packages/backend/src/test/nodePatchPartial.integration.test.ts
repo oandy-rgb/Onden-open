@@ -49,8 +49,8 @@ describe.skipIf(!isTestDb)("PATCH /api/nodes/:id partial update (DB)", () => {
 
   async function seedNode(suffix: string): Promise<string> {
     const r = await seedQ<{ id: string }>(
-      `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, hidden, sort_order)
-       VALUES ($1,'manual','content','npp before ${stamp}-${suffix}','npp-${stamp}-${suffix}','body', false, 0)
+      `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, hidden, order_key)
+       VALUES ($1,'manual','content','npp before ${stamp}-${suffix}','npp-${stamp}-${suffix}','body', false, 'a0')
        RETURNING id`,
       [WS],
     );
@@ -63,8 +63,8 @@ describe.skipIf(!isTestDb)("PATCH /api/nodes/:id partial update (DB)", () => {
     // not hidden: only a tag can be hidden since D104.)
     const rounds: Array<[Record<string, unknown>, Record<string, unknown>]> = [
       [{ presentation: { theme: "r0" } }, { title: `npp after ${stamp}-r0` }],
-      [{ sort_order: 7 }, { title: `npp after ${stamp}-r1` }],
-      [{ presentation: { theme: "r2" } }, { sort_order: 7 }],
+      [{ order_key: "a7" }, { title: `npp after ${stamp}-r1` }],
+      [{ presentation: { theme: "r2" } }, { order_key: "a7" }],
     ];
     for (let i = 0; i < rounds.length; i++) {
       const id = await seedNode(`r${i}`);
@@ -73,62 +73,62 @@ describe.skipIf(!isTestDb)("PATCH /api/nodes/:id partial update (DB)", () => {
       expect(ra.status).toBe(200);
       expect(rb.status).toBe(200);
 
-      const row = (await q<{ title: string; presentation: unknown; sort_order: number }>(
-        `SELECT title, presentation, sort_order FROM content_nodes WHERE id = $1`, [id],
+      const row = (await q<{ title: string; presentation: unknown; order_key: string }>(
+        `SELECT title, presentation, order_key FROM content_nodes WHERE id = $1`, [id],
       )).rows[0]!;
       const want = { ...a, ...b };
       if ("presentation" in want) expect(row.presentation, `round ${i}: presentation lost`).toEqual(want.presentation);
-      if ("sort_order" in want) expect(row.sort_order, `round ${i}: sort_order lost`).toBe(want.sort_order);
+      if ("order_key" in want) expect(row.order_key, `round ${i}: order_key lost`).toBe(want.order_key);
       if ("title" in want) expect(row.title, `round ${i}: title lost`).toBe(want.title);
     }
   });
 
-  it("a PATCH carrying only title leaves body, hidden and sort_order untouched (zod defaults must not resurrect)", async () => {
+  it("a PATCH carrying only title leaves body, hidden and order_key untouched (zod defaults must not resurrect)", async () => {
     // DraftNode.partial() still applies .default() fields — before the fix a
     // title-only PATCH parsed as {title, markdown:'', hidden:false,
-    // sort_order:0} and WIPED the body / reset the flags. Deterministic,
+    // order_key:0} and WIPED the body / reset the flags. Deterministic,
     // sequential, no race needed.
     const id = await seedNode("defaults");
-    await seedQ(`UPDATE content_nodes SET markdown = 'precious body', hidden = true, sort_order = 5 WHERE id = $1`, [id]);
+    await seedQ(`UPDATE content_nodes SET markdown = 'precious body', hidden = true, order_key = 'a5' WHERE id = $1`, [id]);
     expect((await patch(id, { title: `npp renamed ${stamp}` })).status).toBe(200);
-    const row = (await q<{ markdown: string; hidden: boolean; sort_order: number }>(
-      `SELECT markdown, hidden, sort_order FROM content_nodes WHERE id = $1`, [id],
+    const row = (await q<{ markdown: string; hidden: boolean; order_key: string }>(
+      `SELECT markdown, hidden, order_key FROM content_nodes WHERE id = $1`, [id],
     )).rows[0]!;
     expect(row.markdown).toBe("precious body");
     expect(row.hidden).toBe(true);
-    expect(row.sort_order).toBe(5);
+    expect(row.order_key).toBe("a5");
   });
 
-  it("a PATCH carrying only sort_order does not recompute the slug", async () => {
+  it("a PATCH carrying only order_key does not recompute the slug", async () => {
     const id = await seedNode("slug");
     const before = (await q<{ slug: string }>(`SELECT slug FROM content_nodes WHERE id = $1`, [id])).rows[0]!.slug;
-    expect((await patch(id, { sort_order: 3 })).status).toBe(200);
+    expect((await patch(id, { order_key: "a3" })).status).toBe(200);
     const after = (await q<{ slug: string }>(`SELECT slug FROM content_nodes WHERE id = $1`, [id])).rows[0]!.slug;
     expect(after).toBe(before);
   });
 
   // D64: a position among siblings is not an edit of the note.
-  it("a sort_order-only PATCH keeps updated_at and adds no version", async () => {
+  it("an order_key-only PATCH keeps updated_at and adds no version", async () => {
     const id = await seedNode("position");
     await seedQ(`UPDATE content_nodes SET updated_at = '2026-01-01T00:00:00Z' WHERE id = $1`, [id]);
-    expect((await patch(id, { sort_order: 9 })).status).toBe(200);
-    const row = (await q<{ sort_order: number; updated_at: Date }>(
-      `SELECT sort_order, updated_at FROM content_nodes WHERE id = $1`, [id],
+    expect((await patch(id, { order_key: "a9" })).status).toBe(200);
+    const row = (await q<{ order_key: string; updated_at: Date }>(
+      `SELECT order_key, updated_at FROM content_nodes WHERE id = $1`, [id],
     )).rows[0]!;
-    expect(row.sort_order).toBe(9);
+    expect(row.order_key).toBe("a9");
     expect(row.updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
     // The move is still an event (sync, undo), without a body version.
     const events = (await q<{ has_hash: boolean; prev: Record<string, unknown> }>(
       `SELECT payload ? 'body_hash' AS has_hash, tx_meta->'prev_field_values' AS prev
          FROM domain_events WHERE target_id = $1 AND event_type = 'NODE_UPDATED'`, [id],
     )).rows;
-    expect(events).toEqual([{ has_hash: false, prev: { sort_order: 0 } }]);
+    expect(events).toEqual([{ has_hash: false, prev: { order_key: "a0" } }]);
   });
 
-  it("a PATCH with sort_order and another field still counts as an edit", async () => {
+  it("a PATCH with order_key and another field still counts as an edit", async () => {
     const id = await seedNode("position-and-title");
     await seedQ(`UPDATE content_nodes SET updated_at = '2026-01-01T00:00:00Z' WHERE id = $1`, [id]);
-    expect((await patch(id, { sort_order: 2, title: `npp moved ${stamp}` })).status).toBe(200);
+    expect((await patch(id, { order_key: "a2", title: `npp moved ${stamp}` })).status).toBe(200);
     const row = (await q<{ updated_at: Date }>(`SELECT updated_at FROM content_nodes WHERE id = $1`, [id])).rows[0]!;
     expect(row.updated_at.toISOString()).not.toBe("2026-01-01T00:00:00.000Z");
     const hashed = (await q<{ n: number }>(

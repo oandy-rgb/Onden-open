@@ -1,3 +1,4 @@
+import { evenOrderKey } from "@onden/markdown/contract";
 import { bindAccountStorage } from "../lib/accountStorage";
 // Mobile sidebar long-press drag → reparent ("into").
 //
@@ -121,7 +122,7 @@ describe("useSidebarDrag long-press reparent", () => {
     // recompute-at-release reached performSidebarDrop('into') → PATCH parent_id
     expect(apiMock).toHaveBeenCalledWith(
       "/api/nodes/child",
-      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ parent_id: "host", sort_order: 0 }) }),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ parent_id: "host", order_key: "a0" }) }),
     );
   });
 
@@ -206,39 +207,35 @@ describe("useSidebarDrag long-press reparent", () => {
   });
 });
 
-// D64: a drop renumbers only the target's siblings, and only the rows whose
-// sort_order has to change — not every note in the workspace.
+// D64: a drop writes the one note that moved: its key goes between its new neighbours' keys.
 describe("useSidebarDrag reorder", () => {
   const at = (i: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString();
   const patches = () => apiMock.mock.calls
     .filter(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")
     .map(([path, init]) => ({ id: String(path).split("/").pop(), body: JSON.parse(String((init as RequestInit).body)) }));
-  // 200 top-level notes all at sort_order 0 (the default), a tag, and a
-  // parent with three ordered children.
+  // 200 top-level notes, a tag, and a parent with three ordered children.
   const workspace = () => [
-    ...Array.from({ length: 200 }, (_, i) => makeNode(`n${i}`, { sort_order: 0, created_at: at(i) })),
-    makeNode("tag", { node_type: "class_tag", sort_order: 0, created_at: at(0) }),
-    makeNode("p", { sort_order: 0, created_at: at(300) }),
-    ...["a", "b", "c"].map((id, i) => makeNode(id, { parent_id: "p", sort_order: i, created_at: at(301 + i) })),
+    ...Array.from({ length: 200 }, (_, i) => makeNode(`n${i}`, { order_key: evenOrderKey(i), created_at: at(i) })),
+    makeNode("tag", { node_type: "class_tag", order_key: "a0", created_at: at(0) }),
+    makeNode("p", { order_key: evenOrderKey(200), created_at: at(300) }),
+    ...["a", "b", "c"].map((id, i) => makeNode(id, { parent_id: "p", order_key: evenOrderKey(i), created_at: at(301 + i) })),
   ];
 
   it("dragging one note to the top of 200 writes that note only", async () => {
     vi.useRealTimers();
     const result = setup(workspace());
     await act(async () => { await result.current.performSidebarDrop("n150", "n0", false, "above"); });
-    expect(patches()).toEqual([{ id: "n150", body: { sort_order: expect.any(Number) } }]);
+    expect(patches()).toEqual([{ id: "n150", body: { order_key: expect.any(String) } }]);
     expect(noteStructure.children(null)[0].id).toBe("n150");
   });
 
-  it("a drop between equal siblings writes the shorter side once, then one note", async () => {
+  it("a drop between two siblings writes that note only, and a second move writes one more", async () => {
     vi.useRealTimers();
     const result = setup(workspace());
     await act(async () => { await result.current.performSidebarDrop("n150", "n3", false, "above"); });
-    // n0–n2 and n150 must sort before n3's sort_order 0: four writes, not 200.
-    expect(patches().map((p) => p.id).sort()).toEqual(["n0", "n1", "n150", "n2"]);
+    expect(patches().map((p) => p.id)).toEqual(["n150"]);
     let ids = noteStructure.children(null).map((n) => n.id);
     expect(ids.slice(0, 5)).toEqual(["n0", "n1", "n2", "n150", "n3"]);
-    // The rows just written are spaced: a move among them writes one row.
     apiMock.mockClear();
     await act(async () => { await result.current.performSidebarDrop("n2", "n0", false, "below"); });
     expect(patches().map((p) => p.id)).toEqual(["n2"]);
@@ -266,7 +263,7 @@ describe("useSidebarDrag reorder", () => {
     vi.useRealTimers();
     const result = setup(workspace());
     await act(async () => { await result.current.performSidebarDrop("n5", "p", true, "into"); });
-    expect(patches()).toEqual([{ id: "n5", body: { parent_id: "p", sort_order: 3 } }]);
+    expect(patches()).toEqual([{ id: "n5", body: { parent_id: "p", order_key: "a3" } }]);
     expect(noteStructure.children("p").map((n) => n.id)).toEqual(["a", "b", "c", "n5"]);
   });
 });

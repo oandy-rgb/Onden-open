@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import PresentationPlayer from "./PresentationPlayer";
 import { resetAppState } from "../../lib/appStore";
@@ -111,5 +111,93 @@ describe("presenting on a phone held upright", () => {
     render(<PresentationPlayer markdown={deck} title="Deck" onClose={() => {}} />);
     expect(request).not.toHaveBeenCalled();
     expect(document.querySelector(".presentation-rotate")).toBeNull();
+  });
+});
+
+describe("typing a page number while presenting", () => {
+  const long = Array.from({ length: 14 }, (_, i) => `## S${i + 1}\nBody`).join("\n\n---\n\n");
+  const type = (...keys: string[]) => keys.forEach((key) => fireEvent.keyDown(surface(), { key }));
+  const cancelEvent = () => fireEvent(document.querySelector("dialog")!, new Event("cancel", { cancelable: true }));
+  const show = (onClose = () => {}) => render(<PresentationPlayer markdown={long} title="Deck" onClose={onClose} />);
+
+  it("goes to that page on Enter, with several digits", () => {
+    show();
+    type("1", "2");
+    expect(screen.getByText("Go to slide 12")).toBeInTheDocument();
+    type("Enter");
+    expect(heading()).toBe("S12");
+    expect(screen.queryByText(/^Go to slide/)).toBeNull();
+  });
+
+  it("stops at the last page for a number past the end, and reads 0 as the first", () => {
+    show();
+    type("9", "9", "Enter");
+    expect(heading()).toBe("S14");
+    type("0", "Enter");
+    expect(heading()).toBe("S1");
+  });
+
+  it("an arrow key cancels the number and turns the page as usual", () => {
+    show();
+    type("5", "ArrowRight");
+    expect(screen.queryByText(/^Go to slide/)).toBeNull();
+    expect(heading()).toBe("S2");
+  });
+
+  it("Enter without digits is still next page", () => {
+    show();
+    type("Enter");
+    expect(heading()).toBe("S2");
+  });
+
+  it("Esc cancels the number first, and only the next Esc leaves", () => {
+    const onClose = vi.fn();
+    show(onClose);
+    type("3");
+    cancelEvent();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^Go to slide/)).toBeNull();
+    cancelEvent();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets the number after about two seconds", () => {
+    vi.useFakeTimers();
+    try {
+      show();
+      type("4");
+      expect(screen.getByText("Go to slide 4")).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(2100); });
+      expect(screen.queryByText(/^Go to slide/)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("takes a typed number even when a button has focus, and Enter then jumps instead of pressing the button", () => {
+    show();
+    const next = screen.getByRole("button", { name: "Next slide" });
+    next.focus();
+    for (const key of ["1", "2", "Enter"]) fireEvent.keyDown(next, { key });
+    expect(heading()).toBe("S12");
+  });
+
+  it("a modifier pressed alone keeps the number", () => {
+    show();
+    type("1", "Shift", "2");
+    expect(screen.getByText("Go to slide 12")).toBeInTheDocument();
+  });
+
+  it("shows the page it will go to, never 0 or past the end", () => {
+    show();
+    type("0");
+    expect(screen.getByText("Go to slide 1")).toBeInTheDocument();
+    type("9", "9");
+    expect(screen.getByText("Go to slide 14")).toBeInTheDocument();
+  });
+
+  it("tells the page it is on, so the note's tab can come back to it", () => {
+    const onPage = vi.fn();
+    render(<PresentationPlayer markdown={long} title="Deck" onClose={() => {}} onPage={onPage} />);
+    type("ArrowRight", "ArrowRight");
+    expect(onPage).toHaveBeenLastCalledWith("h:s3", 2);
   });
 });

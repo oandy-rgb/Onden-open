@@ -22,6 +22,7 @@ import { chosenLayout, isLayoutId, layoutOfPage, layoutsByPageKey, pagesOf, type
 import SlideView, { type SlideFit } from "./SlideView";
 import { openPptxExport } from "./exportPptx/open";
 import { presentNote } from "./present";
+import { rememberSlide, slideIndexFor } from "./slideSelection";
 import { slideRenderer } from "./slideRender";
 import { THEME_LABELS, useDeckLook } from "./theme";
 import { useSlidesData } from "./useSlidesData";
@@ -42,9 +43,13 @@ export default function SlidesPane({ node, canEdit, onOpenNode }: NoteViewPanePr
   const anchorsSeen = useSyncExternalStore(watchAnchors, anchorsVersion, () => 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the held anchors change with `anchorsSeen`
   const pages = useMemo(() => pagesOf(markdown, anchorSpansOf(node.id, markdown)), [markdown, node.id, anchorsSeen]);
-  const [selected, setSelected] = useState(0);
-  const index = Math.min(selected, pages.length - 1);
+  // Chosen by the page's key (see slideSelection.ts); the state only re-renders, the memory is the module's.
+  const [, setChosenAt] = useState(0);
+  const index = slideIndexFor(node.id, pages);
   const page = pages[index];
+  const setSelected = (i: number) => { rememberSlide(node.id, pages[i].key, i); setChosenAt((n) => n + 1); };
+  // Keep the memory on the page actually shown (a deleted page's neighbour becomes the one to follow).
+  useEffect(() => { rememberSlide(node.id, page.key, index); }, [node.id, page.key, index]);
   const chosen = chosenLayout(page, data.layouts);
   const savedLayout: LayoutId = layoutOfPage(page, data.layouts);
   const render = useMemo(() => slideRenderer(nodes, node, onOpenNode), [nodes, node, onOpenNode]);
@@ -62,7 +67,8 @@ export default function SlidesPane({ node, canEdit, onOpenNode }: NoteViewPanePr
   useEffect(() => { listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [index]);
 
   const alternative = fit.overflow ? alternativeLayout(layout, page.parts) : null;
-  const play = () => presentNote(node, onOpenNode, index);
+  // Closing the player leaves the view on the page last seen there.
+  const play = () => presentNote(node, onOpenNode, index, (key, i) => { rememberSlide(node.id, key, i); setChosenAt((n) => n + 1); });
   const pick = (next: LayoutId | null) => { closeLayouts(); change(withPageLayout({ ...data, layouts: layoutsByPageKey(pages, data.layouts) }, page.key, next)); };
   // Another page, another preview: a half-chosen layout belongs to the page it was shown on.
   const select = (i: number) => { if (i !== index) closeLayouts(); setSelected(i); };

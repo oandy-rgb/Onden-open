@@ -13,7 +13,8 @@ const writes = vi.hoisted(() => ({ set: vi.fn(async () => ({})), remove: vi.fn(a
 vi.mock("../../lib/data/domainWriters", async (load) => ({ ...await load<typeof import("../../lib/data/domainWriters")>(), propertyWriter: { set: writes.set, remove: writes.remove } }));
 
 const MD = "# Deck\n\nOpening line\n\n---\n\n## Plan\n\nSpeaker words.\n\n- one\n- two\n- three\n\n---\n\n## Why\n\nBecause.";
-const NODE_ID = "00000000-0000-4000-8000-0000000000a1";
+let NODE_ID = "";
+let noteCount = 0;
 const note = (attrs?: Record<string, string>) => ({ id: NODE_ID, title: "My talk", slug: "my-talk", markdown: MD, node_type: "content", source_type: "manual", attrs } as unknown as ContentNode);
 
 beforeAll(() => {
@@ -23,6 +24,8 @@ beforeAll(() => {
 }, 30_000);
 beforeEach(() => {
   resetAppState({ data: { ...noWorkspaceData, nodes: [note()] } });
+  // A fresh note id per test: the page a note was left on is remembered for the whole page load.
+  NODE_ID = `00000000-0000-4000-8000-${String(++noteCount).padStart(12, "0")}`;
   writes.set.mockClear(); writes.remove.mockClear();
 });
 afterEach(cleanup);
@@ -181,5 +184,66 @@ describe("the view and the player are one rendering", () => {
     expect(view.layout).toBe("bullets");
     expect({ layout: inPlayer.dataset.layout, html: inPlayer.innerHTML, vars: inPlayer.style.getPropertyValue("--s-bg") }).toEqual(view);
     expect(within(document.querySelector(".presentation") as HTMLElement).getByText("2 / 3")).toBeInTheDocument();
+  });
+});
+
+describe("the 簡報 tab keeps its page", () => {
+  const deckOf = (...names: string[]) => names.map((n) => `## ${n}\n\n- a\n- b`).join("\n\n---\n\n");
+  const withMarkdown = (id: string, markdown: string) => ({ ...note(), id, markdown } as ContentNode);
+  const on = () => thumbs().findIndex((b) => b.getAttribute("aria-current") === "true") + 1;
+  const FIVE = deckOf("Alpha", "Beta", "Gamma", "Delta", "Epsilon");
+
+  it("comes back to the same page after the tab is closed and opened", () => {
+    const n = withMarkdown("00000000-0000-4000-8000-0000000000b1", FIVE);
+    const first = pane(n);
+    fireEvent.click(thumbs()[2]);
+    first.unmount();
+    pane(n);
+    expect(on()).toBe(3);
+  });
+
+  it("stays on the same slide when a page is added before it", () => {
+    const id = "00000000-0000-4000-8000-0000000000b2";
+    const first = pane(withMarkdown(id, FIVE));
+    fireEvent.click(thumbs()[2]);
+    first.unmount();
+    pane(withMarkdown(id, deckOf("Zero", "Alpha", "Beta", "Gamma", "Delta", "Epsilon")));
+    expect(on()).toBe(4);
+  });
+
+  it("moves to the next page when the chosen one is deleted, and to the last when it was last", () => {
+    const id = "00000000-0000-4000-8000-0000000000b3";
+    const first = pane(withMarkdown(id, FIVE));
+    fireEvent.click(thumbs()[2]);
+    first.unmount();
+    const second = pane(withMarkdown(id, deckOf("Alpha", "Beta", "Delta", "Epsilon")));
+    expect(on()).toBe(3);
+    fireEvent.click(thumbs()[3]);
+    second.unmount();
+    pane(withMarkdown(id, deckOf("Alpha", "Beta", "Delta")));
+    expect(on()).toBe(3);
+  });
+
+  it("keeps each note's own page", () => {
+    const a = withMarkdown("00000000-0000-4000-8000-0000000000b4", FIVE);
+    const b = withMarkdown("00000000-0000-4000-8000-0000000000b5", FIVE);
+    const first = pane(a);
+    fireEvent.click(thumbs()[3]);
+    first.unmount();
+    const other = pane(b);
+    expect(on()).toBe(1);
+    other.unmount();
+    pane(a);
+    expect(on()).toBe(4);
+  });
+
+  it("selects the last page seen while playing when the player closes", async () => {
+    const n = withMarkdown("00000000-0000-4000-8000-0000000000b6", FIVE);
+    pane(n);
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    const surface = await waitFor(() => { const el = document.querySelector(".presentation"); if (!el) throw new Error("not yet"); return el; });
+    fireEvent.keyDown(surface, { key: "End" });
+    fireEvent.click(screen.getByRole("button", { name: "Leave the slides" }));
+    await waitFor(() => expect(on()).toBe(5));
   });
 });

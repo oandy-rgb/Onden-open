@@ -59,4 +59,5 @@ export const SLIDES_ZH_TW: Record<string, string> = {
   "One to three big numbers with a word each.": "一到三個大數字，各配一句說明。",
   "Up to six steps in order.": "最多六個依序的步驟。",
   "A block of code or a formula, with a caption.": "一段程式碼或一個公式，附一行說明。",
+  "Go to slide {n}": "到第 {n} 頁",
 };

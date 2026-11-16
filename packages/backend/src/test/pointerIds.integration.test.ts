@@ -188,5 +188,9 @@ describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("the migration 
     expect((await q(`SELECT count(*)::int AS n FROM sync_stamps WHERE table_name = 'note_pointers'`)).rows[0]).toEqual(stampsBefore);
     await rerunMigration("194_stamps_s2");
     expect(await rows()).toEqual(after);
+    // Running 194 again must not leave its own, older trigger arguments behind: 200 made the stamp triggers watch order_key.
+    const stale = (await q<{ tgname: string }>(`SELECT tgname FROM pg_trigger WHERE tgrelid = 'note_pointers'::regclass AND tgname LIKE '%sync_stamp%'
+                                                  AND pg_get_triggerdef(oid) NOT LIKE '%sort=order_key%'`)).rows;
+    expect(stale).toEqual([]);
   });
 });

@@ -306,6 +306,9 @@ describe.skipIf(!isTestDb)("core consistency under concurrent writes", () => {
 
   it.skipIf(needsSecondConnection)("records the actual scalar predecessor so queued edits can be undone in order", async () => {
     const id = await seedNode("scalar-history");
+    // Under a parent of its own: a restore gives back the earlier key only when no live sibling holds it (services/orderKeys.ts
+    // keyForRestore; otherwise a fresh key just before that sibling), and the shared workspace's root is full of notes keyed "a0".
+    await seedQ("UPDATE content_nodes SET parent_id=$2 WHERE id=$1", [id, await seedNode("scalar-history-parent")]);
     const locked = gate(), release = gate();
     const blocker = withEventTransaction(ws, async () => { locked.release(); await release.promise; });
     await locked.promise;

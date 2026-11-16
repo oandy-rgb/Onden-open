@@ -11,7 +11,9 @@ import { listMigrations } from "../../dbMigrations.js";
 import { seedQ } from "./seedQ.js";
 
 const FUNCTION = /CREATE OR REPLACE FUNCTION[\s\S]*?\n\$\$ LANGUAGE [^;]*;/g;
-const TRIGGER = /CREATE OR REPLACE TRIGGER (\w+) ON (\w+)[\s\S]*?;(?:\n|$)/g;
+// "CREATE OR REPLACE TRIGGER <name> AFTER INSERT ON <table> …;": the timing and events sit between the name and ON (the pattern used to
+// expect ON right after the name, matched nothing, and a rerun of 194 left the pointer triggers watching sort_order for every later file).
+const TRIGGER = /CREATE OR REPLACE TRIGGER (\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)\b[^;]*?\bON (\w+)[\s\S]*?;(?:\n|$)/g;
 const functionName = (statement: string) => /^CREATE OR REPLACE FUNCTION (\w+)/.exec(statement)?.[1];
 
 /** `version` is the file name without `.sql`, e.g. "194_stamps_s2". */

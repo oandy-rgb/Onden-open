@@ -4947,6 +4947,26 @@
       "why": "版本歷史就是帶 body_hash 的事件加上 blobs；用原本的時間寫進去只有 spine/importedHistory.ts 一處：驗擁有者、驗雜湊、依來源事件 id 去重、標成不可作為事件復原。格式 3 才有這一段，舊伺服器看到會整份拒絕。設計：docs/architecture/backup-move.md。"
     },
     {
+      "id": "ai-answering-program",
+      "need": "要讓使用者電腦上已登入的 AI 命令列工具領 Onden 的問題並回答（前景、背景服務、桌面版）",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/ai-answerer/src/index.mjs",
+          "exports": [
+            "createClient",
+            "runLoop",
+            "createAdapters"
+          ]
+        }
+      ],
+      "use": "",
+      "replaces": "手寫輪詢腳本，或另寫一套「領問題、跑 AI 工具、交回答案」的流程",
+      "rules": [],
+      "why": "領取協定、一次一件、取消與期限、交回重試，以及 AI 工具被關起來執行的安全旗標（無內建工具、不讀個人設定、空資料夾、金鑰只在 0600 檔）都在這一處；有守門測試鎖住旗標。",
+      "useLang": "none"
+    },
+    {
       "id": "derived-ids",
       "need": "要替系統自己建立的東西（收件匣／技能標籤、網站設定的標籤與筆記、系統空間、下一次的重複任務、RSS 文章）取 id",
       "area": "後端",

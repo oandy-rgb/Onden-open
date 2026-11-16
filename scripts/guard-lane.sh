@@ -22,6 +22,7 @@ step "markdown tests + cross-package guards" in_package markdown npx vitest run
 step "site tests" in_package site npx vitest run
 step "pairing typecheck + tests" in_package pairing sh -c "npx tsc --noEmit && npx vitest run"
 step "relay typecheck + tests" in_package relay sh -c "npx tsc --noEmit && npx vitest run"
+step "ai-answerer typecheck + tests" in_package ai-answerer sh -c "npx tsc --noEmit && npx vitest run"
 step "backend lint" in_package backend npm run -s lint
 # The guard folders need no database: say so, or the skip gate (scripts/lib/skipGateReporter.mjs) fails the run.
 NO_DB=ONDEN_TESTS_WITHOUT_DATABASE=1

@@ -24,11 +24,11 @@ export async function createAiWithConnection(request: SetUpAiRequest, idemKey: s
     await refreshSpaces();
     // A retry of a request the server already carried out answers `deduped` and nothing else: the AI exists, but the
     // reply that held its connection code is gone. Say so; never treat it as "made just now".
-    return "deduped" in made ? { deduped: true, token: null } : { deduped: false, token: made.token };
+    return "deduped" in made ? { deduped: true, token: null, actorId: null } : { deduped: false, token: made.token, actorId: made.actor_id };
   } catch (error) { writeErrors.report(error, addToast); return null; }
 }
 /** What the page needs from a made AI: whether this was a replay, and the connection code (shown once) if there is one. */
-export type CreatedAi = { deduped: boolean; token: string | null };
+export type CreatedAi = { deduped: boolean; token: string | null; actorId: string | null };
 
 export const apiConnection = (credentialId: string, settings: ApiSettings): AiConnectionInput =>
   ({ kind: "api", credential_id: credentialId, model: settings.model, cap: capOf(settings) });
@@ -77,12 +77,17 @@ export async function deleteKey(key: Pick<KeyConnection, "id" | "label">): Promi
   catch (error) { writeErrors.report(error, addToast); return false; }
 }
 
+/** Stop a connection code without asking (the caller's own button was the ask). */
+export async function revokeCodeNow(code: Pick<CodeConnection, "id" | "actorId">): Promise<boolean> {
+  try { await sendWrite("POST", `/api/actors/${code.actorId}/tokens/${code.id}/revoke`, "{}"); return true; }
+  catch (error) { writeErrors.report(error, addToast); return false; }
+}
+
 /** Stop a connection code, after asking: the AI stays, only that code stops working. */
 export async function revokeCode(code: Pick<CodeConnection, "id" | "actorId" | "name">): Promise<boolean> {
   const name = code.name || t("Code without a name");
   if (!(await confirmDialog(t("Revoke the connection code “{name}”? The AI stays, but whatever uses this code loses access until you make another.", { name }), { confirmLabel: t("Revoke code"), danger: true }))) return false;
-  try { await sendWrite("POST", `/api/actors/${code.actorId}/tokens/${code.id}/revoke`, "{}"); return true; }
-  catch (error) { writeErrors.report(error, addToast); return false; }
+  return revokeCodeNow(code);
 }
 
 /** Remove an AI altogether, after asking: its keys stop and it leaves every space. */

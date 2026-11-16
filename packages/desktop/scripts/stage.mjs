@@ -44,6 +44,11 @@ rmSync(join(stage, "web"), { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 cpSync(join(root, "packages/frontend/dist/client"), join(stage, "web"), { recursive: true });
 
+// ── ai-answerer（桌面版回答程式；純 Node，不需要建置也沒有依賴）──────────────────────────────────
+rmSync(join(stage, "ai-answerer"), { recursive: true, force: true });
+cpSync(join(root, "packages/ai-answerer/src"), join(stage, "ai-answerer/src"), { recursive: true, filter: (file) => !/\.test\.[cm]?[jt]s$/.test(file) });
+cpSync(join(root, "packages/ai-answerer/package.json"), join(stage, "ai-answerer/package.json"));
+
 // ── server ───────────────────────────────────────────────────────────────────
 const server = join(stage, "server");
 const lockHash = createHash("sha256")

@@ -3,9 +3,12 @@
 //   → 後端子程序（127.0.0.1、空的埠；內含資料庫升級）→ 等 /health，失敗就還原備份
 //   → 靜態檔＋代理（127.0.0.1:固定埠）→ 視窗換成 App。關掉最後一個視窗＝退出：先請後端關好資料庫。
 // 帳號走既有的建立帳號／登入畫面；桌面版沒有自己的帳號。
-import { app, BrowserWindow, clipboard, dialog, Menu, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage, session, shell } from "electron";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { AI_CHANNELS, createAiHandlers, isTrustedSender } from "./aiAnswering/bridge.mjs";
+import { createAiAnsweringController, unavailableAiAnswering } from "./aiAnswering/controller.mjs";
+import { createAiAnsweringStore, safeStorageCipher } from "./aiAnswering/store.mjs";
 import { startBackend } from "./backendProcess.mjs";
 import { dataLayout, writeSettings } from "./dataLayout.mjs";
 import { shellLocale, shellMessages } from "./messages.mjs";
@@ -23,6 +26,8 @@ const PREFERRED_PORT = 47821;
 const resourceRoot = app.isPackaged ? process.resourcesPath : join(here, "..", "stage");
 const serverRoot = join(resourceRoot, "server");
 const webRoot = join(resourceRoot, "web");
+/** 回答程式（packages/ai-answerer）：打包時由 stage.mjs 複製到這裡。 */
+const answererEntry = join(resourceRoot, "ai-answerer", "src", "index.mjs");
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -43,6 +48,8 @@ let backendReady = false;
 let activeLayout = null;
 /** @type {import("./safeUpdate.mjs").BuildStamp | null} */
 let currentBuild = null;
+/** @type {ReturnType<typeof createAiAnsweringController> | null} */
+let aiAnswering = null;
 const text = () => shellMessages(shellLocale(app.getLocale()));
 
 /** @param {string} message */
@@ -93,7 +100,7 @@ function createWindow() {
     minHeight: 480,
     title: "Onden",
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: join(here, "preload.cjs") },
   });
   mainWindow.on("closed", () => { mainWindow = null; });
   void mainWindow.loadFile(join(here, "loading.html"));
@@ -109,6 +116,7 @@ async function boot() {
   const webPort = await freePort(settings.webPort ?? PREFERRED_PORT);
   if (webPort !== settings.webPort) writeSettings(layout, { ...settings, webPort });
   const backendPort = await freePort();
+  await startAiAnswering(layout, backendPort, webPort);
 
   const t0 = Date.now();
   const started = await startWithSafeUpdate({
@@ -129,6 +137,7 @@ async function boot() {
   });
   backend = started.backend;
   backendReady = true;
+  aiAnswering?.restore(); // 關掉 App 前開著的「用這台電腦上的 AI 回答」接回來
   if (started.backup) log(`換版前已備份：${started.backup.name}`);
   log(`backend ready in ${Date.now() - t0} ms`);
 
@@ -258,7 +267,36 @@ function restrictSession() {
   session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowed.has(permission));
 }
 
+/** 「用這台電腦上的 AI 回答」：控制器＋網頁能呼叫的幾個動作（bridge.mjs）。回答迴圈在後端就緒後才開始。 @param {import("./dataLayout.mjs").DataLayout} layout @param {number} backendPort */
+async function startAiAnswering(layout, backendPort, webPort) {
+  // 選用功能：載入失敗不能讓 App 開不起來，按鈕只會說「現在不能用」。
+  /** @type {ReturnType<typeof createAiAnsweringController> | ReturnType<typeof unavailableAiAnswering>} */
+  let controller;
+  let parseServerAddress = (/** @type {string} */ _text) => /** @type {{ ok: false, message: string }} */ ({ ok: false, message: "unavailable" });
+  try {
+    const answerer = await import(pathToFileURL(answererEntry).href);
+    const store = createAiAnsweringStore({ file: join(layout.root, "ai-answering.json"), cipher: safeStorageCipher(safeStorage) });
+    controller = createAiAnsweringController({ store, answerer, ownBaseUrl: () => `http://${LOOPBACK}:${backendPort}`, log: (line) => log(`ai-answering: ${line}`) });
+    parseServerAddress = answerer.parseServerAddress;
+  } catch (error) {
+    log(`ai-answering 無法載入，按鈕停用：${error instanceof Error ? error.message : String(error)}`);
+    controller = unavailableAiAnswering();
+  }
+  aiAnswering = /** @type {never} */ (controller);
+  const handlers = createAiHandlers({ controller: /** @type {never} */ (controller), parseServerAddress });
+  const trustedOrigin = `http://${LOOPBACK}:${webPort}`; // 固定：App 自己的位址，不看視窗現在在哪
+  for (const [channel, handler] of Object.entries(handlers)) {
+    ipcMain.handle(channel, (event, ...args) => {
+      // 只回應 App 自己的畫面的主框架（不是 loading 畫面、別的網址、子框架或 /api/ 底下的使用者內容）。
+      if (event.senderFrame !== event.sender.mainFrame || !isTrustedSender(event.senderFrame?.url, trustedOrigin)) throw new Error("bridge: untrusted sender");
+      return handler(...args);
+    });
+  }
+  controller.subscribe((status) => mainWindow?.webContents.send(AI_CHANNELS.statusChanged, status));
+}
+
 async function shutdown() {
+  await aiAnswering?.stopAll();
   web?.close();
   web = null;
   await backend?.stop();

@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import type { EditorView } from "@codemirror/view";
 import { GripVertical, Hash } from "lucide-react";
+import { isTagNameShape } from "@onden/markdown";
 import { lazyWithReload } from "../lib/lazyWithReload";
 import type { HandToAi } from "../hooks/useHandToAi";
 import { addToast } from "../lib/appStore";
@@ -209,6 +210,8 @@ export function useParagraphPanels({ getView, noteTitle, tags, functions, extras
     const current = sessionRef.current;
     if (!view || !current) return;
     const framed = frameRange(view) ?? current.range;
+    // A tag named before the name rule can hold symbols a paragraph's `{…}` cannot: say so instead of doing nothing.
+    if (!isTagNameShape(name)) { addToast(t("This tag's name has symbols a paragraph tag can't hold. Rename the tag first."), "info"); close(); return; }
     if (current.target.span) insertBlockTags(view, framed.from, framed.to, name);
     else insertBlockTag(view, framed.from, name);
     close();

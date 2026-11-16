@@ -16,8 +16,10 @@
 // is (anchoredBlocks, treeAnchorTargets): what a link to a paragraph reaches,
 // tagged or not, and what the renderer (remarkBlockId) marks.
 //
-// Only a `{…}` at the very end of that line counts, and only in plain text —
-// not in code or math. The old `^id` marks are read only by the code that moves
+// Only a `{…}` at the very end of that line counts, only in plain text — not
+// in code or math — and only when it holds nothing but tag entries (tagBraces
+// below): `{ indent(); ECHO; }` ending a line of program text that was pasted
+// as a paragraph is text, not a tag. The old `^id` marks are read only by the code that moves
 // them out of the text (see readLegacyIds below); there Obsidian's `#tag ^id` (a
 // block with inline hashtags and an id) counts too, its hashtags as its tags.
 //
@@ -28,7 +30,7 @@ import type { Root, RootContent, Parent, Heading, ListItem, Blockquote, Paragrap
 import { frontmatterLength } from "./frontmatter.js";
 import { cutToUnits } from "./graphemes.js";
 import { parserFor } from "./parsers.js";
-import { HASHTAG_RE } from "./text.js";
+import { HASHTAG_RE, isTagList, isTagNameShape } from "./text.js";
 import { BLOCK_ID, trailingBlockId } from "./blockId.js";
 import { stripCalloutMarker } from "./callouts.js";
 
@@ -462,11 +464,8 @@ export function headingTextEnd(source: string, heading: Heading): number {
   let end = trimEnd(source, lineStart, lineEnd);
   const id = trailingId(source, lineStart, end);
   if (id) end = trimEnd(source, lineStart, id.start);
-  const braces = trailingBraces(source, lineStart, end);
-  const escaped = braces && (source[braces.open - 1] === "\\" || source[braces.close - 1] === "\\");
-  if (braces && !escaped && plainTextAt(heading, braces.open) && source.slice(braces.open + 1, braces.close).trim()) {
-    end = trimEnd(source, lineStart, braces.open);
-  }
+  const braces = tagBraces(source, heading, lineStart, end);
+  if (braces && source.slice(braces.open + 1, braces.close).trim()) end = trimEnd(source, lineStart, braces.open);
   return end;
 }
 
@@ -476,11 +475,9 @@ function fromLine(source: string, host: Paragraph | Heading, lineEnd: number, ki
   let end = trimEnd(source, lineStart, lineEnd);
   const id = kind === "quote" ? null : trailingId(source, lineStart, end);
   if (id) end = trimEnd(source, lineStart, id.start);
-  const braces = trailingBraces(source, lineStart, end);
-  // `\{t\}` is the author writing literal braces.
-  const escaped = braces && (source[braces.open - 1] === "\\" || source[braces.close - 1] === "\\");
-  if (braces && !escaped && plainTextAt(host, braces.open)) {
-    const tags = splitTags(source.slice(braces.open + 1, braces.close));
+  const braces = tagBraces(source, host, lineStart, end);
+  if (braces) {
+    const { tags } = braces;
     if (tags.length > 0) {
       return {
         kind, ref: id?.id ?? null, tags, tagSource: "braces",
@@ -545,6 +542,17 @@ function plainTextAt(host: Parent, offset: number): boolean {
 function splitTags(inner: string): string[] {
   // `key: value` entries are block attributes (later); tags are the rest.
   return [...new Set(inner.split(",").map((t) => t.trim()).filter((t) => t && !t.includes(":")))];
+}
+
+/** Whether this line ends in a tag `{…}`: the braces end the line, are not escaped (`\{t\}` is the author
+ *  writing literal braces), sit in plain text, and hold nothing but tag entries (isTagList, text.ts). Null otherwise: then the braces are
+ *  text for every reader (block nodes, the tag slot the editor writes into, a heading's label). */
+function tagBraces(source: string, host: Parent, lineStart: number, end: number): { open: number; close: number; tags: string[] } | null {
+  const braces = trailingBraces(source, lineStart, end);
+  if (!braces || source[braces.open - 1] === "\\" || source[braces.close - 1] === "\\" || !plainTextAt(host, braces.open)) return null;
+  const inner = source.slice(braces.open + 1, braces.close);
+  if (!isTagList(inner)) return null;
+  return { ...braces, tags: splitTags(inner) };
 }
 
 function standaloneId(source: string, p: Paragraph): { id: string; span: Span } | null {
@@ -740,7 +748,7 @@ export function repairSplitBlockMarker(markdown: string, ref: string): string | 
   const index = lines.findIndex((line) => { if (at + line.length >= first) return true; at += line.length + 1; return false; });
   if (index === -1) return null;
   const match = /^(.*?)[ \t]*(\{[^{}\n]{1,200}\})[ \t]+\^[a-zA-Z0-9-]{1,64}[ \t]*$/.exec(lines[index]!);
-  if (!match || match[1]!.trim() === "" || !lines[index]!.endsWith(token) && !lines[index]!.trimEnd().endsWith(token)) return null;
+  if (!match || !isTagList(match[2]!.slice(1, -1)) || match[1]!.trim() === "" || !lines[index]!.endsWith(token) && !lines[index]!.trimEnd().endsWith(token)) return null;
   let last = index;
   while (last + 1 < lines.length && lines[last + 1]!.trim() !== "") last++;
   if (last === index) return null; // the marker already ends its paragraph
@@ -763,12 +771,11 @@ function tagSlotOf(source: string, kind: BlockKind, host: Paragraph | Heading, l
   let textEnd = trimEnd(source, lineStart, lineEnd);
   const id = kind === "quote" ? null : trailingId(source, lineStart, textEnd);
   if (id) textEnd = trimEnd(source, lineStart, id.start);
-  const found = trailingBraces(source, lineStart, textEnd);
-  const usable = found && source[found.open - 1] !== "\\" && source[found.close - 1] !== "\\" && plainTextAt(host, found.open);
+  const found = tagBraces(source, host, lineStart, textEnd);
   return {
     kind, start, end, insertAt: textEnd,
-    tags: usable ? splitTags(source.slice(found.open + 1, found.close)) : [],
-    braces: usable ? { from: found.open, to: found.close + 1 } : null,
+    tags: found ? found.tags : [],
+    braces: found ? { from: found.open, to: found.close + 1 } : null,
   };
 }
 
@@ -838,7 +845,8 @@ export function blockTagSlotsIn(markdown: string, from: number, to: number): Blo
 export function addBlockTag(markdown: string, offset: number, name: string): string | null {
   const tag = name.trim().replace(/^#/, "").replace(/[{},]/g, "");
   const slot = blockTagSlot(markdown, offset);
-  if (!slot || !tag) return null;
+  // A name the `{…}` grammar cannot hold (isTagNameShape) would be written as text, not as a tag: refuse instead.
+  if (!slot || !isTagNameShape(tag)) return null;
   if (slot.tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return markdown;
   if (slot.braces) {
     const close = slot.braces.to - 1;

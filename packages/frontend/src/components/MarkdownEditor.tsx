@@ -358,6 +358,9 @@ function MarkdownEditor({
   const shownKeyRef = useRef(nodeKey);
   const valueSeenRef = useRef(value);
   const textIsCarried = useRef(false);
+  /** The note whose last caret has been put back for this visit (the restore effect below), or that the person has
+   *  typed in since it was shown: either way the caret is where it should be, and the restore must not run again. */
+  const restoredForRef = useRef<string | null>(null);
   const carriedTextTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [carriedSettled, setCarriedSettled] = useState(0);
   useEffect(() => () => { if (carriedTextTimer.current) clearTimeout(carriedTextTimer.current); }, []);
@@ -1029,6 +1032,10 @@ function MarkdownEditor({
               }
             }
             if (update.docChanged && !external) {
+              // The person typed: the caret is theirs. An empty note (a new one) had nothing to restore a caret into,
+              // so the restore was still waiting for "the body" — and took the first key for it: it put the caret
+              // back with a second transaction, which closed the list that key had just opened (`/` in a new note).
+              if (nodeKeyRef.current) restoredForRef.current = nodeKeyRef.current;
               onChangeRef.current(update.state.doc.toString());
               detectTrigger(update.view);
               setToolbar(null);
@@ -1311,7 +1318,7 @@ function MarkdownEditor({
   // drafts arrive via a parent effect), and a restore applied to that empty
   // doc clamps the caret to 0 — the later body swap then PRESERVES position 0
   // (by design, see the value-sync effect) and the note opens at the top.
-  const restoredForRef = useRef<string | null>(null);
+  // (restoredForRef is declared with the other refs: the person's own first edit also settles the visit.)
   useEffect(() => {
     const view = viewRef.current;
     if (!view || !nodeKey) return;
@@ -1337,15 +1344,17 @@ function MarkdownEditor({
         // the browser move the anchor to the top, so everything from the first
         // line to the link came out selected (2026-11-02); and a finger that
         // only wanted to look gets no keyboard. A mouse keeps the focus (G5).
-        view.dispatch({ selection: { anchor } });
+        view.dispatch({ selection: { anchor }, annotations: ExternalSync.of(true) });
         revealRange(view, { from: anchor, to: head });
         if (!isCoarsePointer()) view.focus();
         removeSession(SESSION_KEYS.pendingCursor(nodeKey));
       } else {
-        // A plain position restore must NOT steal focus.
+        // A plain position restore must NOT steal focus. Like the body swap, it is not the person moving the caret
+        // (ExternalSync): it closes no list and does not overwrite the stash it was read from.
         view.dispatch({
           selection: { anchor, head },
           effects: EditorView.scrollIntoView(head, { y: "center" }),
+          annotations: ExternalSync.of(true),
         });
       }
     } catch { /* a stash that is not JSON: no caret to restore */ }

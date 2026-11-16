@@ -6,6 +6,8 @@
 // text (legacyBlockIds.ts, blocks.ts readLegacyIds) and the summaries that cut
 // them from old text — uses these, so they cannot disagree on what an id is.
 
+import { isTagList } from "./text.js";
+
 /** The characters of an id, as a RegExp character-class body. */
 export const BLOCK_ID_CHARS = "a-zA-Z0-9-";
 export const BLOCK_ID_MAX = 64;
@@ -44,11 +46,12 @@ export function trailingBlockId(text: string, from = 0, to = text.length): { id:
 // cheap string test for text shown small) and the `^id`, or either alone. A run
 // of blanks starts only at its first blank, so a long run is read once.
 const BEFORE = "(?:^|(?<![ \\t])[ \\t]+)";
-const LINE_TRAILERS = new RegExp(`(?:${BEFORE}\\{[^{}\\n]{1,200}\\}(?:[ \\t]+\\^${BLOCK_ID_PATTERN})?|${BEFORE}\\^${BLOCK_ID_PATTERN})[ \\t]*$`, "gm");
+const LINE_TRAILERS = new RegExp(`(?:${BEFORE}\\{([^{}\\n]{1,200})\\}(?:[ \\t]+\\^${BLOCK_ID_PATTERN})?|${BEFORE}\\^${BLOCK_ID_PATTERN})[ \\t]*$`, "gm");
 
 /** `text` without the `{tag}` and `^id` that end any of its lines
  *  (`買牛奶 {task} ^ffb6f7` → `買牛奶`). For text shown as prose (summaries,
  *  snippets, backlink previews), never for editing. One pass, linear. */
 export function withoutLineTrailers(text: string): string {
-  return text.replace(LINE_TRAILERS, "");
+  // A `{…}` that does not hold tags (program text) is words of the line: it stays.
+  return text.replace(LINE_TRAILERS, (whole, inner: string | undefined) => (inner === undefined || isTagList(inner) ? "" : whole));
 }

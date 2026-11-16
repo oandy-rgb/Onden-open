@@ -14,7 +14,7 @@ import { headingAnchorStarts } from "./headingAnchors.js";
 import { frontmatterLength } from "./frontmatter.js";
 import { trailingBlockId } from "./blockId.js";
 import { ATTRIBUTE_KEY } from "./attributeKey.js";
-import { replaceWikilinks, splitWikilink } from "./text.js";
+import { isTagList, replaceWikilinks, splitWikilink } from "./text.js";
 import { stripCalloutMarker } from "./callouts.js";
 import { cutToUnits } from "./graphemes.js";
 import { plainExcerpt } from "./graphemes.js";
@@ -121,7 +121,7 @@ function plainText(para: Paragraph, raw: string): string {
   // The markers block nodes end a line with: `^id` (blockId.ts), then `{tags}`.
   const id = trailingBlockId(text);
   if (id) text = text.slice(0, id.start).trimEnd();
-  text = text.replace(/\s*\{[^{}]*\}$/, "").trim();
+  text = text.replace(/\s*\{([^{}]*)\}$/, (whole, inner: string) => (isTagList(inner) ? "" : whole)).trim();
   // A callout's first line names its kind: `[!note] Title` reads as "Title".
   text = stripCalloutMarker(text);
   return text === "^" ? "" : text;

@@ -1,6 +1,13 @@
 # 分散式同步（beta）：節點、操作集合、權限
 
-> 狀態：現行（最後確認 2026-11-06）。**草案／beta**：第 1 步（設計＋模擬測試台＋最小引擎）與**第 2a 步（接上真資料：創世匯入、擷取、投影、權限對齊、兩個真後端的影子比對，§12）**
+> 狀態：已被取代（2026-11-16）。這份文件描述的是第一版引擎（操作集合 `ds_ops`、`materialize.ts` 的整份記憶體狀態、`bridge/` 的擷取與投影）。2026-11-12 起方向改成「每個欄位的來源標記＋合併核心」，並決定刪掉這一版的第二本帳與它自己的權限判斷：
+> - 方向與要刪的東西：[分散式就緒](proposals/distributed-ready-2026-11-12.md)（第 4 節的表）、[來源標記](proposals/causal-stamps-2026-11-12.md)
+> - 現在的實作：`packages/backend/src/spine/stampedMerge/README.md`（合併核心）、`spine/stampedImport.ts`（快照與修改包的入口）
+> - 設計對照論文與其他軟體：[調查紀錄](../research/sync-design-vs-literature-2026-11-16.md)；角色、空間、工作階段與傳輸的決定在提案「角色、空間、工作階段」（PR #1714，還沒合併）第 10 節
+>
+> `packages/backend/src/distributedSync/` 的程式**還在**（預設關閉，`ONDEN_DISTRIBUTED_SYNC=1` 才開；業主指示保留到新做法走完），它的模擬測試台仍在跑。下面的內容留作那一版的紀錄，**不要照它開新工作**。
+>
+> 原狀態（2026-11-06）：**草案／beta**：第 1 步（設計＋模擬測試台＋最小引擎）與**第 2a 步（接上真資料：創世匯入、擷取、投影、權限對齊、兩個真後端的影子比對，§12）**
 > 已實作並測試；**沒有介面、沒有真傳輸（2b）、沒有簽章、不處理附件**，預設關閉（`ONDEN_DISTRIBUTED_SYNC=1` 才開），正式站行為完全不變。
 > 業主決定（2026-11-01）：「分散式我認為該做，但當 beta。因為如果分散式的測試都沒問題，那有主伺服器就更沒問題了。」
 > 前提文件：[可攜後端](portable-backend.md)、[瀏覽器版](browser-app.md)。尚未合併的姊妹設計：`docs/design/intermittent-server.md`（PR #1132）、`docs/design/desktop-app.md`（PR #1133）。

@@ -6,6 +6,9 @@ import { noWorkspaceData, type ContentNode, type Tag } from "../lib/api";
 import { resetAppState } from "../lib/appStore";
 import { useNoteFunctions } from "../hooks/useNoteFunctions";
 import { tagWriter } from "../lib/data";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
+// The info panel asks for its modules' files with import() as it mounts; they are loaded first so that no test ends while one is still on its way.
+await loadNoteFunctionModules();
 
 // 「還能用在這則」 reads the function catalog (lib/tagFunctions): each function
 // the note does not have yet, with the catalog's sentence and a button that puts

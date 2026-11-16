@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ContentNode } from "../lib/api";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
 
 // The AI conversation in its two frames. The info panel's tab (a wide screen) and the phone's bottom panel are
 // ONE conversation component: what is asked in one is there in the other after a width change, because it is
@@ -17,6 +18,8 @@ const { default: InfoAiTab } = await import("../components/infoAi/InfoAiTab");
 const { PhoneAiPanel } = await import("../components/infoAi");
 const { default: NotePhoneAiHost } = await import("../components/NotePhoneAiHost");
 const { default: NodeInspector } = await import("../components/NodeInspector");
+// The info panel asks for its modules' files with import() as it mounts; they are loaded first so that no test ends while one is still on its way.
+await loadNoteFunctionModules();
 
 const apiMock = vi.mocked(api);
 const note: ContentNode = { id: "open", title: "今天", slug: "open", markdown: "", node_type: "content", source_type: "manual", updated_at: "2026-10-01T00:00:00Z", space_id: "sp" };

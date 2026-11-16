@@ -3,10 +3,12 @@
 // torn the file's environment down when they ask for their files: "EnvironmentTeardownError: Cannot load … after the environment
 // was torn down", an unhandled error that vitest pins on whatever file was running and that fails the whole run.
 // A file that renders the panel awaits this once, before its tests: the imports are then already done, and the panel's own calls
-// resolve at once.
+// resolve at once. guards/infoPanelTestImports.guard.test.ts fails for a test file that names the panel and does not.
 import { MODULES } from "../../modules";
 
 export async function loadNoteFunctionModules(): Promise<void> {
   await Promise.all(MODULES.map((mod) => mod.noteFunctionRows?.()));
   await import("../../components/infoFunctions");
+  // The catalogue of functions a note could have (useNoteFunctions asks for it the first time the tab wants it).
+  await import("../../components/functionCatalog");
 }

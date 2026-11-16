@@ -17,6 +17,9 @@ import { initialInfoTab, pickedInfoTab } from "../lib/infoPanel";
 import type { NodeEdge } from "../lib/api";
 import { activeHeadingIndex, extractHeadings } from "../lib/noteOutline";
 import { useWorkspacePanes } from "../hooks/useWorkspacePanes";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
+// The info panel asks for its modules' files with import() as it mounts; they are loaded first so that no test ends while one is still on its way.
+await loadNoteFunctionModules();
 // History rows read the session; the real store keeps a 1 s unmount timer that can outlive the test environment.
 vi.mock("../lib/accountSession", () => ({ useAccountSession: () => null }));
 

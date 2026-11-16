@@ -21,6 +21,9 @@ import { Quote } from "lucide-react";
 import { skillsModule } from "../modules/skills";
 import { ownerData } from "./ownerData";
 import type { Space } from "../lib/spaces";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
+// The info panel asks for its modules' files with import() as it mounts; they are loaded first so that no test ends while one is still on its way.
+await loadNoteFunctionModules();
 
 // The note's ⋯ menu shed everything but history, a copy, export and Delete.
 // What it shed is still somewhere else; these tests lock where:

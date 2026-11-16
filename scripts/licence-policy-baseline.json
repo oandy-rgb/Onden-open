@@ -1,0 +1,36 @@
+{
+  "allowed": ["MIT", "MIT-0", "ISC", "0BSD", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "BlueOak-1.0.0", "Zlib", "CC0-1.0", "Unlicense"],
+  "conditional": {
+    "LGPL-3.0-or-later": {
+      "how": "libvips（影像處理，由 sharp 載入的預先編譯函式庫，也在 Docker 映像檔裡）。原始碼：https://github.com/libvips/libvips ；以動態連結使用，可以換成你自己編譯的版本。",
+      "packages": ["@img/sharp-*"]
+    },
+    "MPL-2.0": {
+      "how": "以檔案為單位的 copyleft：改了這些套件自己的檔案才需要公開那些檔案。我們沒有改它們的檔案。",
+      "packages": ["lightningcss", "lightningcss-*", "web-push", "dompurify"]
+    },
+    "OFL-1.1": {
+      "how": "字型（思源黑體、思源宋體、霞鶩文楷、Fraunces、IBM Plex）。可以隨軟體散布，不得單獨販售字型本身；授權條款要跟著字型檔。",
+      "packages": ["@fontsource-variable/noto-sans-tc", "@fontsource-variable/noto-serif-tc", "@fontsource/lxgw-wenkai-tc", "packages/frontend/public/fonts"]
+    },
+    "CC-BY-4.0": {
+      "how": "瀏覽器支援資料（不是程式碼）。要求標示出處：這份清單就是標示。",
+      "packages": ["caniuse-lite"]
+    },
+    "Python-2.0": {
+      "how": "寬鬆授權，保留聲明即可。",
+      "packages": ["argparse"]
+    },
+    "Public Domain": {
+      "how": "作者放棄權利；這個字串不是標準的授權代號，所以逐一點名。",
+      "packages": ["jsonify"]
+    }
+  },
+  "bundled": {
+    "packages/frontend/public/fonts": { "what": "介面字型 Fraunces、IBM Plex Sans、IBM Plex Mono（字型檔直接放在 repo，不經 npm）", "licence": "OFL-1.1", "notice": "packages/frontend/public/fonts/OFL.txt" },
+    "packages/markdown/src/vendor/perfect-freehand": { "what": "perfect-freehand（筆跡外框），收錄原始碼", "licence": "MIT", "notice": "packages/markdown/src/vendor/perfect-freehand/LICENSE" },
+    "docs/research/eg-walker-bench/bench/src/vendor/eg-walker-reference": { "what": "eg-walker-reference（只用於研究比較，不隨產品執行）", "licence": "BSD-2-Clause", "notice": "docs/research/eg-walker-bench/bench/src/vendor/eg-walker-reference/NOTICE.md" },
+    "packages/frontend/public/sql.js": { "what": "sql.js 的 wasm 檔，從 npm 套件 sql.js 複製出來（套件本身列在上面的 MIT 一節）", "licence": "MIT", "notice": "THIRD_PARTY_NOTICES.md" },
+    "packages/backend/src/vendor/yauzl.d.ts": { "what": "我們自己為 yauzl 寫的型別宣告，不是第三方程式碼", "licence": "AGPL-3.0-only", "notice": "LICENSE" }
+  }
+}

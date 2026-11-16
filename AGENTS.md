@@ -128,6 +128,7 @@
 - 彈出、選單、對話框、按鈕 → `components/ui`。選位置 → `PlacePicker`／`lib/placeGroups.ts`。
 - 手寫輸入 → `lib/ink`（`InkEngine`）與 `components/InkToolbar.tsx`；形狀幾何 → `@onden/markdown` 的 `inkShapes.ts`；停住修形 → `lib/ink/recognize.ts`；墨水顏色 → `lib/ink/palette.ts`＋`lib/inkPrefs.ts`。
 - 寫新的元件或共用邏輯之前，先在 [docs/agents/entrypoints-catalog.md](docs/agents/entrypoints-catalog.md) 依需求查；真的要新增共用入口，把它加進清單（`scripts/entrypoints.catalog.json`，再跑 `npm run catalog`）。
+- 加套件、把字型／wasm／別人的原始碼放進 repo：`npm run notices:check`（`scripts/thirdPartyNotices.mjs`，守門會跑）檢查授權。允許清單與逐一點名的有條件授權（LGPL、MPL、OFL…）在 `scripts/licence-policy-baseline.json`，只准減少；不在清單上的授權、有條件授權底下的新套件、新的 `vendor/` 資料夾或字型，都先查條款與用法再問擁有者，不要自己加。放進 repo 的第三方檔案要帶著它的授權聲明檔。通過後跑 `npm run notices` 更新 `THIRD_PARTY_NOTICES.md`。
 - 基準與例外清單只准減少：`scripts/*baseline*.json`、`packages/*/eslint-rules/*{allowlist,exceptions}*.json`、guard 測試裡以 `// ratchet:list <標籤>` 標記的例外陣列，由 `npm run ratchet:check`（含 markdown 套件的 `ratchet.guard.test.ts`）對 `git merge-base HEAD origin/main` 比對（找不到 origin/main 就失敗，不當作通過：先 `git fetch origin main`）；也涵蓋 `guards/allowlist/*.ts`、a11y 基準、layout-audit 基準、`bench-budgets.json` 與測試檔裡的 `ratchet:list`；計數變大、既有規則多了檔案、例外多了項目就失敗，整組新規則與刪除放行。新增例外陣列要加標記。真的要放寬只能由擁有者在 PR 說明寫明原因，並在 commit 訊息帶 `ratchet-override: <原因>`（腳本看到才放行）。
 - 寫新的工具函式前先找現成的；新加的要在 PR 說明寫為什麼不用現成的。
 - 各套件另有一份就近的對照表（「在這裡要做 X，一律用 Y」＋守門測試）：[前端](packages/frontend/AGENTS.md)、[後端](packages/backend/AGENTS.md)、[markdown](packages/markdown/AGENTS.md)、[site](packages/site/AGENTS.md)；`components/ui`、`lib/data`、`spine/` 資料夾內也各有一份。其中的允許清單表由 `npm run agents:tables` 從 `owners.ts` 產生，不手改。

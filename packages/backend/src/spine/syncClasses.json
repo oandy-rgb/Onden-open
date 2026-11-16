@@ -209,6 +209,10 @@
   "class": "node-local",
   "note": "the other heads of a unit (writes nobody who wrote later had seen) with their values; carried with the stamp they sit beside, never on their own (migration 205)"
  },
+ "sync_origins": {
+  "class": "node-local",
+  "note": "which other nodes this node takes change bundles from, and how far it holds each: what THIS node took from whom, never copied (migration 206)"
+ },
  "structure_log": {
   "class": "node-local",
   "note": "each node's own history of structure; never sent (S1, proposal §8.5)"

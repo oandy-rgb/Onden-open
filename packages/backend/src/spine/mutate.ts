@@ -36,7 +36,7 @@ import { createContextSlot } from "../requestContext.js";
 import type { ActorCtx } from "../types.js";
 import { eventActorType } from "../types.js";
 import { event, withTransaction, inTransaction, bumpMembershipEpoch, q } from "../db.js";
-import { assertAuthority, AuthorityError, type Authority } from "./authority.js";
+import { assertAuthority, AuthorityError, writesAsPerson, type Authority } from "./authority.js";
 import { ScopeError, assertWriteModeAllows } from "./toolScope.js";
 import { lockEventAppend, withEventTransaction } from "./eventTransaction.js";
 import { withIdempotencyClaim } from "./idempotency.js";
@@ -93,7 +93,7 @@ export async function runCascade<T>(
   const parent = cascade.getStore();
   const run = async () => {
     const actor = parent ? parent.rootActor : await currentRootActor(opts.actor, opts.workspaceId);
-    if (!parent) await stampTransaction(opts.workspaceId, actor.id, { system: !!systemJobOf(actor) });
+    if (!parent) await stampTransaction(opts.workspaceId, actor.id, { system: !!systemJobOf(actor), notAPerson: !writesAsPerson(actor) });
     await assertAuthority(actor, opts.authority);
     return cascade.run({ rootActor: actor, causeEventId: opts.causeEventId }, body);
   };
@@ -119,7 +119,7 @@ export async function runRestore<T>(
       await claim();
       const parent = cascade.getStore();
       const actor = parent ? parent.rootActor : await currentRootActor(opts.actor, opts.workspaceId);
-      if (!parent) await stampTransaction(opts.workspaceId, actor.id, { system: !!systemJobOf(actor) });
+      if (!parent) await stampTransaction(opts.workspaceId, actor.id, { system: !!systemJobOf(actor), notAPerson: !writesAsPerson(actor) });
       return cascade.run({ rootActor: actor, causeEventId: parent?.causeEventId }, () => body(actor));
     }),
   );
@@ -277,7 +277,7 @@ export async function mutate<T>(m: Mutation<T>): Promise<T> {
                  (SELECT id::text FROM spaces WHERE owner_actor_id::text = $1 AND kind = 'personal' AND deleted_at IS NULL), ''), true),
                       set_config('onden.system_actor', $2, true)`,
         [actor.id, systemJobOf(actor) ? "on" : ""]);
-      await stampTransaction(m.workspaceId, actor.id, { system: !!systemJobOf(actor) });
+      await stampTransaction(m.workspaceId, actor.id, { system: !!systemJobOf(actor), notAPerson: !writesAsPerson(actor) });
     }
     // A policy may change while this writer waits. Check it using the same
     // transaction, after acquiring the lock shared by policy and content writes.

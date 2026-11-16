@@ -21,7 +21,8 @@ import { makeInversePatch } from "../services/eventLog/bodyPatch.js";
 const actor: ActorCtx = { id: "restore-admin", name: "Restore admin", role: "admin", type: "human" };
 const options = { actor, workspaceId: "ws-1" };
 const assertAuthority = vi.fn(async (_actor: ActorCtx, _authority: Authority) => {});
-vi.mock("../spine/authority.js", () => ({ assertAuthority }));
+// only the check is replaced; every other export (writesAsPerson, ...) stays real, so a new export does not break this file
+vi.mock("../spine/authority.js", async (original) => ({ ...await original<typeof import("../spine/authority.js")>(), assertAuthority }));
 vi.mock("../services/policyTags.js", () => ({ anyPolicyTag: vi.fn(async () => false), subtreeHasPolicyTag: vi.fn(async () => false) }));
 // The old -> new id lookup (migration 201) is its own table and has its own test (derivedIdsHistory); here the restore logic runs on mocked rows.
 vi.mock("../services/idRewrites.js", () => ({ followIdRewrites: async <T,>(row: T) => row }));

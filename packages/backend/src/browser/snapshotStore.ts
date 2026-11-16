@@ -44,7 +44,7 @@ const GZIP = "application/x-gzip";
 const typeOf = (copy: Blob): string => (copy.type.includes("gzip") ? GZIP : TAR);
 
 type Pointer = { slot: (typeof SLOTS)[number]; bytes: number; savedAt: number; type: string; meta?: CopyMeta };
-const metaOf = (saved: { meta?: Partial<CopyMeta> } | undefined): CopyMeta => ({ ...NO_META, ...saved?.meta });
+const cellMetaOf = (saved: { meta?: Partial<CopyMeta> } | undefined): CopyMeta => ({ ...NO_META, ...saved?.meta });
 
 // Not in the Node typings the backend is checked with; the worker runtime has them.
 type SyncAccessHandle = {
@@ -97,7 +97,7 @@ async function createOpfsStore(): Promise<SnapshotStore> {
       const file = await (await directory.getFileHandle(pointer.slot)).getFile();
       // The pointer is written after the slot, so a size mismatch means the slot was changed behind our back.
       if (file.size !== pointer.bytes) throw new Error("saved copy is incomplete");
-      return { blob: new Blob([file], { type: pointer.type }), meta: metaOf(pointer) };
+      return { blob: new Blob([file], { type: pointer.type }), meta: cellMetaOf(pointer) };
     },
     async write(copy, meta) {
       const previous = await readPointer(directory);
@@ -127,7 +127,7 @@ async function createIndexedDbStore(): Promise<SnapshotStore> {
     copyFormat: "gzip",
     async read() {
       const saved = await idbRequest<{ bytes: ArrayBuffer; type: string; meta?: CopyMeta } | undefined>(store("readonly").get(IDB_KEY));
-      return saved ? { blob: new Blob([saved.bytes], { type: saved.type }), meta: metaOf(saved) } : undefined;
+      return saved ? { blob: new Blob([saved.bytes], { type: saved.type }), meta: cellMetaOf(saved) } : undefined;
     },
     async write(copy, meta) {
       // An ArrayBuffer, not the Blob: older WebKit cannot store Blobs in IndexedDB.

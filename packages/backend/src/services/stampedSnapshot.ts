@@ -30,6 +30,7 @@
 import { CodedStatusError } from "../statusError.js";
 import { requirePerson } from "../spine/authority.js";
 import { stampUnstampedRowsAsGenesis } from "../spine/stamps.js";
+import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import { withActorReadSnapshot } from "./actorReadSnapshot.js";
 import { snapshotScopeFor } from "./readPolicy.js";
 import { SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
@@ -81,7 +82,7 @@ export async function readStampedPages(
     const flush = async () => {
       if (items.length === 0) return;
       pages += 1;
-      const page: StampedPage = { layer: "rows", page: pages, cut, source: node, workspaceId, items };
+      const page: StampedPage = { layer: "rows", dataShape: SYNC_DATA_SHAPE_VERSION, page: pages, cut, source: node, workspaceId, items };
       items = []; bytes = 0;
       await emit(page);
     };

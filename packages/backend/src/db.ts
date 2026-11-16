@@ -6,6 +6,7 @@ import { listMigrations, portableMigrationSql } from "./dbMigrations.js";
 import { afterCommit, withTxHookScope } from "./spine/txHooks.js";
 import { replayedOpId } from "./spine/replicatedOp.js";
 import { log } from "./logger.js";
+import { translateUnitInConflict } from "./spine/unitInConflict.js";
 import { EVENT_APPEND_LOCK_SQL, acquireEventAppendLock } from "./spine/eventLock.js";
 import { notifyChanged, notifyMembershipChanged } from "./services/realtime.js";
 import { nativeBypassEnabled } from "./nativeBypass.js";
@@ -257,7 +258,7 @@ async function runTransaction<T>(begin: string, fn: () => Promise<T>): Promise<T
         // ROLLBACK failed — the connection's tx state is unknown; don't reuse it.
         poisoned = true;
       }
-      throw e;
+      throw translateUnitInConflict(e);
     } finally {
       eventLockedClients.delete(client);
       stampedClients.delete(client);
@@ -293,7 +294,7 @@ export async function withSavepoint<T>(fn: () => Promise<T>): Promise<T> {
         // Do not disguise a broken transaction as a recoverable domain rejection.
         throw new AggregateError([error, cleanupError], "savepoint rollback failed");
       }
-      throw error;
+      throw translateUnitInConflict(error);
     }
   });
 }

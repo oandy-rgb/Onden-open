@@ -892,6 +892,14 @@ export interface SyncNode {
   singleton: Generated<boolean>;
 }
 
+export interface SyncOrigins {
+  have: Generated<Json>;
+  origin: string;
+  since: Generated<Timestamp>;
+  vouched_by: string;
+  workspace_id: string;
+}
+
 export interface SyncStampHeads {
   author: string | null;
   content_hash: Generated<string>;
@@ -1021,6 +1029,7 @@ export interface DB {
   sync_clock: SyncClock;
   sync_join: SyncJoin;
   sync_node: SyncNode;
+  sync_origins: SyncOrigins;
   sync_stamp_heads: SyncStampHeads;
   sync_stamps: SyncStamps;
   workspaces: Workspaces;

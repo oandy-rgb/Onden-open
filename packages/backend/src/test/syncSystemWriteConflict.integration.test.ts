@@ -1,0 +1,81 @@
+// A system or background write must not resolve a conflict nobody has looked at (batch 2b-1, migration 206 sync_stamp_put_over; spine/eventTransaction.ts turns the database's
+// refusal into the retryable `sync_unit_in_conflict`). A unit holds other heads once a merge has kept a write the node never saw (mergeUnitsIntoWorkspace is the test's way to make
+// one). A person's write has seen every head and replaces them; a system job's write has seen only the head the unit shows, and a `saw` cannot say that.
+// SAFETY: only runs against a *_test database; skips otherwise.
+import { describe, expect, it, beforeAll, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import { q } from "../db.js";
+import { mutate } from "../spine/mutate.js";
+import { withTransaction } from "../db.js";
+import { withEventTransaction } from "../spine/eventTransaction.js";
+import { stampTransaction } from "../spine/stamps.js";
+import { writesAsPerson } from "../spine/authority.js";
+import { systemActorFor } from "../spine/systemJobs.js";
+import { mergeUnitsIntoWorkspace } from "../spine/stampedImport.js";
+import { readUnit } from "../spine/stampedMerge/dbUnits.js";
+import { conflictsOf } from "../spine/stampedMerge/unit.js";
+import { PermanentOutboxFailure, RETRY_DAY_ATTEMPTS } from "../services/outbox.js";
+import type { ActorCtx } from "../types.js";
+import { persistActor } from "./helpers/persistActor.js";
+import { setModulesOn } from "./helpers/setModulesOn.js";
+import { makeCaller } from "./helpers/stampedWorld.js";
+import { makeSpace } from "./helpers/spaceFixtures.js";
+
+let WS = "";
+vi.mock("../db.js", async (original) => ({ ...await original<typeof import("../db.js")>(), getWorkspaceId: async () => WS }));
+const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
+
+describe.skipIf(!isTestDb)("a system write beside a conflict", () => {
+  const scheduler = systemActorFor("task-scheduler");
+  let owner!: ActorCtx;
+  let note = "";
+  const heads = async () => (await q(`SELECT 1 FROM sync_stamp_heads WHERE workspace_id = $1 AND row_key = $2 AND field = 'title'`, [WS, note])).rows.length;
+  const systemWrites = (title: string) => mutate({
+    actor: scheduler, workspaceId: WS, authority: { kind: "system" },
+    event: { type: "TASK_OCCURRENCE_MISSED", targetType: "node", targetId: note },
+    apply: async () => { await q(`UPDATE content_nodes SET title = $2 WHERE id = $1`, [note, title]); },
+  });
+
+  beforeAll(async () => {
+    WS = (await q<{ id: string }>(`INSERT INTO workspaces (name, slug) VALUES ('System conflict', $1) RETURNING id`, [`system-conflict-${Date.now()}`])).rows[0]!.id;
+    owner = await persistActor(WS, { id: "", name: "Owner", role: "admin", type: "human" });
+    await setModulesOn(WS, null);
+    const space = await makeSpace(WS, `space ${Date.now()}`, [{ id: owner.id, permission: "edit" }]);
+    note = (await makeCaller(owner)("POST", "/api/nodes", { id: randomUUID(), title: "Mine", markdown: "", space_id: space })).id;
+  });
+
+  it("is refused while the unit holds another head, with a retryable code, and changes nothing; a person's write resolves it; then the system may write", async () => {
+    const merged = await mergeUnitsIntoWorkspace(WS, [{ address: { table: "content_nodes", row: note, field: "title" },
+      unit: [{ stamp: { origin: "another-node", seq: 7, wall: Date.now(), counter: 0, author: null, device: null }, saw: {}, deleted: false, value: "Theirs" }] }]);
+    expect(merged.events[0]?.result.outcome).toBe("conflict");
+    expect(await heads()).toBe(1);
+    const before = await readUnit(WS, { table: "content_nodes", row: note, field: "title" });
+
+    await expect(systemWrites("recalculated")).rejects.toMatchObject({ status: 409, code: "sync_unit_in_conflict" });
+    // B4, the retry limit: this batch adds none of its own. A refused job that runs from the outbox is an ordinary retryable failure (not a PermanentOutboxFailure), so it keeps the outbox's budget
+    // (RETRY_DAY_ATTEMPTS attempts with backoff, about a day) and then lands among the dead rows the owner can see; a job that is not an outbox effect fails its request with the 409. The note that holds
+    // the conflict is the place where a person decides; a screen that lists those notes is a later batch (needs 2b-2's conflict list).
+    const refused = await systemWrites("recalculated").catch((e: unknown) => e);
+    expect(refused).not.toBeInstanceOf(PermanentOutboxFailure);
+    expect(RETRY_DAY_ATTEMPTS).toBe(35);
+    expect(await heads()).toBe(1); // not cleared
+    expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [note])).rows[0]!.title).toBe(before![0]!.value); // not written
+    expect(conflictsOf((await readUnit(WS, { table: "content_nodes", row: note, field: "title" }))!)).toHaveLength(1);
+    expect((await q(`SELECT 1 FROM domain_events WHERE workspace_id = $1 AND target_id = $2 AND event_type = 'TASK_OCCURRENCE_MISSED'`, [WS, note])).rows).toHaveLength(0); // no event of the refused write
+
+    // an AI agent or a delegated token is not a person either: its write, stamped as such, is refused the same way (what a person accepted of its suggestion is the person's write)
+    const asAi = () => withTransaction(() => withEventTransaction(WS, async () => {
+      await stampTransaction(WS, owner.id, { notAPerson: true });
+      await q(`UPDATE content_nodes SET title = 'proposed by an agent' WHERE id = $1`, [note]);
+    }));
+    await expect(asAi()).rejects.toMatchObject({ status: 409, code: "sync_unit_in_conflict" });
+    expect(await heads()).toBe(1);
+    const t = { access: "write", allowedTools: [], tokenId: "t" } as never;
+    expect([writesAsPerson(owner), writesAsPerson({ ...owner, tokenScope: t }), writesAsPerson({ ...owner, type: "agent" }), writesAsPerson({ ...owner, type: "system" })]).toEqual([true, false, false, false]);
+
+    await makeCaller(owner)("PATCH", `/api/nodes/${note}`, { title: "Decided by a person" }); // has seen both heads
+    expect(await heads()).toBe(0);
+    await systemWrites("recalculated"); // a unit without other heads: as before
+    expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [note])).rows[0]!.title).toBe("recalculated");
+  });
+});

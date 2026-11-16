@@ -121,6 +121,11 @@ export function isPerson(actor: ActorCtx): boolean {
   return !actor.tokenScope;
 }
 
+/** The write is a person's: a human acting for themselves. A system job, an AI agent and any delegated token are not: only a person's write resolves a conflict (migration 206). What an AI proposed and a person accepted is the person's write. */
+export function writesAsPerson(actor: ActorCtx): boolean {
+  return actor.type === "human" && !actor.tokenScope;
+}
+
 /** Operations only a person may do (backups, creating spaces, ...): a delegated
  *  token is refused with one answer — 403, `{ error: <message> }` through
  *  AuthorityError — whichever operation it tried. `capability` names it in

@@ -55,6 +55,8 @@ export const POSTGRES_SKIPS: Readonly<Record<string, number>> = {
   "src/test/distributedSyncScale.integration.test.ts": 1, // cost at size, measured on PGlite
   "src/test/poolQueryInTransaction.test.ts": 2,
   "src/test/replicatedOpBoundary.integration.test.ts": 2,
+  "src/test/stampedBundle.integration.test.ts": 35, // several in-process PGlite nodes; the three-process file runs on real Postgres. TEMPORARY: leaves with test/stamped-nodes-on-real-pg (a node = a database on the same server)
+  "src/test/stampedBundleScale.integration.test.ts": 1, // cost at size, measured on PGlite; same as above
   // Two in-process PGlite databases (a stamped snapshot copied to an empty one); no second real server. The round trip itself and the
   // refusals of a damaged copy run on real Postgres in stampedSnapshotTwoProcess.integration.test.ts (one database per process: digest,
   // rows and stamps, the system space and Site Config, unstamped rows, POST/GET /api/snapshot, eight damaged copies). What stays here,

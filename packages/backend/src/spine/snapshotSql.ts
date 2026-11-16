@@ -9,7 +9,7 @@ import { sha256Hex } from "../utils.js";
 import type { Scope, SnapshotSpec } from "./snapshotTables.js";
 import { SNAPSHOT_SPECS } from "./snapshotTables.js";
 
-type ScopeFactory = (params: unknown[]) => Scope;
+export type ScopeFactory = (params: unknown[]) => Scope;
 
 /** Run SQL text that has `$1…` placeholders (the shape every builder here produces) on the caller's transaction. */
 export async function snapshotRows<T>(text: string, params: unknown[] = []): Promise<{ rows: T[] }> {
@@ -79,6 +79,66 @@ export async function readRowChunk(
   return r.rows;
 }
 
+/**
+ * The rows of `table` (a table of the snapshot list) whose key is among `ids`, each as the values a snapshot carries and the text of the given columns as stamps name them (`sync_logged_value`).
+ * For a change bundle: the whole workspace, nothing left out (`wholeWorkspace`). `units`: unit field → column.
+ */
+export async function readCarriedRows(table: string, workspaceId: string, ids: string[], units: Readonly<Record<string, string>>, scopeOf: ScopeFactory): Promise<Map<string, { v: Record<string, unknown>; texts: Record<string, string | null> }>> {
+  const spec = snapshotSpecOf(table);
+  const cols = await carriedColumns(spec);
+  const key = spec.pk[0]!;
+  const params: unknown[] = [workspaceId];
+  const scope = scopeOf(params);
+  const value = valueSql(spec, cols, scope); // numbers its parameters now: before the ids'
+  const r = await snapshotRows<{ id: string; v: Record<string, unknown>; texts: Record<string, string | null> }>(
+    `SELECT t.${quote(key)}::text AS id, ${value} AS v,
+            jsonb_build_object(${Object.entries(units).map(([f, c]) => `${literal(f)}, sync_logged_value(t, ${literal(f)}, ${literal(c)})`).join(", ")}) AS texts
+       FROM ${quote(table)} t WHERE (${spec.where(scope)}) AND t.${quote(key)} = ANY($${params.push(ids)}::uuid[])`, params);
+  return new Map(r.rows.map((row) => [row.id, { v: row.v, texts: row.texts }]));
+}
+
+/** Write a row a bundle carries that this database does not hold, with the values a snapshot carries and the deferred columns (a parent) empty: the units' write-back sets them once every row is in. A row that is there is left as it is. */
+export async function insertCarriedRow(table: string, workspaceId: string, values: Record<string, unknown>): Promise<void> {
+  const spec = snapshotSpecOf(table);
+  const cols = await carriedColumns(spec);
+  const deferred = new Set(spec.deferred ?? []);
+  await snapshotRows(
+    `INSERT INTO ${quote(table)} (${cols.map(quote).join(", ")})
+     SELECT ${cols.map((c) => (deferred.has(c) ? "NULL" : `r.${quote(c)}`)).join(", ")} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) r
+     WHERE r.workspace_id = $2 ON CONFLICT (${spec.pk.map(quote).join(", ")}) DO NOTHING`, [JSON.stringify([values]), workspaceId]);
+}
+
+/**
+ * The creation columns of a row that exists here, replaced by the ones another creation of the same row carried (`values`, as a bundle's row item has them): all carried columns except
+ * the key, the workspace, the deferred ones and `keep` (the units' columns, which their own merge decides). A row made twice on two nodes (the same id) is one row after a merge, and it
+ * must show the creation that won, on every node.
+ */
+export async function overwriteCarriedColumns(table: string, workspaceId: string, key: string, values: Record<string, unknown>, keep: readonly string[]): Promise<void> {
+  const spec = snapshotSpecOf(table);
+  const skip = new Set([...spec.pk, "workspace_id", ...(spec.deferred ?? []), ...keep]);
+  const cols = (await carriedColumns(spec)).filter((c) => !skip.has(c));
+  if (cols.length === 0) return;
+  await snapshotRows(
+    `UPDATE ${quote(table)} t SET ${cols.map((c) => `${quote(c)} = r.${quote(c)}`).join(", ")}
+       FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE t.${quote(spec.pk[0]!)}::text = $2 AND t.workspace_id = $3`, [JSON.stringify(values), key, workspaceId]);
+}
+
+/** Columns of a row that follow a unit's winner or the latest write: `sets` is a list of `column = value` taken from the carried `values` of the row (the same names as the snapshot's columns); `latest` columns take the later of the two. */
+export async function followCarriedColumns(table: string, workspaceId: string, key: string, values: Record<string, unknown>, copy: readonly string[], latest: readonly string[]): Promise<void> {
+  const spec = snapshotSpecOf(table);
+  const all = new Set(await carriedColumns(spec));
+  const sets = [...copy.filter((c) => all.has(c)).map((c) => `${quote(c)} = r.${quote(c)}`), ...latest.filter((c) => all.has(c)).map((c) => `${quote(c)} = GREATEST(t.${quote(c)}, r.${quote(c)})`)];
+  if (sets.length === 0) return;
+  await snapshotRows(
+    `UPDATE ${quote(table)} t SET ${sets.join(", ")} FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE t.${quote(spec.pk[0]!)}::text = $2 AND t.workspace_id = $3`, [JSON.stringify(values), key, workspaceId]);
+}
+
+function snapshotSpecOf(table: string): SnapshotSpec {
+  const spec = SNAPSHOT_SPECS.find((s) => s.table === table);
+  if (!spec) throw new Error(`${table} is not a table of the snapshot list`);
+  return spec;
+}
+
 /** One head of a unit that is not the one its stamp shows: a write nobody who wrote later had seen, that lost on the stamp order, with its value (migration 205 sync_stamp_heads). */
 type WireHead = {
   origin: string; seq: number; contentHash: string; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean;
@@ -98,6 +158,8 @@ export type SnapshotItem =
 export type StampedPage = {
   /** `rows` is done; `history` and `blobs` are in the format so a later stage needs no new page shape, and are refused until then. */
   layer: "rows" | "history" | "blobs";
+  /** SYNC_DATA_SHAPE_VERSION of the node that made the page (spine/syncDataShape.ts): another version is refused. */
+  dataShape: number;
   page: number;
   /** The source's own sequence number when the read started: later changes have a larger one. */
   cut: number;
@@ -106,6 +168,34 @@ export type StampedPage = {
   workspaceId: string;
   items: SnapshotItem[];
 };
+
+/**
+ * One page of a change bundle (spine/stampedBundle.ts reads it, spine/stampedImport.ts `applyChangeBundle` takes the pages of one bundle back). The items are the
+ * snapshot's: a row with ALL its stamps of the scope (saw, meta, the other heads), or the tombstone of a row that is gone. A row also says each unit's value as TEXT
+ * (`texts`, what `sync_logged_value` gives), so the receiver never works a value out of the JSON of `values`. Every page of one bundle has the same header.
+ */
+type BundleRow = { kind: "row"; table: string; values: Record<string, unknown>; stamps: WireStamp[]; texts: Record<string, string | null> };
+export type BundleItem = BundleRow | Extract<SnapshotItem, { kind: "tombstone" }>;
+type ChangeBundleHeader = {
+  layer: "changes";
+  dataShape: number;
+  workspaceId: string;
+  /** Which units the bundle speaks about. `content_nodes`: the stamps filed under that label. Another scope is another bundle (and another number in `sync_origins.have`). */
+  scope: "content_nodes";
+  /** The node that made the bundle. */
+  sender: string;
+  /** The sender's own sequence number when the read started (its stamps in the bundle are at most this). */
+  cut: number;
+  /** What the receiver said it holds (the `have` of the request), per origin: the bundle has every write of the scope above these. */
+  base: Record<string, number>;
+  /** What the sender holds of the scope, per origin, at the cut: the receiver holds these after taking the bundle. */
+  upTo: Record<string, number>;
+  /** How many pages the bundle has. */
+  pages: number;
+};
+export type ChangeBundlePage = ChangeBundleHeader & { page: number; items: BundleItem[] };
+/** The pages of one bundle, put together (spine/stampedBundle.ts `bundleOf`). */
+export type ChangeBundle = ChangeBundleHeader & { items: BundleItem[] };
 
 const STAMP_COLUMNS = `s.table_name AS label, s.row_key AS "rowKey", s.field, s.origin, s.seq::float8 AS seq, s.hlc_wall::float8 AS wall,
   s.hlc_counter AS counter, s.author, s.device::text AS device, s.deleted, s.saw, s.meta,

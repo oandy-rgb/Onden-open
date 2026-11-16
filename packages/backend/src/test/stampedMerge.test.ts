@@ -241,12 +241,10 @@ describe("making a row again, events, and system writes", () => {
     expect(v.fields.get("title")!.map((c) => c.value)).toEqual(["again"]); // the recreator saw the old title
     expect(v.fields.get("body")!.map((c) => c.value).sort()).toEqual(["b2", "written while it was being deleted"]); // it never saw this one: a conflict, not a loss
   });
-  // PINNED for batch 2b (review note-96, 2026-11-16): a field write that the deleter had SEEN (the tombstone's meta.seen says so) should end with the deletion, so
-  // after the same id is made again no old write stays beside the recreated value. Today a node that still holds that write (it never got the delete) merges it
-  // back as a head against the recreation, one conflict per field that was ever edited. The data is there (meta.seen); nothing applies it. Whoever fixes this
-  // decides where: when merging (drop the write) or only in the views of rules/. note-cf's view: the merge core applies it when it handles a recreation of `*`, reading the tombstone's `seen` (batch 2b).
-  // Flip `it.fails` to `it` then. The second test below is the other half: what the deleter had NOT seen stays, and rules/trash.ts tells its author.
-  it.fails("PINNED: a write the deleter had seen is not a head again once the row is made again (three nodes: a made and edited it, b deleted and made it again, c never heard of the delete)", () => {
+  // A field write that the deleter had SEEN (the tombstone's meta.seen says so) ends with the deletion: after the same id is made again no old write stays beside the
+  // recreated value. `createRow` carries the delete's `seen` into the new creation (batch 2b-1) and `droppedBySeen` (store.ts) applies it when merging. The test after it is the other half:
+  // what the deleter had NOT seen stays, and rules/trash.ts tells its author.
+  it("a write the deleter had seen is not a head again once the row is made again (three nodes: a made and edited it, b deleted and made it again, c never heard of the delete)", () => {
     const a1 = writeField(made(), { ...row, field: "title" }, st("a", 1, T0 + 5, "u0"), { value: "edited by a" });
     const c = a1; // c holds what a made
     const tombstoned = deleteRow(a1, row, st("b", 1, T0 + 6, "u1"), { seen: seenOfRow(a1, "note", "n") });

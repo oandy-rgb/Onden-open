@@ -26,7 +26,9 @@ import { receive, tick } from "../hlc.js";
 import { lockEventAppend } from "./eventTransaction.js";
 
 /** A stamp as it is kept in the transaction setting. `bypass` marks one the trigger made for a write outside the roots. */
-export type StampSetting = { origin: string; seq: number; wall: number; counter: number; author: string | null; device: string | null; bypass?: true };
+export type StampSetting = { origin: string; seq: number; wall: number; counter: number; author: string | null; device: string | null; bypass?: true;
+  /** The writer is not a person (a system job, spine/systemJobs.ts, or an AI agent): only a person's write resolves a conflict, so the database refuses its write to a unit that holds other heads (migration 206, `sync_unit_in_conflict`). */
+  system?: true };
 /** A stamp made on another node: its origin, sequence number and clock are kept exactly as received. */
 export type ForeignStamp = Omit<StampSetting, "bypass">;
 
@@ -40,13 +42,18 @@ const MAX_FOREIGN_CLOCK_AHEAD_MS = 10 * 60 * 1000;
 
 /** The batch's highest clock reading is further ahead than MAX_FOREIGN_CLOCK_AHEAD_MS: nothing of the batch is written. */
 class ForeignClockAheadError extends CodedStatusError {
-  constructor() { super(422, "stamp_clock_ahead", "a stamp's clock reading is too far ahead of this machine's clock"); }
+  /** `theirWall`: the highest clock reading of the stamps (ms); `ourWall`: this machine's clock (ms); `aheadMs`: how far apart; `side`: whose clock is out of step (the stamps' when they are ahead of this machine's). */
+  constructor(readonly theirWall: number, readonly ourWall: number) {
+    super(422, "stamp_clock_ahead", `a stamp's clock reading is too far ahead of this machine's clock (${theirWall - ourWall} ms ahead; the bound is ${MAX_FOREIGN_CLOCK_AHEAD_MS} ms)`);
+  }
+  get aheadMs(): number { return this.theirWall - this.ourWall; }
+  readonly side = "sender" as const;
 }
 
 /** Refuse a batch of foreign stamps whose highest `wall` is ahead of `nowWall` by more than the bound. Pure: call it
  *  before the first write (and before any lock), so a refusal leaves the clock and the data exactly as they were. */
 export function assertForeignClockWithinBound(maxWall: number, nowWall: number = Date.now()): void {
-  if (!Number.isFinite(maxWall) || maxWall - nowWall > MAX_FOREIGN_CLOCK_AHEAD_MS) throw new ForeignClockAheadError();
+  if (!Number.isFinite(maxWall) || maxWall - nowWall > MAX_FOREIGN_CLOCK_AHEAD_MS) throw new ForeignClockAheadError(maxWall, nowWall);
 }
 
 const stampSetting = (workspaceId: string) => `onden.stamp_${workspaceId.replaceAll("-", "_")}`;
@@ -81,7 +88,7 @@ async function joinTableThere(): Promise<boolean> {
 
 /** Give the open transaction its stamp for this workspace (once: a second root in the same transaction keeps the first).
  *  `authorId` is the actor of the root write; the device comes from the request. Call inside the transaction. */
-export async function stampTransaction(workspaceId: string, authorId: string, options: { system?: boolean } = {}): Promise<void> {
+export async function stampTransaction(workspaceId: string, authorId: string, options: { system?: boolean; notAPerson?: boolean } = {}): Promise<void> {
   const device = options.system ? null : currentDeviceId() ?? null; // background work has no device (same as domain_events.device_id)
   const node = await lockClock(workspaceId);
   // A workspace that is being filled from a snapshot is not written by anyone else meanwhile: a write here would carry this node's own
@@ -95,13 +102,27 @@ export async function stampTransaction(workspaceId: string, authorId: string, op
     // already written stay as they were) and let the writes from here on name their author. A stamp from another node
     // is never changed.
     const kept = JSON.parse(node.stamp) as StampSetting;
-    if (kept.bypass) await setStamp(workspaceId, { ...kept, author: authorId, device });
+    if (kept.bypass) await setStamp(workspaceId, { ...kept, author: authorId, device, ...(options.system || options.notAPerson ? { system: true as const } : {}) });
     return;
   }
   const clock = tick({ wall: Number(node.hlc_wall), counter: node.hlc_counter }, Date.now());
   const seq = Number(node.next_seq);
   await sql`UPDATE sync_clock SET next_seq = ${seq + 1}, hlc_wall = ${clock.wall}, hlc_counter = ${clock.counter} WHERE workspace_id = ${workspaceId}::uuid`.execute(db);
-  await setStamp(workspaceId, { origin: node.node_id, seq, wall: clock.wall, counter: clock.counter, author: authorId, device });
+  await setStamp(workspaceId, { origin: node.node_id, seq, wall: clock.wall, counter: clock.counter, author: authorId, device, ...(options.system || options.notAPerson ? { system: true as const } : {}) });
+}
+
+/**
+ * The writes `fn` makes are housekeeping, not an edit: the stamps they write carry `meta.quiet`, which `updated_at` (migration 206 sync_touch_updated_at) does not count. Only the writer knows
+ * that, so it is said in the stamp, where every node reads it. The one place that sets the switch (`onden.stamp_quiet`, local to the transaction); call inside the transaction.
+ * A failed write rolls the setting back with its transaction or savepoint.
+ *
+ *   await withQuietStamps(() => applyTheRewrite());   // e.g. services/nodeUpdate.ts when a save must not move "recently changed"
+ */
+export async function withQuietStamps<T>(fn: () => Promise<T>): Promise<T> {
+  await sql`SELECT set_config('onden.stamp_quiet', 'on', true)`.execute(db);
+  const result = await fn();
+  await sql`SELECT set_config('onden.stamp_quiet', '', true)`.execute(db);
+  return result;
 }
 
 /** The writes of this transaction in `workspaceId` carry a stamp made on ANOTHER node: its origin, sequence number,
@@ -151,6 +172,9 @@ export async function advanceClockFor(workspaceId: string, readings: ClockReadin
   const clock = receive({ wall: Number(node.hlc_wall), counter: node.hlc_counter }, highest, Date.now());
   await sql`UPDATE sync_clock SET hlc_wall = ${clock.wall}, hlc_counter = ${clock.counter} WHERE workspace_id = ${workspaceId}::uuid`.execute(db);
 }
+
+/** The bound itself, for the state below. */
+export const FOREIGN_CLOCK_BOUND_MS = MAX_FOREIGN_CLOCK_AHEAD_MS;
 
 /** This node's id (the origin of every stamp it makes). */
 export async function localNodeId(): Promise<string> {

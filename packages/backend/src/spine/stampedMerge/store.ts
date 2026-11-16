@@ -16,7 +16,7 @@
 // The stored form is canonical: a field unit that equals what following `*` would give is not stored, so two nodes
 // holding the same writes hold the same map.
 
-import { type Cell, type Json, type Stamp, type Unit, type SkewGate, type MergeResult, type Rejection, canonical, deferReason, describeUnitChange, maximalHeads, mergeUnit, rejectReason, writeUnit } from "./unit.js";
+import { type Cell, type Json, type Stamp, type Unit, type SkewGate, type MergeResult, type Rejection, GENESIS_STAMP_ORIGIN, canonical, deferReason, describeUnitChange, maximalHeads, mergeUnit, rejectReason, writeUnit } from "./unit.js";
 
 export const STAR = "*";
 export type UnitAddress = { table: string; row: string; field: string };
@@ -37,6 +37,27 @@ function derived(star: Unit | undefined, field: string): Cell[] {
   const out: Cell[] = [];
   for (const h of star ?? []) if (!h.deleted && isFields(h.value) && Object.hasOwn(h.value, field)) out.push({ ...h, saw: {}, value: h.value[field]! });
   return out;
+}
+
+/** What the deleter of a row had seen of its units, carried by a creation that covers the delete (meta.seen, written by migration 206's trigger and by `createRow`). */
+function seenByDelete(star: Unit | undefined, includeDeletes = false): Record<string, number> {
+  const seen: Record<string, number> = {};
+  for (const h of star ?? []) {
+    const s = h.deleted && !includeDeletes ? undefined : (h.meta as { seen?: unknown } | undefined)?.seen;
+    if (s && typeof s === "object" && !Array.isArray(s)) for (const [o, n] of Object.entries(s)) if (typeof n === "number") seen[o] = Math.max(seen[o] ?? -1, n);
+  }
+  return seen;
+}
+
+/**
+ * A row made again over a permanent delete: the writes to its fields that the deleter had SEEN ended with the delete, so they are not heads beside the
+ * recreated values (README "刪除之後再建立"). `star` is the row's `*` as it stands now; a write the deleter had not seen stays, and rules/trash.ts tells its author.
+ * A function of the SET of writes (the recreation's `meta.seen` travels with it), so it gives the same answer on every node and in every arrival order.
+ */
+export function droppedBySeen(star: Unit | undefined, cells: readonly Cell[]): Cell[] {
+  const seen = seenByDelete(star);
+  if (Object.keys(seen).length === 0) return [...cells];
+  return cells.filter((c) => c.stamp.origin === GENESIS_STAMP_ORIGIN || c.stamp.seq > (seen[c.stamp.origin] ?? -1));
 }
 
 /**
@@ -126,7 +147,7 @@ export function mergeStore(local: Store, incoming: Store, gate?: SkewGate): Stor
       const address = { table, row, field: f };
       // Only the field's own writes are stored; what follows `*` is read from the merged `*`, so a creation value that a
       // tombstone or a later `*` write has replaced cannot come back from a message that arrives late.
-      const stored = maximalHeads([...(local.get(addressKey(address)) ?? []), ...(admitted.get(addressKey(address)) ?? [])]);
+      const stored = maximalHeads(droppedBySeen(mstar, [...(local.get(addressKey(address)) ?? []), ...(admitted.get(addressKey(address)) ?? [])]));
       if (stored.length) out.set(addressKey(address), stored);
       const after = effectiveUnit(out, address);
       if (!after) continue; // it followed a `*` that is gone: the event of `*` says so, there is no unit left to describe
@@ -145,7 +166,9 @@ export function mergeStore(local: Store, incoming: Store, gate?: SkewGate): Stor
  */
 export function createRow(store: Store, a: { table: string; row: string }, stamp: Stamp, values: Fields, by: "person" | "system" = "person"): Store {
   const address = addressKey({ ...a, field: STAR });
-  const next = new Map(store).set(address, writeUnit(store.get(address), stamp, { value: values }, by));
+  // made again over a delete (or over a creation that already carries what a delete had seen): the new creation keeps that, so the writes the deleter had seen stay ended
+  const seen = seenByDelete(store.get(address), true);
+  const next = new Map(store).set(address, writeUnit(store.get(address), stamp, { value: values, ...(Object.keys(seen).length ? { meta: { seen } } : {}) }, by));
   for (const [field, value] of Object.entries(values)) {
     const there = effectiveUnit(store, { ...a, field });
     if (there) next.set(addressKey({ ...a, field }), writeUnit(there, stamp, { value }, by));

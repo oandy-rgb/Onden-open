@@ -2,7 +2,7 @@ import { q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { TAG_NODE_TYPE } from "@onden/markdown/contract";
 import type { ActorCtx } from "../types.js";
-import { assertAuthority } from "../spine/authority.js";
+import { assertAuthority, writesAsPerson } from "../spine/authority.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { withIdempotencyClaim } from "../spine/idempotency.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
@@ -143,7 +143,7 @@ function changeMembership(input: MembershipInput, operation: "apply" | "remove")
     if (!dryRun) await claim();
     // The link row is written before the first event goes through mutate(), so the transaction is stamped here, with
     // the actor as author; else the row's stamp is made by the trigger with no author.
-    if (!dryRun) await stampTransaction(workspaceId, actor.id, { system: !!systemJobOf(actor) });
+    if (!dryRun) await stampTransaction(workspaceId, actor.id, { system: !!systemJobOf(actor), notAPerson: !writesAsPerson(actor) });
     if (dryRun) {
       const existing = await q("SELECT 1 FROM node_tags WHERE node_id=$1 AND tag_id=$2", [nodeId,tagId]);
       return operation === "apply" ? existing.rows.length === 0 : existing.rows.length > 0;

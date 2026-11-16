@@ -1,3 +1,4 @@
+import { withQuietStamps } from "../spine/stamps.js";
 import { db } from "../dbKysely.js";
 import { withViews } from "./functionRefs.js";
 import { appendOrderKey, assertOrderKey, respaceIfTooLong, translateLegacySortOrder } from "./orderKeys.js";
@@ -301,13 +302,15 @@ export async function applyNodeColumns(
     vals.push(columns[column]);
     sets.push(`${sqlIdentifier(column)} = $${vals.length}`);
   }
-  const r = await q<ServerNodeRow>(
+  // A save that keeps `updated_at` says so in the stamps it writes (withQuietStamps)
+  const write = () => q<ServerNodeRow>(
     `UPDATE content_nodes
      SET ${(touchUpdatedAt ? [...sets, "updated_at = now()"] : sets).join(", ")}
      WHERE workspace_id = $1 AND id = $2
      RETURNING *`,
     vals,
   );
+  const r = touchUpdatedAt ? await write() : await withQuietStamps(write);
   if (before.isTag && "parent_id" in columns && (columns.parent_id ?? null) !== before.parentId) {
     await retypeGoverned(workspaceId, { tagIds: [id] });
   }

@@ -112,6 +112,56 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - 沒做：新增或移除整列、JSON 單位（`key:…`）、搬動以外的 `meta`、領域副作用（搜尋索引、連結、區塊錨點）、誰可以寫（來源的檢查在呼叫端）。
 - 系統與背景工作的寫入：核心遇到有衝突的單位不寫（`writeUnit(..., "system")`）。**資料庫的觸發器不知道誰在寫**，一個普通寫入（背景工作經 `mutate`）碰到有衝突的單位，目前仍會把它「解決」。在還沒有任何傳輸之前，資料庫裡不會出現多個頭，所以沒有實際影響；接上傳輸之前要在寫入路徑上擋（見 PR 說明「需要決定」）。
 
+## 修改包：別的節點的修改怎麼進來（第 2b-1 批，migration 206）
+
+唯一入口：`applyChangeBundle`（`spine/stampedImport.ts`），讀的一端是 `services/stampedBundle.ts` 的 `readChangeBundle`（格式與切點的說明在 `spine/stampedBundle.ts` 檔頭）。
+一包一個交易，和快照用同一個「觸發器讓開」開關（`reason: "merge"`），不另開旁路。範圍只有 `content_nodes` 的單位；其他表、JSON 鍵、（父層、排序鍵）合成一個單位、分空間的修改包都不在這批。
+
+| 檔案 | 責任 |
+| --- | --- |
+| `rows.ts` | 一列（`*` 與它的欄位）和對方那份合併：純函式，結果與 `store.ts` 的 `mergeStore` 一致（`stampedRows.test.ts` 對照） |
+| `dbRows.ts` | 資料庫那一端到列層：建列、永久刪除的列移除、欄位與標記寫回、本機 `structure_log` 的紀錄、slug |
+| `dbUnits.ts` `storeUnit` | 單位層寫回（兩條路共用）：輸的創建值也以頭的形式留下（它的值只存在那裡） |
+
+### 一個包說什麼
+
+- `base`：收的一方說它握有的（每個來源：連續握有到第幾號）；`upTo`：送的一方在切點握有的。包裡有每個來源在 `(base, upTo]` 之間、這個範圍的每一個寫入（被覆蓋的舊寫入不在：覆蓋它的寫入看過它）。
+- 一列只要有一個標記超過 `base` 就整列送（它所有的標記與 saw、meta、其他的頭，以及每個單位的值的文字），收的一方不必再問。刪掉的列是墓碑。
+- **切點為什麼不會漏**：序號在工作區的事件鎖與 `sync_clock` 那一列之下取，鎖到交易結束才放，所以同一工作區的序號依序取、依序提交，較大的序號不會比較小的先提交。
+  讀包時切點（`next_seq - 1`）與標記在**同一個唯讀快照**讀（`withActorReadSnapshot`）；不加鎖，讀不讓寫的人等。`stampedBundleCut.integration.test.ts` 在真的 Postgres 用兩條連線證明，並且在讀的中途提交一筆寫入，確認它不在這個包裡也不超過切點。
+- 收的一方拒收整包（沒有任何東西留下）：資料形狀版本不同（`bundle_data_shape`）、送的人不是它收過的來源（`bundle_unknown_sender`；快照的來源，或 `admitSyncNode` 收進來的節點，或由已收的送的人帶來的來源）、起點超過它握有的（`bundle_gap`：改拿快照）、同一個（來源、序號）內容不同（`bundle_stamp_clash`：還原備份或複製設定檔）、送的人說它握有這個節點自己從沒寫過的序號（`bundle_own_origin_ahead`：這個節點被還原了）、時鐘超前（`stamp_clock_ahead`：稍後再送）、工作區正在加入（`merge_not_open`）。
+  同樣的包再套一次什麼都不改。
+- **`bundle_stamp_clash` 抓得到與抓不到**：抓得到——接收方的單位還握著那個標記：A 寫了標題（A, s），B 收下；A 被還原後又寫出（A, s）但內容不同，並多寫一筆讓這一列被送出 → 同一個（來源, 序號）內容不同，整包拒收（`stampedBundle.integration`「the same (origin, seq) with other content」）。
+  抓不到——接收方的單位已經被後續寫入蓋掉：A 寫了（A, s）又寫了（A, s+1），B 只握有後者；還原後的 A 再寫出（A, s）不同內容 → 後者的 `saw` 已涵蓋（A, s），沒有東西可比，整包照收（已釘成測試：預期不拒收，`what bundle_stamp_clash cannot see`）。
+  真正的解法是還原後換新的節點編號（不在這批）。
+
+### 收不進去：三個原因、一個出口
+
+一個節點的本機歷史「照原樣收不進去」有三種：**時鐘超前**（`stamp_clock_ahead`，回報對方的讀數、本機時間與差距；存下來的 `hlc_wall` 只會取大，把時鐘調回來也解不開，`stampedBundle.integration`「a clock that was 30 minutes ahead and is set right again」釘住）、
+**被還原**（`bundle_sender_restored`：收的一方握有送的人沒寫過的序號）、**離線太久**（`bundle_gap`：起點超過收的一方握有的，改拿快照；`stampedBundle.integration`「a node that was offline for too long」釘住：送的一方沒有收的一方缺的那一段，整包被拒、什麼都不寫）。三個的出口是同一個：該裝置換一個新的節點編號，把還沒被任何人收下的寫入用現在的時間重新蓋章再送——**這一批不做**，不另外發明「等時間到」或「放寬上限」的路。
+`readUnsendable`（`spine/stampedBundle.ts`）是同一個結構的讀取函式：每個原因一筆 `{reason, writes, aheadMs?}`；今天只有 `clock_ahead` 能從本機資料算出來，另兩個要等有人拒收時才知道，還沒有東西把那個答案存下來。
+
+### 刪除之後再建立
+
+永久刪除寫一個墓碑，它的 `meta.seen` 是刪的人當時看過的（每個來源最大的序號）。同一個 id 再建立時，新的 `*` 把這個 `seen` 帶在自己的 `meta`（migration 206 的觸發器與 `createRow`），
+所以**刪的人看過**的欄位寫入不再是新值旁邊的頭（`droppedBySeen`，`store.ts`）；刪的人**沒看過**的寫入留下，成為衝突（它的作者看得到）。收到永久刪除時，沒看過刪除的寫入不再有列可存：回報在 `lateEdits`（`rules/trash.ts` 的 `recoverLateEdits`），由呼叫者還給作者。
+
+### 4.9 在已刪除父層底下的筆記：定案是「檢視」，不是寫入
+
+`storeMergedRows` 的回報有 `orphaned`（哪些筆記在刪的人沒看過它們時，底下的父層就被永久刪除）與 `notices`（要通知誰，含刪除時沒看過的修改），由 `rules/trash.ts` 從每個節點都有的戳記算出，所以每個節點答案相同；**不寫入**。
+為什麼不是寫入：衍生的修正必須是已複製狀態的純函式；若每個節點各蓋一筆「放進垃圾桶」的寫入，各自的戳記不同，兩邊就不再相同，也無從決定誰的那筆勝出。
+還沒做的是**讀取**：清單、樹、搜尋今天還不知道這個檢視，會把孤兒筆記當成普通的頂層筆記；`stampedBundle.integration`「rule 4.9, the READ」用 `it.fails` 釘住，擋在 2b-2／畫面那批。
+
+### 系統寫入不解決衝突
+
+系統／背景工作（`systemJobOf`，`stampTransaction` 把 `system: true` 放進標記設定）寫到有其他頭的單位，資料庫拒絕（`sync_unit_in_conflict`，409，可重試）；人的寫入看過所有頭，照舊取代。這一批不另設重試上限：從 outbox 跑的工作是一般的可重試失敗，沿用 outbox 的額度（`RETRY_DAY_ATTEMPTS`，約一天，之後進入看得到的死亡列）；不是 outbox 的工作直接以 409 失敗（`syncSystemWriteConflict.integration` 釘住）。
+
+### 沒做到的（在測試裡釘住，見 `stampedBundle.integration.test.ts`）
+
+- 衍生資料：別的表裡由列衍生的資料（屬性、邊、指標、位置、區塊）不在包裡，也不會被更新；永久刪除一列時，收的一方的連鎖刪除不留墓碑（送的一方有）。
+- slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；兩個活著的筆記在同一空間要同一個 slug 時，id 較大的加上 `-<id 前八碼>`。這只保證資料庫的唯一索引不破，不保證所有歷史下各節點相同（需要決定）。
+- 同一個 id 在兩個節點各自建立（算出來的 id）：輸的創建值以頭的形式留下，列的建立欄位（slug、建立時間）跟著勝出的建立。
+
 ## 看見的限制
 
 見 PR 說明的「需要決定」。要點：晚到的撤權（4.1）在只留頭的狀態下無法讓已套用的寫入「事後作廢」，模擬找到會依到達順序而不同的結果，已用預期失敗的測試固定。

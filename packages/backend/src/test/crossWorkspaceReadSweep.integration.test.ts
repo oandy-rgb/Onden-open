@@ -507,6 +507,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     // the join record of a database that was filled from a snapshot (migration 204; no route reads it)
     await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'sweep-probe-node', 0, 'done')`, [A.ws]);
 
+    // which nodes this node takes change bundles from (migration 206; no route reads it)
+    await seedQ(`INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, 'sweep-probe-node', 'snapshot', '{}'::jsonb)`, [A.ws]);
+
     // the other head of a unit (migration 205; nothing but the stamp merge writes it, no route reads it)
     await seedQ(`INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, value) VALUES ($1, 'content_nodes', 'sweep-probe', 'title', 'genesis', 0, repeat('0', 64), 0, 0, 'probe')`, [A.ws]);
 

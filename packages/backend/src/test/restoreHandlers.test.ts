@@ -16,7 +16,8 @@ const probeRow = {
 // Write stamps (spine/stamps.ts) need the real node table; this file stands in for the database.
 vi.mock("../spine/stamps.js", () => ({ stampTransaction: async () => {}, countWritesWithoutStamp: async () => 0 }));
 vi.mock("../spine/currentActor.js", () => ({ resolveCurrentActor: async (a: ActorCtx) => a }));
-vi.mock("../spine/authority.js", () => ({ assertAuthority: vi.fn(async () => {}) }));
+// only the check is replaced; every other export (writesAsPerson, ...) stays real, so a new export does not break this file
+vi.mock("../spine/authority.js", async (original) => ({ ...await original<typeof import("../spine/authority.js")>(), assertAuthority: vi.fn(async () => {}) }));
 vi.mock("../spine/eventTransaction.js", () => ({
   withEventTransaction: async <T,>(_workspaceId: string, fn: () => Promise<T>): Promise<T> => fn(),
 }));

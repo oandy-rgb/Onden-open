@@ -18,6 +18,8 @@ const MAY_NAME_THEM = new Set([
   "spine/snapshotSql.ts", // reads the stamps of the rows a stamped snapshot carries, and their digest (export and check of a copy to an empty database)
   "spine/stampedImport.ts", // the one entry that writes a snapshot's stamps as received into a database that is joining (sync_join, migration 204)
   "spine/stampedMerge/dbUnits.ts", // reads and writes the stamps and other heads of a unit for the merge core; never sends them (the snapshot is the only wire form)
+  "spine/stampedBundle.ts", // reads the stamps a change bundle carries and this node's knowledge of each origin (sync_origins); the bundle is the second wire form, owner-only like the snapshot
+  "spine/stampedMerge/dbRows.ts", // creates and removes rows for the merge core and writes the structure_log line of a change that came from another device; never sends them
   "services/stampedSnapshot.ts", // names sync_stamps only to refuse a snapshot of a database that holds stamps of another node; never sends one but through the owner-only snapshot route
   "dbSchema.generated.ts", // generated column types
 ]);

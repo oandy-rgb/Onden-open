@@ -33,10 +33,12 @@ import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { storeMergedUnits, type IncomingUnit, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
-import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
+import { storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { bundleRefused, normalizeHave } from "./stampedBundle.js";
+import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
+import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
 
 class JoinRefused extends CodedStatusError {}
 const refuse = (code: string, message: string, status: 400 | 409 | 413 | 422 = 422) => new JoinRefused(status, code, message);
@@ -131,6 +133,7 @@ function checkSaw(saw: unknown): void {
 
 /** Everything about the page that can be checked without writing: shape, tables, columns, workspace, stamps. Returns the readings. */
 async function checkPage(page: StampedPage, join: JoinRow, local: string, spacesAlreadyIn: boolean): Promise<ClockReading[]> {
+  if (page.dataShape !== SYNC_DATA_SHAPE_VERSION) throw refuse("join_data_shape", `the page has data shape ${String(page.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: upgrade the older node first`, 409);
   if (page.layer !== "rows") throw refuse("join_layer_not_done", `the ${String(page.layer)} layer is not done yet`);
   if (page.workspaceId !== join.workspace_id) throw refuse("join_wrong_workspace", "the page is of another workspace");
   if (page.source !== join.source_node) throw refuse("join_wrong_source", "the page was made on another node");
@@ -342,6 +345,10 @@ export async function markJoinDone(workspaceId: string, expected: { pages: numbe
       const tables = added.rows.map((r) => r.t);
       throw refuse("join_unstamped_rows", `the snapshot left rows without a stamp (${tables.join(", ")})`, 409);
     }
+    // the node this workspace was filled from is the first origin it accepts bundles from (migration 206), held up to the cut of the snapshot
+    await snapshotRows(
+      `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, 'snapshot', jsonb_build_object('content_nodes', $3::bigint))
+       ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, join.source_node, join.cut_seq]);
     await snapshotRows(`UPDATE sync_join SET state = 'done', finished_at = now() WHERE workspace_id = $1`, [workspaceId]);
   });
 }
@@ -362,17 +369,131 @@ export async function cancelJoin(workspaceId: string): Promise<void> {
   });
 }
 
+/** The one place the stamp triggers stand aside for a merge (the counted exception, sync_clock.merge_batches). A workspace with no clock yet, or one that is being joined, takes nothing. */
+async function openMerge(workspaceId: string): Promise<void> {
+  await standAsideForImport(workspaceId, "merge");
+  const active = (await snapshotRows<{ on: boolean }>(`SELECT sync_import_active($1::uuid) AS on`, [workspaceId])).rows[0]!.on;
+  if (!active) throw refuse("merge_not_open", "this workspace does not take merged units now (it has no clock yet, or it is being joined)", 409);
+}
+
 /**
- * THE ONE ENTRY that writes units received from another node into a workspace that is not being joined, with the stamps they came with (the merge core's answer,
+ * Writes units received from another node into a workspace that is not being joined, with the stamps they came with (the merge core's answer,
  * spine/stampedMerge/dbUnits.ts). The same switch as a snapshot import (migrations 204 / 205 `sync_import_active`, reason "merge"): the stamp triggers stand
- * aside for this transaction, which counts in sync_clock.merge_batches; a workspace with no clock yet, or one that is still joining, takes nothing. It decides
- * nothing about who may write: the caller (the changes pack, later) has checked the sender, and domain effects of a changed row are the caller's too.
+ * aside for this transaction, which counts in sync_clock.merge_batches. It decides nothing about who may write: the caller has checked the sender, and domain
+ * effects of a changed row are the caller's too. A change bundle is taken by `applyChangeBundle` below, which is the product's entry; this one is for single units.
  */
 export async function mergeUnitsIntoWorkspace(workspaceId: string, incoming: readonly IncomingUnit[], gate?: SkewGate): Promise<UnitMergeReport> {
   return withEventTransaction(workspaceId, async () => {
-    await standAsideForImport(workspaceId, "merge");
-    const active = (await snapshotRows<{ on: boolean }>(`SELECT sync_import_active($1::uuid) AS on`, [workspaceId])).rows[0]!.on;
-    if (!active) throw refuse("merge_not_open", "this workspace does not take merged units now (it has no clock yet, or it is being joined)", 409);
+    await openMerge(workspaceId);
     return storeMergedUnits(workspaceId, incoming, gate);
+  });
+}
+
+/** What taking a bundle did. */
+type BundleReport = RowsReport & {
+  sender: string;
+  /** For each origin the receiver now holds further than before (or knew nothing of): the number it holds now. */
+  advanced: Record<string, number>;
+};
+
+type Knowledge = { have: number; known: boolean };
+
+/**
+ * Admit `node` to this workspace: its bundles are taken from now on. THE ONLY WAY a node that did not give this one its snapshot becomes a sender (with star transport the
+ * centre admits each device once; a device admits the centre by taking its snapshot). Who may admit is the caller's to decide (the owner, in the pairing step, a later batch).
+ * Holding nothing of it yet is `have = 0`. Admitting again changes nothing. This node's own node id is not admitted (it is this node).
+ */
+export async function admitSyncNode(workspaceId: string, node: string, vouchedBy = "admitted"): Promise<void> {
+  if (!node || node === GENESIS_ORIGIN) throw refuse("sync_bad_node", "a node id is needed");
+  await withEventTransaction(workspaceId, async () => {
+    if (node === (await localNodeId())) throw refuse("sync_node_is_self", "this node is not admitted to itself", 409);
+    await snapshotRows(`INSERT INTO sync_origins (workspace_id, origin, vouched_by) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, node, vouchedBy]);
+  });
+}
+const GENESIS_ORIGIN = "genesis";
+
+function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
+  if (bundle.layer !== "changes" || bundle.scope !== "content_nodes") throw bundleRefused("bundle_scope", "this is not a bundle of content_nodes units", 422);
+  if (bundle.dataShape !== SYNC_DATA_SHAPE_VERSION) throw bundleRefused("bundle_data_shape", `the bundle has data shape ${String(bundle.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: the older node has to be upgraded first`);
+  if (bundle.workspaceId !== workspaceId) throw bundleRefused("bundle_wrong_workspace", "the bundle is of another workspace", 422);
+  normalizeHave(bundle.base);
+  normalizeHave(bundle.upTo);
+  if (!bundle.sender || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender and its cut", 422);
+  for (const item of bundle.items) {
+    const stamps = item.kind === "row" ? item.stamps : [item.stamp];
+    for (const s of stamps) for (const w of [s, ...s.heads]) {
+      if (![w.seq, w.wall, w.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw bundleRefused("bundle_malformed", "a stamp number that is not a whole number", 422);
+      if (w.origin === GENESIS_ORIGIN) continue;
+      // nothing of an origin beyond what the sender says it holds: a stamp past the cut is a read that was not one snapshot, or a lie
+      if (w.seq > (bundle.upTo[w.origin] ?? -1)) throw bundleRefused("bundle_stamp_beyond_cut", "a stamp of the bundle is beyond what its sender says it holds", 422);
+    }
+  }
+}
+
+/** The highest clock reading among the stamps the receiver does not hold yet: a row is sent whole, so a bundle also carries stamps the receiver has (its own, or below `base`), and what it made itself is no foreign clock. */
+function foreignWall(bundle: ChangeBundle, local: string): number {
+  let max = 0;
+  for (const item of bundle.items) for (const s of item.kind === "row" ? item.stamps : [item.stamp]) for (const w of [s, ...s.heads]) {
+    if (w.origin === GENESIS_ORIGIN || w.origin === local || w.seq <= (bundle.base[w.origin] ?? 0)) continue;
+    max = Math.max(max, w.wall);
+  }
+  return max;
+}
+
+/**
+ * THE ONE ENTRY that takes a change bundle (spine/stampedBundle.ts readChangeBundle made it): the stamps another node has and this one does not, for the units of content_nodes,
+ * merged by the merge core, ONE transaction for the whole bundle, with the same stand-aside switch as a snapshot (reason "merge", `openMerge`): there is no second bypass.
+ * Refused whole, nothing written, with a code the caller branches on:
+ *   bundle_data_shape        another SYNC_DATA_SHAPE_VERSION (spine/syncDataShape.ts)
+ *   bundle_unknown_sender    the sender is not an origin this workspace accepts (sync_origins: its snapshot's source, or a node `admitSyncNode` admitted)
+ *   bundle_gap               per origin the bundle starts past what this node holds (`base` > held): take a snapshot instead
+ *   bundle_stamp_clash       a stamp (origin, seq) this node already holds is in the bundle with other content (a restored backup or a cloned profile made it twice)
+ *   bundle_sender_restored   the sender holds less of ITSELF than this node does (it was restored from an older copy; also refused when it reads, spine/stampedBundle.ts)
+ *   bundle_own_origin_ahead  the bundle says its sender holds writes of THIS node's origin beyond what this node ever made: this node was restored from an older backup
+ *   bundle_stamp_beyond_cut, bundle_malformed, bundle_scope, bundle_wrong_workspace, bundle_from_self   the bundle is not what it says
+ *   stamp_clock_ahead        a clock further ahead than the bound (spine/stamps.ts): offer it again later
+ *   merge_not_open           this workspace is being joined, or has no clock
+ * Taken a second time, a bundle changes nothing. The same stamp with the same content is skipped (re-delivery); knowledge only moves forward.
+ * Not done here, on purpose: who may send (`admitSyncNode`'s caller), tables other than content_nodes, what is derived from a row's text (the PR names it), a transport.
+ */
+export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundle): Promise<BundleReport> {
+  checkBundleShape(workspaceId, bundle);
+  return withEventTransaction(workspaceId, async () => {
+    await openMerge(workspaceId);
+    const local = await localNodeId();
+    if (bundle.sender === local) throw bundleRefused("bundle_from_self", "a bundle made by this node is not taken by this node");
+    assertForeignClockWithinBound(foreignWall(bundle, local));
+    const rows = (await snapshotRows<{ origin: string; vouched_by: string; have: Record<string, number> }>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
+    const held = new Map(rows.map((r) => [r.origin, { have: r.have.content_nodes ?? 0, known: true } as Knowledge] as const));
+    // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
+    if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
+    const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
+    if ((bundle.upTo[local] ?? 0) > ownMax) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
+    if ((bundle.base[bundle.sender] ?? 0) > (bundle.upTo[bundle.sender] ?? 0)) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
+    for (const [origin, upTo] of Object.entries(bundle.upTo)) {
+      if (origin === local) continue;
+      const base = bundle.base[origin] ?? 0;
+      if (base > (held.get(origin)?.have ?? 0) && upTo > (held.get(origin)?.have ?? 0)) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin}: take a snapshot instead`);
+    }
+    const report = await storeMergedRows(workspaceId, bundle.items);
+    if (report.rejected.length) {
+      const clash = report.rejected.some((r) => r.reason === "same-stamp-different-content");
+      const first = report.rejected[0]!;
+      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", "a write of the bundle is not in the format", 422);
+    }
+    const advanced: Record<string, number> = {};
+    for (const [origin, upTo] of Object.entries(bundle.upTo)) {
+      if (origin === local) continue;
+      const mine = held.get(origin)?.have, next = Math.max(mine ?? 0, upTo);
+      if (mine === undefined || next > mine) {
+        advanced[origin] = next;
+        await snapshotRows(
+          `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, jsonb_build_object('content_nodes', $4::bigint))
+           ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || jsonb_build_object('content_nodes', $4::bigint)`, [workspaceId, origin, bundle.sender, next]);
+      }
+    }
+    const readings = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]).flatMap((s) => [s, ...s.heads].filter((w) => w.origin !== local).map((w) => ({ wall: w.wall, counter: w.counter }))));
+    await advanceClockFor(workspaceId, readings);
+    return { ...report, sender: bundle.sender, advanced };
   });
 }

@@ -114,9 +114,8 @@ describe.skipIf(!enabled)("a shorter query finds at least what the longer one fo
     process.stdout.write(`${describeCoverage(coverage)}\n`);
   }, TIMEOUT);
 
-  // Only Han on both sides: a single Latin letter or digit is a whole token for pgroonga, so it is found next to a Han character
-  // and NOT inside a longer word — the same grapheme in the same place gives another answer than a Han one would (the fixed example
-  // below; first real-Postgres run, PROPS_SEED=20261023). What is left is the comparison that crosses the "length 2" boundary:
+  // Only Han on both sides: what a single Latin letter or digit finds depends on the query plan (the fixed example below), so the
+  // same grapheme in the same place can give another answer than a Han one would (first real-Postgres run, PROPS_SEED=20261023). What is left is the comparison that crosses the "length 2" boundary:
   // a BMP Han character (1 UTF-16 unit) against one of Extension B (2 units).
   const oneHan = (g: string): boolean => /^\p{Script=Han}$/u.test(g);
   it.skipIf(needsPgroonga)("MR-S2 pgroonga engine: a one-character Han query does not depend on which Han block the character is in", async () => {
@@ -128,10 +127,18 @@ describe.skipIf(!enabled)("a shorter query finds at least what the longer one fo
     });
   }, TIMEOUT);
 
-  it.skipIf(needsPgroonga)("pgroonga today: a single Latin letter is found as a whole token, not inside a longer word; a Han character is found in both places", async () => {
+  // What pgroonga answers for a single Latin letter depends on HOW Postgres runs the query, which the caller does not choose:
+  // through the pgroonga index the letter is a whole token (q is found next to a Han character, not inside qq); when the planner
+  // reaches the rows another way (say the workspace index) and applies the operator row by row, it matches like a substring
+  // (q is found inside qq too). Seen on real Postgres for this same corpus: {3} in public runs 43914649094 and 43932814646,
+  // {2, 3} in run 43938225708. So this pins only what holds either way; that the answer changes with the plan is an open
+  // defect of the engine's contract (services/textSearch.ts), not something this file can make deterministic.
+  it.skipIf(needsPgroonga)("pgroonga today: a Han character is found wherever it is; a single Latin letter is found at least as a whole token", async () => {
     const world = await openWorld("pgroonga", [{ title: "筆筆", body: "" }, { title: "筆\u{20000}\u{20000}筆", body: "" }, { title: "qq", body: "" }, { title: "q\u{20000}\u{20000}q", body: "" }]);
     expect(exactIndices(await world.search("筆"))).toEqual(new Set([0, 1]));
-    expect(exactIndices(await world.search("q")), "q inside the word qq is not a token").toEqual(new Set([3]));
+    const q = exactIndices(await world.search("q"));
+    expect(q.has(3), "q as a whole token").toBe(true);
+    expect([...q].every((index) => index === 2 || index === 3), "nothing that does not hold a q").toBe(true);
   }, TIMEOUT);
 
   // ── fixed examples: what the portable engine does today with Unicode spellings (portable-backend.md §4: no normalisation) ──

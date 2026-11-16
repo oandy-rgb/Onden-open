@@ -11,7 +11,7 @@ vi.mock("../lib/localDb", () => ({ getPendingWrites: vi.fn(async () => []) }));
 let mayEdit = true;
 vi.mock("../lib/capabilities", async (original) => ({ ...await original<typeof import("../lib/capabilities")>(), useCapabilities: () => ({ canEdit: () => mayEdit }) }));
 const { api, noWorkspaceData } = await import("../lib/api");
-const { resetAppState } = await import("../lib/appStore");
+const { resetAppState, setData } = await import("../lib/appStore");
 const { setLocalePref } = await import("../lib/i18n");
 const { drafts } = await import("../lib/data");
 const { registerNoteEditor } = await import("../lib/editorInsert");
@@ -138,6 +138,19 @@ describe("the answer is Markdown, drawn by the app's one reader", () => {
     expect(answer.querySelector("a")?.getAttribute("href")).toBe("https://example.com/a");
     expect(answer.textContent).not.toContain("**");
     expect(answer.textContent).not.toContain("- 第一項");
+  });
+
+  it("a finished answer is not rebuilt while it sits there: the same elements after time passes and after the note beside it is saved (a rebuilt element drops the selected text)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const answer = await answered("用 `yylex()` 這個函式，見 [[專案計畫]]\n\n- 第一項");
+      const before = [answer.querySelector("code"), answer.querySelector("button.wikilink-token"), answer.querySelector("li")];
+      expect(before.every(Boolean), answer.innerHTML).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+      await act(async () => { setData((d) => ({ ...d, nodes: d.nodes.map((n) => n.id === open.id ? { ...n, markdown: "又打了幾個字", updated_at: "2026-10-01T00:01:00Z" } : n) })); });
+      expect([answer.querySelector("code"), answer.querySelector("button.wikilink-token"), answer.querySelector("li")]).toEqual(before);
+      expect(before.every((el) => el!.isConnected)).toBe(true);
+    } finally { vi.useRealTimers(); }
   });
 
   it("the AI's text is untrusted: an <img onerror> stays text and no element is made from it", async () => {

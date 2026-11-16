@@ -28,6 +28,17 @@
   word-break: break-word;
 }
 
+/* A choice inside the dialog: the box and its words on one line, the box at the start (it must not take a line of its own). */
+.confirm-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.confirm-dialog-check input { flex: none; width: auto; margin: 0; }
+
 .confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;

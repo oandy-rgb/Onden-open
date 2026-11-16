@@ -25,9 +25,9 @@ export default function RestoreVersionDialog({ when, titleNow, titleThen, onConf
         <p className="confirm-dialog-message">
           {t("The note's title is now “{now}”. That version was titled “{then}”.", { now: displayTitle(titleNow), then: displayTitle(titleThen) })}
         </p>
-        <label className="confirm-dialog-message">
-          <Checkbox checked={restoreTitle} onChange={(e) => setRestoreTitle(e.target.checked)} />{" "}
-          {t("Also change the title back to “{title}”", { title: displayTitle(titleThen) })}
+        <label className="confirm-dialog-message confirm-dialog-check">
+          <Checkbox checked={restoreTitle} onChange={(e) => setRestoreTitle(e.target.checked)} />
+          <span>{t("Also change the title back to “{title}”", { title: displayTitle(titleThen) })}</span>
         </label>
         <div className="confirm-dialog-actions">
           <Button variant="secondary" onClick={onClose}>{t("Cancel")}</Button>

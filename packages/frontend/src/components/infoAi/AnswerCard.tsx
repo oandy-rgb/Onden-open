@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Copy, Square } from "lucide-react";
 import { t } from "../../lib/i18n";
 import { classNames } from "../../lib/utils";
@@ -7,6 +7,7 @@ import { selectedTextWithin } from "../../lib/noteChatDom";
 import { displayTitle } from "../../lib/noteLabel";
 import { chatFailureText, stepLine, suggestionLine, turnIsOpen, waitingLine } from "../../lib/noteChat";
 import type { ChatTurn } from "@onden/contract";
+import type { ContentNode } from "../../lib/api";
 import { useNowMs } from "../../hooks/useNowMs";
 import { useAllNodes } from "../../lib/appStore";
 import { AiAnswer } from "../markdownSurfaces";
@@ -26,11 +27,8 @@ export default function AnswerCard({ turn, live, canEdit, online, onOpenSource, 
   onStop: () => void;
 }) {
   const body = useRef<HTMLDivElement>(null);
-  const nodes = useAllNodes();
+  const nodes = useLinkTargets();
   const open = turnIsOpen(turn);
-  // Re-read now and then so a question nobody picks up turns into a plain note about it.
-  const now = useNowMs(10_000);
-  const waiting = open && !live ? waitingLine(turn, now) : null;
   const shown = live ? live.text : turn.reply ?? "";
   const scopeNames = [...turn.scope.notes.map((n) => displayTitle(n.title)), ...turn.scope.tags.map((tag) => `#${tag.name}`)];
   const proposed = suggestionLine(turn);
@@ -40,6 +38,13 @@ export default function AnswerCard({ turn, live, canEdit, online, onOpenSource, 
     return selectedTextWithin(body.current);
   };
   const copy = () => { void copyText(selected() || turn.reply || ""); };
+  // One function for the life of the card: the Markdown reader rebuilds every element of the answer when the function it is given
+  // changes, and a rebuilt paragraph drops the text the person had selected in it (the copy bar closed by itself, tablet 2026-11-16).
+  const openSource = useRef(onOpenSource);
+  useEffect(() => { openSource.current = onOpenSource; });
+  const navigate = useCallback((_slug: string, nodeId: string | null, blockId?: string) => {
+    if (nodeId) openSource.current({ node_id: nodeId, block_id: blockId ?? null });
+  }, []);
 
   return (
     <article className="note-ai-turn" aria-label={t("A question to the AI")}>
@@ -49,11 +54,11 @@ export default function AnswerCard({ turn, live, canEdit, online, onOpenSource, 
       )}
       <div className="note-ai-answer" ref={body}>
         {live && live.step && <p className="note-ai-step" role="status">{stepLine(live.step)}</p>}
-        {open && !live && !shown && waiting && <p className={classNames("note-ai-step", waiting.stuck && "note-ai-step--stuck")} role="status">{waiting.text}</p>}
+        {open && !live && !shown && <WaitingLine turn={turn} />}
         {shown && (
           // The answer is the AI's text, so it is drawn by the app's one Markdown reader (the surface that shows raw HTML as text); [[links]] open the note.
           <div className="note-ai-text obsidian-preview obsidian-preview--md">
-            <AiAnswer nodes={nodes} onNavigate={(_slug, nodeId, blockId) => { if (nodeId) onOpenSource({ node_id: nodeId, block_id: blockId ?? null }); }}>{shown}</AiAnswer>
+            <AiAnswer nodes={nodes} onNavigate={navigate}>{shown}</AiAnswer>
           </div>
         )}
         {turn.status === "failed" && <p className="note-ai-failed" role="alert">{chatFailureText(turn.fail_code)}</p>}
@@ -96,4 +101,22 @@ export default function AnswerCard({ turn, live, canEdit, online, onOpenSource, 
       )}
     </article>
   );
+}
+
+/** What a question still waiting for its AI says. Its own component: it re-reads the time now and then (so a question nobody
+ *  picks up turns into a plain note about it), and that must not redraw a card whose answer is already there. */
+function WaitingLine({ turn }: { turn: ChatTurn }) {
+  const waiting = waitingLine(turn, useNowMs(10_000));
+  return waiting ? <p className={classNames("note-ai-step", waiting.stuck && "note-ai-step--stuck")} role="status">{waiting.text}</p> : null;
+}
+
+/** The notes a [[link]] in an answer can name, as the same array until one of them is added, removed, renamed or moved to another
+ *  space. The store hands out a new array for every save of any note; given that, the Markdown reader would rebuild the answer
+ *  (and drop the selection) each time the note beside the panel is saved. */
+function useLinkTargets(): ContentNode[] {
+  const nodes = useAllNodes();
+  const held = useRef<{ nodes: ContentNode[]; names: string }>({ nodes, names: "" });
+  const names = nodes.map((n) => `${n.id}\u0000${n.title}\u0000${n.slug}\u0000${n.space_id ?? ""}\u0000${n.deleted_at ? 1 : 0}`).join("\u0001");
+  if (held.current.names !== names) held.current = { nodes, names };
+  return held.current.nodes;
 }

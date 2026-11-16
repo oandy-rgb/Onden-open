@@ -3,6 +3,8 @@ name: CI
 # Two ways in (owner, 2026-11-14):
 # - Every PR runs only the guard lane (scripts/guard-lane.sh, a few minutes): the cheap checks no merge
 #   may break. Drafts are skipped; a new push cancels the run before it.
+#   A manual run runs it too (2026-11-17): on the public mirror there are no PRs, so that is the only way it runs there.
+#   Pass the PR description as `-f pr_body=...` when it carries 「不需要更新說明」.
 # - The full suites below run only when asked (2026-10-29: 「我說要跑才跑」): Actions → CI → Run workflow,
 #   or `gh workflow run ci.yml --ref <branch>`. Private-repo minutes ran out in October when every push
 #   ran everything, so the heavy jobs stay manual and the local suites stay the merge gate.
@@ -15,6 +17,10 @@ on:
         description: "Also run the full-stack E2E (slow)"
         type: boolean
         default: false
+      pr_body:
+        description: "The PR description, for the change-note check (it looks for 「不需要更新說明」)"
+        type: string
+        default: ""
 
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
@@ -25,8 +31,10 @@ jobs:
   guard:
     name: Guard lane
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    timeout-minutes: 15
+    # On a PR, and on a manual run: the public mirror has no PRs, its branches are pushed by scripts/public-mirror/public-push.sh
+    # and started by hand, so without the second half this job never ran there and the lane stayed on a laptop.
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 20
     steps:
       # The ratchet and change-note checks compare against origin/main, so they need history.
       - uses: actions/checkout@v4
@@ -45,7 +53,7 @@ jobs:
       # so an internal-only PR passes without writing a note users would then be shown.
       - name: Guard lane
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BODY: ${{ github.event.pull_request.body || inputs.pr_body }}
         run: bash scripts/guard-lane.sh
 
   pairing-relay:

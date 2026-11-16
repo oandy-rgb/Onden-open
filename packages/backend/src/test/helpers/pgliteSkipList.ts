@@ -29,6 +29,7 @@ export const PGLITE_SKIPS: Readonly<Record<string, number>> = {
   "src/test/outboxLongrun.integration.test.ts": 1,
   "src/test/ownerMemberMigration.integration.test.ts": 16,
   "src/test/properties/backupHostHop.property.test.ts": 1,
+  "src/test/properties/searchPrefix.metamorphic.integration.test.ts": 4, // the pgroonga engine's two metamorphic relations, its fixed whole-token example and its differential against the portable engine; real Postgres runs them
   "src/test/properties/searchUnicode.integration.property.test.ts": 3,
   "src/test/readSnapshot.integration.test.ts": 1,
   "src/test/reviewTagModules.integration.test.ts": 2,

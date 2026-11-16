@@ -31,7 +31,7 @@ buffer-equal-constant-time 1.0.1、d3-array 2.12.1、d3-ease 3.0.1、d3-path 1.0
 
 ## MPL-2.0（13）
 
-以檔案為單位的 copyleft：改了這些套件自己的檔案才需要公開那些檔案。
+以檔案為單位的 copyleft：改了這些套件自己的檔案才需要公開那些檔案。我們沒有改它們的檔案。
 
 lightningcss 1.32.0、lightningcss-android-arm64 1.32.0、lightningcss-darwin-arm64 1.32.0、lightningcss-darwin-x64 1.32.0、lightningcss-freebsd-x64 1.32.0、lightningcss-linux-arm-gnueabihf 1.32.0、lightningcss-linux-arm64-gnu 1.32.0、lightningcss-linux-arm64-musl 1.32.0、lightningcss-linux-x64-gnu 1.32.0、lightningcss-linux-x64-musl 1.32.0、lightningcss-win32-arm64-msvc 1.32.0、lightningcss-win32-x64-msvc 1.32.0、web-push 3.6.7
 
@@ -49,7 +49,7 @@ libvips（影像處理，由 sharp 載入的預先編譯函式庫，也在 Docke
 
 ## OFL-1.1（3）
 
-字型（思源黑體、思源宋體、霞鶩文楷）。可以隨軟體散布，不得單獨販售字型本身。
+字型（思源黑體、思源宋體、霞鶩文楷、Fraunces、IBM Plex）。可以隨軟體散布，不得單獨販售字型本身；授權條款要跟著字型檔。
 
 @fontsource-variable/noto-sans-tc 5.3.1、@fontsource-variable/noto-serif-tc 5.3.1、@fontsource/lxgw-wenkai-tc 5.3.1
 
@@ -71,7 +71,7 @@ pako 1.0.11
 
 ## (MPL-2.0 OR Apache-2.0)（1）
 
-以檔案為單位的 copyleft：改了這些套件自己的檔案才需要公開那些檔案。
+以檔案為單位的 copyleft：改了這些套件自己的檔案才需要公開那些檔案。我們沒有改它們的檔案。
 
 dompurify 3.4.10
 
@@ -87,6 +87,8 @@ libvips（影像處理，由 sharp 載入的預先編譯函式庫，也在 Docke
 
 ## CC-BY-4.0（1）
 
+瀏覽器支援資料（不是程式碼）。要求標示出處：這份清單就是標示。
+
 caniuse-lite 1.0.30001799
 
 ## MIT OR Apache-2.0（1）
@@ -95,8 +97,19 @@ caniuse-lite 1.0.30001799
 
 ## Public Domain（1）
 
+作者放棄權利；這個字串不是標準的授權代號，所以逐一點名。
+
 jsonify 0.0.1
 
 ## Python-2.0（1）
 
+寬鬆授權，保留聲明即可。
+
 argparse 2.0.1
+
+## 放在 repo 裡、不經 npm 的第三方檔案
+
+- `packages/frontend/public/fonts`：介面字型 Fraunces、IBM Plex Sans、IBM Plex Mono（字型檔直接放在 repo，不經 npm）。授權 OFL-1.1，聲明在 `packages/frontend/public/fonts/OFL.txt`。
+- `packages/markdown/src/vendor/perfect-freehand`：perfect-freehand（筆跡外框），收錄原始碼。授權 MIT，聲明在 `packages/markdown/src/vendor/perfect-freehand/LICENSE`。
+- `docs/research/eg-walker-bench/bench/src/vendor/eg-walker-reference`：eg-walker-reference（只用於研究比較，不隨產品執行）。授權 BSD-2-Clause，聲明在 `docs/research/eg-walker-bench/bench/src/vendor/eg-walker-reference/NOTICE.md`。
+- `packages/frontend/public/sql.js`：sql.js 的 wasm 檔，從 npm 套件 sql.js 複製出來（套件本身列在上面的 MIT 一節）。授權 MIT，聲明在 `THIRD_PARTY_NOTICES.md`。

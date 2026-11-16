@@ -52,9 +52,11 @@ function endOfDay(dateId: string, timeZone: string, dayStartHour: number): numbe
     const p = Object.fromEntries(fmt.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
     return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second)) - Math.floor(instant / 1000) * 1000;
   };
-  let instant = midnightAsUtc;
-  for (let i = 0; i < 2; i++) instant = midnightAsUtc - offsetAt(instant);
-  return instant - 1;
+  // When the wall-clock midnight does not exist (a DST jump over 00:00) the two guesses differ: the later one
+  // is the first instant of the next day.
+  const first = midnightAsUtc - offsetAt(midnightAsUtc);
+  const second = midnightAsUtc - offsetAt(first);
+  return Math.max(first, second) - 1;
 }
 
 describe("calendar day: backend = frontend = reference", () => {
@@ -86,6 +88,18 @@ describe("calendar day: backend = frontend = reference", () => {
       expect(backendDay(prevEnd + 1, zone, hour)).toBe(day);
     }));
   }, 120_000);
+
+  // The reference endOfDay once mis-computed the day end when 00:00 does not exist (Santiago, 2029-09-02;
+  // found by PROPS_SEED=20261114). localDayId / dateIdAt were right.
+  it("Santiago DST at midnight: end of day is in the day, +1 ms is the next day", () => {
+    const at = 1882929600000, zone = "America/Santiago", hour = 0;
+    const day = frontendDay(at, zone, hour);
+    const end = endOfDay(day, zone, hour);
+    for (const id of [backendDay, frontendDay]) {
+      expect(id(end, zone, hour)).toBe(day);
+      expect(id(end + 1, zone, hour)).toBe(lib.addDays(day, 1));
+    }
+  });
 });
 
 // Node 22's ICU names India and Nepal by their pre-rename ids (Asia/Calcutta, Asia/Katmandu). The names browsers,

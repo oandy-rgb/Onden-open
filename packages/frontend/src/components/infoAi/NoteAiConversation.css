@@ -1,6 +1,7 @@
 /* The AI conversation (NoteAiConversation.tsx), in the info panel's tab and in the phone's bottom panel.
    The thread scrolls above; the chips and the box stay at the bottom. Quiet like the other tabs: type and
-   space, no boxes except the input. */
+   space. Two things have a box: the input, and what the person asked — a long answer scrolls past in the same
+   type, and a bold line among its headings did not say where one question ended and the next began (owner, tablet, 2026-11-17). */
 .note-ai { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .note-ai-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; }
 .note-ai-line { font-size: var(--ac-fs-caption); color: var(--ac-muted); }
@@ -9,12 +10,14 @@
 .note-ai-blocked p { margin: 0; }
 .note-ai-quiet { margin: 0; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
 
-.note-ai-thread { display: flex; flex-direction: column; gap: 20px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.note-ai-thread { display: flex; flex-direction: column; gap: 28px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 /* An empty conversation: the ways to start sit just above the box they lead to, not adrift in the middle of the panel. */
 .note-ai-intro { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-bottom: 4px; }
 .note-ai-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .note-ai-turn { display: flex; flex-direction: column; gap: 8px; }
-.note-ai-question { margin: 0; font-size: var(--ac-fs-small); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
+/* The person's words sit on the right in a soft box, the answer runs the full width on the left. */
+.note-ai-question { align-self: flex-end; max-width: 88%; margin: 0; padding: 8px 12px; border-radius: var(--ac-radius-lg); background: var(--ac-accent-soft); font-size: var(--ac-fs-small); overflow-wrap: anywhere; white-space: pre-wrap; }
+.note-ai-turn > .note-ai-scope { justify-content: flex-end; }
 .note-ai-scope { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .note-ai-answer { display: flex; flex-direction: column; gap: 6px; }
 .note-ai-text.obsidian-preview { flex: none; min-height: 0; padding: 0; overflow: visible; }
@@ -38,6 +41,7 @@
 .note-ai-composer { flex-shrink: 0; padding: 4px 0 calc(4px + env(safe-area-inset-bottom, 0px)); background: inherit; }
 .note-ai-box { position: relative; display: flex; flex-direction: column; gap: 8px; }
 .note-ai-scope-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.note-ai-clear { align-self: flex-end; flex: none; color: var(--ac-muted); }
 .note-ai-scope-item { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
 .note-ai-scope-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-ai-scope-x { display: inline-flex; align-items: center; padding: 2px; border-radius: var(--ac-radius-lg); }

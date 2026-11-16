@@ -2,6 +2,7 @@
 // the merge logic (especially the sync-delta application) is unit-testable
 // without React. No I/O, no hooks — every function returns a new tree.
 
+import { isOlderCopy } from "../rowAge";
 import type { Bootstrap, ContentNode } from "../api";
 import type { SyncDelta, AppliedSyncDelta } from "../localDb";
 import { applyTagCatalog } from "../tagProjection";
@@ -145,7 +146,10 @@ function upsertRows<T extends { id: string }>(rows: T[], upserts: readonly T[]):
  *  deltas patch each node's `attrs` map in place — deletes remove the key,
  *  upserts overwrite. */
 export function applySyncDelta(prev: Bootstrap, delta: AppliedSyncDelta): Bootstrap {
-  let nodes = upsertRows(prev.nodes, delta.nodes.upsert);
+  // A copy from before the one held is not taken (lib/rowAge.ts): the answer was on its way while this device's
+  // save, or a later answer, got here first.
+  const held = new Map(prev.nodes.map((n) => [n.id, n]));
+  let nodes = upsertRows(prev.nodes, delta.nodes.upsert.filter((n) => !isOlderCopy(n, held.get(n.id))));
   // Node deletes include revocation deletes (a node that left the read set via a
   // permission change — HIGH gap #2). Prune the node's dependent tasks/edges too,
   // so a revoked node leaves no dangling task row or half-edge in memory (mirrors

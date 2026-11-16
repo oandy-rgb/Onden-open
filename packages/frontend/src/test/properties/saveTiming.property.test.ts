@@ -662,19 +662,19 @@ describe("save path under random timing", () => {
   // Owner report 2026-11-16 (one person, one tablet, typing alone): two saves of the same note two seconds
   // apart carried the SAME base and the server merged the second "with another writer". A sync answer asked
   // before save 1 was acknowledged reaches the device after it; its row is older than the text just saved.
-  // Open on main (S2: the editor shows a text an acknowledged save replaced; S3: the next save's base is that
-  // old text; S4: the server merges although nobody else wrote). Likely place (read, not verified by a fix):
-  // draftActions.applyRemoteNode, the last branch ("bases.set(...)" + setAppState) takes a row older than the
-  // acknowledged text for a newer remote one, because nothing tells it which text the acknowledgement made current.
+  // What went wrong (S2: the editor shows a text an acknowledged save replaced; S3: the next save's base is that
+  // old text; S4: the server merges although nobody else wrote): the answer's row replaced the saved one in the
+  // store, whole, and applyRemoteNode took it for a newer remote text. Fixed where the answer enters (lib/rowAge.ts:
+  // a copy of a row from before the one held is not taken, in the store and in the local copy alike).
   regression("report 2026-11-16: S2/S3/S4 a sync answer asked before a save and delivered after its acknowledgement", [
     C.type({ kind: "append", k: 0 }), C.tick(), C.syncStarts(), C.deliver(), C.syncAnswer(0),
     C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
-  ], /#S[234]/, true);
+  ], /#S[234]/);
   regression("report 2026-11-16: S2/S3/S4 the stale answer arrives between two acknowledged saves", [
     C.type({ kind: "append", k: 0 }), C.tick(), C.syncStarts(), C.deliver(),
     C.type({ kind: "append", k: 0 }), C.tick(), C.syncAnswer(0), C.deliver(),
     C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
-  ], /#S[234]/, true);
+  ], /#S[234]/);
 
   // Found by the random property (PROPS_RUNS=5000, seeds 2 and 3 below). Both need the simulated reload, which keeps
   // the in-memory store (see "open (seed 7)"): confirm in a real reload before fixing. A late answer asked before the

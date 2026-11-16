@@ -24,7 +24,8 @@ export type WorldRequest = {
   resolve(value: unknown): void; reject(error: unknown): void;
 };
 export type RecordedConflict = { nodeId: string; base: string; incoming: string; current: string };
-type ServerNote = { id: string; title: string; markdown: string };
+/** `at`: the server's own time of the note's last change (updated_at), one tick per change. */
+type ServerNote = { id: string; title: string; markdown: string; at: number };
 
 const TOKEN = /T\d+x/g;
 export const tokensIn = (text: string): string[] => text.match(TOKEN) ?? [];
@@ -82,7 +83,7 @@ export class SaveWorld {
     this.pending = []; this.rejected = []; this.rowSeq = 0;
     for (const id of ["a", "b"]) {
       const lines = [this.nextToken(id), this.nextToken(id)];
-      this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n") });
+      this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n"), at: ++this.serverClock });
     }
   }
 
@@ -98,11 +99,12 @@ export class SaveWorld {
     for (const token of tokensIn(before)) if (!kept.has(token)) this.deleted.add(token);
   }
 
+  private serverClock = 0;
   rows(): ContentNode[] {
     return [...this.server.values()].map((n) => this.row(n));
   }
   row(n: ServerNote): ContentNode {
-    return { id: n.id, title: n.title, slug: n.id, markdown: n.markdown, node_type: "content", source_type: "manual" };
+    return { id: n.id, title: n.title, slug: n.id, markdown: n.markdown, node_type: "content", source_type: "manual", updated_at: new Date(Date.UTC(2026, 0, 1) + n.at * 1000).toISOString() };
   }
 
   // ── transport (lib/api `api`) ──
@@ -141,6 +143,7 @@ export class SaveWorld {
         next = merged;
         for (const c of conflicts) this.conflicts.push({ nodeId: note.id, base: c.base, incoming: c.incoming, current: c.current });
       }
+      if (next !== note.markdown) note.at = ++this.serverClock;
       note.markdown = next;
     }
     if (body.title !== undefined) {
@@ -150,6 +153,7 @@ export class SaveWorld {
         this.violations.push({ invariant: 3, text: `a save carried an old title "${title}" over the newer "${note.title}" (note ${note.id}, request ${request.id})` });
       }
       if (this.userTitles.has(title)) this.appliedTitles.add(title);
+      if (title !== note.title) note.at = ++this.serverClock;
       note.title = title;
     }
     if (request.idemKey) this.idem.set(request.idemKey, { ...note });
@@ -199,10 +203,10 @@ export class SaveWorld {
     const note = this.server.get(noteId)!;
     const next = edit(note.markdown);
     this.recordEdit(note.markdown, next);
-    note.markdown = next;
+    note.markdown = next; note.at = ++this.serverClock;
     this.remoteWrites++; this.wrote(noteId, next);
   }
-  remoteRename(noteId: string, title: string): void { this.server.get(noteId)!.title = title; this.remoteWrites++; }
+  remoteRename(noteId: string, title: string): void { const note = this.server.get(noteId)!; note.title = title; note.at = ++this.serverClock; this.remoteWrites++; }
 
   // ── lib/localDb fake ──
   readonly localDb = {

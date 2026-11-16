@@ -33,6 +33,7 @@ import { projectPendingNoteText, missingPendingNoteCreations } from "./pendingNo
 import { writeTargets, targetIds, parseStoredTargets, type WriteTarget } from "./pendingWriteTargets";
 import type { AppliedSyncDelta, LocalDbEvent, SyncDelta } from "./localDb";
 import { upsertNodeInto, upsertEdgeInto, upsertPointerInto, upsertAttributeInto, reindexNodeText } from "./localMirror";
+import { isOlderCopy } from "./rowAge";
 import { LocalDbError, type LocalDbErrorCode } from "./localDbErrors";
 // The subpath, not the package root: the root pulls in the markdown pipeline,
 // which needs a DOM a worker lacks (test/workerImports.test.ts).
@@ -698,7 +699,11 @@ async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
   d.run("BEGIN");
   try {
     if (catalogTouched) persistTagCatalogInto(d, applyTagCatalog(previousTags, delta) ?? []);
-    for (const n of delta.nodes.upsert) upsertNodeInto(d, n, { from: "server" });
+    // A copy from before the one held is not written (lib/rowAge.ts), the same rule the store applies to this answer.
+    const heldAt = new Map(qry<{ id: string; updated_at: string | null }>(
+      "SELECT id, updated_at FROM nodes WHERE id IN (SELECT value FROM json_each(?))", [JSON.stringify(delta.nodes.upsert.map((n) => n.id))],
+    ).map((row) => [row.id, row]));
+    for (const n of delta.nodes.upsert) if (!isOlderCopy(n, heldAt.get(n.id))) upsertNodeInto(d, n, { from: "server" });
     for (const e of delta.edges.upsert) upsertEdgeInto(d, e);
     for (const id of delta.edges.delete) {
       d.run("DELETE FROM edges WHERE id = ?", [id] as any); // eslint-disable-line @typescript-eslint/no-explicit-any

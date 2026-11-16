@@ -21,7 +21,7 @@ import { drawnWikilinks } from "./wikilinkSpans.js";
 import { frontmatterLength } from "./frontmatter.js";
 import { headingAnchors, headingSections } from "./headingAnchors.js";
 import { parserFor } from "./parsers.js";
-import { linkNameKey } from "./text.js";
+import { isTagList, linkNameKey } from "./text.js";
 import { plainInline, stripLineMarker } from "./plainText.js";
 import { linkSlug } from "./slug.js";
 import { NODE_REF_PREFIX } from "./nodeRef.js";
@@ -138,7 +138,8 @@ export function planSelectionMove(markdown: string, from: number, to: number, an
 
   const start = first.type === "paragraph" && from > first.start ? from : first.start;
   let end = last.type === "paragraph" && to < last.end ? to : last.end;
-  if (end < last.end && /^\s*(?:\{[^{}\n]*\}\s*)?$/.test(markdown.slice(end, last.end))) end = last.end;
+  const rest = /^\s*(?:\{([^{}\n]*)\}\s*)?$/.exec(markdown.slice(end, last.end));
+  if (end < last.end && rest && (rest[1] === undefined || isTagList(rest[1]))) end = last.end;
 
   const lineStart = markdown.lastIndexOf("\n", start - 1) + 1;
   const midLine = !/^[ \t]*$/.test(markdown.slice(lineStart, start));
@@ -192,7 +193,7 @@ function cutSpans(text: string, start: number, end: number, cuts: Span[]): strin
 function titleOf(body: string): string {
   let line = (body.split("\n").find((l) => l.trim() !== "") ?? "").trim();
   // A selection keeps the `{tags}` it was cut with: not words of the title.
-  line = line.replace(/\s+\{[^{}\n]*\}$/, "");
+  line = line.replace(/\s+\{([^{}\n]*)\}$/, (whole, inner: string) => (isTagList(inner) ? "" : whole));
   line = plainInline(stripLineMarker(line).replace(/\s+#+$/, ""))
     .replace(/[[\]|#^\\=]/g, " ")
     .replace(/\s+/g, " ").trim();

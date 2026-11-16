@@ -159,6 +159,19 @@ export const TAG_NAME_CHAR = `[${WORD_CHARS}_-]`;
  *  lastIndex), never with .test/.exec. */
 export const HASHTAG_RE = new RegExp(String.raw`(^|\s)#(${TAG_NAME_CHAR}+)`, "gu");
 
+// What one entry between the commas of a block's `{…}` may be: a tag name — the characters of a #hashtag, and between
+// them spaces and `/ . + &` — or `key: value` of the same characters. Anything else (`;`, brackets, quotes, operators)
+// is program text.
+const TAG_ENTRY = new RegExp(String.raw`^${TAG_NAME_CHAR}(?:${TAG_NAME_CHAR}|[ /.+&])*(?::[ ]*(?:${TAG_NAME_CHAR}|[ /.+&])*)?$`, "u");
+
+/** The ONE rule for what a `{…}` at a line's end must hold to be a block's tags and not text: nothing but tag entries
+ *  between its commas (`inner` is what is between the braces). `{ indent(); ECHO; }` ending a line of program text
+ *  pasted as a paragraph is text. blocks.ts (tagBraces) and every cheap string test that drops a trailing `{…}` from
+ *  shown text ask this. */
+export function isTagList(inner: string): boolean {
+  return inner.split(",").every((entry) => entry.trim() === "" || TAG_ENTRY.test(entry.trim()));
+}
+
 /** Whether `target` (the part of a link before `|`) can be a path into a note: it has a `/` that is not escaped as part of a name. */
 export function hasLinkPath(target: string): boolean {
   return target.includes("/") && !target.includes("://");

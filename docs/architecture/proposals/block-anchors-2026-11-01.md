@@ -1,6 +1,6 @@
 # 段落錨點與子節點：正文不放記號，段落是同一種東西
 
-> 狀態：現行（最後確認 2026-11-08）；批 3（正文不再有 `^id`）與 §10 的匯出三種寫法已實作，分支 `feat/block-anchors-batch3`（PR #1334，draft），完成度以該 PR 說明與[批 3 盤點](block-anchors-batch3-inventory-2026-11-07.md)為準。
+> 狀態：提案（最後確認 2026-11-08）；批 3（正文不再有 `^id`）與 §10 的匯出三種寫法已實作，分支 `feat/block-anchors-batch3`（PR #1334，draft），完成度以該 PR 說明與[批 3 盤點](block-anchors-batch3-inventory-2026-11-07.md)為準。
 
 > 業主已同意，實作中；§0.5 是最新決定，與後文衝突時以它為準。
 

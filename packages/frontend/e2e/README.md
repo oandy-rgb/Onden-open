@@ -46,7 +46,7 @@ Collection is not execution. Run results and remaining limits are kept in the
 Playwright loads every spec to list tests, so one unresolvable import fails the whole run (it did from
 2026-11-09 to 2026-11-14). The few workspace values specs need (client protocol, default site design) come from
 `fullstack/hostContract.ts`, which reads `fullstack/generated/hostContract.json`; `run.sh` and `e2e:cloud-stack`
-write it on the host from source (`scripts/writeHostContract.ts`). Check the layout without Docker or a stack:
+write it on the host from source (`packages/frontend/e2e/scripts/writeHostContract.ts`). Check the layout without Docker or a stack:
 
 ```sh
 cd packages/frontend && npm run check:specs   # copies e2e/ to a temp dir, runs `playwright test --list` over every project

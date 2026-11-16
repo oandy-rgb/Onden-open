@@ -15,7 +15,7 @@ AI 的整個能力＝ `services/agentTools/registry.ts` 登記的 22 個工具�
 1. **排序與搬移的計算**：`planSiblingOrder`（`frontend/src/lib/childOrder.ts`）算出要改哪幾列的 `sort_order`，再逐筆 PATCH；後端只收原始整數。
 2. **白板排版**：`arrangedSlot`、`APPEND_GRID`、`SPAWN_GAP_X`、`alignCanvasCards`（`frontend/src/lib/cardGeometry.ts`、`canvasAlignment.ts`）；後端只收 x/y（`boardWrites.applyBoardChanges`）。
 3. **PDF 文字**：只在瀏覽器用 pdfjs 抽出（`frontend/src/lib/pdf/extractText.ts`），寫進內文時不帶頁碼、截在 6 萬字。
-4. **「AI 提議、使用者接受」只有一種形狀**：針對一則既有筆記的文字／標題修改與留言（`services/aiSuggestions.ts` 的 `ItemKind`）；其他種類的提議只有 `proposeTagPack` 這條擁有者核准的 outbox 路。
+4. **「AI 提議、使用者接受」只有一種形狀**：針對一則既有筆記的文字／標題修改與留言（`services/aiSuggestions.ts` 的 `SuggestionItemKind`）；其他種類的提議只有 `proposeTagPack` 這條擁有者核准的 outbox 路。
 
 ## 2. 方法與限制
 

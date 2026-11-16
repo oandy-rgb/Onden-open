@@ -1,6 +1,7 @@
 # Sync protocol (offline-first, event-sourced)
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/routes/sync.ts, packages/backend/src/services/sync/**
 
 Status: **draft / target** — spec first, incremental migration. Authored 2026-06-14.
 Drivers: architecture review #7 (four-layer state has no formal sync protocol) + the

@@ -1,6 +1,7 @@
 # 復原審核與寫入契約
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/eventRestore/**
 
 2026-09-08 至 2026-09-09。分兩批以「筆記復原」與「屬性／標籤復原」為完整使用案例，追查版本復原、事件反向操作、收件匣拒絕、
 垃圾桶與相關讀取政策。沒有宣稱完成全專案安全審計。原先的前端重構工作保留。
@@ -301,7 +302,7 @@ B 的標題與本文正確，右側卻被 A 的 18 筆歷史覆蓋，仍有可�
 
 執行紀錄位於 `/tmp/onden-live-20260912/`：`history-red.log`、`history-final.log`、
 `frontend-full-final.log`、`tsc-final.log`、`lint-final.log`、`build-final.log`。
-這些暫存紀錄可能於重新開機清除；可重跑的行為案例已收進 `src/test/useLiveEventLog.test.tsx`、
+這些暫存紀錄可能於重新開機清除；可重跑的行為案例已收進 `packages/frontend/src/test/useLiveEventLog.test.tsx`、
 `nodeEventHistoryScope.test.tsx`、`eventLogPanelFilter.test.tsx`。
 
 ## 第五批：保存版本與編輯器一致（2026-09-12）

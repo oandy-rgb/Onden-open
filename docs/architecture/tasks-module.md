@@ -1,6 +1,7 @@
 # 任務模組（tasks）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/tasks/**, packages/backend/src/spine/taskIdentity.ts
 
 狀態：**已實作後端與資料層**（2026-10-24，T1）。任務頁的新介面、自然語言快速新增、日記頁、連結／嵌入、匯出由其他批次接手；它們都照本文的資料合約。
 前置：[模組庫](module-library.md)（內建模組預設全開）、[段落節點 B4](block-nodes.md)（勾選行即任務）、[空間](spaces.md)。
@@ -102,7 +103,7 @@
 3. `later` → `todo` ＋ `_task_someday = true`。
 4. 每天掃描的部分索引 `node_attr_task_due` 換成 `node_attr_task_when`。
 
-重跑沒有影響。還原演練：屬性數量會增加（新增提醒與 someday 兩種列），已用 `-- drill: allows attributes` 聲明；任務數量以「保留 key 或模組標記」計（`scripts/drillInvariants.ts`）。
+重跑沒有影響。還原演練：屬性數量會增加（新增提醒與 someday 兩種列），已用 `-- drill: allows attributes` 聲明；任務數量以「保留 key 或模組標記」計（`packages/backend/scripts/drillInvariants.ts`）。
 
 ## 任務節點記一筆引用；標籤不再讓筆記成為任務（2026-11-12，migration 191）
 

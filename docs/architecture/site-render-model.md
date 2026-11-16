@@ -33,7 +33,7 @@
   - 沒有快照時，回退成即時草稿。
   - 結果：快照之後新發布的筆記不會出現，直到下一次發布；但下架會立即生效。
 - 媒體是即時的：匿名讀者看圖時，`canReadMedia` 檢查擁有它的筆記目前是否公開。
-- 外部靜態主機（`pagesPush.ts`）拿到的 site.json 是**凍結的快照**，**沒有**經過 `loadServedSite` 的即時過濾；設定、CNAME、SEO 檔卻是即時的；媒體複製進 bundle。`docs/deploy-static-site.md` 說 site.json 來自 `/api/site`，和實作不符。
+- 外部靜態主機（`pagesPush.ts`）拿到的 site.json 是**凍結的快照**，**沒有**經過 `loadServedSite` 的即時過濾；設定、CNAME、SEO 檔卻是即時的；媒體複製進 bundle。曾有文件寫成 site.json 來自 `/api/site`，和實作不符；那份文件已不存在。
 - 分享連結與 zip 匯出都走 `loadServedSite`。
 
 ### 畫面：兩套 Markdown 渲染，各有差異

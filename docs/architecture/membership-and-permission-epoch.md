@@ -1,6 +1,7 @@
 # Membership & membership-epoch (the read-membership reconciliation boundary)
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/readPolicy.ts, packages/frontend/src/lib/data/membershipDigest.ts
 
 Status: **spec / in progress.** Companion to [`sync-protocol.md`](./sync-protocol.md).
 The membership *diff* (positive grants + negative revocations + fail-closed

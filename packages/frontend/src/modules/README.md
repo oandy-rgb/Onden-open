@@ -101,7 +101,7 @@ design.
   (`SettingRow`, `renderLayout`, `openModuleDialog`, the info panel's function rows).
   What must work offline is listed in `loadOfflineModuleScreens` (modules/index.ts)
   so `lib/offlineWarmup` has the service worker keep it. After a build,
-  `scripts/check-boot-bundle.mjs` holds the JS loaded after sign-in to a gzip
+  `packages/frontend/scripts/check-boot-bundle.mjs` holds the JS loaded after sign-in to a gzip
   budget and each module directory to its own cap, and names the module that
   went over; the numbers are in that script.
 

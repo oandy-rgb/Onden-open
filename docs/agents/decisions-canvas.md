@@ -321,7 +321,7 @@
 - **白板是筆記的視角，不是筆記類型。** 卡片位置以這篇筆記自己的 id 為鍵；「有白板」＝有一筆 canvas 檢視（白板分頁）。
   `node_type = 'canvas'` 退役，讀取端與白板型視為同一回事（`boardStore.whiteboardNoteSql`、`lib/whiteboardNote.ts`），不再各處判斷節點類型。
 - 比較過的做法：(a) 把位置改以新鍵存放——要搬資料、舊前端寫入會落空；(b) 位置鍵不動、只改節點類型與分頁紀錄（採用）——資料零搬移，
-  舊路由仍讀寫同一組列。轉換可還原（`canvas_note_conversions`、`scripts/restoreCanvasNotes.sql`）。完整契約見 [canvas-as-view.md](../architecture/canvas-as-view.md)。
+  舊路由仍讀寫同一組列。轉換可還原（`canvas_note_conversions`、`packages/backend/scripts/restoreCanvasNotes.sql`）。完整契約見 [canvas-as-view.md](../architecture/canvas-as-view.md)。
 - 點選白板上「本身有白板」的卡片仍進入它的白板（原本點 canvas 型卡片的行為）；只是別張白板上的卡片，仍留在目前白板。
 
 ## 白板複本併回原筆記（2026-10-27，migration 139）
@@ -330,7 +330,7 @@
   側欄又把「放在白板上的頂層筆記」列在白板底下，真正的筆記看起來被收進複本。
 - **做法**：migration 139 只處理**確定是複本**的（條件見 [canvas-as-view.md](../architecture/canvas-as-view.md)「複本併回」）；
   卡片、分區搬到原筆記，原筆記自己那張卡片拿掉，複本軟刪除，並寫 `NODE_DELETED`／`COLLECTION_VIEW_*`／`CANVAS_UPDATED` 事件讓已開著的裝置下次同步就看到。
-  可還原：`board_copy_folds`＋`scripts/restoreFoldedBoards.sql`。不確定的一律不動。
+  可還原：`board_copy_folds`＋`packages/backend/scripts/restoreFoldedBoards.sql`。不確定的一律不動。
 - **側欄**：`tidySidebarRoots` 只剩「產生的筆記（RSS）離開樹」；不再把卡片列在白板底下，節點只照真正的父子關係。
 - **之後不再產生複本**：「給這篇筆記一個白板」只有一條路 `lib/whiteboardTab.ts` 的 `ensureWhiteboardTab`（加分頁或取消隱藏）。
   `buildBoardFromChildren` 只放子孫，不放自己；白板上把卡片「開成子白板」改成開那張卡片筆記自己的白板分頁（舊的 `subCanvasId` 連結照舊能開）。
@@ -517,7 +517,7 @@
 業主 2026-11-09 定案：鏡頭用原生捲動（PDF 的做法）、手寫筆記改成多頁（存法在 #1358）、白板手形工具下筆照規則畫。設計比較在
 [step2-design.md](../research/pdf-unify/step2-design.md)。
 
-- **頁面本子** `src/pagebook/`：`PageBook` 只認得頁面信封（`InkPages`），背景是 `(page) => ReactNode` 插槽（不認得 PDF），文字框與圖片層是 `layers`，
+- **頁面本子** `packages/frontend/src/pagebook/`：`PageBook` 只認得頁面信封（`InkPages`），背景是 `(page) => ReactNode` 插槽（不認得 PDF），文字框與圖片層是 `layers`，
   存檔、翻譯、裝置設定都由外殼傳入（邊界守門 `eslint.boundaries.config.js`）。`InkNodeView` 是薄殼：工具列、裝置設定、文字框／圖片層、存檔。
 - **固定高度的頁**：每頁 1000 單位寬；第一頁高度＝`notePages` 給的 size（筆跡高度，最少 1400，舊的長頁照舊、不切開筆跡），新頁 1000×1400。
   頁不再往下長（不用 `growPage`、`fitBelow`）；起筆在頁外不畫（每頁自己的繪圖面，頁與頁之間的空隙不收筆）。
@@ -553,7 +553,7 @@
 使用案例：在手寫頁框一塊、複製，貼到任何筆記的內容，那一塊就活著出現在那裡。資料只有一份（筆畫留在原頁），引用不複製筆畫。
 
 - **單位是一塊矩形區域，不是一組筆畫**：筆畫會被擦掉重寫，區域永遠有效，之後在框裡補寫的也會出現（`inkRegionToSvg` 只畫「碰到矩形」的筆畫與形狀，並以矩形當 viewBox 裁切，跨過邊界的只留框內）。
-- **語法**：`![[筆記|ink=頁@x,y,w,h]]`，解析與序列化在 `@onden/markdown` 的 `inkRegion.ts`（`parseEmbed` 多回 `inkRegion`；前端、後端發布、網站共用）。
+- **語法**：`![[筆記|ink=頁@x,y,w,h]]`，解析與序列化在 `@onden/markdown` 的 `inkRegion.ts`（`embeds.ts` 的 `parseEmbed` 多回 `inkRegion`；前端、後端發布、網站共用）。
   放在 `|` 而不是 `#`：Obsidian 的 `![[圖片|100x145]]` 已有「`|` 後帶參數」的慣例；`#` 屬於標題與 `#^id`，會被舊解析器當成找不到的標題而壞掉，
   而 `|` 後面舊版只當標籤，**舊版會退回畫整張圖**。`ink=` 開頭、`@x,y,w,h` 結尾的整段才算區域，其他 `|…` 仍是標籤。
 - **頁用 page key**（`page` 或 uuid，`InkPages` 的鍵），不是順序：加頁、換順序都不影響；頁被刪了，嵌入顯示白話「這一頁手寫已經刪除了」。
@@ -599,10 +599,10 @@
 - **跟著筆記走的**：同步（屬性）、歷史（`inkEventSql(…, "note")`，`kind=note` 的 `/ink-edits`、`/ink-versions`；當天卡片的 `DayNote` 沒有第三個欄位，仍算進「編輯過」）、
   備份（側車帶全部屬性；還原時 `handwritingTabOf` 把分頁加回，與 `whiteboardTabOf` 並列）、匯出（`exportInk` 在筆記**還有**手寫分頁時，把 `note_ink` 的頁接在內容之後成為 SVG；分頁拿掉就不匯出——匯出是使用者看得到的東西，完整備份仍帶著筆畫）、複製筆記
   （屬性照複製，`noteDuplicate` 另把「手寫」分頁帶過去）、移到別的空間與刪除／復原（都是節點與屬性本身）。
-- **舊種類不提供**：內容已是手寫頁（`ink_data`）或 PDF（`pdf_url`）的筆記，「＋」不列「手寫」（`useAddView` 的 `useHasPageSurface`；已經有的分頁照常顯示），免得一則筆記兩份筆畫、之後的 migration 189 要處理兩份。
+- **舊種類不提供**：內容已是手寫頁（`ink_data`）或 PDF（`pdf_url`）的筆記，「＋」不列「手寫」（`useAddView` 的 `useHasPageSurface`；已經有的分頁照常顯示），免得一則筆記兩份筆畫、之後的遷移（編號未定；原預訂 189，已被 190 以後佔用）要處理兩份。
 - **唯讀**：沒有編輯權限的成員看得到分頁與筆畫，顯示「你可以讀這則筆記但不能修改」（`InkNodeView` 的 `readOnlyNotice`）；「請更新 App」只給格式比較新的圖。
 - **AI**：`getNode` 的屬性不含筆跡屬性（`isInkPageAttr`）。
-- **不動**：舊的手寫／PDF 筆記種類（之後的 migration 189）；`![[筆記]]` 嵌入（仍顯示文字內容）；選取工具與嵌入（#1527 在改）。
+- **不動**：舊的手寫／PDF 筆記種類（之後的遷移；編號未定，原預訂 189 已被 190 以後佔用）；`![[筆記]]` 嵌入（仍顯示文字內容）；選取工具與嵌入（#1527 在改）。
 
 ## 手寫存檔量：一筆只送、只存這一筆（2026-11-15）
 
@@ -619,6 +619,6 @@
   - M2：另一台存過、伺服器回的是合併值時，下一次存檔先在本機用 `mergeInk` 合併（本機上次存的為基底、伺服器的回答為另一邊），再以伺服器的文字為基底送 patch：沒有第二個請求，也不會因為畫面上沒有別台的筆而把它們當成刪除。
     **不能**直接把伺服器的回答當基底而不合併：畫面（引擎）還看不到別台的筆（M6），下一次存檔就會把它們刪掉。
 - M4：從歷史還原手寫版本後 `announceDrawingRestored(nodeId)`，開著的手寫頁／PDF／白板筆層重新載入（`hooks/useDrawingRestoreSerial`）。
-- M1：整份請求（值＋基底）超過上限時，以前丟掉基底、伺服器照單全收，另一台的筆被蓋掉。現在先讀伺服器現值、本機合併、以伺服器文字為基底送 patch（`patchedBody.ts` `rebasedOnStored`）；讀不到才退回舊做法。
+- M1：整份請求（值＋基底）超過上限時，以前丟掉基底、伺服器照單全收，另一台的筆被蓋掉。現在先讀伺服器現值、本機合併、以伺服器文字為基底送 patch（`rebasedPatch.ts` `rebasedOnStored`）；讀不到才退回舊做法。
 - **仍然沒有上限、也沒有清理**：區塊與清單隨存檔次數線性增加（清單 32 位元組／區塊，約每存一次 6 MB 的值多 12 KB），歷史版本沒有任何精簡；值本身仍沒有大小上限（只有 nginx 的 20 MB）。要精簡舊版本是刪資料，需要業主同意，見研究文件的選項。
-- **備份、還原、搬移工作區**：備份帶的是**當前的整份值**（`node_attributes`），不是區塊，也沒有墨水的版本歷史（`ink_chunks`／`ink_manifests` 在 `backupInventory` 列為「不在備份」）；還原後該筆記第一次存檔就是它自己的區塊。`backupRoundTrip`／`backupHostHop`／`backupRestoreRerun` 的世界產生器（`roundTripArb.ts`）現在有筆記帶超過 192 K 字的 `ink_data`，每趟都要逐字帶回來。還原演練（`scripts/drillInvariants.ts`）多兩個計數與一個結構檢查：區塊與清單的列數不減、事件指到的墨水版本沒有讀不到的。瀏覽器版（PGlite）：`e2e/browser-app/bigInk.mjs` 存兩份超過門檻的墨水、重新整理、備份再還原到另一個空間。本機鏡像（`MIRROR_SCHEMA_VERSION`）不變：墨水不在開機同步裡，沒有改任何同步欄位或 id。
+- **備份、還原、搬移工作區**：備份帶的是**當前的整份值**（`node_attributes`），不是區塊，也沒有墨水的版本歷史（`ink_chunks`／`ink_manifests` 在 `backupInventory` 列為「不在備份」）；還原後該筆記第一次存檔就是它自己的區塊。`backupRoundTrip`／`backupHostHop`／`backupRestoreRerun` 的世界產生器（`roundTripArb.ts`）現在有筆記帶超過 192 K 字的 `ink_data`，每趟都要逐字帶回來。還原演練（`packages/backend/scripts/drillInvariants.ts`）多兩個計數與一個結構檢查：區塊與清單的列數不減、事件指到的墨水版本沒有讀不到的。瀏覽器版（PGlite）：`e2e/browser-app/bigInk.mjs` 存兩份超過門檻的墨水、重新整理、備份再還原到另一個空間。本機鏡像（`MIRROR_SCHEMA_VERSION`）不變：墨水不在開機同步裡，沒有改任何同步欄位或 id。

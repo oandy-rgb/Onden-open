@@ -1,7 +1,9 @@
 # 簡報的決定
 
+> 狀態：現行（最後確認 2026-11-13）
+
 何時讀：改筆記的「簡報」視角、版型與主題、`slides_data`、`@onden/site/look`、播放（`PresentationPlayer`）時。
-設計全文：`docs/architecture/proposals/slides-2026-10-31.md`（提案，在 #876；合併後這裡改成連結。本檔只記**已實作**批次的決定）。
+設計全文：[slides-2026-10-31.md](../architecture/proposals/slides-2026-10-31.md)（歷史紀錄；本檔只記**已實作**批次的決定）。
 
 ## 業主決定（2026-10-31，看過 demo 第 5 版後「好」）
 

@@ -1,6 +1,7 @@
 # stampedMerge：帶標記的資料怎麼合成同一個結果
 
-狀態：核心與證明（2026-11-15）。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
+> 狀態：現行（最後確認 2026-11-15）。核心與證明。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
+> 涵蓋：packages/backend/src/spine/stampedMerge/**
 規則來源：[分散式準備 §4](../../../../../docs/architecture/proposals/distributed-ready-2026-11-12.md)、
 [來源標記](../../../../../docs/architecture/proposals/causal-stamps-2026-11-12.md)、
 [節點同步 §4–5](../../../../../docs/architecture/proposals/node-sync-channels-2026-11-14.md)、

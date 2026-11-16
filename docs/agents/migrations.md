@@ -1,5 +1,8 @@
 # Migration 與升級規則（給代理）
 
+> 狀態：現行（最後確認 2026-11-16）
+> 涵蓋：scripts/upgrade.sh, scripts/rollback.sh, scripts/upgrade-drill.sh
+
 何時讀：新增或修改 `packages/backend/db/migrations/*.sql`、改 `db.ts` 的 `migrate()`、改升級／回退腳本，或準備發布版本前。
 （若另有 `docs/agents/release.md`，發布流程以它為準；本檔只管資料庫與升級路徑。）
 

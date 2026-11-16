@@ -1,6 +1,6 @@
 # 桌面 App 技術實驗：結論（腳本已移除）
 
-> 狀態：已被取代（2026-11-02）。10/31 在 PGlite 上做的兩個實驗，結論已被 main 上的可攜後端實作吸收；腳本與 lock 檔刪除。
+> 狀態：已被取代（2026-11-02；現況見 [portable-backend.md](../../architecture/portable-backend.md)）。10/31 在 PGlite 上做的兩個實驗，結論已被 main 上的可攜後端實作吸收；腳本與 lock 檔刪除。
 
 對應設計文件：[docs/design/desktop-app.md](../../design/desktop-app.md)。
 

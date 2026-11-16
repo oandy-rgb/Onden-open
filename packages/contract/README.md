@@ -14,7 +14,7 @@ const input = DraftNode.parse({ title: "計畫" }); // 後端：驗證請求
 export const titleOf = (node: ServerNode) => node.title; // 前端：只用型別
 ```
 
-- **前端只准 `import type`**。zod 進開機包會超過預算（`scripts/check-boot-bundle.mjs`）。
+- **前端只准 `import type`**。zod 進開機包會超過預算（`packages/frontend/scripts/check-boot-bundle.mjs`）。
 - 後端不在每個請求上 `parse` 回應（bootstrap 很大）；守門是 `packages/backend/src/test/nodeContract.integration.test.ts`，
   用 `.strict()` 解析真實回應，欄位多了或少了就失敗。
 - 讀法與其他套件相同：型別檢查與測試讀 `src/`，後端正式映像跑 `npm run build` 產生的 `dist/`。

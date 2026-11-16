@@ -2,7 +2,7 @@
 
 > 狀態：現行（最後確認 2026-11-13）
 
-設計來源：複習加強提案（`docs/architecture/proposals/review-strengthen-2026-11-13.md`，在 `docs/tag-as-scope` 分支，尚未合進 main）第 3.2 節（複習畫面）與第 3.4 節（狀況頁）。
+設計來源：複習加強提案（`docs/architecture/proposals/review-strengthen-2026-11-13.md`，已合進 main）第 3.2 節（複習畫面）與第 3.4 節（狀況頁）。
 這一步不含挖空（3.1）與以範圍練習（3.3）。
 
 ## 截圖（400 × 800，2 倍解析度，Chromium 模擬手機尺寸，不是真機）

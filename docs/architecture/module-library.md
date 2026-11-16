@@ -549,7 +549,7 @@ tagFunction?: {               // 標籤可以有的功能（複習、文獻引�
 
 - 模組仍是 `modules/<id>/` 一個目錄、註冊表一行；可整個刪除（`moduleBoundary.test.ts` 繼續守這點）。
 - 判斷成員一律呼叫核心的 `effectiveModules`，不自己讀標籤名稱或旗標。
-- 文件 `docs/architecture/writing-a-module.md`（新寫）：最小模組範例、測試方式、送 PR 的檢查清單。
+- 模組撰寫指南（還沒寫，尚無檔案）：最小模組範例、測試方式、送 PR 的檢查清單。
 
 ## 不做的事
 

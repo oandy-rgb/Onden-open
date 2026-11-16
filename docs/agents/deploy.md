@@ -1,6 +1,7 @@
 # 部署、回滾與備份（VPS）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：scripts/deploy-vps.sh, scripts/backup-vps.sh, scripts/restore-drill.sh
 
 何時讀：要部署到正式 VPS、回滾、做或還原備份，或正式站／localhost 連不上、登入出現 `INVALID_ORIGIN` 時。
 每次部署在 docs/deploy-log.md（未隨公開庫附上） 加一列。以下流程整理自 2026-09-28～10-22 的實際部署紀錄

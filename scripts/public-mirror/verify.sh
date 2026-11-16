@@ -4,6 +4,7 @@
 set -euo pipefail
 # With an argument: the private commit the public main is expected to be made from (the mirror workflow passes its own).
 want=${1:-}
+here=$(dirname "$0")
 git fetch -q open main
 [ -n "$want" ] || git fetch -q origin main
 pub=$(git rev-parse open/main)
@@ -16,9 +17,12 @@ if [ -n "$want" ]; then
 else
   echo "private main is now  $(git rev-parse --short origin/main)  ($(git rev-list --count "$src"..origin/main) commits ahead of that)"
 fi
-other=$(git diff --name-status "$pub" "$src" | awk '{p=$2; if (p ~ /^docs\/.*\.(png|jpe?g|webp|gif)$/) next; if (p ~ /scan-2026-11-14/) next; if (p == "docs/deploy-log.md") next; if (p ~ /\.md$/ && $1=="M") next; print}')
+# core.quotePath=false: a file name outside ASCII (docs/research/scan-2026-11-14/00-總表.md) otherwise comes out quoted and
+# escaped, and no rule of the list would match it.
+other=$(git -c core.quotePath=false diff --name-status "$pub" "$src" | node "$here/removedPaths.mjs" --not-removed-diff)
 if [ -n "$other" ]; then echo "DIFFERENCE that is not an excluded file:"; echo "$other"; exit 1; fi
 # The markdown files may differ only on lines that link to an excluded file.
-bad=$(git diff -U0 "$pub" "$src" -- '*.md' ':!docs/research/scan-2026-11-14' ':!docs/deploy-log.md' | grep -E '^[-+][^-+]' | grep -vE '\.(png|jpe?g|webp|gif)|scan-2026-11-14|deploy-log\.md|未隨公開庫附上' || true)
+pathspecs=(); while IFS= read -r ps; do [ -z "$ps" ] || pathspecs+=("$ps"); done < <(node "$here/removedPaths.mjs" --pathspecs)
+bad=$(git diff -U0 "$pub" "$src" -- '*.md' "${pathspecs[@]}" | grep -E '^[-+][^-+]' | grep -vE "$(node "$here/removedPaths.mjs" --link-pattern)|未隨公開庫附上" || true)
 if [ -n "$bad" ]; then echo "markdown lines differ beyond the removed links:"; printf '%s\n' "$bad" | sed -n 1,10p; exit 1; fi
 echo "OK: every code file is identical; only docs images, the scan reports, the deploy log and the links to them differ."

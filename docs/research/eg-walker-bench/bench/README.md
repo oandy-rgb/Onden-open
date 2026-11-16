@@ -1,6 +1,6 @@
 # Eg-walker 合併測試台
 
-> 狀態：現行（研究測試台；結論見上一層的 [report.md](../report.md)）（最後確認 2026-11-01）
+> 狀態：歷史紀錄（研究測試台；結論見上一層的 [report.md](../report.md)）（寫於 2026-11-01） 引用的路徑、函式與行號是寫作當時的，現況以程式為準。
 
 獨立套件（自己的 `package.json`，不在根目錄 workspaces 內，不進主程式的依賴與打包）。
 只**讀**主程式的 `packages/backend/src/services/eventLog/bodyMerge.ts` 當 diff3 基準線，不改任何產品程式。

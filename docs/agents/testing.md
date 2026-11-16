@@ -98,7 +98,7 @@ PGlite 跳過清單是「檔案：個數」且要**剛好相等**：跳過比清
   `queryOnSeparateConnection` 的呼叫者、或任何「單一連線讓錯誤隱形」的行為。不要整個套件都標；完整套件在真 Postgres 另外跑。
 - 守門：後端測試預設開啟 `ONDEN_FORBID_POOL_QUERY_IN_TRANSACTION`（`vitest.config.ts`）：交易中呼叫 `pool.query` 會丟錯，
   讀取請用 `q()`；刻意要在交易外提交的寫入（如 `blobs.putBlob`）用 `db.ts` 的 `queryOnSeparateConnection` 並寫原因。
-- 筆電（合併前）：`cd packages/backend && npm run test:real-pg`（模式 `postgres`）（`scripts/realPostgresTests.mjs` 由上述標記找出檔案再交給 vitest；`-- --list` 只列檔案）。
+- 筆電（合併前）：`cd packages/backend && npm run test:real-pg`（模式 `postgres`）（`packages/backend/scripts/realPostgresTests.mjs` 由上述標記找出檔案再交給 vitest；`-- --list` 只列檔案）。
   需要 `DATABASE_URL` 指向 `_test` 結尾的真 Postgres。檔案裡沒被標記的測試也會一起跑（是 PGlite 結果的超集），這是刻意的：標記是測試層級，檔案層級較簡單。
   跳過的原因分三類：`needsSecondConnection`（鎖等待、佇列中的寫入者、跨連線快照、別處持有的 advisory lock）、
   `needsPostgresServer`（自己的 `pg` 連線、`statement_timeout`、連線池計數、連線逐出、數萬列規模）、`needsPgroonga`（分詞器、`&@~` 運算子、Unicode 折疊）。

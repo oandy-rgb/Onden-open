@@ -1,6 +1,6 @@
 # PDF 手寫存檔量：量測與修正（2026-11-15）
 
-> 狀態：現行（2026-11-15）。掃描：09-ink-pdf.md（未隨公開庫附上） S1（總表第 5 項）；設計決定在 [decisions-canvas.md](../agents/decisions-canvas.md)「手寫存檔量」。
+> 狀態：現行（最後確認 2026-11-15）。掃描：09-ink-pdf.md（未隨公開庫附上） S1（總表第 5 項）；設計決定在 [decisions-canvas.md](../agents/decisions-canvas.md)「手寫存檔量」。
 
 ## 怎麼量
 

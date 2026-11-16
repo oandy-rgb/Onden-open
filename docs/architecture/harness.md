@@ -85,7 +85,7 @@ type Scope =
 ## 留下來、與 AI 有關但不屬於這次移除的
 
 - 技能筆記（「當成技能」開著，內部是 `skills` 模組標籤，介面不顯示）；MCP prompts；SKILL.md 匯出與匯入（保留 `ai` 鍵）。
-- 前端技能目錄（`modules/skills/catalogue.ts`、`api.ts` 的 `listSkills`）：目前沒有畫面使用，等「交給 AI」的技能挑選器接回。
+- 前端技能目錄（`modules/skills/catalogue.ts`；前端呼叫 API 列技能的函式已在清除死碼時刪掉）：目前沒有畫面使用，等「交給 AI」的技能挑選器接回。
 - MCP 工具與 token（`services/agentTools/`、`/api/mcp/*`）原封不動。
 - semantic 模組（獨立的嵌入模型，預設關閉）原封不動。
 - 資料上 `source_type = "ai"` 的既有筆記照舊顯示（舊的「存成筆記」產物）。

@@ -76,7 +76,7 @@ AI 工作階段的整組復原，或在 `mutate` 附近加「某種操作者只�
 
 ## 測試在哪
 
-`src/test/aiSuggestions.integration.test.ts`（授權允許／拒絕、撤權、競態、stale、void、冪等重送、交易回滾、整組復原含已接受的處）、
+`packages/backend/src/test/aiSuggestions.integration.test.ts`（授權允許／拒絕、撤權、競態、stale、void、冪等重送、交易回滾、整組復原含已接受的處）、
 `aiSuggestionBlocks.test.ts`（段落差異與套用）。
 
 ## 批 3＋4：API 跑法（2026-10-30，`feat/ai-runtime-api`，疊在上面的建議核心之上）

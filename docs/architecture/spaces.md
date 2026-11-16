@@ -1,6 +1,7 @@
 # 空間：用「放在哪裡」決定誰看得到（設計草案 v3）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/spaces.ts, packages/backend/src/spine/spaceAccess.ts
 
 狀態：**全部階段已實作**（2026-10-13，分支 `feat/spaces`，PR #10）。空間一律生效，沒有開關；
 現有的標籤權限由 migration 094 一次性、fail-closed 轉換，舊的標籤權限程式已刪除（使用者決定「直接完成轉換，不太需要過度」）。
@@ -38,7 +39,7 @@
 | 沒有 policy 的操作預設放行到 viewer | `dispatcher/permissions.ts:34-37, 70-79` |
 | token 標籤白名單、工具白名單 | `agent_tokens.allowed_tag_ids`、`allowed_tools` |
 | 人員範圍（matter scope），只看直接掛標籤的筆記，不往下繼承 | `actors.scoped_tag_ids`（migration 066） |
-| 任務的範圍主體是宿主筆記 | `taskIdentity.ts`（`nodeTagScopeSubjectSql`） |
+| 任務的範圍主體是宿主筆記 | `taskIdentity.ts`（任務與宿主筆記同一個空間，migration 093） |
 | principal_admin：任何非 token 的 admin（不是單一擁有者） | `spine/authority.ts:105-107` |
 | workspace 設定節點保護 | `reservedNodes.ts` |
 | 移除成員 → 401 | `member_removals`、`index.ts:299` |

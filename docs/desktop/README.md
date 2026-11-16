@@ -1,6 +1,6 @@
 # Onden 桌面版（試做）
 
-> 狀態：試做（spike），2026-11-02。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
+> 狀態：現行（試做 spike，2026-11-02 起；最後確認 2026-11-13）。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
 > 已實作並測過的是下面「現在能做什麼」；「還沒做的」一節是刻意不做的範圍，不是漏掉。
 
 ## 現在能做什麼
@@ -105,7 +105,7 @@ npm run desktop:build    # 建前後端 → 整理 stage/ → electron-builder �
 # 產物：packages/desktop/release/Onden-<版本>-x86_64.AppImage
 ```
 
-`scripts/stage.mjs` 做的事：
+`packages/desktop/scripts/stage.mjs` 做的事：
 
 1. 前端建置複製到 `stage/web`；
 2. 後端執行環境到 `stage/server`：後端 `dist`、`db/migrations`、markdown／site 的 `dist`，以及 `npm ci --omit=dev` 裝出來的 `node_modules`（與 `backend/docker/Dockerfile` 同一個作法）；
@@ -114,7 +114,7 @@ npm run desktop:build    # 建前後端 → 整理 stage/ → electron-builder �
 5. **檢查**：關鍵套件必須解析到 stage 裡面。Node 會一路往上層資料夾找套件，不檢查的話在 repo 裡會悄悄用到根目錄的 `node_modules`，打包後才缺東西（這個問題真的發生過一次）。
 6. **後端用的 Node**：下載官方 Node 22（版本與 SHA-256 固定在 `stage.mjs`）放到 `stage/server/runtime/node`，後端用它跑，不用 Electron 內建的 Node。Electron 在 Linux 會把系統的 glib 符號帶進程序，sharp 讀圖片時因此 SIGSEGV（electron#46323；在 Fedora 44 上實際發生，上傳圖片讓後端當掉）。AppImage 因此多約 30 MB。下載的壓縮檔快取在 `packages/desktop/.cache/`。
 
-`asar: false`：後端要從磁碟讀遷移 SQL、`sharp` 有原生檔，後端又在子程序裡跑；全部攤開最單純。electron-builder 的 `extraResources` 會略過名為 `node_modules` 的資料夾，所以後端由 `scripts/afterPack.cjs` 在打包後複製進 `resources/server`。
+`asar: false`：後端要從磁碟讀遷移 SQL、`sharp` 有原生檔，後端又在子程序裡跑；全部攤開最單純。electron-builder 的 `extraResources` 會略過名為 `node_modules` 的資料夾，所以後端由 `packages/desktop/scripts/afterPack.cjs` 在打包後複製進 `resources/server`。
 
 **選 electron-builder 的理由**：AppImage 一行設定就有，Windows（NSIS）、macOS（dmg）同一份設定，日後的簽章與自動更新（`electron-updater`）也在同一個工具鏈；授權 MIT。
 

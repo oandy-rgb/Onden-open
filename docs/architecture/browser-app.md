@@ -143,7 +143,7 @@ npm run build:browser -- --tag=<版本標籤> --report-url=<回報位址>   # �
 ```
 
 - 三步：Node 上先套遷移並輸出 `snapshot.tar.gz`（`prepareSnapshot.ts`）→ esbuild 把 `worker.ts` 打包成 `worker.js`（`node:*` 換成 `browser-shims/`）→ vite 用 `vite.browser.config.ts` 建頁面，再把 PGlite 的 wasm／資料／擴充複製進去。
-- **正式版不受影響**：頁面是獨立的 vite 設定與 `browser.html`，不經 Astro，也不進 `scripts/check-boot-bundle.mjs`；正式版沒有任何新的 import（`browserApp/` 只被 `browser.html` 用，守門 `browserApp.guard.test.ts` 釘住）。`npm run build` 照舊通過。
+- **正式版不受影響**：頁面是獨立的 vite 設定與 `browser.html`，不經 Astro，也不進 `packages/frontend/scripts/check-boot-bundle.mjs`；正式版沒有任何新的 import（`browserApp/` 只被 `browser.html` 用，守門 `browserApp.guard.test.ts` 釘住）。`npm run build` 照舊通過。
 - 唯一碰到共用程式的地方：`localDbWorker.ts` 找 `sql.js` 的路徑（瀏覽器版放在頁面資源旁邊、正式版不變）、`db.ts`／`dbPglite.ts`／`backgroundJobs.ts`／`config.ts` 各一個注入點（`useDatabaseSnapshot`、`useJobRunner`、`setEnvironment`）。
 
 首次開啟要下載的東西（gzip，靜態主機的壓縮傳輸；`measure.mjs` 實測請求 127 個檔）：

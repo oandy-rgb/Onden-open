@@ -1,6 +1,6 @@
 # 視圖模組：月曆、看板、卡片也是標籤的功能（設計草案）
 
-> 狀態：現行（最後確認 2026-11-12）
+> 狀態：已被取代（檢視改成「功能引用」，migration 188；見 [function-references-2026-11-02.md](proposals/function-references-2026-11-02.md)）。下文的 `syncViewModuleExtends`、`pickDateField` 已不存在。
 
 > 2026-11-12（功能引用表 B2，遷移 188）：已存檢視不再放在 `content_nodes.collection_views`，改成 `function_refs` 的一列
 > （`function_id`＝版面、`instance`＝檢視 id、`config`＝名稱、篩選、排序、釘選順序、版面參數），標籤與筆記同一個入口

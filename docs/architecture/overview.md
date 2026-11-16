@@ -51,7 +51,7 @@
 ## 5. 模組
 
 功能（白板、任務、看板、RSS、技能、簡報、網站…）是可開關的模組：入口只放登記資料，畫面用 `lazyWithReload` 用到才載。
-標籤、功能與視圖的關係見模組庫。建置後 `scripts/check-boot-bundle.mjs` 檢查登入後必載 JS 的大小預算。
+標籤、功能與視圖的關係見模組庫。建置後 `packages/frontend/scripts/check-boot-bundle.mjs` 檢查登入後必載 JS 的大小預算。
 
 - 位置：`packages/frontend/src/modules/`、`packages/backend/src/modules/`（各有 README）
 - 專文：[模組庫](module-library.md)、[視圖也是模組](views-as-modules.md)、[模組分類的決定](../agents/decisions-modules.md)

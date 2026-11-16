@@ -1,0 +1,12 @@
+{
+  "說明": "被取代清單：還在 repo 裡、但已被別的做法取代的路徑（已刪除的東西由引用檢查抓）。現行文件的程式碼引用或「> 涵蓋：」指到這裡的路徑就失敗（check-md-links.mjs）。每項：paths（路徑或 glob）、replacedBy（被什麼取代）、pr。這份清單會增加（取代發生就登記），所以不是 ratchet 基準；刪掉的項目代表那些路徑已經從 repo 移除。",
+  "entries": [
+    {
+      "paths": [
+        "packages/backend/src/distributedSync/**"
+      ],
+      "replacedBy": "來源標記＋合併核心（packages/backend/src/spine/stampedMerge/）；第一版引擎的第二本帳 ds_ops、materialize.ts、bridge/ 決定刪除，等主線具備同等能力後才做（docs/architecture/proposals/distributed-ready-2026-11-12.md 第 4 節）",
+      "pr": "#1742"
+    }
+  ]
+}

@@ -69,7 +69,8 @@ export default function ScopeBox({ nodeId, noteTitle, chips, text, disabled, can
 
   return (
     <div className="note-ai-box">
-      <ul className="note-ai-scope-list" aria-label={t("What the AI will read")}>
+      {/* This note alone needs no row: the box already says "ask about this note". The row is for what was added to it. */}
+      {chips.length > 0 && <ul className="note-ai-scope-list" aria-label={t("What the AI will read")}>
         <li><Chip tone="neutral" className="note-ai-scope-item" title={t("This note is always included")}>{displayTitle(noteTitle)}</Chip></li>
         {chips.map((chip) => (
           <li key={`${chip.kind}:${chip.id}`}>
@@ -81,7 +82,7 @@ export default function ScopeBox({ nodeId, noteTitle, chips, text, disabled, can
             </Chip>
           </li>
         ))}
-      </ul>
+      </ul>}
       <div className="note-ai-compose">
         <TextArea
           ref={input} className="note-ai-input" rows={1} value={text} maxLength={QUESTION_MAX} disabled={disabled}

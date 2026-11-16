@@ -436,6 +436,7 @@ export async function discardUnfinishedJoins(client: ShellClient, onlyWorkspaceI
     `SELECT workspace_id::text, shell_person FROM sync_join WHERE state = 'joining' AND ($1::uuid IS NULL OR workspace_id = $1) FOR UPDATE`, [onlyWorkspaceId ?? null])).rows) {
     await client.query(`DELETE FROM workspaces WHERE id = $1`, [workspace_id]);
     await client.query(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [workspace_id]);
+    if ((await client.query(`SELECT to_regclass('sync_stamp_heads') AS t`)).rows[0]?.t) await client.query(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1`, [workspace_id]);
     await client.query(`DELETE FROM sync_clock WHERE workspace_id = $1`, [workspace_id]);
     await client.query(`DELETE FROM sync_join WHERE workspace_id = $1`, [workspace_id]);
     person = (shell_person as ShellPerson | null) ?? person;

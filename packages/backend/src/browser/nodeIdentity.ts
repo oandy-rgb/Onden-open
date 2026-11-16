@@ -28,7 +28,11 @@ export async function ensureOwnNodeId(): Promise<boolean> {
     const own = (await sql<{ node_id: string }>`
       INSERT INTO sync_node (singleton, node_id) VALUES (true, gen_random_uuid()::text)
       ON CONFLICT (singleton) DO UPDATE SET node_id = EXCLUDED.node_id RETURNING node_id`.execute(db)).rows[0]!.node_id;
-    if (before) await sql`UPDATE sync_stamps SET origin = ${own} WHERE origin = ${before}`.execute(db);
+    if (before) {
+      await sql`UPDATE sync_stamps SET origin = ${own} WHERE origin = ${before}`.execute(db);
+      // what a write had seen names its writers by origin too (migration 205); the same writes, under the copy's own id
+      await sql`UPDATE sync_stamps SET saw = (saw - ${before}::text) || jsonb_build_object(${own}::text, saw -> ${before}::text) WHERE saw ? ${before}::text`.execute(db);
+    }
     await writeAppState(STATE_KEY, { taken: true });
   });
   return true;

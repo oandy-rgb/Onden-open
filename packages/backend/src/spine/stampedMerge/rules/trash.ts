@@ -1,0 +1,66 @@
+// A deletion meeting a change it had not seen (4.9). The delete takes effect; nobody's words are lost, and the person who
+// wrote them is told where they went. "Had not seen" is the deleting write's `seen` (`seenOfRow` in a store: per origin the
+// highest sequence number of that node's writes to the row the deleter held). It is used here for who to tell and what to
+// hand back, never to decide what the merged data is, so a wrong claim can silence a notice but cannot lose a value.
+import type { Saw, Stamp } from "../unit.js";
+
+export type Deletion = { stamp: Stamp; seen: Saw };
+export type Notice = { to: string; note: string; kind: "edit-kept-in-trash" | "created-under-deleted-parent" };
+
+const hadSeen = (d: Deletion, w: Stamp): boolean => w.seq <= (d.seen[w.origin] ?? -1);
+const byNote = (a: Notice, b: Notice) => (a.note + a.to + a.kind < b.note + b.to + b.kind ? -1 : 1);
+
+/** One note in the trash, and the writes to it the deleter had not seen. The edit stays in the note (the fields merge on their own); the editor is told, unless that was the same person on another device. */
+export function noticesForEditedDeletes(notes: readonly { id: string; deleted: Deletion | null; edits: readonly Stamp[] }[]): Notice[] {
+  const out = new Map<string, Notice>();
+  for (const n of notes) {
+    if (!n.deleted) continue;
+    for (const e of n.edits) {
+      if (hadSeen(n.deleted, e) || e.author === null || e.author === n.deleted.stamp.author) continue;
+      out.set(`${n.id}|${e.author}`, { to: e.author, note: n.id, kind: "edit-kept-in-trash" });
+    }
+  }
+  return [...out.values()].sort(byNote);
+}
+
+export type TreeNote = { id: string; parent: string | null; created: Stamp; deleted: Deletion | null };
+export type TrashFix = { note: string; trashedWith: string };
+/**
+ * A note made under a parent that another node deleted before seeing the note: the note stays, goes to the trash with that
+ * parent and comes back with it; its creator is told (unless they are the one who deleted). The nearest such ancestor is
+ * `trashedWith`. A note the deleter HAD seen is the ordinary cascade's and not this rule's.
+ */
+export function trashOrphanedChildren(notes: readonly TreeNote[]): { fixes: TrashFix[]; notices: Notice[] } {
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const fixes: TrashFix[] = [], notices: Notice[] = [];
+  for (const n of [...notes].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (n.deleted) continue;
+    const seen = new Set<string>([n.id]);
+    for (let p = n.parent === null ? undefined : byId.get(n.parent); p && !seen.has(p.id); p = p.parent === null ? undefined : byId.get(p.parent)) {
+      seen.add(p.id);
+      if (!p.deleted || hadSeen(p.deleted, n.created)) continue;
+      fixes.push({ note: n.id, trashedWith: p.id });
+      const who = n.created.author;
+      if (who !== null && who !== p.deleted.stamp.author) notices.push({ to: who, note: n.id, kind: "created-under-deleted-parent" });
+      break;
+    }
+  }
+  return { fixes, notices: notices.sort(byNote) };
+}
+
+export type FieldWrite = { field: string; stamp: Stamp; value: unknown };
+export type RecoveryCopy = { to: string; row: string; fields: FieldWrite[]; notify: boolean };
+/** A row deleted for good while another node wrote to it (a write the deleter had not seen): the row stays gone, and each author gets those fields back as a recovery copy. */
+export function recoverLateEdits(rows: readonly { id: string; purged: Deletion | null; writes: readonly FieldWrite[] }[]): RecoveryCopy[] {
+  const out: RecoveryCopy[] = [];
+  for (const r of rows) {
+    if (!r.purged) continue;
+    const byAuthor = new Map<string, FieldWrite[]>();
+    for (const w of r.writes) {
+      if (hadSeen(r.purged, w.stamp) || w.stamp.author === null) continue;
+      byAuthor.set(w.stamp.author, [...(byAuthor.get(w.stamp.author) ?? []), w]);
+    }
+    for (const [to, fields] of byAuthor) out.push({ to, row: r.id, fields: fields.sort((a, b) => (a.field < b.field ? -1 : 1)), notify: to !== r.purged.stamp.author });
+  }
+  return out.sort((a, b) => (a.row + a.to < b.row + b.to ? -1 : 1));
+}

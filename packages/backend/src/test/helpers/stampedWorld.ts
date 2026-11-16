@@ -194,7 +194,7 @@ export function rowsOf(node: RealNode | null, world: Pick<SourceWorld, "ws" | "o
   });
 }
 
-export type StampRow = { table_name: string; row_key: string; field: string; origin: string; seq: string; hlc_wall: string; hlc_counter: number; author: string | null; device: string | null; deleted: boolean };
+export type StampRow = { table_name: string; row_key: string; field: string; origin: string; seq: string; hlc_wall: string; hlc_counter: number; author: string | null; device: string | null; deleted: boolean; saw: Record<string, number>; meta: unknown };
 
 /** The ids of notes and spaces of the workspace that `world.owner` cannot read (their stamps are not in the owner's snapshot). */
 export function outOfScopeIds(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">): Promise<string[]> {
@@ -211,10 +211,17 @@ export function outOfScopeIds(node: RealNode | null, world: Pick<SourceWorld, "w
 export function stampsOfWorkspace(node: RealNode | null, world: Pick<SourceWorld, "ws">, without: string[] = []): Promise<StampRow[]> {
   return onNode(node, async () => {
     const r = await q<StampRow>(
-      `SELECT table_name, row_key, field, origin, seq::text, hlc_wall::text, hlc_counter, author, device::text, deleted FROM sync_stamps WHERE workspace_id = $1
+      `SELECT table_name, row_key, field, origin, seq::text, hlc_wall::text, hlc_counter, author, device::text, deleted, saw, meta FROM sync_stamps WHERE workspace_id = $1
         ORDER BY table_name COLLATE "C", row_key COLLATE "C", field COLLATE "C"`, [world.ws]);
     return r.rows.filter((s) => !s.row_key.split("/").some((part) => without.includes(part)));
   });
+}
+
+/** The other heads of units (sync_stamp_heads) of the workspace, in a fixed order. */
+export function headsOfWorkspace(node: RealNode | null, world: Pick<SourceWorld, "ws">): Promise<Record<string, unknown>[]> {
+  return onNode(node, async () => (await q<Record<string, unknown>>(
+    `SELECT table_name, row_key, field, origin, seq::text, content_hash, hlc_wall::text, hlc_counter, author, device::text, deleted, saw, meta, value FROM sync_stamp_heads WHERE workspace_id = $1
+      ORDER BY table_name COLLATE "C", row_key COLLATE "C", field COLLATE "C", origin COLLATE "C", seq, content_hash`, [world.ws])).rows);
 }
 
 /** The digest of the workspace as `person` reads it on `node`: what the receiver holds, in the terms the source's digest was made in. */

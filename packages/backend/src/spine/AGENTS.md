@@ -13,6 +13,7 @@
 | 系統 actor | `systemActor.ts` | `systemActor.guard.test.ts` |
 | 交易與 savepoint | `eventTransaction.ts`、`txHooks.ts` | 無專屬守門，靠審查 |
 | 重試去重（冪等鍵） | `idempotency.ts` | 無專屬守門，靠審查 |
+| 兩個節點各自改過的、帶來源標記的資料合成同一個結果（單位、列、欄位、JSON 鍵、跨列規則；純函式，還沒接線） | `stampedMerge/`（說明在它的 README.md；證明在 `test/stampedMergeSim.test.ts`；下一批「修改包」才有產品呼叫者） | `test/stampedMerge.test.ts`、`test/stampedMergeSim.test.ts` |
 | 把別處的版本歷史（帶原始時間的內文版本）寫進新工作區 | `importedHistory.ts` 的 `appendImportedVersions`（只准擁有者；驗雜湊、去重） | 靠審查；契約 [backup-move.md](../../../../docs/architecture/backup-move.md) |
 | 把一個工作區連同每筆的來源標記原樣寫入**空的**資料庫（加入第二台裝置的快照） | `stampedImport.ts`（唯一入口；只有 `services/stampedJoin.ts` 呼叫；沒有 `sync_join` 的加入中狀態一律拒絕；本機 `next_seq` 不動） | `stampedImport.guard.test.ts` |
 | 收下別台的標記前檢查時鐘 | `stamps.ts` 的 `assertForeignClockWithinBound`（超前 10 分鐘整批拒收） | 無專屬守門；整合測試 stampClockBound 驗證 |

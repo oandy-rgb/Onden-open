@@ -2,6 +2,13 @@
   "說明": "unused:check 的基準，只准減少（ratchet:check）。intentional＝刻意保留，必須寫理由；leftover＝尚未清掉的死碼。新的死碼請直接刪，不要加進這裡。",
   "intentional": {
     "files": {
+      "packages/backend/src/spine/stampedMerge/body.ts": "內文合併的檢視（多個頭算出一份文字）；2b 套用修改包時才有呼叫者，現在由合併核心的測試與模擬器使用。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/focus.ts": "跨列規則（焦點）；規則接到畫面那批才有呼叫者。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/functionRefs.ts": "跨列規則（功能引用重複）；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/moveCycle.ts": "跨列規則（搬移成環）；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/names.ts": "跨列規則（同層重名）；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/permission.ts": "跨列規則（權限）；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/rules/trash.ts": "跨列規則（刪除對編輯）；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
       "packages/backend/src/admin.ts": "自架管理指令（`node dist/admin.js`，docs 與 docker 說明都是這樣叫），沒有 import 它的程式是正常的",
       "packages/backend/src/browser/makeOldCopy.ts": "升級夾具：`tsx src/browser/makeOldCopy.ts` 由 e2e/browser-app/smoke.mjs 手動執行；不動",
       "packages/backend/src/browser/prepareSnapshot.ts": "`tsx src/browser/prepareSnapshot.ts` 由 scripts/build-browser.mjs 以指令列執行",
@@ -17,6 +24,13 @@
       "packages/relay/src/worker.ts": "relay 的 worker 入口，由部署設定載入，刻意保留"
     },
     "exports": {
+      "packages/backend/src/spine/stampedMerge/store.ts#*": "列層的純函式儲存（模擬器與核心測試的對象）；資料庫端目前只接單位層。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/dbUnits.ts#UNIT_SOURCES": "單位對應資料表欄位的清單；測試拿它對照觸發器的參數。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/dbUnits.ts#readUnit": "把資料庫的一個單位讀成核心的輸入；2b 的修改包套用會用到，現在由測試使用。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/unit.ts#stampKey": "核心的小工具；列層儲存與測試使用。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/unit.ts#conflictsOf": "單位目前的衝突；畫面顯示衝突那批才有產品呼叫者。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedMerge/unit.ts#winnerOf": "單位目前顯示的頭；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
+      "packages/backend/src/spine/stampedImport.ts#mergeUnitsIntoWorkspace": "把合併結果寫回工作區的唯一入口；刻意還沒有產品呼叫者（guards/stampedMergeCallers 釘住：接傳輸前要先擋系統寫入）。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
       "packages/backend/src/browser/#*": "升級夾具與瀏覽器版啟動檔，由指令列或測試載入",
       "packages/backend/src/distributedSync/": "distributedSync 整個資料夾刻意保留（業主指示）",
       "packages/backend/src/localDay.ts#supportedTimeZones": "localDayAgreement 屬性測試靠它列舉「伺服器接受的所有時區」核對資料庫；沒有它就列舉不了",

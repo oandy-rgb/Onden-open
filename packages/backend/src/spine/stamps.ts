@@ -122,14 +122,21 @@ export async function adoptForeignStamp(workspaceId: string, stamp: ForeignStamp
 /** A reading of the logical clock: the pair a stamp carries as `wall` and `counter`. */
 export type ClockReading = { wall: number; counter: number };
 
-/** Inside a stamped-snapshot import (spine/stampedImport.ts, the one caller): the stamp triggers of `workspaceId` stand aside for the rest
- *  of this transaction, because the snapshot carries the stamps and they are written as received. Two things make that so: the
+/** The two reasons the stamp triggers of a workspace stand aside for the rest of a transaction (migration 204 / 205 `sync_import_active` is the one place that decides):
+ *  `join` = a stamped snapshot is being imported (spine/stampedImport.ts; the workspace's sync_join row must be 'joining'),
+ *  `merge` = changes of another node are being written back as received (spine/stampedMerge/dbUnits.ts; the workspace must have a clock and not be joining,
+ *  and the transaction counts it in sync_clock.merge_batches, the visible exception like writes_without_mutate). */
+type StandAsideReason = "join" | "merge";
+
+/** Inside a stamped-snapshot import or a merge write-back (the two callers named in stampedImport.guard.test.ts), the stamp triggers of `workspaceId` stand aside for the rest
+ *  of this transaction, because what is written carries the stamps it had and they are stored as received. Two things make that so: the
  *  transaction setting `onden.stamp_import_<workspace>` (local to the transaction: when it ends every trigger is as before) and
- *  the workspace's sync_join row being 'joining' (migration 204: without one the setting does nothing). The transaction also gets a
+ *  `sync_import_active` agreeing with its value (migrations 204 / 205: without the matching state of the workspace the setting does nothing). The transaction also gets a
  *  placeholder stamp so that nothing makes one of its own, and counts as stamped for the guard in db.ts. Call after the event lock. */
-export async function standAsideForImport(workspaceId: string): Promise<void> {
-  await sql`SELECT set_config(${`onden.stamp_import_${workspaceId.replaceAll("-", "_")}`}, 'on', true)`.execute(db);
-  await setStamp(workspaceId, { origin: "import", seq: 0, wall: 0, counter: 0, author: null, device: null });
+export async function standAsideForImport(workspaceId: string, reason: StandAsideReason = "join"): Promise<void> {
+  await sql`SELECT set_config(${`onden.stamp_import_${workspaceId.replaceAll("-", "_")}`}, ${reason === "join" ? "on" : "merge"}, true)`.execute(db);
+  await setStamp(workspaceId, { origin: reason === "join" ? "import" : "merge", seq: 0, wall: 0, counter: 0, author: null, device: null });
+  if (reason === "merge") await sql`UPDATE sync_clock SET merge_batches = merge_batches + 1 WHERE workspace_id = ${workspaceId}::uuid`.execute(db);
 }
 
 /** The local clock after seeing a whole batch of foreign readings, once: the batch's highest reading goes through the clock rule

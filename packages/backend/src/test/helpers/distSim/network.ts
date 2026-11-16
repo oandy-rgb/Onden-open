@@ -6,8 +6,10 @@ import type { Rng } from "./rng.js";
 export type Faults = { drop: number; duplicate: number };
 export const RELIABLE: Faults = { drop: 0, duplicate: 0 };
 
-export class MemoryNetwork {
-  private queue: SyncMessage[] = [];
+/** Any message that says who sent it and who it is for; the engine's own are `SyncMessage`s. */
+export type Addressed = { from: NodeId; to: NodeId };
+export class MemoryNetwork<M extends Addressed = SyncMessage> {
+  private queue: M[] = [];
   private cut = new Set<string>();
   readonly stats = { sent: 0, dropped: 0, duplicated: 0, delivered: 0, cutOff: 0 };
   constructor(private readonly rng: Rng, public faults: Faults = RELIABLE) {}
@@ -18,7 +20,7 @@ export class MemoryNetwork {
   isCut(a: NodeId, b: NodeId): boolean { return this.cut.has(this.key(a, b)); }
   get pending(): number { return this.queue.length; }
 
-  send(msg: SyncMessage): void {
+  send(msg: M): void {
     this.stats.sent += 1;
     if (this.isCut(msg.from, msg.to)) { this.stats.cutOff += 1; return; }
     if (this.rng.chance(this.faults.drop)) { this.stats.dropped += 1; return; }
@@ -26,7 +28,7 @@ export class MemoryNetwork {
     if (this.rng.chance(this.faults.duplicate)) { this.stats.duplicated += 1; this.queue.push(msg); }
   }
   /** Any pending message, not the oldest: delay and reordering are the same thing here. */
-  take(): SyncMessage | undefined {
+  take(): M | undefined {
     if (!this.queue.length) return undefined;
     const [msg] = this.queue.splice(this.rng.int(this.queue.length), 1);
     if (this.isCut(msg!.from, msg!.to)) { this.stats.cutOff += 1; return this.take(); }

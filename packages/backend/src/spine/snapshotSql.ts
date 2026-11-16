@@ -79,7 +79,16 @@ export async function readRowChunk(
   return r.rows;
 }
 
-export type WireStamp = { label: string; rowKey: string; field: string; origin: string; seq: number; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean };
+/** One head of a unit that is not the one its stamp shows: a write nobody who wrote later had seen, that lost on the stamp order, with its value (migration 205 sync_stamp_heads). */
+type WireHead = {
+  origin: string; seq: number; contentHash: string; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean;
+  saw: Record<string, number>; meta: unknown | null; value: string | null;
+};
+/** A stamp as it travels: who wrote, when, what the writer had seen of the unit (`saw`) and knew beyond it (`meta`), and the unit's other heads (`heads`, usually none). */
+export type WireStamp = {
+  label: string; rowKey: string; field: string; origin: string; seq: number; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean;
+  saw: Record<string, number>; meta: unknown | null; heads: WireHead[];
+};
 
 export type SnapshotItem =
   | { kind: "row"; table: string; values: Record<string, unknown>; stamps: WireStamp[] }
@@ -99,7 +108,10 @@ export type StampedPage = {
 };
 
 const STAMP_COLUMNS = `s.table_name AS label, s.row_key AS "rowKey", s.field, s.origin, s.seq::float8 AS seq, s.hlc_wall::float8 AS wall,
-  s.hlc_counter AS counter, s.author, s.device::text AS device, s.deleted`;
+  s.hlc_counter AS counter, s.author, s.device::text AS device, s.deleted, s.saw, s.meta,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('origin', h.origin, 'seq', h.seq, 'contentHash', h.content_hash, 'wall', h.hlc_wall, 'counter', h.hlc_counter, 'author', h.author,
+                                               'device', h.device::text, 'deleted', h.deleted, 'saw', h.saw, 'meta', h.meta, 'value', h.value) ORDER BY h.origin COLLATE "C", h.seq, h.content_hash)
+              FROM sync_stamp_heads h WHERE h.workspace_id = s.workspace_id AND h.table_name = s.table_name AND h.row_key = s.row_key AND h.field = s.field), '[]'::jsonb) AS heads`;
 
 /** The stamps of the given rows: `pairs` are (label, row key). */
 export async function readStampsOf(workspaceId: string, pairs: { label: string; rowKey: string }[]): Promise<WireStamp[]> {
@@ -189,7 +201,10 @@ export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeF
          SELECT count(*)::int AS n, COALESCE(string_agg(r.h, ',' ORDER BY r.k COLLATE "C"), '') AS agg FROM (
            SELECT concat_ws(chr(31), s.table_name, s.row_key, s.field) AS k,
                   encode(sha256(convert_to(concat_ws(chr(31), s.table_name, s.row_key, s.field, s.origin, s.seq, s.hlc_wall, s.hlc_counter,
-                    COALESCE(s.author, '~'), COALESCE(s.device::text, '~'), s.deleted), 'UTF8')), 'hex') AS h
+                    COALESCE(s.author, '~'), COALESCE(s.device::text, '~'), s.deleted, s.saw::text, COALESCE(s.meta::text, '~'),
+                    COALESCE((SELECT string_agg(concat_ws(chr(30), h.origin, h.seq, h.content_hash, h.hlc_wall, h.hlc_counter, COALESCE(h.author, '~'), COALESCE(h.device::text, '~'), h.deleted,
+                                                      h.saw::text, COALESCE(h.meta::text, '~'), COALESCE(h.value, '~')), chr(29) ORDER BY h.origin COLLATE "C", h.seq, h.content_hash)
+                                FROM sync_stamp_heads h WHERE h.workspace_id = s.workspace_id AND h.table_name = s.table_name AND h.row_key = s.row_key AND h.field = s.field), '~')), 'UTF8')), 'hex') AS h
              FROM sync_stamps s
             WHERE s.workspace_id = $1 AND s.table_name = ${label}
               AND (EXISTS (SELECT 1 FROM inscope i WHERE i.k = s.row_key)

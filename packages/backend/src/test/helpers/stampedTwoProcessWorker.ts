@@ -15,12 +15,14 @@ import { getWorkspaceId, migrate, q, withSavepoint, withTransaction } from "../.
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { stampTransaction } from "../../spine/stamps.js";
 import { abandonJoin, applyJoinPage, startJoin } from "../../services/stampedJoin.js";
-import { markJoinDone } from "../../spine/stampedImport.js";
+import { markJoinDone, mergeUnitsIntoWorkspace } from "../../spine/stampedImport.js";
+import { readUnit } from "../../spine/stampedMerge/dbUnits.js";
+import { conflictsOf } from "../../spine/stampedMerge/unit.js";
 import type { StampedPage, TableDigest } from "../../spine/snapshotSql.js";
 import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
 import { persistActor } from "./persistActor.js";
 import { seedQ } from "./seedQ.js";
-import { buildSourceWorld, capture, digestAs, fillFrom, notCarriedOnPurpose, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace } from "./stampedWorld.js";
+import { buildSourceWorld, capture, digestAs, fillFrom, headsOfWorkspace, makeCaller, notCarriedOnPurpose, outOfScopeIds, rowsOf, snapshotApp, stampsOfWorkspace } from "./stampedWorld.js";
 import { independentRowHashes } from "./stampedRowHashes.js";
 
 const [mode, first, second] = process.argv.slice(2);
@@ -38,15 +40,20 @@ async function exportHalf(out: string): Promise<void> {
   // Rows nothing has stamped (what a boot seed leaves): the export stamps them as genesis, and the copy still matches. Made here by taking
   // away the stamps of the workspace row and of one space.
   const unstamped = (await q(`DELETE FROM sync_stamps WHERE workspace_id = $1 AND (table_name = 'workspaces' OR (table_name = 'spaces' AND row_key = $2)) RETURNING table_name`, [world.ws, world.spaceA])).rows.length;
+  // One unit with two heads (migration 205): a note written here, and a value it had before stamps that this write never saw (the merge keeps it as a head).
+  const root = (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND title = 'Grandchild'`, [world.ws])).rows[0]!.id;
+  await world.call("PATCH", `/api/nodes/${root}`, { title: "Grandchild, written here" });
+  const merged = await mergeUnitsIntoWorkspace(world.ws, [{ address: { table: "content_nodes", row: root, field: "title" }, unit: [{ stamp: { origin: "genesis", seq: 0, wall: 0, counter: 0, author: null, device: null }, saw: {}, deleted: false, value: "Grandchild, from a backup" }] }]);
+  if (merged.events[0]?.result.outcome !== "conflict") throw new Error("the source world has no unit with two heads");
   const cap = await capture(null, world, 12_000);
   const res = await snapshotApp(world.owner).request("/api/snapshot");
   if (res.status !== 200) throw new Error(`GET /api/snapshot answered ${res.status}`);
   const stream = await res.text();
   const hidden = await outOfScopeIds(null, world);
   writeFileSync(out, JSON.stringify({
-    world: { ws: world.ws, owner: world.owner, secretNote: world.secretNote },
+    world: { ws: world.ws, owner: world.owner, secretNote: world.secretNote }, headNote: root,
     summary: cap.summary, unstamped, pages: cap.pages.length, stream, hidden, pagesRaw: cap.pages,
-    rows: await rowsOf(null, world), stamps: await stampsOfWorkspace(null, world, hidden),
+    rows: await rowsOf(null, world), stamps: await stampsOfWorkspace(null, world, hidden), heads: await headsOfWorkspace(null, world),
     // WHOLE tables, hashed by SQL that does not use the digest or the snapshot's selection: what the receiver may lack is only what is left out on purpose
     wholeTables: await independentRowHashes(notCarriedOnPurpose(world)),
     // a second export after one edit: pages of two exports mixed are refused
@@ -94,7 +101,7 @@ async function refuseHalf(from: string, out: string): Promise<void> {
 
 async function importHalf(from: string, out: string): Promise<void> {
   await start();
-  const source = JSON.parse(readFileSync(from, "utf8")) as { world: { ws: string; owner: { id: string; name: string; type: "human" } }; stream: string; hidden: string[] };
+  const source = JSON.parse(readFileSync(from, "utf8")) as { world: { ws: string; owner: { id: string; name: string; type: "human" } }; headNote: string; stream: string; hidden: string[] };
   const ws = await getWorkspaceId();
   // the one local person of an empty database: the owner of it, with the sign-in of this device
   const local = await persistActor(ws, { id: "", name: "Local", role: "admin", type: "human" });
@@ -107,10 +114,16 @@ async function importHalf(from: string, out: string): Promise<void> {
     status: res.status, answer,
     join: (await q(`SELECT state, applied_through FROM sync_join WHERE workspace_id = $1`, [world.ws])).rows,
     digest: await digestAs(null, world.ws, world.owner),
-    rows: await rowsOf(null, world), stamps: await stampsOfWorkspace(null, world, source.hidden),
+    rows: await rowsOf(null, world), stamps: await stampsOfWorkspace(null, world, source.hidden), heads: await headsOfWorkspace(null, world),
     wholeTables: await independentRowHashes(null),
     node: (await q<{ node_id: string }>(`SELECT node_id FROM sync_node`)).rows[0]!.node_id,
     login: (await q<{ external_id: string | null }>(`SELECT external_id FROM actors WHERE id = $1`, [source.world.owner.id])).rows[0]?.external_id ?? null,
+    // last, because it writes: the receiver goes on as a node of its own, and its write has seen both heads of the unit (the value it was written over and the one from before stamps)
+    settled: await (async () => {
+      await makeCaller(source.world.owner as never)("PATCH", `/api/nodes/${source.headNote}`, { title: "Grandchild, settled on the copy" });
+      const unit = (await readUnit(world.ws, { table: "content_nodes", row: source.headNote, field: "title" }))!;
+      return { units: unit.length, conflicts: conflictsOf(unit).length, saw: Object.keys(unit[0]!.saw), headsLeft: (await q(`SELECT 1 FROM sync_stamp_heads WHERE workspace_id = $1 AND row_key = $2`, [world.ws, source.headNote])).rows.length };
+    })(),
   }));
 }
 

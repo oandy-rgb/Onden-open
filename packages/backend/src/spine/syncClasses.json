@@ -205,6 +205,10 @@
   "class": "node-local",
   "note": "the stamps themselves are what is copied, with the data they describe (S1)"
  },
+ "sync_stamp_heads": {
+  "class": "node-local",
+  "note": "the other heads of a unit (writes nobody who wrote later had seen) with their values; carried with the stamp they sit beside, never on their own (migration 205)"
+ },
  "structure_log": {
   "class": "node-local",
   "note": "each node's own history of structure; never sent (S1, proposal §8.5)"

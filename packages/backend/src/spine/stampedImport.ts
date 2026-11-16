@@ -33,6 +33,7 @@ import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
+import { storeMergedUnits, type IncomingUnit, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
 import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
@@ -106,6 +107,7 @@ export async function beginJoin(input: JoinInput): Promise<void> {
       await snapshotRows(`DELETE FROM workspaces WHERE id = $1`, [shell.id]);
       await snapshotRows(`SELECT set_config('myapp.allow_event_prune', '', true)`);
       await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [shell.id]);
+      await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1`, [shell.id]);
       await snapshotRows(`DELETE FROM sync_clock WHERE workspace_id = $1`, [shell.id]);
     }
     await snapshotRows(
@@ -119,6 +121,12 @@ const sortedJson = (value: unknown): string => JSON.stringify(value, (_k, v) => 
 
 function stampsOf(item: SnapshotItem): WireStamp[] {
   return item.kind === "row" ? item.stamps : item.kind === "tombstone" ? [item.stamp] : [];
+}
+
+/** What a write says it had seen: origin → whole number ≥ 0 (a genesis value is named `genesis:<hash>` with 0). */
+function checkSaw(saw: unknown): void {
+  if (saw === undefined) return; // a source that does not send it: every unit is taken to have been written over nothing
+  if (saw === null || typeof saw !== "object" || Array.isArray(saw) || !Object.values(saw).every((n) => Number.isSafeInteger(n) && (n as number) >= 0)) throw refuse("join_stamp_saw", "what a write had seen is not an object of whole numbers");
 }
 
 /** Everything about the page that can be checked without writing: shape, tables, columns, workspace, stamps. Returns the readings. */
@@ -160,6 +168,15 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
       if (seen.has(id) && seen.get(id) !== content) throw refuse("join_stamp_conflict", "one stamp number with two different contents");
       seen.set(id, content);
       readings.push({ wall: stamp.wall, counter: stamp.counter });
+      checkSaw(stamp.saw);
+      for (const head of stamp.heads ?? []) {
+        if (head.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
+        if (head.origin !== join.source_node && head.origin !== "genesis") throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
+        if (![head.seq, head.wall, head.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw refuse("join_stamp_number", "a stamp number that is not a whole number");
+        if (typeof head.contentHash !== "string" || (head.origin === "genesis") !== /^[0-9a-f]{64}$/.test(head.contentHash)) throw refuse("join_head_shape", "a head of a unit that does not say what it holds");
+        checkSaw(head.saw);
+        readings.push({ wall: head.wall, counter: head.counter });
+      }
     }
   }
   return readings;
@@ -192,13 +209,22 @@ async function setRefs(spec: SnapshotSpec, refs: { key: Record<string, unknown>;
 async function insertStamps(workspaceId: string, stamps: WireStamp[]): Promise<void> {
   if (stamps.length === 0) return;
   await snapshotRows(
-    `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted)
-     SELECT $1::uuid, s."label", s."rowKey", s.field, s.origin, s.seq, s.wall, s.counter, s.author, s.device, s.deleted
-       FROM jsonb_to_recordset($2::jsonb) AS s("label" text, "rowKey" text, field text, origin text, seq bigint, wall bigint, counter int, author text, device uuid, deleted boolean)
+    `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
+     SELECT $1::uuid, s."label", s."rowKey", s.field, s.origin, s.seq, s.wall, s.counter, s.author, s.device, s.deleted, COALESCE(s.saw, '{}'::jsonb), s.meta
+       FROM jsonb_to_recordset($2::jsonb) AS s("label" text, "rowKey" text, field text, origin text, seq bigint, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb)
      ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
        origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter,
-       author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted`,
+       author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta`,
     [workspaceId, JSON.stringify(stamps)]);
+  const withHeads = stamps.filter((s) => s.heads.length > 0);
+  if (withHeads.length === 0) return;
+  await snapshotRows(
+    `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, author, device, deleted, saw, meta, value)
+     SELECT $1::uuid, w."label", w."rowKey", w.field, h.origin, h.seq, h."contentHash", h.wall, h.counter, h.author, h.device, h.deleted, COALESCE(h.saw, '{}'::jsonb), h.meta, h.value
+       FROM jsonb_to_recordset($2::jsonb) AS w("label" text, "rowKey" text, field text, heads jsonb)
+      CROSS JOIN LATERAL jsonb_to_recordset(w.heads) AS h(origin text, seq bigint, "contentHash" text, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb, value text)
+     ON CONFLICT DO NOTHING`,
+    [workspaceId, JSON.stringify(withHeads.map((s) => ({ label: s.label, rowKey: s.rowKey, field: s.field, heads: s.heads })))]);
 }
 
 /** Rows the database's own triggers make when a workspace or a person is inserted (the default space, a personal space and its
@@ -297,7 +323,8 @@ export async function markJoinDone(workspaceId: string, expected: { pages: numbe
     const differences = compareDigests(expected.digest, await computeSnapshotDigest(workspaceId, wholeWorkspace));
     if (differences.length > 0) throw new JoinDigestMismatch(differences);
     const clash = await snapshotRows(
-      `SELECT 1 FROM sync_stamps WHERE workspace_id = $1 GROUP BY origin, seq
+      `SELECT 1 FROM (SELECT origin, seq, hlc_wall, hlc_counter, author, device FROM sync_stamps WHERE workspace_id = $1
+                      UNION ALL SELECT origin, seq, hlc_wall, hlc_counter, author, device FROM sync_stamp_heads WHERE workspace_id = $1) x GROUP BY origin, seq
         HAVING count(DISTINCT md5(concat_ws('/', hlc_wall, hlc_counter, COALESCE(author, '~'), COALESCE(device::text, '~')))) > 1 LIMIT 1`, [workspaceId]);
     if (clash.rows.length > 0) throw refuse("join_stamp_conflict", "one stamp number with two different contents", 409);
     if (join.person_actor_id) {
@@ -332,5 +359,20 @@ export async function cancelJoin(workspaceId: string): Promise<void> {
     // The empty workspace again, in this process: the person can sign in and join again without a restart.
     await ensureShellWorkspace(run, nativeBypassEnabled());
     if (person) await restoreShellPerson(run, person);
+  });
+}
+
+/**
+ * THE ONE ENTRY that writes units received from another node into a workspace that is not being joined, with the stamps they came with (the merge core's answer,
+ * spine/stampedMerge/dbUnits.ts). The same switch as a snapshot import (migrations 204 / 205 `sync_import_active`, reason "merge"): the stamp triggers stand
+ * aside for this transaction, which counts in sync_clock.merge_batches; a workspace with no clock yet, or one that is still joining, takes nothing. It decides
+ * nothing about who may write: the caller (the changes pack, later) has checked the sender, and domain effects of a changed row are the caller's too.
+ */
+export async function mergeUnitsIntoWorkspace(workspaceId: string, incoming: readonly IncomingUnit[], gate?: SkewGate): Promise<UnitMergeReport> {
+  return withEventTransaction(workspaceId, async () => {
+    await standAsideForImport(workspaceId, "merge");
+    const active = (await snapshotRows<{ on: boolean }>(`SELECT sync_import_active($1::uuid) AS on`, [workspaceId])).rows[0]!.on;
+    if (!active) throw refuse("merge_not_open", "this workspace does not take merged units now (it has no clock yet, or it is being joined)", 409);
+    return storeMergedUnits(workspaceId, incoming, gate);
   });
 }

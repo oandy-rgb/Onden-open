@@ -309,7 +309,7 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
     const page = clone(cap.pages[0]!);
     const row = page.items.find((i) => i.kind === "row" && i.stamps.length > 0);
     if (row?.kind === "row") row.stamps[0]!.origin = own;
-    else page.items.push({ kind: "tombstone", table: "spaces", stamp: { label: "spaces", rowKey: "x", field: "*", origin: own, seq: 1, wall: 1, counter: 0, author: null, device: null, deleted: true } });
+    else page.items.push({ kind: "tombstone", table: "spaces", stamp: { label: "spaces", rowKey: "x", field: "*", origin: own, seq: 1, wall: 1, counter: 0, author: null, device: null, deleted: true, saw: {}, meta: null, heads: [] } });
     await expect(apply(node, page)).rejects.toThrow(/made on this node/);
     await abandon(node);
   }, 60_000);
@@ -321,8 +321,8 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
     const stampOf = (pages: StampedPage[]) => { const row = firstRow(pages, "content_nodes"); if (row.kind !== "row") throw new Error(); return row; };
     const withRow = (edit: (page: StampedPage) => void) => { const page = clone(page0); edit(page); return page; };
     const cases: [string, StampedPage, RegExp][] = [
-      ["a third origin", withRow((p) => { p.items.push({ kind: "tombstone", table: "spaces", stamp: { label: "spaces", rowKey: "k", field: "*", origin: "someone-else", seq: 1, wall: 1, counter: 0, author: null, device: null, deleted: true } }); }), /does not vouch/],
-      ["one stamp number, two contents", withRow((p) => { const s = { label: "spaces", rowKey: "k", field: "*", origin: cap.summary.source, seq: 9, wall: 1, counter: 0, author: null, device: null, deleted: true }; p.items.push({ kind: "tombstone", table: "spaces", stamp: s }, { kind: "tombstone", table: "spaces", stamp: { ...s, rowKey: "k2", wall: 2 } }); }), /two different contents/],
+      ["a third origin", withRow((p) => { p.items.push({ kind: "tombstone", table: "spaces", stamp: { label: "spaces", rowKey: "k", field: "*", origin: "someone-else", seq: 1, wall: 1, counter: 0, author: null, device: null, deleted: true, saw: {}, meta: null, heads: [] } }); }), /does not vouch/],
+      ["one stamp number, two contents", withRow((p) => { const s = { label: "spaces", rowKey: "k", field: "*", origin: cap.summary.source, seq: 9, wall: 1, counter: 0, author: null, device: null, deleted: true, saw: {}, meta: null, heads: [] }; p.items.push({ kind: "tombstone", table: "spaces", stamp: s }, { kind: "tombstone", table: "spaces", stamp: { ...s, rowKey: "k2", wall: 2 } }); }), /two different contents/],
       ["a table that is not carried", withRow((p) => { p.items.push({ kind: "row", table: "domain_events", values: { id: 1 }, stamps: [] }); }), /does not carry/],
       ["a column that is not carried", withRow((p) => { (p.items.find((i) => i.kind === "row" && i.table === "workspaces") as { values: Record<string, unknown> }).values.membership_epoch = 99; }), /does not carry/],
       ["a row of another workspace", withRow((p) => { p.items = [{ kind: "row", table: "spaces", values: { ...(firstRow([page0], "spaces") as { values: Record<string, unknown> }).values, workspace_id: "00000000-0000-4000-8000-000000000000" }, stamps: [] }]; }), /another workspace/],

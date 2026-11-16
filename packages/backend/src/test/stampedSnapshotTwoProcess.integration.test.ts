@@ -56,8 +56,8 @@ async function worked(database: string, args: string[], persistIn?: string): Pro
   catch (e) { throw new Error(`the worker (${args[0]}) failed: ${(e as { stderr?: string }).stderr ?? e}`); }
 }
 
-type Exported = { wholeTables: TableHashes; pagesRaw: StampedPage[]; second: { pages: StampedPage[]; summary: Exported["summary"] }; unstamped: number; world: { ws: string; owner: { id: string }; secretNote: string }; summary: { source: string; cut: number; pages: number; digest: TableDigest[] }; stream: string; hidden: string[]; rows: Record<string, string[]>; stamps: unknown[] };
-type Imported = { wholeTables: TableHashes; status: number; answer: { pages?: number }; join: Array<{ state: string; applied_through: number }>; digest: TableDigest[]; rows: Record<string, string[]>; stamps: unknown[]; node: string; login: string | null };
+type Exported = { wholeTables: TableHashes; pagesRaw: StampedPage[]; second: { pages: StampedPage[]; summary: Exported["summary"] }; unstamped: number; world: { ws: string; owner: { id: string }; secretNote: string }; summary: { source: string; cut: number; pages: number; digest: TableDigest[] }; stream: string; hidden: string[]; rows: Record<string, string[]>; stamps: unknown[]; heads: unknown[] };
+type Imported = { wholeTables: TableHashes; status: number; answer: { pages?: number }; join: Array<{ state: string; applied_through: number }>; digest: TableDigest[]; rows: Record<string, string[]>; stamps: unknown[]; heads: unknown[]; node: string; login: string | null; settled: { units: number; conflicts: number; saw: string[]; headsLeft: number } };
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 const firstRow = (pages: StampedPage[], table: string) => { for (const p of pages) for (const i of p.items) if (i.kind === "row" && i.table === table) return i; throw new Error(`no ${table} row`); };
@@ -66,6 +66,8 @@ const firstRow = (pages: StampedPage[], table: string) => { for (const p of page
 const DAMAGE: Record<string, { expect: RegExp; copy: (source: Exported) => { pages: StampedPage[]; summaryPages?: number; summary?: Exported["summary"]; direct?: boolean } }> = {
   "a value changed in one row (the digests differ)": { expect: /differs from the source/, copy: (s) => { const pages = clone(s.pagesRaw); firstRow(pages, "content_nodes").values.title = "Quietly rewritten"; return { pages }; } },
   "a stamp changed in one place (only the digest can see it)": { expect: /differs from the source/, copy: (s) => { const pages = clone(s.pagesRaw); const row = firstRow(pages, "content_nodes"); if (row.kind === "row") row.stamps[0]!.deleted = !row.stamps[0]!.deleted; return { pages }; } },
+  "what a write had seen changed in one place (only the digest can see it)": { expect: /differs from the source/, copy: (s) => { const pages = clone(s.pagesRaw); const row = firstRow(pages, "content_nodes"); if (row.kind === "row") row.stamps[0]!.saw = { ...row.stamps[0]!.saw, "someone-else": 1 }; return { pages }; } },
+  "the other head of a unit left out (only the digest can see it)": { expect: /differs from the source/, copy: (s) => { const pages = clone(s.pagesRaw); const stamp = pages.flatMap((p) => p.items).flatMap((i) => (i.kind === "row" ? i.stamps : [])).find((x) => x.heads.length > 0); if (!stamp) throw new Error("no unit with two heads"); stamp.heads = []; return { pages }; } },
   "a page that never arrives": { expect: /differs from the source|violates|did not arrive/, copy: (s) => ({ pages: s.pagesRaw.filter((p) => p.page !== 2), summaryPages: s.pagesRaw.length }) },
   "a page that never arrives, the finish asked for directly": { expect: /did not arrive/, copy: (s) => ({ pages: s.pagesRaw.filter((p) => p.page !== 2), summaryPages: s.pagesRaw.length, direct: true }) },
   "pages in the wrong order": { expect: /violates|not present|foreign key|constraint|order/, copy: (s) => ({ pages: clone(s.pagesRaw).reverse() }) },
@@ -124,6 +126,14 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
     expect(receiver.rows).toEqual(source.rows);
     expect(source.stamps.length).toBeGreaterThan(50);
     expect(receiver.stamps).toEqual(source.stamps);
+    // a unit with two heads (migration 205): the other head, with its value, is the same on both, and the digest's stamp hash covers it
+    expect(source.heads).toHaveLength(1);
+    expect(receiver.heads).toEqual(source.heads);
+  });
+
+  it("the receiver goes on as a node of its own: its write has seen both heads of the unit, and nothing of the conflict is left", () => {
+    expect(receiver.settled).toMatchObject({ units: 1, conflicts: 0, headsLeft: 0 });
+    expect(receiver.settled.saw.some((name) => name.startsWith("genesis:"))).toBe(true);
   });
 
   it("holds every row of every carried table, whole tables hashed by SQL that uses neither the digest nor the snapshot's selection: the source has nothing the receiver lacks except what is left out on purpose", () => {

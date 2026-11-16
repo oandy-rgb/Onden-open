@@ -6,6 +6,15 @@
 // the receiver's digest and the comparison): milliseconds, the highest resident memory seen (sampled every 20 ms, minus what the process held
 // when the phase began), and for the pages: how many, their total JSON bytes and the bytes after gzip level 6 (what would cross the wire).
 // Counts and sizes only; no real data is used.
+//
+// Environment (all optional):
+//   RECEIVER_TAR=<file>        the receiver is the browser app's packaged database (tsx src/browser/prepareSnapshot.ts <file>), opened the way a browser
+//                              copy starts (its own node id, its one local sign-in joined to the snapshot's person), instead of a freshly migrated one
+//   DROP_PARENT_INDEX=1        drop migration 205's content_nodes_parent_idx in both databases first: the cost before the index
+// Memory, two numbers per phase (node --expose-gc, so retained is read after a collection): peakMiB = the highest resident set seen DURING the phase minus what the
+// process held when it began; retainedMiB = what the process holds AFTER the phase (after gc and a 300 ms pause) minus what it held when it began. PGlite's wasm memory
+// never goes back to the system, so retained is the growth of the database's own heap plus what the phase left in JS; both source and receiver databases are in this
+// process, so the figures are for the receiving PHASE, not for a browser tab (the pages here are also kept as JSON strings, as a stream would not).
 import { performance } from "node:perf_hooks";
 import { gzipSync } from "node:zlib";
 import { setEnvironment } from "../src/config.js";
@@ -29,15 +38,26 @@ holder.opened = Promise.resolve(receiverDb);
 await db.migrate();
 holder.opened = Promise.resolve(sourceDb);
 
+if (process.env.DROP_PARENT_INDEX) {
+  await db.q(`DROP INDEX IF EXISTS content_nodes_parent_idx`);
+  holder.opened = Promise.resolve(receiverDb); await db.q(`DROP INDEX IF EXISTS content_nodes_parent_idx`); holder.opened = Promise.resolve(sourceDb);
+}
 const ms = (t: number) => Math.round(performance.now() - t);
 const mib = (bytes: number) => Math.round((bytes / 1024 / 1024) * 10) / 10;
-async function peakOf<T>(work: () => Promise<T>): Promise<{ value: T; ms: number; peakMiB: number }> {
+async function peakOf<T>(work: () => Promise<T>): Promise<{ value: T; ms: number; peakMiB: number; retainedMiB: number }> {
   global.gc?.();
   const base = process.memoryUsage().rss;
   let peak = base;
   const timer = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 20);
   const t = performance.now();
-  try { const value = await work(); return { value, ms: ms(t), peakMiB: mib(Math.max(peak, process.memoryUsage().rss) - base) }; } finally { clearInterval(timer); }
+  try {
+    const value = await work();
+    const took = ms(t);
+    const high = Math.max(peak, process.memoryUsage().rss);
+    clearInterval(timer);
+    global.gc?.(); await new Promise((r) => setTimeout(r, 300)); global.gc?.();
+    return { value, ms: took, peakMiB: mib(high - base), retainedMiB: mib(process.memoryUsage().rss - base) };
+  } finally { clearInterval(timer); }
 }
 
 const { q } = db;
@@ -77,19 +97,29 @@ const gzipBytes = pages.reduce((n, p) => n + gzipSync(p, { level: 6 }).length, 0
 const rowsInSnapshot = summary.digest.reduce((n, d) => n + d.rows, 0);
 const stampsInSnapshot = summary.digest.reduce((n, d) => n + d.stamps, 0);
 
-holder.opened = Promise.resolve(receiverDb);
+let login: string | null = null;
+if (process.env.RECEIVER_TAR) {
+  const { readFile } = await import("node:fs/promises");
+  const tar = new Blob([await readFile(process.env.RECEIVER_TAR)]);
+  const packaged = await openPglite({ dataDir: "memory://", loadDataDir: async () => tar });
+  holder.opened = Promise.resolve(packaged);
+  const { ensureOwnNodeId } = await import("../src/browser/nodeIdentity.js");
+  await ensureOwnNodeId();
+  login = (await db.q<{ id: string }>(`SELECT id FROM "user" LIMIT 1`)).rows[0]!.id;
+} else holder.opened = Promise.resolve(receiverDb);
 const imported = await peakOf(async () => {
   await startJoin({ workspaceId: ws, sourceNode: summary.source, cutSeq: summary.cut, personActorId: owner });
   let applyMs = 0;
   for (const text of pages) { const t0 = performance.now(); await applyJoinPage(JSON.parse(text) as Page); applyMs += performance.now() - t0; }
   const t1 = performance.now();
-  try { await finishJoin({ workspaceId: ws, personActorId: owner, pages: pages.length, digest: summary.digest, localLogin: null }); }
+  try { await finishJoin({ workspaceId: ws, pages: pages.length, digest: summary.digest, localLogin: login }); }
   catch (error) { await abandonJoin(ws); throw error; }
   return { applyMs: Math.round(applyMs), finishMs: ms(t1) };
 });
 
 console.log(JSON.stringify({
   notes: N, seedMs, rowsInSnapshot, stampsInSnapshot, pages: pages.length, jsonMiB: mib(jsonBytes), gzipMiB: mib(gzipBytes),
-  export: { ms: exported.ms, peakMiB: exported.peakMiB }, import: { ms: imported.ms, peakMiB: imported.peakMiB, ...imported.value },
+  receiver: process.env.RECEIVER_TAR ? "packaged browser database" : "freshly migrated database", parentIndex: process.env.DROP_PARENT_INDEX ? "dropped" : "present",
+  export: { ms: exported.ms, peakMiB: exported.peakMiB, retainedMiB: exported.retainedMiB }, import: { ms: imported.ms, peakMiB: imported.peakMiB, retainedMiB: imported.retainedMiB, ...imported.value },
 }, null, 1));
 process.exit(0);

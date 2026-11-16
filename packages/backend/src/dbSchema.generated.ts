@@ -865,6 +865,7 @@ export interface StructureLog {
 export interface SyncClock {
   hlc_counter: Generated<number>;
   hlc_wall: Generated<Int8>;
+  merge_batches: Generated<Int8>;
   next_seq: Generated<Int8>;
   workspace_id: string;
   writes_without_mutate: Generated<Int8>;
@@ -891,6 +892,24 @@ export interface SyncNode {
   singleton: Generated<boolean>;
 }
 
+export interface SyncStampHeads {
+  author: string | null;
+  content_hash: Generated<string>;
+  deleted: Generated<boolean>;
+  device: string | null;
+  field: string;
+  hlc_counter: number;
+  hlc_wall: Int8;
+  meta: Json | null;
+  origin: string;
+  row_key: string;
+  saw: Generated<Json>;
+  seq: Int8;
+  table_name: string;
+  value: string | null;
+  workspace_id: string;
+}
+
 export interface SyncStamps {
   author: string | null;
   deleted: Generated<boolean>;
@@ -898,8 +917,10 @@ export interface SyncStamps {
   field: string;
   hlc_counter: number;
   hlc_wall: Int8;
+  meta: Json | null;
   origin: string;
   row_key: string;
+  saw: Generated<Json>;
   seq: Int8;
   table_name: string;
   workspace_id: string;
@@ -1000,6 +1021,7 @@ export interface DB {
   sync_clock: SyncClock;
   sync_join: SyncJoin;
   sync_node: SyncNode;
+  sync_stamp_heads: SyncStampHeads;
   sync_stamps: SyncStamps;
   workspaces: Workspaces;
 }

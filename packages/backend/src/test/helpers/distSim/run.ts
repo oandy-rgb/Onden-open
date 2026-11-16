@@ -40,19 +40,22 @@ export async function runScript(c: Cluster, seed: number, steps: Step[], opts: {
   }
 }
 
-/** Remove steps (halves first, then one by one) while the run still fails; returns the smallest list found. */
-export async function shrinkSteps(c: Cluster, seed: number, steps: Step[], opts: Parameters<typeof runScript>[3], budget = 40): Promise<Step[]> {
-  let best = steps;
+/** Remove items (halves first, then one by one) while `stillFails` holds; returns the smallest list found within `budget` tries. */
+export async function shrinkList<T>(items: T[], stillFails: (candidate: T[]) => boolean | Promise<boolean>, budget = 40): Promise<T[]> {
+  let best = items;
   let tries = 0;
-  const stillFails = async (candidate: Step[]) => { tries += 1; return (await runScript(c, seed, candidate, opts)).failures.length > 0; };
   for (let size = Math.floor(best.length / 2); size >= 1 && tries < budget; size = Math.floor(size / 2)) {
     for (let start = 0; start < best.length && tries < budget; start += size) {
       const candidate = [...best.slice(0, start), ...best.slice(start + size)];
-      if (candidate.length && (await stillFails(candidate))) { best = candidate; start -= size; }
+      if (candidate.length && (tries++, await stillFails(candidate))) { best = candidate; start -= size; }
     }
   }
   return best;
 }
+
+/** Remove steps while the run still fails; returns the smallest list found. */
+export const shrinkSteps = (c: Cluster, seed: number, steps: Step[], opts: Parameters<typeof runScript>[3], budget = 40): Promise<Step[]> =>
+  shrinkList(steps, async (candidate) => (await runScript(c, seed, candidate, opts)).failures.length > 0, budget);
 
 export const describeStep = (s: Step): string => JSON.stringify(s);
 export { DEVICES, HUB };

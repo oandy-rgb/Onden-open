@@ -136,7 +136,7 @@ export { linkPlaces, CONTEXT_LENGTH, type ContextPiece, type LinkPlace, type Lin
 export { MEDIA_URL_PREFIX, isMediaId, mediaUrl, mediaRefs, rewriteMediaRefs, bundleMedia, mediaSrc, type MediaSrcOptions } from "./mediaRefs.js";
 export {
   scanWikilinks, soleWikilink, wikilinkBodies, replaceWikilinks, splitWikilink, hasLinkPath, wikilinkTarget, wikilinkNames, linkNamesNote, linkNameKey,
-  TAG_NAME_CHAR, HASHTAG_RE, isTagList, type WikilinkMatch,
+  TAG_NAME_CHAR, HASHTAG_RE, isTagList, isTagNameShape, type WikilinkMatch,
 } from "./text.js";
 export { snippetAround, snippetPlainText, queryTerms, type Snippet, type SnippetRange, type SnippetOptions } from "./snippet.js";
 export { sitePathFor, servedLinkTarget, aliasLinksBySlug, type ServedPage } from "./sitePath.js";

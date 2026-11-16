@@ -205,7 +205,7 @@ function titleOf(body: string): string {
 // ── The way back ────────────────────────────────────────────────────────────
 
 export type BlockExpandRefusal =
-  | "child_has_frontmatter" | "child_empty" | "child_not_one_block" | "note_too_long";
+  | "child_has_frontmatter" | "child_empty" | "child_not_one_block" | "child_tag_not_writable" | "note_too_long";
 
 /** A line that is only an embed of a whole note (`![[child]]`, no `#` part),
  *  for `isChild` to say which names the child. Code is left out. */
@@ -237,7 +237,12 @@ export function planBlockExpand(
   if (body.trim() === "") return { refused: "child_empty" };
   if (!oneBlock(body)) return { refused: "child_not_one_block" };
 
-  for (const tag of opts.tags) body = addBlockTag(body, 0, tag) ?? body;
+  for (const tag of opts.tags) {
+    // A tag the `{…}` grammar cannot hold (a name older than the name rule) would be lost without a word: refuse.
+    const tagged = addBlockTag(body, 0, tag);
+    if (tagged === null) return { refused: "child_tag_not_writable" };
+    body = tagged;
+  }
   const indented = body.split("\n").map((line, i) => (i > 0 && line !== "" ? embed.indent + line : line)).join("\n");
   return {
     markdown: markdown.slice(0, embed.start) + indented + markdown.slice(embed.end),

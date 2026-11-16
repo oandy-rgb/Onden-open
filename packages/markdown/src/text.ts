@@ -159,17 +159,37 @@ export const TAG_NAME_CHAR = `[${WORD_CHARS}_-]`;
  *  lastIndex), never with .test/.exec. */
 export const HASHTAG_RE = new RegExp(String.raw`(^|\s)#(${TAG_NAME_CHAR}+)`, "gu");
 
-// What one entry between the commas of a block's `{…}` may be: a tag name — the characters of a #hashtag, and between
-// them spaces and `/ . + &` — or `key: value` of the same characters. Anything else (`;`, brackets, quotes, operators)
-// is program text.
-const TAG_ENTRY = new RegExp(String.raw`^${TAG_NAME_CHAR}(?:${TAG_NAME_CHAR}|[ /.+&])*(?::[ ]*(?:${TAG_NAME_CHAR}|[ /.+&])*)?$`, "u");
+// ── The tag-name shape ──────────────────────────────────────────────────────
+// A tag name must be writable as a tag in a note, and what is written as a tag must not be mistaken for anything else.
+// A note names a tag three ways: `#name` (letters, digits, `_`, `-` only: HASHTAG_RE), `{a, b}` at the end of a block
+// (blocks.ts: one line, split on `,`, trimmed, an item with `:` is not a tag) and a path `#a/b` (split on `/`). The
+// `{…}` form is the widest — spaces and any script work there — so the rule is the one of that form:
+//   - no `/`, `#`, `,`, `:`, `{`, `}` or control character (newline, tab): they are the grammar's own marks;
+//   - none of `; ( ) [ ] = < > " ' \` * | \ $`: the marks of program text. `^[ \t]+ { indent(); ECHO; }` typed as a
+//     paragraph ends in braces too, and must stay text (the owner's Lex notes became tags, 2026-11-17);
+//   - no space at either end, not empty.
+// `研究`, `reading list`, `C++`, `Q&A` and `讀書（小說）` are valid; `#研究` (the marker is not part of the name), `a/b`,
+// `C#`, `x, y`, `key:value`, `f(x)` and `it's` are not. For a tag's NAME only a new one is checked (create, rename, undo
+// of a rename, pack install: the backend's assertTagNameShape): a tag whose name predates the rule still loads, and can
+// be renamed to a valid one.
+const TAG_NAME_FORBIDDEN = /[/#,:{};()[\]=<>"'`*|\\$\p{Cc}]/u;
 
-/** The ONE rule for what a `{…}` at a line's end must hold to be a block's tags and not text: nothing but tag entries
- *  between its commas (`inner` is what is between the braces). `{ indent(); ECHO; }` ending a line of program text
- *  pasted as a paragraph is text. blocks.ts (tagBraces) and every cheap string test that drops a trailing `{…}` from
- *  shown text ask this. */
+/** Whether `name` can be a tag's name (the rule above). */
+export function isTagNameShape(name: string): boolean {
+  return name.length > 0 && name.trim() === name && !TAG_NAME_FORBIDDEN.test(name);
+}
+
+/** What a `{…}` at a line's end must hold to be a block's tags and not text (`inner` is what is between the braces):
+ *  between its commas nothing but tag names (isTagNameShape) and `key: value` pairs of two such names. One entry that is
+ *  neither makes the whole `{…}` text. blocks.ts (tagBraces) and every cheap string test that drops a trailing `{…}`
+ *  from shown text ask this. */
 export function isTagList(inner: string): boolean {
-  return inner.split(",").every((entry) => entry.trim() === "" || TAG_ENTRY.test(entry.trim()));
+  return inner.split(",").every((entry) => {
+    const item = entry.trim();
+    if (item === "" || isTagNameShape(item)) return true;
+    const colon = item.indexOf(":");
+    return colon > 0 && isTagNameShape(item.slice(0, colon).trim()) && (item.slice(colon + 1).trim() === "" || isTagNameShape(item.slice(colon + 1).trim()));
+  });
 }
 
 /** Whether `target` (the part of a link before `|`) can be a path into a note: it has a `/` that is not escaped as part of a name. */

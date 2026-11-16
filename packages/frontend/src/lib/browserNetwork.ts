@@ -2,6 +2,8 @@
 // and outside lib/data so a light module (lazyWithReload, on the boot path) can ask without loading the data layer;
 // the sync engine, the write queue and note search ask here too.
 
+import type { InstallEnv } from "./browserAppInstall";
+import { hasAnyCoarsePointer, runsStandalone } from "./mediaQuery";
 /** The browser's own network state: false only when it says offline. True where it cannot be asked
  *  (no `navigator`), so a missing answer never blocks a request. */
 export function isBrowserOnline(): boolean {
@@ -22,4 +24,11 @@ export function browserSummary(): string {
   const family = pick("Edge", /Edg\/(\d+)/) ?? pick("Firefox", /Firefox\/(\d+)/) ?? pick("Chrome", /(?:Chrome|CriOS)\/(\d+)/) ?? pick("Safari", /Version\/(\d+)[^ ]* (?:Mobile\/\S+ )?Safari/) ?? "unknown";
   const system = /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "unknown system";
   return `${family} on ${system}`;
+}
+
+/** What lib/browserAppInstall.ts needs to know about this browser to decide whether to urge "add to the Home Screen". */
+export function homeScreenEnv(): InstallEnv {
+  if (typeof navigator === "undefined") return { userAgent: "", platform: "", hasTouch: false, standalone: false };
+  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || runsStandalone();
+  return { userAgent: navigator.userAgent, platform: navigator.platform, hasTouch: hasAnyCoarsePointer(), standalone };
 }

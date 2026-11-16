@@ -1,3 +1,5 @@
+import { shouldUrgeHomeScreen } from "../lib/browserAppInstall";
+import { homeScreenEnv } from "../lib/browserNetwork";
 import { Suspense, useEffect, useState } from "react";
 import type { BridgeSaveState } from "@onden/markdown";
 import { confirmDialog } from "../components/ConfirmDialog";
@@ -96,6 +98,14 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
     setReminded(true);
     addToast(due.neverBackedUp ? t("You haven't downloaded a backup yet. Your avatar at the top has the backup.") : t("It has been {n} days since your last backup. Your avatar at the top has the backup.", { n: due.daysSince ?? 0 }), "info");
   }, [due.due, due.neverBackedUp, due.daysSince, reminded]);
+  // On an iPad or iPhone outside the Home Screen the notes can be cleared while the app stays closed; say so once per visit,
+  // whether or not a backup is due (the dialog repeats it with the steps).
+  const [urged, setUrged] = useState(false);
+  useEffect(() => {
+    if (urged || !shouldUrgeHomeScreen(homeScreenEnv())) return;
+    setUrged(true);
+    addToast(t("Safari may clear these notes after seven days without a visit. Add Onden to the Home Screen to keep them; your avatar at the top has the steps."), "info");
+  }, [urged]);
 
   useEffect(() => {
     if (!open) return;
@@ -186,7 +196,8 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
     reloadPage();
   }
 
-  const attention = save?.failed || save?.store === "none" || due.due;
+  const homeScreen = shouldUrgeHomeScreen(homeScreenEnv());
+  const attention = save?.failed || save?.store === "none" || due.due || homeScreen;
   // No badge of its own: the app's save line (account menu, phone menu) says where the notes are and opens this;
   // a problem shows on the avatar like any other saving trouble.
   const line = statusLine(save);
@@ -219,6 +230,9 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
             <p className="trial-dialog-line">{storageLine(storage)}</p>
             {storage.persistent !== true && storage.persistent !== null && (
               <Button type="button" variant="secondary" onClick={() => void keepStorage()}>{t("Ask the browser to keep my notes")}</Button>
+            )}
+            {homeScreen && (
+              <p className="trial-dialog-line trial-dialog-status--attention">{t("On an iPad or iPhone, Safari may clear these notes after seven days without opening this page. Add Onden to the Home Screen to prevent that: tap the Share button, then “Add to Home Screen”, and open Onden from there.")}</p>
             )}
             <p className={`trial-dialog-line${due.due ? " trial-dialog-status--attention" : ""}`}>{backupLine(habit, due)}</p>
             <div className="trial-dialog-actions">

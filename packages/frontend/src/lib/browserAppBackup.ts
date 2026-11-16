@@ -13,7 +13,9 @@ import { PREFS, getPref, setPref, type Pref } from "./prefs";
 import { getStoredDirHandle, pickDirectory, requestDirPermission, storeDirHandle } from "./fileSystemStorage";
 import { dateIdAt, dateTimeId, daysBetween } from "./localDate";
 
-export const BACKUP_EVERY_DAYS = 7;
+// Three days, not seven: Safari's clean-up comes after seven days WITHOUT a visit, and the reminder only shows on a visit;
+// a seven-day reminder would first appear on the visit that may already find the notes gone.
+export const BACKUP_EVERY_DAYS = 3;
 export const SAVES_BEFORE_REMINDER = 50;
 const KEEP_IN_FOLDER = 5;
 const FOLDER_SLOT = "trialBackupDir";

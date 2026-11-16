@@ -105,6 +105,8 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Last backup: today.": "上次備份：今天。",
   "Last backup: {n} days ago.": "上次備份：{n} 天前。",
   "Ask the browser to keep my notes": "請瀏覽器長期保留我的筆記",
+  "On an iPad or iPhone, Safari may clear these notes after seven days without opening this page. Add Onden to the Home Screen to prevent that: tap the Share button, then “Add to Home Screen”, and open Onden from there.": "在 iPad 或 iPhone 上，七天沒有打開這個頁面，Safari 可能會清掉這些筆記。把 Onden 加到主畫面就不會：按「分享」按鈕，選「加入主畫面」，之後從主畫面打開 Onden。",
+  "Safari may clear these notes after seven days without a visit. Add Onden to the Home Screen to keep them; your avatar at the top has the steps.": "七天沒打開的話，Safari 可能會清掉這些筆記。把 Onden 加到主畫面可以保住它們；做法在上方你的頭像裡。",
   "Back up to a folder…": "備份到資料夾…",
   "Allow and back up to \"{name}\"": "允許並備份到「{name}」",
   "Back up now to \"{name}\"": "立刻備份到「{name}」",

@@ -24,6 +24,10 @@ export function matchesMedia(query: string): boolean {
 /** One-off check for event handlers and layout maths (no re-render). */
 export function isMobileLayout(): boolean { return matchesMedia(MOBILE_QUERY); }
 export function isCoarsePointer(): boolean { return matchesMedia(COARSE_POINTER_QUERY); }
+/** Some pointer of this device is a finger (an iPad with a trackpad attached still has its screen). */
+export function hasAnyCoarsePointer(): boolean { return matchesMedia("(any-pointer: coarse)"); }
+/** The app was opened from the Home Screen / as an installed app, not in a browser tab. */
+export function runsStandalone(): boolean { return matchesMedia("(display-mode: standalone)"); }
 
 /** The query's live MediaQueryList (to listen for changes), or null where matchMedia is missing (SSR, jsdom). */
 export function mediaQueryList(query: string): MediaQueryList | null {

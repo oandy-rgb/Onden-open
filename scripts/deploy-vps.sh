@@ -52,6 +52,12 @@ upload() {
 }
 
 build() {
+  # What goes live comes from a main the public repo also has (scripts/public-mirror/README.md). DEPLOY_WITHOUT_MIRROR=1 skips
+  # this when the public repo cannot be reached; say so in the deploy log.
+  if [ "${DEPLOY_WITHOUT_MIRROR:-}" = 1 ]; then echo "!! building WITHOUT checking that public main is private main"
+  else (cd "$REPO" && bash scripts/public-mirror/verify.sh "$(git rev-parse origin/main)") \
+    || die "public main is not private main. First: bash scripts/public-mirror/public-push.sh origin/main main"
+  fi
   upload
   echo "== build $svcs at tree $tree"
   vps bash -s -- "$sha" "$tree" "${svcs// /,}" <<'REMOTE'

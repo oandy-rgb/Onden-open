@@ -329,6 +329,10 @@ body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui
   outline: none;
 }
 .pane-resizer--sidebar { right: 0; }
+/* The line the handle shows touches the pane's border (measured: it sat 2px away from it in the sidebar and 4px in the info
+   pane, so a second line appeared beside the divider while dragging). Both panes clip at the border's inner edge, so the line
+   lies against it, not over it. */
+.pane-resizer--sidebar::after { left: auto; right: 0; transform: none; }
 /* A list column scrolls right up to its edge: the handle sits just outside it, so
  * the scrollbar stays the scrollbar, and its line falls on the column's border. */
 .pane-resizer--column { right: -6px; }
@@ -370,7 +374,8 @@ body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui
   width: 6px;
   height: calc(100dvh - 48px);
 }
-.pane-resizer--inspector::after { height: calc(100dvh - 48px); bottom: auto; }
+/* The handle starts 2px inside the pane's padding edge (margin above): the line goes back against the border. */
+.pane-resizer--inspector::after { height: calc(100dvh - 48px); bottom: auto; left: -2px; transform: none; }
 body.onden-pane-dragging,
 body.onden-pane-dragging * { user-select: none !important; cursor: col-resize !important; }
 body.onden-zen .pane-resizer { display: none; }

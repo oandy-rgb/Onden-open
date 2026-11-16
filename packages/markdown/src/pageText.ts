@@ -30,7 +30,7 @@
 // PAGE_TEXT_VERSION is opened read-only instead: isPageTextReadOnly).
 
 import { cutToUnits } from "./graphemes.js";
-import { isJsonRecord as isRecord, mergeById, parseJsonRecord } from "./jsonMerge.js";
+import { isJsonRecord as isRecord, encodePagedItems, mergePagedItems, parseJsonRecord, revertPagedConflicts } from "./jsonMerge.js";
 
 export const PAGE_TEXT_VERSION = 1;
 export const PAGE_TEXT_ATTRIBUTE = "page_text";
@@ -113,11 +113,7 @@ export function decodePageText(raw: string | null | undefined): PageTextDoc {
 /** The stored form: pages without boxes are left out, so a note whose text
  *  was all removed stores almost nothing. */
 export function encodePageText(doc: PageTextDoc): string {
-  const pages: Record<string, PageTextPage> = {};
-  for (const [key, page] of Object.entries(doc.pages)) {
-    if (page.boxes.length > 0) pages[key] = page;
-  }
-  return JSON.stringify({ ...doc, v: PAGE_TEXT_VERSION, pages });
+  return encodePagedItems(doc, "boxes", PAGE_TEXT_VERSION);
 }
 
 /** Written by a newer version that this one must not edit (it would drop what
@@ -161,17 +157,8 @@ export function pageTextPlain(raw: string | null | undefined): string {
  *  may have changed since. Pure and deterministic. An unreadable value merges
  *  as no boxes (keep everything either side has). */
 export function mergePageText(base: string | null | undefined, stored: string | null | undefined, incoming: string): PageTextMergeResult {
-  const conflicts: PageTextConflict[] = [];
   const b = decodePageText(base), s = decodePageText(stored), i = decodePageText(incoming);
-  const pages: Record<string, PageTextPage> = {};
-  const keys = new Set([...Object.keys(s.pages), ...Object.keys(i.pages)]);
-  for (const key of [...keys].sort()) {
-    const boxes = mergeById(
-      b.pages[key]?.boxes ?? [], s.pages[key]?.boxes ?? [], i.pages[key]?.boxes ?? [],
-      (id) => conflicts.push({ pageKey: key, id }),
-    );
-    pages[key] = { ...s.pages[key], ...i.pages[key], boxes };
-  }
+  const { pages, conflicts } = mergePagedItems(b, s, i, "boxes");
   return { value: encodePageText({ ...s, ...i, v: 1, pages }), conflicts };
 }
 
@@ -182,15 +169,6 @@ export function mergePageText(base: string | null | undefined, stored: string | 
 export function revertPageTextConflicts(merged: string, overridden: string, conflicts: readonly PageTextConflict[]): string {
   const doc = decodePageText(merged);
   const theirs = decodePageText(overridden);
-  const pages = { ...doc.pages };
-  for (const { pageKey, id } of conflicts) {
-    const boxes = [...(pages[pageKey]?.boxes ?? [])];
-    const other = theirs.pages[pageKey]?.boxes.find((box) => box.id === id);
-    const at = boxes.findIndex((box) => box.id === id);
-    if (at < 0) { if (other) boxes.push(other); }
-    else if (other) boxes[at] = other;
-    else boxes.splice(at, 1);
-    pages[pageKey] = { ...pages[pageKey], boxes };
-  }
+  const pages = revertPagedConflicts(doc, theirs, conflicts, "boxes");
   return encodePageText({ ...doc, pages });
 }

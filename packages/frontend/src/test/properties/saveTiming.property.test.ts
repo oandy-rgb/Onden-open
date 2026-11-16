@@ -445,6 +445,12 @@ describe("save path under random timing", () => {
       expect(problems.filter((p) => expected.test(p)), problems.join("\n")).toEqual([]);
     }, 20_000);
 
+  // Nightly 2026-11-15, PROPS_SEED=765832 PROPS_RUNS=5000 (found at run 1292). Invariant: text typed in the editor is in the body, a conflict or a recovery copy.
+  // Likely cause: the over-length-title refusal after a reload drops the typed text of the earlier session instead of keeping a recovery copy.
+  regression("nightly 2026-11-15: a refused long title after a reload loses text typed before the reload (seed 765832)", [
+    C.longTitle(), C.type({ kind: "append", k: 0 }), C.reload(), C.longTitle(),
+  ], /gone from note/, true);
+
   // Review #1: save in flight, type more, switch away and back — the draft is
   // rebuilt from the first save's text and the next save deletes the second.
   regression("review #1: switching away and back during a save, then typing", [

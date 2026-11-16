@@ -8,6 +8,7 @@ import r7 from "./r7-tap-target.mjs";
 import r8 from "./r8-align.mjs";
 import r9 from "./r9-sticky-hover.mjs";
 import r10 from "./r10-list-over-content.mjs";
+import r11 from "./r11-split-pane-clip.mjs";
 
 /** Every rule: { id, name, severity (1 broken · 2 hard to use · 3 off by a pixel or two), when?(viewport), run(page, ctx) }. */
-export const RULES = [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10];
+export const RULES = [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11];

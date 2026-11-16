@@ -336,6 +336,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Whether `error` — or anything it wraps in `cause` — is an ApiError carrying the server's `code`. */
+export function hasApiErrorCode(error: unknown, code: string): boolean {
+  for (let e = error; e; e = (e as { cause?: unknown }).cause) {
+    if (e instanceof ApiError && e.code === code) return true;
+  }
+  return false;
+}
+
 /** A failed response's body, ready for `new ApiError(status, body)`: its wording is
  *  loaded first when only the on-demand sentence table can word it. */
 export async function readErrorBody(response: Response): Promise<string> {

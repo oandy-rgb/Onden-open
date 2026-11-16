@@ -401,16 +401,12 @@ export class InkEngine {
   canRedo(): boolean { return this.model.canRedo(); }
 
   /** False when there was nothing to undo. */
-  undo(): boolean {
-    if (!this.model.undo()) return false;
-    this.repaintCommitted();
-    this.scheduleChange();
-    this.notifyHistory();
-    return true;
-  }
+  undo(): boolean { return this.afterHistoryStep(this.model.undo()); }
 
-  redo(): boolean {
-    if (!this.model.redo()) return false;
+  redo(): boolean { return this.afterHistoryStep(this.model.redo()); }
+
+  private afterHistoryStep(stepped: boolean): boolean {
+    if (!stepped) return false;
     this.repaintCommitted();
     this.scheduleChange();
     this.notifyHistory();

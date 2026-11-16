@@ -32,6 +32,12 @@ async function goList(h) {
 
 export const SCREENS = [
   { id: "note-long", name: "筆記：長內文、有標籤", go: (h) => open(h, note(IDS.long)) },
+  { id: "split-note-note", name: "並排：兩則筆記，左邊拖到 0.3", async go(h) {
+    if (h.phone) skip("手機沒有並排");
+    await open(h, `${note(IDS.long)}&right=note:${IDS.parent}:content`);
+    await h.page.evaluate(() => document.querySelector(".split-root")?.style.setProperty("--split-ratio", "0.3"));
+    await settle(h, 500);
+  } },
   { id: "note-children", name: "筆記：有子筆記", go: (h) => open(h, note(IDS.parent)) },
   { id: "note-parent-picker", name: "筆記：打開「移到…」的上層清單（標題上方）", async go(h) {
     await open(h, note(IDS.childB));

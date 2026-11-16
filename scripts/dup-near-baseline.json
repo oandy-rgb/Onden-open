@@ -1,20 +1,14 @@
 {
   "pairs": {
-    "packages/backend/src/modules/review/routes.ts:<anonymous> <-> packages/backend/src/modules/review/routes.ts:<anonymous>#2": 0.84,
     "packages/backend/src/modules/review/routes.ts:<anonymous>#3 <-> packages/backend/src/modules/review/routes.ts:<anonymous>#4": 1,
     "packages/backend/src/modules/website/publishing/siteDiff.ts:<anonymous> <-> packages/backend/src/services/eventLog/bodyMerge.ts:<anonymous>": 0.81,
     "packages/backend/src/routes/aiSuggestions.ts:<anonymous>#2 <-> packages/backend/src/routes/aiSuggestions.ts:<anonymous>#3": 1,
     "packages/backend/src/routes/nodes.ts:<anonymous>#29 <-> packages/backend/src/routes/nodes.ts:<anonymous>#30": 1,
     "packages/backend/src/services/eventRestore/restore.ts:restoreNodeDeleted <-> packages/backend/src/services/eventRestore/restore.ts:restoreNodeUndeleted": 0.94,
-    "packages/backend/src/services/nodeTree.ts:ancestorIds <-> packages/backend/src/services/tagHierarchy.ts:descendantsOf": 0.88,
     "packages/backend/src/services/tasksStore.ts:taskRowsByIds <-> packages/backend/src/services/tasksStore.ts:taskRowsForBootstrap": 1,
     "packages/frontend/src/hooks/useInboxGovernance.ts:<anonymous>#5 <-> packages/frontend/src/hooks/useInboxGovernance.ts:<anonymous>#6": 1,
-    "packages/frontend/src/lib/ink/engine.ts:InkEngine.redo <-> packages/frontend/src/lib/ink/engine.ts:InkEngine.undo": 1,
     "packages/frontend/src/lib/ink/engine.ts:cancel <-> packages/frontend/src/lib/ink/engine.ts:up": 0.83,
-    "packages/frontend/src/modules/website/publishPreview.ts:isPreviewStale <-> packages/frontend/src/modules/website/websiteWriter.ts:isDesignStale": 1,
     "packages/frontend/src/settings/spacesAndMembers/AddAiRoleWizard.tsx:<anonymous>#2 <-> packages/frontend/src/settings/spacesAndMembers/AddMemberForm.tsx:<anonymous>": 0.86,
-    "packages/markdown/src/pageImages.ts:encodePageImages <-> packages/markdown/src/pageText.ts:encodePageText": 1,
-    "packages/markdown/src/pageImages.ts:mergePageImages <-> packages/markdown/src/pageText.ts:mergePageText": 1,
     "packages/markdown/src/pageImages.ts:revertPageImagesConflicts <-> packages/markdown/src/pageText.ts:revertPageTextConflicts": 1
   }
 }

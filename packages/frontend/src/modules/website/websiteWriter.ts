@@ -1,4 +1,4 @@
-import { ApiError, type SiteConfig } from "../../lib/api";
+import { hasApiErrorCode, type SiteConfig } from "../../lib/api";
 import type { PublishPreview } from "@onden/contract";
 import type { PublishBody } from "./publishPreview";
 import { t } from "../../lib/i18n";
@@ -15,10 +15,7 @@ export function chromeRevision(chrome: Record<string, unknown> | null | undefine
 
 /** A save refused because the design changed elsewhere since this tab loaded it. */
 export function isDesignStale(error: unknown): boolean {
-  for (let e = error; e; e = (e as { cause?: unknown }).cause) {
-    if (e instanceof ApiError && e.code === "design_stale") return true;
-  }
-  return false;
+  return hasApiErrorCode(error, "design_stale");
 }
 
 /** POST /api/publish/include's answer. */

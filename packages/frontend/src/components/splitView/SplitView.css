@@ -3,6 +3,19 @@
 .split-root { display: flex; position: relative; min-width: 0; }
 .split-left { flex: 0 0 calc(var(--split-ratio, 0.5) * 100%); min-width: 0; max-width: calc(var(--split-ratio, 0.5) * 100%); }
 .split-left > .workspace-grid { max-width: 100%; }
+.split-root--on > .split-left > .workspace-grid { --onden-center-min: 0px; }
+/* Each side is a container: a narrow one takes the phone's note gutter (20px) instead of the window's 32/48px, so
+   the note keeps its words. The measure needs nothing: it is a max-width on a column that is already the side's width.
+   The font keeps following the window. */
+.split-root--on > .split-left { container: split-side / inline-size; }
+.split-pane { container-name: split-side; }
+@container split-side (max-width: 560px) {
+  .note-document { --onden-note-gutter: 20px; }
+  /* The info column (300px) would take the whole half and leave the note no width: it folds away, as 「資訊」 does by hand. */
+  .overview-workspace.obsidian-workspace:not(.focus-mode) { grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(0, 1fr) 0; }
+  .overview-workspace.obsidian-workspace .overview-activity,
+  .overview-workspace.obsidian-workspace .ov-activity-pane--collapsed { display: none; }
+}
 .split-divider {
   flex: none;
   width: 6px;

@@ -31,7 +31,7 @@
 // (isPageImagesReadOnly).
 
 import { cutToGraphemes } from "./graphemes.js";
-import { isJsonRecord as isRecord, mergeById, parseJsonRecord } from "./jsonMerge.js";
+import { isJsonRecord as isRecord, encodePagedItems, mergePagedItems, parseJsonRecord, revertPagedConflicts } from "./jsonMerge.js";
 import { MEDIA_URL_PREFIX, isMediaId } from "./mediaRefs.js";
 
 export const PAGE_IMAGES_VERSION = 1;
@@ -111,11 +111,7 @@ export function decodePageImages(raw: string | null | undefined): PageImagesDoc 
 /** The stored form: pages without pictures are left out, so a note whose
  *  pictures were all removed stores almost nothing. */
 export function encodePageImages(doc: PageImagesDoc): string {
-  const pages: Record<string, PageImagesPage> = {};
-  for (const [key, page] of Object.entries(doc.pages)) {
-    if (page.images.length > 0) pages[key] = page;
-  }
-  return JSON.stringify({ ...doc, v: PAGE_IMAGES_VERSION, pages });
+  return encodePagedItems(doc, "images", PAGE_IMAGES_VERSION);
 }
 
 /** Written by a newer version that this one must not edit (it would drop what
@@ -133,17 +129,8 @@ export const pageImagesOf = (doc: PageImagesDoc, pageKey: string): readonly Page
  *  incoming save was made from; `stored` the current one, which another device
  *  may have changed since. Pure and deterministic. */
 export function mergePageImages(base: string | null | undefined, stored: string | null | undefined, incoming: string): PageImagesMergeResult {
-  const conflicts: PageImagesConflict[] = [];
   const b = decodePageImages(base), s = decodePageImages(stored), i = decodePageImages(incoming);
-  const pages: Record<string, PageImagesPage> = {};
-  const keys = new Set([...Object.keys(s.pages), ...Object.keys(i.pages)]);
-  for (const key of [...keys].sort()) {
-    const images = mergeById(
-      b.pages[key]?.images ?? [], s.pages[key]?.images ?? [], i.pages[key]?.images ?? [],
-      (id) => conflicts.push({ pageKey: key, id }),
-    );
-    pages[key] = { ...s.pages[key], ...i.pages[key], images };
-  }
+  const { pages, conflicts } = mergePagedItems(b, s, i, "images");
   return { value: encodePageImages({ ...s, ...i, v: 1, pages }), conflicts };
 }
 
@@ -154,15 +141,6 @@ export function mergePageImages(base: string | null | undefined, stored: string 
 export function revertPageImagesConflicts(merged: string, overridden: string, conflicts: readonly PageImagesConflict[]): string {
   const doc = decodePageImages(merged);
   const theirs = decodePageImages(overridden);
-  const pages = { ...doc.pages };
-  for (const { pageKey, id } of conflicts) {
-    const images = [...(pages[pageKey]?.images ?? [])];
-    const other = theirs.pages[pageKey]?.images.find((image) => image.id === id);
-    const at = images.findIndex((image) => image.id === id);
-    if (at < 0) { if (other) images.push(other); }
-    else if (other) images[at] = other;
-    else images.splice(at, 1);
-    pages[pageKey] = { ...pages[pageKey], images };
-  }
+  const pages = revertPagedConflicts(doc, theirs, conflicts, "images");
   return encodePageImages({ ...doc, pages });
 }

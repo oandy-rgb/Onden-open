@@ -544,6 +544,12 @@ describe("what the property found (minimal cases, fixed)", () => {
     expect(await runCommands([BrowserOffline(), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), Refresh()], true)).toEqual([]);
   });
 
+  // Nightly 2026-11-15, PROPS_SEED=765832 PROPS_RUNS=5000 (found at run 894). Invariant: an account removed while the app was online does not read as offline.
+  // Likely cause: the revoked answer reaches a reconnect that was already in flight (syncEngine reconnect() setOnline(false)); same family as the case above, no Refresh needed.
+  it.fails("revoked-while-reconnecting again: slow server, back online, account removed, server up reads as offline (seed 765832)", async () => {
+    expect(await runCommands([BrowserOffline(), Advance(1_000), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), SetServer("up", 0)], true)).toEqual([]);
+  });
+
   // seed 3 at 500 runs, shrunk to this. Scenario: a save is queued offline; the browser comes back while the server is slow (the drain's PATCH is in
   // flight); a second save is made meanwhile. Expected: both reach the server once it answers. Actual: the second save goes to the queue behind the first,
   // the single-flight flushPendingWrites (lib/data/writeQueue.ts) has already read its list, and no retry is scheduled after a pass that succeeded:

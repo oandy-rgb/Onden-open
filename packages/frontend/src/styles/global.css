@@ -374,7 +374,7 @@ h3 {
   /* col-1 = the lens-stable left sidebar (doc 01 P1); col-2 = lens content;
    * col-3 = inspector (toggled). In NOTES mode .obsidian-workspace spans 1/-1
    * and re-grids internally, so col-1's width is moot there. */
-  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) 0;
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(var(--onden-center-min, 360px), 1fr) 0;
   min-height: 100dvh;
   padding: 0;
   position: relative;
@@ -384,6 +384,8 @@ h3 {
   max-width: 100vw;
 }
 
+/* --onden-center-min: the centre column's floor. A side-by-side half sets it to 0 (SplitView.css): the floor
+ * is wider than the half, and the grid clips sideways, so the note's right edge was cut off at the divider. */
 /* The notes list folded away alone (the top bar's left switch): its column
  * shrinks to 0 in every grid that reads --onden-sidebar-track, and the list,
  * still in its column, is hidden and out of the tab order. */
@@ -398,14 +400,14 @@ h3 {
 .workspace-grid > .obsidian-sidebar { grid-column: 1; }
 
 .workspace-grid.inspector-open {
-  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) var(--onden-inspector-width, minmax(300px, 340px));
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(var(--onden-center-min, 360px), 1fr) var(--onden-inspector-width, minmax(300px, 340px));
 }
 
 /* Inspector collapsed: right column fully retracts to 0. Editor reclaims
  * the whole width. The expand toggle floats fixed-position outside the
  * grid so the user can pop the pane back open. */
 .workspace-grid.inspector-open.inspector-collapsed {
-  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(360px, 1fr) 0;
+  grid-template-columns: var(--onden-sidebar-track, var(--onden-sidebar-width, 240px)) minmax(var(--onden-center-min, 360px), 1fr) 0;
 }
 
 /* Below 900px the 3-column inspector layout cramps the editor + view-mode

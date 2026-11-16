@@ -61,3 +61,55 @@ export function mergeById<T extends { id: string }>(
   }
   return out;
 }
+
+// ── Id-keyed items per page (page_text boxes, page_images pictures) ─────────
+// Both attributes are `{ v, pages: { [pageKey]: { [listKey]: item[] } } }`;
+// these are the encode / three-way merge / conflict-revert steps they share,
+// `listKey` naming the list ("boxes" or "images"). Decoding stays in each file
+// (each repairs its own item shape).
+
+type PagedDoc<T, K extends string> = { v: number; pages: Record<string, { [P in K]: T[] }> };
+
+/** The stored form: pages with no items are left out. */
+export function encodePagedItems<T, K extends string>(doc: PagedDoc<T, K>, listKey: K, version: number): string {
+  const pages: Record<string, { [P in K]: T[] }> = {};
+  for (const [key, page] of Object.entries(doc.pages)) {
+    if (page[listKey].length > 0) pages[key] = page;
+  }
+  return JSON.stringify({ ...doc, v: version, pages });
+}
+
+/** mergeById page by page; each conflict is reported with the page it is on. */
+export function mergePagedItems<T extends { id: string }, K extends string>(
+  b: PagedDoc<T, K>, s: PagedDoc<T, K>, i: PagedDoc<T, K>, listKey: K,
+): { pages: Record<string, { [P in K]: T[] }>; conflicts: Array<{ pageKey: string; id: string }> } {
+  const conflicts: Array<{ pageKey: string; id: string }> = [];
+  const pages: Record<string, { [P in K]: T[] }> = {};
+  const keys = new Set([...Object.keys(s.pages), ...Object.keys(i.pages)]);
+  for (const key of [...keys].sort()) {
+    const items = mergeById(
+      b.pages[key]?.[listKey] ?? [], s.pages[key]?.[listKey] ?? [], i.pages[key]?.[listKey] ?? [],
+      (id) => conflicts.push({ pageKey: key, id }),
+    );
+    pages[key] = { ...s.pages[key], ...i.pages[key], [listKey]: items } as { [P in K]: T[] };
+  }
+  return { pages, conflicts };
+}
+
+/** `doc`'s pages with only the conflicting items taken back from `theirs`:
+ *  swapped, removed when that side had none, or re-added when only it had it. */
+export function revertPagedConflicts<T extends { id: string }, K extends string>(
+  doc: PagedDoc<T, K>, theirs: PagedDoc<T, K>, conflicts: readonly { pageKey: string; id: string }[], listKey: K,
+): Record<string, { [P in K]: T[] }> {
+  const pages = { ...doc.pages };
+  for (const { pageKey, id } of conflicts) {
+    const items = [...(pages[pageKey]?.[listKey] ?? [])];
+    const other = theirs.pages[pageKey]?.[listKey].find((item) => item.id === id);
+    const at = items.findIndex((item) => item.id === id);
+    if (at < 0) { if (other) items.push(other); }
+    else if (other) items[at] = other;
+    else items.splice(at, 1);
+    pages[pageKey] = { ...pages[pageKey], [listKey]: items } as { [P in K]: T[] };
+  }
+  return pages;
+}

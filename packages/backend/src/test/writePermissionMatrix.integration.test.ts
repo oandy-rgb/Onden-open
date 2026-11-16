@@ -213,6 +213,7 @@ const BODY_FILL: Record<string, BodyFill> = {
   "POST /api/agent-sessions/runners/:actor_id/enabled": json(() => ({ enabled: true })),
   "POST /api/backup/restore/:id/apply": json((g) => ({ space_id: g.space, mode: "merge" })),
   "POST /api/backup/restore/upload": none,
+  "POST /api/snapshot": none,
   "POST /api/bookmark": json((g) => ({ url: "https://example.invalid/", space_id: g.space })),
   "POST /api/bookmark/preview": json(() => ({ url: "https://example.invalid/" })),
   "POST /api/capture/inbox": json(() => ({})),

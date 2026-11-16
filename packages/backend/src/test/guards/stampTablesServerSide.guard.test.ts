@@ -14,6 +14,10 @@ const MAY_NAME_THEM = new Set([
   "services/attributeWrites.ts", // reads the replaced value's own stamp to compare clocks (#1658)
   "services/attributeChange.ts", // stamps an attribute a new note inherits when it is made, and reads the replaced value's stamp (#1658)
   "browser/nodeIdentity.ts", // a browser-app copy moves its own stamps to its own node id once (#1706); in that copy only, nothing is sent
+  "db.ts", // at start, discards the stamps and clock of a snapshot import that was cut off (discardUnfinishedJoins); nothing is sent
+  "spine/snapshotSql.ts", // reads the stamps of the rows a stamped snapshot carries, and their digest (export and check of a copy to an empty database)
+  "spine/stampedImport.ts", // the one entry that writes a snapshot's stamps as received into a database that is joining (sync_join, migration 204)
+  "services/stampedSnapshot.ts", // names sync_stamps only to refuse a snapshot of a database that holds stamps of another node; never sends one but through the owner-only snapshot route
   "dbSchema.generated.ts", // generated column types
 ]);
 

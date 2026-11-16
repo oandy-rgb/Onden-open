@@ -28,6 +28,7 @@ export const SERVER_ERROR_MESSAGES: Record<string, string> = {
   field_name_inherited: "A tag above already has a field with this name. Rename it first.",
   rate_limited: "Too many requests. Try again in a moment.",
   workspace_busy: "Other changes are being saved right now. Yours will be tried again automatically in a moment.",
+  workspace_joining: "This workspace is being filled from another device right now. Try again when that has finished.",
   client_too_old: "This screen is an old version. Reload it before you edit; what you just typed is still here.",
   server_too_old: "This server needs to be updated before your changes can be sent. They are kept on this device and will be sent once it is.",
   internal: "Something went wrong on the server.",

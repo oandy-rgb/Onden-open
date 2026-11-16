@@ -72,3 +72,14 @@ describe("saved views are function references", () => {
     expect(files.filter(({ text }) => names.test(code(text))).map(({ file }) => file)).toEqual([]);
   });
 });
+
+// The snapshot table list (spine/snapshotTables.json) is data, not a .ts file, so the scan above does not read it. It names the frozen
+// column once, as the label its stamps are filed under (`content_nodes.collection_views`), and the copy carries the column's values
+// like any other column: the importer writes them as the source held them and never reads them as views.
+describe("the snapshot table list and the frozen views column", () => {
+  it("names collection_views only as the stamp label of content_nodes", () => {
+    const text = readFileSync(join(SRC, "spine/snapshotTables.json"), "utf8");
+    const names = text.match(/[\w.]*collection_views[\w.]*/g) ?? [];
+    expect(names).toEqual(["content_nodes.collection_views"]);
+  });
+});

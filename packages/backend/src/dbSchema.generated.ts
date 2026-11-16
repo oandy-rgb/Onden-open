@@ -870,6 +870,21 @@ export interface SyncClock {
   writes_without_mutate: Generated<Int8>;
 }
 
+export interface SyncJoin {
+  applied_through: Generated<number>;
+  cut_seq: Int8;
+  finished_at: Timestamp | null;
+  import_batches: Generated<Int8>;
+  page_hashes: Generated<Json>;
+  person_actor_id: string | null;
+  rows_applied: Generated<Int8>;
+  shell_person: Json | null;
+  source_node: string;
+  started_at: Generated<Timestamp>;
+  state: Generated<string>;
+  workspace_id: string;
+}
+
 export interface SyncNode {
   created_at: Generated<Timestamp>;
   node_id: string;
@@ -983,6 +998,7 @@ export interface DB {
   spaces: Spaces;
   structure_log: StructureLog;
   sync_clock: SyncClock;
+  sync_join: SyncJoin;
   sync_node: SyncNode;
   sync_stamps: SyncStamps;
   workspaces: Workspaces;

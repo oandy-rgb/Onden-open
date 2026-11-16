@@ -15,13 +15,14 @@ type Holder = { opened: Promise<PGlite> | null };
 export class RealNode {
   private constructor(readonly name: string, public pg: PGlite) {}
 
-  /** A new node: from `copyOf` (a copy of that node's database right now: "two copies of one server"), else from the migrated template. */
-  static async open(name: string, copyOf?: RealNode): Promise<RealNode> {
+  /** A new node: from `copyOf` (a copy of that node's database right now: "two copies of one server"), else from the migrated template
+   *  (or from `tarFile`, another PGlite dump such as the browser's packaged database). */
+  static async open(name: string, copyOf?: RealNode, tarFile?: string): Promise<RealNode> {
     if (copyOf) {
       const dump = await copyOf.pg.dumpDataDir("none");
       return new RealNode(name, await openPglite({ dataDir: "memory://", loadDataDir: async () => dump }));
     }
-    const file = process.env.ONDEN_PGLITE_SNAPSHOT;
+    const file = tarFile ?? process.env.ONDEN_PGLITE_SNAPSHOT;
     if (!file) throw new Error("realNode needs ONDEN_PGLITE_SNAPSHOT (a PGlite test run)");
     const tar = new Blob([await readFile(file)]);
     return new RealNode(name, await openPglite({ dataDir: "memory://", loadDataDir: async () => tar }));
@@ -40,8 +41,10 @@ export class RealNode {
 const current = new AsyncLocalStorage<RealNode>();
 let tail: Promise<unknown> = Promise.resolve();
 
-/** Run `fn` against `node`'s database, alone. Nested calls for the same node join; for another node they are a bug (they would deadlock). */
-export function onNode<T>(node: RealNode, fn: () => Promise<T>): Promise<T> {
+/** Run `fn` against `node`'s database, alone (`null`: the one this process has). Nested calls for the same node join; for another node they are a bug (they would deadlock). */
+export function onNode<T>(node: RealNode | null, fn: () => Promise<T>): Promise<T> {
+  // null: the database this process is connected to, as it is (a process that has one database of its own, on a real Postgres)
+  if (node === null) return fn();
   const inside = current.getStore();
   if (inside) {
     if (inside !== node) throw new Error(`onNode(${node.name}) inside onNode(${inside.name})`);

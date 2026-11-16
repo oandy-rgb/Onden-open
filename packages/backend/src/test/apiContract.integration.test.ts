@@ -93,6 +93,7 @@ const SKIPPED_NOT_JSON: Record<string, string> = {
   "GET /api/media/:filename": "binary file",
   "GET /api/skills/:id/skill.md": "markdown download",
   "GET /api/rss/opml": "xml download",
+  "GET /api/snapshot": "lines of JSON, one message a line (owner only; services/stampedSnapshotStream.ts)",
   "GET /api/git/diff/:hash": "git backup only",
   "GET /api/auth/*": "better-auth, mocked here",
   "GET /api/auth/providers": "better-auth, mocked here",

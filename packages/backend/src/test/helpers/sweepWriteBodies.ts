@@ -197,6 +197,7 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
   "POST /api/mcp/sessions/:id/finish": (o) => ({ params: { id: o.session }, json: { status: "failed", fail_code: "sweep" } }),
 
   // ── backup and restore ───────────────────────────────────────────────────
+  "POST /api/snapshot": () => ({ raw: { bytes: Buffer.from('{"kind":"hello","workspaceId":"00000000-0000-4000-8000-000000000001","source":"sweep-source","cut":0,"person":"00000000-0000-4000-8000-000000000002"}\n'), contentType: "application/x-ndjson" } }),
   "POST /api/backup/restore/upload": (o) => ({ raw: { bytes: Buffer.from(o.backupZipBase64, "base64"), contentType: "application/zip" } }),
   "POST /api/backup/restore/:id/apply": (o, r) => ({ params: { id: o.upload }, json: { space_id: r.space, mode: "empty" } }),
   "DELETE /api/backup/restore/:id": (o) => ({ params: { id: o.upload } }),
@@ -263,6 +264,7 @@ export const NO_POSITIVE: Array<{ route: string; reason: string }> = [
   { route: "POST /api/nodes/:id/paragraphs/:blockId/reassign", reason: "needs a block row (a paragraph anchor) with a matching body hash; the world has none" },
   { route: "POST /api/mcp/sessions/:id/claim", reason: "the runner's side: only the agent's own resident token may pull a session (403 for a person); the sweep signs in as the workspace owner, so it can only see the refusal" },
   { route: "POST /api/mcp/sessions/:id/events", reason: "the runner's side: only the session token minted by claim may log to a session (403 'does not belong to this session'); the sweep signs in as the workspace owner" },
+  { route: "POST /api/snapshot", reason: "fills only an EMPTY workspace of its own (409 join_not_empty: the sweep's workspaces hold notes); the request names nothing of A and writes nothing when refused. The positive case (200, two digests agree, the workspace is the database's) is src/test/stampedSnapshotTwoProcess.integration.test.ts, on real Postgres and PGlite, and the two-node PGlite route test in stampedSnapshot.integration.test.ts" },
   { route: "POST /api/mcp/sessions/:id/finish", reason: "the runner's side: only the session token minted by claim may finish a session (403); the sweep signs in as the workspace owner" },
 ];
 

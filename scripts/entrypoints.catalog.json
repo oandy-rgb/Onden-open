@@ -4989,6 +4989,42 @@
       "replaces": "在模組畫面用 useState 記頁裡的位置（重新載入就掉）、自己 pushState、為這個位置另加一個網址參數",
       "rules": [],
       "why": "網址的 `m=` 由 useUrlLocation 寫入與還原，意義由該頁（lazy chunk）自己定義，開機程式不認識任何模組的頁。換位置要不要新增一筆歷史，由呼叫處用 navigate 說明（進入某一組＝push，Back 回上一頁）。"
+    },
+    {
+      "id": "be-stamped-snapshot",
+      "need": "要把一個工作區連同每筆的來源標記複製到另一個空的資料庫（加入第二台裝置的第一段），並證明兩個資料庫一模一樣",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/services/stampedSnapshot.ts",
+          "exports": [
+            "readStampedPages"
+          ]
+        },
+        {
+          "file": "packages/backend/src/services/stampedJoin.ts",
+          "exports": [
+            "startJoin",
+            "applyJoinPage",
+            "finishJoin",
+            "abandonJoin"
+          ]
+        },
+        {
+          "file": "packages/backend/src/spine/snapshotSql.ts",
+          "exports": [
+            "computeSnapshotDigest",
+            "compareDigests"
+          ]
+        }
+      ],
+      "use": "import { readStampedPages } from \"./services/stampedSnapshot.js\";\nimport { startJoin, applyJoinPage, finishJoin } from \"./services/stampedJoin.js\";\nimport type { ActorCtx } from \"./types.js\";\n// 來源：整份在同一個唯讀快照裡分頁讀；接收端（另一個資料庫）：空工作區、加入中、頁到齊且摘要吻合才完成\nexport async function copyWorkspace(owner: ActorCtx, workspaceId: string, pages: Parameters<typeof applyJoinPage>[0][]) {\n  const summary = await readStampedPages(owner, workspaceId, { since: null, layer: \"rows\" }, async (page) => { pages.push(page); });\n  await startJoin({ workspaceId, sourceNode: summary.source, cutSeq: summary.cut, personActorId: owner.id, shellPersonId: null });\n  for (const page of pages) await applyJoinPage(page);\n  await finishJoin({ workspaceId, pages: summary.pages, digest: summary.digest, localLogin: null });\n}",
+      "replaces": "用備份（不帶標記、每列重新蓋章）複製工作區，或在別處另寫一套逐表匯出匯入與比對",
+      "rules": [
+        "guard:stampedImport",
+        "guard:stampTablesServerSide"
+      ],
+      "why": "快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。"
     }
   ]
 }

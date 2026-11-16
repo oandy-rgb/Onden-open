@@ -405,6 +405,61 @@ export async function migrate({ seedNativeActor = nativeBypassEnabled() }: { see
       await client.query("CREATE INDEX IF NOT EXISTS content_nodes_trgm_idx ON content_nodes USING gin (title gin_trgm_ops, markdown gin_trgm_ops)");
     }
 
+    // A snapshot import that was cut off (the process died between pages) left a half-filled workspace and a 'joining' record:
+    // discard it, then make the empty workspace again, so the database is the empty one a person can join from.
+    // One transaction: a crash between the discard and the person's return must not lose the person (they go back, with their sign-in).
+    await client.query("BEGIN");
+    try {
+      const person = await discardUnfinishedJoins(client);
+      await ensureShellWorkspace(client, seedNativeActor);
+      if (person) await restoreShellPerson(client, person);
+      await client.query("COMMIT");
+    } catch (e) { await client.query("ROLLBACK"); throw e; }
+  } finally {
+    // Release the lock (best-effort) and return the connection. A session-level
+    // advisory lock would also auto-release when the connection closes, but
+    // unlocking explicitly returns a clean connection to the pool.
+    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
+    client.release();
+  }
+}
+
+/** What a query runner looks like to the two functions below: the migration's own client, or q() inside a transaction. */
+type ShellClient = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> };
+
+/** A workspace that was being filled from a snapshot and never finished (the process died, or the import was abandoned half way) is
+ *  removed with its stamps and clock: the foreign keys take what it owns. Nothing to do before migration 204 is applied. */
+export async function discardUnfinishedJoins(client: ShellClient, onlyWorkspaceId?: string): Promise<ShellPerson | null> {
+  if (!(await client.query(`SELECT to_regclass('sync_join') AS t`)).rows[0]?.t) return null;
+  let person: ShellPerson | null = null;
+  for (const { workspace_id, shell_person } of (await client.query(
+    `SELECT workspace_id::text, shell_person FROM sync_join WHERE state = 'joining' AND ($1::uuid IS NULL OR workspace_id = $1) FOR UPDATE`, [onlyWorkspaceId ?? null])).rows) {
+    await client.query(`DELETE FROM workspaces WHERE id = $1`, [workspace_id]);
+    await client.query(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [workspace_id]);
+    await client.query(`DELETE FROM sync_clock WHERE workspace_id = $1`, [workspace_id]);
+    await client.query(`DELETE FROM sync_join WHERE workspace_id = $1`, [workspace_id]);
+    person = (shell_person as ShellPerson | null) ?? person;
+  }
+  return person;
+}
+
+/** The one person the empty database had when a join began (what stampedImport.ts beginJoin saves in sync_join.shell_person). */
+export type ShellPerson = { id: string; name: string; external_id: string | null; write_mode: string; owner: boolean };
+
+/** Put that person back into the shell with the same id, sign-in link and write mode, and the ownership when they had it: the person who
+ *  tried to join and was refused is the same person afterwards (not a new row the next sign-in would make, with another id). */
+export async function restoreShellPerson(client: ShellClient, person: ShellPerson): Promise<void> {
+  const ws = (await client.query(`SELECT id::text FROM workspaces WHERE slug = 'default' LIMIT 1`)).rows[0] as { id: string } | undefined;
+  if (!ws) throw new Error("the shell has no workspace to put the person back into");
+  await client.query(
+    `INSERT INTO actors (id, workspace_id, name, type, external_id, write_mode) VALUES ($1, $2, $3, 'human', $4, $5) ON CONFLICT (id) DO NOTHING`,
+    [person.id, ws.id, person.name, person.external_id, person.write_mode]);
+  if (person.owner) await client.query(`UPDATE workspaces SET owner_actor_id = $2 WHERE id = $1 AND owner_actor_id IS NULL`, [ws.id, person.id]);
+}
+
+/** The empty workspace a database starts with, made idempotently (nothing is made twice). Every boot runs it, and so does a
+ *  cancelled snapshot import, so the person can sign in and try again without a restart. */
+export async function ensureShellWorkspace(client: ShellClient, seedNativeActor: boolean): Promise<void> {
     // Ensure the single-tenant default workspace exists, every boot, idempotently.
     // A fresh deploy initdb-loads the schema-only snapshot (schema.sql), which marks
     // ALL migrations applied but carries no seed rows — so migration 001's workspace
@@ -436,7 +491,7 @@ export async function migrate({ seedNativeActor = nativeBypassEnabled() }: { see
     // that on (migration 186: the switch publishes every note in it).
     // Its id is derived from the workspace (migration 201), made here rather than by a SQL function so that a database whose
     // migrations stop before 201 (an older copy the browser app upgrades) still boots.
-    const missing = await client.query<{ id: string }>(
+    const missing = await client.query(
       `SELECT w.id FROM workspaces w WHERE NOT EXISTS (SELECT 1 FROM spaces s WHERE s.workspace_id = w.id AND s.is_default)`,
     );
     for (const { id } of missing.rows) {
@@ -457,13 +512,6 @@ export async function migrate({ seedNativeActor = nativeBypassEnabled() }: { see
           WHERE s.is_default ON CONFLICT (space_id, actor_id) DO NOTHING`,
       );
     }
-  } finally {
-    // Release the lock (best-effort) and return the connection. A session-level
-    // advisory lock would also auto-release when the connection closes, but
-    // unlocking explicitly returns a clean connection to the pool.
-    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
-    client.release();
-  }
 }
 
 /** Run `fn` only while this process holds the named cross-instance lock (a Postgres session

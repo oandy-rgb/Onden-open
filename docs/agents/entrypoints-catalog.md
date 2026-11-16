@@ -1459,7 +1459,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（53）
+## 後端（54）
 
 ### 要寫日誌
 
@@ -1916,3 +1916,20 @@ import { newIdFor } from "./services/derivedIds.js";
 export const captureTagId = (workspaceId: string) => newIdFor("content_nodes", derivedIdName.moduleTag(workspaceId, "capture"));`
 - 取代：在建立處用 randomUUID()／gen_random_uuid() 給一個「每個工作區只該有一個」的東西 id（兩台離線裝置各建一個）
 - 為什麼：id 由用途算出（與日記同一個 v5 做法），兩個建立者得到同一筆；名字串只在 `derivedIdName` 一處，migration 201 的 SQL（`onden_uuid5`）與它一致（derivedIdsMigration 測試對照）。算出的 id 已被別的資料列用掉時 `newIdFor` 退回隨機 id，建立不會因此失敗。
+
+### 要把一個工作區連同每筆的來源標記複製到另一個空的資料庫（加入第二台裝置的第一段），並證明兩個資料庫一模一樣
+
+- 入口：`backend/src/services/stampedSnapshot.ts`（`readStampedPages`）；`backend/src/services/stampedJoin.ts`（`startJoin`、`applyJoinPage`、`finishJoin`、`abandonJoin`）；`backend/src/spine/snapshotSql.ts`（`computeSnapshotDigest`、`compareDigests`）　項目 `be-stamped-snapshot`
+- 寫法：`import { readStampedPages } from "./services/stampedSnapshot.js";
+import { startJoin, applyJoinPage, finishJoin } from "./services/stampedJoin.js";
+import type { ActorCtx } from "./types.js";
+// 來源：整份在同一個唯讀快照裡分頁讀；接收端（另一個資料庫）：空工作區、加入中、頁到齊且摘要吻合才完成
+export async function copyWorkspace(owner: ActorCtx, workspaceId: string, pages: Parameters<typeof applyJoinPage>[0][]) {
+  const summary = await readStampedPages(owner, workspaceId, { since: null, layer: "rows" }, async (page) => { pages.push(page); });
+  await startJoin({ workspaceId, sourceNode: summary.source, cutSeq: summary.cut, personActorId: owner.id, shellPersonId: null });
+  for (const page of pages) await applyJoinPage(page);
+  await finishJoin({ workspaceId, pages: summary.pages, digest: summary.digest, localLogin: null });
+}`
+- 取代：用備份（不帶標記、每列重新蓋章）複製工作區，或在別處另寫一套逐表匯出匯入與比對
+- 守門：`guard:stampedImport`、`guard:stampTablesServerSide`
+- 為什麼：快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。

@@ -1,0 +1,467 @@
+{
+ "$shellEmptyChecks": [
+  {"kind": "writes by a person (stamps)", "sql": "SELECT 1 FROM sync_stamps WHERE workspace_id = $1 AND origin <> 'genesis' AND author IS NOT NULL AND author NOT IN (SELECT id::text FROM actors WHERE workspace_id = $1 AND external_id = {systemExternalId})"},
+  {"kind": "events of a person", "sql": "SELECT 1 FROM domain_events WHERE workspace_id = $1 AND actor_type <> 'system' AND event_type <> 'ACTOR_CREATED'"},
+  {"kind": "more than one person", "sql": "SELECT 1 FROM actors WHERE workspace_id = $1 AND type = 'human' HAVING count(*) > 1"},
+  {"kind": "an agent besides the System account", "sql": "SELECT 1 FROM actors WHERE workspace_id = $1 AND type = 'agent' AND external_id IS DISTINCT FROM {systemExternalId}"},
+  {"kind": "an access token", "sql": "SELECT 1 FROM agent_tokens"},
+  {"kind": "an AI connection", "sql": "SELECT 1 FROM ai_credentials"},
+  {"kind": "an uploaded file", "sql": "SELECT 1 FROM media_uploads"},
+  {"kind": "rows of agent_runners", "sql": "SELECT 1 FROM agent_runners"},
+  {"kind": "rows of agent_sessions", "sql": "SELECT 1 FROM agent_sessions"},
+  {"kind": "rows of agent_session_events", "sql": "SELECT 1 FROM agent_session_events"},
+  {"kind": "rows of ai_suggestions", "sql": "SELECT 1 FROM ai_suggestions"},
+  {"kind": "rows of blobs", "sql": "SELECT 1 FROM blobs"},
+  {"kind": "rows of imported_media", "sql": "SELECT 1 FROM imported_media"},
+  {"kind": "rows of snapshot_media", "sql": "SELECT 1 FROM snapshot_media"},
+  {"kind": "rows of push_subscriptions", "sql": "SELECT 1 FROM push_subscriptions"},
+  {"kind": "rows of publish_snapshots", "sql": "SELECT 1 FROM publish_snapshots"},
+  {"kind": "rows of backup_restore_jobs", "sql": "SELECT 1 FROM backup_restore_jobs"},
+  {"kind": "rows of event_reviews", "sql": "SELECT 1 FROM event_reviews"},
+  {"kind": "rows of member_removals", "sql": "SELECT 1 FROM member_removals"},
+  {"kind": "rows of dispatcher_pending", "sql": "SELECT 1 FROM dispatcher_pending"},
+  {"kind": "rows of push_reminder_sent", "sql": "SELECT 1 FROM push_reminder_sent"},
+  {"kind": "rows of board_copy_folds", "sql": "SELECT 1 FROM board_copy_folds"},
+  {"kind": "rows of board_copy_unparents", "sql": "SELECT 1 FROM board_copy_unparents"},
+  {"kind": "rows of board_ink_moves", "sql": "SELECT 1 FROM board_ink_moves"},
+  {"kind": "rows of canvas_note_conversions", "sql": "SELECT 1 FROM canvas_note_conversions"},
+  {"kind": "rows of ds_peers", "sql": "SELECT 1 FROM ds_peers"},
+  {"kind": "rows of ds_ops", "sql": "SELECT 1 FROM ds_ops"},
+  {"kind": "a tag of its own", "sql": "SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND node_type = 'class_tag' AND title NOT IN ('admin-only', 'person', 'workspace-config', 'meeting', 'archive', 'book', 'project', 'task', 'page')"},
+  {"kind": "a space of its own", "sql": "SELECT 1 FROM spaces WHERE workspace_id = $1 AND NOT (is_default OR kind IN ('system', 'personal') OR (kind = 'shared' AND name = '受限'))"},
+  {"kind": "a function reference of its own", "sql": "SELECT 1 FROM function_refs WHERE workspace_id = $1 AND NOT (function_id = 'tasks' AND config = '{}'::jsonb)"},
+  {"kind": "a changed module switch", "sql": "SELECT 1 FROM workspaces WHERE id = $1 AND NOT (modules_off IN ('[]'::jsonb, '[\"skills\",\"external_calendars\"]'::jsonb) AND (modules_confirmed IS NULL OR modules_confirmed IN ('[]'::jsonb, '[\"ai\"]'::jsonb)) AND home_node_id IS NULL)"},
+  {"kind": "a tag applied to a note", "sql": "SELECT 1 FROM node_tags nt WHERE NOT (nt.node_id IN (SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.source_type = 'system') AND nt.tag_id IN (SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.node_type = 'class_tag' AND n.title = 'workspace-config'))"},
+  {"kind": "notes of its own", "sql": "SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND {notTag} AND source_type <> 'system'"}
+ ],
+ "workspaces": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.id = $1",
+  "exclude": [
+   "membership_epoch"
+  ],
+  "deferred": [
+   "owner_actor_id",
+   "home_node_id"
+  ],
+  "stamps": [
+   {
+    "label": "workspaces",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "workspaces.modules_off",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "workspaces.modules_confirmed",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "actors": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1",
+  "exclude": [
+   "invite_email",
+   "invite_token_hash",
+   "invite_expires_at",
+   "invite_used_at"
+  ],
+  "override": {
+   "external_id": "CASE WHEN t.type = 'human' THEN NULL ELSE t.external_id END"
+  },
+  "note": "only the System account's link (external_id) travels; a person's link to a sign-in is this node's own"
+ },
+ "spaces": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {space:t.id}",
+  "stamps": [
+   {
+    "label": "spaces",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "spaces.capabilities",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "space_members": {
+  "pk": [
+   "space_id",
+   "actor_id"
+  ],
+  "order": [
+   "t.space_id::text",
+   "t.actor_id::text"
+  ],
+  "where": "{space:t.space_id} AND t.space_id IN (SELECT x.id FROM spaces x WHERE x.workspace_id = $1)",
+  "stamps": [
+   {
+    "label": "space_members",
+    "rowKey": "t.space_id::text || '/' || t.actor_id::text"
+   }
+  ]
+ },
+ "content_nodes": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {row:t}",
+  "exclude": [
+   "deleted_by_event_id"
+  ],
+  "deferred": [
+   "parent_id"
+  ],
+  "override": {
+   "parent_id": "CASE WHEN t.parent_id IS NULL THEN NULL WHEN EXISTS (SELECT 1 FROM content_nodes p WHERE p.id = t.parent_id AND {row:p}) THEN t.parent_id END"
+  },
+  "note": "a parent this reader cannot read is not named: the receiver would have no row for it",
+  "stamps": [
+   {
+    "label": "content_nodes",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "content_nodes.tag_schema",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "content_nodes.collection_views",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "node_tags": {
+  "pk": [
+   "node_id",
+   "tag_id"
+  ],
+  "order": [
+   "t.node_id::text",
+   "t.tag_id::text"
+  ],
+  "where": "{node:t.node_id} AND {node:t.tag_id}",
+  "stamps": [
+   {
+    "label": "node_tags",
+    "rowKey": "t.node_id::text || '/' || t.tag_id::text"
+   }
+  ]
+ },
+ "node_attributes": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND t.source IN ('ui', 'explicit', 'dispatcher') AND {node:t.node_id}",
+  "note": "only what a person or an automation wrote; what the note text produces is worked out again by the receiver",
+  "stamps": [
+   {
+    "label": "node_attributes",
+    "rowKey": "t.node_id::text || '/' || t.key"
+   },
+   {
+    "label": "node_attributes._canvas_sections",
+    "rowKey": "t.node_id::text",
+    "when": "t.key = '_canvas_sections'"
+   }
+  ]
+ },
+ "node_edges": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND t.origin = 'manual' AND {node:t.source_node_id} AND {node:t.target_node_id}",
+  "stamps": [
+   {
+    "label": "node_edges",
+    "rowKey": "t.source_node_id::text || '/' || t.target_node_id::text || '/' || t.edge_type"
+   }
+  ]
+ },
+ "note_pointers": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.parent_id} AND {node:t.target_id}",
+  "stamps": [
+   {
+    "label": "note_pointers",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "node_positions": {
+  "pk": [
+   "node_id",
+   "surface"
+  ],
+  "order": [
+   "t.node_id::text",
+   "t.surface"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.node_id}",
+  "stamps": [
+   {
+    "label": "node_positions",
+    "rowKey": "t.node_id::text || '/' || t.surface::text"
+   }
+  ]
+ },
+ "block_nodes": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.note_id}",
+  "deferred": [
+   "parent_block_id"
+  ]
+ },
+ "block_node_tags": {
+  "pk": [
+   "block_node_id",
+   "tag_id"
+  ],
+  "order": [
+   "t.block_node_id::text",
+   "t.tag_id::text"
+  ],
+  "where": "t.workspace_id = $1 AND t.block_node_id IN (SELECT b.id FROM block_nodes b WHERE b.workspace_id = $1 AND {node:b.note_id}) AND {node:t.tag_id}",
+  "stamps": [
+   {
+    "label": "block_node_tags",
+    "rowKey": "t.block_node_id::text || '/' || t.tag_id::text"
+   }
+  ]
+ },
+ "function_refs": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND (t.holder_node_id IS NOT NULL AND {node:t.holder_node_id} OR t.holder_space_id IS NOT NULL AND {space:t.holder_space_id} OR t.holder_block_id IS NOT NULL AND t.holder_block_id IN (SELECT b.id FROM block_nodes b WHERE b.workspace_id = $1 AND {node:b.note_id}))",
+  "stamps": [
+   {
+    "label": "function_refs",
+    "rowKey": "t.id::text"
+   },
+   {
+    "label": "function_refs.config",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "actor_module_settings": {
+  "pk": [
+   "actor_id",
+   "tag_id"
+  ],
+  "order": [
+   "t.actor_id",
+   "t.tag_id::text"
+  ],
+  "where": "{person:t.actor_id} AND {node:t.tag_id}",
+  "stamps": [
+   {
+    "label": "actor_module_settings",
+    "rowKey": "t.actor_id::text || '/' || t.tag_id::text"
+   }
+  ]
+ },
+ "rss_subscriptions": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {space:t.space_id}",
+  "exclude": [
+   "etag",
+   "last_modified",
+   "last_fetched_at",
+   "last_error"
+  ],
+  "note": "the fetch state belongs to the node that fetches",
+  "stamps": [
+   {
+    "label": "rss_subscriptions",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "rss_mutes": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {person:t.actor_id} AND (t.subscription_id IS NULL OR t.subscription_id IN (SELECT x.id FROM rss_subscriptions x WHERE x.workspace_id = $1 AND {space:x.space_id}))",
+  "stamps": [
+   {
+    "label": "rss_mutes",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "rss_staging": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND EXISTS (SELECT 1 FROM rss_seen n WHERE n.staging_id = t.id AND {person:n.actor_id}) AND t.subscription_id IN (SELECT x.id FROM rss_subscriptions x WHERE x.workspace_id = $1 AND {space:x.space_id})",
+  "exclude": [
+   "saved_node_id"
+  ]
+ },
+ "rss_seen": {
+  "pk": [
+   "staging_id",
+   "actor_id"
+  ],
+  "order": [
+   "t.staging_id::text",
+   "t.actor_id"
+  ],
+  "where": "{person:t.actor_id} AND t.staging_id IN (SELECT x.id FROM rss_staging x WHERE x.workspace_id = $1 AND x.subscription_id IN (SELECT r.id FROM rss_subscriptions r WHERE r.workspace_id = $1 AND {space:r.space_id}))"
+ },
+ "external_calendars": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {person:t.actor_id}",
+  "exclude": [
+   "url_ciphertext",
+   "last_fetched_at",
+   "last_attempt_at",
+   "last_error"
+  ],
+  "placeholders": {
+   "url_ciphertext": "'\\x'::bytea"
+  },
+  "note": "the address is a sealed secret, and what was last fetched is the fetching node's",
+  "stamps": [
+   {
+    "label": "external_calendars",
+    "rowKey": "t.id::text"
+   }
+  ]
+ },
+ "review_states": {
+  "pk": [],
+  "order": [
+   "COALESCE(t.node_id::text, '')",
+   "t.actor_id",
+   "COALESCE(t.block_id::text, '')"
+  ],
+  "where": "t.workspace_id = $1 AND {person:t.actor_id} AND ((t.node_id IS NOT NULL AND {node:t.node_id}) OR (t.block_id IS NOT NULL AND t.block_id IN (SELECT b.id FROM block_nodes b WHERE b.workspace_id = $1 AND {node:b.note_id})))"
+ },
+ "actor_prefs": {
+  "pk": [
+   "actor_id",
+   "key"
+  ],
+  "order": [
+   "t.actor_id::text",
+   "t.key"
+  ],
+  "where": "{person:t.actor_id} AND t.actor_id IN (SELECT a.id FROM actors a WHERE a.workspace_id = $1)"
+ },
+ "focus_sessions": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {person:t.actor_id}"
+ },
+ "block_anchors": {
+  "pk": [
+   "workspace_id",
+   "anchor_id"
+  ],
+  "order": [
+   "t.anchor_id"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.note_id}"
+ },
+ "block_link_bindings": {
+  "pk": [
+   "workspace_id",
+   "note_id",
+   "link_text"
+  ],
+  "order": [
+   "t.note_id::text",
+   "t.link_text"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.note_id}"
+ },
+ "ai_edit_suggestions": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.node_id} AND EXISTS (SELECT 1 FROM ai_edit_suggestion_items i WHERE i.suggestion_id = t.id AND i.status = 'pending')",
+  "exclude": [
+   "session_id",
+   "created_event_id"
+  ],
+  "note": "only the suggestions still waiting for a decision: a decided one has nothing left to merge"
+ },
+ "ai_edit_suggestion_items": {
+  "pk": [
+   "id"
+  ],
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.status = 'pending' AND t.suggestion_id IN (SELECT g.id FROM ai_edit_suggestions g WHERE g.workspace_id = $1 AND {node:g.node_id})",
+  "exclude": [
+   "decided_event_id"
+  ]
+ }
+}

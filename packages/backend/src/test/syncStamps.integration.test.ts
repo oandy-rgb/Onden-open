@@ -283,9 +283,11 @@ describe.skipIf(!isTestDb)("write stamps on content_nodes", () => {
   describe("a stamp made on another node", () => {
     it("is written as received: this node's sequence number stays, its clock moves up to the received reading", async () => {
       await create(); // the clock row exists
+      // Another test of this file puts the clock an hour ahead: with a received reading only minutes ahead (the bound is ten) this one needs its own start.
+      await seedQ(`UPDATE sync_clock SET hlc_wall = $1, hlc_counter = 0 WHERE workspace_id = $2`, [Date.now(), ws]);
       const clockBefore = (await q<{ next_seq: string; hlc_wall: string; hlc_counter: number }>(
         `SELECT next_seq, hlc_wall, hlc_counter FROM sync_clock WHERE workspace_id = $1`, [ws])).rows[0]!;
-      const foreign = { origin: `phone-${randomUUID()}`, seq: 41, wall: Date.now() + 7_200_000, counter: 3, author: owner.id, device: randomUUID() };
+      const foreign = { origin: `phone-${randomUUID()}`, seq: 41, wall: Date.now() + 300_000 /* ahead, but inside MAX_FOREIGN_CLOCK_AHEAD_MS */, counter: 3, author: owner.id, device: randomUUID() };
       const id = randomUUID();
       await withEventTransaction(ws, async () => {
         await adoptForeignStamp(ws, foreign);

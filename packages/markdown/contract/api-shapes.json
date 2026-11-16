@@ -4099,6 +4099,7 @@
     "GET /api/rss/opml": "xml download",
     "GET /api/site/search.idx/*": "answered 404 for the seeded ids; no success shape recorded",
     "GET /api/skills/:id/skill.md": "markdown download",
+    "GET /api/snapshot": "lines of JSON, one message a line (owner only; services/stampedSnapshotStream.ts)",
     "GET /api/tags/:tagId/views/:viewId/exec": "answered 404 for the seeded ids; no success shape recorded"
   }
 }

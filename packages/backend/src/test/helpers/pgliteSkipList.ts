@@ -55,4 +55,22 @@ export const POSTGRES_SKIPS: Readonly<Record<string, number>> = {
   "src/test/distributedSyncScale.integration.test.ts": 1, // cost at size, measured on PGlite
   "src/test/poolQueryInTransaction.test.ts": 2,
   "src/test/replicatedOpBoundary.integration.test.ts": 2,
+  // Two in-process PGlite databases (a stamped snapshot copied to an empty one); no second real server. The round trip itself and the
+  // refusals of a damaged copy run on real Postgres in stampedSnapshotTwoProcess.integration.test.ts (one database per process: digest,
+  // rows and stamps, the system space and Site Config, unstamped rows, POST/GET /api/snapshot, eight damaged copies). What stays here,
+  // 29 tests; each, and why it is not there too:
+  //   same digest / same row by row (2), bootstrap counts of both nodes (1): the two-process file checks the first two on real Postgres;
+  //     they stay for the shuffled PGlite run, and the third reads the receiver as a second node next to the source;
+  //   the checks notice a tampered receiver (1), a done database's counts (1), the receiver goes on as a node of its own (1), the
+  //     sign-in link (1), a limited reader's copy (1), "not a copy of what the owner cannot read" (1): source and receiver open at once,
+  //     or the receiver written to afterwards;
+  //   the packaged browser database as receiver (1): PGlite's own tar;
+  //   refusals that prepare the receiver by hand before the join: not empty (1) and "someone already wrote" (1), which kind and System-account stamps (1), the known limit of
+  //     "empty" (1), cancel (1), a cut-off join (1), a stamp naming this node (1), a clock ahead with the clock checked after (1),
+  //     page replay (1), order inside and across pages (1), write while joining (1), person must be human (1), triggers step aside only
+  //     inside a join (1), a foreign origin and the other malformed pages (1), "refuses what is not done, and a token" (1);
+  //   the routes: hello/pages/manifest (1), 403 for a non-owner (1), upload fills the empty database (1), malformed lines (1): the same
+  //     routes are called on real Postgres in the two-process file; these keep the two-node variants.
+  "src/test/stampedSnapshot.integration.test.ts": 29,
+  "src/test/properties/stampedSnapshot.property.integration.test.ts": 1, // the same two databases under random writes
 };

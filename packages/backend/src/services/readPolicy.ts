@@ -11,6 +11,8 @@ import { taskHostLiveSql } from "../spine/taskIdentity.js";
 import { publishableSpaceNodeIds, spaceCanRead, spaceReadableNodeIds, spaceScopeSql } from "../spine/spaceScope.js";
 import { readableSpaceIdsSql } from "../spine/spaceAccess.js";
 import { liveNodeSql } from "../spine/nodeSql.js";
+import { isWorkspaceOwner } from "../spine/authority.js";
+import type { Scope } from "../spine/snapshotTables.js";
 
 /** Live node ids the PUBLIC site may serve: notes in spaces whose `publish`
  *  switch is on (a note kept off by its own `_published` 'false' is left out by
@@ -83,5 +85,34 @@ export async function canReadRetainedNode(actor: ActorCtx, nodeId: string): Prom
  *  map false to 404. */
 export async function canSeeTag(actor: ActorCtx, tagId: string): Promise<boolean> {
   return spaceCanRead(actor, tagId, "live");
+}
+
+/** The same read rule for a stamped snapshot (spine/snapshotTables.ts): the notes of spaces `actor` may read, live or in the
+ *  trash (a tag definition is readable by every member), the readable spaces, and the actor's own personal rows. `$1` is the
+ *  workspace id; each use appends its own params. */
+export function snapshotScope(actor: ActorCtx, params: unknown[], ownerSeesSystem = false): Scope {
+  const nodeRow = (alias: string) => ownerSeesSystem
+    ? `(${spaceScopeSql(actor, alias, params)} OR ${alias}.space_id IN (${SYSTEM_SPACES_SQL}))`
+    : spaceScopeSql(actor, alias, params);
+  const space = (col: string) => ownerSeesSystem
+    ? `(${col} IN (${readableSpaceIdsSql(actor, params)}) OR ${col} IN (${SYSTEM_SPACES_SQL}))`
+    : `${col} IN (${readableSpaceIdsSql(actor, params)})`;
+  return {
+    nodeRow,
+    node: (col) => `${col} IN (SELECT x.id FROM content_nodes x WHERE x.workspace_id = $1 AND ${nodeRow("x")})`,
+    space,
+    person: (col) => `(${col})::text = $${params.push(actor.id)}`,
+  };
+}
+
+/** The `system` space of the workspace (`$1`): it holds the Site Config note, which no member reads as a note (spine/spaceAccess.ts).
+ *  The workspace owner's copy carries it: the settings are the owner's own, and a copy without them is not the same workspace. */
+const SYSTEM_SPACES_SQL = `SELECT x.id FROM spaces x WHERE x.workspace_id = $1 AND x.kind = 'system'`;
+
+/** snapshotScope for `actor`, with the system space when `actor` is the workspace owner. Call it inside the read snapshot: it reads
+ *  who the owner is at that moment. */
+export async function snapshotScopeFor(actor: ActorCtx): Promise<(params: unknown[]) => Scope> {
+  const ownerSeesSystem = await isWorkspaceOwner(actor);
+  return (params) => snapshotScope(actor, params, ownerSeesSystem);
 }
 

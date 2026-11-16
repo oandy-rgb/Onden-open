@@ -112,3 +112,18 @@ describe("block anchors move in one place", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// The snapshot import (spine/stampedImport.ts) writes bodies too, and the detector above cannot see it: it builds its INSERT from the
+// table list (spine/snapshotTables.json), so no `UPDATE content_nodes SET markdown` is in its text. It is a COPY of a workspace into an
+// empty database: the note rows and the block_anchors / block_link_bindings rows travel together, exactly as the source held them
+// (anchors keep the body hash they were made against), so no anchor needs to move. Named here so that stays a decision, not a blind spot.
+describe("the snapshot import copies bodies and their anchors together", () => {
+  it("carries the note rows and both anchor tables, from the one list the import reads", async () => {
+    const { SNAPSHOT_SPECS } = await import("../../spine/snapshotTables.js");
+    const carried = SNAPSHOT_SPECS.map((s) => s.table);
+    for (const table of ["content_nodes", "block_anchors", "block_link_bindings"]) expect(carried, table).toContain(table);
+    const text = readFileSync(join(SRC, "spine/stampedImport.ts"), "utf8");
+    expect(writesBody(text), "the import writes the table list's rows; a literal body UPDATE here would bypass applyBodyChange").toBe(false);
+    expect(text).toContain("SNAPSHOT_SPECS");
+  });
+});

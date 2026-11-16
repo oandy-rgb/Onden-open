@@ -590,6 +590,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "It no longer exists, or you can't see it.": "它已經不存在，或你沒有權限看到。",
   "Too many requests. Try again in a moment.": "操作太頻繁，請稍後再試。",
   "Other changes are being saved right now. Yours will be tried again automatically in a moment.": "現在有其他修改正在儲存，你的修改稍後會自動再試。",
+  "This workspace is being filled from another device right now. Try again when that has finished.": "這個工作區正在從另一台裝置匯入資料，請等它完成後再試。",
   "Something went wrong on the server.": "伺服器發生錯誤。",
   "A tag name can't contain “/”. To make a nested tag, create it first, then pick its parent tag in “Edit structure” on its tag page.": "標籤名稱不能包含「/」。要建立子標籤，請先建好標籤，再到它的標籤頁，在「編輯結構」選上層標籤。",
   "This version came from a backup or a workspace move and can't be undone as a change. Open the note's version list and restore that version instead.": "這個版本是從備份或搬家帶過來的，不能當成一次修改來復原。請到筆記的版本清單，直接還原那一版。",

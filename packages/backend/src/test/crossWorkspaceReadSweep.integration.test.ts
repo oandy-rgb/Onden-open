@@ -504,6 +504,8 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
       await grade(A.owner, g.note, 3);
     }
     await replaceSettings(A.owner, reviewTag, { maximum_interval_days: 7 });
+    // the join record of a database that was filled from a snapshot (migration 204; no route reads it)
+    await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'sweep-probe-node', 0, 'done')`, [A.ws]);
 
     // a day note for the day A's notes were made on (the day lens lists what happened that day)
     const madeAt = (await q<{ t: Date }>(`SELECT created_at AS t FROM content_nodes WHERE id = $1`, [open.note])).rows[0]!.t;

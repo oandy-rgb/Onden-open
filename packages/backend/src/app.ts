@@ -25,6 +25,7 @@ import edgesRouter from "./routes/edges.js";
 import syncRouter from "./routes/sync.js";
 import bootstrapRouter from "./routes/bootstrap.js";
 import workspaceRouter from "./routes/workspace.js";
+import stampedSnapshotRouter from "./routes/stampedSnapshot.js";
 import manifestsRouter from "./routes/manifests.js";
 import versionsRouter from "./routes/versions.js";
 import historyRouter from "./routes/history.js";
@@ -320,6 +321,7 @@ app.get("/health", async (c) => {
 
 app.route("/api/bootstrap", bootstrapRouter);
 app.route("/api/workspace", workspaceRouter);
+app.route("/api/snapshot", stampedSnapshotRouter);
 
 app.route("/api/nodes", nodeRouter);
 app.route("/api/nodes", blockLinkRouter);

@@ -14,17 +14,14 @@
 // database. Without a test DATABASE_URL nothing is touched and the
 // integration files skip.
 
-import { readFile, readdir } from "node:fs/promises";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import pg from "pg";
 import type { TestProject } from "vitest/node";
 import { databaseName, isTestDatabase } from "./helpers/testDatabase.js";
+import { buildDatabase } from "./helpers/databaseBuild.js";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const dbDir = resolve(here, "../../db");
 
 // Snapshot databases other work relies on: never drop or rebuild them.
 const NEVER_REBUILD = /^onden_mperf_/;
@@ -39,28 +36,6 @@ async function withClient<T>(url: string, fn: (c: pg.Client) => Promise<T>): Pro
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try { return await fn(client); } finally { await client.end(); }
-}
-
-/** schema.sql is pg_dump output; drop its psql-only `\restrict` lines. */
-async function schemaSql(): Promise<string> {
-  const text = await readFile(resolve(dbDir, "schema.sql"), "utf-8");
-  return text.split("\n").filter((line) => !line.startsWith("\\")).join("\n");
-}
-
-/** Apply migrations newer than the snapshot, the way db.ts migrate() does. */
-async function applyPendingMigrations(c: pg.Client): Promise<void> {
-  const dir = resolve(dbDir, "migrations");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
-  const { rows } = await c.query<{ version: string }>("SELECT version FROM schema_migrations");
-  const applied = new Set(rows.map((r) => r.version));
-  for (const file of files) {
-    const version = file.replace(/\.sql$/, "");
-    if (applied.has(version)) continue;
-    await c.query("BEGIN");
-    await c.query(await readFile(resolve(dir, file), "utf-8"));
-    await c.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
-    await c.query("COMMIT");
-  }
 }
 
 /** PGlite runs: there is no server to rebuild. Migrate one in-memory database once and save it as a
@@ -138,8 +113,7 @@ async function prepare(project: TestProject): Promise<void> {
   await withClient(url!, async (c) => {
     const hasSchema = exists
       && (await c.query("SELECT to_regclass('public.schema_migrations') AS t")).rows[0].t !== null;
-    if (!hasSchema) await c.query(await schemaSql());
-    await applyPendingMigrations(c);
+    await buildDatabase(c, !hasSchema);
     // The shared default workspace (the one getWorkspaceId() answers) has the ai module agreed to, like a
     // workspace that used AI before it became a module (migration 159): many files run agent tools and
     // MCP routes there at the same time, and none of them may depend on another having turned it on.

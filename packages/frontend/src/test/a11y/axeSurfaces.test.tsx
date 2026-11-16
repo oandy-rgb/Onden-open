@@ -6,6 +6,8 @@
 // What jsdom can and cannot judge: roles, names, labels, ARIA validity, duplicate
 // ids, landmarks and form labels yes; colour contrast (see contrast.test.ts),
 // focus order and real focus trapping no (a native <dialog> is stubbed in setup.ts).
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "../helpers/offlineNetwork";
 import { createRef } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";

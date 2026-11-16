@@ -4,6 +4,8 @@
 // is global. Before, the renderer and version history took the first
 // same-titled note in ANY space, and backlink snippets compared the raw link
 // body, so `[[Plan|our plan]]` had no snippet.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";

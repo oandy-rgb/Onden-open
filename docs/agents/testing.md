@@ -22,6 +22,20 @@
   例如筆記開啟延遲應區分載入、查詢與渲染，不能只因刪掉一層呼叫就宣稱變快。
   參考作者的 [Always Measure One Level Deeper](https://www.cl.cam.ac.uk/teaching/2425/P56/files/ousterhout2018always.pdf)
   （Communications of the ACM，2018；屬於補充論文）。
+- 測試不得靠運氣穩定（2026-11-15）：不加重試、不單靠拉長等待、不跳過；找出原因並移除。
+  - 共用資料庫與順序：檔案和檔內測試每輪隨機排序，測試不得假設工作區的模組開關、設定或殘留資料是某個狀態
+    （自己先設成要的狀態）；一個檔案有多個頂層 `describe` 時，結束共用資源（`pool.end()`、伺服器、時鐘）只放檔案層級的
+    `afterAll`（守門：`packages/backend/src/test/guards/testFileTeardown.guard.test.ts`）。
+  - 時間：用「備援／退避／逾時」的真實時鐘斷言前，先把測試要看的值固定住（例如把 `next_attempt_at` 設到一小時後），
+    或讓資料庫在同一個敘述裡算出兩端的差；背景的 fire-and-forget 作業（路由的 `void drainOutbox(...)`）可能在測試讀取前或後完成，
+    要等「第 N 次失敗」而不是「再多一次」。
+  - 「接近線性」的測試：能計步就計步；正規表示式與第三方剖析器無法計步時，量這個執行緒的 CPU 時間
+    （`packages/markdown/src/linearTiming.testing.ts` 的 `timed`／`fastestMs`；不是牆上時鐘，也不是整個行程的 CPU 時間），
+    取最快的一批，比值的上限留足餘裕。
+  - 前端測試不得連到網路：`src/test/setup.ts` 讓任何沒被 stub 的 `fetch`／`WebSocket`／`EventSource`／`XMLHttpRequest`
+    立刻讓當下的測試失敗並寫出網址（`helpers/noRealNetwork.ts`）。畫面一掛載就載資料、而測試不關心的檔案，
+    第一個 import 放 `./helpers/offlineNetwork`（整個檔案網路都是斷的，請求立刻失敗）；要回應就自己 `vi.stubGlobal("fetch", …)`。
+    渲染資訊面板（`NodeInspector`）的檔案，在測試前 `await loadNoteFunctionModules()`，避免測試結束時模組還在動態載入。
 - 完成時說明：哪些入口已遷移、呼叫者少理解哪些概念、保留了哪些行為、測試結果和剩餘限制。
   當本批使用案例已符合契約且驗證通過，停止擴大重構。
 

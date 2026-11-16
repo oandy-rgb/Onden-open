@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import OverviewSidebar from "../components/OverviewSidebar";

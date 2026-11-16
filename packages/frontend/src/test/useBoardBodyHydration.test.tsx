@@ -2,6 +2,8 @@
 // A slim workspace (lib/slimMode.ts) keeps bodies out of memory. useBoardWorkspace fetches the open
 // board's missing card bodies, but only while a board is open, and never more than the resident-body
 // cap allows: syncEngine evicts the oldest bodies past it, so an evicted card must not be fetched again.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { noWorkspaceData, type Canvas, type ContentNode } from "../lib/api";

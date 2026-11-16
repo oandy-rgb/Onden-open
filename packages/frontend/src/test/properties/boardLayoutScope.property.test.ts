@@ -5,6 +5,8 @@
 //
 // Replay:  PROPS_SEED=<seed> PROPS_RUNS=<n> npx vitest run src/test/properties/boardLayoutScope.property.test.ts
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "../helpers/offlineNetwork";
 import { describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import fc from "fast-check";

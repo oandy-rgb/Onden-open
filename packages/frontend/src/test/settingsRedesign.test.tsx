@@ -1,5 +1,7 @@
 // 設定改版 (docs/agents/decisions-ui.md): the old appearance choices read as the new ones, the old
 // page ids still lead somewhere, the note's 「文字樣式」 sheet shares the settings' preferences.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

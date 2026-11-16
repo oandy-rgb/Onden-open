@@ -8,6 +8,8 @@
 //     (diagrams={false}) — hundreds of cards lazy-loading mermaid would be a
 //     perf regression — pinned by rendering a CardNode.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi } from "vitest";
 import { render, waitFor, fireEvent } from "@testing-library/react";
 import OverviewPreview from "../components/OverviewPreview";

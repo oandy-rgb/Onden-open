@@ -1,13 +1,16 @@
 // The info panel's Tags tab picked on a note with relations (or functions) but no tag says so, instead of a
 // blank panel: the "nothing at all" message covers only a note with nothing in any tab (NodeInspector).
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import NodeInspector from "../components/NodeInspector";
 import { noWorkspaceData, type ContentNode, type NodeEdge } from "../lib/api";
 import { resetAppState } from "../lib/appStore";
 import { setLocalePref } from "../lib/i18n";
+import { loadNoteFunctionModules } from "./helpers/noteFunctionModules";
 
-await import("../components/InfoFunctions");
+await loadNoteFunctionModules();
 
 const node = (id: string, title: string): ContentNode => ({
   id, title, slug: id, markdown: "", node_type: "content", source_type: "manual", updated_at: "2026-11-05T00:00:00Z",

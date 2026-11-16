@@ -3,6 +3,8 @@
 // closures every time (inline nav/rename, useSidebarDrag's functions). The
 // memoized OverviewSidebar must skip those renders, and still render when a
 // value inside a group changes.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, act } from "@testing-library/react";
 import { useState } from "react";

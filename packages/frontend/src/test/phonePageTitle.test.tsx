@@ -3,6 +3,8 @@
 // buttons the title row held sit in the bar beside search
 // (lib/phoneTopbarActions). A computer keeps the wordmark and the title rows.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { lazy } from "react";

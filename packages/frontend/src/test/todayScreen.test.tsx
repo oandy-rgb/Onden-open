@@ -1,6 +1,8 @@
 // The 今天 page (modules/daily/today): the three columns and what each holds, the degrade when the journal or tasks
 // are off, the journal column's box (nothing is made until a line is added), folding it, 「全部的事」, the span switch.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

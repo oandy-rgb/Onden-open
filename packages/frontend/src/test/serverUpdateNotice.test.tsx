@@ -1,5 +1,7 @@
 // A server older than this page accepts (X-Onden-Server-Protocol): the page says so in plain words, keeps changes on
 // the device, and drops the notice when the server is updated.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { CLIENT_PROTOCOL, SERVER_PROTOCOL_HEADER } from "@onden/markdown";

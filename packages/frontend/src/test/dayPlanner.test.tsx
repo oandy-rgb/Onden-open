@@ -2,6 +2,8 @@
 // 可以排進今天的 (late and due-soon tasks, with their own buttons), 還沒排時間, the timeline with its
 // 「現在」 line, and 3 天 / 週 (wide screens only) with dragging a not-yet-planned task onto a day. The Journal page's one-day view is journalScreen.test.tsx.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

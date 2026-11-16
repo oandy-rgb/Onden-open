@@ -1,5 +1,7 @@
 // Quick-add: the # / @ lists, the "did not understand this part" notice, and the readings added in 2026-11
 // (a range, a part of the day, a length). The writer behind it (createQuickTask) is a spy.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

@@ -1,5 +1,7 @@
 // The first-run welcome card: shown only on a workspace without notes until
 // dismissed; its starter pack and intro-site opt-ins.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 

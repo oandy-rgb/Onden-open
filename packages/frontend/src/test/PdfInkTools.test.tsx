@@ -3,6 +3,8 @@
 // mode: Select (default), the ink tools, the shapes. Tools / colour / size reach
 // what is stored; the eraser reaches earlier drawings; plus undo, stylus mode,
 // the S Pen button, and the "⋯" menu (zoom, clear all after a confirmation).
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PdfNodeView from "../components/PdfNodeView";

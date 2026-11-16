@@ -3,6 +3,8 @@
 // editor (components/EmbedEditSheet) and never turns it into `![[…]]` text;
 // revealing the text is explicit (lib/editorEmbeds).
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";

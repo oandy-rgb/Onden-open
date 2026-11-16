@@ -2,6 +2,8 @@
 // 段落引用的安全網: 被引用次數（編輯器的數字、刪除提示）、已刪除的救回、
 // 複製的段落連結貼上時才綁定到那一段 (lib/blockSafety).
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";

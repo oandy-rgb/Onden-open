@@ -13,6 +13,8 @@
 //     not pass because the census is empty).
 // A new FrontendModule field fails `declared fields are all in the census`
 // until it is given a surface here. Backend side: backend/src/test/moduleOffNoTrace*.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";

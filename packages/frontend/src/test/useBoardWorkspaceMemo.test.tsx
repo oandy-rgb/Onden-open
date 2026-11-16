@@ -4,6 +4,8 @@
 // callback context) skip those renders only if `actions` keeps ONE identity
 // and `board` changes only when a value in it does.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { resetAppState } from "../lib/appStore";

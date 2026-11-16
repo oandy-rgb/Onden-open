@@ -2,6 +2,8 @@
 // a dragged column), the
 // switch that folds the notes list on its own, and the ways to fold a column:
 // the chord, the palette and a drag past the minimum width.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";

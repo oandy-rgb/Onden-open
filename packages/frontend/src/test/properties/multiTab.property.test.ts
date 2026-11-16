@@ -39,6 +39,8 @@
 //          PROPS_TRACE=1 adds the server's timeline, PROPS_DUMP=1 prints the
 //          first failing run before shrinking starts.)
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "../helpers/offlineNetwork";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import fc from "fast-check";
 

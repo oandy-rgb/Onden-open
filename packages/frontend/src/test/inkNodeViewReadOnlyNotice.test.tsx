@@ -1,5 +1,7 @@
 // The notice a read-only handwriting surface shows (components/InkNodeView, the real one — not a stand-in): a drawing made with
 // a newer version says to update the app; a note the person may not change says that instead, never the update line.
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { stubPagesNearScreen } from "./helpers/nearScreen";

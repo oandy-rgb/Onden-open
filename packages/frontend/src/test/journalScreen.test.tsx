@@ -5,6 +5,8 @@
 // page, the sections under the words, no timeline column. Listed only while the module is
 // imported. The timeline's planning and 收工 are the Tasks page's: test/dayPlanner.test.tsx.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

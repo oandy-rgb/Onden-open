@@ -3,6 +3,8 @@
 // (lib/embeds embedExcerpt → lib/embedDom → MarkdownRenderer), in the preview
 // and as the editor's block widget, and follow the source as it changes.
 
+// The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
+import "./helpers/offlineNetwork";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { EditorState } from "@codemirror/state";

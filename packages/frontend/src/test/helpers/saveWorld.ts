@@ -43,7 +43,17 @@ export class SaveWorld {
   requests: WorldRequest[] = [];
   conflicts: RecordedConflict[] = [];
   /** Violations the fake server saw while applying (stale title, re-sent refusal). */
-  violations: Array<{ invariant: 3 | 6; text: string }> = [];
+  violations: Array<{ invariant: 3 | 6 | "S3"; text: string }> = [];
+  /** Every time the server merged a save onto a body that moved since the save's base (the toast "merged with
+   *  another writer"). With no other device writing, there is no one to merge with (invariant S4). */
+  merges: Array<{ nodeId: string; requestId: number }> = [];
+  /** Writes of the OTHER device in this run (bodies and renames). */
+  remoteWrites = 0;
+  /** Per note: texts this device already replaced by an acknowledged save. A base or a shown text that goes back
+   *  to one of them is a step back, unless somebody wrote that text again afterwards (`wrote`). */
+  retired = new Map<string, Set<string>>();
+  /** Per note: the text of this device's newest acknowledged save (what the server answered with). */
+  lastAcked = new Map<string, string>();
   private idem = new Map<string, ServerNote>();
   private counter = 0;
   private requestSeq = 0;
@@ -65,6 +75,7 @@ export class SaveWorld {
 
   reset(): void {
     this.server.clear(); this.requests = []; this.conflicts = []; this.violations = [];
+    this.merges = []; this.remoteWrites = 0; this.retired.clear(); this.lastAcked.clear();
     this.idem.clear(); this.counter = 0; this.requestSeq = 0;
     this.typed.clear(); this.deleted.clear(); this.userTitles.clear(); this.appliedTitles.clear();
     this.rejectedBodies.clear(); this.rejectedNotes.clear();
@@ -110,6 +121,10 @@ export class SaveWorld {
     if (this.rejectedBodies.has(key)) {
       this.violations.push({ invariant: 6, text: `a save the server refused was sent again (note ${request.nodeId}, request ${request.id})` });
     }
+    const base = body.base_markdown;
+    if (base !== undefined && this.retired.get(request.nodeId)?.has(base)) {
+      this.violations.push({ invariant: "S3", text: `a save of note ${request.nodeId} (request ${request.id}) carries a base this device had already replaced by an acknowledged save` });
+    }
     return new Promise((resolve, reject) => { this.requests.push({ ...request, resolve, reject }); });
   }
 
@@ -121,6 +136,7 @@ export class SaveWorld {
     if (body.markdown !== undefined) {
       let next = body.markdown;
       if (body.base_markdown !== undefined && mergeGuard(note.markdown, body.base_markdown, next)) {
+        this.merges.push({ nodeId: note.id, requestId: request.id });
         const { merged, conflicts } = threeWayMergeBody(body.base_markdown, next, note.markdown);
         next = merged;
         for (const c of conflicts) this.conflicts.push({ nodeId: note.id, base: c.base, incoming: c.incoming, current: c.current });
@@ -142,8 +158,25 @@ export class SaveWorld {
 
   deliver(request: WorldRequest): void {
     request.state = "applied";
-    request.resolve(this.apply(request));
+    const row = this.apply(request);
+    this.acknowledge(request.nodeId, request.body.markdown, row.markdown ?? "");
+    request.resolve(row);
   }
+
+  /** This device was told its save is in. Whatever text it held before that is now behind it. */
+  private acknowledge(nodeId: string, sent: string | undefined, answered: string): void {
+    if (sent === undefined) return;
+    const retired = this.retired.get(nodeId) ?? new Set<string>();
+    for (const behind of [this.lastAcked.get(nodeId), this.requestBase(nodeId, sent)]) if (behind !== undefined) retired.add(behind);
+    retired.delete(answered); retired.delete(sent);
+    this.retired.set(nodeId, retired);
+    this.lastAcked.set(nodeId, answered);
+  }
+  private requestBase(nodeId: string, sent: string): string | undefined {
+    return this.requests.findLast((r) => r.nodeId === nodeId && r.state === "applied" && r.body.markdown === sent)?.body.base_markdown;
+  }
+  /** Somebody (the person typing, or the other device) wrote this text: it is current again, not a step back. */
+  wrote(nodeId: string, text: string): void { this.retired.get(nodeId)?.delete(text); }
   failRetryably(request: WorldRequest, kind: "503" | "network"): void {
     request.state = "failed";
     request.reject(kind === "503" ? this.makeApiError(503) : new TypeError("Failed to fetch"));
@@ -167,8 +200,9 @@ export class SaveWorld {
     const next = edit(note.markdown);
     this.recordEdit(note.markdown, next);
     note.markdown = next;
+    this.remoteWrites++; this.wrote(noteId, next);
   }
-  remoteRename(noteId: string, title: string): void { this.server.get(noteId)!.title = title; }
+  remoteRename(noteId: string, title: string): void { this.server.get(noteId)!.title = title; this.remoteWrites++; }
 
   // ── lib/localDb fake ──
   readonly localDb = {

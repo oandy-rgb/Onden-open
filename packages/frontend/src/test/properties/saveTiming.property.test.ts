@@ -21,6 +21,12 @@
 //   4 the open note's editor text equals the server (unless its save was refused)
 //   5 pagehide / background never leaves the newest typing unprotected
 //   6 a refused save is in recovery once and is not sent again
+//   S1–S4 (a late sync answer, the owner report 2026-11-16; commands `syncStarts` / `syncAnswer`):
+//   S1 once a save of this device is acknowledged, the editor's base is never older than that save
+//      (the base is private to draftActions, so it is read where it is used: S3)
+//   S2 the editor never shows a text an acknowledged save of this device already replaced (unless somebody typed or wrote it again)
+//   S3 a save request never carries a base this device already replaced by an acknowledged save
+//   S4 with no other device writing, the server never merges a save of this device
 //   (1 also covers saves the CLIENT refuses before sending: a title over 500 characters, a body over the cap, NUL, half a surrogate
 //    pair, the note gone from the store; the generator types them, deletes the open note elsewhere, and reloads)
 //
@@ -58,6 +64,10 @@ import {
   __resetDraftStateForTests, applyRemoteNode, flushPendingSave, readOverviewDraft, resetDraftForNode, typeIntoDraft,
 } from "../../lib/data/draftActions";
 import { pendingFields } from "../../lib/data/optimisticFields";
+import { applySyncDelta } from "../../lib/data/storeOps";
+import { projectPendingNoteText } from "../../lib/pendingNoteProjection";
+import type { ContentNode } from "../../lib/api";
+import type { AppliedSyncDelta } from "../../lib/localDb";
 import { flushPendingWrites, stopWriteRetry } from "../../lib/data/writeQueue";
 import { getRecoveryWrites, refreshRecoveryWrites, removeRecoveryWrite } from "../../lib/data/writeRecovery";
 import { setPending } from "../../lib/data/syncStatus";
@@ -109,6 +119,12 @@ class Editor {
   /** Notes removed from the store (deleted on another device): their typed text can only live in recovery. */
   vanished = new Set<string>();
   exitProblems: string[] = [];
+  /** Answers the device asked the server for (`syncStarts`) and has not been given yet, as the server held them then. */
+  asked: Array<{ rows: ContentNode[]; delivered: boolean }> = [];
+  /** Step-back problems (S2) seen after a command; they are gone from the state by the end of the run. */
+  stepProblems = new Set<string>();
+  /** Per note: the text the person last typed (the editor showing it is typing, not a step back). */
+  private lastTyped = new Map<string, string>();
   private unsubscribe = () => {};
   private resetKey = "";
   private remoteKey = "";
@@ -124,7 +140,7 @@ class Editor {
     localStorage.clear();
     await refreshRecoveryWrites();
     setPending(0);
-    this.userTokens.clear(); this.vanished.clear(); this.exitProblems = []; this.titleSeq = 0;
+    this.userTokens.clear(); this.vanished.clear(); this.exitProblems = []; this.titleSeq = 0; this.asked = []; this.stepProblems = new Set(); this.lastTyped.clear();
     this.resetKey = ""; this.remoteKey = ""; effectsDue = null;
     resetAppState({ data: { ...ownerData, nodes: world.rows() }, online: true, selectedId: "a" });
     this.unsubscribe = subscribeApp(() => { effectsDue = () => this.effects(); });
@@ -166,6 +182,8 @@ class Editor {
     if (unsendable) world.rejectedNotes.add(this.open);
     const markdown = editLines(current.markdown, op, token + (adds ? unsendable : ""));
     world.recordEdit(current.markdown, markdown);
+    world.wrote(this.open, markdown);
+    this.lastTyped.set(this.open, markdown);
     typeIntoDraft(this.open, { markdown });
   }
 
@@ -241,22 +259,56 @@ class Editor {
   }
   remoteRename(noteId: string): void { world.remoteRename(noteId, `Remote${++this.titleSeq}-${noteId}`); }
 
-  /** A sync delta: the server's rows reach the store, except fields an
-   *  optimistic edit of this device still owns (lib/data/optimisticFields). */
+  /** A sync delta: the server's rows reach the store, except fields an optimistic edit of this device still owns
+   *  (lib/data/optimisticFields), and with the device's queued writes laid over them as the worker does
+   *  (projectPendingNoteText: without it a delta taken while a save sits in the offline queue shows the older text). */
   sync(): void {
+    const rows = projectPendingNoteText(world.rows(), world.pending as never);
     setData((data) => ({
       ...data,
       nodes: data.nodes.map((n) => {
-        const s = world.server.get(n.id);
+        const s = rows.find((row) => row.id === n.id);
         if (!s) return n;
         const pending = pendingFields(`node:${n.id}`);
         return {
           ...n,
-          ...(pending.has("markdown") ? {} : { markdown: s.markdown, ...(n.body_len === undefined ? {} : { body_len: s.markdown.length }) }),
+          ...(pending.has("markdown") ? {} : { markdown: s.markdown, ...(n.body_len === undefined ? {} : { body_len: s.markdown!.length }) }),
           ...(pending.has("title") ? {} : { title: s.title }),
         };
       }),
     }));
+  }
+
+  /** The device asks the server now: the answer is the rows as the server holds them at this moment, and it
+   *  reaches the device only with `syncAnswer`. */
+  syncStarts(): void { this.asked.push({ rows: world.rows(), delivered: false }); }
+
+  get unanswered(): number { return this.asked.filter((a) => !a.delivered).length; }
+
+  /** A captured answer reaches the device now, however much happened since. It takes the road a /api/sync
+   *  delta takes in syncEngine.applyAndShow: the queued writes of this device are laid over its notes
+   *  (the worker's projectPendingNoteText), then the store applies the rows (applySyncDelta, whole-row
+   *  replaces, no version check). The editor effect then offers the row to applyRemoteNode. */
+  syncAnswer(index: number): void {
+    const open = this.asked.filter((a) => !a.delivered);
+    const answer = open.length ? open[index % open.length] : undefined;
+    if (!answer) return;
+    answer.delivered = true;
+    const upsert = projectPendingNoteText(answer.rows, world.pending as never);
+    const delta = {
+      last_event_id: 0, nodes: { upsert, delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] },
+      attributes: { upsert: [], delete: [] }, workspace: null,
+    } as unknown as AppliedSyncDelta;
+    setData((data) => applySyncDelta(data, delta));
+  }
+
+  /** S2, read after every command: the editor never shows a text this device had already replaced by an
+   *  acknowledged save (unless somebody wrote that text again). */
+  checkStepBack(): void {
+    const open = this.open;
+    if (this.vanished.has(open)) return;
+    const shown = getAppState().overviewDraft;
+    if (shown !== this.lastTyped.get(open) && world.retired.get(open)?.has(shown)) this.stepProblems.add(`#S2 the editor of note ${open} went back to ${JSON.stringify(shown)}, a text this device had already replaced by an acknowledged save`);
   }
 
   /** syncEngine.adoptBody's LRU eviction does not spare the open note (review #15). */
@@ -285,6 +337,7 @@ class Editor {
       await vi.advanceTimersByTimeAsync(2000);
       await flush();
       for (let guard = 0; world.inflight.length && guard < 50; guard++) { world.deliver(world.inflight[0]!); await flush(); }
+      while (this.unanswered) { this.syncAnswer(0); await flush(); }
       this.sync();
       await flush();
       // Each round above is the retry: the queue's own backoff timer is not a wait this settling is for.
@@ -302,7 +355,7 @@ const parseBody = (raw: string | null): { title?: string; markdown?: string } =>
 // ── invariants ──────────────────────────────────────────────────────────────
 
 function invariants(editor: Editor, settled: boolean): string[] {
-  const problems = [...editor.exitProblems, ...world.violations.map((v) => `#${v.invariant} ${v.text}`)];
+  const problems = [...editor.exitProblems, ...editor.stepProblems, ...world.violations.map((v) => `#${v.invariant} ${v.text}`)];
   if (!settled) problems.push("never settled: a request, queued write or timer is still waiting");
   const recovery = getRecoveryWrites().map((w) => ({ id: /\/api\/nodes\/([^/]+)$/.exec(w.path)?.[1], md: parseBody(w.body).markdown ?? "" }));
   for (const [token, home] of world.typed) {
@@ -324,6 +377,7 @@ function invariants(editor: Editor, settled: boolean): string[] {
     const inRecovery = recovery.some((w) => w.id === home && w.md.includes(token));
     if (!inConflict && !inRecovery) problems.push(`#1 ${token} (${editor.userTokens.has(token) ? "typed here" : "other device"}) is gone from note ${home}: not in its body, a conflict or a recovery copy`);
   }
+  if (world.remoteWrites === 0 && world.merges.length) problems.push(`#S4 the server merged ${world.merges.length} save(s) of this device (request ${world.merges.map((m) => m.requestId).join(",")}) although no other device wrote`);
   const open = editor.open;
   if (!world.rejectedNotes.has(open)) {
     const draft = getAppState();
@@ -368,6 +422,9 @@ const C = {
   remoteBody: (note: string, op: LineOp) => cmd(`other device edits ${note}: ${fmt(op)}`, (e) => e.remoteBody(note, op)),
   remoteRename: (note: string) => cmd(`other device renames ${note}`, (e) => e.remoteRename(note)),
   sync: () => cmd("sync delta arrives", (e) => e.sync()),
+  /** The device asks the server now; the answer is captured as of this moment and not delivered. */
+  syncStarts: () => cmd("sync starts (answer captured, not delivered)", (e) => e.syncStarts()),
+  syncAnswer: (i = 0) => cmd(`captured sync answer #${i} delivered`, (e) => e.syncAnswer(i), () => editor.unanswered > 0),
   evict: () => cmd("open note's body evicted from memory", (e) => e.evictOpenBody()),
   deliver: (i = 0) => cmd(`request #${i} delivered`, (e) => { const r = e.request(i); if (r) world.deliver(r); }, hasRequest),
   failRetry: (kind: "503" | "network", i = 0) => cmd(`request #${i} fails (${kind}, not applied)`, (e) => { const r = e.request(i); if (r) world.failRetryably(r, kind); }, hasRequest),
@@ -396,6 +453,8 @@ const commandKinds: Array<[kind: string, weight: number, arb: fc.Arbitrary<Cmd>]
   ["remoteBody", 2, fc.tuple(noteId, lineOp).map(([n, op]) => C.remoteBody(n, op))],
   ["remoteRename", 1, noteId.map(C.remoteRename)],
   ["sync", 2, fc.constant(C.sync())],
+  ["syncStarts", 2, fc.constant(C.syncStarts())],
+  ["syncAnswer", 3, index.map(C.syncAnswer)],
   ["evict", 1, fc.constant(C.evict())],
   ["deliver", 4, index.map(C.deliver)],
   ["failRetry", 1, fc.tuple(fc.constantFrom<"503" | "network">("503", "network"), index).map(([k, i]) => C.failRetry(k, i))],
@@ -417,7 +476,10 @@ const editor = new Editor();
 async function runSequence(commands: Iterable<Cmd>): Promise<string[]> {
   await editor.setup();
   try {
-    for (const command of commands) { if (command.check({})) await command.run({}, editor); }
+    for (const command of commands) {
+      if (command.check({})) await command.run({}, editor);
+      editor.checkStepBack();
+    }
     const settled = await editor.settle();
     return invariants(editor, settled).filter((p) => !SKIP.some((prefix) => p.startsWith(prefix)));
   } finally { editor.teardown(); }
@@ -596,6 +658,47 @@ describe("save path under random timing", () => {
   regression("nightly 2026-11-15: long title, typing, reload, long title again keeps the typing in recovery (seed 765832)", [
     C.longTitle(), C.type({ kind: "append", k: 0 }), C.reload(), C.longTitle(),
   ], /#1/);
+
+  // Owner report 2026-11-16 (one person, one tablet, typing alone): two saves of the same note two seconds
+  // apart carried the SAME base and the server merged the second "with another writer". A sync answer asked
+  // before save 1 was acknowledged reaches the device after it; its row is older than the text just saved.
+  // Open on main (S2: the editor shows a text an acknowledged save replaced; S3: the next save's base is that
+  // old text; S4: the server merges although nobody else wrote). Likely place (read, not verified by a fix):
+  // draftActions.applyRemoteNode, the last branch ("bases.set(...)" + setAppState) takes a row older than the
+  // acknowledged text for a newer remote one, because nothing tells it which text the acknowledgement made current.
+  regression("report 2026-11-16: S2/S3/S4 a sync answer asked before a save and delivered after its acknowledgement", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.syncStarts(), C.deliver(), C.syncAnswer(0),
+    C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
+  ], /#S[234]/, true);
+  regression("report 2026-11-16: S2/S3/S4 the stale answer arrives between two acknowledged saves", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.syncStarts(), C.deliver(),
+    C.type({ kind: "append", k: 0 }), C.tick(), C.syncAnswer(0), C.deliver(),
+    C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
+  ], /#S[234]/, true);
+
+  // Found by the random property (PROPS_RUNS=5000, seeds 2 and 3 below). Both need the simulated reload, which keeps
+  // the in-memory store (see "open (seed 7)"): confirm in a real reload before fixing. A late answer asked before the
+  // typing overwrites the optimistic row while the keepalive save is in flight; the reseed then reads that row.
+  regression("late sync answer (seed 2): rename, answer asked before the save and delivered after it started, reload: the editor shows the old title", [
+    C.rename(), C.syncStarts(), C.tick(), C.syncAnswer(0), C.reload(),
+  ], /#4/, true);
+  regression("late sync answer (seed 21): typing, reload, answer, switch away and back: the editor shows the text from before", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.syncStarts(), C.syncAnswer(0), C.switchNote(), C.switchNote(),
+  ], /#4/, true);
+
+  // Seed 3 with S2–S4 and #4 skipped (PROPS_SKIP=S2,S3,S4,4): the same family, now with a body save that carries the old title.
+  regression("late sync answer (seed 3): rename, reload, answer, typing, a failed save, background: a save carries the old title over the rename", [
+    C.rename(), C.reload(), C.syncStarts(), C.syncAnswer(0), C.type({ kind: "append", k: 0 }),
+    C.failRetry("503", 0), C.background(), C.type({ kind: "append", k: 0 }),
+  ], /#3/, true);
+
+  // Seed 3: no sync involved. The keepalive save of the first typing is refused after the person typed something
+  // the client itself refuses (NUL); the next save still carries the refused text as its base, the server has moved
+  // not at all and the save is merged. Invariant S4 only: nobody else wrote.
+  regression("S4 (seed 3): typing, reload, a NUL typed, the first save refused, typing again is merged with no other writer", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.typeRefused({ kind: "delete", k: 0 }, "\u0000"),
+    C.failPermanent(0), C.type({ kind: "append", k: 0 }),
+  ], /#S4/, true);
 
   // A save the app itself refuses before sending (lib/data/noteWriter.ts) keeps the typed text in the same
   // recovery store as a server refusal: it survives opening another note and a reload (the durable row).

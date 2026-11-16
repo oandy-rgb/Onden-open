@@ -146,6 +146,7 @@
 
 ## 驗證與完成條件（完整：[testing.md](docs/agents/testing.md)）
 
+- 犯了錯（對擁有者說錯、審查放過缺口、擁有者比測試先發現、同類問題再出現），在同一批工作裡記進 [docs/agents/mistakes.md](docs/agents/mistakes.md)：類別、擋住這一類的機制，或明寫「尚無機制」。
 - 從對應套件目錄執行相關 `npm test -- <測試路徑>`、`npx tsc --noEmit`、`npm run lint`；
   影響前端建置或載入時加 `npm run build`（會印出開機 JS 大小與每個開機 chunk 最大的來源檔；新功能預設延後載入，開機預算只准調低）。純文件改動檢查內容與連結：`node scripts/check-md-links.mjs`。
 - 改了使用者看得到的東西（`packages/frontend/src`、`packages/site/src` 的非測試檔），就在 `changes/` 加一個檔案（寫法見 [changes/README.md](changes/README.md)：

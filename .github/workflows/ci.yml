@@ -178,15 +178,18 @@ jobs:
           DATABASE_URL: postgres://onden:onden@localhost:5432/onden_test
         run: npx vitest run --shard=${{ matrix.shard }}/4
 
-      # Real client stack (frontend) against the real backend on this database,
-      # over a network that drops, duplicates and delays requests. It reads the
-      # schema the integration run above just built.
-      - name: Multi-device sync fault simulation
+      # Real client stack (frontend) against the real backend on this database:
+      # the multi-device sync fault simulation (a network that drops, duplicates
+      # and delays requests) and every other frontend file that needs a database.
+      # Found by the same rule the frontend's skip gate uses (the file reads
+      # process.env.DATABASE_URL), not listed: a new database-gated file runs
+      # here without touching this step. It reads the schema the run above built.
+      - name: Frontend tests that need a database
         if: matrix.shard == 1
         working-directory: packages/frontend
         env:
           DATABASE_URL: postgres://onden:onden@localhost:5432/onden_test
-        run: npx vitest run src/test/properties/syncFaultSimulation.integration.property.test.ts
+        run: npx vitest run $(grep -rl --include='*.test.ts' --include='*.test.tsx' 'process.env.DATABASE_URL' src)
 
       - name: Postgres logs (on failure)
         if: failure()

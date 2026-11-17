@@ -1,6 +1,7 @@
 # 技能 harness：技能只組 prompt；模型呼叫只在 API 跑法
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/harness/**, packages/backend/src/services/agentTools/loadSkill.ts, packages/backend/src/spine/toolScope.ts, packages/backend/src/routes/skills.ts, packages/backend/src/routes/mcpProtocol.ts
 
 > 2026-10-23 改寫：內建的全域 API AI（伺服器拿全域 key、有預設模型、直接寫入）已整個移除，那一套 H1–H5（模型閘道、`POST /api/ai/run`、
 > 串流、工具迴圈、額度、「設定 › AI」的金鑰與模型）不存在，歷史看 git。
@@ -18,7 +19,7 @@
 AI 在 Onden 是一個角色，只有兩種跑法：**API**（伺服器用使用者的金鑰呼叫任何服務的模型）、**MCP**（使用者自己的
 AI 用戶端用限權 token 連進來；可以手動開，也可以放在某台機器上自動領排隊中的工作，見 [自動領工作](../self-host/ai-client-on-a-machine.md)）。兩者共用同一組工具（`services/agentTools` registry 與 `callTool`）、同一個寫入路徑（`spine/mutate`）與同一份
 工作階段紀錄。**API 跑法永遠只能提建議，不能直接改內容**：它的 session 寫入模式 `suggest` 由資料庫欄位決定，`mutate()` 對這種身分只放行
-`AI_SUGGESTION_CREATED`（`spine/writeMode.ts`）。**送給模型的筆記內容只經 `harness.prompt()`**（讀取政策 ∩ 空間 `external_ai`）；
+`AI_SUGGESTION_CREATED`（`spine/toolScope.ts`）。**送給模型的筆記內容只經 `harness.prompt()`**（讀取政策 ∩ 空間 `external_ai`）；
 沒有預設模型，沒有 `ONDEN_SECRET_KEY` 或沒有金鑰時 API 跑法整個不出現。
 
 ## 留下來的：`services/harness/`
@@ -85,7 +86,7 @@ type Scope =
 ## 留下來、與 AI 有關但不屬於這次移除的
 
 - 技能筆記（「當成技能」開著，內部是 `skills` 模組標籤，介面不顯示）；MCP prompts；SKILL.md 匯出與匯入（保留 `ai` 鍵）。
-- 前端技能目錄（`modules/skills/catalogue.ts`；前端呼叫 API 列技能的函式已在清除死碼時刪掉）：目前沒有畫面使用，等「交給 AI」的技能挑選器接回。
+- 前端技能目錄由 `hooks/useNoteSkills.ts` 取得，設定頁（`modules/skills/SkillsSettings.tsx`）與「交給 AI」（`SkillHandoffAction.tsx`）使用。
 - MCP 工具與 token（`services/agentTools/`、`/api/mcp/*`）原封不動。
 - semantic 模組（獨立的嵌入模型，預設關閉）原封不動。
 - 資料上 `source_type = "ai"` 的既有筆記照舊顯示（舊的「存成筆記」產物）。

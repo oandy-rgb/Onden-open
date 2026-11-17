@@ -1,6 +1,7 @@
 # 逐步圖（```steps 區塊）
 
 > 狀態：現行（最後確認 2026-11-02）。第 1、2 層已實作並測試；第 3 層（樹／圖／陣列的補間動畫）只預留介面，尚未實作。
+> 涵蓋：packages/markdown/src/stepsBlocks.ts, packages/markdown/src/lineAlign.ts, packages/markdown/src/stepsNav.ts, packages/markdown/src/stepsEnhance.ts, packages/frontend/src/components/StepsFigure.tsx, packages/frontend/src/components/siteFrame/SiteSteps.astro
 
 給資工學生在筆記裡「一步一步」講演算法或程式。原則（2026-10-22 記錄、2026-11-02 決定做）：
 **寫狀態，不寫動畫**——使用者寫每一步的內容，App 負責播放與過場；不執行使用者的程式碼。

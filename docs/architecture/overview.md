@@ -1,6 +1,7 @@
 # 架構總覽（先看這份）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/services/eventLog/bodyMerge.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/writeQueue.ts
 
 結論：Onden 是「筆記樹＋事件紀錄」的離線優先 PWA。**所有寫入都過後端同一道閘門**，所有改動都留事件，
 前端有本機副本、靠增量同步；內文衝突用逐行三方合併；功能以可關閉的模組掛上去。

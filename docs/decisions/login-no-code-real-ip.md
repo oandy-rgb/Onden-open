@@ -1,6 +1,7 @@
 # 登入不用驗證碼；用真實 IP 限速
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/auth.ts, packages/backend/src/authClientIp.ts
 
 | 項目 | 內容 |
 | --- | --- |

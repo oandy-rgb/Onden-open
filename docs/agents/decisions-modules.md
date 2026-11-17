@@ -1,6 +1,7 @@
 # 模組分類的決定
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/index.ts, packages/backend/src/modules/types.ts, packages/frontend/src/modules/index.ts, packages/frontend/src/modules/types.ts, packages/backend/src/modules/importers/**, packages/backend/src/modules/capture/**, packages/backend/src/modules/semantic/**, packages/frontend/src/modules/graph/**, packages/frontend/src/modules/capture/**, packages/backend/src/modules/rss/sources.ts, packages/backend/src/modules/website/index.ts
 
 何時讀：新增或搬動模組、決定一個能力該不該有開關、改 `modules/index.ts` 兩邊的註冊表時。
 

@@ -1,6 +1,7 @@
 # 邊界決定：核心寫入、標籤同名、冪等、同步與 membership（第 10–15、17 批，2026-09-13）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/backend/src/services/orderKeys.ts, packages/backend/src/services/actorPrefs.ts, packages/backend/src/services/actorReadSnapshot.ts, packages/backend/src/spine/txHooks.ts, packages/backend/src/services/sync/membership.ts, packages/backend/src/services/eventLog/bodyMerge*.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/membershipReconcile.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/localCopyState.ts, packages/frontend/src/lib/accountPrefStore.ts
 
 何時讀：改 `updateNode`、標籤改名、交易／冪等、sync、membership、待同步文字之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。

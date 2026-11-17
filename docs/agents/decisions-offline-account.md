@@ -1,6 +1,7 @@
 # 邊界決定：離線佇列、登入與帳號隔離、啟動（第 16、18–21、24、25 批，2026-09-13～15）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/accountStorage.ts, packages/frontend/src/lib/indexedDbStorage.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeRecovery.ts, packages/frontend/src/components/AccountSessionBoundary.tsx, packages/frontend/src/components/MembershipGate.tsx
 
 何時讀：改離線佇列、拒絕輸入保留、登入檢查、帳號本機副本分區、手機帳號入口或啟動位置之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -47,7 +48,7 @@
 
 - **請求保有原頁面的帳號預期。** 比較送出前另查一次 session，與請求攜帶預期 user ID 後，
   選後者。前者與正式請求之間仍可換 cookie；後者由同一次後端驗證結果核對。
-  `AccountSessionBoundary` 在工作區掛載前呼叫 `bindRequestAccount(userId)`；同一頁不能改綁另一人，
+  `AccountSessionBoundary` 在工作區掛載前呼叫 `bindAccountStorage(userId, serverUrl)`；同一頁不能改綁另一人，
   換帳號先隱藏工作區並提供重載。`api`／`apiFetch` 統一附上 `X-Onden-Expected-User`，
   領域 writer 不自行配置；舊非同步工作仍屬於原頁面，不採用新帳號的全域值。
 - **預期身分只能收緊請求，不能授權。** 後端在 cookie 驗證後、actor 查找／建立之前比對，

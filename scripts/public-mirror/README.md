@@ -1,6 +1,7 @@
 # 公開庫（Onden-open）跟著私人庫
 
 > 狀態：現行（最後確認 2026-11-17）
+> 涵蓋：scripts/public-mirror/*.sh, scripts/public-mirror/removed-paths.json, scripts/public-mirror/removedPaths.mjs, .github/workflows/public-mirror.yml
 
 業主 2026-11-15／16 的決定：分散式做完之前，私人庫開發、公開庫跑完整檢查；兩邊的程式必須一模一樣。
 之後公開庫會變成正本（切換另外公告）。

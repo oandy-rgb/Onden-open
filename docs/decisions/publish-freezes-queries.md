@@ -1,6 +1,7 @@
 # 發布時查詢／資料庫區塊凍結成快照
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/website/publishing/queryBlocks.ts, packages/backend/src/modules/website/publishing/snapshot.ts
 
 | 項目 | 內容 |
 | --- | --- |

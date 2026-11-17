@@ -1,6 +1,7 @@
 # 簡報是筆記的一種檢視
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/modules/slides/index.tsx
 
 | 項目 | 內容 |
 | --- | --- |

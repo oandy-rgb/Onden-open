@@ -1,6 +1,7 @@
 # 沒有垃圾桶：軟刪除＋復原提示＋從歷史還原
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/eventRestore/restore.ts, packages/frontend/src/lib/childOrder.ts
 
 | 項目 | 內容 |
 | --- | --- |

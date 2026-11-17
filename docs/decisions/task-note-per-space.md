@@ -1,6 +1,7 @@
 # 每個空間一篇任務筆記；日記與 RSS 維持個人
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/sidebarTidy.ts, packages/frontend/src/lib/data/dayNotes.ts
 
 | 項目 | 內容 |
 | --- | --- |

@@ -1,6 +1,7 @@
 # 介面不放技術細節
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/serverErrors.ts, packages/frontend/src/lib/data/writeErrors.ts, packages/frontend/src/lib/eventKinds.ts, packages/frontend/src/lib/effectKinds.ts
 
 | 項目 | 內容 |
 | --- | --- |

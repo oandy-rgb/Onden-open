@@ -1,6 +1,6 @@
 # 版面規則檢查報告（2026-11-02）
 
-> 狀態：現行（最後確認 2026-11-02）。第一輪結果。工具在 [`packages/frontend/e2e/layout-audit/`](../../packages/frontend/e2e/layout-audit/README.md)，違規基準在同資料夾的 `baseline.json`。
+> 狀態：歷史紀錄（寫於 2026-11-02）。第一輪結果。工具在 [`packages/frontend/e2e/layout-audit/`](../../packages/frontend/e2e/layout-audit/README.md)，違規基準在同資料夾的 `baseline.json`。
 > 這個 PR **不修產品畫面**；下面的原因是讀 CSS 後的判斷，沒有逐一改了驗證。對象是瀏覽器版（Chromium），WebKit 與真機沒跑。
 
 ## 一句話結論

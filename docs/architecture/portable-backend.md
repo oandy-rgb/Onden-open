@@ -3,6 +3,7 @@
 > 狀態：現行（最後確認 2026-11-01）。第 1 批（地基）已實作並測試。承接實驗 PR #1140（`docs/research/browser-trial/`）。
 > 第 2 批（瀏覽器 App 本體）已實作：見 [browser-app.md](browser-app.md) 與本文 §8。第 3 批（PR 預覽網址＋WebKit／iOS 測試）與桌面 App（PR #1133）共用這一批。
 > 正式伺服器行為不變：預設仍是真 Postgres（`pg` Pool）＋pgroonga＋`AsyncLocalStorage`＋`node:*`。
+> 涵蓋：packages/backend/src/app.ts, packages/backend/src/server.ts, packages/backend/src/db.ts, packages/backend/src/dbPglite.ts, packages/backend/src/requestContext.ts, packages/backend/src/services/textSearch.ts, packages/backend/src/dbKysely.ts
 
 ## 1. 怎麼拆（已實作）
 

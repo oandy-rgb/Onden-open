@@ -1,6 +1,7 @@
 # 自架 Onden 的 HTTPS
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：docker/nginx/nginx.conf, docker/caddy/Caddyfile, packages/backend/src/authClientIp.ts, scripts/test-real-ip.sh
 
 手機、安裝成 App（PWA）、離線模式、剪貼簿，只有在 **https://** 網址（或 `localhost`）下才能用。
 用 `http://192.168…` 或 `http://你的網域` 開，網頁看起來正常，但這些功能會悄悄失效。

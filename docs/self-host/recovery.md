@@ -1,6 +1,7 @@
 # 帳號救援：忘記密碼與帳號被盜
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/admin.ts, packages/backend/src/services/adminAccounts.ts
 
 Onden 沒有「寄信重設密碼」：自架的人通常沒有郵件伺服器。取而代之的是**在伺服器的容器裡執行的管理指令**。
 能執行指令的人本來就控制著你的主機，所以這些指令不開任何網路入口，也不需要額外的密碼。

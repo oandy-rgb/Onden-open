@@ -1,6 +1,7 @@
 # 一致的錯誤與保存契約
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/httpError.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeErrors.ts, packages/frontend/src/lib/data/backgroundWrite.ts
 
 何時讀：改前端保存／離線佇列／錯誤處理、依成功才關閉的表單，或後端 HTTP 錯誤映射之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。

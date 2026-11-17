@@ -1,6 +1,6 @@
 # Interaction design — one home, many lenses
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：歷史紀錄（2026-06 的設計分析與 2026-06-12 的進度對照；最後確認 2026-11-01）
 
 This set of ten sections is about **interaction, IA, and UX** — not architecture
 (that is covered in [`../architecture/`](../architecture/)).

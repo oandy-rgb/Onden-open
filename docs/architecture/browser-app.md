@@ -3,6 +3,7 @@
 > 狀態：現行（最後確認 2026-11-02；盲測修正批見 §16）。第 2 批（能用）、第 3 批（可以給朋友用，§12）與第 4 批（圖片與檔案，§14）已實作並測試（Chromium 桌機與手機視窗實跑；WebKit／iOS 沒有跑，原因見 §15）。
 > 地基是[可攜後端](portable-backend.md)（第 1 批，PR #1157）；實驗與數字的來源是 [browser-trial](../research/browser-trial/README.md)。
 > iPhone 真機要做的檢查：[browser-app-ios-checklist.md](browser-app-ios-checklist.md)。第 4 批做了圖片與檔案（§14）；沒做的（WebKit 實跑等）在 §15。
+> 涵蓋：packages/backend/src/browser/**, packages/backend/browser-shims/**, packages/frontend/src/browserApp/**, packages/frontend/browser-sw/media-sw.js, scripts/build-browser.mjs, scripts/deploy-browser.mjs, scripts/browserReleaseScan.mjs
 
 打開一個靜態網址，就有一個完整、能寫筆記的 Onden：後端是同一套 `packages/backend` 的 `app`，跑在這個頁面的 Web Worker 裡，
 資料庫是 PGlite；資料只存在這個瀏覽器。正式伺服器的行為與正式版的開機 JS 預算都沒有改動。

@@ -1,6 +1,7 @@
 # 快速捕捉是內建模組；未分類進收件匣；待審合進「等你決定」
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/modules/capture/index.tsx, packages/frontend/src/modules/capture/DecideSection.tsx, packages/backend/src/modules/capture/index.ts
 
 | 項目 | 內容 |
 | --- | --- |

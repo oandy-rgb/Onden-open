@@ -1,6 +1,6 @@
 # 白板兩層之間的接縫（2026-10-31）
 
-> 狀態：現行（進行中的盤點／計畫，完成後移到 docs/archive/）（最後確認 2026-11-01）
+> 狀態：歷史紀錄（寫於 2026-10-31）
 
 白板是兩層：卡片層（`@xyflow/react`，`components/KnowledgeWorkspace.tsx`）與手寫層（`lib/ink/`，由 `components/CanvasInkLayer.tsx` 疊上去，座標靠 `lib/ink/flowTransform.ts`）。
 本文記錄查證結果（行號是改動**前**的 `origin/main`）、這批做了什麼、以及留給擁有者決定的事。

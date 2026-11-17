@@ -1,6 +1,7 @@
 # 邊界決定：復原、屬性與標籤、歷史、版本（第 1–5 批，2026-09-08～12）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/eventRestore/*.ts, packages/backend/src/services/tagMembership.ts, packages/frontend/src/hooks/useVersionRestore.ts, packages/frontend/src/hooks/useLiveEventLog.ts
 
 何時讀：改事件復原、版本復原、屬性／標籤復原、歷史列表與預覽之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。

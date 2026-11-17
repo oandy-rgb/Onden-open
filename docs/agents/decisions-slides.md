@@ -1,6 +1,7 @@
 # 簡報的決定
 
 > 狀態：現行（最後確認 2026-11-13）
+> 涵蓋：packages/frontend/src/modules/slides/**, packages/backend/src/modules/slides/**, packages/site/src/look.ts, packages/markdown/src/slideDeck.ts, packages/markdown/src/slideAnalyze.ts, packages/markdown/src/slidePages.ts, packages/markdown/src/slideLayouts.ts, packages/markdown/src/slidesData.ts
 
 何時讀：改筆記的「簡報」視角、版型與主題、`slides_data`、`@onden/site/look`、播放（`PresentationPlayer`）時。
 設計全文：[slides-2026-10-31.md](../architecture/proposals/slides-2026-10-31.md)（歷史紀錄；本檔只記**已實作**批次的決定）。

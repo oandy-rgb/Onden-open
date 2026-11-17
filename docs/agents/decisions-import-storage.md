@@ -1,6 +1,7 @@
 # 邊界決定：本機備份與匯入（第 6–9 批，2026-09-12）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/importers/**/*.ts, packages/backend/src/services/backupRestore.ts, packages/backend/src/services/backupExtras.ts, packages/backend/src/services/exportZip.ts, packages/backend/src/services/vaultPath.ts, packages/backend/src/services/taskListFile.ts, packages/backend/src/services/standaloneTasks.ts, packages/frontend/src/lib/localBackup.ts
 
 何時讀：改本機備份、資料夾副本，或 Markdown／Obsidian／圖片匯入之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -106,7 +107,7 @@
   行尾 `^t-<節點 id 前 12 碼>` 是穩定代碼。有內文的任務另存 `任務/<標題>.md` 並在行內用 `[[…]]` 連過去
   （連結與圖片照一般筆記改寫成相對路徑與 `attachments/`）。
 - **匯入認檔案，不認路徑。** frontmatter 有 `onden_export: tasks` 的檔案才是任務清單
-  （`importTaskLists.ts`）：每行變回獨立任務，連到的內文檔變成任務內文而不是另一篇筆記，
+  （`modules/importers/markdown/taskLists.ts`）：每行變回獨立任務，連到的內文檔變成任務內文而不是另一篇筆記，
   段落標題忽略（可任意搬動行）。沒有標記的檔案——包括別人寫了 Obsidian Tasks 符號的筆記、
   一篇叫「任務」的筆記——照原本的匯入行為。更新匯入（`upsert`）遇到 `^t-…` 已對到本工作區可讀的任務就略過，
   不更新其欄位；一般匯入永遠新建。

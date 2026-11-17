@@ -1,6 +1,6 @@
 # 提案：已發布筆記改名後，舊網址不再 404（GAP-240）
 
-> 狀態：現行（方案 B 已實作，最後確認 2026-11-05）
+> 狀態：歷史紀錄（寫於 2026-11-04；現況見 packages/backend/src/modules/website/publishing/siteRedirects.ts）
 
 狀態：**業主 2026-11-05 選 B，四題都照建議（slug 80 字、轉址上限 1000、標籤頁同批）；已實作**，見 §7。引用的路徑以 `packages/` 為根。
 

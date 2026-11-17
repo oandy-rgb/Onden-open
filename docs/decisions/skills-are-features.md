@@ -1,6 +1,7 @@
 # 技能是功能，不是 #技能 標籤
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/skills/index.ts, packages/frontend/src/modules/skills/index.tsx
 
 | 項目 | 內容 |
 | --- | --- |

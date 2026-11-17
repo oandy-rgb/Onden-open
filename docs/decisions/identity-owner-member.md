@@ -1,6 +1,7 @@
 # 身分只有擁有者與成員；擁有者逐空間設定成員
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/spine/spaceAccess.ts, packages/backend/src/routes/invites.ts
 
 | 項目 | 內容 |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Eg-walker 測試台原始數字
 
-> 狀態：現行（`src/makeTables.ts` 由 `bench/out/*.json` 自動產生；解讀見上一層的 report.md）（最後確認 2026-11-01）
+> 狀態：歷史紀錄（寫於 2026-11-01）（`src/makeTables.ts` 由 `bench/out/*.json` 自動產生；解讀見上一層的 report.md）
 
 ## Node（v22.23.4，Intel(R) Xeon(R) Processor @ 2.10GHz，校準 72 ms）
 

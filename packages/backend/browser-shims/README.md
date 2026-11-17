@@ -1,4 +1,5 @@
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/browser-shims/*.mjs, packages/backend/browser-shims/*.cjs
 
 # 瀏覽器版的 Node 替身（只在 `npm run build:browser` 用）
 

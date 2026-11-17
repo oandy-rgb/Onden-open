@@ -72,12 +72,11 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
     initializedRef.current = true;
     // A node from the URL (?node=) already seeded selectedId — don't override it
     // with the default pick (surface S2a deep-link). D5's non-clobbering rule:
-    // the landing is additive, a deep link always wins. A selection that names nothing in the
-    // workspace (the note was deleted, or the link is from another account) is not one: it is
-    // dropped and the launch goes on, so the editor does not stay empty beside a full list.
-    const selectionExists = !!selectedId && (!!nodeOf(data, selectedId) || !!data.tags?.some((tag) => tag.id === selectedId));
-    if (selectionExists) return;
-    if (selectedId) setSelectedId(null);
+    // the landing is additive, a deep link always wins. That holds even when the id is not among
+    // the notes loaded so far: a board is selected by an id that is no note, and a note made on
+    // another device is not in a cached bootstrap yet (dropping such a selection sent every board
+    // link and every fresh note link to the landing note instead, 2026-11-17).
+    if (selectedId) return;
     // A PLACE deep link (?view=tasks/website/timeline) is exactly as explicit
     // as ?node= — landing must not clobber it either. (It used to: a cold
     // load on a place URL bounced to the landing note.)

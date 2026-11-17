@@ -19,7 +19,7 @@
 ## 同一條路，鍵是參數
 
 不是第二套寫入：`saveInk(nodeId, doc, base, { attr })`（`lib/data/inkWriter.ts`）、`loadInkPage(nodeId, attr)`（`lib/ink/store.ts`）、
-`PUT /api/nodes/:id/attributes/:key`（`services/attributeWrites.ts` 的 `MERGED_KEYS`＝`INK_PAGE_ATTRS` ＋ 頁面圖層）走同一個 codec、
+`PUT /api/nodes/:id/attributes/:key`（`services/attributeWrites.ts` 的 `MERGED_KEYS`＝`INK_PAGE_ATTRS` ＋ 頁面圖層 ＋ `note_pages`）走同一個 codec、
 `base_value` 三方合併（`mergeInk`）、`value_patch`（`patchedBody.ts`）、離線佇列與 ATTRIBUTE_SET 事件（內容定址：`attributeSnapshot.encodeSnapshot`）。
 懶 bootstrap 把兩者都留到打開才載（`BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`、本機資料庫 worker 的 `DRAWING_KEYS_SQL`），`/sync/drawings` 依鍵列出。
 
@@ -46,7 +46,7 @@
 | 後端 `services/attributeWrites.ts` | 改 | `MERGED_KEYS` 含 `board_ink`（`base_value` 合併、衝突紀錄） |
 | 後端 `services/eventLog/attributeSnapshot.ts` | 改 | `board_ink` 的事件同樣內容定址（`value_ref`），復原讀得到 |
 | 後端 `services/eventQuery.ts` | 改 | `board_ink` 的 ATTRIBUTE_CONFLICT 列表同樣不帶兩份整張圖 |
-| 後端 `services/sync/bootstrap.ts`、`sync/drawings.ts`、`routes/sync.ts` | 改 | `BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`＝`INK_PAGE_ATTRS` ＋ `pdf_annotations`；`drawings.ts` 用同一串，不另寫 |
+| 後端 `services/sync/bootstrap.ts`、`sync/drawings.ts`、`routes/sync.ts` | 改 | `BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`＝`INK_PAGE_ATTRS` ＋ `pdf_annotations` ＋ `pdf_text`（2026-11-17 起）；`drawings.ts` 用同一串，不另寫 |
 | 後端 `services/backupArchive.ts` | 改（計數）／不用改（內容） | 備份側車帶節點的**所有**屬性，`board_ink` 不會遺失；`counts.drawings` 加算 `board_ink` |
 | 後端 `services/exportZip.ts`（`DATA_ATTRIBUTES`） | 改 | 同 `ink_data`：資料屬性不寫進 frontmatter。**`board_ink` 因此不在 Markdown 匯出中**，完整備份才有；`feat/export-ink` 若要匯出白板筆跡須以 `board_ink` 為來源 |
 | 後端 `modules/importers/markdown/note.ts`、`obsidian/import.ts` | 不用改 | 匯入的繪圖是手寫筆記 |
@@ -99,3 +99,10 @@ board／handwriting／unknown、`signals` 證據、`value_hash`）。
 上表每一列「依 `INK_PAGE_ATTRS` 走」的位置（合併、內容定址、延後載入、`/sync/drawings`、備份計數、Markdown 匯出排除）自動涵蓋；另外明確處理的有
 `inkEventSql(…, "note")`（歷史 `kind=note`）、`exportInk`（頁接在內容之後）、`drillInvariants` 的計數、備份還原的分頁（`handwritingTabOf`）、複製筆記帶分頁。
 `InkKind` 多了 `"note"`；`DayNote` 沒有對應欄位。分頁本身是 `function_refs` 的一列（layout `handwriting`），刪分頁不動 `note_ink`。決定見 [decisions-canvas.md](../agents/decisions-canvas.md)。
+
+## `note_pages`、`pdf_text`：不是筆跡（2026-11-17）
+
+`note_pages`（`NOTE_PAGES_ATTR`）只記一則筆記有哪些頁、什麼順序（空白頁與 PDF 檔的頁段）；那些頁的筆畫仍在 `note_ink`，以頁 key 為鍵。
+`pdf_text`（`PDF_TEXT_ATTR`）是 PDF 各頁的文字 `{ [頁 key]: 文字 }`，給語意索引與 `getNode` 的摘要用（`services/pdfText.ts`）；**伺服器的文字搜尋還沒有讀它**。
+兩者都不在 `INK_PAGE_ATTRS`，在 `EDITOR_STORAGE_ATTR_KEYS`（屬性面板不列）。`note_pages` 是合併寫入的鍵（`MERGED_KEYS`，`mergeNotePages`）、跟著精簡 bootstrap 走；
+`pdf_text` 在 `BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`，所以不在精簡 bootstrap 裡，並和筆跡一樣由 `/sync/drawings` 列出（`drawings.ts` 用同一串鍵）。

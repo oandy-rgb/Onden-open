@@ -35,6 +35,7 @@ export interface CheckResult {
   oldProposals: ReturnType<typeof oldProposals>;
   exceptions: Record<string, string>;
   noCoverage: string[];
+  coversNothing: Array<{ f: string; reason: string }>;
   superseded: SupersededEntry[];
 }
 export function checkDocs(root: string, opts?: { files?: string[]; baseline?: { codeReferences?: Record<string, string>; noCoverage?: string[] }; now?: Date; superseded?: SupersededEntry[]; removed?: RemovedRules }): CheckResult;

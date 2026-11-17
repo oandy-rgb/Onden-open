@@ -1,7 +1,7 @@
 // Taking a bundle costs time in proportion to its size (review of PR #1758, item 1). The first version took 17.5 s for 1,000 rows and 438 s for 10,000: every statement compared the row id as TEXT
 // (`id::text = $1`), which keeps the primary key's index from being used, so each of the ~40 statements per row scanned the table; the rows of a bundle were also matched to their stamps with a filter per row.
 // This fails when the cost per row grows with the size again: a bundle four times as large must not take more than 5.2 times as long (linear is 4; the broken version was 6.2 for 1,000 → 4,000). stampedBundle.guard.test.ts also forbids the text comparison itself, which this size alone shows only in part.
-// SAFETY: PGlite databases made from the migrated template; only in a PGlite run.
+// SAFETY: databases made from the migrated template (PGlite, or new databases on a `_test` server); nothing shared is touched.
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { q, withTransaction } from "../db.js";
@@ -12,7 +12,7 @@ import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
 import { admit, bundleFor, peerOf, take } from "./helpers/stampedBundleWorld.js";
 
-const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "") && process.env.ONDEN_DB_DRIVER === "pglite";
+const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
 const open: RealNode[] = [];
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); });
 

@@ -1,15 +1,10 @@
 // A workspace copied to an empty database with every row's write stamp kept (services/stampedSnapshot.ts → services/stampedJoin.ts, the owner-only
 // routes in routes/stampedSnapshot.ts): the two databases hold the same, table by table (the digest and, as a check of the digest itself, a row-by-row
 // comparison); the receiver goes on as a node of its own; what is wrong with a snapshot is refused and leaves no half-copied workspace; the routes
-// stream it out and take it in, owner only. SAFETY: two PGlite databases made from the migrated template; only in a PGlite run.
-// (realPostgresAlso: not possible as written: the backend reaches its database through one handle, so a second database in the same process is
-// PGlite only (helpers/distSim/realNode.ts). The SQL itself is plain SQL and plpgsql; the PR lists what to run on a real Postgres by hand.)
-import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { promisify } from "node:util";
+// stream it out and take it in, owner only. SAFETY: two databases made from the migrated template: PGlite databases of this process, or databases
+// of the real server of a `_test` DATABASE_URL (helpers/distSim/postgresNodes.ts); the same test bodies run on both.
+// (the browser app's packaged database as the receiver is in stampedSnapshotBrowserShell.integration.test.ts)
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { getWorkspaceId, migrate, q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
@@ -22,7 +17,6 @@ import { markJoinDone, readJoinProgress } from "../spine/stampedImport.js";
 import { standAsideForImport, stampTransaction } from "../spine/stamps.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { buildBootstrap } from "../services/sync/index.js";
-import { ensureOwnNodeId } from "../browser/nodeIdentity.js";
 import { indexMissingNoteLinks } from "../services/wikilinkEdges.js";
 import { snapshotScopeFor } from "../services/readPolicy.js";
 import { withActorReadSnapshot } from "../services/actorReadSnapshot.js";
@@ -30,7 +24,7 @@ import { persistActor } from "./helpers/persistActor.js";
 import { seedQ } from "./helpers/seedQ.js";
 import type { ActorCtx } from "../types.js";
 
-const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "") && process.env.ONDEN_DB_DRIVER === "pglite";
+const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 describe.skipIf(!isTestDb)("a stamped snapshot copied to an empty database", () => {
@@ -75,32 +69,6 @@ describe.skipIf(!isTestDb)("a stamped snapshot copied to an empty database", () 
     expect(origins.has(dstNode)).toBe(false);
     expect([...origins].every((o) => o === cap.summary.source || o === "genesis")).toBe(true);
   });
-
-  it("the browser's packaged database takes the copy once its sample notes are gone for good, and its one local sign-in opens the person", async () => {
-    // The receiver a browser shell starts from: prepareSnapshot's output, with the node identity the first open makes (browser/nodeIdentity.ts).
-    const dir = mkdtempSync(join(tmpdir(), "packaged-"));
-    const tar = join(dir, "packaged.tar.gz");
-    let shell: RealNode | null = null;
-    try {
-      await promisify(execFile)("npx", ["tsx", "src/browser/prepareSnapshot.ts", tar], { cwd: resolve(import.meta.dirname, "../.."), timeout: 240_000, env: { ...process.env, NODE_DISABLE_COMPILE_CACHE: "1" } });
-      shell = await RealNode.open("browser-shell", undefined, tar);
-      const login = await onNode(shell, async () => {
-        await ensureOwnNodeId();
-        // the browser's one local account (a sign-in): its actor is made at its first request, so only the account exists now
-        return (await q<{ id: string }>(`SELECT id FROM "user"`)).rows[0]!.id;
-      });
-      // A note of the person's own (the first open's samples are such notes) keeps the database from being taken for empty, in the trash too:
-      // the layer above must remove them for good (purge) before it joins; the trash is not enough.
-      const sample = randomUUID();
-      await onNode(shell, () => seedQ(`INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, deleted_at) SELECT $1, id, 'manual', 'content', 'Welcome', 'welcome-sample', 'hello', now() FROM workspaces`, [sample]));
-      await expect(fillFrom(shell, world, cap, { localLogin: login })).rejects.toMatchObject({ code: "join_not_empty" });
-      await onNode(shell, () => seedQ(`DELETE FROM content_nodes WHERE id = $1`, [sample]));
-      await fillFrom(shell, world, cap, { localLogin: login });
-      expect(compareDigests(cap.summary.digest, await digestAs(shell, world.ws, world.owner))).toEqual([]);
-      const linked = await onNode(shell, async () => (await q<{ id: string }>(`SELECT id::text FROM actors WHERE external_id = $1`, [login])).rows.map((r) => r.id));
-      expect(linked).toEqual([world.owner.id]);
-    } finally { await shell?.close(); rmSync(dir, { recursive: true, force: true }); }
-  }, 300_000);
 
   it("the two checks notice a row changed on the receiver: the digest and the row-by-row comparison both differ", async () => {
     const tampered = await openNode("receiver-tampered");
@@ -557,10 +525,14 @@ describe.skipIf(!isTestDb)("the snapshot routes", () => {
     src = await openNode("route-source");
     dst = await openNode("route-receiver");
     world = await buildSourceWorld(src);
-    const res = await onNode(src, async () => exportAs(world.owner));
+    // the answer is a stream that holds the owner's read snapshot (a connection) until its last line is read: read it while still on the node
+    const res = await onNode(src, async () => {
+      const response = await exportAs(world.owner);
+      return { status: response.status, contentType: response.headers.get("content-type") ?? "", text: await response.text() };
+    });
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("application/x-ndjson");
-    text = await onNode(src, () => res.text());
+    expect(res.contentType).toContain("application/x-ndjson");
+    text = res.text;
   }, 120_000);
   afterAll(async () => { await src?.close(); await dst?.close(); });
 

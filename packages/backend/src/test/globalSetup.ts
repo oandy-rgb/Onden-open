@@ -21,6 +21,7 @@ import pg from "pg";
 import type { TestProject } from "vitest/node";
 import { databaseName, isTestDatabase } from "./helpers/testDatabase.js";
 import { buildDatabase } from "./helpers/databaseBuild.js";
+import { dropNodeDatabases, runId } from "./helpers/distSim/nodeDatabaseNames.js";
 
 
 // Snapshot databases other work relies on: never drop or rebuild them.
@@ -84,7 +85,17 @@ export default async function setup(project: TestProject): Promise<() => void> {
   mkdirSync(templateDir());
   for (const key of ["TMPDIR", "TMP", "TEMP"]) process.env[key] = runTmp;
   await prepare(project);
-  return checkTempLeftovers;
+  return async () => {
+    await dropNodeDatabasesOfThisRun();
+    checkTempLeftovers();
+  };
+}
+
+/** Real Postgres: the databases single-process multi-node tests made on the server (helpers/distSim/postgresNodes.ts) are dropped by the
+ *  tests that made them; whatever a failed or killed worker left, and the run's template, go here. */
+async function dropNodeDatabasesOfThisRun(): Promise<void> {
+  if (process.env.ONDEN_DB_DRIVER === "pglite" || !isTestDatabase()) return;
+  try { await dropNodeDatabases({ run: runId() }); } catch (e) { console.error(`[db] could not drop this run's node databases: ${(e as Error).message}`); }
 }
 
 async function prepare(project: TestProject): Promise<void> {
@@ -98,6 +109,10 @@ async function prepare(project: TestProject): Promise<void> {
 
   const url = process.env.DATABASE_URL;
   if (!isTestDatabase(url)) return;
+  // The run's name for the node databases, known to every worker started after this; and what crashed runs left on the server goes now.
+  runId();
+  const swept = await dropNodeDatabases({ staleRuns: true, keep: runId() }).catch(() => []);
+  if (swept.length > 0) console.log(`[db] dropped ${swept.length} node database(s) a crashed run left behind`);
   const name = databaseName(url);
   const keep = process.env.ONDEN_TEST_DB_KEEP === "1" || NEVER_REBUILD.test(name);
   const ident = `"${name.replace(/"/g, '""')}"`;

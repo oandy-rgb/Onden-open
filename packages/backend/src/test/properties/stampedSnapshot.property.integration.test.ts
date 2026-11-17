@@ -3,7 +3,7 @@
 // as a node of its own (its writes are stamped with its own id, from sequence number 1, after what it received); and a copy is not
 // exported again as it is (it holds stamps it did not make): the first stage's deliberate limit.
 // The source keeps growing from one run to the next, so later runs copy bigger, older, more edited workspaces.
-// SAFETY: PGlite only (two databases in one process); runs on a database named *_test.
+// SAFETY: two databases in one process (PGlite, or databases of the real server: helpers/distSim/postgresNodes.ts); runs on a database named *_test.
 import { randomUUID } from "node:crypto";
 import fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ import { readStampedPages } from "../../services/stampedSnapshot.js";
 import { compareDigests } from "../../spine/snapshotSql.js";
 import { checkAsync } from "../helpers/propsConfig.js";
 
-const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "") && process.env.ONDEN_DB_DRIVER === "pglite";
+const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
 
 type Op =
   | { kind: "create"; space: 0 | 1; under: number | null }

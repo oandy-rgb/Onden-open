@@ -16,6 +16,7 @@
 // The stored form is canonical: a field unit that equals what following `*` would give is not stored, so two nodes
 // holding the same writes hold the same map.
 
+import { placedSort } from "./rules/place.js";
 import { type Cell, type Json, type Stamp, type Unit, type SkewGate, type MergeResult, type Rejection, GENESIS_STAMP_ORIGIN, canonical, deferReason, describeUnitChange, maximalHeads, mergeUnit, rejectReason, writeUnit } from "./unit.js";
 
 export const STAR = "*";
@@ -98,6 +99,8 @@ export function rowOf(store: Store, table: string, row: string): RowView {
   const star = store.get(addressKey({ table, row, field: STAR }));
   const fields = new Map<string, Unit>();
   for (const f of fieldsOf(store, table, row)) fields.set(f, effectiveUnit(store, { table, row, field: f })!);
+  // a row's parent and order key are one place (rules/place.ts)
+  if (fields.has("parent") && fields.has("sort")) fields.set("sort", placedSort(fields.get("parent"), fields.get("sort")!));
   return { exists: star !== undefined && !star[0]!.deleted, star, fields };
 }
 /** Every (table, row key) in the store. */

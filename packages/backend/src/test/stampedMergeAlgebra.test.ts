@@ -109,3 +109,67 @@ describe("the row merge (rows.ts): the same on every order, with itself, and gro
     }
   });
 });
+
+describe("a note's place (parent and order key, rules/place.ts) and a JSON column's keys: the same on every order, and never a parent of one write with a key of another", () => {
+  const row = { table: "note", row: "n" };
+  const KEY = "note.schema:key:"; // a JSON column's key as the row state names it (dbUnits.ts unitName)
+  /** Three nodes start from one creation and each makes three writes: a move (parent and order key in ONE write, as migration 209 has every move do), a reorder (the key alone), or a key of a JSON column set or removed. */
+  function states(seed: number): Store[] {
+    const rng = makeRng(seed);
+    const base = createRow(new Map(), row, st("s", 1, T0), { parent: "p0", sort: "a0" });
+    const out: Store[] = [];
+    for (const who of ["a", "b", "c"]) {
+      let s = base, clock = T0 + 10;
+      for (let seq = 1; seq <= 3; seq++) {
+        clock += 1 + rng.int(5);
+        const stamp = st(who, seq, clock), op = rng.int(10);
+        if (op < 4) { s = writeField(s, { ...row, field: "parent" }, stamp, { value: `p${who}${seq}` }); s = writeField(s, { ...row, field: "sort" }, stamp, { value: `${who}${seq}` }); }
+        else if (op < 7) s = writeField(s, { ...row, field: "sort" }, stamp, { value: `r${who}${seq}` });
+        else s = writeField(s, { ...row, field: `${KEY}${rng.pick(["due", "owner"])}` }, stamp, rng.chance(0.3) ? { deleted: true } : { value: `${who}${seq}` });
+      }
+      out.push(s);
+    }
+    return out;
+  }
+  const shownRow = (s: Store) => { const v = rowOf(s, "note", "n"); return [...v.fields].sort(([x], [y]) => (x < y ? -1 : 1)).map(([f, u]) => `${f}=${canonical(u)}`).join(";"); };
+  /** The key shown was set by the write that set the parent shown, or by a write that had seen it (its `saw` of the key's unit covers that write: the write of a move stamps both). */
+  const placeIsOneWrite = (s: Store): boolean => {
+    const v = rowOf(s, "note", "n"), p = v.fields.get("parent")![0]!, k = v.fields.get("sort")![0]!;
+    return (k.stamp.origin === p.stamp.origin && k.stamp.seq === p.stamp.seq) || p.stamp.seq <= (k.saw[p.stamp.origin] ?? -1);
+  };
+
+  it("every order and grouping of three nodes' states shows the same place and keys, byte for byte, and the place is always one write's", () => {
+    let mixedBefore = 0;
+    for (let seed = 1; seed <= 80; seed++) {
+      const all = states(seed);
+      const ref = mergeStore(mergeStore(all[0]!, all[1]!).store, all[2]!).store;
+      for (const order of permutations(all)) {
+        const m = order.reduce((acc, s) => mergeStore(acc, s).store);
+        expect(storeText(m), `seed ${seed}: stored`).toBe(storeText(ref));
+        expect(shownRow(m), `seed ${seed}: shown`).toBe(shownRow(ref));
+        expect(placeIsOneWrite(m), `seed ${seed}: the place is one write's`).toBe(true);
+      }
+      expect(shownRow(mergeStore(all[0]!, mergeStore(all[1]!, all[2]!).store).store), `seed ${seed}: grouping`).toBe(shownRow(ref));
+      for (const s of all) expect(shownRow(mergeStore(ref, s).store), `seed ${seed}: a state again`).toBe(shownRow(ref));
+      // the rule is not vacuous: merging the two units on their own (the largest stamp of each) would have mixed writers here
+      const v = rowOf(ref, "note", "n");
+      const plainKey = [...v.fields.get("sort")!].sort((x, y) => (x.stamp.wall - y.stamp.wall) || (x.stamp.origin < y.stamp.origin ? -1 : 1)).at(-1)!;
+      const p = v.fields.get("parent")![0]!;
+      if (!(plainKey.stamp.origin === p.stamp.origin && plainKey.stamp.seq === p.stamp.seq) && !(p.stamp.seq <= (plainKey.saw[p.stamp.origin] ?? -1))) mixedBefore++;
+    }
+    expect(mixedBefore).toBeGreaterThan(0);
+  });
+
+  it("the row merge (rows.ts) agrees: two nodes' states merged either way show the same place, one write's", () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      const [a, b] = states(seed) as [Store, Store];
+      const sa = { star: a.get(addressKey({ ...row, field: STAR })), own: new Map([...a].filter(([k]) => !k.endsWith("*")).map(([k, u]) => [k.split("\u0001")[2]!, u])), creation: new Map<string, string | null>() } as RowState;
+      const sb = { star: b.get(addressKey({ ...row, field: STAR })), own: new Map([...b].filter(([k]) => !k.endsWith("*")).map(([k, u]) => [k.split("\u0001")[2]!, u])), creation: new Map<string, string | null>() } as RowState;
+      const x = mergeRow(sa, sb), y = mergeRow(sb, sa);
+      if ("rejected" in x || "rejected" in y) throw new Error("rejected");
+      expect(canonical(x.fields.get("sort")), `seed ${seed}`).toBe(canonical(y.fields.get("sort")));
+      const p = x.fields.get("parent")?.[0], k = x.fields.get("sort")?.[0];
+      if (p && k) expect((k.stamp.origin === p.stamp.origin && k.stamp.seq === p.stamp.seq) || p.stamp.seq <= (k.saw[p.stamp.origin] ?? -1), `seed ${seed}: one write's`).toBe(true);
+    }
+  });
+});

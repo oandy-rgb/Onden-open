@@ -80,32 +80,38 @@ export async function readRowChunk(
 }
 
 /**
- * The rows of `table` (a table of the snapshot list) whose key is among `ids`, each as the values a snapshot carries and the text of the given columns as stamps name them (`sync_logged_value`).
- * For a change bundle: the whole workspace, nothing left out (`wholeWorkspace`). `units`: unit field → column.
+ * How a change bundle names the rows of a table: `match(alias, params)` is the SQL that picks the rows asked for (the key compared as its columns' types, so the index is used),
+ * `idSql(alias)` the text of a row's key (what `sync_stamps.row_key` holds), `workspace(alias, wsParam)` that the row belongs to the workspace. spine/stampedMerge/dbUnits.ts builds them.
  */
-export async function readCarriedRows(table: string, workspaceId: string, ids: string[], units: Readonly<Record<string, string>>, scopeOf: ScopeFactory): Promise<Map<string, { v: Record<string, unknown>; texts: Record<string, string | null> }>> {
+export type RowMatch = { match(alias: string, params: unknown[]): string; idSql(alias: string): string; workspace(alias: string, wsParam: string): string };
+
+/**
+ * The rows of `table` (a table of the snapshot list) that `rows` picks, each as the values a snapshot carries and the text of each unit as the stamps name it (`texts`: SQL over `t`
+ * giving a jsonb object, unit name → text, spine/stampedMerge/dbUnits.ts `unitTextsSql`). For a change bundle: the rows the caller's scope carries (`scopeOf`).
+ */
+export async function readCarriedRows(table: string, workspaceId: string, rows: RowMatch, texts: string, scopeOf: ScopeFactory): Promise<Map<string, { v: Record<string, unknown>; texts: Record<string, string | null> }>> {
   const spec = snapshotSpecOf(table);
   const cols = await carriedColumns(spec);
-  const key = spec.pk[0]!;
   const params: unknown[] = [workspaceId];
   const scope = scopeOf(params);
-  const value = valueSql(spec, cols, scope); // numbers its parameters now: before the ids'
+  const value = valueSql(spec, cols, scope); // numbers its parameters now: before the keys'
   const r = await snapshotRows<{ id: string; v: Record<string, unknown>; texts: Record<string, string | null> }>(
-    `SELECT t.${quote(key)}::text AS id, ${value} AS v,
-            jsonb_build_object(${Object.entries(units).map(([f, c]) => `${literal(f)}, sync_logged_value(t, ${literal(f)}, ${literal(c)})`).join(", ")}) AS texts
-       FROM ${quote(table)} t WHERE (${spec.where(scope)}) AND t.${quote(key)} = ANY($${params.push(ids)}::uuid[])`, params);
+    `SELECT ${rows.idSql("t")} AS id, ${value} AS v, ${texts} AS texts
+       FROM ${quote(table)} t WHERE (${spec.where(scope)}) AND ${rows.match("t", params)}`, params);
   return new Map(r.rows.map((row) => [row.id, { v: row.v, texts: row.texts }]));
 }
 
-/** Write a row a bundle carries that this database does not hold, with the values a snapshot carries and the deferred columns (a parent) empty: the units' write-back sets them once every row is in. A row that is there is left as it is. */
+/** Write a row a bundle carries that this database does not hold, with the values a snapshot carries, the deferred columns (a parent) empty (the units' write-back sets them once every row is in) and the placeholders of columns a snapshot never carries. A row that is there is left as it is. */
 export async function insertCarriedRow(table: string, workspaceId: string, values: Record<string, unknown>): Promise<void> {
   const spec = snapshotSpecOf(table);
   const cols = await carriedColumns(spec);
   const deferred = new Set(spec.deferred ?? []);
+  const placeholders = Object.entries(spec.placeholders ?? {});
+  const ws = cols.includes("workspace_id") ? `WHERE r.workspace_id = $2` : "";
   await snapshotRows(
-    `INSERT INTO ${quote(table)} (${cols.map(quote).join(", ")})
-     SELECT ${cols.map((c) => (deferred.has(c) ? "NULL" : `r.${quote(c)}`)).join(", ")} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) r
-     WHERE r.workspace_id = $2 ON CONFLICT (${spec.pk.map(quote).join(", ")}) DO NOTHING`, [JSON.stringify([values]), workspaceId]);
+    `INSERT INTO ${quote(table)} (${[...cols, ...placeholders.map(([c]) => c)].map(quote).join(", ")})
+     SELECT ${[...cols.map((c) => (deferred.has(c) ? "NULL" : `r.${quote(c)}`)), ...placeholders.map(([, e]) => e)].join(", ")} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) r
+     ${ws} ON CONFLICT DO NOTHING`, ws ? [JSON.stringify([values]), workspaceId] : [JSON.stringify([values])]);
 }
 
 /**
@@ -113,25 +119,30 @@ export async function insertCarriedRow(table: string, workspaceId: string, value
  * the key, the workspace, the deferred ones and `keep` (the units' columns, which their own merge decides). A row made twice on two nodes (the same id) is one row after a merge, and it
  * must show the creation that won, on every node.
  */
-export async function overwriteCarriedColumns(table: string, workspaceId: string, key: string, values: Record<string, unknown>, keep: readonly string[]): Promise<void> {
+export async function overwriteCarriedColumns(table: string, workspaceId: string, row: RowMatch, values: Record<string, unknown>, keep: readonly string[]): Promise<void> {
   const spec = snapshotSpecOf(table);
-  const skip = new Set([...spec.pk, "workspace_id", ...(spec.deferred ?? []), ...keep]);
+  const skip = new Set(["workspace_id", ...(spec.deferred ?? []), ...keep]);
   const cols = (await carriedColumns(spec)).filter((c) => !skip.has(c));
   if (cols.length === 0) return;
+  const params: unknown[] = [JSON.stringify(values), workspaceId];
   await snapshotRows(
     `UPDATE ${quote(table)} t SET ${cols.map((c) => `${quote(c)} = r.${quote(c)}`).join(", ")}
-       FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE t.${quote(spec.pk[0]!)}::text = $2 AND t.workspace_id = $3`, [JSON.stringify(values), key, workspaceId]);
+       FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE ${row.match("t", params)} AND ${row.workspace("t", "$2")}`, params);
 }
 
-/** Columns of a row that follow a unit's winner or the latest write: `sets` is a list of `column = value` taken from the carried `values` of the row (the same names as the snapshot's columns); `latest` columns take the later of the two. */
-export async function followCarriedColumns(table: string, workspaceId: string, key: string, values: Record<string, unknown>, copy: readonly string[], latest: readonly string[]): Promise<void> {
+/** Columns of a row that follow a unit's winner or the latest write: `copy` columns take the carried `values` of the row (the same names as the snapshot's columns); `latest` columns take the later of the two. */
+export async function followCarriedColumns(table: string, workspaceId: string, row: RowMatch, values: Record<string, unknown>, copy: readonly string[], latest: readonly string[]): Promise<void> {
   const spec = snapshotSpecOf(table);
   const all = new Set(await carriedColumns(spec));
   const sets = [...copy.filter((c) => all.has(c)).map((c) => `${quote(c)} = r.${quote(c)}`), ...latest.filter((c) => all.has(c)).map((c) => `${quote(c)} = GREATEST(t.${quote(c)}, r.${quote(c)})`)];
   if (sets.length === 0) return;
+  const params: unknown[] = [JSON.stringify(values), workspaceId];
   await snapshotRows(
-    `UPDATE ${quote(table)} t SET ${sets.join(", ")} FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE t.${quote(spec.pk[0]!)}::text = $2 AND t.workspace_id = $3`, [JSON.stringify(values), key, workspaceId]);
+    `UPDATE ${quote(table)} t SET ${sets.join(", ")} FROM jsonb_populate_record(NULL::${quote(table)}, $1::jsonb) r WHERE ${row.match("t", params)} AND ${row.workspace("t", "$2")}`, params);
 }
+
+/** The columns of `table` a snapshot leaves empty and sets once every row is in (`deferred`: a parent). A row made from a bundle's values holds NULL there until its unit is written. */
+export const deferredColumnsOf = (table: string): readonly string[] => snapshotSpecOf(table).deferred ?? [];
 
 function snapshotSpecOf(table: string): SnapshotSpec {
   const spec = SNAPSHOT_SPECS.find((s) => s.table === table);
@@ -180,8 +191,8 @@ type ChangeBundleHeader = {
   layer: "changes";
   dataShape: number;
   workspaceId: string;
-  /** Which units the bundle speaks about. `content_nodes`: the stamps filed under that label. Another scope is another bundle (and another number in `sync_origins.have`). */
-  scope: "content_nodes";
+  /** Which units the bundle speaks about. `stamped`: every label of spine/stampedMerge/dbUnits.ts CARRIED_LABELS, at one cut (each label has its number in `sync_origins.have`). A per-space bundle would be another scope. */
+  scope: "stamped";
   /** The node that made the bundle. */
   sender: string;
   /** The sender's own sequence number when the read started (its stamps in the bundle are at most this). */

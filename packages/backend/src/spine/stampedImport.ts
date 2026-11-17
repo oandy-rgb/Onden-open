@@ -33,8 +33,8 @@ import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
-import { bundleRefused, normalizeHave } from "./stampedBundle.js";
+import { CARRIED_LABELS, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { BUNDLE_SCOPE, bundleRefused, haveOfAll, heldOfAll, normalizeHave } from "./stampedBundle.js";
 import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
@@ -403,8 +403,8 @@ export async function markJoinDone(workspaceId: string, expected: { pages: numbe
     }
     // the node this workspace was filled from is the first origin it accepts bundles from (migration 206), held up to the cut of the snapshot
     await snapshotRows(
-      `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, 'snapshot', jsonb_build_object('content_nodes', $3::bigint))
-       ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, join.source_node, join.cut_seq]);
+      `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, 'snapshot', $3::jsonb)
+       ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, join.source_node, JSON.stringify(haveOfAll(Number(join.cut_seq)))]);
     await snapshotRows(`UPDATE sync_join SET state = 'done', finished_at = now() WHERE workspace_id = $1`, [workspaceId]);
   });
 }
@@ -428,6 +428,10 @@ export async function cancelJoin(workspaceId: string): Promise<void> {
 /** The one place the stamp triggers stand aside for a merge (the counted exception, sync_clock.merge_batches). A workspace with no clock yet, or one that is being joined, takes nothing. */
 async function openMerge(workspaceId: string): Promise<void> {
   await standAsideForImport(workspaceId, "merge");
+  // A merge looks every row up by its key, while the rows of the bundle grow the tables inside ONE transaction. A plan cached while a table was small (the check of a foreign
+  // key pointing at it, a trigger's lookup) stays a read of the whole table however large the table grows: every note made read every note (quadratic in the rows read,
+  // stampedBundleScale.integration.test.ts counts them). For this transaction only, every statement is planned for the table as it is now.
+  await snapshotRows(`SELECT set_config('plan_cache_mode', 'force_custom_plan', true)`);
   const active = (await snapshotRows<{ on: boolean }>(`SELECT sync_import_active($1::uuid) AS on`, [workspaceId])).rows[0]!.on;
   if (!active) throw refuse("merge_not_open", "this workspace does not take merged units now (it has no clock yet, or it is being joined)", 409);
 }
@@ -469,14 +473,17 @@ export async function admitSyncNode(workspaceId: string, node: string, vouchedBy
 const GENESIS_ORIGIN = "genesis";
 
 function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
-  if (bundle.layer !== "changes" || bundle.scope !== "content_nodes") throw bundleRefused("bundle_scope", "this is not a bundle of content_nodes units", 422);
+  if (bundle.layer !== "changes" || bundle.scope !== BUNDLE_SCOPE) throw bundleRefused("bundle_scope", "this is not a change bundle of this node's stamped tables", 422);
   if (bundle.dataShape !== SYNC_DATA_SHAPE_VERSION) throw bundleRefused("bundle_data_shape", `the bundle has data shape ${String(bundle.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: the older node has to be upgraded first`);
   if (bundle.workspaceId !== workspaceId) throw bundleRefused("bundle_wrong_workspace", "the bundle is of another workspace", 422);
   normalizeHave(bundle.base);
   normalizeHave(bundle.upTo);
   if (!bundle.sender || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender and its cut", 422);
   for (const item of bundle.items) {
+    // only the labels this node carries (stampedMerge/dbUnits.ts CARRIED_LABELS): anything else is not a bundle of this shape
+    if (!CARRIED_LABELS.includes(item.table)) throw bundleRefused("bundle_scope", "a bundle item of a table a bundle does not carry", 422);
     const stamps = item.kind === "row" ? item.stamps : [item.stamp];
+    if (stamps.some((s) => !CARRIED_LABELS.includes(s.label))) throw bundleRefused("bundle_scope", "a stamp of a table a bundle does not carry", 422);
     for (const s of stamps) for (const w of [s, ...s.heads]) {
       if (![w.seq, w.wall, w.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw bundleRefused("bundle_malformed", "a stamp number that is not a whole number", 422);
       if (w.origin === GENESIS_ORIGIN) continue;
@@ -497,7 +504,7 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
 }
 
 /**
- * THE ONE ENTRY that takes a change bundle (spine/stampedBundle.ts readChangeBundle made it): the stamps another node has and this one does not, for the units of content_nodes,
+ * THE ONE ENTRY that takes a change bundle (spine/stampedBundle.ts readChangeBundle made it): the stamps another node has and this one does not, for the units of every table of UNIT_SOURCES and their JSON keys,
  * merged by the merge core, ONE transaction for the whole bundle, with the same stand-aside switch as a snapshot (reason "merge", `openMerge`): there is no second bypass.
  * Refused whole, nothing written, with a code the caller branches on:
  *   bundle_data_shape        another SYNC_DATA_SHAPE_VERSION (spine/syncDataShape.ts)
@@ -510,7 +517,7 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
  *   stamp_clock_ahead        a clock further ahead than the bound (spine/stamps.ts): offer it again later
  *   merge_not_open           this workspace is being joined, or has no clock
  * Taken a second time, a bundle changes nothing. The same stamp with the same content is skipped (re-delivery); knowledge only moves forward.
- * Not done here, on purpose: who may send (`admitSyncNode`'s caller), tables other than content_nodes, what is derived from a row's text (the PR names it), a transport.
+ * Not done here, on purpose: who may send (`admitSyncNode`'s caller), the tables not carried yet (NOT_CARRIED_YET in test/stampedBundleSources.integration.test.ts), what is derived from a row's text and domain events (batch 2b-2b), a transport.
  */
 export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundle): Promise<BundleReport> {
   checkBundleShape(workspaceId, bundle);
@@ -520,7 +527,7 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     if (bundle.sender === local) throw bundleRefused("bundle_from_self", "a bundle made by this node is not taken by this node");
     assertForeignClockWithinBound(foreignWall(bundle, local));
     const rows = (await snapshotRows<{ origin: string; vouched_by: string; have: Record<string, number> }>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
-    const held = new Map(rows.map((r) => [r.origin, { have: r.have.content_nodes ?? 0, known: true } as Knowledge] as const));
+    const held = new Map(rows.map((r) => [r.origin, { have: heldOfAll(r.have), known: true } as Knowledge] as const));
     // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
     if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
     const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
@@ -535,7 +542,7 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     if (report.rejected.length) {
       const clash = report.rejected.some((r) => r.reason === "same-stamp-different-content");
       const first = report.rejected[0]!;
-      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", "a write of the bundle is not in the format", 422);
+      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", "a write of the bundle is not in the format", 422);
     }
     const advanced: Record<string, number> = {};
     for (const [origin, upTo] of Object.entries(bundle.upTo)) {
@@ -544,8 +551,8 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
       if (mine === undefined || next > mine) {
         advanced[origin] = next;
         await snapshotRows(
-          `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, jsonb_build_object('content_nodes', $4::bigint))
-           ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || jsonb_build_object('content_nodes', $4::bigint)`, [workspaceId, origin, bundle.sender, next]);
+          `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb)
+           ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || $4::jsonb`, [workspaceId, origin, bundle.sender, JSON.stringify(haveOfAll(next))]);
       }
     }
     const readings = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]).flatMap((s) => [s, ...s.heads].filter((w) => w.origin !== local).map((w) => ({ wall: w.wall, counter: w.counter }))));

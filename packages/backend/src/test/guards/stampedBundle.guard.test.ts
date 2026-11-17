@@ -50,3 +50,10 @@ describe("a row key is compared as its own type", () => {
     }
   });
 });
+
+describe("the merge never renumbers siblings", () => {
+  it("no file of the merge or the bundle names the order-key writers: a renumbering made by every node on its own would be a stamped write nobody made (rules/place.ts; equal keys are ordered by key, order_stamp, id, and split by the next person's reorder, planSiblingOrder)", () => {
+    const files = [...sourceFiles(join(SRC, "spine/stampedMerge")), join(SRC, "spine/stampedBundle.ts"), join(SRC, "spine/stampedImport.ts")];
+    for (const f of files) expect(code(f), rel(f)).not.toMatch(/\b(respaceSiblings|respaceIfTooLong|appendOrderKey|keyForRestore|orderKeys\.js)\b/);
+  });
+});

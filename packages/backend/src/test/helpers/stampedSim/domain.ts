@@ -7,7 +7,8 @@ import { type Store, createRow, deleteRow, effectiveUnit, fieldsOf, jsonObjectOf
 import type { Deletion, FieldWrite, TreeNote } from "../../../spine/stampedMerge/rules/trash.js";
 import type { FocusSession } from "../../../spine/stampedMerge/rules/focus.js";
 import type { ParentLink } from "../../../spine/stampedMerge/rules/moveCycle.js";
-import type { FunctionRefRow } from "../../../spine/stampedMerge/rules/functionRefs.js";
+import type { mergeDuplicateRefs } from "../../../spine/stampedMerge/rules/functionRefs.js";
+type FunctionRefRow = Parameters<typeof mergeDuplicateRefs>[0][number];
 import type { PermissionChange, Permission } from "../../../spine/stampedMerge/rules/permission.js";
 import type { SlugItem } from "../../../spine/stampedMerge/rules/names.js";
 import type { SimNode, StampedWorld } from "./world.js";

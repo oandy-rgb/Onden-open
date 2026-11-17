@@ -10,6 +10,7 @@
 // seen are gone (`droppedBySeen`), the others stay beside the new value.
 
 import { droppedBySeen } from "./store.js";
+import { placedSort } from "./rules/place.js";
 import { type Cell, type Rejection, type Unit, type MergeResult, GENESIS_STAMP_ORIGIN, describeUnitChange, mergeUnit, maximalHeads, stampKey, rejectReason } from "./unit.js";
 
 export type RowState = { star: Unit | undefined; own: ReadonlyMap<string, Unit>; creation: ReadonlyMap<string, string | null> };
@@ -46,13 +47,16 @@ function fieldsOf(star: Unit | undefined, own: ReadonlyMap<string, Unit>, valueO
   const aliveKeys = new Set(alive.map((h) => stampKey(h.stamp)));
   // a creation value that lost to an own write is kept as a head of the field with its value; once its creation is no longer a head of `*` (a creation that covers it
   // replaced it) it is not a value of anyone any more. A real write over a row always says what it saw (migration 205), so an empty `saw` marks exactly these.
-  const staleCreation = (c: Cell) => c.stamp.origin !== GENESIS_STAMP_ORIGIN && Object.keys(c.saw).length === 0 && c.meta === undefined && !aliveKeys.has(stampKey(c.stamp));
+  // A key of a JSON column (a name `<label>:<field>`, dbUnits.ts unitName) never follows a creation: its first write has an empty saw and is a write like any other.
+  const staleCreation = (c: Cell, field: string) => !field.includes(":") && c.stamp.origin !== GENESIS_STAMP_ORIGIN && Object.keys(c.saw).length === 0 && c.meta === undefined && !aliveKeys.has(stampKey(c.stamp));
   for (const field of names) {
     const derived: Cell[] = [];
     for (const h of alive) { const v = valueOf(h, field); if (v !== undefined) derived.push({ stamp: h.stamp, saw: {}, deleted: false, value: v }); }
-    const cells = [...derived, ...droppedBySeen(star, (own.get(field) ?? []).filter((c) => !staleCreation(c)))];
+    const cells = [...derived, ...droppedBySeen(star, (own.get(field) ?? []).filter((c) => !staleCreation(c, field)))];
     if (cells.length) out.set(field, maximalHeads(cells));
   }
+  // a row's parent and order key are one place (rules/place.ts): the key shown is one the parent's write set or had seen
+  if (out.has("parent") && out.has("sort")) out.set("sort", placedSort(out.get("parent"), out.get("sort")!));
   return out;
 }
 

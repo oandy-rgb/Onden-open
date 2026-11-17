@@ -15,6 +15,8 @@ import spaceRouter from "../../routes/spaces.js";
 import edgeRouter from "../../routes/edges.js";
 import pointerRouter from "../../routes/pointers.js";
 import tagRouter from "../../routes/tags.js";
+import canvasRouter from "../../routes/canvases.js";
+import boardRouter from "../../routes/boards.js";
 import { withRequestDevice } from "../../requestContext.js";
 import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
 import { readStampedPages } from "../../services/stampedSnapshot.js";
@@ -51,6 +53,8 @@ export function makeCaller(actor: ActorCtx): (method: string, path: string, body
   server.route("/api/edges", edgeRouter);
   server.route("/api/pointers", pointerRouter);
   server.route("/api/tags", tagRouter);
+  server.route("/api/canvases", canvasRouter);
+  server.route("/api/boards", boardRouter);
   return async (method, path, body) => {
     const res = await server.request(path, { method, headers: body === undefined ? {} : { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const text = await res.text();

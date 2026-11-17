@@ -3918,6 +3918,7 @@ INSERT INTO schema_migrations (version) VALUES ('204_stamped_snapshot_join') ON 
 INSERT INTO schema_migrations (version) VALUES ('205_stamp_saw_heads') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('206_sync_change_bundles') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('207_fresh_proofs') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('209_place_is_one_write') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5631,3 +5632,258 @@ CREATE TABLE IF NOT EXISTS fresh_proof_attempts (
   failures     integer NOT NULL DEFAULT 0,
   locked_until timestamptz
 );
+
+-- 209: a note's place is one write: a move stamps its order key too; a key of a tag's schema counts for updated_at; the module sets are stored sorted (db/migrations/209_place_is_one_write.sql)
+CREATE OR REPLACE FUNCTION sync_stamp_place_with_parent() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(NEW.workspace_id) THEN RETURN NULL; END IF;
+  PERFORM sync_stamp_put_row(NEW.workspace_id, 'content_nodes', NEW.id::text, 'sort', false, sync_stamp_current(NEW.workspace_id), OLD, 'order_key');
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_place AFTER UPDATE OF parent_id ON content_nodes FOR EACH ROW
+  WHEN (OLD.parent_id IS DISTINCT FROM NEW.parent_id AND OLD.order_key IS NOT DISTINCT FROM NEW.order_key)
+  EXECUTE FUNCTION sync_stamp_place_with_parent();
+
+CREATE OR REPLACE FUNCTION order_stamp_follow_parent() RETURNS trigger AS $$
+DECLARE s jsonb;
+BEGIN
+  IF sync_import_active(NEW.workspace_id) THEN RETURN NEW; END IF;
+  s := sync_stamp_current(NEW.workspace_id);
+  NEW.order_stamp := lpad(s->>'wall', 15, '0') || lpad(s->>'counter', 6, '0');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER content_nodes_order_stamp_parent BEFORE UPDATE OF parent_id ON content_nodes FOR EACH ROW
+  WHEN (OLD.parent_id IS DISTINCT FROM NEW.parent_id AND OLD.order_key IS NOT DISTINCT FROM NEW.order_key)
+  EXECUTE FUNCTION order_stamp_follow_parent();
+
+-- A note's `updated_at` is a function of the stamps that replicate (206): the largest wall time (ms) among the stamps of the row's units that COUNT as an edit, now also the keys of its tag schema.
+CREATE OR REPLACE FUNCTION sync_touch_updated_at(p_ws uuid, p_key text) RETURNS void AS $$
+DECLARE v_wall bigint;
+BEGIN
+  SELECT max(w) INTO v_wall FROM (
+    SELECT hlc_wall AS w FROM sync_stamps WHERE workspace_id = p_ws AND table_name IN ('content_nodes', 'content_nodes.tag_schema') AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort') AND COALESCE(meta->>'quiet', '') <> 'true'
+    UNION ALL SELECT hlc_wall FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name IN ('content_nodes', 'content_nodes.tag_schema') AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort') AND COALESCE(meta->>'quiet', '') <> 'true') x;
+  IF v_wall IS NOT NULL AND v_wall > 0 THEN
+    UPDATE content_nodes SET updated_at = to_timestamp(v_wall / 1000.0) WHERE id = p_key::uuid AND workspace_id = p_ws AND updated_at IS DISTINCT FROM to_timestamp(v_wall / 1000.0);
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sync_touch_after_json() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(NEW.workspace_id) THEN RETURN NULL; END IF;
+  PERFORM sync_touch_updated_at(NEW.workspace_id, NEW.id::text);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+-- named to run after content_nodes_tag_schema_stamp_update (AFTER triggers run in name order): the keys are stamped first
+CREATE OR REPLACE TRIGGER content_nodes_tag_schema_touch AFTER UPDATE OF tag_schema ON content_nodes FOR EACH ROW
+  WHEN (OLD.tag_schema IS DISTINCT FROM NEW.tag_schema)
+  EXECUTE FUNCTION sync_touch_after_json();
+
+-- A set of module ids (an array of strings) as it is stored: sorted by byte, each id once. Anything that is not an array is left as it is.
+CREATE OR REPLACE FUNCTION sync_set_sorted(p jsonb) RETURNS jsonb AS $$
+  SELECT CASE WHEN jsonb_typeof(p) = 'array'
+    THEN COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e COLLATE "C") FROM (SELECT DISTINCT e FROM jsonb_array_elements_text(p) e) x), '[]'::jsonb)
+    ELSE p END;
+$$ LANGUAGE sql IMMUTABLE;
+CREATE OR REPLACE FUNCTION workspaces_sets_sorted() RETURNS trigger AS $$
+BEGIN
+  NEW.modules_off := sync_set_sorted(NEW.modules_off);
+  NEW.modules_confirmed := sync_set_sorted(NEW.modules_confirmed);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER workspaces_sets_sorted BEFORE INSERT OR UPDATE OF modules_off, modules_confirmed ON workspaces FOR EACH ROW
+  EXECUTE FUNCTION workspaces_sets_sorted();
+
+-- A board's section frames are one unit, the attribute's `value` (it travels in a change bundle like any attribute). From now on the attribute trigger stamps only that
+-- unit; until now it also stamped each section (label node_attributes._canvas_sections, migration 199), a second kind of unit over the same data that nothing reads and
+-- nothing copies (src/spine/snapshotTables.ts RETIRED_STAMP_LABELS). The text below is 205's, without the three per-section calls; the structure log lines stay.
+CREATE OR REPLACE FUNCTION sync_stamp_attribute_trigger() RETURNS trigger AS $$
+DECLARE
+  old_kept boolean := false;
+  new_kept boolean := false;
+  op text;
+  ws uuid;
+  rkey text;
+  attr text;
+  s jsonb;
+  value_changed boolean := false;
+  v_seen jsonb;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN old_kept := OLD.source IN ('ui', 'explicit', 'dispatcher'); END IF;
+  IF TG_OP <> 'DELETE' THEN new_kept := NEW.source IN ('ui', 'explicit', 'dispatcher'); END IF;
+  IF NOT old_kept AND NOT new_kept THEN RETURN NULL; END IF;
+  -- what this change is to the stamps: a source flip counts as made / removed
+  IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND old_kept AND NOT new_kept) THEN op := 'DELETE';
+  ELSIF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND NOT old_kept AND new_kept) THEN op := 'INSERT';
+  ELSE op := 'UPDATE'; END IF;
+  IF op = 'DELETE' THEN
+    ws := OLD.workspace_id; rkey := OLD.node_id::text || '/' || OLD.key; attr := OLD.key;
+  ELSE
+    ws := NEW.workspace_id; rkey := NEW.node_id::text || '/' || NEW.key; attr := NEW.key;
+  END IF;
+  IF op = 'UPDATE' THEN
+    value_changed := OLD.value IS DISTINCT FROM NEW.value;
+    IF NOT (value_changed OR OLD.value_type IS DISTINCT FROM NEW.value_type OR OLD.is_inheritable IS DISTINCT FROM NEW.is_inheritable) THEN
+      RETURN NULL;
+    END IF;
+  END IF;
+  s := sync_stamp_current(ws);
+  IF op = 'INSERT' THEN
+    PERFORM sync_stamp_put_over(ws, 'node_attributes', rkey, '*', false, s, NULL, false);
+    IF attr = '_canvas_sections' THEN
+      PERFORM sync_structure_put(ws, 'node_attributes', rkey, 'sections', NULL, NEW.value, s, false);
+    END IF;
+  ELSIF op = 'DELETE' THEN
+    v_seen := sync_row_seen(ws, 'node_attributes', rkey); -- before the fields' stamps go
+    DELETE FROM sync_stamps WHERE workspace_id = ws AND table_name = 'node_attributes' AND row_key = rkey AND field <> '*';
+    DELETE FROM sync_stamp_heads WHERE workspace_id = ws AND table_name = 'node_attributes' AND row_key = rkey AND field <> '*';
+    PERFORM sync_stamp_put_over(ws, 'node_attributes', rkey, '*', true, s, NULL, false, v_seen);
+    IF attr = '_canvas_sections' THEN
+      PERFORM sync_structure_put(ws, 'node_attributes', rkey, 'sections', OLD.value, NULL, s, false);
+    END IF;
+  ELSE
+    IF value_changed THEN PERFORM sync_stamp_put_row(ws, 'node_attributes', rkey, 'value', false, s, OLD, 'value'); END IF;
+    IF OLD.value_type IS DISTINCT FROM NEW.value_type THEN PERFORM sync_stamp_put_row(ws, 'node_attributes', rkey, 'type', false, s, OLD, 'value_type'); END IF;
+    IF OLD.is_inheritable IS DISTINCT FROM NEW.is_inheritable THEN PERFORM sync_stamp_put_row(ws, 'node_attributes', rkey, 'inheritable', false, s, OLD, 'is_inheritable'); END IF;
+    IF value_changed AND attr = '_canvas_sections' THEN
+      PERFORM sync_structure_put(ws, 'node_attributes', rkey, 'sections', OLD.value, NEW.value, s, false);
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- The genesis pass (202) is 202's text without the per-section step: a database that runs it from now on (a browser node at its first start, src/browser/nodeIdentity.ts)
+-- gives no section its own stamp either.
+CREATE OR REPLACE FUNCTION sync_genesis_pass() RETURNS TABLE (stamps_added bigint, baseline_lines_added bigint, markers_added bigint, rows_skipped bigint) AS $fn$
+DECLARE
+  v_step record;
+  v_added bigint;
+  v_skipped bigint;
+  v_stamps bigint := 0;
+  v_lines bigint := 0;
+  v_skips bigint := 0;
+  v_marks jsonb := '[]'::jsonb;
+  v_n bigint;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+              WHERE NOT t.tgisinternal AND p.proname LIKE 'sync\_%trigger'
+                AND p.proname NOT IN ('sync_stamp_trigger', 'sync_stamp_json_trigger', 'sync_stamp_attribute_trigger')) THEN
+    RAISE EXCEPTION '202 (sync_genesis_pass): a stamp trigger function this migration does not know is installed; extend the plan before running it';
+  END IF;
+
+  FOR v_step IN
+    WITH trg AS (
+      SELECT c.relname::text AS tbl, p.proname::text AS fn,
+             string_to_array(encode(t.tgargs, 'escape'), '\000') AS a,
+             (regexp_match(pg_get_triggerdef(t.oid), ' WHEN \((.*)\) EXECUTE FUNCTION '))[1] AS wh
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_proc p ON p.oid = t.tgfoid
+       WHERE NOT t.tgisinternal AND pg_table_is_visible(c.oid)
+         AND (t.tgtype & 5) = 5 AND (t.tgtype & 2) = 0
+         AND p.proname IN ('sync_stamp_trigger', 'sync_stamp_json_trigger', 'sync_stamp_attribute_trigger')
+    ),
+    g AS (
+      SELECT trg.*,
+             CASE WHEN a[3] LIKE 'via:%'
+                    THEN 'COALESCE(' || (SELECT string_agg(format('(SELECT n.workspace_id FROM content_nodes n WHERE n.id = t.%I)', c), ', ' ORDER BY o)
+                                           FROM unnest(string_to_array(substr(a[3], 5), ',')) WITH ORDINALITY AS u(c, o)) || ')'
+                  WHEN a[3] LIKE 'space:%' THEN format('(SELECT s.workspace_id FROM spaces s WHERE s.id = t.%I)', substr(a[3], 7))
+                  ELSE format('t.%I', a[3]) END AS ws_sql,
+             (SELECT string_agg(format('t.%I::text', c), ' || ''/'' || ' ORDER BY o)
+                FROM unnest(string_to_array(a[2], ',')) WITH ORDINALITY AS u(c, o)) AS key_sql,
+             (SELECT string_agg(format('t.%I::text', c), ' || ''/'' || ' ORDER BY o)
+                FROM unnest(string_to_array(COALESCE(NULLIF(a[6], ''), a[2]), ',')) WITH ORDINALITY AS u(c, o)) AS log_key_sql,
+             COALESCE(regexp_replace(wh, '\mnew\.', 't.', 'gi'), 'true') AS when_sql,
+             CASE WHEN COALESCE(a[8], '') = '' THEN 'true'
+                  ELSE format('t.%I::text IS NOT DISTINCT FROM %L', split_part(a[8], '=', 1), split_part(a[8], '=', 2)) END AS filter_sql
+        FROM trg WHERE fn <> 'sync_stamp_attribute_trigger'
+    ),
+    fields AS (
+      SELECT g.*, left(x.spec, x.cut - 1) AS fld, substr(x.spec, x.cut, 1) AS kind, substr(x.spec, x.cut + 1) AS col
+        FROM g
+       CROSS JOIN LATERAL (SELECT s.spec, least(NULLIF(position('=' IN s.spec), 0), NULLIF(position('~' IN s.spec), 0),
+                                                NULLIF(position('@' IN s.spec), 0), NULLIF(position('^' IN s.spec), 0)) AS cut
+                             FROM unnest(string_to_array(g.a[5], ',')) AS s(spec)) x
+       WHERE g.fn = 'sync_stamp_trigger' AND COALESCE(g.a[5], '') <> ''
+    ),
+    plan AS (
+      SELECT 'stamps' AS part, a[1] AS table_name, 'row' AS unit,
+             format('SELECT %s AS ws, %L AS tn, %s AS rk, %L AS fld, NULL::text AS nv FROM %I t WHERE %s',
+                    ws_sql, a[1], key_sql, '*', tbl, when_sql) AS src_sql
+        FROM g WHERE fn = 'sync_stamp_trigger'
+      UNION ALL
+      SELECT 'stamps', a[1], a[6] || '*',
+             format('SELECT %s AS ws, %L AS tn, %s AS rk, %L || u.k AS fld, NULL::text AS nv FROM %I t CROSS JOIN LATERAL sync_json_units(t.%I::jsonb, %L) u WHERE %s',
+                    ws_sql, a[1], key_sql, a[6], tbl, a[4], a[5], when_sql)
+        FROM g WHERE fn = 'sync_stamp_json_trigger'
+      UNION ALL
+      SELECT 'stamps', 'node_attributes', 'row (a person or automation wrote it)',
+             'SELECT t.workspace_id AS ws, ''node_attributes'' AS tn, t.node_id::text || ''/'' || t.key AS rk, ''*'' AS fld, NULL::text AS nv FROM node_attributes t WHERE t.source IN (''ui'', ''explicit'', ''dispatcher'')'
+        FROM trg WHERE fn = 'sync_stamp_attribute_trigger' AND tbl = 'node_attributes'
+      UNION ALL
+      SELECT 'structure baseline', a[1], fld,
+             format('SELECT %s AS ws, %L AS tn, %s AS rk, %L AS fld, %s AS nv FROM %I t WHERE %s AND %s',
+                    ws_sql, a[1], log_key_sql, fld,
+                    CASE WHEN kind = '=' AND fld = 'deleted' THEN format('(t.%I IS NOT NULL)::text', col)
+                         WHEN kind = '@' OR (kind = '=' AND position('+' IN col) > 0)
+                           THEN 'jsonb_build_object(' || (SELECT string_agg(format('%L, t.%I', c, c), ', ' ORDER BY o)
+                                                            FROM unnest(string_to_array(col, '+')) WITH ORDINALITY AS u(c, o)) || ')::text'
+                         ELSE format('t.%I::text', col) END,
+                    tbl, when_sql, filter_sql)
+        FROM fields
+      UNION ALL
+      SELECT 'structure baseline', a[7], a[8] || '*',
+             format('SELECT %s AS ws, %L AS tn, %s AS rk, %L || u.k AS fld, u.v::text AS nv FROM %I t CROSS JOIN LATERAL sync_json_units(t.%I::jsonb, %L) u WHERE %s',
+                    ws_sql, a[7], key_sql, a[8], tbl, a[4], a[5], when_sql)
+        FROM g WHERE fn = 'sync_stamp_json_trigger' AND COALESCE(a[7], '') <> ''
+      UNION ALL
+      SELECT 'structure baseline', 'node_attributes', 'sections',
+             'SELECT t.workspace_id AS ws, ''node_attributes'' AS tn, t.node_id::text || ''/'' || t.key AS rk, ''sections'' AS fld, t.value AS nv FROM node_attributes t WHERE t.key = ''_canvas_sections'' AND t.source IN (''ui'', ''explicit'', ''dispatcher'')'
+        FROM trg WHERE fn = 'sync_stamp_attribute_trigger' AND tbl = 'node_attributes'
+    )
+    SELECT DISTINCT part, table_name, unit, src_sql FROM plan ORDER BY part, table_name, unit
+  LOOP
+    IF v_step.part = 'stamps' THEN
+      EXECUTE format('WITH u AS MATERIALIZED (%s),
+                           ins AS (INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted)
+                                   SELECT u.ws, u.tn, u.rk, u.fld, ''genesis'', 0, 0, 0, NULL, NULL, false FROM u
+                                    WHERE u.ws IS NOT NULL AND u.rk IS NOT NULL
+                                   ON CONFLICT (workspace_id, table_name, row_key, field) DO NOTHING RETURNING 1)
+                      SELECT (SELECT count(*) FROM ins), (SELECT count(*) FROM u WHERE u.ws IS NULL OR u.rk IS NULL)', v_step.src_sql)
+        INTO v_added, v_skipped;
+      v_stamps := v_stamps + v_added;
+    ELSE
+      v_marks := v_marks || jsonb_build_array(jsonb_build_array(v_step.table_name, v_step.unit));
+      EXECUTE format('WITH u AS MATERIALIZED (%1$s),
+                           ins AS (INSERT INTO structure_log (workspace_id, table_name, row_key, field, old_value, new_value, origin, seq, hlc_wall, hlc_counter, author, device)
+                                   SELECT u.ws, u.tn, u.rk, u.fld, NULL, u.nv, ''genesis'', 0, 0, 0, NULL, NULL FROM u
+                                    WHERE u.ws IS NOT NULL AND u.rk IS NOT NULL
+                                      AND NOT EXISTS (SELECT 1 FROM structure_log m WHERE m.workspace_id = u.ws AND m.table_name = ''baseline''
+                                                         AND m.row_key = %2$L AND m.field = %3$L) RETURNING 1)
+                      SELECT (SELECT count(*) FROM ins), (SELECT count(*) FROM u WHERE u.ws IS NULL OR u.rk IS NULL)', v_step.src_sql, v_step.table_name, v_step.unit)
+        INTO v_added, v_skipped;
+      v_lines := v_lines + v_added;
+    END IF;
+    IF v_skipped > 0 THEN
+      v_skips := v_skips + v_skipped;
+      RAISE NOTICE 'sync_genesis_pass: % row(s) of % (%) have no workspace or a NULL key and were skipped', v_skipped, v_step.table_name, v_step.unit;
+    END IF;
+  END LOOP;
+
+  -- The markers that say a workspace's baseline of a unit kind is taken (and, on the next call, that it is not taken again).
+  INSERT INTO structure_log (workspace_id, table_name, row_key, field, old_value, new_value, origin, seq, hlc_wall, hlc_counter, author, device)
+  SELECT w.id, 'baseline', s.t, s.u, NULL, NULL, 'genesis', 0, 0, 0, NULL, NULL
+    FROM workspaces w
+   CROSS JOIN (SELECT DISTINCT e->>0 AS t, e->>1 AS u FROM jsonb_array_elements(v_marks) e) s
+   WHERE NOT EXISTS (SELECT 1 FROM structure_log m WHERE m.workspace_id = w.id AND m.table_name = 'baseline' AND m.row_key = s.t AND m.field = s.u);
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN QUERY SELECT v_stamps, v_lines, v_n, v_skips;
+END
+$fn$ LANGUAGE plpgsql;

@@ -7,4 +7,6 @@
 // removed from src/spine/stampedMerge/dbUnits.ts UNIT_SOURCES, the meaning of `saw` or `meta` changes, or a wire type of spine/snapshotSql.ts changes
 // in a way an older reader would misread. Do NOT bump it for a migration that only adds a table nobody replicates or an index. A node that is a
 // version behind has to take a snapshot (after it is upgraded), never a bundle: that is what the refusal is for.
-export const SYNC_DATA_SHAPE_VERSION = 1;
+// 2 (batch 2b-2a): a change bundle carries every table of UNIT_SOURCES and the keys of JSON_SOURCES (scope "stamped" instead of "content_nodes"; a row of another table, the keys of
+// a JSON column as `<label>:<field>` texts, and a stamp of a row that is not in the table travel), so a node of version 1 would misread one. A snapshot page is unchanged, but carries the number too.
+export const SYNC_DATA_SHAPE_VERSION = 2;

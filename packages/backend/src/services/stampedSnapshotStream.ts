@@ -1,6 +1,6 @@
 // The wire form of a stamped snapshot: lines of JSON (NDJSON), one message each, so neither side holds more than a page.
 //
-//   {"kind":"hello","dataShape":1,"workspaceId":…,"source":…,"cut":…,"person":…}     first
+//   {"kind":"hello","dataShape":<SYNC_DATA_SHAPE_VERSION>,"workspaceId":…,"source":…,"cut":…,"person":…}     first
 //   {"kind":"page","page":{…}}  × N                                    pages of services/stampedSnapshot.ts
 //   {"kind":"manifest","pages":N,"digest":[…]}                         last: what the pages must add up to
 //   {"kind":"error","code":…}                                          instead of the manifest, when the source gave up half way

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { reads, sendWrite } from "../../lib/data";
+import { reads, rssWriter } from "../../lib/data";
 
 // 少看這種: hide a word (in titles) or a whole feed from your own list for a
 // week. Nothing is deleted and nobody else's list changes (backend mutes.ts).
@@ -25,15 +25,15 @@ export function muteWordOf(selection: string): string | null {
 
 /** Returns the mute's id (to take it back). */
 export async function muteWords(keyword: string): Promise<string> {
-  return (await sendWrite<{ id: string }>("POST", "/api/rss/mutes", { keyword })).id;
+  return (await rssWriter.muteWords(keyword)).id;
 }
 
 export async function muteFeed(sourceId: string): Promise<string> {
-  return (await sendWrite<{ id: string }>("POST", "/api/rss/mutes", { source_id: sourceId })).id;
+  return (await rssWriter.muteFeed(sourceId)).id;
 }
 
 export async function unmute(id: string): Promise<void> {
-  await sendWrite("DELETE", `/api/rss/mutes/${id}`);
+  await rssWriter.unmute(id);
 }
 
 /** The active mutes (null while loading or when they could not be read). */

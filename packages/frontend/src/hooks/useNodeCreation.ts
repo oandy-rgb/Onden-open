@@ -1,7 +1,7 @@
 import { randomUUID } from "../lib/uuid";
 import { boardSpaceId } from "../lib/boardLayout";
 import { markdownExportUrl, nodeNeedsBody, type Bootstrap, type Canvas, type ContentNode } from "../lib/api";
-import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, sendWrite, writeErrors, pins } from "../lib/data";
+import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, captureWriter, writeErrors, pins } from "../lib/data";
 import type { CreateNote, DayNoteSeed } from "../lib/data";
 import { addToast, getAppState, getNode } from "../lib/appStore";
 import { t } from "../lib/i18n";
@@ -98,7 +98,7 @@ export function useNodeCreation({
         await nodeActions.assignToGroup(id, parentId);
       },
       askBookmarkUrl: () => (typeof window === "undefined" ? null : window.prompt(t("Bookmark URL:"))?.trim() || null),
-      postBookmark: async (url) => (await sendWrite<{ id: string }>("POST", "/api/bookmark", spaceId ? { url, space_id: spaceId } : { url })).id,
+      postBookmark: async (url) => captureWriter.bookmark(url, spaceId),
       createTag: async () => {
         const tagName = name?.trim();
         if (!tagName) return null;

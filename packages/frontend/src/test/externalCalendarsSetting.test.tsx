@@ -9,8 +9,10 @@ const list = vi.fn();
 const sendWrite = vi.fn();
 vi.mock("../lib/data", async (original) => {
   const real = await original<typeof import("../lib/data")>();
-  return { ...real, sendWrite: (...args: unknown[]) => sendWrite(...args), reads: { ...real.reads, workspace: { ...real.reads.workspace, externalCalendars: () => list() } } };
+  return { ...real, reads: { ...real.reads, workspace: { ...real.reads.workspace, externalCalendars: () => list() } } };
 });
+
+vi.mock("../lib/data/onlineWrite", async (original) => ({ ...await original<typeof import("../lib/data/onlineWrite")>(), sendWrite: (...args: unknown[]) => sendWrite(...args) }));
 
 import CalendarsSetting from "../modules/external_calendars/CalendarsSetting";
 import type { SettingContext } from "../lib/settingsTypes";

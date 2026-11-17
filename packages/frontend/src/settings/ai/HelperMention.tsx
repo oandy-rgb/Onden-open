@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { addToast } from "../../lib/appStore";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, reads, writeErrors } from "../../lib/data";
 import { t, useT } from "../../lib/i18n";
 import { confirmDialog } from "../../components/ConfirmDialog";
 import { Button, TextField } from "../../components/ui";
@@ -24,8 +24,8 @@ export function useMentionRunner(actorId: string) {
  *  running requests, so it is the 「暫停」 of this way of running; nothing is deleted. */
 export async function setMentionEnabled(person: { id: string }, enabled: boolean, handle?: string): Promise<boolean> {
   try {
-    if (handle !== undefined) await sendWrite("PUT", `/api/agent-sessions/runners/${person.id}`, { handle });
-    await sendWrite("POST", `/api/agent-sessions/runners/${person.id}/enabled`, { enabled });
+    if (handle !== undefined) await aiRoleWriter.setMentionName(person.id, handle);
+    await aiRoleWriter.setMentionEnabled(person.id, enabled);
     return true;
   } catch (error) { writeErrors.report(error, addToast); return false; }
 }

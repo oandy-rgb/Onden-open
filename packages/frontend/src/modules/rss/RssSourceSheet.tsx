@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import ShellDialog from "../../components/ShellDialog";
 import { Button, Checkbox, Select } from "../../components/ui";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { rssWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { muteFeed } from "./rssMutes";
 import RssDestinationFields from "./RssDestinationFields";
@@ -56,14 +56,14 @@ export default function RssSourceSheet({ source, online, onClose, onUnsubscribed
   const counts = useRssCounts();
   const countChoice = counts.choiceFor(source.id);
 
-  async function unsubscribe() {
+  /** One request at a time: busy while it runs, and a refusal is shown in the sheet (which stays open). */
+  async function exclusive(action: () => Promise<void>) {
     if (running.current) return;
     running.current = true;
     setBusy(true);
     setError(null);
     try {
-      await sendWrite("POST", `/api/rss/sources/${source.id}/unsubscribe`, {});
-      onUnsubscribed(source);
+      await action();
     } catch (e) {
       setError(writeErrors.message(e));
     } finally {
@@ -71,67 +71,39 @@ export default function RssSourceSheet({ source, online, onClose, onUnsubscribed
       setBusy(false);
     }
   }
+
+  const unsubscribe = () => exclusive(async () => {
+    await rssWriter.unsubscribe(source.id);
+    onUnsubscribed(source);
+  });
 
   /** Save the feed's default (a destination), or clear it (null). */
-  async function saveDefault(next: RssDestination | null) {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    setError(null);
+  const saveDefault = (next: RssDestination | null) => exclusive(async () => {
     setSaved(null);
-    try {
-      const body = { save_default: next && { tag_ids: next.tagIds, parent_id: next.parentId } };
-      const res = await sendWrite<{ save_default?: { tag_ids: string[]; parent_id: string | null; origin: string } }>("PATCH", `/api/rss/sources/${source.id}`, body);
-      if (res.save_default) {
-        setDest({ tagIds: res.save_default.tag_ids, parentId: res.save_default.parent_id });
-        setOrigin(res.save_default.origin as typeof origin);
-      }
-      setSaved(next ? t("Saved. New saves from this feed go here.") : t("Cleared. This feed uses the fallback default again."));
-      onChanged();
-    } catch (e) {
-      setError(writeErrors.message(e));
-    } finally {
-      running.current = false;
-      setBusy(false);
+    const body = { save_default: next && { tag_ids: next.tagIds, parent_id: next.parentId } };
+    const res = await rssWriter.changeSource<{ save_default?: { tag_ids: string[]; parent_id: string | null; origin: string } }>(source.id, body);
+    if (res.save_default) {
+      setDest({ tagIds: res.save_default.tag_ids, parentId: res.save_default.parent_id });
+      setOrigin(res.save_default.origin as typeof origin);
     }
-  }
+    setSaved(next ? t("Saved. New saves from this feed go here.") : t("Cleared. This feed uses the fallback default again."));
+    onChanged();
+  });
 
-  /** Save one setting of this feed at once (PATCH), showing the server's answer; the sheet stays open with the error when refused. */
-  async function patchSetting<T>(body: Record<string, unknown>, applied: (res: T) => void) {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      applied(await sendWrite<T>("PATCH", `/api/rss/sources/${source.id}`, body));
-      onChanged();
-    } catch (e) {
-      setError(writeErrors.message(e));
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
-  }
+  /** Save one setting of this feed at once (PATCH), showing the server's answer. */
+  const patchSetting = <T,>(body: Record<string, unknown>, applied: (res: T) => void) => exclusive(async () => {
+    applied(await rssWriter.changeSource<T>(source.id, body));
+    onChanged();
+  });
   const setAlwaysFulltext = (on: boolean) => patchSetting<{ always_fulltext?: boolean }>({ always_fulltext: on }, (res) => setAlwaysFull(res.always_fulltext ?? on));
   const changeVoice = (next: RssVoice) => patchSetting<{ voice?: RssVoice }>({ voice: next }, (res) => setVoice(res.voice ?? next));
   const changeDisplay = (next: RssDisplayMode) => patchSetting<{ display_mode?: RssDisplayMode }>({ display_mode: next }, (res) => setDisplay(res.display_mode ?? next));
 
   /** 靜音一週: this feed leaves YOUR list for a week; the source panel can end it. */
-  async function mute() {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      await muteFeed(source.id);
-      onMuted(source);
-    } catch (e) {
-      setError(writeErrors.message(e));
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
-  }
+  const mute = () => exclusive(async () => {
+    await muteFeed(source.id);
+    onMuted(source);
+  });
 
   return (
     <ShellDialog sheet className="rss-sheet" label={t("Feed settings")} busy={busy} onClose={onClose}>

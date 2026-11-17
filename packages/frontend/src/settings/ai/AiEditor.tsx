@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Pause, Play, Trash2 } from "lucide-react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import type { Space } from "../../lib/spaces";
 import { Button, TextField } from "../../components/ui";
@@ -53,8 +53,8 @@ export default function AiEditor({ role, connection, state, spaces, online, onCh
     if (busy || !name.trim() || !handle.trim() || (!nameChanged && !handleChanged)) return;
     setBusy(true);
     try {
-      if (nameChanged) await sendWrite("PATCH", `/api/actors/${role.actor_id}`, { name: name.trim() });
-      if (handleChanged) await sendWrite("PUT", `/api/agent-sessions/runners/${role.actor_id}`, { handle: handle.trim().toLowerCase() });
+      if (nameChanged) await aiRoleWriter.rename(role.actor_id, name.trim());
+      if (handleChanged) await aiRoleWriter.setMentionName(role.actor_id, handle.trim().toLowerCase());
       addToast(t("Saved."), "success");
     } catch (error) { writeErrors.report(error, addToast); }
     finally {

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useT } from "../../lib/i18n";
 import type { SettingContext } from "../../lib/settingsTypes";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { reads, rssWriter, writeErrors } from "../../lib/data";
 import { Button, FileInput, Link, buttonClass } from "../../components/ui";
 
 // The RSS module's settings (its module card): OPML import/export — the standard
@@ -25,7 +25,7 @@ export default function RssOpmlWidget({ ctx }: { ctx: SettingContext }) {
     setError(null);
     try {
       const opml = await file.text();
-      const res = await sendWrite<{ imported: number; skipped: number }>("POST", "/api/rss/opml", { opml });
+      const res = await rssWriter.importOpml(opml);
       setResult(res);
       setStatus("done");
       ctx.onImportDone();

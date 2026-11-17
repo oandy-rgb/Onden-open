@@ -12,7 +12,7 @@
 // `available` stays false and no surface shows anything.
 
 import { useSyncExternalStore } from "react";
-import { reads, sendWrite } from "./data";
+import { pushWriter, reads } from "./data";
 import { isBrave, isIos } from "./pushBrowser";
 import { serviceWorkerContainer } from "./storagePersist";
 
@@ -71,7 +71,7 @@ async function currentSubscription(): Promise<PushSubscription | null> {
  *  hands the device to the account signed in now). */
 async function registerWithServer(subscription: PushSubscription): Promise<void> {
   const json = subscription.toJSON();
-  await sendWrite("POST", "/api/push/subscriptions", { endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth });
+  await pushWriter.register({ endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth });
 }
 
 let refreshed = false;
@@ -133,7 +133,7 @@ export async function disablePush(): Promise<void> {
   try {
     const subscription = await currentSubscription();
     if (subscription) {
-      try { await sendWrite("DELETE", "/api/push/subscriptions", { endpoint: subscription.endpoint }); } catch { /* see above */ }
+      try { await pushWriter.remove(subscription.endpoint); } catch { /* see above */ }
       try { await subscription.unsubscribe(); } catch { /* already gone */ }
     }
     set({ subscribed: false });

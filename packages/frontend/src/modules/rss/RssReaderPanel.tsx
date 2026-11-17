@@ -1,7 +1,7 @@
 import { randomUUID } from "../../lib/uuid";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ExternalLink, PenLine, Quote, Rss } from "lucide-react";
-import { dayNotes, latestOnly, reads, sendOrQueue, sendWrite, writeErrors } from "../../lib/data";
+import { dayNotes, latestOnly, reads, rssWriter, sendOrQueue, writeErrors } from "../../lib/data";
 import { addToast, getNode, useTagRows, useAllNodes } from "../../lib/appStore";
 import { ReaderArticle } from "../../components/markdownSurfaces";
 import { markRssVisited, useRssUnread, type RssDestination, type RssSource } from "./useRssUnread";
@@ -207,7 +207,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
   const markLeft = useCallback((a: Article | null) => {
     if (!a || a.seen) return;
     setItems((prev) => prev?.map((it) => it.id === a.id ? { ...it, seen: true } : it) ?? prev);
-    void sendWrite("POST", `/api/rss/items/${a.id}/seen`, "{}").then(() => refreshSources()).catch(() => null);
+    void rssWriter.markSeen(a.id).then(() => refreshSources()).catch(() => null);
   }, [refreshSources]);
 
   /** Back to the list (or another feed): the open article is left. */
@@ -239,7 +239,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
     setFullText({ id: a.id, status: "loading" });
     if (!auto) setNotice(null);
     try {
-      const r = await sendWrite<{ body?: string }>("POST", `/api/rss/items/${a.id}/fulltext`, "{}");
+      const r = await rssWriter.fetchFullText(a.id);
       // Only a real article replaces the feed's text.
       if (typeof r?.body !== "string" || !r.body.trim()) throw new Error(t("Could not load the full article"));
       const body = r.body;

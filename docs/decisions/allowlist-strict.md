@@ -23,6 +23,6 @@
 ## 相關檔案與狀態備註
 
 - 嚴格模式已實作：`scripts/allowlistLib.mjs` 對不在 `RATCHET_RULES` 的規則，基準有任何項目就失敗。
-- **與決定不同（給業主）**：決定寫「基準必須為空」，但 `RATCHET_RULES` 另有五條規則允許逐檔計數、只減不增：`be-raw-sql`（194 檔 897 處）、`fe-app-store-reach`（85 檔 174 處）、`fe-store-inline-selector`（54 檔 94 處）、`fe-literal-api-write`（26 檔 61 處）、`fe-store-write`（1 檔 1 處）；其餘規則皆為空物件（2026-11-17 讀 `scripts/allowlist-baseline.json` 統計）。後四條是 2026-11-14 之後加進來的，`AGENTS.md` 只寫 `be-raw-sql` 一個例外。這是決定改了、還是例外該收回，由業主定；本文不改決定。
+- **業主 2026-11-17 決定：「例外清單全部清空」**——帶逐檔計數的規則（`RATCHET_RULES`）也要歸零、改成嚴格模式，不是例外該留著。當天的狀況（讀 `scripts/allowlist-baseline.json`）：原有五條，`fe-literal-api-write`（26 檔 61 處）與 `fe-store-write`（1 處）已歸零並移出 `RATCHET_RULES`；還在進行：`fe-app-store-reach`（85 檔 174 處）、`fe-store-inline-selector`（54 檔 94 處）、`be-raw-sql`（194 檔 897 處，分批改寫，做法見 [工作指示](../research/allowlist-empty-brief-2026-11-17.md)）。現在的數字以 `scripts/allowlist-baseline.json` 為準。
 - 舊例外清單還沒清完（2026-11-17）：`packages/frontend/eslint-rules/module-entry-allowlist.json` 仍有項目（後端同名檔已是 `{}`）、`packages/backend/eslint-rules/dup-b2-infra-exceptions.json` 剩 `console` 一項、`packages/backend/eslint-rules/route-input-exceptions.json` 仍有逐檔計數、`scripts/dup-names-baseline.json`、`scripts/dup-near-baseline.json` 仍有內容（`scripts/dup-baseline.json` 只剩 45 位元組）。`packages/*/eslint-rules/*-allowlist.json` 這個樣式只剩 `module-entry-allowlist.json`。
 - [AGENTS.md](../../AGENTS.md)「允許清單守門」

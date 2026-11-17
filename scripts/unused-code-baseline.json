@@ -619,7 +619,7 @@
       "packages/frontend/src/settings/NoteFontCards.tsx": ["NOTE_FONT_LABELS"],
       "packages/frontend/src/settings/ai/ApiConnectionForm.tsx": ["connectionTestable"],
       "packages/frontend/src/settings/ai/ApiSettingsFields.tsx": ["ApiKeyChoice"],
-      "packages/frontend/src/settings/ai/HelperMention.tsx": ["Runner", "setMentionEnabled"],
+      "packages/frontend/src/settings/ai/HelperMention.tsx": ["Runner"],
       "packages/frontend/src/settings/ai/actions.ts": ["CreatedAi"],
       "packages/frontend/src/settings/ai/model.ts": ["AiPageLayout"],
       "packages/frontend/src/settings/appearance.ts": ["NOTE_TEXT_SCALE"],

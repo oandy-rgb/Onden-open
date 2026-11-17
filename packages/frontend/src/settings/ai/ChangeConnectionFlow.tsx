@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { randomUUID } from "../../lib/uuid";
 import { Button, Radio } from "../../components/ui";
@@ -46,7 +46,7 @@ export default function ChangeConnectionFlow({ role, data, online, aiOn, onDone,
     let done = false;
     if (pick === "key") done = await setAiKey(role.actor_id, settings.credentialId, settings);
     else if (hasCode) {
-      try { await sendWrite("PATCH", `/api/ai/roles/${role.actor_id}`, { default_runtime: "mcp" }); done = true; }
+      try { await aiRoleWriter.useConnectionCode(role.actor_id); done = true; }
       catch (error) { writeErrors.report(error, addToast); }
     } else {
       const token = await giveCode(role.actor_id, role.name, role.default_runtime === "mcp", codeKey.current);

@@ -8,8 +8,8 @@ const h = vi.hoisted(() => ({ actorTokens: vi.fn(), sendWrite: vi.fn() }));
 vi.mock("../lib/data", async (original) => ({
   ...await original<typeof import("../lib/data")>(),
   reads: { people: { actorTokens: h.actorTokens } },
-  sendWrite: h.sendWrite,
 }));
+vi.mock("../lib/data/onlineWrite", async (original) => ({ ...await original<typeof import("../lib/data/onlineWrite")>(), sendWrite: h.sendWrite }));
 
 const person = {
   id: "helper-1", name: "Helper", type: "agent", isOwner: false, invitePending: false, inviteEmail: null,

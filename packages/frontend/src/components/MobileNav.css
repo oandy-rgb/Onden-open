@@ -81,6 +81,12 @@
     transform: scale(0.96);
   }
 
+  /* The + rises a few px above the bar (the negative margin above). A sheet docked on the bar (ui/SheetDock: the note's AI bar) sits
+     exactly on the bar's top edge and is a higher layer, so it cut the top of the + off (owner's phone, 2026-11-17). While a sheet is
+     docked there the bar is the higher layer of the two: the + overlaps the sheet's lower edge the way it overlaps the page. Not while
+     the sheet is being typed in: then it reaches the bottom of the screen and covers the bar on purpose. */
+  body:has(.ui-sheet-dock:not([data-typing])) .mobile-bottom-nav { z-index: var(--z-bar-over-dock); }
+
   /* 56px = .mobile-nav-btn min-height; keep app-shell scrollable area above the nav */
   :root {
     /* Shared by feedback overlays so sync, recovery and notifications remain reachable. */

@@ -13,7 +13,6 @@
 }
 
 /* 「放大」 is the shared .pane--expanded (ExpandPaneButton.css). */
-.pdf-node.pane--expanded .pdf-node-content { min-height: 0; }
 
 /* The one toolbar (InkToolbar) is the whole chrome; in fullscreen the Exit
    button sits beside it in the same row, so it never covers a tool. */
@@ -44,7 +43,10 @@
 
 .pdf-node-content {
   flex: 1 1 auto;
-  min-height: 560px;
+  /* The host gives the view its height (OverviewEditor.css: at least 600px) and the pages scroll inside it. A floor of its own here
+     (it was 560px) plus the toolbar's row came to more than the host's 600px on a short screen, and the host cut the toolbar's
+     lower edge off (owner's phone, 2026-11-17). The page book keeps its own floor (PageBook.css). */
+  min-height: 0;
   position: relative;
   /* The page book fills it (and scrolls inside it). */
   display: flex;

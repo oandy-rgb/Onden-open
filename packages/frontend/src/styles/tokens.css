@@ -132,6 +132,7 @@
   --z-kb-toolbar: 120;    /* editing toolbar riding the keyboard */
   --z-board-menu: 200;
   --z-floating-panel: 300;
+  --z-bar-over-dock: 310;  /* the phone bottom bar while a sheet is docked on top of it: its raised + stays whole */
   --z-notice-low: 350;    /* corner notices that sit under toasts */
   --z-toast: 400;
   --z-notice-top: 420;    /* above toasts when no modal is open */

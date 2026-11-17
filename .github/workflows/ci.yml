@@ -109,6 +109,20 @@ jobs:
         working-directory: packages/backend
         run: npm run test:no-db
 
+      # The files that mean something only on PGlite (POSTGRES_SKIPS in src/test/helpers/pgliteSkipList.ts: the
+      # real-Postgres shards skip them by name). Without this step no job ran them at all: on 2026-11-17 a tag-name
+      # rule broke one of them on main and every job was green. Read from the list, so a new entry runs here too.
+      - name: Tests that only run on PGlite
+        working-directory: packages/backend
+        env:
+          ONDEN_DB_DRIVER: pglite
+          DATABASE_URL: postgres://x@localhost/onden_cloud_test
+        run: |
+          files=$(sed -n '/export const POSTGRES_SKIPS/,/^};/p' src/test/helpers/pgliteSkipList.ts | grep -o '"src/test/[^"]*"' | tr -d '"')
+          [ -n "$files" ] || { echo "POSTGRES_SKIPS could not be read"; exit 1; }
+          for f in $files; do [ -f "$f" ] || { echo "POSTGRES_SKIPS names a file that does not exist: $f"; exit 1; }; done
+          npx vitest run --maxWorkers=2 $files
+
   # The DB-gated files against a real Postgres, in four shards side by side: the files run one at a time (they share
   # one test database), so a single job took 52 minutes on a hosted 2-core runner (2026-11-15). Each shard has its own
   # Postgres; a skipped test fails its shard (src/test/helpers/pgliteSkipList.ts names the few that are PGlite-only).

@@ -381,6 +381,21 @@ describe("the opt-out is printed, and 實作提案 names the proposal a PR imple
   });
 });
 
+describe("dated entries: a section whose heading starts with a date is a record of that day", () => {
+  const cur = "# T\n\n> 狀態：現行\n> 涵蓋：src/**\n";
+  it("code references inside a dated section are not checked; the same reference outside one is", () => {
+    const root = fixture({
+      "src/a.ts": "x\n",
+      "docs/agents/log.md": `${cur}\n\`scripts/gone.mjs\`\n\n## 紀錄\n\n### 2026-11-17　某一天\n- 證據：\`scripts/gone-then.mjs\`\n\n#### 細節\n\`scripts/gone-detail.mjs\`\n\n### 不是日期\n\`scripts/gone-after.mjs\`\n`,
+    });
+    expect(messages(checkDocs(root, { baseline: { noCoverage: [] } }).problems.codeRefs)).toEqual(["missing path -> scripts/gone.mjs", "missing path -> scripts/gone-after.mjs"]);
+  });
+  it("a broken link inside a dated section still fails", () => {
+    const root = fixture({ "src/a.ts": "x\n", "docs/agents/log.md": `${cur}\n### 2026-11-17　某一天\n[x](nope.md)\n` });
+    expect(checkDocs(root, { baseline: { noCoverage: [] } }).problems.links.length).toBe(1);
+  });
+});
+
 describe("public mirror: paths the mirror removes are not stale in the mirror tree", () => {
   const rules = { files: ["docs/deploy-log.md"], prefixes: ["docs/research/scan/"], imagesUnder: ["docs/"], imageExtensions: ["png"] };
   const cur = "# T\n\n> 狀態：現行\n> 涵蓋：src/**\n";

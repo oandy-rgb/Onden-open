@@ -73,8 +73,10 @@ const DAMAGE: Record<string, { expect: RegExp; copy: (source: Exported) => { pag
   "a page that never arrives, the finish asked for directly": { expect: /did not arrive/, copy: (s) => ({ pages: s.pagesRaw.filter((p) => p.page !== 2), summaryPages: s.pagesRaw.length, direct: true }) },
   "pages in the wrong order": { expect: /violates|not present|foreign key|constraint|order/, copy: (s) => ({ pages: clone(s.pagesRaw).reverse() }) },
   "two exports mixed into one": { expect: /another export/, copy: (s) => ({ pages: [...clone(s.pagesRaw.slice(0, 2)), ...clone(s.second.pages.slice(2))], summary: s.second.summary, summaryPages: s.second.pages.length }) },
-  // (every stamp of that one write — one stamp number — is moved, else the copy would be refused first for naming one number with two contents)
-  "a stamp far ahead of this machine's clock": { expect: /stamp_clock_ahead|ahead/, copy: (s) => { const pages = clone(s.pagesRaw); const all = pages.flatMap((p) => p.items).flatMap((i) => (i.kind === "row" ? i.stamps : i.kind === "tombstone" ? [i.stamp] : [])); const chosen = all.find((x) => x.origin === s.summary.source)!; for (const x of all) if (x.origin === chosen.origin && x.seq === chosen.seq) x.wall = Date.now() + BOUND + 3_600_000; return { pages }; } },
+  // (every stamp of that one write — one stamp number — is moved to the SAME wall time, read once: a clock read per stamp gave two walls a millisecond apart
+  //  now and then, and the copy was then refused first for naming one number with two contents (join_stamp_conflict), which is right; the write is the lowest
+  //  sequence number of the source, not whichever stamp the database returns first)
+  "a stamp far ahead of this machine's clock": { expect: /stamp_clock_ahead|ahead/, copy: (s) => { const pages = clone(s.pagesRaw); const all = pages.flatMap((p) => p.items).flatMap((i) => (i.kind === "row" ? i.stamps : i.kind === "tombstone" ? [i.stamp] : [])); const chosen = all.filter((x) => x.origin === s.summary.source).reduce((a, b) => (b.seq < a.seq ? b : a)); const tooFar = Date.now() + BOUND + 3_600_000; for (const x of all) if (x.origin === chosen.origin && x.seq === chosen.seq) x.wall = tooFar; return { pages }; } },
   "a row with no stamp at all (this database's own pass would stamp it)": { expect: /join_unstamped_rows|without a stamp|differs from the source/, copy: (s) => { const pages = clone(s.pagesRaw); const row = firstRow(pages, "spaces"); if (row.kind === "row") row.stamps = []; return { pages, direct: true }; } },
 };
 const BOUND = 10 * 60 * 1000;

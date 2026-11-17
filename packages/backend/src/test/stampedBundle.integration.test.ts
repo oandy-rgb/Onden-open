@@ -1,10 +1,11 @@
 // Change bundles between nodes that each hold their own database (batch 2b-1: spine/stampedBundle.ts reads one, spine/stampedImport.ts applyChangeBundle takes it). Nodes are
-// PGlite databases of this process (helpers/distSim/realNode.ts); the same exchange between PROCESSES and on a real Postgres is stampedBundleTwoProcess.integration.test.ts.
+// databases of this process (helpers/distSim/realNode.ts: PGlite databases, or databases of the real server of DATABASE_URL, helpers/distSim/postgresNodes.ts; the same test bodies run on both);
+// the same exchange between PROCESSES is stampedBundleTwoProcess.integration.test.ts.
 // What is proved here: after both sides wrote for a while without exchanging, bundles in both directions leave the two databases with the same rows, the same stamps (saw, meta) and the same
 // other heads; a bundle taken twice changes nothing; the order of delivery does not matter; a third node that only talks to the first ends the same (star); every refusal; the rules of the
 // merge on a database (a row made again after a delete; what the deleter had seen); the structure log of what came from another device; and what is derived from a row and is NOT brought
 // up to date (pinned, so a later batch that fixes it has a test to turn around).
-// SAFETY: PGlite databases made from the migrated template; only in a PGlite run.
+// SAFETY: databases made from the migrated template (PGlite, or new databases on a `_test` server); nothing shared is touched.
 import { keyBetween } from "@onden/markdown/contract";
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
@@ -19,7 +20,7 @@ import { NOT_AN_EDIT_FIELDS } from "../spine/stampedMerge/dbUnits.js";
 import { applyChangeBundle } from "../spine/stampedImport.js";
 import { applyJoinPage, startJoin, abandonJoin } from "../services/stampedJoin.js";
 
-const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "") && process.env.ONDEN_DB_DRIVER === "pglite";
+const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
 const noNew = { weights: { title: 0, body: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } } as const;
 
 type Cluster = { world: SourceWorld; a: Peer; b: Peer; c: Peer; nodes: RealNode[]; joined: Awaited<ReturnType<typeof capture>> };

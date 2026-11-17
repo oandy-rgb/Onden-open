@@ -176,6 +176,27 @@ const packagesNamed = (f, text) => {
   return [...named];
 };
 
+/**
+ * 有日期的紀錄：標題以日期開頭（`### 2026-11-16　…`）的那一節，到下一個同級或更高級的標題為止。它寫的是那一天看到的事
+ * （犯錯紀錄的證據、逐週的量測），之後檔案搬了、被取代了，紀錄不改寫——所以這些行不查程式碼引用（連結照查）。
+ * 回傳這些行號（從 1 起算）。
+ */
+export function datedEntryLines(text) {
+  const lines = blankFences(text).split("\n");
+  const dated = new Set();
+  let depth = 0; // 目前所在的有日期小節的標題層級；0＝不在裡面
+  lines.forEach((line, i) => {
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      if (depth && level <= depth) depth = 0;
+      if (!depth && /^\d{4}-\d{2}-\d{2}(?!\d)/.test(heading[2])) depth = level;
+    }
+    if (depth) dated.add(i + 1);
+  });
+  return dated;
+}
+
 /** 一份文件裡每個行內程式碼 { line, span, col }。 */
 function codeSpans(text) {
   const out = [];
@@ -435,7 +456,8 @@ export function checkDocs(root, { files = listFiles(root), baseline = {}, now = 
     add("numbers", f, checkNumbers(root, text));
     if (wantsCodeRefs(f, head)) {
       counts.codeRefDocuments++;
-      const found = checkCodeRefs(root, f, text, fileSet, { superseded, removed });
+      const dated = datedEntryLines(text);
+      const found = checkCodeRefs(root, f, text, fileSet, { superseded, removed }).filter((p) => !dated.has(p.line));
       if (f in exceptions) {
         if (!found.length) problems.exceptions.push({ f, line: 1, message: `已登記為例外但現在查得過 -> 從 ${BASELINE_FILE} 刪掉這一項` });
       } else add("codeRefs", f, found);

@@ -128,9 +128,12 @@ describe.skipIf(!isTestDb)("undoing a NODE_UPDATED writes the same columns an or
   it("order_key: the position comes back; an undo, unlike the reorder itself, moves updated_at", async () => {
     const id = await create({ title: "Column order" });
     const original = (await row(id)).order_key;
-    await patch(id, { order_key: "a7" });
+    // A key the note does not already have: which key a new note gets depends on how many root notes the workspace holds, so under a
+    // shuffled order it was sometimes "a7" itself, the reorder changed nothing, no event was written and the undo had nothing to undo.
+    const moved = original === "a7" ? "a8" : "a7";
+    await patch(id, { order_key: moved });
     const afterReorder = await row(id);
-    expect(afterReorder.order_key).toBe("a7");
+    expect(afterReorder.order_key).toBe(moved);
     await undo(id);
     const restored = await row(id);
     expect(restored.order_key).toBe(original);
@@ -140,7 +143,9 @@ describe.skipIf(!isTestDb)("undoing a NODE_UPDATED writes the same columns an or
   it("an ordinary reorder keeps updated_at (the reference the undo above differs from)", async () => {
     const id = await create({ title: "Column order control" });
     const first = await row(id);
-    await patch(id, { order_key: "a7" });
+    const moved = first.order_key === "a7" ? "a8" : "a7"; // a real reorder: see the test above
+    await patch(id, { order_key: moved });
+    expect((await row(id)).order_key).toBe(moved);
     expect((await row(id)).updated_at.getTime()).toBe(first.updated_at.getTime());
   });
 

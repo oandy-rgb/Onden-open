@@ -99,9 +99,12 @@ psql "$DATABASE_URL" -1 -f packages/backend/scripts/restoreFoldedBoards.sql
 
 ## 前端
 
-- `lib/whiteboardNote.ts`：`isWhiteboardNote`、`opensOnWhiteboard`。`canvasList`、`useViewOwner`、`useWorkspaceFocus`（預設分頁、
-  `decideCanvasView` 的 `ownsWhiteboard`）、`useGraphLayout`、`canvasWriter.create` 都改用它，不再看 `node_type`。
-- 預設分頁：沒有使用者選擇時，`opens_first` 的筆記開白板；選了「內容」會被記住（`rememberTab` 的預設分頁參數）。
+- `lib/whiteboardNote.ts`：`isWhiteboardNote`、`isRetiredBoardKind`、`ownsBoard`、`opensOnWhiteboardView`（讀白板分頁紀錄的 `opens_first`）。
+  `canvasList`、`useViewOwner`、`useWorkspaceFocus`（`decideCanvasView` 的 `ownsWhiteboard`）、`useGraphLayout`、`canvasWriter.create` 都用它，不再看 `node_type`。
+- 預設分頁只有一條規則：`lib/viewTabs.ts` 的 `defaultTabKey`（頁面、分頁列、並排右側都問它）。沒有使用者選擇時，`opens_first` 的白板分頁
+  （或舊的白板種類筆記，`retiredBoard`）開白板；否則開內建的「內容」；「內容」被移除時（2026-11-16 起可以，見
+  [decisions-ui.md](../agents/decisions-ui.md)）開第一個看得到的分頁。選了「內容」會被記住（`rememberTab` 的預設分頁參數）；
+  記住的是已被移除的「內容」時改開預設分頁。
 - 分頁列的白板分頁可像其他分頁一樣移除（只隱藏，白板保留）；伺服器建立的分頁名 `Canvas` 以使用者語言顯示。
 
 ## 白板自動樹：以這篇筆記為根展開子筆記

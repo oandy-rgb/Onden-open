@@ -59,11 +59,14 @@ describe("useLandingNote when its setting has nothing to open", () => {
     expect(openNote).toHaveBeenCalledWith("a");
   });
 
-  it("drops a selection that names no note and goes on with the launch", () => {
+  // A board's id is no note, and a note made elsewhere is not in a cached bootstrap yet.
+  it("keeps a selection whose id is not among the loaded notes (a board, a note not loaded yet)", async () => {
     const openNote = vi.fn(); const openDailyNote = vi.fn(async () => "today");
-    setAppState({ bootstrapped: true, membershipGated: false, selectedId: "gone", data: { ...noWorkspaceData, nodes: [note("a")] } as never } as never);
+    setAppState({ bootstrapped: true, membershipGated: false, selectedId: "board-or-new-note", data: { ...noWorkspaceData, nodes: [note("a")] } as never } as never);
     renderHook(() => useLandingNote({ initialLocation: loc, ui, openNote, openDailyNote }));
-    expect(openDailyNote).toHaveBeenCalledWith({ announce: false });
+    await act(async () => {});
+    expect(openDailyNote).not.toHaveBeenCalled();
+    expect(openNote).not.toHaveBeenCalled();
   });
 
   it("keeps a selection that exists", () => {

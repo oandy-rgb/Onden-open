@@ -32,4 +32,17 @@ describe("the three-host parity list is watched by the ratchet", () => {
     const reworded = { ...parsed.differences, [firstId!]: { ...parsed.differences[firstId!], reason: "改寫過的理由" } };
     expect(compareGroups(base, jsonGroups(FILE, JSON.stringify({ differences: reworded })))).toEqual([]);
   });
+
+  // The parity run was in no CI job and stayed broken for a week unnoticed (docs/agents/mistakes.md): a gate that the docs
+  // name must be a command some job runs, so removing the job (or renaming the script) fails here.
+  it("a CI job runs the parity and desktop gates the docs name", () => {
+    const root = join(import.meta.dirname, "../../../../..");
+    const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+    const scripts = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts;
+    for (const gate of ["parity", "desktop:check"]) {
+      expect(scripts[gate], `package.json has no script ${gate}`).toBeTruthy();
+      expect(ci, `no job in ci.yml runs npm run ${gate}`).toMatch(new RegExp(`npm run ${gate}( |$)`, "m"));
+    }
+    expect(ci).toContain("--database-url"); // the Node host on the job's real Postgres, not only PGlite
+  });
 });

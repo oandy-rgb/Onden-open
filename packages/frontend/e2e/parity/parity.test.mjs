@@ -64,3 +64,52 @@ test("宿主少跑了一步或多了一步都是差異", () => {
   results[1].normalized.push(entry("extra", {}));
   assert.equal(compareHosts(results, []).perHost.browser.unexpected[0].step, "extra");
 });
+
+// ── position fields (order_stamp, order_key, sort_order): compared as order, not as text ──────────────────────────
+const note = (id, key, stamp, parent = null) => ({ id, parent_id: parent, order_key: key, order_stamp: stamp });
+const stampAt = (ms, counter = 0) => `${String(ms).padStart(15, "0")}${String(counter).padStart(6, "0")}`;
+const norm = (...bodies) => normalizeLog(bodies.map((b, i) => entry(`s${i}`, b)), new Map());
+
+test("order_stamp: another clock reading with the same order is the same; another order, or a tie turned into an order, is a difference", () => {
+  const early = norm(note("a", "aA", stampAt(1000)), note("b", "aB", stampAt(2000)));
+  const later = norm(note("a", "aA", stampAt(9000)), note("b", "aB", stampAt(9500, 3)));
+  assert.deepEqual(early, later);
+  const swapped = norm(note("a", "aA", stampAt(9500)), note("b", "aB", stampAt(9000)));
+  assert.notDeepEqual(early, swapped);
+  const tied = norm(note("a", "aA", stampAt(1000)), note("b", "aB", stampAt(1000)));
+  const tiedLater = norm(note("a", "aA", stampAt(7000)), note("b", "aB", stampAt(7000)));
+  assert.deepEqual(tied, tiedLater);
+  assert.notDeepEqual(tied, early);
+});
+
+test("order_stamp: an empty stamp (a row nobody wrote since the migration) stays empty", () => {
+  assert.equal(norm(note("a", "aA", ""))[0].body.order_stamp, "");
+});
+
+test("order_key: a sibling only one host has shifts the text but not the order; a different order is a difference", () => {
+  const node = norm(note("a", "aA", ""), note("b", "aB", ""), note("c", "aC", ""));
+  const desktop = norm(note("a", "aA", ""), note("b", "aB", ""), note("c", "aD", "")); // aC is the host's own note, not observed
+  assert.deepEqual(node, desktop);
+  const reordered = norm(note("a", "aA", ""), note("b", "aC", ""), note("c", "aB", ""));
+  assert.notDeepEqual(node, reordered);
+});
+
+test("order_key: byte order, and each sibling group (parent_id) is ranked on its own", () => {
+  // "aZ" < "aa" in byte order; a locale would put them the other way round.
+  const bodies = [note("a", "aa", "", U1), note("b", "aZ", "", U1), note("c", "aa", "", U2)];
+  const out = norm(...bodies).map((e) => e.body.order_key);
+  assert.deepEqual(out, ["<key #1>", "<key #0>", "<key #0>"]);
+});
+
+test("sort_order in a backup: the offset made by siblings the script did not make is gone, a different order is not", () => {
+  const backup = (...ranks) => ({ entries: Object.fromEntries(ranks.map(([title, r]) => [title, { parent_id: null, sort_order: r }])) });
+  assert.deepEqual(norm(backup(["x", 0], ["y", 1])), norm(backup(["x", 2], ["y", 7])));
+  assert.notDeepEqual(norm(backup(["x", 0], ["y", 1])), norm(backup(["x", 7], ["y", 2])));
+});
+
+test("sort_order is a snapshot: two backups taken at different times are ranked each on its own", () => {
+  const backup = (...ranks) => ({ rows: ranks.map((r) => ({ parent_id: null, sort_order: r })) });
+  const a = normalizeLog([entry("first", backup(0, 1)), entry("second", backup(5, 9))], new Map());
+  const b = normalizeLog([entry("first", backup(3, 4)), entry("second", backup(0, 1))], new Map());
+  assert.deepEqual(a, b);
+});

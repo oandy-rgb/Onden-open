@@ -47,7 +47,7 @@
 
 | 層 | 在哪 | 跑什麼 |
 | --- | --- | --- |
-| 每個 PR | 雲端 | 相關測試、`npx tsc --noEmit`、`npm run lint`、守門（前端完整 vitest 內的 `*.guard.test.ts`、`npm run dup:check`、`npm run changes:check`）；後端 PGlite 完整套；瀏覽器版（`dist-browser`）冒煙 `e2e/browser-app/smoke.mjs`（`run-all.mjs` 跑完各引擎後接著跑 `handwritingTab.mjs`：筆記的「手寫」分頁——新增、畫、新增一頁、切回內容打字、重新整理、拿掉分頁再加回，筆畫都在；桌面淺色／深色與手機）；改 UI 時 `layout:audit`（`test/layout-audit` 合併後）；改到下表「桌面版與三宿主對照」所列路徑的 PR 加 `npm run desktop:check` 與 `npm run parity` |
+| 每個 PR | 雲端 | 相關測試、`npx tsc --noEmit`、`npm run lint`、守門（前端完整 vitest 內的 `*.guard.test.ts`、`npm run dup:check`、`npm run changes:check`）；後端 PGlite 完整套；瀏覽器版（`dist-browser`）冒煙 `e2e/browser-app/smoke.mjs`（`run-all.mjs` 跑完各引擎後接著跑 `handwritingTab.mjs`：筆記的「手寫」分頁——新增、畫、新增一頁、切回內容打字、重新整理、拿掉分頁再加回，筆畫都在；桌面淺色／深色與手機）；改 UI 時 `layout:audit`（`test/layout-audit` 合併後）；改到下表「桌面版與三宿主對照」所列路徑的 PR 加 `npm run desktop:check` 與 `npm run parity`（每個 PR 的 CI 只跑守門；這兩個在本機跑，或手動觸發 CI 的 `parity` 工作） |
 | 合併前（一批 PR 一次） | 筆電 | 只跑後端需要真 Postgres 的部分、`npm run build`、B 類全端 e2e（下表）、WebKit 冒煙 |
 | 每晚 | 雲端 | 完整前端 vitest、完整全端 e2e（`e2e:cloud-stack`）、屬性測試（`test:props:long`）、規模測試、`zz*` 探針 |
 
@@ -113,9 +113,10 @@ PGlite 跳過清單是「檔案：個數」且要**剛好相等**：跳過比清
 ### 桌面版與三宿主對照：`desktop:check`、`parity`
 
 同一個後端有三種跑法：伺服器（Node + 真 Postgres）、桌面版（Electron，後端是打包進去的 Node 22 跑 PGlite）、瀏覽器版（頁面 worker 裡的 PGlite）。
-桌面版曾在一天內壞兩次（stage 漏了 `@onden/contract`、上傳圖片時後端 SIGSEGV），都是手動打包才發現，所以它和三宿主對照都進 PR 的雲端流程。
+桌面版曾在一天內壞兩次（stage 漏了 `@onden/contract`、上傳圖片時後端 SIGSEGV），都是手動打包才發現。三宿主對照曾因 migration 200 在第 1 步就失敗、一週沒人發現（它不在任何 CI 工作裡）；
+現在兩者都在 CI 的手動工作 `parity`（`gh workflow run ci.yml --ref <分支>`；其他重工作同樣只在要求時跑）：先 `desktop:check`，再跑全 PGlite 的三宿主對照，最後把 Node 欄換成工作自己的真 Postgres 再跑一次（前一步失敗也會跑，一次看到兩個結果）。
 
-| 改到這些路徑的 PR | 雲端要跑 |
+| 改到這些路徑的 PR | 要跑（本機，或在 CI 手動觸發 `parity` 工作） |
 | --- | --- |
 | `packages/backend`、`packages/markdown`、`packages/contract`、`packages/site`、`packages/desktop`、根目錄 `package.json`／`package-lock.json` | `npm run desktop:check`、`npm run parity` |
 | `packages/frontend`（只動 UI、不動 API） | 既有的 `e2e/browser-app/smoke.mjs` 就夠（動到側欄／標籤列／檢視分頁或週看板的「按住後拖」（`lib/touchHold`）時加 `npm run e2e:touch-hold`：用 CDP 送真觸控序列，需先 `npm run build:browser`；動到簡報 `modules/slides/` 的版面、表格或匯出時加 `npm run e2e:slides`：真瀏覽器量表格有沒有超出投影片、PPTX 位置是否一致，需先 `npm run build:browser`）；改到 `src/browserApp`、`dist-browser` 的建置時加 `npm run parity -- --hosts browser`；改手寫頁的「引用」、區域嵌入或 `inkRegion` 時加 `npm run e2e:quote-region`（packages/frontend，先 `npm run build:browser`；`run-all.mjs` 也會跑）|
@@ -142,12 +143,14 @@ PGlite 跳過清單是「檔案：個數」且要**剛好相等**：跳過比清
 | `browser` | Chromium 開 `dist-browser`（靜態伺服器 `e2e/browser-app/serve.mjs`），請求在頁面內 `fetch`；圖片與 zip 走同源 `/__parity/in`、`/__parity/out`，不經 `page.evaluate` | `npm run build:browser` |
 
 每一步的回應先**正規化**（`normalize.mjs`：各宿主產生的 id 換成劇本裡的名字、時間戳與計數器拿掉、標了 `unordered` 的清單排序），再與 Node 那一欄逐欄比對（`compare.mjs`）。
+位置欄位（`order_stamp`、`order_key`、備份裡的 `sort_order`）換成**名次**而不是拿掉：`order_stamp` 是寫入當下的時鐘讀數、每次不同；`order_key` 與 `sort_order` 取決於同一層還有哪些筆記，而宿主會多出劇本沒建的兄弟（桌面版視窗自己開出今天的日記、瀏覽器版的範例筆記）。
+名次保留「誰在誰前面、誰與誰同位」，丟掉文字本身；`order_key` 在同一個 `parent_id` 內、整份紀錄排名，`order_stamp` 整份紀錄排一次，`sort_order` 是一份備份當下的名次所以每一步各排各的（見 `normalize.mjs` 開頭的註解與 `parity.test.mjs`）。備份還原後的兄弟順序另在劇本裡比對（`siblingOrder`：還原前、還原後的標題順序）。
 bootstrap、議程、備份 zip 這類含整個工作區的回應，只比劇本自己建立的東西（`projections.mjs`）；預設資料（內建標籤、瀏覽器版的範例筆記）不在比對範圍。
 **已知差異**在 `scripts/parity-known-differences-baseline.json`：每條寫明哪一步、哪個宿主、哪個欄位、為什麼是設計（指向文件段落），`bug: true` 的是還沒修的錯誤、不是設計。
 不在清單上的差異 → 失敗；清單上的差異消失了 → 印「可以移除」。檔名帶 `baseline`，所以 `npm run ratchet:check` 與 `ratchet.guard.test.ts` 會擋「新增一條」（只准減少；真的要新增要 `ratchet-override`）。
 結尾逐宿主印通過步數／失敗差異／已知差異。參數：`--hosts node,desktop,browser`（`node` 永遠會跑）、`--verbose`（逐步印回應）、`--desktop-app <檔>`、`--keep`。對照測試自己的測試：`npm run parity:test`。
 
-- 雲端（每個 PR）：`npm run parity`（Node 欄是 PGlite）。三個宿主共用同一個資料庫引擎，所以這一輪抓的是**宿主**差異（打包、橋接、環境），不是 PGlite vs Postgres 的差異。
+- CI 手動工作 `parity`：第一步 `npm run parity`（Node 欄是 PGlite）。三個宿主共用同一個資料庫引擎，所以這一輪抓的是**宿主**差異（打包、橋接、環境），不是 PGlite vs Postgres 的差異；第二步用 `--database-url` 把 Node 欄換成真 Postgres（見下一條）。
 - 筆電（合併前）：`DATABASE_URL=postgres://…/onden_cloud_test npm run parity`。Node 欄換成真 Postgres（pgroonga），搜尋排序與分詞的差異會在這裡出現，**第一次跑要把新差異判成設計（加進清單）或錯誤**。
 - 不在對照範圍（沒有 HTTP 入口可以觀察）：瀏覽器版不跑的週期工作（RSS 抓取、推播提醒迴圈、外部日曆抓取、事件修剪）、git 筆記備份（`content/` 的 git 倉庫）、網站發佈。這幾項的依據是 [browser-app.md §7](../architecture/browser-app.md)，不是測試。
 - 新增一步時：劇本只用 `api.call(步驟名, 方法, 路徑, 選項)`；回傳含 id 就用 `api.name("名字", id)` 登記；步驟名是已知差異清單的鍵，不要隨便改（同名第二次出現會自動變成「名 #2」）。

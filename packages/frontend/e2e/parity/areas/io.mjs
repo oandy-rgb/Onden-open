@@ -1,6 +1,6 @@
 // 區 10、11：匯入與匯出（Markdown、圖片、[[連結]]、zip）、備份下載與還原。
 import { unzipSync, strFromU8 } from "fflate";
-import { PNG_1X1, makeNote, nameIf, scrubText, scrubPath } from "./util.mjs";
+import { PNG_1X1, makeNote, nameIf, scrubText, scrubPath, siblingOrder } from "./util.mjs";
 
 const unzipView = (api, bytes, pick) => {
   let files;
@@ -124,6 +124,7 @@ export async function backupArea(api, ctx) {
       const byId = new Map(nodes.map((n) => [n.id, n.title]));
       return {
         notes: nodes.map((n) => [n.title, n.node_type, n.markdown?.replace(/\/api\/media\/[^\s)]+/g, "/api/media/<media>"), n.deleted_at != null]).sort(),
+        order: siblingOrder(nodes),
         attrs: (b.attributes ?? []).filter((a) => byId.has(a.node_id) && !a.key.startsWith("_")).map((a) => [byId.get(a.node_id), a.key, a.value]).sort(),
         ink: (b.attributes ?? []).filter((a) => byId.has(a.node_id) && a.key === "ink_data").map((a) => [byId.get(a.node_id), a.value.length > 10]).sort(),
         tags: (b.nodes ?? []).filter((n) => n.title === "備份標籤").map((n) => [n.node_type, (n.tag_schema?.fields ?? []).map((f) => f.name)]),
@@ -170,6 +171,7 @@ export async function backupArea(api, ctx) {
       const byId = new Map(nodes.map((n) => [n.id, n.title]));
       return {
         notes: nodes.map((n) => [n.title, n.node_type, n.markdown?.replace(/\/api\/media\/[^\s)]+/g, "/api/media/<media>"), n.deleted_at != null]).sort(),
+        order: siblingOrder(nodes),
         attrs: (r.body?.attributes ?? []).filter((a) => byId.has(a.node_id) && !a.key.startsWith("_")).map((a) => [byId.get(a.node_id), a.key, a.value]).sort(),
         ink: (r.body?.attributes ?? []).filter((a) => byId.has(a.node_id) && a.key === "ink_data").map((a) => [byId.get(a.node_id), a.value.length > 10]).sort(),
         edges: (r.body?.edges ?? []).filter((e) => byId.has(e.source_node_id)).map((e) => [byId.get(e.source_node_id), byId.get(e.target_node_id) ?? "(其他)", e.edge_type]).sort(),

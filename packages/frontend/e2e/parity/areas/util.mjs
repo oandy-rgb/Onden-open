@@ -38,3 +38,16 @@ export const scrubText = (text) => String(text)
   .replace(/("slug": ?"\d{4}-\d{2}-\d{2})-\d+"/g, '$1"')
   .replace(/ink-[0-9a-f-]+-(\d+\.svg)/g, "ink-{id}-$1");
 export const scrubPath = (path) => scrubText(path).replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, "{uuid}");
+
+/** Titles of `nodes` in the order a person sees them: per sibling group (space, parent), by key, then the stamp of the write that
+ *  set it, then title. The same rule as the app's (services/orderKeys.ts siblingOrderSql, byte order); the id is left out as
+ *  it differs per host. Used where the script checks that an operation (restore) keeps the order of siblings. */
+export function siblingOrder(nodes) {
+  const text = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const groups = new Map();
+  for (const n of nodes) {
+    const g = `${n.space_id}|${n.parent_id ?? ""}`;
+    groups.set(g, [...(groups.get(g) ?? []), n]);
+  }
+  return [...groups.values()].map((g) => g.sort((a, b) => text(a.order_key, b.order_key) || text(a.order_stamp ?? "", b.order_stamp ?? "") || text(a.title, b.title)).map((n) => n.title)).sort((a, b) => text(a[0], b[0]));
+}

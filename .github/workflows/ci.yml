@@ -257,6 +257,85 @@ jobs:
         working-directory: packages/frontend
         run: npm run build
 
+  # The three hosts of one backend (server, packaged desktop app, browser version) run the same script and are compared
+  # step by step (packages/frontend/e2e/parity, docs/agents/testing.md). It was in no job, so it stayed broken for a week
+  # (script failed at step 1 from migration 200 until #1811) and nobody saw it. Manual only, like the other heavy jobs.
+  # Step 1 is the all-PGlite run (the three hosts share one database engine, so it catches host differences: packaging,
+  # bridge, environment). Step 2 puts the Node host on this job's real Postgres (pgroonga, the image compose uses) and
+  # compares the other two against it, so it also catches PGlite-vs-Postgres differences; it runs even when step 1 failed,
+  # so one run shows both. desktop:check comes first because it builds the packaged app the desktop host opens.
+  parity:
+    name: Three-host parity (desktop · browser · Node on PGlite and on real Postgres)
+    # Pinned: this job installs Chromium with the pinned Playwright (e2e/package.json), which refuses an Ubuntu newer than it
+    # knows ("Playwright does not support chromium on ubuntu26.04-x64", first hosted run 2026-11-17). Move it with Playwright.
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # What the Node host runs (packages/backend/dist), and the static folder the browser host opens.
+      - name: Build packages and the browser version
+        run: |
+          npm run build -w packages/markdown
+          npm run build -w packages/contract
+          npm run build -w packages/site
+          npm run build -w packages/backend
+          npm run build:browser
+
+      # Chromium for the browser host. The desktop host drives the Electron that desktop:install downloads.
+      - name: Install Chromium
+        working-directory: packages/frontend/e2e
+        run: npm ci && npx playwright install --with-deps chromium
+
+      # Ubuntu 24.04 stops unprivileged user namespaces, which Chromium's sandbox needs; the Electron app runs with its real
+      # sandbox here (the host adds --no-sandbox only for root). Not yet seen running on a hosted runner: if the desktop step
+      # fails to launch, look here first.
+      - name: Allow the Electron sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # install + pack + desktop:test + smoke on the packaged app (scripts/desktopCheck.mjs); leaves release/linux-unpacked.
+      - name: Desktop app check (builds the packaged app)
+        run: npm run desktop:check
+
+      - name: Parity — all PGlite
+        run: xvfb-run -a npm run parity -- --hosts node,desktop,browser
+
+      - name: Build Postgres image
+        if: always()
+        run: docker build -t onden-postgres ./docker/postgres
+
+      - name: Start Postgres
+        if: always()
+        run: |
+          docker run -d --name onden-pg -p 5432:5432 \
+            -e POSTGRES_DB=onden -e POSTGRES_USER=onden -e POSTGRES_PASSWORD=onden \
+            onden-postgres postgres -c shared_preload_libraries='pg_stat_statements'
+          for i in $(seq 1 60); do
+            # TCP on purpose, see the backend-postgres job: the init-time server answers on the socket only.
+            docker exec onden-pg pg_isready -h 127.0.0.1 -U onden -d onden >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec onden-pg psql -U onden -d onden -c "CREATE DATABASE onden_test;"
+
+      # The URL goes by flag, not by env: the desktop host passes its environment on to the packaged app, which must keep PGlite.
+      # The Node host makes a fresh database on this server for the run and drops it after.
+      - name: Parity — Node on real Postgres
+        if: always()
+        run: xvfb-run -a npm run parity -- --hosts node,desktop,browser --database-url postgres://onden:onden@localhost:5432/onden_test
+
+      - name: Postgres logs (on failure)
+        if: failure()
+        run: docker logs onden-pg || true
+
   # Critical-path e2e on every run: the @critical subset (~24 tests — auth gate,
   # capture→task→daily loop, governance/approval, publish/site basics, smoke,
   # offline sync drain). Same self-contained run.sh stack as the full suite;

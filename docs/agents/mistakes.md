@@ -251,6 +251,14 @@
 - **機制**：進行中〔目標第 1 層〕：`docs/agents/appearance-rules.md` 要列出**每一種**影響外觀的數值並逐項標「有規則／沒有規則」；`packages/frontend/e2e/style-census/` 對每個畫面量實際算出來的值並出總覽圖；新種類用與 `fe-css-*` 相同的只減不增基準（分支 `test/style-census`，尚未合併）。回報這類清理時，沒涵蓋的種類寫在數字前面。
 - **還沒擋住的**：上面的工具與規則都還沒進 main；四種數值目前沒有任何檢查。
 
+### 2026-11-17　三宿主對照一週在第 1 步就失敗、沒人發現（文件說會跑，沒有任何工作在跑）
+- **發生了什麼**：`npm run parity` 從手足排序鍵進來（PR #1595、migration 200）那天起在第 1 步失敗，直到 #1811 才修好。修好後第一次真的跑完，291 項差異全在三個欄位（`order_stamp`、`order_key`、備份裡的 `sort_order`）——這幾個欄位從來沒被比對過。`docs/agents/testing.md` 寫「三宿主對照都進 PR 的雲端流程」，實際上 `.github/workflows/ci.yml` 沒有任何一個工作跑它（也沒有跑 `desktop:check`）。
+- **證據**：#1811 的跑法回報（每個宿主跑完 499 步、`grep "^  ✗"` 扣掉三個欄位後 0 行）；本批在 main（21617ca）重現同樣的 291 項（Node 對桌面版 158、對瀏覽器版 133）；`grep -n "parity\|desktop:check" .github/workflows/ci.yml` 在本批之前沒有輸出。
+- **發現者**：另一個 PR 的作者（#1801，在 #1811 的留言回報跑完的結果）。
+- **為什麼沒擋到**：文件寫的「會跑」沒有任何東西核對；檢查只存在於寫文件的人腦中。
+- **類別**：文件過時（文件宣稱的檢查不存在）；邊界沒走到。
+- **機制**：〔第 1 層〕`parityList.guard.test.ts` 多一條：`package.json` 的 `parity`、`desktop:check` 必須是 `ci.yml` 某個工作會跑的指令，且有 `--database-url`（真 Postgres 那一欄）；刪掉工作或改名腳本，守門就失敗。CI 工作 `parity` 是手動觸發（與其他重工作一致，沒有人手動觸發它就不會跑）。
+- **還沒擋住的**：（1）工作是手動的：沒人按就沒人知道它壞了；每個 PR 的 CI 只有守門。（2）工作本身還沒在託管的 runner 上跑過（桌面版的沙箱設定、真 Postgres 那一欄），第一次跑的結果要看。
 ### 2026-11-17　工作階段的請求本文先整個讀進記憶體才計量（邊界沒走到；審查放過缺口）
 - **發生了什麼**：#1800 的位元組上限在 `app.ts` 用 `await c.req.arrayBuffer()` 讀完整個本文才計；持有效憑證的不可信電腦可以先讓伺服器吃下最多 1 GiB 的本文，上限才說話。第 1 輪我把「算實際讀到的」當成對的做法回報了，沒有問「讀到哪裡停」。
 - **證據**：`git show 3a812daf6:packages/backend/src/app.ts` 的 `chargeTemporarySessionBytes(…, (await c.req.arrayBuffer()).byteLength)`；擁有者在第 3 輪讀 diff 時發現。

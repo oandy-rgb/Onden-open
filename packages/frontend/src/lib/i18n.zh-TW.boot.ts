@@ -175,6 +175,8 @@ export const ZH_TW_BOOT: Record<string, string> = {
 
   // ── Overview empty state ──
   "No notes yet": "還沒有筆記",
+  "No note is open": "沒有開啟的筆記",
+  "Pick one from the list, or start a new one.": "從左邊的列表選一則，或建立新的。",
   // ── Canvas card colours ──
   "Red": "紅",
   "Orange": "橘",

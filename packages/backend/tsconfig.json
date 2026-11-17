@@ -11,7 +11,7 @@
     // @onden/markdown from source for type-checking and `tsx` (dev); the
     // compiled import still names the package, which the production image
     // resolves to its built dist/ (docker/Dockerfile).
-    "paths": { "@onden/markdown": ["../markdown/src/index.ts"], "@onden/markdown/ink": ["../markdown/src/ink.ts"], "@onden/markdown/page-text": ["../markdown/src/pageText.ts"], "@onden/markdown/page-images": ["../markdown/src/pageImages.ts"], "@onden/markdown/full": ["../markdown/src/full.ts"], "@onden/markdown/block-id": ["../markdown/src/blockId.ts"], "@onden/markdown/contract": ["../markdown/src/sharedContract.ts"], "@onden/site": ["../site/src/index.ts"], "@onden/contract": ["../contract/src/index.ts"] }
+    "paths": { "@onden/markdown": ["../markdown/src/index.ts"], "@onden/markdown/ink": ["../markdown/src/ink.ts"], "@onden/markdown/note-pages": ["../markdown/src/notePages.ts"], "@onden/markdown/page-text": ["../markdown/src/pageText.ts"], "@onden/markdown/page-images": ["../markdown/src/pageImages.ts"], "@onden/markdown/full": ["../markdown/src/full.ts"], "@onden/markdown/block-id": ["../markdown/src/blockId.ts"], "@onden/markdown/contract": ["../markdown/src/sharedContract.ts"], "@onden/site": ["../site/src/index.ts"], "@onden/contract": ["../contract/src/index.ts"] }
   },
   "include": ["src/**/*.ts"]
 }

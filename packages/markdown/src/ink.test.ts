@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { currentUnits, decodeInk, encodeInk, INK_KNOWN_FEATURES, legacyFingerprint, inkPageOrder, withPageAppended, withPageDoc, noteDoc, notePages, pdfPageOfKey, pdfPageRecord, inkUnknownRequirements, isInkReadOnly, mergeInk, mergeIntervals, revertInkConflicts, type InkDocument, type InkEnvelope, type InkStroke } from "./ink.js";
+import { currentUnits, decodeInk, encodeInk, INK_KNOWN_FEATURES, legacyFingerprint, inkPageOrder, withPageAppended, withPageDoc, noteDoc, notePages, blankPageRecord, pdfPageOfKey, pdfPageRecord, inkUnknownRequirements, isInkReadOnly, mergeInk, mergeIntervals, revertInkConflicts, type InkDocument, type InkEnvelope, type InkStroke } from "./ink.js";
 
 // Fixtures in the shapes the app stores (frontend test/ink.test.ts,
 // overviewEditorPdfInk.test.tsx, lib/pdf/pdfAdapter): pressure and plain
@@ -377,8 +377,11 @@ describe("ink codec — forward compatibility", () => {
 });
 
 describe("ink codec — features / requires (read-only rule)", () => {
-  it("writes none today: this version knows every feature it writes", () => {
-    expect(INK_KNOWN_FEATURES).toEqual([]);
+  it("writes one today (the carrier first page of a notebook whose pages are listed in note_pages): this version knows it, one from before does not", () => {
+    expect(INK_KNOWN_FEATURES).toEqual(["note-pages"]);
+    const carrier = noteDoc({ version: 1, pages: { u: blankPageRecord("u") }, carrier: true })!;
+    expect(carrier.requires).toEqual(["note-pages"]);
+    expect(isInkReadOnly(carrier)).toBe(false);
     expect(isInkReadOnly(page([S1]))).toBe(false);
   });
   it("features a reader does not know are fine unless the writer REQUIRES them", () => {

@@ -24,6 +24,7 @@ import { enqueueEffect, requireString, type OutboxEffect } from "../../services/
 import { embedNode, refreshSuggestedLinks } from "../../services/embeddings.js";
 import { getEmbedder } from "../../services/embedder.js";
 import { readableNodeIdSet } from "../../services/readPolicy.js";
+import { pdfTextOf } from "../../services/pdfText.js";
 import { workspaceHasModule } from "../../services/workspaceModules.js";
 import { notATaskNodeSql } from "../../services/tasksStore.js";
 import { NOT_SYSTEM_NODE_SQL } from "../../spine/reservedNodes.js";
@@ -40,6 +41,12 @@ const BACKFILL_BATCH = 20;
 const embeddable = () => sql<boolean>`${sql.raw(liveNodeSql("n"))} AND n.node_type = 'content'
   AND ${sql.raw(NOT_SYSTEM_NODE_SQL("n"))} AND ${sql.raw(notATaskNodeSql("n"))}
   AND (n.title <> '' OR n.markdown <> '')`;
+
+/** What a note is embedded as: its title and body (`text`), then the text of its PDF pages when it has any. */
+export async function withPdfText(workspaceId: string, nodeId: string, text: string): Promise<string> {
+  const pdf = await pdfTextOf(workspaceId, nodeId);
+  return pdf === "" ? text : `${text}\n\n${pdf}`;
+}
 
 const key = (workspaceId: string) => `embed_backfill:${workspaceId}`;
 
@@ -116,7 +123,7 @@ export const embedBackfillEffect: OutboxEffect<BackfillPayload> = {
       enqueueEffect({ workspaceId: p.workspaceId, kind: "embed_backfill", dedupKey: key(p.workspaceId), payload: { workspaceId: p.workspaceId, phase, after } });
     if (p.phase === "embed") {
       const batch = await nextToEmbed(p.workspaceId);
-      for (const note of batch) await embedNode(p.workspaceId, note.id, `${note.title}\n\n${note.markdown}`);
+      for (const note of batch) await embedNode(p.workspaceId, note.id, await withPdfText(p.workspaceId, note.id, `${note.title}\n\n${note.markdown}`));
       // A full batch may leave more; a short one means every note has its embedding, so the suggestions come next
       // (each note's nearest notes are only complete once all of them are embedded).
       await next(batch.length === BACKFILL_BATCH ? "embed" : "link", null);

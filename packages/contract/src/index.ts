@@ -6,6 +6,7 @@ export type * from "./backup.js";
 export type * from "./blocks.js";
 export type * from "./history.js";
 export type * from "./importers.js";
+export type * from "./notePages.js";
 export type * from "./paging.js";
 export type * from "./publish.js";
 export type * from "./reviewCards.js";

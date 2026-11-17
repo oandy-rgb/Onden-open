@@ -50,6 +50,9 @@ export interface InkPages {
   /** Page keys top to bottom. Absent (every drawing before notebooks had
    *  several pages), or missing a key: see inkPageOrder. */
   order?: string[];
+  /** The `page` of these pages is only a carrier (a notebook whose pages are described by `note_pages`, notePages.ts, has no
+   *  first page of its own; `page` is stored empty so an older app can still open the value) and is not one of the pages. */
+  carrier?: true;
 }
 
 /** A page's width in units: the one every host draws and stores. */
@@ -60,10 +63,11 @@ export const INK_NOTE_MIN_HEIGHT = 1400;
 
 export const emptyInkPages = (): InkPages => ({ version: 1, pages: {} });
 
-/** The page of a PDF: 1000 units wide, `ratio` = page height / page width. */
-export function pdfPageRecord(page: number, doc: InkDocument, ratio: number): InkPageRecord {
+/** The page of a PDF: 1000 units wide, `ratio` = page height / page width. `key`: the page's key when it is not `pdf:<page>`
+ *  (a page of a note's page list, notePages.ts, is `<prefix>:<page>`). */
+export function pdfPageRecord(page: number, doc: InkDocument, ratio: number, key = pdfPageKey(page)): InkPageRecord {
   return {
-    key: pdfPageKey(page),
+    key,
     background: { kind: "pdf", page },
     size: { width: INK_PAGE_UNITS, height: INK_PAGE_UNITS * ratio },
     doc,
@@ -78,9 +82,10 @@ export function pdfPageOfKey(key: string): number | null {
 
 /** The keys of `pages` top to bottom: those `order` names first, in its order,
  *  then the rest — `page`, then PDF pages by number, then any other key in
- *  stored order. A key `order` names that has no page is skipped. */
+ *  stored order. A key `order` names that has no page is skipped.
+ *  `page` of a notebook marked `carrier` is not a page: it is left out. */
 export function inkPageOrder(pages: InkPages): string[] {
-  const keys = Object.keys(pages.pages);
+  const keys = Object.keys(pages.pages).filter((key) => key !== INK_PAGE_KEY || !pages.carrier);
   const named = (pages.order ?? []).filter((key, i, all) => key in pages.pages && all.indexOf(key) === i);
   const rank = (key: string) => (key === INK_PAGE_KEY ? -1 : pdfPageOfKey(key) ?? Number.MAX_SAFE_INTEGER);
   const rest = keys.filter((key) => !named.includes(key)).map((key, i) => ({ key, i }))
@@ -134,22 +139,32 @@ export function notePages(doc: InkDocument | null | undefined): InkPages {
     },
   };
   if (morePages?.order) pages.order = morePages.order;
+  if (morePages?.carrier) pages.carrier = true;
   return pages;
 }
 
 /** The drawing a handwriting note stores: its `page`, with every other page in
- *  `morePages` (null when it has no `page`). */
+ *  `morePages` (null when it has no page at all). Pages but no `page` (a notebook whose first page is a PDF's): an empty
+ *  carrier `page` is stored and `morePages` is marked `carrier`, which is what keeps it from being shown. */
 export function noteDoc(pages: InkPages): InkDocument | null {
-  const first = pages.pages[INK_PAGE_KEY]?.doc;
+  const rest = Object.fromEntries(Object.entries(pages.pages).filter(([key]) => key !== INK_PAGE_KEY));
+  const carrier = !pages.pages[INK_PAGE_KEY] && (pages.carrier === true || Object.keys(rest).length > 0);
+  const first = pages.pages[INK_PAGE_KEY]?.doc ?? (carrier ? blankPageRecord(INK_PAGE_KEY).doc : null);
   if (!first) return null;
   const doc: InkDocument = { ...first };
   delete doc.morePages;
-  const rest = Object.fromEntries(Object.entries(pages.pages).filter(([key]) => key !== INK_PAGE_KEY));
-  if (Object.keys(rest).length === 0 && !pages.order) return doc;
+  // An app from before this format would show the empty carrier as a page and, saving it, drop the `carrier` mark: it must open
+  // such a drawing read-only (the `requires` rule of ink.ts), so a notebook is never saved by one that cannot keep it.
+  if (carrier) doc.requires = [...new Set([...(doc.requires ?? []), CARRIER_FEATURE])];
+  if (Object.keys(rest).length === 0 && !pages.order && !carrier) return doc;
   const more: InkPages = { version: 1, pages: rest };
-  if (pages.order) more.order = pages.order;
+  if (pages.order) more.order = pages.order.filter((key) => !carrier || key !== INK_PAGE_KEY);
+  if (carrier) more.carrier = true;
   return { ...doc, morePages: more };
 }
+
+/** The `requires` name of a drawing whose first page is a carrier (known to INK_KNOWN_FEATURES of this version on). */
+const CARRIER_FEATURE = "note-pages";
 
 // ── Does `units` still describe the older fields? ──────────────────────────
 // An older app that edits a PDF note changes `pages` / `annotations` and keeps

@@ -33,9 +33,9 @@ export default defineConfig({
   base: "./",
   // The same aliases as astro.config.mjs: the packages are read from source. Subpath entries first (matched by prefix).
   resolve: { alias: [
-    ...["slug", "ink", "page-text", "page-images", "cite", "snippet", "media-enhance", "steps-enhance", "block-id", "task-parse", "contract"].map((sub) => ({
+    ...["slug", "ink", "page-text", "page-images", "note-pages", "cite", "snippet", "media-enhance", "steps-enhance", "block-id", "task-parse", "contract"].map((sub) => ({
       find: `@onden/markdown/${sub}`,
-      replacement: fileURLToPath(new URL(`../markdown/src/${{ "page-text": "pageText", "page-images": "pageImages", "media-enhance": "mediaEnhance", "steps-enhance": "stepsEnhance", "block-id": "blockId", "task-parse": "taskParse", contract: "sharedContract" }[sub] ?? sub}.ts`, import.meta.url)),
+      replacement: fileURLToPath(new URL(`../markdown/src/${{ "page-text": "pageText", "page-images": "pageImages", "note-pages": "notePages", "media-enhance": "mediaEnhance", "steps-enhance": "stepsEnhance", "block-id": "blockId", "task-parse": "taskParse", contract: "sharedContract" }[sub] ?? sub}.ts`, import.meta.url)),
     })),
     { find: "@onden/markdown", replacement: fileURLToPath(new URL("../markdown/src/index.ts", import.meta.url)) },
     { find: /^@onden\/site$/, replacement: fileURLToPath(new URL("../site/src/index.ts", import.meta.url)) },

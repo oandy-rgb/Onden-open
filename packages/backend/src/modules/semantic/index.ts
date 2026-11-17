@@ -1,9 +1,11 @@
 import type { ModuleDefinition } from "../types.js";
+import { PDF_TEXT_ATTR } from "@onden/markdown/contract";
+import { db } from "../../dbKysely.js";
 import { log } from "../../logger.js";
 import { enqueueEffect, requireString, type OutboxEffect } from "../../services/outbox.js";
 import { embedNode, semanticSearchNodes } from "../../services/embeddings.js";
 import { workspaceHasModule } from "../../services/workspaceModules.js";
-import { SEMANTIC_MODULE, embedBackfillEffect, refreshOwnerSuggestions, requestBackfill, resumeIndexing } from "./indexing.js";
+import { SEMANTIC_MODULE, embedBackfillEffect, withPdfText, refreshOwnerSuggestions, requestBackfill, resumeIndexing } from "./indexing.js";
 import { semanticSearch } from "./semanticSearchTool.js";
 import { suggestLinks } from "./suggestLinksTool.js";
 import type { AgentTool } from "../../services/agentTools/index.js";
@@ -28,7 +30,7 @@ const embedEffect: OutboxEffect<{ workspaceId: string; nodeId: string; text: str
   // without any client asking (indexing.ts).
   perform: async (p) => {
     if (!(await workspaceHasModule(p.workspaceId, SEMANTIC_MODULE))) return;
-    await embedNode(p.workspaceId, p.nodeId, p.text);
+    await embedNode(p.workspaceId, p.nodeId, await withPdfText(p.workspaceId, p.nodeId, p.text));
     await refreshOwnerSuggestions(p.workspaceId, p.nodeId);
   },
 };
@@ -48,6 +50,13 @@ export const semanticModule: ModuleDefinition = {
     start.unref?.();
   },
   nodeHooks: {
+    // A PDF's text is part of what the note says (indexing.ts withPdfText): the intent is filed again when it changes.
+    attributeCommitted: async ({ workspaceId, nodeId, key }) => {
+      if (key !== PDF_TEXT_ATTR) return;
+      const note = await db.selectFrom("content_nodes").select(["title", "markdown"]).where("workspace_id", "=", workspaceId).where("id", "=", nodeId).executeTakeFirst();
+      if (!note) return;
+      await enqueueEffect({ workspaceId, kind: "embed", dedupKey: `embed:${nodeId}`, payload: { nodeId, workspaceId, text: `${note.title}\n\n${note.markdown ?? ""}` } });
+    },
     // Rides the outbox in the write transaction: one pending intent per node,
     // collapsed by the dedup key, so a burst of edits embeds once.
     contentCommitted: async ({ workspaceId, nodeId, text, triggeredByEventId }) => {

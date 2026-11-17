@@ -25,6 +25,12 @@ for (const engine of ["chromium", "mobile-chrome"]) {
   const run = spawnSync(process.execPath, [quote, engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
   summary.push([`quote ${engine}`, run.status === 0 ? "passed" : "FAILED"]);
 }
+// A note whose pages are listed in note_pages (blank pages and the pages of a PDF): shown in order, drawn on, kept across a reload; the notes made before look as they did.
+const pages = join(dirname(smoke), "notePages.mjs");
+for (const engine of ["chromium", "mobile-chrome"]) {
+  const run = spawnSync(process.execPath, [pages, engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
+  summary.push([`note pages ${engine}`, run.status === 0 ? "passed" : "FAILED"]);
+}
 // Text typed into an attribute box and a table cell survives the page being hidden and closed without a blur
 // (Chromium, and Chromium with a Pixel 5 window, which is an emulation, not a phone).
 const leave = join(dirname(smoke), "unsavedTextOnLeave.mjs");

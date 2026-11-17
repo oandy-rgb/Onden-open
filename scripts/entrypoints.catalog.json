@@ -5075,6 +5075,35 @@
       "why": "快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。"
     },
     {
+      "id": "note-pages",
+      "need": "要知道一則筆記有哪些頁（空白頁、PDF 檔的幾頁）、頁的鍵、加一頁、合併兩台裝置的加頁",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/markdown/src/notePages.ts",
+          "exports": [
+            "decodeNotePages",
+            "notePagesOf",
+            "expandNotePages",
+            "insertBlankPage",
+            "mintPageId",
+            "mergeNotePages"
+          ]
+        },
+        {
+          "file": "packages/frontend/src/modules/handwriting/notePagesBook.ts",
+          "exports": [
+            "buildNoteBook",
+            "pagesToStore"
+          ]
+        }
+      ],
+      "use": "import { notePagesOf, expandNotePages } from \"@onden/markdown/note-pages\";\nexport const pageKeys = (stored: string | null, pdfUrl: string | null) => {\n  const pages = notePagesOf({ note_pages: stored, pdf_url: pdfUrl });\n  return pages ? expandNotePages(pages, () => 3).entries.map((entry) => entry.key) : [];\n};",
+      "replaces": "自己解析 `note_pages` 的 JSON、自己用 `pdf_url` 數頁、自己用 randomUUID 產生頁 key",
+      "rules": [],
+      "why": "頁清單（`note_pages`）只存「有哪些頁、什麼順序」，筆跡在 `note_ink`、PDF 文字在 `pdf_text`；頁 key 只由 `mintPageId` 產生且不重複使用，切段的後半拿新 id 但保留 key 前綴。舊的 PDF 筆記用 `pagesFromPdfUrl` 讀成同一種清單（key 仍是 `pdf:<n>`）。伺服器與前端的合併（`mergeNotePages`）是同一個純函式。"
+    },
+    {
       "id": "be-fresh-proof",
       "need": "要求「剛剛再確認過是本人」才給整個工作區或做不可逆的事（再輸入一次密碼）",
       "area": "後端",

@@ -19,7 +19,7 @@ function isVisibleNote(data: { nodes: ContentNode[] }, id: string): boolean {
 /** Where the launch ends when its setting has nothing to open (no home note, today's note could not be
  *  started, daily notes off): the note left open last time, else the note changed most recently. With
  *  notes in the workspace the launch never ends on an empty editor. */
-export function fallbackLandingNote(data: { nodes: ContentNode[] }, lastNodeId: string | null): string | null {
+function fallbackLandingNote(data: { nodes: ContentNode[] }, lastNodeId: string | null): string | null {
   const openable = (node: ContentNode | undefined): node is ContentNode => !!node && !node.hidden && !isTag(node);
   const last = nodeOf(data, lastNodeId);
   if (openable(last)) return last.id;
@@ -75,7 +75,7 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
     // the landing is additive, a deep link always wins. A selection that names nothing in the
     // workspace (the note was deleted, or the link is from another account) is not one: it is
     // dropped and the launch goes on, so the editor does not stay empty beside a full list.
-    const selectionExists = !!selectedId && (!!nodeOf(data, selectedId) || data.tags.some((tag) => tag.id === selectedId));
+    const selectionExists = !!selectedId && (!!nodeOf(data, selectedId) || !!data.tags?.some((tag) => tag.id === selectedId));
     if (selectionExists) return;
     if (selectedId) setSelectedId(null);
     // A PLACE deep link (?view=tasks/website/timeline) is exactly as explicit

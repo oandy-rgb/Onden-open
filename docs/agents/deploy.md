@@ -39,7 +39,7 @@
 - `scripts/deploy-vps.sh deploy <commit>`：build 再 switch。
 - 預設只換前端；加 `--backend` 前後端都建、都換（migration 在 backend 開機時套用）。
 - `scripts/deploy-vps.sh rollback before-<sha> [--backend]`、`scripts/deploy-vps.sh status`（正式版本、鎖、磁碟、各 tag）。
-- switch 成功後自動清回滾映像：每個服務保留「和目前執行中不同」的最新 2 個（業主 2026-11-15；原本 3 個），其餘取消 tag；沒切換過的 `pre-*` 也一併清掉。
+- 回滾映像由腳本自己清（同一條規則，數量不同）：**建置前**每個服務只留「和目前執行中不同」的最新 1 個（業主 2026-11-17：「只留最新一組」——建置最多要用掉 12% 的磁碟，原本每次部署都要先問他刪哪一組）；**switch 成功後**留最新 2 個（業主 2026-11-15；剛做出來的那一個加上建置前留下的那一個），其餘取消 tag；沒切換過的 `pre-*` 也一併清掉。所以平常主機上是兩組，建置當下是一組。
 - 開機檢查用 `packages/frontend/e2e` 的 playwright；沒裝時依序找 `PLAYWRIGHT_LIB`、`/opt/node-tools`、`git worktree list` 裡其他 worktree 裝好的那份，都沒有才停。
 
 小改動（只動前端少數檔案、沒有改共用元件）可以先跑 `scripts/fast-lane.sh` 就部署：前端 tsc、eslint、有 import 到改動檔案的測試
@@ -136,7 +136,7 @@
 
 ## 清理與磁碟
 
-- 回滾映像保留最近 2 次、release 保留最近 3 次；nginx 仍掛載的 release 與有 `KEEP.txt` 的備份不刪。
+- 回滾映像保留最近 2 次（建置當下 1 次）、release 保留最近 3 次；nginx 仍掛載的 release 與有 `KEEP.txt` 的備份不刪。
 - 每次部署約多 2.7 GB 建置快取；`deploy-vps.sh switch` 做完會自動清掉（業主 2026-11-14 同意；只清建置快取，不動映像、回滾點與 release 目錄），
   下一次建置因此從頭來、會慢一些。`docker builder prune` 可能刪掉執行中映像的內容，所以腳本清完會逐一確認執行中映像與回滾映像都還建得出容器，
   壞了會印 `IMAGE DAMAGED AFTER PRUNE`。

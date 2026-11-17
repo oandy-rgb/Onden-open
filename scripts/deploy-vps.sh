@@ -26,6 +26,26 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 die() { echo "deploy-vps: $*" >&2; exit 1; }
 vps() { ssh -o BatchMode=yes "$HOST" "$@"; }
 
+# Runs on the VPS (sent ahead of the build and the switch scripts): keep the $1 newest rollback images per service that
+# differ from what now runs, newest by when their release arrived; untag the rest. A tag on the running image costs
+# nothing and stays.
+#   before a build: 1 (owner, 2026-11-17: 「只留最新一組」 — a build needs up to 12% of the disk at its peak, and asking
+#     him which set to delete had become a step of every deploy);
+#   after a switch: 2 (owner, 2026-11-15) — the one just made and the one the build kept.
+KEEP_ROLLBACK_FN=$(cat <<'FN'
+keep_rollback() {
+  local keep=$1 svc live t
+  for svc in backend frontend; do
+    live=$(docker image inspect -f '{{.Id}}' "onden-vps-$svc:latest")
+    for t in $(docker images "onden-vps-$svc" --format '{{.Tag}}' | grep '^before-' || true); do
+      echo "$(stat -c %Y "/srv/onden/releases/${t#before-}"* 2> /dev/null | head -1 || echo 0) $(docker image inspect -f '{{.Id}}' "onden-vps-$svc:$t") $t"
+    done | sort -rn | awk -v live="$live" -v keep="$keep" '$2 != live && !($2 in seen) { seen[$2] = 1; n++ } $2 != live && n > keep { print $3 }' |
+      sed "s|^|onden-vps-$svc:|" | xargs -r docker rmi > /dev/null || true
+  done
+}
+FN
+)
+
 cmd=${1:-}; shift || true
 target=""; svcs="frontend"
 for a in "$@"; do
@@ -60,10 +80,12 @@ build() {
   fi
   upload
   echo "== build $svcs at tree $tree"
-  vps bash -s -- "$sha" "$tree" "${svcs// /,}" <<'REMOTE'
+  { printf '%s\n' "$KEEP_ROLLBACK_FN"; cat <<'REMOTE'; } | vps bash -s -- "$sha" "$tree" "${svcs// /,}"
 {
 set -euo pipefail
 ROOT=/srv/onden; sha=$1; tree=$2; svcs=${3//,/ }
+keep_rollback 1
+echo "rollback sets kept for this build: $(docker images 'onden-vps-backend' --format '{{.Tag}}' | grep '^before-' | tr '\n' ' ')"
 used=$(df --output=pcent / | tail -1 | tr -dc 0-9)
 if [ "$used" -ge 90 ]; then
   echo "disk $used% used: drop the oldest before-* tags first (docs/agents/deploy.md)"; docker images 'onden-vps-*' --format '{{.Repository}}:{{.Tag}} {{.CreatedSince}}' | grep before-; exit 1
@@ -87,7 +109,7 @@ REMOTE
 switch() {
   upload
   echo "== switch to $sha ($svcs)"
-  out=$(vps bash -s -- "$sha" "$tree" "${svcs// /,}" "${USER:-?}@$(hostname -s)" <<'REMOTE' | tee /dev/stderr
+  out=$({ printf '%s\n' "$KEEP_ROLLBACK_FN"; cat <<'REMOTE'; } | vps bash -s -- "$sha" "$tree" "${svcs// /,}" "${USER:-?}@$(hostname -s)" | tee /dev/stderr
 {
 set -euo pipefail
 ROOT=/srv/onden; sha=$1; tree=$2; svcs=${3//,/ }; who=$4
@@ -137,15 +159,8 @@ docker logs --since "$since" onden-vps-backend-1 2>&1 | grep -iE '"level":("erro
 for svc in backend frontend; do
   docker images "onden-vps-$svc" --format '{{.Tag}}' | grep '^pre-' | grep -v "^pre-$tree-" | sed "s|^|onden-vps-$svc:|" | xargs -r docker rmi > /dev/null || true
 done
-# Rollback images: the 2 newest that differ from what now runs stay (owner, 2026-11-15: keep the last 2; it was 3, and
-# a --backend build now needs ~12% of the disk), newest by when their release arrived. A tag on the running image costs nothing and stays; untagging the others frees them.
-for svc in backend frontend; do
-  live=$(docker image inspect -f '{{.Id}}' "onden-vps-$svc:latest")
-  for t in $(docker images "onden-vps-$svc" --format '{{.Tag}}' | grep '^before-' || true); do
-    echo "$(stat -c %Y "$ROOT/releases/${t#before-}"* 2> /dev/null | head -1 || echo 0) $(docker image inspect -f '{{.Id}}' "onden-vps-$svc:$t") $t"
-  done | sort -rn | awk -v live="$live" '$2 != live && !($2 in seen) { seen[$2] = 1; n++ } $2 != live && n > 2 { print $3 }' |
-    sed "s|^|onden-vps-$svc:|" | xargs -r docker rmi > /dev/null || true
-done
+# Rollback images: the 2 newest that differ from what now runs stay (keep_rollback, above).
+keep_rollback 2
 # Build cache only (owner, 2026-11-14: after every deploy): two builds regrow it by ~18% of the disk. Images, the
 # before-* rollback tags and the release directories are not touched; the next build is slower by the cold cache.
 docker builder prune -f 2>&1 | tail -1 || true

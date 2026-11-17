@@ -5,6 +5,8 @@
 // tag membership (tagHierarchy) can name the view module tags without an import
 // cycle through the module registry. Read at call time, after the registry ran.
 
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
+
 /** What the core needs to know about a layout besides its id. */
 export type ViewLayoutSpec = {
   /** How a published site draws a view of this layout (publishing/siteRows);
@@ -40,6 +42,12 @@ export function siteViewKindOf(layout: string | null | undefined): "cards" | "ta
  *  module, so it never makes a view module tag. */
 export const WHITEBOARD_LAYOUT = "canvas";
 
+// The note's own text as a tab (「內容」) is the layout CONTENT_LAYOUT (@onden/markdown): a note with no record of it shows the
+// built-in tab first and always (every note made before this layout existed); a note with one lets the person move, rename or
+// hide it (`layout_config.hidden`, the same key the whiteboard's record uses). The record holds no data, so search, publishing
+// and export do not look at it. Note-only, like the slides' tab (a tag's first tab is its list, which has no record); not a
+// view module, so no module tag.
+
 /** Layouts a module gives a NOTE's views (the slides' 「簡報」 tab): stored on the
  *  note like the whiteboard, with no rows to run, and — unlike a view module —
  *  no module tag and not always on: `assertLayoutImported` needs the module on.
@@ -57,9 +65,9 @@ export function noteViewLayouts(): ViewLayout[] {
 
 /** A layout only a note's tab row takes (the slides' 「簡報」): a tag's views refuse it. */
 export function isNoteOnlyViewLayout(id: unknown): boolean {
-  return typeof id === "string" && noteLayouts.has(id);
+  return id === CONTENT_LAYOUT || (typeof id === "string" && noteLayouts.has(id));
 }
 
 export function isStoredViewLayout(id: unknown): boolean {
-  return id === WHITEBOARD_LAYOUT || isViewLayout(id) || (typeof id === "string" && noteLayouts.has(id));
+  return id === WHITEBOARD_LAYOUT || id === CONTENT_LAYOUT || isViewLayout(id) || (typeof id === "string" && noteLayouts.has(id));
 }

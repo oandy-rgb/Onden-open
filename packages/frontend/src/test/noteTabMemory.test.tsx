@@ -27,7 +27,7 @@ function useFocus(initial: { nodeId: string | null; lens: NodeLens; viewTab?: st
   const focus = useWorkspaceFocus({
     ui: ui as never, initialLocation: initial,
     boards: { selectCanvas: vi.fn(async () => {}) as never, createCanvas: vi.fn() as never },
-    canvasImported: true, setCanvasNavStack: vi.fn(),
+    canvasImported: true, setCanvasNavStack: vi.fn(), confirm: async () => false,
   });
   return { ...focus, notesView, viewTab };
 }

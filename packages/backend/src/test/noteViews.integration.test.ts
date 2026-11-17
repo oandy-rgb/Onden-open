@@ -21,6 +21,8 @@ import { dayLens } from "../services/dayLens.js";
 import { calendarDayOf } from "@onden/markdown";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { seedQ } from "./helpers/seedQ.js";
+import { withEventTransaction } from "../spine/eventTransaction.js";
+import { restoreNoteViews } from "../services/noteViews.js";
 
 const database = process.env.DATABASE_URL ?? "";
 const isTestDb = /onden_test(\?|$)/.test(database) || /_test\b/.test(database);
@@ -172,6 +174,89 @@ describe.skipIf(!isTestDb)("a note's views of its children (DB)", () => {
     // Nothing runs for it: its cards live on the board, and the children are untouched.
     const children = await q<{ n: string }>(`SELECT count(*)::text AS n FROM content_nodes WHERE parent_id = $1 AND deleted_at IS NULL`, [parent]);
     expect(Number(children.rows[0]!.n)).toBeGreaterThan(0);
+  });
+
+  it("the 「內容」 tab is a stored tab too: its place and hidden flag are written key by key, and the text is not touched", async () => {
+    const { parent } = await family();
+    as(owner);
+    await seedQ(`UPDATE content_nodes SET markdown = 'still here' WHERE id = $1`, [parent]);
+    const table = ((await (await post(parent, { name: "Shelf", pin_order: 0 })).json()) as { id: string }).id;
+    const created = await post(parent, { name: "Content", layout: "content", pin_order: 1, layout_config: { hidden: true } });
+    expect(created.status).toBe(201);
+    const contentId = ((await created.json()) as { id: string }).id;
+    const read = async () => ((await (await list(parent)).json()) as { views: Array<{ id: string; layout: string; pin_order: number; layout_config: Record<string, unknown> }> }).views;
+    expect((await read()).map((v) => [v.layout, v.layout_config.hidden ?? null])).toEqual([["table", null], ["content", true]]);
+    // Two devices change different keys of the one record: neither overwrites the other.
+    expect((await patch(parent, contentId, { layout_config_patch: { opens_first: true } })).status).toBe(200);
+    expect((await patch(parent, contentId, { layout_config_patch: { hidden: null }, pin_order: 0 } as never)).status).toBe(200);
+    expect((await patch(parent, table, { pin_order: 1 })).status).toBe(200);
+    const after = await read();
+    expect(after.map((v) => v.layout)).toEqual(["content", "table"]);
+    expect(after[0]!.layout_config).toEqual({ opens_first: true });
+    expect((await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [parent])).rows[0]!.markdown).toBe("still here");
+  });
+
+  it("a note has one 「內容」 record: a second create returns the first, and no other view can be patched into one", async () => {
+    const { parent } = await family();
+    as(owner);
+    const first = ((await (await post(parent, { name: "Content", layout: "content", layout_config: { hidden: true } })).json()) as { id: string }).id;
+    const again = await post(parent, { name: "Content 2", layout: "content" });
+    expect(((await again.json()) as { id: string }).id).toBe(first);
+    const records = ((await (await list(parent)).json()) as { views: Array<{ layout: string }> }).views.filter((v) => v.layout === "content");
+    expect(records).toHaveLength(1);
+    const table = ((await (await post(parent, { name: "Shelf", layout: "table" })).json()) as { id: string }).id;
+    const turned = await patch(parent, table, { layout: "content" });
+    expect(turned.status).toBe(422);
+    expect(await turned.json()).toMatchObject({ error: "view_layout_not_changeable" });
+    // The record itself still takes its own settings.
+    expect((await patch(parent, first, { layout_config_patch: { hidden: null } })).status).toBe(200);
+  });
+
+  describe("「內容」 is never hidden for lack of another tab: one guarantee where view records are written", () => {
+    const layouts = async (parent: string) => ((await (await list(parent)).json()) as { views: Array<{ id: string; layout: string; layout_config: Record<string, unknown> }> }).views;
+    const hiddenFlag = async (parent: string) => (await layouts(parent)).find((v) => v.layout === "content")?.layout_config.hidden ?? null;
+
+    it("created hidden with no other view it shows; with another view it is hidden, and the last other view going shows it again, in the same transaction", async () => {
+      const { parent } = await family();
+      as(owner);
+      const alone = await post(parent, { name: "Content", layout: "content", layout_config: { hidden: true } });
+      expect(alone.status).toBe(201);
+      expect(await hiddenFlag(parent)).toBeNull();
+      const table = ((await (await post(parent, { name: "Shelf", layout: "table" })).json()) as { id: string }).id;
+      const contentId = (await layouts(parent)).find((v) => v.layout === "content")!.id;
+      expect((await patch(parent, contentId, { layout_config_patch: { hidden: true } })).status).toBe(200);
+      expect(await hiddenFlag(parent)).toBe(true);
+      // Another device, an agent or a restore removes the last other tab: one request, and 「內容」 shows.
+      expect((await del(parent, table)).status).toBeLessThan(300);
+      expect(await hiddenFlag(parent)).toBeNull();
+      // Hiding it with nothing else to show is not kept either.
+      expect((await patch(parent, contentId, { layout_config_patch: { hidden: true } })).status).toBe(200);
+      expect(await hiddenFlag(parent)).toBeNull();
+    });
+
+    it("a backup restore of a hidden 「內容」 with no other view brings it back shown; with one, hidden", async () => {
+      const a = await note("Restored alone", null);
+      const b = await note("Restored with a table", null);
+      const stored = (layout: string, name: string, config: Record<string, unknown>) => ({ layout, name, filters: [], sorts: [], visible_fields: [], layout_config: config, pin_order: 0 });
+      await withEventTransaction(workspaceId, () => restoreNoteViews(workspaceId, a, [stored("content", "Content", { hidden: true })]));
+      await withEventTransaction(workspaceId, () => restoreNoteViews(workspaceId, b, [stored("table", "Shelf", {}), stored("content", "Content", { hidden: true })]));
+      as(owner);
+      expect(await hiddenFlag(a)).toBeNull();
+      expect(await hiddenFlag(b)).toBe(true);
+    });
+
+    it("asked to hide the record that is there, a create applies it (it is not dropped); the record takes no part in name clashes", async () => {
+      const { parent } = await family();
+      as(owner);
+      await post(parent, { name: "Shelf", layout: "table" });
+      const first = ((await (await post(parent, { name: "Content", layout: "content" })).json()) as { id: string }).id;
+      expect(await hiddenFlag(parent)).toBeNull();
+      const again = await post(parent, { name: "Content", layout: "content", layout_config: { hidden: true } });
+      expect(((await again.json()) as { id: string }).id).toBe(first);
+      expect(await hiddenFlag(parent)).toBe(true);
+      // A person's own view may be called "Content"; the record's stored name does not count.
+      expect((await post(parent, { name: "Content", layout: "table" })).status).toBe(201);
+    });
   });
 
   it("a canvas tab is accepted whatever the stored module list says: the whiteboard is always on", async () => {

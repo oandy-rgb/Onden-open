@@ -177,6 +177,9 @@ export const BOARD_INK_ATTR = "board_ink";
 export const NOTE_INK_ATTR = "note_ink";
 /** The layout (= the handwriting module's id) of the stored view that is a note's 「手寫」 tab. */
 export const HANDWRITING_LAYOUT = "handwriting";
+/** The layout of the stored view that places or hides a note's own 「內容」 tab (a note with no such view shows the built-in tab,
+ *  first and always). Holds no data: the text is the note's body whether the tab shows or not. Note-only. */
+export const CONTENT_LAYOUT = "content";
 /** Every attribute that holds drawing data in the ink page format (large, merged on write, content-addressed in
  *  history, left out of the lean bootstrap). */
 export const INK_PAGE_ATTRS = [INK_DATA_ATTR, BOARD_INK_ATTR, NOTE_INK_ATTR] as const;

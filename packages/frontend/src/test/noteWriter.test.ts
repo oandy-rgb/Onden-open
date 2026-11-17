@@ -20,7 +20,13 @@ import { setPending } from "../lib/data/syncStatus";
 import { setLocalePref } from "../lib/i18n";
 import { getRecoveryWrites } from "../lib/data/writeRecovery";
 import { ownerData } from "./ownerData";
-import { isWhiteboardNote, opensOnWhiteboard } from "../lib/whiteboardNote";
+import { isRetiredBoardKind, isWhiteboardNote } from "../lib/whiteboardNote";
+import { buildViewTabs, defaultTabKey } from "../lib/viewTabs";
+
+const opensOnWhiteboard = (node: ContentNode) => defaultTabKey(buildViewTabs({
+  views: (node.collection_views ?? []) as never, canvasImported: true, earnsWhiteboard: isRetiredBoardKind(node), canManage: false, contentName: "", whiteboardName: "", retiredBoard: isRetiredBoardKind(node),
+})) === "canvas";
+
 
 const note: ContentNode = { id: "n1", title: "Original", markdown: "old body", slug: "original", source_type: "manual", node_type: "content", hidden: true };
 function harness(online = true) {

@@ -27,6 +27,7 @@ import tagsRouter from "../routes/tags.js";
 import { addTaskUnderNote } from "../modules/tasks/routes.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { TASK_STATUSES } from "@onden/markdown";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
 import { noteViewLayouts, viewLayouts, WHITEBOARD_LAYOUT } from "../services/viewLayouts.js";
 import { classifySystemAttr } from "../services/backupSystemAttrs.js";
 import {
@@ -203,7 +204,7 @@ describe.skipIf(!enabled)("a restored backup holds every view layout and every t
     await setWorkspaceOwner(ws, solo.id);
     from = await makeSpace(ws, `From ${stamp}`, [{ id: solo.id, permission: "edit" }]);
     into = await makeSpace(ws, `Into ${stamp}`, [{ id: solo.id, permission: "edit" }]);
-    layouts = [...new Set([...viewLayouts(), WHITEBOARD_LAYOUT, ...noteViewLayouts()])].filter((layout) => !(layout in VIEW_LAYOUTS_NOT_IN_A_BACKUP));
+    layouts = [...new Set([...viewLayouts(), WHITEBOARD_LAYOUT, CONTENT_LAYOUT, ...noteViewLayouts()])].filter((layout) => !(layout in VIEW_LAYOUTS_NOT_IN_A_BACKUP));
 
     const made = await send(solo, "/api/nodes", "POST", { title: "Kinds", markdown: "- [ ] 行任務 {task}\n", space_id: from });
     const host = ((await made.json()) as { id: string }).id;

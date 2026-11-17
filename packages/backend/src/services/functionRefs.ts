@@ -45,7 +45,7 @@ import {
   type EventRow, type RestoreContext, type RestoreError, type RestoreResult,
 } from "./restoreContract.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
-import { TAG_NODE_TYPE, isTag } from "@onden/markdown/contract";
+import { CONTENT_LAYOUT, TAG_NODE_TYPE, isTag } from "@onden/markdown/contract";
 
 // ── 型別 ────────────────────────────────────────────────────────────────────
 
@@ -556,9 +556,24 @@ export async function viewRecordById(kind: "tag" | "note", workspaceId: string, 
 /** 這個名字已有別的檢視用了嗎（精確比對、照輸入）。`exceptViewId` 是正在改名的那一個。 */
 export async function viewNameTaken(workspaceId: string, holderId: string, name: string, exceptViewId?: string): Promise<boolean> {
   let query = db.selectFrom("function_refs").select("id")
-    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "<>", "").where(sql`config->>'name'`, "=", name);
+    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "<>", "").where(sql`config->>'name'`, "=", name)
+    // The 「內容」 record's stored name is never shown (the tab is called by the person's language), so it takes no part in "taken".
+    .where("function_id", "<>", CONTENT_LAYOUT);
   if (exceptViewId) query = query.where("instance", "<>", exceptViewId);
   return (await query.limit(1).executeTakeFirst()) !== undefined;
+}
+
+/** 一則筆記沒有其他檢視紀錄時，它的「內容」分頁不是收起來的（收起來是「別的分頁在，這個先不看」）。
+ *  寫檢視紀錄的三個函式（新增、改、刪）在同一筆交易的最後都過這裡：建立、複製、備份還原、別台或 MCP 刪掉最後一個分頁，
+ *  都得到同一個保證，客戶端不必再補一個請求。紀錄還在但這台看不到的分頁（模組關著）不算「沒有」：那由畫面算出來。 */
+async function keepContentTabShowing(workspaceId: string, holderId: string): Promise<void> {
+  const hidden = await db.selectFrom("function_refs").select("instance")
+    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("function_id", "=", CONTENT_LAYOUT).where("instance", "<>", "")
+    .where(sql`config->'layout_config'->>'hidden'`, "=", "true").limit(1).executeTakeFirst();
+  if (!hidden) return;
+  const other = await db.selectFrom("function_refs").select("id")
+    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "<>", "").where("function_id", "<>", CONTENT_LAYOUT).limit(1).executeTakeFirst();
+  if (!other) await patchView(workspaceId, holderId, hidden.instance, { layout_config_patch: { hidden: null } });
 }
 
 /** 新增一個檢視（呼叫者已檢查名字與權限）。`element` 是檢視的內容（不含 id、版面）。 */
@@ -572,6 +587,7 @@ export async function insertView(input: {
     config: JSON.stringify(config), holder_node_id: input.holderId,
     created_by: input.createdBy && isUuid(input.createdBy) ? input.createdBy : null,
   }).execute();
+  await keepContentTabShowing(input.workspaceId, input.holderId);
 }
 
 /** 把改到的欄位併進檢視（版面變成 function_id，其餘併進 config）。回傳有沒有這個檢視。 */
@@ -593,12 +609,14 @@ export async function patchView(workspaceId: string, holderId: string, viewId: s
     config, updated_at: sql`now()`,
     ...(typeof layout === "string" ? { function_id: normalizedLayout(layout) } : {}),
   }).where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "=", viewId).executeTakeFirst();
+  await keepContentTabShowing(workspaceId, holderId);
   return Number(result.numUpdatedRows) > 0;
 }
 
 export async function removeView(workspaceId: string, holderId: string, viewId: string): Promise<void> {
   requireTransaction("removeView");
   await db.deleteFrom("function_refs").where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "=", viewId).execute();
+  await keepContentTabShowing(workspaceId, holderId);
 }
 
 /** 一列節點（`SELECT *`／`RETURNING *` 拿到的）換成客戶端存的樣子：`collection_views` 凍結了，改由引用組回。

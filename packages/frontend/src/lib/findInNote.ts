@@ -21,6 +21,7 @@ export function setPendingFind(nodeId: string, query: string): void {
   pendingFromSearch.set(nodeId, text);
   rememberFindText(text);
 }
+export function hasPendingFind(nodeId: string): boolean { return pendingFromSearch.has(nodeId); }
 export function takePendingFind(nodeId: string): string | null {
   const text = pendingFromSearch.get(nodeId) ?? null;
   pendingFromSearch.delete(nodeId);

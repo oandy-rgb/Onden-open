@@ -78,6 +78,36 @@ describe.skipIf(!/^\/[^/]*_test$/.test(dbName))("NOTE-11/PER-02 atomic note copy
     expect((await q("SELECT 1 FROM node_edges WHERE source_node_id=$1 OR target_node_id=$1", [id])).rows).toHaveLength(0);
   });
 
+  it("a hidden 「內容」 tab is copied with the text, in its place among the tabs; a note with no record gets none", async () => {
+    const hidden = await node("Sketch only", "words that stay");
+    const plain = await node("Plain", "just text");
+    const view = (layout: string, name: string, pin: number, config: object) => seedQ(
+      `INSERT INTO function_refs(workspace_id, holder_node_id, function_id, instance, config) VALUES($1,$2,$3,$4,$5)`,
+      [workspaceId, hidden, layout, randomUUID(), JSON.stringify({ name, filters: [], sorts: [], group_by: null, visible_fields: [], layout_config: config, pin_order: pin })]);
+    await view("handwriting", "Handwriting", 0, {});
+    await view("content", "Content", 1, { hidden: true });
+    // The table is not copied: a copy with only the hidden record would show nothing, so the record comes out shown.
+    await view("table", "Shelf", 2, {});
+    const view2 = (holder: string, layout: string, name: string, pin: number, config: object) => seedQ(
+      `INSERT INTO function_refs(workspace_id, holder_node_id, function_id, instance, config) VALUES($1,$2,$3,$4,$5)`,
+      [workspaceId, holder, layout, randomUUID(), JSON.stringify({ name, filters: [], sorts: [], group_by: null, visible_fields: [], layout_config: config, pin_order: pin })]);
+    const copiedViews = async (source: string) => {
+      const response = await copy(source);
+      expect(response.status, await response.clone().text()).toBe(201);
+      const id = ((await response.json()) as { id: string }).id;
+      return (await q<{ function_id: string; config: { pin_order: number; layout_config: object } }>(
+        `SELECT function_id, config FROM function_refs WHERE holder_node_id = $1 AND instance <> '' ORDER BY function_id`, [id])).rows;
+    };
+    expect((await copiedViews(hidden)).map((row) => [row.function_id, row.config.pin_order, row.config.layout_config]))
+      .toEqual([["content", 1, { hidden: true }], ["handwriting", 0, {}]]);
+    // No other view travels: the record is not left hidden (the 「手寫」 tab is not there to be the one showing).
+    const lonely = await node("Table only", "x");
+    await view2(lonely, "table", "Shelf", 0, {});
+    await view2(lonely, "content", "Content", 1, { hidden: true });
+    expect((await copiedViews(lonely)).map((row) => [row.function_id, row.config.layout_config])).toEqual([["content", {}]]);
+    expect(await copiedViews(plain)).toEqual([]);
+  });
+
   it("a trashed tag is left off the copy instead of refusing it", async () => {
     const source = await node("Merged note");
     const live = await seedClassTag(workspaceId, { name: `Live ${randomUUID()}`, nodeSlug: randomUUID() });

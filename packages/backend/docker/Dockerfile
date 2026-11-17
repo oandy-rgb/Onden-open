@@ -73,8 +73,13 @@ RUN --mount=type=cache,target=/root/.npm \
 # lockfile untouched. Model weights (multilingual-e5-small) download on first
 # use; compose mounts a named volume over the cache so rebuilds don't
 # re-download.
+# ONNXRUNTIME_NODE_INSTALL_CUDA=skip: onnxruntime-node's install script otherwise downloads the
+# GPU (CUDA) binaries from a GitHub release — never used here (the server has no GPU; the CPU
+# runtime is inside the npm package) and a build then depends on that download: it returned 504
+# on 2026-11-07 and 404 from 2026-11-17 (the v1.21.0 release page is gone), which failed every
+# image build.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --no-save --workspace=packages/backend @huggingface/transformers@3
+    ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install --no-save --workspace=packages/backend @huggingface/transformers@3
 COPY --from=build /app/packages/backend/dist ./packages/backend/dist
 COPY --from=build /app/packages/markdown/dist ./packages/markdown/dist
 COPY --from=build /app/packages/site/dist ./packages/site/dist

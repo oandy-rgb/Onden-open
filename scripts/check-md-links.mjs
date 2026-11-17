@@ -58,10 +58,14 @@ export function parseHead(text) {
   const status = headText.match(STATUS_LINE)?.[1] ?? null;
   const statusLine = head.find((l) => l.startsWith("> 狀態：")) ?? null;
   const field = (name) => head.find((l) => l.startsWith(`> ${name}：`))?.slice(`> ${name}：`.length).trim() ?? null;
-  const covers = (field("涵蓋") ?? "").split(/[,，、]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean);
+  // 「> 涵蓋：無（原因）」：這份文件沒有對應的程式（原則、索引、只增不改的紀錄）。原因必填；不是 glob，所以不進 covers。
+  const coverLine = field("涵蓋") ?? "";
+  const none = coverLine.match(/^無(?:[（(]\s*(.*?)\s*[）)])?\s*$/);
+  const coversNothing = none ? { reason: none[1] ?? "" } : null;
+  const covers = none ? [] : coverLine.split(/[,，、]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean);
   // 由資料檔產生的文件（`<!-- 由 npm run … 產生 -->`）按定義與資料一致，不需要人來「最後確認」。
   const generated = /^<!-- 由 .*產生/m.test(headText);
-  return { status, statusLine, generated, confirmed: statusLine?.match(CONFIRMED)?.[1] ?? null, after: field("完成後"), covers, headText };
+  return { status, statusLine, generated, confirmed: statusLine?.match(CONFIRMED)?.[1] ?? null, after: field("完成後"), covers, coversNothing, headText };
 }
 
 // ---- 檔案清單 ----
@@ -344,6 +348,10 @@ export function globToRegExp(glob) {
 export const matchesAny = (globs, path) => globs.some((g) => globToRegExp(g.endsWith("/") ? `${g}**` : g).test(path));
 
 export function checkCovers(head, files, superseded = []) {
+  if (head.coversNothing) {
+    if (head.status !== "現行") return [{ line: 1, message: "「> 涵蓋：」只用在狀態為現行的文件" }];
+    return head.coversNothing.reason ? [] : [{ line: 1, message: "「> 涵蓋：無」要寫原因：`> 涵蓋：無（為什麼這份文件沒有對應的程式）`" }];
+  }
   if (!head.covers.length) return [];
   if (head.status !== "現行") return [{ line: 1, message: "「> 涵蓋：」只用在狀態為現行的文件" }];
   const out = [];
@@ -439,6 +447,7 @@ export function checkDocs(root, { files = listFiles(root), baseline = {}, now = 
   const noCoverage = new Set(baseline.noCoverage ?? []);
   const problems = { links: [], status: [], codeRefs: [], covers: [], numbers: [], exceptions: [] };
   const docs = [];
+  const coversNothing = [];
   const add = (kind, f, list) => list.forEach((p) => problems[kind].push({ f, ...p }));
   const counts = { documents: mdFiles.length, codeRefDocuments: 0, byStatus: {} };
 
@@ -450,7 +459,8 @@ export function checkDocs(root, { files = listFiles(root), baseline = {}, now = 
     add("links", f, checkLinks(root, f, text));
     if (needsStatusLine(f)) { add("status", f, checkStatus(root, f, head, fileSet)); const k = head.status ?? "(無)"; counts.byStatus[k] = (counts.byStatus[k] ?? 0) + 1; }
     add("covers", f, checkCovers(head, files, superseded));
-    const needsCover = head.status === "現行" && !head.generated && !head.covers.length;
+    const needsCover = head.status === "現行" && !head.generated && !head.covers.length && !head.coversNothing;
+    if (head.status === "現行" && head.coversNothing) coversNothing.push({ f, reason: head.coversNothing.reason });
     if (needsCover && !noCoverage.has(f)) problems.covers.push({ f, line: 1, message: `現行文件要宣告 "> 涵蓋：<glob>"（它描述哪些程式）；沒有對應程式的才登記在 ${BASELINE_FILE} 的 noCoverage，而那份清單只准減少，新文件不能加` });
     if (!needsCover && noCoverage.has(f)) problems.exceptions.push({ f, line: 1, message: `noCoverage 裡的文件已經有涵蓋、或不是現行 -> 從 ${BASELINE_FILE} 刪掉這一項` });
     add("numbers", f, checkNumbers(root, text));
@@ -467,7 +477,7 @@ export function checkDocs(root, { files = listFiles(root), baseline = {}, now = 
   for (const f of Object.keys(exceptions)) if (!mdFiles.includes(f) && !isRemovedPath(removed, f)) problems.exceptions.push({ f, line: 1, message: `例外清單裡的文件不存在 -> 從 ${BASELINE_FILE} 刪掉` });
   for (const f of noCoverage) if (!mdFiles.includes(f) && !isRemovedPath(removed, f)) problems.exceptions.push({ f, line: 1, message: `noCoverage 裡的文件不存在 -> 從 ${BASELINE_FILE} 刪掉` });
   const total = Object.values(problems).reduce((n, l) => n + l.length, 0);
-  return { problems, docs, counts, total, oldProposals: oldProposals(docs, now), exceptions, noCoverage: [...noCoverage], superseded };
+  return { problems, docs, counts, total, oldProposals: oldProposals(docs, now), exceptions, noCoverage: [...noCoverage], coversNothing, superseded };
 }
 
 const LABEL = { links: "壞連結", status: "狀態行", codeRefs: "過時的程式碼引用", covers: "涵蓋", numbers: "數字", exceptions: "例外清單" };
@@ -486,7 +496,9 @@ function printReport(r) {
   console.log(`\n### 程式碼引用的例外清單（${ex.length}，只准減少）`);
   for (const [f, reason] of ex) console.log(`  ${f}  ${reason}`);
   console.log(`\n### 沒有涵蓋的現行文件（${r.noCoverage.length}，只准減少；每補一份「> 涵蓋：」就從清單刪一項）`);
-  console.log(`### 被取代清單（${r.superseded.length}）`);
+  console.log(`\n### 宣告沒有對應程式的現行文件（${r.coversNothing.length}；改程式不會提醒它們，內容對不對只能靠人看）`);
+  for (const c of r.coversNothing) console.log(`  ${c.f}  ${c.reason}`);
+  console.log(`\n### 被取代清單（${r.superseded.length}）`);
   for (const e of r.superseded) console.log(`  ${e.paths.join(", ")}  →  ${describeSuperseded(e)}`);
 }
 

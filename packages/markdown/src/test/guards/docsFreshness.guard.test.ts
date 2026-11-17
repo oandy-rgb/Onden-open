@@ -381,6 +381,28 @@ describe("the opt-out is printed, and 實作提案 names the proposal a PR imple
   });
 });
 
+describe("涵蓋：無（原因）: a current document with no code to name says so, with a reason", () => {
+  const head = (cover: string) => `# T\n\n> 狀態：現行\n${cover}\n\nwords\n`;
+  it("with a reason it needs no globs and no noCoverage entry, and the report lists it", () => {
+    const root = fixture({ "docs/rules.md": head("> 涵蓋：無（擁有者的原則，沒有對應的程式）") });
+    const r = checkDocs(root, { baseline: { noCoverage: [] } });
+    expect(r.total).toBe(0);
+    expect(r.coversNothing).toEqual([{ f: "docs/rules.md", reason: "擁有者的原則，沒有對應的程式" }]);
+  });
+  it("without a reason it fails", () => {
+    for (const cover of ["> 涵蓋：無", "> 涵蓋：無（）"]) {
+      const r = checkDocs(fixture({ "docs/rules.md": head(cover) }), { baseline: { noCoverage: [] } });
+      expect(messages(r.problems.covers), cover).toEqual(["「> 涵蓋：無」要寫原因：`> 涵蓋：無（為什麼這份文件沒有對應的程式）`"]);
+    }
+  });
+  it("it is for current documents only, and a document that declares it must leave noCoverage", () => {
+    const past = checkDocs(fixture({ "docs/old.md": "# T\n\n> 狀態：歷史紀錄\n> 涵蓋：無（紀錄）\n" }), { baseline: { noCoverage: [] } });
+    expect(messages(past.problems.covers)).toEqual(["「> 涵蓋：」只用在狀態為現行的文件"]);
+    const listed = checkDocs(fixture({ "docs/rules.md": head("> 涵蓋：無（原則）") }), { baseline: { noCoverage: ["docs/rules.md"] } });
+    expect(listed.problems.exceptions.map((p: { f: string }) => p.f)).toEqual(["docs/rules.md"]);
+  });
+});
+
 describe("dated entries: a section whose heading starts with a date is a record of that day", () => {
   const cur = "# T\n\n> 狀態：現行\n> 涵蓋：src/**\n";
   it("code references inside a dated section are not checked; the same reference outside one is", () => {

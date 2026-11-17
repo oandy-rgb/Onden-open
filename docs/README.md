@@ -1,6 +1,7 @@
 # Onden 文件目錄
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：無（文件的索引）
 
 結論：**現行文件**在 `docs/agents`、`docs/architecture`、`docs/decisions`、`docs/interaction-design`、`docs/self-host` 與少數頂層檔；
 進行中的盤點在 `docs/research`；所有已完成、已被取代的紀錄在 `docs/archive`（不再維護，引用前先查程式）。

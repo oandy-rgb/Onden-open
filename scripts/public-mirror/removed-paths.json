@@ -1,0 +1,7 @@
+{
+  "說明": "公開庫的鏡像會拿掉哪些路徑（只有這一份資料）：public-push.sh 照它刪檔，verify.sh 照它判斷「公開庫與私人庫只差這些」，文件檢查器（scripts/check-md-links.mjs）照它判斷「文件提到的路徑在鏡像裡不存在是正常的」。files＝單一檔案；prefixes＝整個資料夾；imagesUnder 底下副檔名在 imageExtensions 的檔案。改這份就同時改了三處。",
+  "files": ["docs/deploy-log.md"],
+  "prefixes": ["docs/research/scan-2026-11-14/"],
+  "imagesUnder": ["docs/"],
+  "imageExtensions": ["png", "jpg", "jpeg", "webp", "gif"]
+}

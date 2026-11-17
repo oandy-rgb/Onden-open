@@ -98,13 +98,13 @@ PGlite 跳過清單是「檔案：個數」且要**剛好相等**：跳過比清
   `queryOnSeparateConnection` 的呼叫者、或任何「單一連線讓錯誤隱形」的行為。不要整個套件都標；完整套件在真 Postgres 另外跑。
 - 守門：後端測試預設開啟 `ONDEN_FORBID_POOL_QUERY_IN_TRANSACTION`（`vitest.config.ts`）：交易中呼叫 `pool.query` 會丟錯，
   讀取請用 `q()`；刻意要在交易外提交的寫入（如 `blobs.putBlob`）用 `db.ts` 的 `queryOnSeparateConnection` 並寫原因。
-- 同一行程內要好幾個資料庫的同步測試（`helpers/stampedWorld.ts`／`stampedBundleWorld.ts` 的 `openNode`、`onNode`、`RealNode`）兩種引擎都跑同一份測試內容：
+- 同一行程內要好幾個資料庫的同步測試（`helpers/stampedWorld.ts` 的 `openNode`、`helpers/distSim/realNode.ts` 的 `onNode` 與 `RealNode`，`helpers/stampedBundleWorld.ts` 建在它們上面）兩種引擎都跑同一份測試內容：
   PGlite 時一個節點是一個 PGlite；真 Postgres 時一個節點是 `DATABASE_URL` 那台伺服器上的一個資料庫（`helpers/distSim/postgresNodes.ts`：
   從每輪一個、用全部 migration 從零建的範本複製，`onNode` 把後端唯一的連線池指到它，`close` 刪掉它）。名稱 `onden_node_<輪>_<n>_test`；
   `globalSetup` 在一輪結束時刪掉自己這輪的、下一輪開始時刪掉沒有連線的舊輪殘留。節點仍是一次一個（`onNode` 的鎖），所以兩個節點不會真的同時寫。
   離開節點時（兩種引擎一樣）`onNode` 會等 `awaitAllDispatchers()`（路由回應後才跑的派生寫入）並確認沒有任何連線還在外面，否則報錯並印出那條連線最後的 SQL 與取得它的堆疊（`connectionLedger.ts`）；接縫本身有 `nodeDatabaseSwitch.integration.test.ts`。
   只有 PGlite 才有的東西（瀏覽器版封裝的 tar）不得放進這類檔案的共用測試：另放小檔，只在 PGlite 輪註冊（不是跳過，所以不進 `POSTGRES_SKIPS`）。
-- 筆電（合併前）：`cd packages/backend && npm run test:real-pg`（模式 `postgres`）（`scripts/realPostgresTests.mjs` 由上述標記找出檔案再交給 vitest；`-- --list` 只列檔案）。
+- 筆電（合併前）：`cd packages/backend && npm run test:real-pg`（模式 `postgres`）（`packages/backend/scripts/realPostgresTests.mjs` 由上述標記找出檔案再交給 vitest；`-- --list` 只列檔案）。
   需要 `DATABASE_URL` 指向 `_test` 結尾的真 Postgres。檔案裡沒被標記的測試也會一起跑（是 PGlite 結果的超集），這是刻意的：標記是測試層級，檔案層級較簡單。
   跳過的原因分三類：`needsSecondConnection`（鎖等待、佇列中的寫入者、跨連線快照、別處持有的 advisory lock）、
   `needsPostgresServer`（自己的 `pg` 連線、`statement_timeout`、連線池計數、連線逐出、數萬列規模）、`needsPgroonga`（分詞器、`&@~` 運算子、Unicode 折疊）。

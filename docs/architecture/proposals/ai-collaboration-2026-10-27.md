@@ -1,6 +1,6 @@
 # 提案：AI 協作（一個角色、多種跑法、待審建議）
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：提案（最後確認 2026-11-01）（批 0＋1＋2 已動工，決定見 [decisions-ai-collaboration.md](../../agents/decisions-ai-collaboration.md)；其餘批次未做）
 
 > 2026-10-27。**設計提案**；只寫文件，不含程式。實作前由使用者決定第 9 節的問題。
 > **2026-10-30 起：批 0＋1＋2（待審建議）已動工**，決定與和本文不同之處見 [decisions-ai-collaboration.md](../../agents/decisions-ai-collaboration.md)；其餘批次（角色與跑法層、API 跑法等）仍是提案。

@@ -1,5 +1,8 @@
 # 升級與回退
 
+> 狀態：現行（最後確認 2026-11-16）
+> 涵蓋：scripts/upgrade.sh, scripts/rollback.sh, scripts/backup.sh, scripts/restore.sh
+
 這份說明給自己架設 Onden 的人。你只需要會在終端機下指令。
 
 ## 基本觀念

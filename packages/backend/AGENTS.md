@@ -12,7 +12,7 @@
 | 同層排序：寫（新筆記放最後、舊整數翻成鍵、復原時的鍵、鍵太長重配）與 ORDER BY 片段 | `services/orderKeys.ts`（鍵本身用 `@onden/markdown` 的 `keyBetween`）；欄位 `order_key`／`order_stamp` 逐位元組比較，`sort_order` 已凍結不讀不寫 | `orderKeyWriters.guard.test.ts` |
 | SHA-256 十六進位摘要 | `utils.ts` 的 `sha256Hex` | `dupSweep.guard.test.ts` |
 | 事件附加鎖 | `spine/eventLock.ts` 的 `lockEventAppend` | `dupSweep.guard.test.ts` |
-| 新的區塊 id | `services/blockNodes.ts` 的 `newBlockId` | `dupSweep.guard.test.ts` |
+| 新的區塊 id | `@onden/markdown` 的 `newBlockId` | `dupSweep.guard.test.ts` |
 | 「哪些事件算儲存」 | `services/history/bodyEvents.ts` 的 `bodyEventSql` | `dupSweep.guard.test.ts` |
 | 復原的 `history_incomplete`／`state_conflict` 拒絕 | `services/eventRestore/refusals.ts` | `dupSweep.guard.test.ts` |
 | 路徑中的 bigint id | `routes/params.ts` 的 `parseBigintId`（其他請求輸入也各有一個讀取者） | `dupSweep.guard.test.ts`、`dup-b2-input.guard.test.ts` |

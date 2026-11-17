@@ -75,6 +75,8 @@ export function renderCatalogMarkdown(catalog = loadCatalog()) {
   const out = [
     "# 唯一入口清單",
     "",
+    "> 狀態：現行（由資料檔產生，內容與 scripts/entrypoints.catalog.json 永遠一致）",
+    "",
     "<!-- 由 npm run catalog 從 scripts/entrypoints.catalog.json 產生，不要手改。 -->",
     "",
     "寫新的元件或共用邏輯之前，先在這裡依「需求」查；已有入口就用它。真的要新增共用入口，把它加進 `scripts/entrypoints.catalog.json` 再跑 `npm run catalog`。",

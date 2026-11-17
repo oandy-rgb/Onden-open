@@ -1,6 +1,7 @@
 # 傳到我的手機：碰面點（`packages/relay`）
 
 > 狀態：現行（最後確認 2026-11-12）。**程式與本機測試完成；尚未部署**（部署需要業主自己的 Cloudflare 帳號）。
+> 涵蓋：packages/relay/src/**
 
 > 2026-11-12。對應[提案](proposals/send-to-phone-2026-11-12.md)第 5 節第 4 項；加密與權杖導出見[配對與加密](send-to-phone-crypto.md)。
 

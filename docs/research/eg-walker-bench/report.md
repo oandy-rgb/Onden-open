@@ -1,6 +1,6 @@
 # Eg-walker 合併到底多快（手機能不能用）
 
-> 狀態：現行（研究結論；是否進入影子模式由業主決定）（最後確認 2026-11-01）
+> 狀態：歷史紀錄（研究結論；是否進入影子模式由業主決定）（寫於 2026-11-01） 引用的路徑、函式與行號是寫作當時的，現況以程式為準。
 
 研究問題：伺服器之後自己寫 Eg-walker（Gentle & Kleppmann, EuroSys 2025）取代現行行級 diff3（[`bodyMerge.ts`](../../../packages/backend/src/services/eventLog/bodyMerge.ts)），
 而分散式同步 beta 裡手機也是節點、也得自己合併——速度與打包大小夠不夠？本文只做量測，**不改任何產品程式**（`packages/*/src` 沒動）；

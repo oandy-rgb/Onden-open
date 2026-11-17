@@ -1,6 +1,7 @@
 # 傳到我的手機：配對與加密（`@onden/pairing`）
 
 > 狀態：現行（最後確認 2026-11-12）
+> 涵蓋：packages/pairing/src/**
 
 > 2026-11-12。對應[提案](proposals/send-to-phone-2026-11-12.md)第 3 節。實作：`packages/pairing`。碰面點服務見[碰面點](send-to-phone-relay.md)。
 > **這個模組在上線前需要一次人工的安全審查。** 本文最後一節列出審查者最該看的 5 個點。

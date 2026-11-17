@@ -1,6 +1,7 @@
 # 只送差異的寫入
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/patchedValue.ts, packages/frontend/src/lib/data/patchedBody.ts
 
 業主 2026-10-30：「所有地方都改成只送差異，看能不能共用」。
 

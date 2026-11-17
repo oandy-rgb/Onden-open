@@ -3,7 +3,7 @@
 // refuse to go on while public main is not private main: sending a branch to the public CI, and building a deploy.
 // Both ask scripts/public-mirror/verify.sh, which is run here against two small repositories on disk.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -48,6 +48,23 @@ describe("public main is private main, or the next step stops", () => {
   it("passes when public main was made from private main", () => {
     const { commit, mirror, verify } = world();
     mirror(commit("one"));
+    const result = verify();
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+  });
+
+  // The mirror leaves out what scripts/public-mirror/removed-paths.json lists; verify.sh must know such a file by its
+  // name whatever script the name is in (git prints names outside ASCII quoted and escaped unless told not to).
+  it("passes when the only difference is a left-out file whose name is not ASCII", () => {
+    const { work, commit, verify } = world();
+    mkdirSync(join(work, "docs/research/scan-2026-11-14"), { recursive: true });
+    writeFileSync(join(work, "docs/research/scan-2026-11-14/00-總表.md"), "# 總表\n");
+    const sha = commit("one");
+    git(work, "rm", "-q", "-r", "--cached", "docs/research/scan-2026-11-14");
+    const stripped = git(work, "write-tree");
+    git(work, "reset", "-q");
+    const made = git(work, "commit-tree", stripped, "-m", `同步：私人庫 ${sha.slice(0, 9)}（main）`);
+    git(work, "push", "-q", "open", `${made}:refs/heads/main`);
+    git(work, "fetch", "-q", "open");
     const result = verify();
     expect(result.status, result.stdout + result.stderr).toBe(0);
   });

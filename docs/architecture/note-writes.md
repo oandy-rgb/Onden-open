@@ -1,6 +1,7 @@
 # 筆記寫入模組
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/frontend/src/lib/data/noteWriter.ts
 
 這次局部重構把「畫面想改什麼」與「如何可靠保存」分開。主要入口是
 `packages/frontend/src/lib/data/noteWriter.ts`，不是要求每個按鈕自行組合

@@ -174,6 +174,20 @@
 - **機制**：〔第 1 層〕`ui.css` 的 `.ui-layer.ui-layer--fill` 權重提高，與載入順序無關；`expandedPaneFillsWindow.mjs`（真瀏覽器，桌面與手機視窗，列入 `run-all.mjs`）量「放大後窗格等於視窗、每個 `.ui-layer--fill` 都等於視窗、上方列與面板在原位置點不到、Esc 與按鈕都能還原、重新載入仍放大」。
 - **還沒擋住的**：只有 Chromium 的量測；並排右側的 z-index 是用 `:has()` 抬高那一側，之後若有新的「覆蓋整個視窗」的元素放進有自己堆疊層的父層，e2e 的 `.ui-layer--fill` 檢查會抓到大小但抓不到被蓋住的情況，要靠點擊測試涵蓋。
 
+### 2026-11-16　文件說的檔案、函式、migration 已經不在了，檔頭還寫「現行」（文件過時）
+- **發生了什麼**：文件檢查器第一次跑在 main 上（740 份 `.md`）：48 份「現行」或必查的文件裡有 115 處引用已不存在（路徑不存在 69、行號超出檔案長度 10、函式或常數不在那個檔 34、migration 編號不存在 2）；
+  `docs/` 底下 12 份沒有可用的狀態行（4 份 `docs/agents`、`deploy-log`、設計與自架文件、現行卻沒寫確認日期）。最舊的錯誤：`views-as-modules.md` 寫著「最後確認 2026-11-12」，
+  講的 syncViewModuleExtends、pickDateField 在那之前就刪了；根目錄 AGENTS.md 與三個套件的 AGENTS／README 把 check-boot-bundle 腳本寫在根目錄的 scripts/，實際在 packages/frontend/scripts/，
+  AGENTS.md 的「區塊 id」入口寫成 blockNodes 的 newBlockId，其實是 @onden/markdown 的（dupSweep 守門測試裡那條的名字也還指著舊位置，尚未改）。
+- **證據**：本 PR 的 `node scripts/check-md-links.mjs` 在 `origin/main` 上的輸出（0 broken link、12 status line problem、115 stale code reference）；修法與改狀態的 48 份名單在 PR 說明。
+- **發現者**：測試（檢查器第一次執行）。
+- **為什麼沒擋到**：只有連結（相對 `.md` 連結）有檢查，而且只有 `docs/research`、`docs/architecture` 要求狀態行；行內程式碼寫的路徑與函式名沒有人比對，「最後確認」是人手寫的日期，不是檢查的結果（現在不再要求，改由「涵蓋」在程式變動時觸發）。
+- **類別**：文件過時。
+- **機制**：〔第 1 層〕`scripts/check-md-links.mjs`（`docs.guard.test.ts` 與 `scripts/guard-lane.sh` 都會跑）：現行文件、各 `AGENTS.md`、package README、`docs/agents/*` 的路徑／行號／函式／migration 引用必須存在；`docs/` 每份文件要有狀態行；
+  現行文件要宣告 `> 涵蓋：` 或登記在 noCoverage（只准減少）；提案可寫 `> 完成後：`，超過 60 天沒動列在 `--report`；文件可宣告 `> 涵蓋：<glob>`，PR 改了涵蓋的程式卻沒改文件就在 guard lane 失敗（`npm run docs:covered`，要放行寫 `文件不需要更新：<原因>`）；`<!-- check: 基準檔#路徑 -->` 比對文件裡的數字。例外清單 `scripts/docs-freshness-baseline.json` 只准減少。規則：[docs-freshness.md](docs-freshness.md)。
+- **還沒擋住的**：（1）只查「路徑存在、行號不超過、名稱出現在檔案裡」與「被取代清單」，查不到文件的**敘述**還對不對（函式改了行為、文件沒改）；現行文件靠 `> 涵蓋：` 在程式變動時被提醒，目前只有 18 份宣告，其餘 125 份登記在 `noCoverage`（只准減少）。
+  （2）「文件不需要更新」是作者自己的聲明：`docs:covered` 會印出文件、glob、改到的檔與原因，由 note-cf 對照 diff 查證；查證是第 3 層（流程），聲明錯了事後才發現的記在這份紀錄。（3）改成歷史紀錄的 27 份是人為判斷，需作者確認。
+  （4）dupSweep 守門測試的區塊 id 那條仍指著舊位置，沒有改（本批不動守門程式）。
 ### 2026-11-17　新的標籤名稱規則擋掉了程式自己取的名字「idea (2)」，而且已經上線（沒查現況就定規則）
 - **發生了什麼**：#1793 把「程式符號」（含括號）加進標籤名稱的禁用字元。兩個同名標籤相遇時，同步與合併會把較晚的那個取名為「名稱 (2)」；這條新規則拒絕它。main 上一個測試因此失敗，而這個版本（a81a184c）已經部署。正式環境目前碰不到（舊的分散式同步關著、新的合併沒有產品呼叫者），但規則本身是錯的。
 - **證據**：note-cf 轉述雲端作者在 #1801 的回報；本機重現：`ONDEN_DB_DRIVER=pglite … vitest run src/test/distributedSyncReal.integration.test.ts -t "name clash"` 在 main（dac2c5f0c）失敗，訊息 `(projection) A: tag.create TagNameShapeError`；會取這種名字的程式：`packages/backend/src/spine/stampedMerge/rules/names.ts`（`${n} (${k})`）、`packages/backend/src/distributedSync/bridge/view.ts`。公開庫第 43957093364 次（部署依據）全綠。

@@ -1,6 +1,6 @@
 # 桌面 App 內建伺服器：設計（2026-11-02 依現況改寫）
 
-> 狀態：設計提案，**尚未實作桌面外殼**；地基（可攜後端、瀏覽器版）已在 main。寫給業主看。
+> 狀態：歷史紀錄（2026-11-02 的設計；桌面外殼之後已在 `packages/desktop` 試做，現況見 [desktop/README.md](../desktop/README.md)）。以下是當時寫給業主看的設計。
 > 改寫原因：10/31 的初稿假設「要內建真的 Postgres、自己寫搜尋抽象層」。之後 #1157（可攜後端）與 #1164（瀏覽器版）已上線，那兩件事已經做完，且方向不同。本文照現況重寫。
 > 相關：伺服器不在線時的行為見 `docs/design/intermittent-server.md`（#1132，另一個 PR，尚未合併）；後端怎麼放進別的環境見 [portable-backend.md](../architecture/portable-backend.md)；瀏覽器版見 [browser-app.md](../architecture/browser-app.md)。
 > 初稿的實驗已被取代，只留結論：[research/desktop-app](../research/desktop-app/README.md)。

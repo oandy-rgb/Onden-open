@@ -26,7 +26,7 @@
 - 新抽象須指出消除的重複責任或錯誤來源，且在本批遷移中實際使用；優先沿用現有模組與 registry，
   不為假想擴充預建政策語言、插件框架或事件平台。搬檔案、縮短函式、加轉呼叫層不算完成重構。
 - 功能模組的入口（`modules/<id>/index`）只放登記資料（id、名稱、圖示、指令、判斷是否在用的小函式）；畫面、編輯器、對話框、設定元件與大型函式庫用 `lazyWithReload`／`import()` 用到才載。
-  建置後 `scripts/check-boot-bundle.mjs` 檢查登入後必載 JS 的 gzip 總預算與每個模組的上限，超過就失敗並指出模組（見 [modules/README](packages/frontend/src/modules/README.md)）。
+  建置後 `packages/frontend/scripts/check-boot-bundle.mjs` 檢查登入後必載 JS 的 gzip 總預算與每個模組的上限，超過就失敗並指出模組（見 [modules/README](packages/frontend/src/modules/README.md)）。
 - 影響使用決策的保證（保存確認、覆蓋範圍、撤權結果）放進介面與名稱；只隱藏不影響使用方式的內部選擇。
 - 同一概念同一名稱；ID、游標、版本、時間單位從名稱或型別可辨識；不用含糊的 `data`／`info`／`manager`。
 - 錯誤語意與回傳型別一致；既有慣例有問題時，在明確範圍內修正並遷移呼叫者，不為新入口另建近似慣例。
@@ -140,8 +140,8 @@
   降低 `scripts/dup-names-baseline.json`，通用名稱要放該檔 `allow` 並寫理由。兩個檢查都在完整 vitest 的 `dup.guard.test.ts` 內，不是只有 `npm run check` 才跑——新 PR 必須通過。
 - `npm run dup:near` 只准減、不准增「近似重複」（變數改名、改註解後仍相同的函式；正規化後相似度 ≥ 0.8，jscpd 與 `dup:names` 都抓不到）；
   變少時用 `npm run dup:near:baseline` 降低 `scripts/dup-near-baseline.json`（只掃產品程式，不含測試）。同樣在 `dup.guard.test.ts` 內跑。
-- 前後端要一致的常數與判斷 → `@onden/markdown` 的 `sharedContract.ts`（任務模組 id／`_task_*` 屬性鍵／任務標籤功能、發布的邊類型、回溯上限、標籤頁列數、密碼長度、檢視的內建欄位與篩選運算）、`isUuid`／`UUID_SOURCE`、`isHexColor`、`BLOCK_ID_CHARS`；不在兩邊各寫一份。守門：`packages/markdown/src/test/guards/crossPackage.guard.test.ts`；清單與待收斂項目：[docs/research/dup-sweep-2026-10-29-cross.md](docs/research/dup-sweep-2026-10-29-cross.md)。
-- 後端：SHA-256 十六進位摘要 → `utils.ts` `sha256Hex`；事件附加鎖 → `spine/eventLock.ts` `lockEventAppend`；區塊 id → `blockNodes.ts` `newBlockId`；「哪些事件算儲存」→ `services/history` `bodyEventSql`；復原的 `history_incomplete`／`state_conflict` 拒絕 → `eventRestore/refusals.ts`；路徑中的 bigint id → `routes/params.ts` `parseBigintId`；新筆記預設落點 → `services/spaces.ts`。清單與待處理批次：[dup-sweep-2026-10-29-backend.md](docs/research/dup-sweep-2026-10-29-backend.md)；守門 `src/test/guards/dupSweep.guard.test.ts`。
+- 前後端要一致的常數與判斷 → `@onden/markdown` 的 `sharedContract.ts`（任務模組 id／`_task_*` 屬性鍵／任務標籤功能、發布的邊類型、回溯上限、標籤頁列數、密碼長度、檢視的內建欄位與篩選運算）、`isUuid`／`UUID_SOURCE`、`isHexColor`、`BLOCK_ID_CHARS`；不在兩邊各寫一份。守門：`packages/markdown/src/test/guards/crossPackage.guard.test.ts`；2026-10-29 的盤點（歷史紀錄，不再更新）：[dup-sweep-2026-10-29-cross.md](docs/research/dup-sweep-2026-10-29-cross.md)；現況看 `npm run dup:check`／`dup:names`／`dup:near` 與 `scripts/dup-*baseline.json`。
+- 後端：SHA-256 十六進位摘要 → `utils.ts` `sha256Hex`；事件附加鎖 → `spine/eventLock.ts` `lockEventAppend`；區塊 id → `@onden/markdown` 的 `newBlockId`；「哪些事件算儲存」→ `services/history` `bodyEventSql`；復原的 `history_incomplete`／`state_conflict` 拒絕 → `eventRestore/refusals.ts`；路徑中的 bigint id → `routes/params.ts` `parseBigintId`；新筆記預設落點 → `services/spaces.ts`。2026-10-29 的盤點（歷史紀錄，不再更新）：[dup-sweep-2026-10-29-backend.md](docs/research/dup-sweep-2026-10-29-backend.md)；現況看 `npm run dup:check`／`dup:names`／`dup:near` 與 `scripts/dup-*baseline.json`；守門 `src/test/guards/dupSweep.guard.test.ts`。
 - 允許清單守門（預設拒絕：只有列出的主人能用，其他一律失敗）：前端 import 分層 `packages/frontend/eslint.boundaries.config.js`；平台全域（`window`、`document`、`crypto`…）、原生 `<button>`／`<input>` 等、CSS 的顏色／圓角／陰影／z-index／字級／`@media` 寬度（600／900／1280）／`position: fixed` 的主人表在 `packages/frontend/src/test/guards/allowlist/owners.ts`；後端 route 的 import 層、`process.env`、`setInterval`、`console`、route 內直接下 SQL（`.query(`、`q(`；含 `modules/*/routes.ts`） 在 `packages/backend/src/test/guards/allowlist/owners.ts`。`scripts/allowlist-baseline.json`（`{ 規則: { 檔案: 次數 } }`）已清零（2026-10-31），現在是嚴格模式：每條規則必須維持空物件（唯一例外：`be-raw-sql` 逐檔計數、只減不增，見 `allowlistLib.mjs` 的 `RATCHET_RULES`），基準有任何項目、或任何違規，守門測試直接失敗。失敗訊息寫「這個檔不准用 X，請改用 <主人>」：改用主人，不要記基準。新增主人須在 `owners.ts` 該行寫理由，且主人必須是 catalog 某筆的 `entry` 檔；沒有「還沒改」的容身處。新增規則時先把現有違規清到 0 再加（基準檔裡只加該規則的空物件）。
   app 的 CSS／TSX 讀顏色只准 `var(--ac-*)`（規則 `css-legacy-token`；准用前綴與理由在 `TOKEN_PREFIX_OWNERS`）；舊別名（`--accent`、`--muted`、`--onden-text-muted`…）已刪，只剩已發布網站共用樣式表還在讀的幾個，記在基準。
 
@@ -150,6 +150,8 @@
 - 犯了錯（對擁有者說錯、審查放過缺口、擁有者比測試先發現、同類問題再出現），在同一批工作裡記進 [docs/agents/mistakes.md](docs/agents/mistakes.md)：類別、擋住這一類的機制，或明寫「尚無機制」。
 - 從對應套件目錄執行相關 `npm test -- <測試路徑>`、`npx tsc --noEmit`、`npm run lint`；
   影響前端建置或載入時加 `npm run build`（會印出開機 JS 大小與每個開機 chunk 最大的來源檔；新功能預設延後載入，開機預算只准調低）。純文件改動檢查內容與連結：`node scripts/check-md-links.mjs`。
+- 改了文件：`node scripts/check-md-links.mjs`（連結、狀態行、現行文件裡的路徑／函式／migration 引用都要還在；規則見 [docs-freshness.md](docs/agents/docs-freshness.md)）。
+  改了某份文件的 `> 涵蓋：` 所列程式卻沒動那份文件，`npm run docs:covered` 會擋；確實不需要在 PR 說明寫一行 `文件不需要更新：<原因>`。
 - 改了使用者看得到的東西（`packages/frontend/src`、`packages/site/src` 的非測試檔），就在 `changes/` 加一個檔案（寫法見 [changes/README.md](changes/README.md)：
   日期加一到兩句白話，不寫版本、PR 編號、檔名等技術字）；`npm run changes:check` 會比對 `origin/main...HEAD` 提醒。
   確實使用者看不出差別時，在 PR 說明寫「不需要更新說明」並以 `--skip` 略過。
@@ -185,6 +187,7 @@
 | [decisions-slides.md](docs/agents/decisions-slides.md) | 改筆記的「簡報」視角、版型與主題、`slides_data`、`@onden/site/look`、簡報播放（簡報批 0–2） |
 | [decisions-modules.md](docs/agents/decisions-modules.md) | 新增或搬動模組、決定能力要不要有開關（功能／內建模組／核心）、改兩邊模組註冊表時 |
 | [testing.md](docs/agents/testing.md) | 決定驗證範圍、測試怎麼寫與回報時 |
+| [docs-freshness.md](docs/agents/docs-freshness.md) | 寫或改任何 `.md`、文件檢查器（`scripts/check-md-links.mjs`）擋下你、要宣告「這份文件涵蓋哪些程式」時 |
 | [migrations.md](docs/agents/migrations.md) | 新增／改 migration、改 `migrate()` 或升級／回退腳本、準備發布版本前 |
 | [deploy.md](docs/agents/deploy.md) | 部署、回滾、備份、排查連不上或 `INVALID_ORIGIN` 時 |
 | [release.md](docs/agents/release.md) | 切發布版本、推映像到 GHCR、改 `compose.yaml` 的 `image:` 或自架者的升級說明時 |

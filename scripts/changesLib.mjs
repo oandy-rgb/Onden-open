@@ -9,6 +9,11 @@ const CHANGE_FILE = /^changes\/(?!README\.md$)[^/]+\.md$/;
 /** PR 說明裡寫這句，就不要求更新說明。 */
 export const SKIP_PHRASE = '不需要更新說明';
 
+/** 測試與型別宣告檔（scripts/check-md-links.mjs 的「涵蓋」比對也用）。 */
+export function isTestPath(path) {
+  return TEST_PATH.test(path);
+}
+
 /** 這個路徑是不是使用者可能看得到的程式（測試與型別宣告不算）。 */
 export function isUserFacingSource(path) {
   return USER_FACING.some((dir) => path.startsWith(dir)) && !TEST_PATH.test(path);

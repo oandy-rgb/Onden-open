@@ -53,7 +53,7 @@
 | 後端 `services/history/bodyEvents.ts`（`inkEventSql`）、`inkChanges.ts`、`activity.ts`、`routes/nodes.ts` `/ink-versions`、`/ink-edits`、`/ink-change`、`nodeReads.ts` | 改 | 歷史有兩種筆跡，`kind`＝`handwriting`（`ink_data`）／`board`（`board_ink`，另含 172 之前存在 `ink_data` 的舊儲存）。同一組查詢，`kind` 是參數，不複製；見下節「歷史」 |
 | 前端 `lib/data/reads.ts`（`InkVersion`、`inkEdits`、`inkChange`）、`NoteHistory`、`WorkspaceHistoryNoteRow`、`InkChangeDisclosure` | 改 | 讀取帶 `kind`；標籤分「手寫」與「白板筆跡」；還原走 `nodeMutations.restoreInkVersion` |
 | 後端 `routes/nodes.ts` 的屬性讀取 | 不用改 | 依鍵讀，`?keys=board_ink` 直接可用 |
-| `scripts/drillInvariants.ts` | 改 | 新增 `ink_pages_notes`、`ink_bytes`（總量不能少）與 `ink_data_rows`／`board_ink_rows` |
+| `packages/backend/scripts/drillInvariants.ts` | 改 | 新增 `ink_pages_notes`、`ink_bytes`（總量不能少）與 `ink_data_rows`／`board_ink_rows` |
 | `canvasExport`（白板匯出 JSON Canvas） | 不用改 | 只匯出卡片、分區與連線，本來就不含筆跡 |
 
 ## 歷史
@@ -87,7 +87,7 @@ board／handwriting／unknown、`signals` 證據、`value_hash`）。
   由擁有者看 `suggested` 決定（SQL 在 migration 檔頭註解），決定後填 `decision`。
   2026-11-07 擁有者決定有文字的都是白板（migration 179）：移除 `ink_data`，內容分頁變回文字；172 之後才畫在內容分頁的筆畫先依 id 併進 `board_ink`。沒有文字的、頁面上有文字框或圖片的（`page_text`、`page_images`，白板筆層顯示不了）留著，`decision` 仍是空的。
 - **不動**：PDF 信封、有 `pdf_url`、沒有白板分頁、讀不出來、沒有筆畫、已經有 `board_ink`。
-- 還原：`scripts/restoreBoardInk.sql`（`psql -1`）。測試：`src/test/boardInkMigration.integration.test.ts`、`boardInkDecision.integration.test.ts`（179）。
+- 還原：`packages/backend/scripts/restoreBoardInk.sql`（`psql -1`）。測試：`src/test/boardInkMigration.integration.test.ts`、`boardInkDecision.integration.test.ts`（179）。
 
 遷移期（舊版前端還開著）：舊版會把白板筆畫寫回 `ink_data`。新版白板只讀 `board_ink`，所以那些筆畫暫時看不到；
 不自動搬（無法分辨是白板還是手寫頁）。部署後重新載入即可。

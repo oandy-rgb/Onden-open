@@ -1,9 +1,10 @@
 # 效能預算與基準測試
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：bench-budgets.json, packages/frontend/scripts/check-worker-bundle.mjs, packages/frontend/scripts/check-app-css.mjs
 
 20k 篇筆記的工作區是 Onden 的規模目標。2026-10-24 效能審查（分支 `review/2026-10-24-performance` 的 `docs/archive/research/review-2026-10-24/performance.md`）量過這個規模，
-這份基準測試把那些量測變成可重複的指令，並用預算擋住退步。它是 `scripts/check-worker-bundle.mjs`、`check-app-css.mjs`
+這份基準測試把那些量測變成可重複的指令，並用預算擋住退步。它是 `packages/frontend/scripts/check-worker-bundle.mjs`、`check-app-css.mjs`
 （建置大小守門）在執行期的延伸。
 
 ## 在你自己的機器上跑

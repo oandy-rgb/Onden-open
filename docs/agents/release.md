@@ -1,5 +1,8 @@
 # 發布版本與映像（自架用）
 
+> 狀態：現行（最後確認 2026-11-16）
+> 涵蓋：scripts/release.sh, scripts/changelog.sh, .github/workflows/release.yml
+
 何時讀：要切發布版本、改 `release.yml`／`scripts/release.sh`、或改 compose 的 `image:` 時。
 沒有使用者明確要求「切版」，不要切版、不要推映像。
 

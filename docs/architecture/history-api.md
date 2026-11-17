@@ -1,6 +1,7 @@
 # 整個工作區的「歷史」API
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/history/**, packages/backend/src/routes/history.ts
 
 何時讀：改 `routes/history.ts`、`services/history/*`，或前端「歷史」畫面（`components/history/`）時。
 後端全部限制在「呼叫者讀得到的筆記」（`readableScopeSql`；已刪除用 `readableTrashedNodeIds`）。

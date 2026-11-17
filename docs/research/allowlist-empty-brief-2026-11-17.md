@@ -38,3 +38,30 @@
 
 一張表：規則｜改前幾處幾檔 → 改後｜新增了哪些入口（名字、放在哪、為什麼沒有現成的）。然後列：沒搬的（檔案、行、原因）。
 寫明哪些驗證跑了、結果的最後幾行、哪些沒跑。使用者看不出差別，附一行「不需要更新說明」。非草稿 PR，不要自己合併。
+
+## 後端的 `be-raw-sql`：另外的規矩（note-cf 2026-11-17 的條件，每一批都要做到）
+
+手寫的 `q(…)`／`client.query(…)` 改成有型別的 `db`（`packages/backend/src/dbKysely.ts`；寫法見
+[portable-backend.md §9](../architecture/portable-backend.md)）。這條規則數的是 `q(` 與 `.query(` 的呼叫；在 `db` 的查詢裡用 Kysely 的 `sql` 模板寫一段
+片段（遞迴 CTE、權限範圍片段、pgroonga 運算子）不算手寫。**SQL 的改寫是最容易藏住無聲變化的地方**，所以：
+
+1. **同一個交易。** `db` 最後呼叫 `q()`，所以在 `withTransaction`／`mutate()`／savepoint 裡會用那個交易的連線。每一批至少加一個測試：
+   一個被改寫的**寫入**放在 `withTransaction` 裡，交易回滾時它也跟著回滾（改寫前先確認這個測試在舊程式上通過）。不要用 `db.transaction()`。
+2. **存進去的位元組要一樣，不只是回傳的列。** Kysely 對陣列、`jsonb`、時間戳的綁定方式和手寫不同（#1778 才查到一個 `jsonb` 欄位被
+   有型別的寫入路徑存成 JSON 字串）。凡是寫入 `jsonb`、陣列、`timestamptz`、`bytea` 欄位的語句：測試要直接查資料庫，比對改寫前後
+   `pg_typeof(col)`、`jsonb_typeof(col)` 與值本身。
+3. **熱門讀取看查詢計畫。** 改到啟動資料、同步增量、搜尋、標籤樹、檢視查詢這類每個畫面都會打的讀取時，在真 Postgres 上對改寫前後各跑一次
+   `EXPLAIN`，把兩份貼進 PR 說明；計畫變了就不要合，回報。
+4. **兩種引擎都跑。** PGlite 整套（`npm run test:pglite`）與真 Postgres（公開庫 CI 的四個 shard；本機有的話 `npm run test:real-pg`）。
+5. **只改寫，不順手改進。** 同一句 SQL 在同一個 PR 裡不能既換寫法又改邏輯（多選一欄、少一個 JOIN、換排序）。看到值得改的，列在 PR 說明。
+   參數的順序、`ORDER BY`、`FOR UPDATE` 的鎖定順序、`LIMIT` 都要原樣保留——`FOR UPDATE` 的順序是避免死結的規則。
+6. **不要動的語句**（留著，列在 PR 說明的「沒搬」）：由表格描述產生的 SQL（表名、欄名是資料）；`set_config`／`SET LOCAL`、advisory lock、
+   事件附加鎖；呼叫 `sync_*` 這類資料庫函式；`ANALYZE` 與維護用語句。這些之後會以「這個檔就是 SQL 層」登記在
+   `packages/backend/src/test/guards/allowlist/owners.ts` 的 `RAW_SQL_OWNERS`（要寫理由，擁有者同意），不是硬改成 `sql.raw`。
+7. **不要碰的檔案**（別的 PR 正在改，等它們合併）：`spine/**`、`services/sync/**`、`services/stamped*`、`distributedSync/**`（會整個刪掉，不轉）、
+   `services/blockAnchors/**`、`blockNodes.ts`、`blockChildNote.ts`、`blockLinks.ts`、`services/spaces.ts`、`actors.ts`、`tagCatalog.ts`、
+   `tagHierarchy.ts`、`workspaceSettings.ts`、`eventVisibility.ts`、`exportZip.ts`、`backupArchive.ts`、`spaceOverview.ts`、
+   `modules/tasks/focus.ts`、`app.ts`、`db.ts`、`services/agentSessions*.ts`、`panelChat*.ts`。任務訊息指定的檔案才是你的份。
+8. 降基準：`npm run allowlist:baseline`（只准往下）。`be-raw-sql` 要等最後一批才從 `RATCHET_RULES` 拿掉，你不要拿。
+
+PR 說明多一張表：每個檔｜改前幾句 → 改後｜每一句屬於哪一類（讀／寫／寫入特殊型別／熱門讀取）｜對應的測試。

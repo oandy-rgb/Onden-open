@@ -8,11 +8,26 @@ import { consumeFirstRunLanding, useFirstRunLanding } from "../lib/firstRunLandi
 import type { useUiMode } from "./useUiMode";
 import type { ContentNode } from "../lib/api";
 import { nodeOf } from "../lib/nodeIndex";
+import { isTag } from "@onden/markdown/contract";
 
 /** A note that exists and is not hidden (the landing targets must be openable). */
 function isVisibleNote(data: { nodes: ContentNode[] }, id: string): boolean {
   const node = nodeOf(data, id);
   return !!node && !node.hidden;
+}
+
+/** Where the launch ends when its setting has nothing to open (no home note, today's note could not be
+ *  started, daily notes off): the note left open last time, else the note changed most recently. With
+ *  notes in the workspace the launch never ends on an empty editor. */
+function fallbackLandingNote(data: { nodes: ContentNode[] }, lastNodeId: string | null): string | null {
+  const openable = (node: ContentNode | undefined): node is ContentNode => !!node && !node.hidden && !isTag(node);
+  const last = nodeOf(data, lastNodeId);
+  if (openable(last)) return last.id;
+  let newest: ContentNode | null = null;
+  for (const node of data.nodes) {
+    if (openable(node) && (!newest || (node.updated_at ?? "") > (newest.updated_at ?? ""))) newest = node;
+  }
+  return newest?.id ?? null;
 }
 
 type Options = {
@@ -57,8 +72,12 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
     initializedRef.current = true;
     // A node from the URL (?node=) already seeded selectedId — don't override it
     // with the default pick (surface S2a deep-link). D5's non-clobbering rule:
-    // the landing is additive, a deep link always wins.
-    if (selectedId) return;
+    // the landing is additive, a deep link always wins. A selection that names nothing in the
+    // workspace (the note was deleted, or the link is from another account) is not one: it is
+    // dropped and the launch goes on, so the editor does not stay empty beside a full list.
+    const selectionExists = !!selectedId && (!!nodeOf(data, selectedId) || !!data.tags?.some((tag) => tag.id === selectedId));
+    if (selectionExists) return;
+    if (selectedId) setSelectedId(null);
     // A PLACE deep link (?view=tasks/website/timeline) is exactly as explicit
     // as ?node= — landing must not clobber it either. (It used to: a cold
     // load on a place URL bounced to the landing note.)
@@ -83,6 +102,12 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
     // first entry's place. Resuming is the exception — the page left earlier sits above the default
     // screen — and so is a phone, whose first entry is the notes list (the bottom of the notes stack).
     const land = (go: () => void) => navigate(go, { history: landingHistory(landing === "resume") });
+    const lastNodeId = savedLastLocation
+      ? parseLocation(savedLastLocation, { view: "notes", nodeId: null, lens: "editor" }).nodeId : null;
+    const landOnFallback = () => {
+      const id = fallbackLandingNote(data, lastNodeId);
+      if (id) land(() => openNote(id));
+    };
     if (landing === "home") {
       const homeId = data.workspace.home_node_id;
       if (homeId && isVisibleNote(data, homeId)) {
@@ -113,6 +138,7 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
     if (!dailyNotesEnabled()) {
       const homeId = data.workspace.home_node_id;
       if (homeId && isVisibleNote(data, homeId)) land(() => openNote(homeId));
+      else landOnFallback();
       return;
     }
     const existingToday = findDayNode(data.nodes);
@@ -120,7 +146,10 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
       land(() => openNote(existingToday.id));
       return;
     }
-    void openDailyNote({ announce: false }).then(id => { if (id) setOverviewMobileTab("edit"); });
+    void openDailyNote({ announce: false }).then(id => {
+      if (id) setOverviewMobileTab("edit");
+      else landOnFallback();
+    });
   }, [bootstrapped, membershipGated, data.nodes, data.workspace.home_node_id, firstRun.phase]); // eslint-disable-line react-hooks/exhaustive-deps -- setSelectedId is stable; effect intentionally keyed on node-set changes
 
   // Two-axis nav (mobile-nav-two-axis): an explicit ?node= deep-link OPENS that

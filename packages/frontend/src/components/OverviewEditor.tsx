@@ -828,8 +828,8 @@ export default function OverviewEditor({
           <EmptyState
             size="page"
             variant="empty"
-            title={t("No notes yet")}
-            description={t("This space is yours — create your first note.")}
+            title={nodes.length > 0 ? t("No note is open") : t("No notes yet")}
+            description={nodes.length > 0 ? t("Pick one from the list, or start a new one.") : t("This space is yours — create your first note.")}
             ctaLabel={t("New note")}
             onCta={onCreateFirst}
           />

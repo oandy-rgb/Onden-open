@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { addBlockTag, blockTagSlot, parseBlocks } from "../blocks.js";
 import { withoutLineTrailers } from "../blockId.js";
 import { isTagList } from "../text.js";
-import { isTagNameShape } from "../sharedContract.js";
+import { isTagNameShape, tagClashName } from "../sharedContract.js";
 import { planBlockExpand } from "../blockChild.js";
 
 const tagsOf = (markdown: string): string[][] => parseBlocks(markdown).map((block) => block.tags);
@@ -82,7 +82,8 @@ describe("which `{…}` are tags", () => {
       expect(isTagNameShape(name), name).toBe(true);
       expect(tagsOf(`一段話 {${name}}`), name).toEqual([[name]]);
     }
-    // The number a same-name clash gives the later tag (sync, merge) is part of a name.
+    // The number a same-name clash gives the later tag (sync, merge) is part of a name: whatever tagClashName makes is one.
+    for (const [base, n] of [["idea", 2], ["讀書（小說）", 13], ["idea (2)", 3]] as const) expect(isTagNameShape(tagClashName(base, n)), tagClashName(base, n)).toBe(true);
     for (const name of ["idea (2)", "讀書 (13)"]) {
       expect(isTagNameShape(name), name).toBe(true);
       expect(tagsOf(`一段話 {${name}}`), name).toEqual([[name]]);

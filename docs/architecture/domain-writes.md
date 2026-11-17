@@ -1,6 +1,7 @@
 # 領域寫入模組
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/data/domainWriters.ts, packages/frontend/src/lib/data/taskWriter.ts, packages/frontend/src/lib/data/propertyWriter.ts, packages/frontend/src/lib/data/tagWriter.ts, packages/frontend/src/lib/data/relationWriter.ts, packages/frontend/src/lib/data/canvasWriter.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/optimisticFields.ts, packages/frontend/src/lib/taskMirror.ts
 
 延續 `note-writes.md` 的局部重構。這一批把任務、屬性、標籤、關聯、白板的主要寫入流程
 收進領域模組。所有 writer 都綁在 `domainWriters` 的同一個 context 上（`useAppData`

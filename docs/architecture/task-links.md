@@ -1,6 +1,7 @@
 # 任務的連結與嵌入（T6）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/markdown/src/nodeRef.ts, packages/frontend/src/lib/taskRefs.ts, packages/frontend/src/lib/taskRefs.app.ts, packages/frontend/src/lib/embedDom.ts, packages/backend/src/services/wikilinkEdges.ts, packages/backend/src/modules/website/publishing/redaction.ts
 
 任務是隱藏節點（掛 `#task`），不在筆記樹，也不在前端的 `nodes`（在 `data.tasks`）。本文記錄筆記怎麼連到任務、
 把任務嵌成能直接勾的列，以及權限與發布的處理。已實作、已測試的範圍以「驗證」一節為準。

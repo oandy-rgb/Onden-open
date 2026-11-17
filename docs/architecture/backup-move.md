@@ -1,6 +1,7 @@
 # 備份還原與搬整個工作區
 
 > 狀態：現行（最後確認 2026-11-14；版本歷史見下節）
+> 涵蓋：packages/backend/src/services/backup*.ts, packages/backend/src/spine/importedHistory.ts, packages/backend/src/routes/backup.ts
 
 程式：`packages/backend/src/services/backupArchive.ts`（寫出）、`backupFile.ts`（檢查上傳）、`backupRestore.ts`（還原）、
 `backupWorkspaceMove.ts`、`backupExtras.ts`、`backupSystemAttrs.ts`、`backupLinks.ts`；介面在「設定 › 你的資料 › 從備份還原」。

@@ -3,6 +3,7 @@
 > 狀態：現行（最後確認 2026-11-01）。待在 iPhone 真機執行；WebKit 與 iPhone 在雲端環境裝不起來（見 [browser-app.md](browser-app.md) §14）。
 > 這份清單是要在業主的 iPhone／iPad（Safari 與「加到主畫面」）上手動做的。每項寫了怎麼做、預期看到什麼、不對的話代表什麼。
 > 做完在最下面的表格填結果（裝置、iOS 版本、通過／失敗、備註）。
+> 涵蓋：packages/frontend/src/browserApp/**, packages/backend/src/browser/journal.ts, packages/backend/src/browser/snapshotStore.ts, packages/frontend/browser-sw/media-sw.js
 
 準備：用 HTTPS 的試用版網址（GitHub Pages 的子路徑也行）在 Safari 開啟。需要一台 Mac 或 Windows 電腦下載備份檔來比對時更方便，但不是必須。
 「說明」頁（試用版最下面的提示 › 說明與回報問題）裡的「複製診斷資訊」可貼到備忘錄，每一項都請順手貼一份，回報時才知道當時的保存方式。

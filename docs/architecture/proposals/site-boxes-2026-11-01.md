@@ -1,9 +1,10 @@
 # 網站的盒子模型：預設就好看、使用者只換「這一格放什麼」（2026-11-01）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/site/src/boxes.ts, packages/site/src/widgets.ts, packages/site/src/designV3.ts, packages/frontend/src/components/siteFrame/SiteWidgets.tsx
 
 > 業主 2026-10-31 看完 demo 第 4 版後決定（「直接開始」）：網站改成**很多小盒子**，參考 Shopify Online Store 2.0 的 sections / blocks。
-> 這份文件定義盒子、零件、資料形狀與搬遷；第 1 步（本文＋ `@onden/site` 的盒子模型＋唯一一套畫法）與第 2 步（設定畫面）的實作狀態寫在 §8。
+> 這份文件定義盒子、零件、資料形狀與搬遷；第 1 步（本文＋ `@onden/site` 的盒子模型＋唯一一套畫法）與第 2 步（設定畫面）的實作狀態寫在 §10。
 > 接續 [發布改版](publish-redesign-2026-10-24.md)（§5.2 的設計形狀、§5.4 的預設設計在這裡被取代）與 [網站呈現模型](../site-render-model.md)（快照為準、下架即時，不變）。
 
 ## 1. 為什麼改

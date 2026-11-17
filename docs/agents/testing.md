@@ -1,6 +1,7 @@
 # 驗證與完成條件
 
 > 狀態：現行（最後確認 2026-11-14）
+> 涵蓋：scripts/guard-lane.sh, scripts/fast-lane.sh, scripts/repeat-changed-tests.sh, scripts/lib/skipGateReporter.mjs, scripts/desktopCheck.mjs, scripts/parity-known-differences-baseline.json, packages/backend/src/test/helpers/pgliteSkipList.ts, packages/backend/src/test/helpers/pgliteSkips.ts, packages/backend/scripts/realPostgresTests.mjs, packages/frontend/e2e/parity/run.mjs, packages/frontend/e2e/fullstack/cloud-stack.mjs, packages/frontend/e2e/browser-app/run-all.mjs, packages/frontend/scripts/client-writes/capture.mjs, packages/frontend/src/lib/keys.ts, packages/markdown/src/graphemes.ts, packages/markdown/src/test/helpers/unicodeText.ts
 
 何時讀：決定驗證範圍、寫測試、回報完成時。精簡版在 [AGENTS.md](../../AGENTS.md)。部署相關的兩條在 [deploy.md](deploy.md)。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -169,7 +170,7 @@ Astro node 伺服器 → 以 Node 內建 http 做同源轉發（取代 compose �
 - **瀏覽器版本**：預裝的 Chromium 版本若與 `e2e/package.json` 釘的 Playwright 不同，腳本在暫存目錄建符號連結對應，不需要 `playwright install`。
 - **B 類略過**：`E2E_CLOUD=1`（`--run` 自動設）時 `playwright.config.ts` 略過 `scaleIntegrity.spec.ts`：它灌 5000+ 筆記，PGlite（單連線）跑 4 分多鐘，之後每個 API 都逾時，會連累字母序在它後面的所有 spec。留給筆電的真 Postgres。
 - **站內 feed 位址**：`rssReader`／`composition` 讓後端抓自己的 `/site/feed.xml`；compose 裡是 `http://nginx`，雲端用 `E2E_FEED_ORIGIN`（`cloud-stack.mjs` 設為轉發的 loopback 位址，`helpers.ts` 的 `FEED_ORIGIN`）。
-- **`zz*` 探針**：沒有 `expect`、只印數值的 126 個已搬到 `e2e/probes/`（不屬於任何驗收，綠燈不代表受保護；跑法：`npm run e2e:probes`，見該資料夾的 README）。留在 `fullstack/` 的 `zz*` 是有斷言的。上面的指令 `grep -v /zz` 仍然排除它們。用 `e2eContainer`／`psql`／`docker exec` 的探針需要 docker 與真 Postgres，不在雲端堆疊跑；它們在 `helpers.ts` 會因沒有 `E2E_COMPOSE_PROJECT` 而具名跳過。
+- **`zz*` 探針**：沒有 `expect`、只印數值的探針已搬到 `e2e/probes/`（不屬於任何驗收，綠燈不代表受保護；跑法：`npm run e2e:probes`，見該資料夾的 README）。留在 `fullstack/` 的 `zz*` 是有斷言的。上面的指令 `grep -v /zz` 仍然排除它們。用 `e2eContainer`／`psql`／`docker exec` 的探針需要 docker 與真 Postgres，不在雲端堆疊跑；它們在 `helpers.ts` 會因沒有 `E2E_COMPOSE_PROJECT` 而具名跳過。
 - **失敗分類**（回報全端 e2e 結果時分開列，不混在一起）：A＝舊測試本來就壞（產品改了、spec 沒跟上；在 docker 的筆電上也會失敗）；
   B＝需要真 Postgres（pgroonga 全文搜尋、第二條連線、PG 專有行為；留給筆電）；C＝雲端堆疊的環境差異（轉發、SSR、時區、路徑、背景工作；要修啟動腳本或輔助，不改產品）。
 

@@ -1,6 +1,7 @@
 # AI 不預設模型
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/agentRuntime/api/models.ts
 
 | 項目 | 內容 |
 | --- | --- |

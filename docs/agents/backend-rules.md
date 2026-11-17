@@ -1,6 +1,7 @@
 # 後端規則：事件、權限、交易與復原
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/spine/currentActor.ts, packages/backend/src/spine/systemJobs.ts, packages/backend/src/services/readPolicy.ts, packages/backend/src/services/tagMembershipWrites.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/test/guards/systemActor.guard.test.ts
 
 何時讀：改後端寫入、權限、事件、交易或復原的任何程式之前。硬規則的精簡版在 [AGENTS.md](../../AGENTS.md)。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -51,7 +52,7 @@
 - 事件內容須服務明確用途，避免傾倒整個請求、憑證或不必要的內容。
   修改事件格式時，檢查既有歷史、復原與同步消費者的相容性。
 - 外部副作用沿用既有 outbox；不新增與資料庫交易各自提交的臨時傳送流程。
-- 沒人觸發、到時間自己跑的背景工作（目前只有任務排程器）用系統身分走 `mutate`（`spine/systemJobs.ts`）：
+- 沒人觸發、到時間自己跑的背景工作（目前是任務排程器與段落標記修復，見 `SYSTEM_JOBS`）用系統身分走 `mutate`（`spine/systemJobs.ts`）：
   事件 `actor_type` 為 `system`，`actor_id` 由工作推導；它只有 `{ kind: "system" }`／`cascade` 權限，
   允許的事件種類、對象種類與所需模組寫在 `SYSTEM_JOBS`，每個事件（含連帶）都核對，越界丟 `AuthorityError`。
   系統身分沒有個人空間（資料庫拒絕沒指定父節點或空間的建立）、不是擁有者，也不是原生 app 的 `system` 帳號。
@@ -67,4 +68,4 @@
 - 分清共用的歷史／執行順序、各領域的反向操作，以及一次復原包含哪些操作的分組規則。
   在既有機制內逐步分離這些責任；不能直接把編輯器記憶體內的 undo 範例當作跨裝置持久化協定。
 - 遷移復原流程時，將共用權限、交易、事件機制收回既有邊界，保留領域的衝突判斷。
-  目前 `services/eventRestore/restore.ts` 仍有自行組裝流程；這是漸進改善位置，不能據此新增更多旁路。
+  `services/eventRestore/restore.ts` 的寫入已經走 `spine/mutate.ts` 的 `runRestore`／`mutateRestore`；不要新增繞過它們的復原旁路。

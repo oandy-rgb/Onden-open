@@ -1,6 +1,7 @@
 # 白板是筆記的視角（migration 138）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/boardStore.ts, packages/backend/scripts/restoreCanvasNotes.sql, packages/backend/scripts/restoreFoldedBoards.sql, packages/frontend/src/lib/whiteboardNote.ts, packages/frontend/src/lib/whiteboardTab.ts, packages/frontend/src/lib/boardTree.ts, packages/frontend/src/hooks/useBoardTree.ts, packages/frontend/src/hooks/useBoardTreeSettings.ts
 
 2026-10-27。使用者決定「白板是看筆記的一種視角，不是一種筆記類型」。筆記標題上方的分頁列（內容｜白板｜表格…｜＋，見
 [views-as-modules.md](views-as-modules.md)）裡，「白板」是其中一個分頁。

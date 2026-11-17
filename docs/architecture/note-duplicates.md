@@ -1,6 +1,7 @@
 # 筆記安全副本（NOTE-11／PER-02／DEC-02）
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/noteDuplicate.ts, packages/frontend/src/lib/data/nodeActions.ts
 
 普通複製使用 `POST /api/nodes/:id/duplicate`，JSON 可帶穩定的客戶端 UUID `{ "id": "…" }`，重試沿用 `Idempotency-Key`。首次成功回 `201` 與完整新節點；同鍵已提交的重送沿用共用 `200 { "deduped": true }`，客戶端以該 UUID 讀取或同步結果。只接受 live content 筆記；class tag、媒體、白板與帶 `#task` 身分的節點回 `422`。來源不可讀或已不存在時拒絕，拒絕不留下副本、標籤關係、成功事件或已提交的冪等鍵。
 

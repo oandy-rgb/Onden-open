@@ -1,6 +1,7 @@
 # 自動配色：兩個種子色產生全部 app 顏色
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/appColors.ts, packages/frontend/src/styles/tokens.css
 
 | 項目 | 內容 |
 | --- | --- |

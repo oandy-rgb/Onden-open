@@ -2,6 +2,7 @@
 
 > 狀態：現行（最後確認 2026-11-02）。範圍：mermaid 流程圖（`flowchart`／`graph`）與狀態圖（`stateDiagram`／`-v2`）。
 > 序列圖、甘特圖、圓餅圖等其他類型這版不支援，照舊由讀者的瀏覽器畫。
+> 涵蓋：packages/markdown/src/diagramLayout.ts, packages/markdown/src/diagramSvg.ts, packages/frontend/src/lib/diagramPrecompile.ts, packages/backend/src/modules/website/publishing/diagrams.ts
 
 ## 問題與決定（業主 2026-11-02）
 

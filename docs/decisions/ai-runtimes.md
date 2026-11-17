@@ -1,6 +1,7 @@
 # 加入 AI 角色只有 API 與 MCP 兩種；API 只能提建議
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/services/agentRuntime/api/**
 
 | 項目 | 內容 |
 | --- | --- |

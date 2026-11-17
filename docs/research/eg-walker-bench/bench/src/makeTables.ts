@@ -11,7 +11,7 @@ const cell = (r?: Row) => (!r ? "—" : r.skipped || !r.stats ? "未跑" : `${fm
 const IMPLS = ["diff3", "ref", "dt", "proto"] as const;
 const NAMES: Record<string, string> = { diff3: "現行 diff3", ref: "參考實作", dt: "diamond-types", proto: "我們的原型" };
 const SCEN = ["10KB-10", "10KB-100", "10KB-1000", "50KB-10", "50KB-100", "50KB-1000", "200KB-10", "200KB-100", "200KB-1000"];
-const lines: string[] = ["# Eg-walker 測試台原始數字", "", "> 狀態：現行（`src/makeTables.ts` 由 `bench/out/*.json` 自動產生；解讀見上一層的 report.md）（最後確認 2026-11-01）", ""];
+const lines: string[] = ["# Eg-walker 測試台原始數字", "", "> 狀態：歷史紀錄（寫於 2026-11-01）（`src/makeTables.ts` 由 `bench/out/*.json` 自動產生；解讀見上一層的 report.md）", ""];
 const p = (s = "") => lines.push(s);
 
 function forkTable(title: string, rows: Row[], op: string) {

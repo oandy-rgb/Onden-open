@@ -4,7 +4,7 @@ import type { Summary } from "./evaluate.js";
 
 const rd = (f: string) => JSON.parse(readFileSync(`out/${f}`, "utf8"));
 const ms = (x: number) => (x < 1 ? x.toFixed(3) : x < 100 ? x.toFixed(1) : x.toFixed(0));
-const lines: string[] = ["# 認段落身分的合併原型：量測表格", "", "> 狀態：現行（由 makeTables.ts 從 paraid-*.json 產生，不手改）（最後確認 2026-11-15）。說明見 [報告](../../../body-merge-measurements-2026-11-15.md)。", ""];
+const lines: string[] = ["# 認段落身分的合併原型：量測表格", "", "> 狀態：歷史紀錄（寫於 2026-11-15）（由 makeTables.ts 從 paraid-*.json 產生，不手改）。說明見 [報告](../../../body-merge-measurements-2026-11-15.md)。", ""];
 const L = (s = "") => lines.push(s);
 
 for (const mode of ["block", "line"] as const) {

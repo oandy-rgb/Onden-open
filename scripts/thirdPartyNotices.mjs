@@ -81,6 +81,8 @@ const lines = [
   "",
   "> 狀態：現行（由 `npm run notices` 從 `package-lock.json` 產生，不要手改）",
   "",
+  "<!-- 由 npm run notices 從 package-lock.json 產生，不要手改。 -->",
+  "",
   "Onden 本身以 AGPL-3.0 授權（見 [LICENSE](LICENSE)）。下面是隨 Onden 一起散布的第三方套件",
   `（共 ${total} 個，只在開發時用到的不列），依授權分組。各套件的完整授權條款在它自己的套件資料夾裡。`,
   "",

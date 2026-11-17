@@ -1,6 +1,7 @@
 # 筆跡存在哪個屬性（`ink_data`、`board_ink`）
 
 > 狀態：現行（最後確認 2026-11-02）
+> 涵蓋：packages/markdown/src/sharedContract.ts, packages/frontend/src/lib/data/inkWriter.ts, packages/frontend/src/lib/ink/store.ts, packages/backend/src/services/attributeWrites.ts, packages/backend/src/services/history/bodyEvents.ts, packages/backend/src/services/history/inkChanges.ts
 
 一篇筆記最多有三份筆跡，各有自己的屬性，格式與寫入路徑相同、用途不同（第三份 `note_ink` 是 2026-11-12 加的「手寫」分頁，見文末）：
 

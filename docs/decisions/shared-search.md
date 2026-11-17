@@ -1,6 +1,7 @@
 # 側欄與指令面板共用同一套搜尋
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/frontend/src/lib/data/noteSearch.ts
 
 | 項目 | 內容 |
 | --- | --- |

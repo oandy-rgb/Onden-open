@@ -1,6 +1,6 @@
 # 認段落身分的合併原型：量測表格
 
-> 狀態：現行（由 makeTables.ts 從 paraid-*.json 產生，不手改）（最後確認 2026-11-15）。說明見 [報告](../../../body-merge-measurements-2026-11-15.md)。
+> 狀態：歷史紀錄（寫於 2026-11-15）（由 makeTables.ts 從 paraid-*.json 產生，不手改）。說明見 [報告](../../../body-merge-measurements-2026-11-15.md)。
 
 ### (a) 既有產生器，單位＝段落（空行分隔的區塊），每格 20 個種子
 

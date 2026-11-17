@@ -1,6 +1,6 @@
 # Interaction-design decisions (settled)
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：歷史紀錄（2026-06-08 的決定；最後確認 2026-11-01）
 
 This is the **decision layer** that sits above the exploratory cross-app studies
 (`01`–`10`). Those docs survey how other tools work; this one records what Onden

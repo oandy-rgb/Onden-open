@@ -3,6 +3,7 @@
 > 狀態：現行（最後確認 2026-11-01）
 
 > 狀態：RSS 劃線已實作（2026-10-29）。PDF 劃線、「閱讀頁依網址找出劃線」尚未做，見下方「之後」。
+> 涵蓋：packages/markdown/src/excerpt.ts, packages/frontend/src/lib/noteExportExcerpts.ts, packages/backend/src/modules/website/publishing/excerptEmbeds.ts
 
 ## 這是什麼
 

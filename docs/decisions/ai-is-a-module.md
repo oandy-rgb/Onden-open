@@ -1,6 +1,7 @@
 # AI 整個是可以關掉的模組
 
 > 狀態：現行（最後確認 2026-11-01）
+> 涵蓋：packages/backend/src/modules/ai/index.ts, packages/frontend/src/modules/ai/index.ts
 
 | 項目 | 內容 |
 | --- | --- |

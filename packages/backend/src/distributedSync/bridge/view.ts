@@ -3,6 +3,7 @@
 // Only what the engine carries is here: space names and members, and per note its space, kind, title, body, parent, deleted flag and tags.
 // Slugs, sort order, attributes… are not replicated (doc §4.4).
 import { cutToUnits } from "@onden/markdown";
+import { tagClashName } from "@onden/markdown/contract";
 import { db } from "../../dbKysely.js";
 import type { Note, World } from "../materialize.js";
 import { isGlobalTagSpace, GLOBAL_TAG_SPACE_PREFIX, type NoteId, type SpaceId } from "../types.js";
@@ -30,7 +31,7 @@ export function tagDisplayTitles(world: World): Map<NoteId, string> {
     const used = seen.get(g) ?? seen.set(g, new Set()).get(g)!;
     let title = n.title, i = 2;
     while (used.has(title.normalize("NFC").toLowerCase())) {
-      do { title = `${n.title} (${i++})`; } while (taken.get(g)!.has(title.normalize("NFC").toLowerCase()));
+      do { title = tagClashName(n.title, i++); } while (taken.get(g)!.has(title.normalize("NFC").toLowerCase()));
     }
     used.add(title.normalize("NFC").toLowerCase());
     out.set(n.id, title);

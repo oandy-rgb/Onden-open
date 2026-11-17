@@ -3,6 +3,7 @@
 // "name (2)" / "name-2" and a notice goes to whoever can sort it out. The answer is a view computed from the merged rows,
 // not a write: nothing is renamed in the data, so every node shows the same names and a rename by a person later is an
 // ordinary write.
+import { tagClashName } from "@onden/markdown/contract";
 import { type Stamp, compareStamps } from "../unit.js";
 
 export type NameItem = { id: string; scope: string; name: string; created: Stamp };
@@ -41,7 +42,7 @@ export function resolveNameClashes(items: readonly NameItem[], rule: NameRule): 
 
 /** Tags with the same name under one parent (4.2). The earlier-created keeps `#name`. Soft-deleted tags are left out by the caller: a deleted tag frees its name. */
 export const resolveTagNames = (tags: readonly { id: string; parent: string | null; name: string; created: Stamp }[]): NameResolution =>
-  resolveNameClashes(tags.map((t) => ({ id: t.id, scope: t.parent ?? "", name: t.name, created: t.created })), { format: (n, k) => `${n} (${k})` });
+  resolveNameClashes(tags.map((t) => ({ id: t.id, scope: t.parent ?? "", name: t.name, created: t.created })), { format: tagClashName });
 
 /** Saved views with the same name on one tag or note (4.8). The later one is shown as "name (2)". */
 export const resolveViewNames = (views: readonly { id: string; owner: string; name: string; created: Stamp }[]): NameResolution =>

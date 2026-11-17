@@ -81,13 +81,16 @@ export function createTouchPressGuard() {
  *  to the touch, at the finger. The menu (or drop) has just opened there, so
  *  that click would pick its first item: swallow the next click, briefly. */
 export function swallowNextClick(ms = 500) {
+  // The window the listener was put on, kept: the timer can outlive the page that started it (a test's window is
+  // gone 500 ms later, and `window` is then not defined), and it must take its listener off that same window.
+  const host = window;
   const stop = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); done(); };
-  const timer = window.setTimeout(() => done(), ms);
+  const timer = host.setTimeout(() => done(), ms);
   function done() {
-    window.clearTimeout(timer);
-    window.removeEventListener("click", stop, true);
+    host.clearTimeout(timer);
+    host.removeEventListener("click", stop, true);
   }
-  window.addEventListener("click", stop, true);
+  host.addEventListener("click", stop, true);
 }
 
 /** How long a press must stay still to count as a long press (opens a menu or shows an embed's

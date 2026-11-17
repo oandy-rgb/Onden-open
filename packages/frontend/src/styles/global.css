@@ -47,6 +47,14 @@
   box-sizing: border-box;
 }
 
+/* A tap is a tap at once. Without this the browser holds every tap back while it waits to see whether a second one
+   follows (double-tap zoom): measured on the owner's tablet (Samsung Internet, 2026-11-17) the click arrived 205–227 ms
+   after the finger lifted, and 4–5 ms with this. Panning and pinch zoom stay; surfaces that set their own
+   touch-action (ink, drag handles) keep it. */
+html {
+  touch-action: manipulation;
+}
+
 /* Scrollbars, one rule for the whole app. With a mouse: a thin, faint bar
    that darkens while the pointer is over its area (it still tells how long a
    note is and can be dragged). Touch screens keep the system's overlay bar. */

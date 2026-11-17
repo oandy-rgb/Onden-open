@@ -82,6 +82,12 @@ describe("which `{…}` are tags", () => {
       expect(isTagNameShape(name), name).toBe(true);
       expect(tagsOf(`一段話 {${name}}`), name).toEqual([[name]]);
     }
+    // The number a same-name clash gives the later tag (sync, merge) is part of a name.
+    for (const name of ["idea (2)", "讀書 (13)"]) {
+      expect(isTagNameShape(name), name).toBe(true);
+      expect(tagsOf(`一段話 {${name}}`), name).toEqual([[name]]);
+    }
+    for (const name of ["f(2)", "idea (x)", "idea (2) x", "(2)", " (2)"]) expect(isTagNameShape(name), name).toBe(false);
     for (const name of ["a/b", "C#", "x, y", "key:value", "f(x)", "it's", "a = b", " padded", ""]) expect(isTagNameShape(name), name).toBe(false);
   });
 

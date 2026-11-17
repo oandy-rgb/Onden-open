@@ -292,7 +292,12 @@ export { keyBetween, keysBetween, evenOrderKey, evenOrderKeys, isValidOrderKey, 
 // be renamed to a valid one.
 const TAG_NAME_FORBIDDEN = /[/#,:{};()[\]=<>"'`*|\\$\p{Cc}]/u;
 
+// One exception: the number a name gets when two tags of the same name meet — "idea (2)" (sync and merge give the later
+// one that name: stampedMerge/rules/names.ts, the old distributedSync bridge). The app makes such names itself, so they
+// must be names, and `{idea (2)}` must be that tag.
+const CLASH_NUMBER = / \(\d+\)$/;
+
 /** Whether `name` can be a tag's name (the rule above). */
 export function isTagNameShape(name: string): boolean {
-  return name.length > 0 && name.trim() === name && !TAG_NAME_FORBIDDEN.test(name);
+  return name.length > 0 && name.trim() === name && !TAG_NAME_FORBIDDEN.test(name.replace(CLASH_NUMBER, ""));
 }

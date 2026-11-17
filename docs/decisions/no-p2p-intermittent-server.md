@@ -1,11 +1,12 @@
 # 不做點對點同步；支援「伺服器常常不在」；拿掉 Apache AGE
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-17）
+> 涵蓋：docker/postgres/Dockerfile, packages/backend/db/migrations/158_drop_age.sql, docs/design/intermittent-server.md
 
 | 項目 | 內容 |
 | --- | --- |
 | 日期 | 2026-11-01（業主決定，2026 年） |
-| 實作狀態 | **實作中** |
+| 實作狀態 | **已實作**（離線優先與拿掉 AGE；「伺服器常常不在」的其餘項目見備註） |
 
 ## 決定
 
@@ -22,5 +23,5 @@
 ## 相關檔案與狀態備註
 
 - 離線優先已實作（[同步協定](../architecture/sync-protocol.md)）。
-- **與程式不符**：`docker/postgres/Dockerfile` 仍編譯 Apache AGE，`db/schema.sql` 與 `001_baseline.sql` 仍 `CREATE EXTENSION age`。
-- **文件缺**：業主指定的 `docs/design/intermittent-server.md` 尚未在 main，這裡不連結。
+- AGE 已拿掉：`docker/postgres/Dockerfile` 只裝 pgvector 與 PGroonga 的 apt 套件，不編譯 AGE；`packages/backend/db/migrations/158_drop_age.sql` 對既有資料庫 `DROP EXTENSION age`（還有圖資料就拒絕執行）。`packages/backend` 下沒有任何 `CREATE EXTENSION … age`（2026-11-17 `grep` 結果）。
+- 設計文件在 main：[intermittent-server.md](../design/intermittent-server.md)。檔頭狀態仍是「提案（2026-11-02，待業主決定）」，內容分批（①–④）是否都做完，本文沒有逐項核對。

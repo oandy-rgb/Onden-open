@@ -181,9 +181,9 @@
 | [decisions-import-storage.md](docs/agents/decisions-import-storage.md) | 改匯入（資料夾／媒體／單筆 Markdown）或本機備份、資料夾副本（第 6–9 批） |
 | [decisions-core-sync.md](docs/agents/decisions-core-sync.md) | 改 `updateNode`、標籤同名、冪等／交易、sync、membership、待同步文字、同步存活與離線副本狀態、開機先畫與 gate 時間（第 10–15、17、41、43 批） |
 | [decisions-offline-account.md](docs/agents/decisions-offline-account.md) | 改離線佇列、登入檢查、帳號隔離、手機帳號入口、啟動位置（第 16、18–21、24、25 批） |
-| [decisions-canvas.md](docs/agents/decisions-canvas.md) | 改白板與手寫（密度、加入、布局、分組、拖動、匯入匯出、卡片編輯、S Pen 側鍵、形狀／停住修形／顏色、頁面文字框與圖片、插入、筆的預設、取色器、形狀填色）（第 22、26–38 批） |
-| [decisions-ui.md](docs/agents/decisions-ui.md) | 改側欄收合／寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置畫面、筆記與標籤頁標題上方的視角分頁（第 23、39、40 批） |
-| [decisions-ai-collaboration.md](docs/agents/decisions-ai-collaboration.md) | 改 AI 的修改怎麼生效（待審建議、`write_mode`、接受／拒絕、@ai 回覆）、AI 跑法（API／訂閱／MCP）、API 金鑰與模型呼叫、`ONDEN_SECRET_KEY`、MCP 工具對筆記的寫入、AI 工作階段的復原（AI 協作第 0–4 批、技能當功能） |
+| [decisions-canvas.md](docs/agents/decisions-canvas.md) | 改白板與手寫（密度、加入、布局、分組、拖動、匯入匯出、卡片編輯、S Pen 側鍵、形狀／停住修形／顏色、頁面文字框與圖片、插入、筆的預設、取色器、形狀填色、頁面本子與存法、引用一塊區域、手寫分頁）。只留現行規則；分批紀錄在 [decisions-canvas-history.md](docs/agents/decisions-canvas-history.md) |
+| [decisions-ui.md](docs/agents/decisions-ui.md) | 改側欄收合／寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置畫面、筆記與標籤頁標題上方的視角分頁。只留現行規則；分批紀錄在 [decisions-ui-history.md](docs/agents/decisions-ui-history.md) |
+| [decisions-ai-collaboration.md](docs/agents/decisions-ai-collaboration.md) | 改 AI 的修改怎麼生效（待審建議、`write_mode`、接受／拒絕、@ai 回覆）、AI 跑法（API／MCP）、API 金鑰與模型呼叫、`ONDEN_SECRET_KEY`、MCP 工具對筆記的寫入、AI 工作階段的復原（AI 協作第 0–4 批、技能當功能） |
 | [decisions-slides.md](docs/agents/decisions-slides.md) | 改筆記的「簡報」視角、版型與主題、`slides_data`、`@onden/site/look`、簡報播放（簡報批 0–2） |
 | [decisions-modules.md](docs/agents/decisions-modules.md) | 新增或搬動模組、決定能力要不要有開關（功能／內建模組／核心）、改兩邊模組註冊表時 |
 | [testing.md](docs/agents/testing.md) | 決定驗證範圍、測試怎麼寫與回報時 |

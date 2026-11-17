@@ -1,6 +1,7 @@
 # Onden 桌面版（試做）
 
-> 狀態：現行（試做 spike，2026-11-02 起；最後確認 2026-11-13）。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
+> 狀態：現行（試做 spike，2026-11-02 起；最後確認 2026-11-17）。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
+> 涵蓋：packages/desktop/src/**, packages/desktop/scripts/**, packages/desktop/package.json, scripts/desktopCheck.mjs
 > 已實作並測過的是下面「現在能做什麼」；「還沒做的」一節是刻意不做的範圍，不是漏掉。
 
 ## 現在能做什麼
@@ -25,7 +26,15 @@ Electron 主程序（packages/desktop/src/main.mjs）
 - **埠盡量固定**：瀏覽器端的本機資料（IndexedDB、離線佇列）綁 origin（含埠）。第一次選好的埠記在 `desktop.json`，之後優先用同一個；被別的程式占走才換，換了就像換一台電腦（本機副本重新同步）。
 - **子程序用 `child_process.fork`**（`ELECTRON_RUN_AS_NODE`），不用 `utilityProcess`：行為與普通 `node serverEntry.mjs` 相同，開發與測試不需要 Electron；有 IPC，Windows 也能「請它關資料庫再離開」。
 - **乾淨關閉**：後端本身沒有 SIGTERM 處理。`serverEntry.mjs` 先裝好關閉處理（先 `pglite.end()` 再離開）再載入既有的 `server.js`，所以後端程式碼沒動。關掉視窗 → 請後端關好 → 退出；8 秒內沒結束才強制結束。
-- **安全**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`，沒有 preload；不動 `webSecurity`。外部連結用系統瀏覽器開，視窗不會被導到別的網址；只放行剪貼簿、通知、全螢幕權限；網頁伺服器檢查 `Host`（防 DNS rebinding）並蓋掉用戶端自帶的 `X-Real-IP`；只允許一個實例（再雙擊會把原視窗叫到前面）。
+- **安全**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；不動 `webSecurity`。有一個 preload（`src/preload.cjs`），只用 `contextBridge` 對網頁暴露 `window.ondenDesktop.ai`（見下一節「AI 橋」），沒有通用的 `invoke`／`send`，網頁拿不到 `ipcRenderer`。外部連結用系統瀏覽器開，視窗不會被導到別的網址；只放行剪貼簿、通知、全螢幕權限；網頁伺服器檢查 `Host`（防 DNS rebinding）並蓋掉用戶端自帶的 `X-Real-IP`；只允許一個實例（再雙擊會把原視窗叫到前面）。
+
+### AI 橋：用這台電腦上的 AI 回答
+
+設定 › AI 的按鈕（前端 `lib/desktopBridge.ts`）透過 preload 呼叫主程序，開關「這台電腦上已登入的命令列 AI 工具替你回答筆記旁的問題」（設計：[提案](../architecture/proposals/desktop-ai-answering-2026-11-15.md)）：
+
+- 網頁能要求的動作只有 `src/aiAnswering/bridge.mjs` 的 `AI_CHANNELS` 那幾個（偵測、狀態、預覽位址、開關自己的／遠端的回答），`preload.cjs` 的清單要與它一致。主程序只回應 App 自己畫面的主框架（固定來源、不是 `/api/` 底下的內容）。
+- 回答程式是 `packages/ai-answerer`，`stage.mjs` 複製成 `ai-answerer/src` 隨安裝檔出貨；載入失敗不影響開機，按鈕只會停用。狀態與連線碼存在 `<userData>/ai-answering.json`（用系統的 `safeStorage` 加密）。關閉 App 時先停掉回答（`stopAll`）再關後端。
+- 瀏覽器版與伺服器版沒有這座橋（`window.ondenDesktop` 不存在）。
 
 ### 第一次打開
 
@@ -41,6 +50,7 @@ Linux：`~/.config/Onden/`（打包版）；開發時是 `~/.config/onden-deskto
 | `data/content/` | 上傳的圖片與附件（`media/`）、筆記備份用的 git 倉庫 |
 | `secrets.json` | 第一次啟動自動產生的 `ONDEN_SECRET_KEY`（加密你的 AI 金鑰與外部日曆網址）與 `BETTER_AUTH_SECRET`（簽登入 cookie），權限 0600 |
 | `desktop.json` | 上次使用的埠 |
+| `ai-answering.json` | 「用這台電腦上的 AI 回答」的開關狀態與連線碼（加密） |
 | `version.json` | 這份資料上次是由哪個版本開的（換版時據此自動備份） |
 | `backups/` | 換版前的自動備份，每份一個資料夾（`before-<舊>-to-<新>-<時間>/`），預設保留最近 3 份 |
 | 其他（`Cache`、`Local Storage`…） | Chromium 自己的資料（登入 cookie、瀏覽器端離線副本） |

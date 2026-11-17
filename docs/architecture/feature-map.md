@@ -1,9 +1,10 @@
 # Onden 功能解構地圖
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行
+> 涵蓋：packages/backend/src/modules/index.ts, packages/frontend/src/modules/index.ts, packages/frontend/src/lib/tagModules.ts, packages/backend/src/routes/mcpProtocol.ts
 
-這份地圖把專案拆成可以分別理解、驗證和重構的能力。它包含現況與建議邊界，
-不是宣告所有功能已經能獨立停用，也不要求現在搬動所有檔案。
+這份地圖把專案拆成可以分別理解、驗證和重構的能力。它是手寫的（沒有腳本產生它），表格列出的是現在的入口；
+不要求現在搬動所有檔案。已被取代的 RSS 拆分範例、早期的「現有基礎與下一步」在 [feature-map-history.md](feature-map-history.md)。
 
 逐項驗收與剩餘範圍見 [全功能盤點清單](../research/full-feature-audit.md)：依使用案例追蹤
 入口、桌面／手機、正常與失敗情境、既有證據及缺口。本文件用來理解責任，清單用來追蹤驗證進度。
@@ -31,21 +32,24 @@ flowchart TB
 這是理解用的簡化資料流。尚未遷移的功能仍有直接 API 呼叫；
 上圖不表示所有讀寫都已經通過同一個前端模組。權限的最終執行點在後端。
 
+
 ## 功能清單與責任邊界
+
+路徑未註明套件者，前端在 `packages/frontend/src/`，後端在 `packages/backend/src/`。
 
 | 功能 | 使用者操作 | 應由它負責的規則 | 主要依賴 | 現有程式入口 |
 | --- | --- | --- | --- | --- |
-| 筆記與捕捉 | 新增、編輯、改名、刪除、還原 | 草稿生命週期、保存確認、筆記歷史 | 節點、媒體、共用提交 | `modules/capture/QuickCapture.tsx`、`OverviewEditorHost.tsx`、`draftActions.ts`、`noteWriter.ts`、`noteHistoryWriter.ts` |
-| 標籤、屬性與集合 | 套標籤、填欄位、建 schema、切表格／看板 | 欄位定義與值、成員關係、查詢／檢視設定 | 節點、屬性、標籤 | `NodeAttributesPanel.tsx`、`tagPage/`、`collections/`、`propertyWriter.ts`、`tagWriter.ts` |
-| 任務 | 新增、完成、延期、設定重複 | 任務狀態、日期清單、重複任務規則 | 筆記、任務屬性、背景排程 | `modules/tasks/TasksMode.tsx`、`taskWriter.ts`、`taskAgenda.ts`、後端 `modules/tasks/`（[任務模組](tasks-module.md)） |
-| RSS 閱讀 | 訂閱、略過、保存文章、擷取重點 | 文章暫存、已看狀態、保存成筆記、來源關聯 | 筆記、關聯、背景抓取 | 前後端 `modules/rss/` |
-| 標籤功能 | 啟用複習等功能、查看來源標籤與直接成員 | 功能綁定、配置權限、保存結果；不授予額外讀寫權 | 標籤 schema、既有成員關聯 | `services/tagModules.ts`、`tagCatalog.ts`、`tagPage/`、`tagModuleWriter` |
+| 筆記與捕捉 | 新增、編輯、改名、刪除、還原 | 草稿生命週期、保存確認、筆記歷史 | 節點、媒體、共用提交 | `modules/capture/QuickCapture.tsx`、`components/OverviewEditorHost.tsx`、`lib/data/draftActions.ts`、`lib/data/noteWriter.ts`、`lib/data/noteHistoryWriter.ts` |
+| 標籤、屬性與集合 | 套標籤、填欄位、建 schema、切表格／看板 | 欄位定義與值、成員關係、查詢／檢視設定 | 節點、屬性、標籤 | `components/NodeAttributesPanel.tsx`、`components/tagPage/`、`components/collections/`、`lib/data/propertyWriter.ts`、`lib/data/tagWriter.ts`、`lib/data/tagSchemaWriter.ts` |
+| 任務 | 新增、完成、延期、設定重複 | 任務狀態、日期清單、重複任務規則 | 筆記、任務屬性、背景排程 | `modules/tasks/TasksMode.tsx`、`lib/data/taskWriter.ts`、`lib/data/taskAgenda.ts`、後端 `modules/tasks/`（[任務模組](tasks-module.md)、[日子時間線](day-timeline.md)） |
+| RSS 閱讀 | 訂閱、略過、保存文章、把重點放進筆記 | 文章暫存、已看狀態、保存成筆記、來源關聯 | 筆記、關聯、背景抓取 | 前後端 `modules/rss/`（保存：後端 `modules/rss/save.ts`；摘錄：前端 `modules/rss/rssQuote.ts`） |
+| 標籤功能 | 啟用複習等功能、查看來源標籤與直接成員 | 功能綁定、配置權限、保存結果；不授予額外讀寫權 | 標籤 schema、既有成員關聯 | `lib/tagModules.ts`、後端 `services/functionRefs.ts`、`services/tagCatalog.ts`、`components/tagPage/`、`lib/data/tagConfigWriter.ts`（[模組庫](module-library.md)） |
 | 複習 | 套用具複習功能的標籤、取得到期卡片、評分 | 複習排程、記憶狀態、每日數量 | 筆記、複習屬性 | 前後端 `modules/review/` |
-| 白板與關係圖 | 加卡片、拖移、連線、整理布局 | 白板保存座標；關係操作保存語意連結 | 筆記 ID、關聯、布局資料 | `useCanvasActions.ts`、`modules/graph/LocalGraphLens.tsx`、`canvasWriter.ts`、`relationWriter.ts` |
-| 搜尋與查詢 | 搜尋筆記、篩選、查反向連結 | 可讀資料範圍、查詢條件、排序與結果 | 資料核心、搜尋索引、權限 | `useOverviewSearch.ts`、`routes/query.ts` |
-| 網站 | 編輯版型、選首頁、預覽、發佈 | 網站草稿、設定、發佈前置條件與結果 | 筆記、工作區設定、發佈服務 | `modules/website/WebsiteScreen.tsx`、`modules/website/studio/`、`websiteWriter.ts`、`workspaceWriter.ts` |
-| AI 與變更審核 | 讓自己的 AI 透過 MCP 操作、審核變更（Onden 不呼叫模型） | 工具授權、技能 prompts、建議與審核流程 | 搜尋、領域操作、權限、事件 | `InboxReview.tsx`、`routes/mcpProtocol.ts`、`routes/skills.ts`、`routes/inbox.ts`、`services/agentTools/`、`services/harness/` |
-| 資料移轉與管理 | 匯入、匯出、備份、設定儲存位置 | 格式轉換、來源識別、覆蓋保護、還原與資料完整性 | 資料核心、儲存、工作區權限 | `modules/importers/routes.ts`、`modules/importers/markdown/note.ts`、`modules/importers/shared/identity.ts`、`routes/export.ts`、`localDbSchema.ts`、`fileSystemStorage.ts` |
+| 白板與關係圖 | 加卡片、拖移、連線、整理布局 | 白板保存座標；關係操作保存語意連結 | 筆記 ID、關聯、布局資料 | `hooks/useCanvasActions.ts`、`modules/graph/LocalGraphLens.tsx`、`lib/data/canvasWriter.ts`、`lib/data/relationWriter.ts` |
+| 搜尋與查詢 | 搜尋筆記、篩選、查反向連結 | 可讀資料範圍、查詢條件、排序與結果 | 資料核心、搜尋索引、權限 | `hooks/useOverviewSearch.ts`、`lib/data/noteSearch.ts`（`reads.notes.search`）、後端 `routes/query.ts` |
+| 網站 | 編輯版型、選首頁、預覽、發佈 | 網站草稿、設定、發佈前置條件與結果 | 筆記、工作區設定、發佈服務 | `modules/website/WebsiteScreen.tsx`、`modules/website/studio/`、`modules/website/websiteWriter.ts`、`lib/data/workspaceWriter.ts` |
+| AI 與變更審核 | 讓自己的 AI 透過 MCP 操作、審核變更（伺服器只在使用者自己的 API 金鑰下提建議，見 [decisions-ai-collaboration.md](../agents/decisions-ai-collaboration.md)） | 工具授權、技能 prompts、建議與審核流程 | 搜尋、領域操作、權限、事件 | `components/InboxReview.tsx`、後端 `routes/mcpProtocol.ts`、`routes/skills.ts`、`routes/inbox.ts`、`services/agentTools/`、`services/harness/` |
+| 資料移轉與管理 | 匯入、匯出、備份、設定儲存位置 | 格式轉換、來源識別、覆蓋保護、還原與資料完整性 | 資料核心、儲存、工作區權限 | 後端 `modules/importers/routes.ts`、`modules/importers/markdown/note.ts`、`modules/importers/shared/identity.ts`、`routes/export.ts`；前端 `lib/localDbSchema.ts`、`lib/fileSystemStorage.ts` |
 
 表中的一列是一組可理解的責任，未必只對應一個檔案或單一模組。例如集合的 schema
 與檢視配置可以有自己的子模組；白板布局和語意關聯也各有自己的寫入模組。
@@ -71,31 +75,6 @@ flowchart TB
 「A 是 B 的參考資料」是關聯；「A 的卡片在白板左上角」是布局。
 移動卡片不應改變參考關係。這兩種操作可以在同一個畫面發生，仍由不同責任管理。
 
-## 如何再拆一個功能：以 RSS 為例
-
-RSS 可以拆成四個使用案例，暫時只在同一模組內整理即可：
-
-| 使用案例 | 輸入 | 完成條件 | 失敗後的畫面 |
-| --- | --- | --- | --- |
-| 訂閱來源 | feed URL | 訂閱已接受，或訂閱意圖已持久化待同步 | 保留 URL，說明原因 |
-| 略過文章 | article ID | 已看狀態已接受，或意圖已持久化 | 保存未確認時保留目前文章 |
-| 保存文章 | article ID、目前讀到的內容 | 取得可開啟的筆記，或可靠保存待同步意圖與本機內容 | 保留文章，重試沿用同一操作識別 |
-| 保存重點 | article ID、選取文字 | 文章筆記、重點筆記、來源關聯具有一致的完成／待同步狀態 | 保留選取文字，不因重試重複建立卡片 |
-
-建議的公開介面範例，**尚未實作**：
-
-```ts
-saveHighlight({ articleId, text })
-// → { articleNoteId, quoteNoteId, status: "synced" | "queued" }
-```
-
-這個入口需要隱藏以下工作：取得正確的來源筆記、配置穩定識別、保存重點及關聯、
-處理離線與重試、明確回報失敗。前端不用自己串接三個 API。
-
-現況的 `RssReaderPanel.tsx` 還會直接組合 `saveArticle → POST nodes → POST edges`。
-另一裝置先保存文章時，伺服器可能回傳不同的來源筆記 ID；離線依賴操作不能假定
-本機預先配置的 ID 一定就是最終 ID。要先選擇伺服器原子操作或明確的 ID 對應協定，
-才能把上述介面的保證做實。
 
 ## 每個功能用一張說明卡管理
 
@@ -112,15 +91,12 @@ saveHighlight({ articleId, text })
 重構的單位可以是一張說明卡。卡片上的規則、操作與測試能對得上，就有明確的停止點。
 只有搬動程式碼、呼叫端仍要理解相同細節時，還沒有建立足夠清楚的邊界。
 
-## 現有基礎與下一步
+## 模組與依賴方向
 
-- **已有基礎**：前後端 RSS／複習模組目錄、後端模組註冊；筆記、任務、屬性、標籤、關聯、白板、網站等寫入入口。
-- **仍待整理**：大型畫面中的多步協調、部分直接 API 呼叫、跨模組讀取與資料責任。現有 `modules/` 是原始碼組織方式，沒有完整動態載入或通用停用機制。
-- **標籤功能第一版**：稍後讀／複習使用明確的 tag module 設定，改名不變、停用保留進度；
-  設定、套用、排程各有自己的權限與寫入契約。白板／RSS 尚未遷入此中心，見
-  [契約與驗證](../archive/research/tag-module-center-2026-09-29.md)。
-- **建議依賴方向**：選用功能依賴資料核心和共用服務；資料核心對選用功能的具體實作保持獨立。已存在的註冊入口可繼續使用。
-- **可驗證的隔離目標**：移除 RSS 的介面與註冊後，既有文章筆記仍可閱讀／編輯；停止網站功能後，日常筆記和任務仍可正常保存。這些需後續以建置與行為測試證明。
+- **內建模組可由擁有者開關**：模組目錄加註冊表（前後端各一份 `modules/index.ts`），關掉後資料保留、介面不留痕跡
+  （`packages/frontend/src/test/moduleOffNoTrace.test.ts` 逐一檢查每個可切換模組；機制見 [模組庫](module-library.md)、[模組表](core-vs-modules.md)）。
+- **建議依賴方向**：選用功能依賴資料核心和共用服務；資料核心對選用功能的具體實作保持獨立。
+- **仍待整理**：大型畫面中的多步協調、部分直接 API 呼叫、跨模組讀取與資料責任。
 - **學生的閱讀順序**：先沿「編輯筆記 → 保存 → 失敗保留草稿」追一條完整流程，再理解共用提交，最後選 RSS 或複習深入。每次只增加一塊要掌握的責任。
 
 ## 對照程式與既有文件
@@ -131,5 +107,3 @@ saveHighlight({ articleId, text })
 - 後端模組規則：`packages/backend/src/modules/README.md`
 - 已註冊模組：`packages/backend/src/modules/index.ts`
 - 已完成的寫入重構：[domain-writes.md](domain-writes.md)、[website-writes.md](website-writes.md)
-
-這次交付是功能與依賴地圖，沒有變更執行程式；本次未重新執行應用程式測試。

@@ -1,10 +1,12 @@
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行
+> 涵蓋：packages/backend/src/modules/index.ts, packages/frontend/src/modules/index.ts, packages/frontend/src/lib/sidebarTidy.ts, packages/backend/src/services/sync/bootstrap.ts, packages/backend/src/services/workspaceModules.ts
 
 # 核心功能與模組：哪些關不掉、為什麼
 
 業主規則（2026-11-01）：「每個新功能都必須是可以關掉的模組，關掉後不能在任何地方留下痕跡。」
 本文列出**現在不是可關閉模組**的功能（以實際程式為準），逐項寫「為什麼是核心」或「建議改成模組」。
-**只是建議，沒有搬任何程式**；要不要改成模組由業主決定。
+**表中的「建議」沒有照做**（手寫已成內建模組，見表）；要不要改成可關閉的模組由業主決定。
+2026-11-01 當天的殘留修正記錄在最後一節，不是現行規則。
 
 ## 怎麼檢查「關掉不留痕跡」
 
@@ -20,9 +22,11 @@
 
 ## 已經是模組
 
-可關閉：`review`、`rss`、`website`、`skills`、`slides`、`semantic`、`daily`、`tasks`、`ai`（預設關著，同意一次才開；`skills` 依賴它）。
-永遠開著（這是明確決定，測試鎖住清單）：視圖版面 `table`／`kanban`／`calendar`／`gallery` 與白板 `canvas`。
-內建、沒有開關：`capture`（收件匣）、`graph`（關係圖）、`importers`（匯入）。
+可關閉：`review`、`rss`、`website`、`skills`、`semantic`、`daily`、`tasks`、`external_calendars`（外部行事曆；日記或任務任一個開著才能開）、
+`ai`（預設關著，同意一次才開；`skills` 依賴它）。
+永遠開著（這是明確決定，測試鎖住清單）：視圖版面 `table`／`kanban`／`calendar`／`gallery`、白板 `canvas` 與簡報 `slides`（業主 2026-11-15）。
+內建、沒有開關：`capture`（收件匣）、`graph`（關係圖）、`importers`（匯入）、`handwriting`（手寫）。
+後端與前端的註冊表各有一份清單（`modules/index.ts`），資料夾與註冊互相對照由測試守住。
 
 ## 不是模組的功能
 
@@ -34,7 +38,7 @@
 | 歷史、版本、垃圾桶、復原 | 核心 | 資料可靠性的底線（寫入事件與復原契約）。 |
 | 同步、離線、本機副本、備份與匯出 | 核心 | 資料可靠性；匯出／備份不該能被關掉。 |
 | 搜尋（側欄、指令面板、`((`） | 核心 | 找到自己的東西是基本需求；沒有可關的理由。 |
-| 手寫（ink） | 核心 | 編輯器的一種內容類型（`InkNodeView`）。**建議改成模組**：多數人不用手寫；關掉後收起工具列、指令面板的「新增手寫筆記」與設定裡的筆選項。 |
+| 手寫（ink） | **內建模組 `handwriting`、無開關** | 筆記的「手寫」分頁、設定 › 手寫的筆選項是模組的；編輯器裡的手寫內容（`InkNodeView`）與白板墨水層仍是核心畫面。要不要改成可關閉（收起工具列、指令面板的「新增手寫筆記」與筆選項）由業主決定；[模組庫](module-library.md)目前寫「手寫不是功能（關不掉）」。 |
 | PDF 內嵌與標註 | 核心 | 附件顯示的一部分（`PdfNodeView`）。**建議改成模組**：與手寫同理，是否值得取決於 PDF 標註是不是多數人會用。 |
 | 白板 | 永遠開著的模組（`canvas`） | 目前只有版面切換，程式織進核心畫面（`shellFeature: whiteboard`）。維持「永遠開著」或改成可關，由業主決定；改成可關需要補上筆記上的「在白板」資訊與備份匯出的處理。 |
 | 時間線（核心頁「歷史」的工作區變更） | 核心 | 是歷史的畫面，不是新功能。日子頁的時間線屬 `tasks`／`daily` 模組。 |
@@ -45,14 +49,17 @@
 
 ## 已知殘留（測試或審查發現）
 
-1. **MCP／API 工具清單列出已關模組的工具（已修）**：`GET /api/mcp/tools`、MCP `tools/list` 與 API 執行階段原本不看工作區的
-   模組狀態，關掉的模組工具仍出現（呼叫才被拒）。現在 `AgentTool.available` 由模組閘門提供，清單依工作區過濾；
-   測試先失敗再通過（後端 `moduleOffNoTrace.test.ts`）。
-2. **側欄樹把「模組自動建立的筆記」收起，不看模組開關**：`GENERATED_SOURCE_TYPES`（RSS 文章與來源）在 RSS 關掉後仍被收起，
+1. **側欄樹把「模組自動建立的筆記」收起，不看模組開關**：`GENERATED_SOURCE_TYPES`（RSS 文章與來源）在 RSS 關掉後仍被收起，
    而閱讀頁也不可用，使用者只能用搜尋找到。屬「關掉保留資料」與「看得見」之間的取捨，**沒有改**，等業主決定
    （選項：模組關掉時這些筆記照一般筆記顯示）。
-3. **bootstrap 仍帶 `tasks` 陣列**：它是筆記屬性的投影，關掉任務模組後前端不會顯示，但資料仍同步到裝置。
+2. **bootstrap 仍帶 `tasks` 陣列**（`services/sync/bootstrap.ts` 的 `taskRowsForBootstrap`）：它是筆記屬性的投影，關掉任務模組後前端不會顯示，但資料仍同步到裝置。
    需要資料庫才能驗證，這次沒有寫測試也沒有改；是否在模組關掉時不帶，是同步契約的決定。
-4. **背景工作的關閉判斷靠各模組自己**：目前 `rss`（`workspaceHasModule`）與 `tasks`（SQL 的 `modules_off`）各有一份；
-   新模組若有 `startBackground`，測試會要求在 `moduleOffNoTrace.test.ts` 登記它的判斷。若再出現第三份，建議把「這個工作區有開嗎」
-   收成 `startPeriodicJob` 的選項，而不是各自判斷。
+3. **背景工作的關閉判斷靠各模組自己**：目前 `rss`、`semantic`、`external_calendars` 各用 `workspaceHasModule`，`tasks`（排程與推播提醒）用 SQL 的
+   `modules_off`；新模組若有 `startBackground`，測試會要求在 `moduleOffNoTrace.test.ts` 登記它的判斷。
+   第三份已經出現（現在是四個模組、兩種寫法）；先前的建議（把「這個工作區有開嗎」收成 `startPeriodicJob` 的選項，而不是各自判斷）尚未做，是否做由業主決定。
+
+### 2026-11-01　當天修掉的殘留
+
+- **MCP／API 工具清單列出已關模組的工具（已修）**：`GET /api/mcp/tools`、MCP `tools/list` 與 API 執行階段原本不看工作區的
+  模組狀態，關掉的模組工具仍出現（呼叫才被拒）。現在 `AgentTool.available` 由模組閘門提供，清單依工作區過濾；
+  測試先失敗再通過（後端 `moduleOffNoTrace.test.ts`）。

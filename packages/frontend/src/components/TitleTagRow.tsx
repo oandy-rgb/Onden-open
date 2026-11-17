@@ -7,7 +7,7 @@ import { tagWriter } from "../lib/data";
 import { enabledTagFunctions, isViewModuleTag } from "../modules";
 import { useModuleFilter } from "../hooks/useModuleFilter";
 import { isSystemTag } from "../lib/systemNodes";
-import { isTagShown, nodeTagIds } from "../lib/nodeTags";
+import { isAppliedByAppTag, isTagShown, nodeTagIds } from "../lib/nodeTags";
 import { tagName } from "../lib/hashtags";
 import { isImeComposing, isEscapeKey } from "../lib/keys";
 import { tagSuggestions } from "../lib/tagSuggestions";
@@ -126,7 +126,8 @@ function TagRow({ node, tags, onToggleTag, expandedTagId, cardId, readOnly }: Pr
         <span key={tag.id} className="prop-tag prop-tag--applied">
           <Pressable type="button" className="prop-tag-name tap-target" onClick={() => onToggleTag(tag.id)} title={t("Show this tag's fields")}
             aria-expanded={expandedTagId === tag.id} aria-controls={expandedTagId === tag.id ? cardId : undefined}><TagName tag={tag} /></Pressable>
-          {!readOnly && <Pressable type="button" className="prop-tag-remove" disabled={busy}
+          {/* A tag only the app puts on a note (收件匣) is also only taken off by the app: filing the capture on the inbox page. */}
+          {!readOnly && !isAppliedByAppTag(tag) && <Pressable type="button" className="prop-tag-remove" disabled={busy}
             aria-label={t("Remove #{name} from this note", { name: tag.name })}
             onClick={() => remove(tag)}><X size={11} /></Pressable>}
         </span>

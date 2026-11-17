@@ -3,9 +3,9 @@
 // suggestion, distributed-ready 4.5 "not done yet" and add-device-snapshot §5; the owner is asked to confirm in the PR.)
 import { type Cell, type Stamp, type Unit, compareStamps, sameContent } from "../unit.js";
 
-export type FunctionRefRow = { id: string; holder: string; fn: string; instance: string; created: Stamp; config: Readonly<Record<string, Unit>> };
+type FunctionRefRow = { id: string; holder: string; fn: string; instance: string; created: Stamp; config: Readonly<Record<string, Unit>> };
 /** One config key of the kept reference as it should read: the value that wins, and the other values (different content) that stay visible as conflicts. */
-export type MergedKey = { winner: Cell; conflicts: Cell[] };
+type MergedKey = { winner: Cell; conflicts: Cell[] };
 export type MergedRef = { keepId: string; dropIds: string[]; config: Record<string, MergedKey> };
 
 const naturalKey = (r: FunctionRefRow) => JSON.stringify([r.holder, r.fn, r.instance]);

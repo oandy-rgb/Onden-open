@@ -10,7 +10,8 @@
 import { listMigrations } from "../../dbMigrations.js";
 import { seedQ } from "./seedQ.js";
 
-const FUNCTION = /CREATE OR REPLACE FUNCTION[\s\S]*?\n\$\$ LANGUAGE [^;]*;/g;
+// The body's quote is `$$` or a named one (`$fn$`: sync_genesis_pass, 202 and 209), and the statement ends at the same quote.
+const FUNCTION = /CREATE OR REPLACE FUNCTION[\s\S]*?\n\$(\w*)\$ LANGUAGE [^;]*;/g;
 // "CREATE OR REPLACE TRIGGER <name> AFTER INSERT ON <table> …;": the timing and events sit between the name and ON (the pattern used to
 // expect ON right after the name, matched nothing, and a rerun of 194 left the pointer triggers watching sort_order for every later file).
 const TRIGGER = /CREATE OR REPLACE TRIGGER (\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)\b[^;]*?\bON (\w+)[\s\S]*?;(?:\n|$)/g;

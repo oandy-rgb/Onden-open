@@ -423,6 +423,25 @@ describe.skipIf(!isTestDb)("a stamped snapshot import refuses what is wrong and 
     await abandon(worked);
   }, 120_000);
 
+  it("the module switches an install turns off are the same set in either order (stored sorted since migration 209, unsorted before): the probe and the join both take the database for empty; another set is not", async () => {
+    // the install's set as two databases can hold it: sorted (written after 209), and in the order an install wrote it before 209 (the sorting trigger is set aside to write it so)
+    for (const [what, off, empty] of [
+      ["sorted", ["external_calendars", "skills"], true],
+      ["install order", ["skills", "external_calendars"], true],
+      ["another set", ["skills"], false],
+    ] as const) {
+      const node = await receiver(`switches-${what.replace(/ /g, "-")}`);
+      await onNode(node, async () => {
+        await seedQ(`ALTER TABLE workspaces DISABLE TRIGGER workspaces_sets_sorted`);
+        await seedQ(`UPDATE workspaces SET modules_off = $1::jsonb WHERE slug = 'default'`, [JSON.stringify(off)]);
+        await seedQ(`ALTER TABLE workspaces ENABLE TRIGGER workspaces_sets_sorted`);
+        expect((await q<{ t: string }>(`SELECT modules_off::text AS t FROM workspaces WHERE slug = 'default'`)).rows[0]!.t, what).toBe(JSON.stringify(off).replace(/","/g, '", "'));
+      });
+      if (empty) { await join(node); await abandon(node); } // `join` also checks that the probe (GET /api/snapshot/readiness) said the same
+      else await expect(join(node), what).rejects.toThrow(/module_switch/);
+    }
+  }, 120_000);
+
   it("a tag a person made is not taken for empty even when its only stamps are genesis and the history is pruned (the rows an install makes are told by name, not by stamp); the one thing that stays unseen, an install row edited without a stamp or an event, is pinned", async () => {
     const node = await receiver("pruned-history-tag");
     const tagId = await onNode(node, async () => {

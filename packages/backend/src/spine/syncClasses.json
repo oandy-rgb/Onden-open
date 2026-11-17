@@ -7,7 +7,7 @@
  },
  "node_attributes": {
   "class": "stamped",
-  "note": "per (note, key), only what a person or automation wrote (source ui / explicit / dispatcher); tombstone on delete (S2); a board's _canvas_sections per section (S3, table_name 'node_attributes._canvas_sections')",
+  "note": "per (note, key), only what a person or automation wrote (source ui / explicit / dispatcher); tombstone on delete (S2); a board's _canvas_sections are the attribute's value, one unit (the per-section stamps of S3 are retired by migration 209, snapshotTables.ts RETIRED_STAMP_LABELS)",
   "wired": true,
   "snapshot": "rows"
  },

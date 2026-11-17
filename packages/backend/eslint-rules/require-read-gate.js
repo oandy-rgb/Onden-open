@@ -98,6 +98,7 @@ const GATED = {
 // actor-facing read (so it's exempt from a read-policy primitive).
 const INTERNAL = {
   "browser/makeOldCopy.ts": "test tool: makes the saved copy an older app would have left (and takes migration 200 back out of it); runs once offline with no actor, serves nothing",
+  "spine/stampedMerge/dbRows.ts": "write path of a change bundle (the one taking entry in spine/stampedImport.ts, under the event lock with the stamp triggers standing aside): reads the notes of the bundle's rows to give them their slug; serves nothing",
   "spine/snapshotTables.ts": "the SQL fragments of a stamped snapshot's table list; the reader's scope comes from services/readPolicy.ts snapshotScope (the export gates through it), and the one fragment named here, wholeWorkspace, is a check of a database that is the receiver's own",
   "services/selectionDelivery.ts": "write path: reads the note body only to splice the model's text into the proposal it hands to createSuggestions, which asserts write_node for the agent under the event lock; nothing is served",
   "services/aiSessionStart.ts": "write path: reads the note's space under the event lock AFTER the spine asserted the sender\'s authority (write_node for a selection, read for an info-panel question); only the space id is read, nothing is served",

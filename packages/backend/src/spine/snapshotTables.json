@@ -30,7 +30,7 @@
   {"code": "own_tags", "sql": "SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND node_type = 'class_tag' AND title NOT IN ('admin-only', 'person', 'workspace-config', 'meeting', 'archive', 'book', 'project', 'task', 'page')"},
   {"code": "spaces", "sql": "SELECT 1 FROM spaces WHERE workspace_id = $1 AND NOT (is_default OR kind IN ('system', 'personal') OR (kind = 'shared' AND name = '受限'))"},
   {"code": "own_function_refs", "sql": "SELECT 1 FROM function_refs WHERE workspace_id = $1 AND NOT (function_id = 'tasks' AND config = '{}'::jsonb)"},
-  {"code": "module_switch", "sql": "SELECT 1 FROM workspaces WHERE id = $1 AND NOT (modules_off IN ('[]'::jsonb, '[\"skills\",\"external_calendars\"]'::jsonb) AND (modules_confirmed IS NULL OR modules_confirmed IN ('[]'::jsonb, '[\"ai\"]'::jsonb)) AND home_node_id IS NULL)"},
+  {"code": "module_switch", "sql": "SELECT 1 FROM workspaces WHERE id = $1 AND NOT ((modules_off = '[]'::jsonb OR (modules_off @> '[\"skills\",\"external_calendars\"]'::jsonb AND modules_off <@ '[\"skills\",\"external_calendars\"]'::jsonb)) AND (modules_confirmed IS NULL OR modules_confirmed IN ('[]'::jsonb, '[\"ai\"]'::jsonb)) AND home_node_id IS NULL)"},
   {"code": "applied_tag", "sql": "SELECT 1 FROM node_tags nt WHERE NOT (nt.node_id IN (SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.source_type = 'system') AND nt.tag_id IN (SELECT n.id FROM content_nodes n WHERE n.workspace_id = $1 AND n.node_type = 'class_tag' AND n.title = 'workspace-config'))"},
   {"code": "own_notes", "sql": "SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND {notTag} AND source_type <> 'system'"}
  ],
@@ -182,11 +182,6 @@
    {
     "label": "node_attributes",
     "rowKey": "t.node_id::text || '/' || t.key"
-   },
-   {
-    "label": "node_attributes._canvas_sections",
-    "rowKey": "t.node_id::text",
-    "when": "t.key = '_canvas_sections'"
    }
   ]
  },

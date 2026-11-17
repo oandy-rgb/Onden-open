@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { buildDatabase } from "./helpers/databaseBuild.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
+import { ALL_TABLES } from "./helpers/stampedBundleWorld.js";
 import { compareDigests, type TableDigest } from "../spine/snapshotSql.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -103,8 +104,12 @@ describe.skipIf(!isTestDatabase())("change bundles between three processes", () 
       expect(sx.heads, `${x.label} and ${y.label}: other heads`).toBe(sy.heads);
     };
 
+    // batch 2b-2a: every stamped table travels. Tags every node can apply first, then each round writes notes AND attributes, tags, pointers and the keys of a tag's schema
+    await a.call("write", { seed: 50, count: 6, weights: { tagMake: 3 } });
+    await give(a, b); await give(a, c);
     for (let round = 0; round < 2; round++) {
       await Promise.all([a.call("write", { seed: 100 + round, count: 25 }), b.call("write", { seed: 200 + round, count: 25 }), c.call("write", { seed: 300 + round, count: 25, aheadMs: 5 * 60_000 })]);
+      await Promise.all([a.call("write", { seed: 400 + round, count: 25, weights: ALL_TABLES }), b.call("write", { seed: 500 + round, count: 25, weights: ALL_TABLES }), c.call("write", { seed: 600 + round, count: 25, weights: ALL_TABLES })]);
       await give(b, a); await give(c, a);
       await give(a, b); await give(a, c);
     }

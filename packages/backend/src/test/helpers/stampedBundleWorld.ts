@@ -4,7 +4,7 @@
 // moves that may close a cycle once two nodes have made theirs, reorders, trash, undelete, permanent delete, the same id made again), so what is exchanged is what the triggers
 // stamped. (The pure simulator's generators, helpers/stampedSim/, speak units, not routes; they cannot drive a database.)
 import { keyBetween } from "@onden/markdown/contract";
-import { q } from "../../db.js";
+import { q, withTransaction } from "../../db.js";
 import { readChangeBundle } from "../../services/stampedBundle.js";
 import { readHave, bundleOf } from "../../spine/stampedBundle.js";
 import { admitSyncNode, applyChangeBundle } from "../../spine/stampedImport.js";
@@ -13,7 +13,9 @@ import type { ActorCtx } from "../../types.js";
 import { onNode, type RealNode } from "./distSim/realNode.js";
 import { makeRng, type Rng } from "./distSim/rng.js";
 import { digestAs, headsOfWorkspace, makeCaller, outOfScopeIds, stampsOfWorkspace } from "./stampedWorld.js";
-import { localNodeId } from "../../spine/stamps.js";
+import { localNodeId, stampTransaction } from "../../spine/stamps.js";
+import { withEventTransaction } from "../../spine/eventTransaction.js";
+import { CARRIED_LABELS } from "../../spine/stampedMerge/dbUnits.js";
 
 export type Peer = { name: string; node: RealNode | null; ws: string; owner: ActorCtx; space: string; call: ReturnType<typeof makeCaller> };
 
@@ -38,8 +40,14 @@ export async function withClockAhead<T>(offsetMs: number, fn: () => Promise<T>):
 const uuidFrom = (rng: Rng): string => { const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rng.next() * 16).toString(16)).join(""); return `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`; };
 
 export type WriteOptions = { weights?: Partial<Record<Op, number>>; ids?: () => string };
-export type Op = "create" | "title" | "body" | "move" | "reorder" | "trash" | "undelete" | "purge" | "recreate";
-const DEFAULT_WEIGHTS: Record<Op, number> = { create: 18, title: 16, body: 16, move: 14, reorder: 10, trash: 8, undelete: 3, purge: 6, recreate: 5 };
+export type Op = "create" | "title" | "body" | "move" | "reorder" | "trash" | "undelete" | "purge" | "recreate"
+  | "attr" | "unattr" | "tagMake" | "tag" | "untag" | "point" | "unpoint" | "schemaKey" | "row";
+/** The writes of the other tables (batch 2b-2a) are off by default, so a seed of an earlier test draws the same writes as before; `ALL_TABLES` turns them on. */
+const DEFAULT_WEIGHTS: Record<Op, number> = { create: 18, title: 16, body: 16, move: 14, reorder: 10, trash: 8, undelete: 3, purge: 6, recreate: 5,
+  attr: 0, unattr: 0, tagMake: 0, tag: 0, untag: 0, point: 0, unpoint: 0, schemaKey: 0, row: 0 };
+/** Weights that also write attributes (set, unset), tags (made, applied, removed, a key of a tag's schema set or removed: a JSON key unit) and pointers (made, removed). */
+export const ALL_TABLES: Partial<Record<Op, number>> = { attr: 12, unattr: 5, tagMake: 3, tag: 10, untag: 5, point: 8, unpoint: 4, schemaKey: 8, row: 16 };
+const ATTR_KEYS = ["status", "rating", "colour"];
 const purgedIds = new WeakMap<Peer, string[]>();
 /** Titles are unique per peer for the whole run (a slug is derived from a title and must stay unique among a space's notes; test stampedBundleSlugs covers a collision). */
 const counters = new WeakMap<Peer, number>();
@@ -60,7 +68,7 @@ export async function markWorld(p: Peer): Promise<void> {
 export async function writeFor(peer: Peer, rng: Rng, count: number, options: WriteOptions = {}): Promise<Record<Op, number>> {
   const done = Object.fromEntries(Object.keys(DEFAULT_WEIGHTS).map((k) => [k, 0])) as Record<Op, number>;
   const weights = { ...DEFAULT_WEIGHTS, ...options.weights };
-  const bag = (Object.keys(weights) as Op[]).flatMap((op) => Array<Op>(weights[op]).fill(op));
+  const bag = (Object.keys(weights) as Op[]).flatMap((op) => Array<Op>(weights[op] ?? 0).fill(op));
   const newId = options.ids ?? (() => uuidFrom(rng));
   await onNode(peer.node, async () => {
     for (let i = 0; i < count; i++) {
@@ -102,16 +110,148 @@ export async function writeFor(peer: Peer, rng: Rng, count: number, options: Wri
           await peer.call("POST", `/api/nodes/${id}/purge`, { expected_ids: ids });
           purgedIds.set(peer, [...(purgedIds.get(peer) ?? []), ...ids]);
           done.purge++;
+        } else if (op === "attr" && mine.length) {
+          await peer.call("PUT", `/api/nodes/${rng.pick(mine).id}/attributes/${rng.pick(ATTR_KEYS)}`, { value: `${peer.name} ${nextN(peer)}` });
+          done.attr++;
+        } else if (op === "unattr" && mine.length) {
+          const withAttr = await q<{ node_id: string; key: string }>(`SELECT node_id::text, key FROM node_attributes WHERE workspace_id = $1 AND source = 'ui' AND key = ANY($2::text[]) ORDER BY node_id, key`, [peer.ws, ATTR_KEYS]);
+          if (withAttr.rows.length) { const x = rng.pick(withAttr.rows); await peer.call("DELETE", `/api/nodes/${x.node_id}/attributes/${x.key}`); done.unattr++; }
+        } else if (op === "tagMake") {
+          await peer.call("POST", "/api/tags", { name: `${peer.name}-tag-${nextN(peer)}` });
+          done.tagMake++;
+        } else if ((op === "tag" || op === "untag" || op === "schemaKey") && mine.length) {
+          const tags = (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND node_type = 'class_tag' AND title ~ '-tag-' AND deleted_at IS NULL ORDER BY id`, [peer.ws])).rows;
+          if (tags.length) {
+            const tag = rng.pick(tags).id;
+            if (op === "tag") { await peer.call("PUT", `/api/nodes/${rng.pick(mine).id}/tags/${tag}`); done.tag++; }
+            else if (op === "untag") {
+              const on = (await q<{ node_id: string }>(`SELECT node_id::text FROM node_tags WHERE tag_id = $1 ORDER BY node_id`, [tag])).rows;
+              if (on.length) { await peer.call("DELETE", `/api/nodes/${rng.pick(on).node_id}/tags/${tag}`); done.untag++; }
+            } else {
+              const schema = (await q<{ s: Record<string, unknown> | null }>(`SELECT tag_schema AS s FROM content_nodes WHERE id = $1`, [tag])).rows[0]?.s ?? {};
+              const key = rng.pick(["due", "owner", "size"]);
+              const next = { ...schema };
+              // always a change (a write that changes nothing takes no stamp): remove the key, or give it the other type, or add it
+              const was = (next[key] as { type?: string } | undefined)?.type;
+              if (was && rng.chance(0.4)) delete next[key]; else next[key] = { type: was === "text" ? "number" : was === "number" ? "text" : rng.pick(["text", "number"]) };
+              // a local write of the column (the json trigger stamps it key by key); the schema route takes only its own top-level keys, which is not what is driven here
+              await withTransaction(() => q(`UPDATE content_nodes SET tag_schema = $2::jsonb WHERE id = $1`, [tag, JSON.stringify(next)]));
+              done.schemaKey++;
+            }
+          }
+        } else if (op === "point" && live.length > 1) {
+          const target = rng.pick(live), parent = rng.pick(live.filter((x) => x.id !== target.id));
+          await peer.call("POST", "/api/pointers", { target_id: target.id, parent_id: parent.id });
+          done.point++;
+        } else if (op === "unpoint") {
+          const ptrs = (await q<{ id: string }>(`SELECT id::text FROM note_pointers WHERE workspace_id = $1 ORDER BY id`, [peer.ws])).rows;
+          if (ptrs.length) { await peer.call("DELETE", `/api/pointers/${rng.pick(ptrs).id}`); done.unpoint++; }
+        } else if (op === "row") {
+          if (await writeOtherRow(peer, rng, mine.map((n) => n.id))) done.row++;
         } else if (op === "recreate" && (purgedIds.get(peer) ?? []).length) {
           const id = rng.pick(purgedIds.get(peer)!);
           await peer.call("POST", "/api/nodes", { id, title: `${peer.name} again ${nextN(peer)}`, markdown: `again ${i}`, space_id: peer.space });
           purgedIds.set(peer, purgedIds.get(peer)!.filter((x) => x !== id));
           done.recreate++;
         }
-      } catch { /* the route refused it (a cycle, a note that is not in the trash, a parent that is gone): part of the run */ }
+      } catch (error) {
+        // the route refused it (a cycle, a note that is not in the trash, a parent that is gone): part of the run. Anything else is a broken generator, not a refusal
+        // (a catch-all here hid for a round that the direct writes to the feeds and mutes all threw: PR #1778 round 2, docs/agents/mistakes.md)
+        if (!/ → 4\d\d: /.test((error as Error).message)) throw error;
+      }
     }
   });
   return done;
+}
+
+/**
+ * One random write, straight to a row, of a table no route of this world reaches (the routes are a module's, or need a second person): a card's position, a space's name or one
+ * of its switches, a member's permission, a feed, a mute, a calendar, a person's module settings, a key of a function reference's config, a module switch. A local write in one
+ * stamped transaction, which the table's stamp trigger stamps like any other (the service rules of these tables are not what is tested here). Returns whether it wrote.
+ */
+/** One write of each of `ops` through the generator, as `peer`; returns what was done (a run that must reach every table asserts each is 1). */
+export async function writeEachOp(peer: Peer, rng: Rng, ops: readonly Op[]): Promise<Partial<Record<Op, number>>> {
+  const done: Partial<Record<Op, number>> = {};
+  const none = Object.fromEntries(Object.keys(DEFAULT_WEIGHTS).map((k) => [k, 0])) as Record<Op, number>;
+  for (const op of ops) done[op] = (await writeFor(peer, rng, 1, { weights: { ...none, [op]: 1 } }))[op];
+  return done;
+}
+
+/** One direct row write of each kind (writeOtherRow), as `peer`: a run that must reach every table does this once besides its random writes. Returns the kinds that wrote nothing
+ *  (a kind with nothing to change: no function reference, no second person). */
+export async function writeEachRowKind(peer: Peer, rng: Rng): Promise<string[]> {
+  return onNode(peer.node, async () => {
+    const own = async () => (await notesOf(peer)).filter((n) => !n.deleted && !WORLD_NOTES.has(n.id)).map((n) => n.id);
+    // a card needs a live note of this node's own: when the random writes trashed them all, make one (through the route, like any other note)
+    if (!(await own()).length) await peer.call("POST", "/api/nodes", { id: uuidFrom(rng), title: `${peer.name} ${nextN(peer)}`, markdown: "for a card", space_id: peer.space });
+    const mine = await own();
+    const idle: string[] = [];
+    for (const kind of ROW_KINDS) if (!(await writeOtherRow(peer, rng, mine, kind))) idle.push(kind);
+    return idle;
+  });
+}
+
+const ROW_KINDS = ["position", "spaceName", "capability", "member", "feed", "mute", "calendar", "moduleSettings", "config", "moduleSwitch"] as const;
+const ROW_TURNS = new Map<string, number>();
+async function writeOtherRow(peer: Peer, rng: Rng, mine: string[], only?: (typeof ROW_KINDS)[number]): Promise<boolean> {
+  const n = nextN(peer), owner = peer.owner.id;
+  // a local write as the owner, in one stamped transaction (what mutate gives a root write; a stamped table refuses a write without one)
+  const one = async (sql: string, params: unknown[]) => withTransaction(() => withEventTransaction(peer.ws, async () => {
+    await stampTransaction(peer.ws, owner);
+    return (await q(sql, params)).rowCount ?? 0;
+  }));
+  // the kinds take turns (each peer goes through all ten every ten row writes), so a run with a handful of row writes per peer reaches every table; what is written is random
+  const turn = ROW_TURNS.get(peer.name) ?? 0;
+  if (!only) ROW_TURNS.set(peer.name, turn + 1);
+  switch (only ?? ROW_KINDS[turn % ROW_KINDS.length]!) {
+    case "position": {
+      if (!mine.length) return false;
+      const node = rng.pick(mine);
+      const placed = (await q(`SELECT 1 FROM node_positions WHERE node_id = $1 AND surface = 'scale-board'`, [node])).rows.length > 0;
+      if (placed && rng.chance(0.2)) return (await one(`DELETE FROM node_positions WHERE node_id = $1 AND surface = 'scale-board'`, [node])) > 0; // a card that is placed is sometimes taken off
+      return (await one(`INSERT INTO node_positions (node_id, surface, x, y, workspace_id) VALUES ($1, 'scale-board', $2, $3, $4)
+                         ON CONFLICT (node_id, surface) DO UPDATE SET x = EXCLUDED.x, y = EXCLUDED.y`, [node, rng.int(500), rng.int(500), peer.ws])) > 0;
+    }
+    case "spaceName": return (await one(`UPDATE spaces SET name = $2 WHERE id = $1`, [peer.space, `${peer.name} space ${n}`])) > 0;
+    case "capability": return (await one(`UPDATE spaces SET capabilities = capabilities || jsonb_build_object($2::text, $3::boolean) WHERE id = $1`, [peer.space, rng.pick(["publish", "comments", "tasks"]), rng.chance(0.5)])) > 0;
+    case "member": {
+      const other = (await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'human' AND id <> $2 ORDER BY id LIMIT 1`, [peer.ws, owner])).rows[0];
+      if (!other) return false;
+      return (await one(`INSERT INTO space_members (space_id, actor_id, permission) VALUES ($1, $2, $3) ON CONFLICT (space_id, actor_id) DO UPDATE SET permission = EXCLUDED.permission`,
+        [peer.space, other.id, rng.pick(["view", "suggest", "edit"])])) > 0;
+    }
+    case "feed": {
+      const feeds = (await q<{ id: string }>(`SELECT id::text FROM rss_subscriptions WHERE workspace_id = $1 ORDER BY id`, [peer.ws])).rows;
+      if (feeds.length && rng.chance(0.6)) return (await one(`UPDATE rss_subscriptions SET title = $2 WHERE id = $1`, [rng.pick(feeds).id, `${peer.name} feed ${n}`])) > 0;
+      return (await one(`INSERT INTO rss_subscriptions (workspace_id, space_id, title, url) VALUES ($1, $2, $3, $4)`, [peer.ws, peer.space, `${peer.name} feed ${n}`, `https://feeds.example/${peer.name}/${n}`])) > 0;
+    }
+    case "mute": {
+      const mutes = (await q<{ id: string }>(`SELECT id::text FROM rss_mutes WHERE workspace_id = $1 ORDER BY id`, [peer.ws])).rows;
+      if (mutes.length && rng.chance(0.3)) return (await one(`DELETE FROM rss_mutes WHERE id = $1`, [rng.pick(mutes).id])) > 0;
+      return (await one(`INSERT INTO rss_mutes (workspace_id, actor_id, keyword, expires_at) VALUES ($1, $2, $3, now() + interval '30 days')`, [peer.ws, owner, `${peer.name}-word-${n}`])) > 0;
+    }
+    case "calendar": {
+      const cals = (await q<{ id: string }>(`SELECT id::text FROM external_calendars WHERE workspace_id = $1 ORDER BY id`, [peer.ws])).rows;
+      if (cals.length && rng.chance(0.6)) return (await one(`UPDATE external_calendars SET name = $2, enabled = $3 WHERE id = $1`, [rng.pick(cals).id, `${peer.name} cal ${n}`, rng.chance(0.5)])) > 0;
+      return (await one(`INSERT INTO external_calendars (id, workspace_id, actor_id, name, color, url_ciphertext, url_host) VALUES (gen_random_uuid(), $1, $2, $3, '#336699', '\\x'::bytea, 'calendars.example')`,
+        [peer.ws, owner, `${peer.name} cal ${n}`])) > 0;
+    }
+    case "moduleSettings": {
+      const tag = (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND node_type = 'class_tag' AND deleted_at IS NULL ORDER BY id LIMIT 1`, [peer.ws])).rows[0];
+      if (!tag) return false;
+      return (await one(`INSERT INTO actor_module_settings (actor_id, tag_id, settings) VALUES ($1, $2, $3::jsonb) ON CONFLICT (actor_id, tag_id) DO UPDATE SET settings = EXCLUDED.settings`,
+        [owner, tag.id, JSON.stringify({ size: rng.int(5), by: peer.name })])) > 0;
+    }
+    case "config": {
+      const refs = (await q<{ id: string }>(`SELECT id::text FROM function_refs WHERE workspace_id = $1 ORDER BY id`, [peer.ws])).rows;
+      if (!refs.length) return false;
+      return (await one(`UPDATE function_refs SET config = config || jsonb_build_object($2::text, $3::text) WHERE id = $1`, [rng.pick(refs).id, rng.pick(["limit", "sort", "group"]), `${peer.name}${n}`])) > 0;
+    }
+    case "moduleSwitch": {
+      const id = rng.pick(["rss", "website", "calendar", "canvas"]);
+      return (await one(`UPDATE workspaces SET modules_off = CASE WHEN modules_off ? $2 THEN modules_off - $2 ELSE modules_off || to_jsonb($2::text) END WHERE id = $1`, [peer.ws, id])) > 0;
+    }
+  }
 }
 
 /** A bundle from `from` for `to`: what `to` holds is asked of `to`, the bundle is read on `from`, and goes through JSON as it would on the wire. */
@@ -135,8 +275,9 @@ export const admit = (centre: Peer, other: Peer): Promise<void> => nodeIdOf(othe
 /** What a peer holds of the workspace, in the terms two databases can be compared in: the digest (rows and stamps with saw and meta and the other heads), and the stamps and heads as they are. */
 export async function peerStateOf(p: Peer): Promise<{ digest: TableDigest[]; stamps: unknown; heads: unknown; conflicts: string[] }> {
   const digest = await digestAs(p.node, p.ws, p.owner);
-  const stamps = (await stampsOfWorkspace(p.node, p, await outOfScopeIds(p.node, p))).filter((s) => s.table_name === "content_nodes").map((s) => ({ ...s }));
-  const heads = (await headsOfWorkspace(p.node, p)).filter((h) => h.table_name === "content_nodes");
+  const carried = new Set<string>(CARRIED_LABELS);
+  const stamps = (await stampsOfWorkspace(p.node, p, await outOfScopeIds(p.node, p))).filter((s) => carried.has(String(s.table_name))).map((s) => ({ ...s }));
+  const heads = (await headsOfWorkspace(p.node, p)).filter((h) => carried.has(String(h.table_name)));
   const conflicts = heads.map((h) => `${String(h.row_key)}/${String(h.field)}/${String(h.origin)}:${String(h.seq)}/${String(h.value)}`).sort();
   return { digest, stamps, heads, conflicts };
 }
@@ -144,9 +285,21 @@ export async function peerStateOf(p: Peer): Promise<{ digest: TableDigest[]; sta
 export async function expectSame(a: Peer, b: Peer, label = ""): Promise<{ a: Awaited<ReturnType<typeof peerStateOf>>; b: Awaited<ReturnType<typeof peerStateOf>> }> {
   const [sa, sb] = [await peerStateOf(a), await peerStateOf(b)];
   const diff = compareDigests(sa.digest, sb.digest);
-  if (diff.length) throw new Error(`${label} ${a.name} and ${b.name} differ: ${JSON.stringify(diff)}`);
-  if (JSON.stringify(sa.stamps) !== JSON.stringify(sb.stamps)) throw new Error(`${label} ${a.name} and ${b.name} hold different stamps`);
-  if (JSON.stringify(sa.heads) !== JSON.stringify(sb.heads)) throw new Error(`${label} ${a.name} and ${b.name} hold different other heads`);
+  if (diff.length) {
+    // name what differs: the rows (columns) and the stamps of the tables that differ, a few of each
+    const detail: Record<string, unknown> = {};
+    for (const t of [...new Set(diff.map((d) => d.table))]) {
+      const rowsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: unknown }>(`SELECT to_jsonb(t) - 'updated_at_unused' AS r FROM "${t}" t ${t === "content_nodes" || t === "node_attributes" || t === "note_pointers" ? "WHERE t.workspace_id = $1" : "WHERE $1::uuid IS NOT NULL"}`, [p.ws])).rows.map((x) => JSON.stringify(x.r)));
+      const stampsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: unknown }>(`SELECT to_jsonb(s) AS r FROM sync_stamps s WHERE workspace_id = $1 AND split_part(table_name, '.', 1) = $2`, [p.ws, t])).rows.map((x) => JSON.stringify(x.r)));
+      const [ra, rb, sa2, sb2] = [await rowsOf(a), await rowsOf(b), await stampsOf(a), await stampsOf(b)];
+      const only = (x: string[], y: string[]) => { const ys = new Set(y); return x.filter((v) => !ys.has(v)).slice(0, 2); };
+      detail[t] = { rowsOnlyA: only(ra, rb), rowsOnlyB: only(rb, ra), stampsOnlyA: only(sa2, sb2), stampsOnlyB: only(sb2, sa2) };
+    }
+    throw new Error(`${label} ${a.name} and ${b.name} differ: ${JSON.stringify(diff)} ${JSON.stringify(detail)}`);
+  }
+  const firstDiff = (x: unknown[], y: unknown[]) => { const xs = new Set(x.map((v) => JSON.stringify(v))), ys = new Set(y.map((v) => JSON.stringify(v))); return { only: [...xs].filter((v) => !ys.has(v)).slice(0, 3), other: [...ys].filter((v) => !xs.has(v)).slice(0, 3) }; };
+  if (JSON.stringify(sa.stamps) !== JSON.stringify(sb.stamps)) throw new Error(`${label} ${a.name} and ${b.name} hold different stamps: ${JSON.stringify(firstDiff(sa.stamps as unknown[], sb.stamps as unknown[]))}`);
+  if (JSON.stringify(sa.heads) !== JSON.stringify(sb.heads)) throw new Error(`${label} ${a.name} and ${b.name} hold different other heads: ${JSON.stringify(firstDiff(sa.heads as unknown[], sb.heads as unknown[]))}`);
   return { a: sa, b: sb };
 }
 

@@ -1,8 +1,9 @@
 // The ids a body write mints, on two nodes that hold the same text. Step 1b of docs/architecture/proposals/anchors-deterministic-2026-11-16.md:
 // each `it.fails` below turns around in step 3 (the writer mints an id once and carries it).
 //
-// A writes the body (and derives its anchors, paragraph rows and the task note); a bundle gives B the text only (pinned in stampedBundle.integration.test.ts:
-// B derives nothing from it); then B edits one word of that text, so B's own write derives what A derived, for the same paragraphs and the same task line.
+// A writes the body (and derives its anchors, paragraph rows and the task note); a bundle gives B the text, and since batch 2b-2a also A's task note with its task
+// reference and its `_task_status` (function_refs and node_attributes travel), but not the derived paragraph rows (pinned in stampedBundle.integration.test.ts: B derives
+// nothing from the text); then B edits one word of that text, so B's own write derives what A derived, for the same paragraphs and the same task line.
 // Both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts).
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
@@ -81,14 +82,22 @@ describe.skipIf(!isTestDb)("the ids a body write mints, on two nodes that hold t
     const { atB } = await result();
     expect(atB.taskNotes.filter((t) => !t.linkedToALine)).toEqual([]);
   }, 300_000);
-  it("task lists: B's list shows the one task of the line, not two (A's note that arrived by bundle has no line on B, so the list does not show it)", async () => {
+  // What a person sees today (since batch 2b-2a): B's task list shows the ONE task line as TWO tasks. A's task note arrived with its task reference and its status
+  // (function_refs and node_attributes travel in a bundle), which is all the list asks for (services/tasksStore.ts TASK_JOIN_SQL); B's own write made the second one.
+  // Before 2b-2a only the note arrived, so the duplicate was there but not listed. Step 3 of the anchors proposal (the writer mints the id once) removes it, and it must
+  // be done before a transport is connected (spine/stampedMerge/README.md, 接上傳輸前必須完成).
+  it("task lists: B's list shows the one task line as two tasks, A's (arrived by bundle, with no line on B) and B's own (the line's), A's list shows one", async () => {
     const { atA, atB } = await result();
     expect(atA.agendaTaskIds).toHaveLength(1);
-    expect(atB.agendaTaskIds).toHaveLength(1);
-    expect(atB.agendaTaskIds[0]).toBe(atB.taskNotes.find((t) => t.linkedToALine)!.id);
+    expect(atB.agendaTaskIds).toEqual(atB.taskNotes.map((t) => t.id).sort());
+    expect(atB.agendaTaskIds).toHaveLength(2);
+    expect(atB.agendaTaskIds).toContain(atA.agendaTaskIds[0]); // A's, by bundle
+    expect(atB.agendaTaskIds).toContain(atB.taskNotes.find((t) => t.linkedToALine)!.id); // B's own, the one the line points at
+    expect(atB.taskNotes.find((t) => t.id === atA.agendaTaskIds[0])!.linkedToALine).toBe(false);
   }, 300_000);
-  it.fails("task lists: it is the same task on both nodes (today B lists its own note, with another id than the one A lists)", async () => {
+  it.fails("task lists: it is the same ONE task on both nodes (today B lists two: A's, which arrived by bundle, and its own, with another id)", async () => {
     const { atA, atB } = await result();
+    expect(atB.agendaTaskIds).toHaveLength(1);
     expect(atB.agendaTaskIds).toEqual(atA.agendaTaskIds);
   }, 300_000);
 });

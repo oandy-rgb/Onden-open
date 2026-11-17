@@ -64,3 +64,22 @@ export function recoverLateEdits(rows: readonly { id: string; purged: Deletion |
   }
   return out.sort((a, b) => (a.row + a.to < b.row + b.to ? -1 : 1));
 }
+
+/** A row of another table that hangs on a note (an attribute, a tag applied to it, a pointer to or under it, its position on a board, a reference it holds). */
+export type HangingRow = { table: string; row: string; on: string; created: Stamp };
+export type Hanging = { table: string; row: string; on: string };
+/**
+ * Rule 4.9 for the rows that hang on a note, as a VIEW: a row made (or made again) on a note that was deleted for good by someone who had not seen that row. The row is not kept
+ * (there is no note to hold it, the database refuses it); every node computes the same list from stamps it holds, and the row's maker is told, unless they are the deleter.
+ * A row the deleter HAD seen is the ordinary cascade's and not this rule's. Nothing is written: a stamped delete made by each node on its own would be a write nobody made.
+ */
+export function rowsOnDeletedNotes(rows: readonly HangingRow[], deleted: ReadonlyMap<string, Deletion>): { hanging: Hanging[]; notices: Notice[] } {
+  const hanging: Hanging[] = [], notices: Notice[] = [];
+  for (const r of [...rows].sort((a, b) => (a.table + a.row + a.on < b.table + b.row + b.on ? -1 : 1))) {
+    const d = deleted.get(r.on);
+    if (!d || hadSeen(d, r.created)) continue;
+    hanging.push({ table: r.table, row: r.row, on: r.on });
+    if (r.created.author !== null && r.created.author !== d.stamp.author) notices.push({ to: r.created.author, note: r.on, kind: "created-under-deleted-parent" });
+  }
+  return { hanging, notices: notices.sort(byNote) };
+}

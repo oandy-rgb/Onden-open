@@ -21,6 +21,7 @@
 | `rules/moveCycle.ts` | 搬動造成迴圈（4.10） |
 | `rules/permission.ts` | 撤權只對之後有效（4.1）、只能在主伺服器做（4.13）、離線太久（4.14） |
 | `rules/functionRefs.ts` | 兩台各建同一個功能引用（以較早的那一列為準，另一列的 config 逐鍵併進視圖） |
+| `rules/place.ts` | 筆記的位置＝（父層、排序鍵）一個寫入：顯示的排序鍵一定是設定父層那筆寫入的，或看過它的寫入的 |
 
 ## 一個單位怎麼合（`mergeUnit`）
 
@@ -116,7 +117,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 ## 修改包：別的節點的修改怎麼進來（第 2b-1 批，migration 206）
 
 唯一入口：`applyChangeBundle`（`spine/stampedImport.ts`），讀的一端是 `services/stampedBundle.ts` 的 `readChangeBundle`（格式與切點的說明在 `spine/stampedBundle.ts` 檔頭）。
-一包一個交易，和快照用同一個「觸發器讓開」開關（`reason: "merge"`），不另開旁路。範圍只有 `content_nodes` 的單位；其他表、JSON 鍵、（父層、排序鍵）合成一個單位、分空間的修改包都不在這批。
+一包一個交易，和快照用同一個「觸發器讓開」開關（`reason: "merge"`），不另開旁路。第 2b-1 批的範圍只有 `content_nodes`；其他表、JSON 鍵、（父層、排序鍵）見下一節（第 2b-2a 批）。分空間的修改包不在這兩批。
 
 | 檔案 | 責任 |
 | --- | --- |
@@ -157,9 +158,58 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 系統／背景工作（`systemJobOf`，`stampTransaction` 把 `system: true` 放進標記設定）寫到有其他頭的單位，資料庫拒絕（`sync_unit_in_conflict`，409，可重試）；人的寫入看過所有頭，照舊取代。這一批不另設重試上限：從 outbox 跑的工作是一般的可重試失敗，沿用 outbox 的額度（`RETRY_DAY_ATTEMPTS`，約一天，之後進入看得到的死亡列）；不是 outbox 的工作直接以 409 失敗（`syncSystemWriteConflict.integration` 釘住）。
 
+## 每一張帶標記的表都跟著修改包走（第 2b-2a 批，migration 209）
+
+範圍從 `content_nodes` 擴大到 `dbUnits.ts` 的 `UNIT_SOURCES`（一份資料：每張表的列鍵、工作區、欄位，守門 `stampedBundleSources.integration.test.ts` 對照資料庫裡標記觸發器的參數）與 `JSON_SOURCES`（JSON 欄位的鍵，一鍵一個單位）。
+同一個核心（`rows.ts` `mergeRow`）、同一個列層寫回（`dbRows.ts`，依 `UNIT_SOURCES` 的順序：父表先），沒有第二套合併。`sync_origins.have` 每個標籤一個數字，一包在一個切點讀全部標籤，所以收下之後各標籤相同；
+只收過 `content_nodes` 的舊節點，其他標籤從 0 起算（筆記會整份再送一次，收兩次不改任何東西）。`NOT_CARRIED_YET` 列出接了觸發器但還沒跟著走的，各附原因：
+
+- 看板的區段（`node_attributes._canvas_sections`）**跟著走**，一個單位：屬性的 `value`（照一般單位合併：較晚的寫入勝，另一邊留成頭，每台相同；不逐個區段合併）。一份資料只有一種單位：migration 209 之後觸發器與起始標記都不再逐區段蓋章；
+  之前留下的逐區段標記不刪、不改寫，摘要、快照與修改包都不讀它（`snapshotTables.ts` 的 `RETIRED_STAMP_LABELS`，守門 `stampedBundleSources.integration.test.ts`）。沒有任何讀者用過逐區段的標記。`content_nodes.collection_views` 是凍結欄位（沒有寫入者），不需要。
+- 集合（`workspaces.modules_off`／`modules_confirmed`）**跟著走**：一個元素一個單位（在／不在），和 JSON 鍵同一個機制；寫回時排序存放，本機寫入也由 migration 209 的觸發器排序存放，所以相同的單位就是相同的位元組。
+- `block_node_tags`：掛在段落（`block_nodes`）上，段落由內文衍生，合併進來的內文還不會重建段落（2b-2b）。
+
+列層的新規則：
+
+- **掛在被永久刪除的筆記上的列**（屬性、標籤、指標、卡片位置、功能引用）：資料庫拒絕（外鍵），不建列；它的標記照存，**而且照樣跟著包走**（沒有列的標記也送），所以每台握有相同的寫入。規則 4.9 的檢視 `hanging`（`rules/trash.ts` `rowsOnDeletedNotes`）列出它們並通知建立的人（刪的人沒看過的才算）。不寫入、不在各台各蓋一筆刪除。
+- **同一個衍生 id 在兩台各建**（指標、Onden 自己建的功能引用）：一列，輸的建立值留成頭。**人加的功能引用** id 不是衍生的，兩台各加同一個功能會撞唯一索引：留建立較早的那一列（`mergeDuplicateRefs`，每台相同），另一列不在表裡、標記照存，config 逐鍵併入是檢視（`duplicateRefs`），不寫入。
+- **沒有列的標記也送**（列不在表裡就送它的標記；在表裡但不在讀者範圍內的不送）。這只對握有整個工作區的讀者成立；**分空間的包（#1769）不能照這條送**：不在讀者範圍內、而且已刪的列的標記會洩漏它存在過，那一批要自己決定。
+- **JSON 的鍵**：一鍵一個單位，第一次寫入的 `saw` 是空的（不是「跟著建立」）。列不在時鍵的標記照存（刪除觸發器在刪的那台留下鍵的墓碑）。標籤 schema 的鍵也算筆記的 `updated_at`（migration 209 重新定義 `sync_touch_updated_at`）。
+
+### 成本：每一筆都照現在的表規劃
+
+一包在一個交易裡讓表從小長大，查詢規劃器的統計卻還是交易開始前的（交易中不會有 autovacuum，PGlite 根本沒有）：快取的計畫（外鍵檢查、觸發器的查找）一直是整表讀，按鍵找一列的寫入走工作區的索引——每多一列就多讀整張表。
+所以合併的交易內 `plan_cache_mode = force_custom_plan`（`stampedImport.ts` `openMerge`），一包在一張表建了 100 列以上就在交易內 `ANALYZE` 那張表（`dbRows.ts`）；讀包時每張表的變動鍵只找一次、每塊 10,000 列。
+`stampedBundleScale.integration.test.ts` 斷言資料庫讀的列數（`pg_stat_user_tables`），不斷言時間。讀的那一端需要統計是新的：見下一節。
+套用端的 `ANALYZE` 不需要比套用更多的權限，也不會讓套用失敗（本機 Postgres 16.15 實測）：表的擁有者以外的角色執行時只有一個 WARNING（`permission denied to analyze "…", skipping it`），交易照常提交——那時只是統計沒更新、成本回到修之前；
+`ANALYZE` 可以在交易區塊內執行（`VACUUM` 才不行），在唯讀交易裡也可以，之後同一條連線的語句照常。PGlite 以超級使用者執行，沒有權限的問題。
+
+### 接上傳輸前必須完成
+
+- **送的一方的統計要是新的。** 呼叫 `readChangeBundle` 的一方要保證它的資料庫有新的統計：伺服器由 autovacuum 做；瀏覽器版（PGlite，沒有 autovacuum）由它自己的維護工作定期 `ANALYZE`。這是只屬於這一台的維護，不是複製的狀態（統計不跟著包走、也不進摘要）。
+  統計在節點還小時取過一次就夠（`stampedBundleScale.integration.test.ts`「a sender whose statistics were taken once…」，3.7 倍）。**完全沒有統計**時計畫看運氣：同一個設定跑 5 次，3 次組合鍵的查詢走錯索引（`node_tags` 每個鍵讀同一個標籤的所有列，4 倍的標記讀 14.4 倍的列）、2 次是 0.5 倍；時過時不過的結果不能釘成 `it.fails`，所以沒有釘。傳輸那一批要讓節點在讀包之前至少有過一次統計。
+- **同一個任務行在兩台是兩個任務**（錨點提案第 3 步：id 由寫入者鑄一次、跟著帶）。2b-2a 起任務筆記連同它的任務引用與 `_task_status` 跟著包走，所以收的一方的任務清單會列出兩個（對方的、和自己由同一行再做出的一個）；2b-2a 之前重複也在，只是收的一方看不到。`anchorIdsTwoNodes.integration.test.ts` 釘住現在的樣子，`it.fails`「the same ONE task on both nodes」等第 3 步翻過來。沒解掉之前接上傳輸，人會看到重複的任務。
+- **觸發器不知道誰在寫**：一個普通寫入碰到有衝突的單位會把它解決（上面「系統與背景工作的寫入」）；要在寫入路徑上擋。
+
+### （父層、排序鍵）是一個位置
+
+| | 甲：觸發器把兩欄合成一個單位 `place` | 乙（採用）：兩個標記，核心當成一個合 |
+| --- | --- | --- |
+| 既有標記 | 要讀成一對，`parent`／`sort` 兩個名字在快照、結構紀錄、`updated_at`（搬動算、排序不算）、搬動成環規則（`meta.from`）、4.9 檢視、十幾個測試裡都要改 | 不變 |
+| 「搬動算修改、排序不算」 | 一個單位分不出來，要另加記號 | 照舊（`NOT_AN_EDIT_FIELDS`） |
+| 資料形狀 | 單位名稱改變 | 不變（另一項改變才升版，見下） |
+| 要的條件 | 無 | 每一次改父層的寫入也蓋排序鍵（migration 209 的觸發器：鍵沒變也用同一個標記蓋一次） |
+
+規則（`rules/place.ts` `placedSort`）：顯示的排序鍵＝`sort` 的頭裡，**就是**勝出的父層那筆寫入、或**看過**它的那一個（取較大者）；沒看過它的排序（在舊父層底下的重排）留成頭（衝突，作者看得到），不會顯示在新父層底下。
+它是兩個單位的頭的函式，所以每台相同；`order_stamp` 跟著顯示的那個頭（`storeUnit`，以及 209 的 `order_stamp_follow_parent`）。209 之前「搬動但鍵沒變」的寫入沒有蓋 `sort`：找不到相連的頭時顯示 `sort` 最大的頭，跟以前一樣（那時沒有交換過）。
+`note_pointers` 不需要：指標的父層是 id 的一部分（migration 194），換父層就是另一列。
+
+**兩列最後拿到同一個鍵**：每台都以（鍵、設定這個鍵那筆寫入的標記 `order_stamp`、id）排序，相同；之後要插在它們中間，由下一個重排這一組的人在他那一台用 `planSiblingOrder` 把其中一列換新鍵（一筆有標記的寫入，只在動手的那一台寫一次）。
+`respaceSiblings` 只在寫入了過長的鍵之後、作為那筆寫入的連帶，在寫的那一台做；合併從不重新編號（守門：`stampedBundle.guard.test.ts`「the merge never renumbers siblings」）。各台各自重新編號會是沒人寫過的寫入。
+
 ### 沒做到的（在測試裡釘住，見 `stampedBundle.integration.test.ts`）
 
-- 衍生資料：別的表裡由列衍生的資料（屬性、邊、指標、位置、區塊）不在包裡，也不會被更新；永久刪除一列時，收的一方的連鎖刪除不留墓碑（送的一方有）。
+- 衍生資料：由內文衍生的（連結、搜尋文字、錨點、任務行、複習卡、標籤記號、段落）與領域事件，合併進來時都不會更新（2b-2b，一個機制）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
 - slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；兩個活著的筆記在同一空間要同一個 slug 時，id 較大的加上 `-<id 前八碼>`。這只保證資料庫的唯一索引不破，不保證所有歷史下各節點相同（需要決定）。
 - 同一個 id 在兩個節點各自建立（算出來的 id）：輸的創建值以頭的形式留下，列的建立欄位（slug、建立時間）跟著勝出的建立。
 

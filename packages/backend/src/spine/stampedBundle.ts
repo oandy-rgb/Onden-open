@@ -1,4 +1,4 @@
-// Reading a CHANGE BUNDLE: everything of a workspace's `content_nodes` units that another node does not have yet (docs/research/sync-design-vs-literature-2026-11-16.md, the
+// Reading a CHANGE BUNDLE: everything of a workspace's stamped units (every table of stampedMerge/dbUnits.ts UNIT_SOURCES and its JSON keys) that another node does not have yet (docs/research/sync-design-vs-literature-2026-11-16.md, the
 // list "before change bundles"; the taking half is `applyChangeBundle` in spine/stampedImport.ts).
 //
 //   const pages = await readChangeBundle(actor, workspaceId, { [originA]: 12, [originB]: 3 });   // services/stampedBundle.ts. `have`: per origin, the highest sequence number the receiver holds
@@ -25,12 +25,14 @@ import { CodedStatusError } from "../statusError.js";
 import { FOREIGN_CLOCK_BOUND_MS } from "./stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
 import { readCarriedRows, readStampsOf, snapshotRows, type BundleItem, type ChangeBundle, type ChangeBundlePage, type ScopeFactory } from "./snapshotSql.js";
-import { GENESIS_STAMP_ORIGIN, UNIT_SOURCES } from "./stampedMerge/index.js";
+import { CARRIED_LABELS, GENESIS_STAMP_ORIGIN, UNIT_SOURCES, labelsOf, rowMatchOf, unitTextsSql } from "./stampedMerge/index.js";
 
-const SCOPE = "content_nodes" as const;
-const SRC = UNIT_SOURCES.find((u) => u.label === SCOPE)!;
+/** What a bundle speaks about: every label in CARRIED_LABELS, read at one cut. */
+export const BUNDLE_SCOPE = "stamped" as const;
 const PAGE_BYTES = 4 * 1024 * 1024;
-const CHUNK_ROWS = 200;
+/** How many rows of a table one statement reads. A chunk costs about one pass over the table (with current statistics the planner reads it whole rather than look up thousands of
+ *  keys one by one), so the number of chunks must not grow with a bundle: 200 made reading quadratic (stampedBundleScale.integration.test.ts counts the rows read). */
+const CHUNK_ROWS = 10_000;
 
 class BundleRefused extends CodedStatusError {}
 export const bundleRefused = (code: string, message: string, status: 400 | 409 | 422 = 409) => new BundleRefused(status, code, message);
@@ -56,9 +58,27 @@ export async function readHave(workspaceId: string): Promise<Record<string, numb
     `SELECT n.node_id, c.next_seq::text FROM sync_node n LEFT JOIN sync_clock c ON c.workspace_id = $1 WHERE n.singleton`, [workspaceId])).rows[0];
   if (!own) throw new Error("this database has no node id yet");
   const have: Record<string, number> = {};
-  for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) have[o.origin] = o.have[SCOPE] ?? 0;
+  for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) have[o.origin] = heldOfAll(o.have);
   have[own.node_id] = Number(own.next_seq ?? 1) - 1;
   return have;
+}
+
+/**
+ * How far a node holds an origin's writes to EVERY label a bundle carries: the least of `sync_origins.have` over CARRIED_LABELS (a label it never took counts 0). A bundle carries all
+ * labels at one cut, so after taking one they are equal; a node that took only `content_nodes` before this batch holds the other labels from 0 and is sent them whole (its notes again too:
+ * taking them twice changes nothing).
+ */
+export function heldOfAll(have: Readonly<Record<string, number>>): number {
+  return Math.min(...CARRIED_LABELS.map((l) => have[l] ?? 0));
+}
+/** The `sync_origins.have` of an origin held up to `n` for every label a bundle carries. */
+export const haveOfAll = (n: number): Record<string, number> => Object.fromEntries(CARRIED_LABELS.map((l) => [l, n]));
+
+/** Which of `keys` are rows of the table at all (in or out of the reader's scope). */
+async function rowsPresent(src: (typeof UNIT_SOURCES)[number], workspaceId: string, keys: string[]): Promise<Set<string>> {
+  const m = rowMatchOf(src, keys);
+  const params: unknown[] = [workspaceId];
+  return new Set((await snapshotRows<{ id: string }>(`SELECT ${m.idSql("t")} AS id FROM "${src.table}" t WHERE ${m.match("t", params)} AND ${m.workspace("t", "$1")}`, params)).rows.map((r) => r.id));
 }
 
 const sizeOf = (item: BundleItem) => new TextEncoder().encode(JSON.stringify(item)).length;
@@ -82,7 +102,7 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     // one snapshot: the cut and the stamps are read at the same moment (see the header)
     const cut = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
     const upTo: Record<string, number> = {};
-    for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) upTo[o.origin] = o.have[SCOPE] ?? 0;
+    for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) upTo[o.origin] = heldOfAll(o.have);
     // the receiver holds more of THIS node than it ever made: this node was restored from an older copy and has written the same numbers again with other content. Nothing it sends can be told from news; it must not send (the way out is a new node id, a later batch)
     if ((base[node] ?? 0) > cut) throw bundleRefused("bundle_sender_restored", "the receiver holds writes of this node that this node never made: it was restored from an older copy");
     upTo[node] = cut;
@@ -91,29 +111,40 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     const pages: ChangeBundlePage[] = [];
     let items: BundleItem[] = [];
     let bytes = 0;
-    const header = { layer: "changes" as const, dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, scope: SCOPE, sender: node, cut, base, upTo };
+    const header = { layer: "changes" as const, dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, scope: BUNDLE_SCOPE, sender: node, cut, base, upTo };
     const flush = () => { if (items.length) { pages.push({ ...header, pages: 0, page: pages.length + 1, items }); items = []; bytes = 0; } };
     const add = (item: BundleItem) => { items.push(item); bytes += sizeOf(item); if (bytes >= budget) flush(); };
 
-    let after = "";
-    for (;;) {
-      const keys = (await snapshotRows<{ row_key: string }>(
+    for (const src of UNIT_SOURCES) {
+      const labels = labelsOf(src);
+      // the rows of this table that have at least one stamp (of the row or of a key of its JSON columns) the receiver does not hold: found in ONE pass over the
+      // table's stamps, then read CHUNK_ROWS rows at a time (a query per chunk that looked for "the next 200 after the last" rescanned every stamp each time: quadratic)
+      const changed = (await snapshotRows<{ row_key: string }>(
         `SELECT s.row_key FROM (
-           SELECT row_key, origin, seq FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2
-           UNION ALL SELECT row_key, origin, seq FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2) s
-          WHERE s.origin <> 'genesis' AND s.seq > COALESCE(($3::jsonb ->> s.origin)::bigint, 0) AND s.row_key COLLATE "C" > $4
-          GROUP BY s.row_key ORDER BY s.row_key COLLATE "C" LIMIT $5`, [workspaceId, SCOPE, JSON.stringify(base), after, CHUNK_ROWS])).rows.map((r) => r.row_key);
-      if (keys.length === 0) break;
-      const rows = await readCarriedRows(SCOPE, workspaceId, keys, SRC.fields, scopeOf);
-      const stamps = await readStampsOf(workspaceId, keys.map((rowKey) => ({ label: SCOPE, rowKey })));
-      for (const key of keys) {
-        const own = stamps.filter((s) => s.rowKey === key);
-        const row = rows.get(key);
-        if (row) add({ kind: "row", table: SCOPE, values: row.v, stamps: own, texts: row.texts });
-        else { const star = own.find((s) => s.field === "*" && s.deleted); if (star) add({ kind: "tombstone", table: SCOPE, stamp: star }); }
+           SELECT row_key, origin, seq FROM sync_stamps WHERE workspace_id = $1 AND table_name = ANY($2::text[])
+           UNION ALL SELECT row_key, origin, seq FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = ANY($2::text[])) s
+          WHERE s.origin <> 'genesis' AND s.seq > COALESCE(($3::jsonb ->> s.origin)::bigint, 0)
+          GROUP BY s.row_key ORDER BY s.row_key COLLATE "C"`, [workspaceId, labels, JSON.stringify(base)])).rows.map((r) => r.row_key);
+      for (let at = 0; at < changed.length; at += CHUNK_ROWS) {
+        const keys = changed.slice(at, at + CHUNK_ROWS);
+        const rows = await readCarriedRows(src.table, workspaceId, rowMatchOf(src, keys), unitTextsSql(src), scopeOf);
+        const present = await rowsPresent(src, workspaceId, keys);
+        const stamps = await readStampsOf(workspaceId, keys.flatMap((rowKey) => labels.map((label) => ({ label, rowKey }))));
+        const byRow = new Map<string, typeof stamps>();
+        for (const st of stamps) (byRow.get(st.rowKey) ?? byRow.set(st.rowKey, []).get(st.rowKey)!).push(st);
+        for (const key of keys) {
+          const own = byRow.get(key) ?? [];
+          const row = rows.get(key);
+          if (row) add({ kind: "row", table: src.label, values: row.v, stamps: own, texts: row.texts });
+          else if (!present.has(key)) {
+            // a row that is not in the table: gone for good (its tombstone, and the keys of its JSON columns: the delete trigger leaves theirs), or never made here because it hangs
+            // on a note this node does not hold (rule 4.9, dbRows.ts): its stamps travel all the same, so every node holds the same writes. A row that IS in the table and
+            // out of the reader's scope sends nothing (as before). This is right for a reader that holds the whole workspace; a per-space bundle (#1769) must NOT send the
+            // stamps of a row outside the reader's scope that is gone: they would tell the reader that the row existed. That batch decides its own rule.
+            for (const st of own) add({ kind: "tombstone", table: st.label, stamp: st });
+          }
+        }
       }
-      after = keys[keys.length - 1]!;
-      if (keys.length < CHUNK_ROWS) break;
     }
     flush();
     if (pages.length === 0) pages.push({ ...header, pages: 0, page: 1, items: [] });

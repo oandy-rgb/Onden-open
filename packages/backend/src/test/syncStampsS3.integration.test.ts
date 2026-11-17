@@ -3,9 +3,6 @@
 // remove the row; one stamp per transaction; an untouched key keeps its stamp; the same content in another key order or
 // layout changes nothing; the structure log replays to the table; none of it reaches a response, sync content or backup.
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { apiOnError } from "../httpError.js";
@@ -26,13 +23,13 @@ import { stampTransaction, countWritesWithoutStamp } from "../spine/stamps.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
 import { seedQ } from "./helpers/seedQ.js";
+import { rerunMigration } from "./helpers/rerunMigration.js";
 import { zipEntries } from "./helpers/zipEntries.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 import { capabilityProblems, memberProblems } from "./helpers/structureReplay.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const DEVICE = randomUUID();
-const MIGRATION = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../db/migrations/199_stamps_s3.sql"), "utf8");
 
 type Stamp = { field: string; origin: string; seq: number; hlc_wall: number; hlc_counter: number; author: string | null; device: string | null; deleted: boolean };
 type LogRow = { field: string; old_value: string | null; new_value: string | null; seq: number; author: string | null };
@@ -389,32 +386,28 @@ describe.skipIf(!isTestDb)("write stamps on JSON keys, spaces, space members and
     });
   });
 
-  describe("a board's section frames: one stamp per section as well as the whole-value log", () => {
-    it("add two sections, change one, remove one: only the changed ones are stamped; the whole-value log is kept", async () => {
+  describe("a board's section frames: one unit, the attribute's value (migration 209), and the whole-value log", () => {
+    it("add two sections, change one, remove one: the value is stamped each time, no section gets a stamp of its own; the whole-value log is kept", async () => {
       const board = (await ok("POST", "/api/canvases", { space_id: space })).id as string;
-      const T = "node_attributes._canvas_sections";
+      const row = `${board}/_canvas_sections`;
       await ok("PATCH", `/api/boards/${board}`, { sections: { upsert: [frame("s1", "one"), frame("s2", "two")] } });
-      const created = await stampsOf(T, board);
-      expect([...created.keys()].sort()).toEqual(["section:s1", "section:s2"]);
-      expect(created.get("section:s1")!.seq).toBe(created.get("section:s2")!.seq);
-      expect(created.get("section:s1")).toMatchObject({ author: owner.id, device: DEVICE, deleted: false });
+      const created = await stampsOf("node_attributes", row);
+      expect(created.get("*")).toMatchObject({ author: owner.id, device: DEVICE, deleted: false });
 
       await ok("PATCH", `/api/boards/${board}`, { sections: { upsert: [frame("s2", "two!")] } });
-      const changed = await stampsOf(T, board);
-      expect(changed.get("section:s1")).toEqual(created.get("section:s1"));
-      expect(changed.get("section:s2")!.seq).toBeGreaterThan(created.get("section:s2")!.seq);
+      const changed = await stampsOf("node_attributes", row);
+      expect(changed.get("value")!.seq).toBeGreaterThan(created.get("*")!.seq);
 
       await ok("PATCH", `/api/boards/${board}`, { sections: { upsert: [frame("s2", "two!")] } }); // the same frame again
-      expect(seqs(await stampsOf(T, board))).toEqual(seqs(changed));
+      expect(seqs(await stampsOf("node_attributes", row))).toEqual(seqs(changed));
 
       await ok("PATCH", `/api/boards/${board}`, { sections: { remove: ["s1"] } });
-      const removed = await stampsOf(T, board);
-      expect(removed.get("section:s1")).toMatchObject({ deleted: true });
-      expect(removed.get("section:s2")).toEqual(changed.get("section:s2"));
+      expect((await stampsOf("node_attributes", row)).get("value")!.seq).toBeGreaterThan(changed.get("value")!.seq);
 
       await ok("PATCH", `/api/boards/${board}`, { sections: { remove: ["s2"] } }); // the attribute itself goes
-      expect((await stampsOf(T, board)).get("section:s2")).toMatchObject({ deleted: true });
-      expect((await logOf("node_attributes", `${board}/_canvas_sections`, "sections")).length).toBe(4); // S2's whole-value lines are all still there
+      expect((await stampsOf("node_attributes", row)).get("*")).toMatchObject({ deleted: true });
+      expect([...(await stampsOf("node_attributes._canvas_sections", board)).keys()]).toEqual([]); // the retired per-section label (snapshotTables.ts RETIRED_STAMP_LABELS)
+      expect((await logOf("node_attributes", row, "sections")).length).toBe(4); // S2's whole-value lines are all still there
     });
 
     it("frame text that is not JSON never fails the write", async () => {
@@ -487,13 +480,13 @@ describe.skipIf(!isTestDb)("write stamps on JSON keys, spaces, space members and
             SELECT id, tag_schema::text FROM content_nodes WHERE id = $1 UNION ALL SELECT id, capabilities::text FROM spaces WHERE id = $2) t`, [id, spaceId])).rows[0]!.h,
       });
       const before = await snapshot();
-      await pool.query(MIGRATION);
+      await rerunMigration("199_stamps_s3"); // with every later migration's functions put back: tests of this file run in a shuffled order, and a raw rerun left 199's attribute trigger for the ones after it
       expect(await snapshot()).toEqual(before); // the migration writes no stamp, no log line and no row of the data it watches
       expect((await stampsOf("content_nodes.tag_schema", id)).size).toBe(0);
 
       await setJson("tag_schema", id, JSON.stringify({ a: 1, b: 3 }));
       expect([...(await stampsOf("content_nodes.tag_schema", id)).keys()]).toEqual(["key:b"]); // a is unknown until S5, only b was written
-      await pool.query(MIGRATION); // again, after the triggers have been used
+      await rerunMigration("199_stamps_s3"); // again, after the triggers have been used
       await setJson("tag_schema", id, JSON.stringify({ a: 1, b: 3 }));
       expect([...(await stampsOf("content_nodes.tag_schema", id)).keys()]).toEqual(["key:b"]);
     });

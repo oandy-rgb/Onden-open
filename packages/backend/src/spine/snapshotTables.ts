@@ -68,9 +68,19 @@ const fill = (template: string, s: Scope) => template.replace(/\{(row|node|space
  *  switch, a tag applied to anything but the Site Config note), whatever the row's stamp says — a row of an older database carries only a genesis stamp. `{systemExternalId}` and `{notTag}` are filled in by spine/stampedImport.ts. */
 export const SHELL_EMPTY_CHECKS: { code: string; sql: string }[] = (data as unknown as Record<string, { code: string; sql: string }[]>)["$shellEmptyChecks"]!;
 
+/**
+ * Stamp labels that some databases still hold and that are neither made, copied nor compared any more: written before 2026-11, no trigger or genesis pass makes them
+ * (migration 209), and the snapshot, the digest and the change bundle leave them out (none of them lists a label here: SNAPSHOT_SPECS refuses one, and
+ * stampedBundleSources.integration.test.ts checks the bundle's labels). The stamps stay where they are: nothing deletes or rewrites them.
+ *   node_attributes._canvas_sections   one stamp per section of a board's section frames (migration 199). The frames are the text of the attribute `value`,
+ *                                      a unit of its own that travels; two kinds of unit over one piece of data made two nodes with the same boards differ.
+ */
+export const RETIRED_STAMP_LABELS: readonly string[] = ["node_attributes._canvas_sections"];
+
 export const SNAPSHOT_SPECS: SnapshotSpec[] = Object.entries(data as unknown as Record<string, Entry>).filter(([table]) => !table.startsWith("$")).map(([table, e]) => ({
   table, pk: e.pk, order: e.order, where: (s) => fill(e.where, s), exclude: e.exclude, placeholders: e.placeholders, deferred: e.deferred, stamps: e.stamps,
   override: e.override ? (s) => Object.fromEntries(Object.entries(e.override!).map(([c, sql]) => [c, fill(sql, s)])) : undefined,
 }));
+for (const spec of SNAPSHOT_SPECS) for (const d of spec.stamps ?? []) if (RETIRED_STAMP_LABELS.includes(d.label)) throw new Error(`snapshotTables.json: ${spec.table} lists the retired stamp label ${d.label}`);
 
 export const snapshotSpec = (table: string): SnapshotSpec | undefined => SNAPSHOT_SPECS.find((s) => s.table === table);

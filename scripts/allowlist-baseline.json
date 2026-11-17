@@ -6,7 +6,7 @@
   "be-raw-sql": {
     "app.ts": 2,
     "auth.ts": 1,
-    "browser/makeOldCopy.ts": 3,
+    "browser/makeOldCopy.ts": 1,
     "browser/prepareSnapshot.ts": 1,
     "browser/worker.ts": 2,
     "distributedSync/node.ts": 7,

@@ -52,6 +52,7 @@ import { holderViewsSql } from "./functionRefSql.js";
 import type { TaskListLang } from "./taskListFile.js";
 import { attributeValues, bundleMedia, rewriteMediaRefs, linkNameKey, replaceWikilinks, linkSlug, splitWikilink, wikilinkNames, encodeValues, entryFor, entryValue, CHILD_KEY_PREFIX, isListValue, mediaRefs, readFrontmatter, writeFrontmatter, type FrontmatterEntry, type FrontmatterValue, isUuid, isSystemAttr, PUBLISH_OFF_KEY, PUBLISH_OFF_FALLBACK_KEY, publishOffEntry, fieldValue, UUID_SOURCE, INK_PAGE_ATTRS, parseInkRegion, writeLegacyIds, type PartLinkExportMode } from "@onden/markdown";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
+import { requirePerson } from "../spine/authority.js";
 import { isTag, isCanvas } from "@onden/markdown/contract";
 
 export type ExportNode = {
@@ -607,6 +608,8 @@ export function produceArchive(out: PacedArchive, what: string, produce: () => P
  *  the caller streams it. The note list is read before this returns, so a
  *  failure to start answers as an error, not as a broken download. */
 export async function buildMarkdownExport(actor: ActorCtx | null, workspaceId: string, options: VaultOptions = {}): Promise<archiver.Archiver> {
+  // The whole workspace in one file is the person's own to take away, not a temporary session's (it works on a computer that is not theirs).
+  if (actor) requirePerson(actor, "export");
   const index = await vaultIndex(actor, workspaceId, "export");
   const out = pacedArchive();
   produceArchive(out, "markdown export", async () => { await writeVault(out, actor, workspaceId, index, undefined, options); });

@@ -60,7 +60,7 @@ router.patch("/modules", async (c) => {
 
 // ── Site config (workspace-level settings via #workspace-config node) ────────
 
-router.get("/config", async (c) => c.json(await readWorkspaceConfig(await getWorkspaceId())));
+router.get("/config", async (c) => c.json(await readWorkspaceConfig(c.get("actor"), await getWorkspaceId())));
 
 router.patch("/config", async (c) => {
   const input = await parseBody(c, z.object({

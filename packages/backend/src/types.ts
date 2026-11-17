@@ -4,7 +4,10 @@
 // (spine/systemJobs.ts), made only inside the server. Audit records written
 // beside someone else's operation (dispatcher, conflict notes) still pass
 // 'system' to event() explicitly; test/guards/systemActor.guard.test.ts lists them.
-export type ActorType = "human" | "agent" | "system";
+// "session" is a temporary participant (services/participantSessions.ts): one person on one computer for a while.
+// It is an `actors` row like the other two, a member of exactly the spaces it was opened on, and never a person
+// (spine/authority.ts isPerson) nor an owner.
+export type ActorType = "human" | "agent" | "system" | "session";
 
 export type TokenAccess = "read" | "write";
 
@@ -37,17 +40,27 @@ export type TokenScope = {
   sessionId?: string | null;
 };
 
+/** Populated only for a temporary session (type 'session'); read with the actor under the event lock (spine/currentActor.ts). */
+type SessionScope = {
+  sessionId: string;
+  /** The person the session acts for (participant_sessions.opened_by): its reach is never wider than theirs, at any moment. */
+  openedBy: string;
+  expiresAt: Date;
+};
+
 export interface ActorCtx {
   id: string;
   name: string;
   type: ActorType;
   tokenScope?: TokenScope;
+  sessionScope?: SessionScope;
 }
 
 // Map ActorCtx.type to the event() actor_type column.
 //   human → "user"  (human actor)
 //   agent → "ai_agent"  (any non-human actor)
 //   system → "system"   (a background job, spine/systemJobs.ts)
+//   session → "user"  (a person's own hands on another computer; it is not an AI, so its edits are not agent changes for the inbox)
 export function eventActorType(t: ActorType): "user" | "ai_agent" | "system" {
-  return t === "human" ? "user" : t === "system" ? "system" : "ai_agent";
+  return t === "human" || t === "session" ? "user" : t === "system" ? "system" : "ai_agent";
 }

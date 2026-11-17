@@ -5095,6 +5095,27 @@
         "guard:freshProof"
       ],
       "why": "票限時 2 分鐘、只能用一次、綁人與用途；伺服器只存雜湊、不寫入日誌。新的受保護路由在 FRESH_PROOF_PURPOSES 加一行用途即可。"
+    },
+    {
+      "id": "be-participant-sessions",
+      "need": "要讓一個人在別人的電腦上暫時用自己的幾個空間（開、列出、結束、憑證；不是登入、不是 AI 權杖）",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/services/participantSessions.ts",
+          "exports": [
+            "openTemporarySession",
+            "listTemporarySessions",
+            "endTemporarySession",
+            "endTemporarySessionsOpenedBy",
+            "resolveTemporarySessionActor"
+          ]
+        }
+      ],
+      "use": "import type { ActorCtx } from \"./types.js\";\nimport { endTemporarySession, openTemporarySession } from \"./services/participantSessions.js\";\nexport async function example(owner: ActorCtx, workspaceId: string, spaceId: string, ticket: string) {\n  const opened = await openTemporarySession(owner, workspaceId, { spaces: [{ spaceId, permission: \"edit\" }], minutes: 120 }, ticket);\n  await endTemporarySession(owner, workspaceId, opened.sessionId);\n}",
+      "replaces": "另做一把只限某幾個空間的權杖，或在每個讀取入口另寫「這個人只能看這幾個空間」的判斷",
+      "rules": [],
+      "why": "工作階段是 actors 的一列（type 'session'），所以它能讀寫什麼由 space_members 與同一條空間規則決定，並且永遠不比開它的人寬；沒有第二條權限判斷。結束與到期由資料庫時間在每個請求判斷，憑證只存雜湊。"
     }
   ]
 }

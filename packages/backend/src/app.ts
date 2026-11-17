@@ -44,8 +44,15 @@ import type { ActorCtx, ActorType } from "./types.js";
 import { eventActorType } from "./types.js";
 import { resolveBearerActor, parseBearer } from "./services/agentTokens.js";
 import { actorForSession } from "./services/actors.js";
+import { readTemporarySessionBody, resolveTemporarySessionActor } from "./services/participantSessions.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./spine/systemActor.js";
 import { withRequestDevice, withRequestSession } from "./requestContext.js";
+/** The headers of a request whose body was read and re-wrapped: the declared length is dropped (the body now carries its own). */
+function withoutLength(headers: Headers): Headers {
+  const copy = new Headers(headers);
+  copy.delete("content-length");
+  return copy;
+}
 // The assembled Hono instance — pure assembly, no listening port, no migrations,
 // no background jobs, no top-level await — so any environment can import it:
 // vitest drives it via app.request(), server.ts (Node boot) serves it, and a
@@ -196,8 +203,12 @@ app.use("*", async (c, next) => {
   //   3. Native-origin fallback         →  System actor (dev / Capacitor app)
   // A valid bearer token always wins, so an authenticated agent isn't masked
   // by a stale session cookie present on the same request.
+  //   1b. the same header may carry a temporary session's credential (services/participantSessions.ts): that is a person's
+  //       own hands on another computer, so it is the whole app (not confined to MCP), as the participant it was opened as.
   const bearer = parseBearer(c.req.header("authorization"));
-  const bearerActor = bearer ? await resolveBearerActor(bearer) : null;
+  const bearerActor = bearer
+    ? (await resolveBearerActor(bearer)) ?? (await resolveTemporarySessionActor(bearer, await getWorkspaceId()))
+    : null;
   if (bearerActor && c.req.header("X-Onden-Expected-User")) throw new UnauthorizedError("account_changed");
   // POST /api/invites/claim resolves the session WITH its invite link, so the
   // first sign-in claims the invited member instead of becoming a viewer
@@ -233,6 +244,17 @@ app.use("*", async (c, next) => {
   // bearer token (resolveBearerActor).
   if (actor?.tokenScope && !c.req.path.startsWith("/api/mcp") && !PUBLIC_PATHS.has(c.req.path) && !isPublicRead) {
     return c.json({ error: "token_scope", detail: "this token is an MCP agent credential, valid only on /api/mcp/*" }, 403);
+  }
+  // A temporary session's body is read HERE, counted as it is read and cut at the request cap or what the session has left (services/participantSessions.ts),
+  // then handed on as the request's body: a body larger than either is never taken into memory.
+  if (actor?.type === "session" && !["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+    const body = await readTemporarySessionBody(c.req.raw, actor.sessionScope!.sessionId, c.req.path);
+    if (body) c.req.raw = new Request(c.req.url, { method: c.req.method, headers: withoutLength(c.req.raw.headers), body });
+  }
+  // The MCP surface is for an AI's token: a temporary session is a participant of the app itself and never starts or drives an AI
+  // (aiSessionStart refuses it too; this keeps it off the tool list altogether).
+  if (actor?.type === "session" && c.req.path.startsWith("/api/mcp")) {
+    return c.json({ error: "session_scope", detail: "a temporary session does not use the AI tool surface" }, 403);
   }
   // The session rides the request (requestContext.ts) so a fresh-proof ticket is bound to the session it was handed to.
   return signedIn?.sessionId ? withRequestSession(signedIn.sessionId, next) : next();

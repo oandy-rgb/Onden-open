@@ -21,6 +21,8 @@
 //
 // SAFETY: only runs against a *_test database; skips otherwise.
 
+import { openTemporarySession } from "../services/participantSessions.js";
+import { ticketWithoutEvidence } from "./helpers/freshProofTicket.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -534,6 +536,10 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
       allDay: false, startsAt: `${day}T10:00:00Z`, endsAt: `${day}T11:00:00Z`, startDate: null, endDate: null,
     }] });
 
+    // a temporary session of the owner's (its credential, its participant, its id): none of them may reach another workspace
+    const temporary = await openTemporarySession(A.owner, A.ws, { spaces: [{ spaceId: space, permission: "view" }] }, await ticketWithoutEvidence(A.owner, "open_session"));
+    const temporaryActor = (await q<{ id: string }>(`SELECT actor_id::text AS id FROM participant_sessions WHERE id = $1`, [temporary.sessionId])).rows[0]!.id;
+
     // backups: a restore that finished (its job stays), and a second upload still waiting (its preview is a read)
     const donor = await freshWorkspace("sweepD");
     await createNote({ actor: donor.actor, workspaceId: donor.ws, title: canary("BackupNote"), markdown: canary("BackupBody"), event: { uiContext: "test.sweep" } });
@@ -611,7 +617,7 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     const restrictedIds = [...await harvestRestricted(A.ws, restrictedSpace), ...await harvestRestricted(A.ws, restoredSpace)];
     W = {
       A, B, C, open, restricted, restoredSpace, agent: agent.id, invite: invited.id, calendar: calendarId, upload, job: job.id, reviewTag, day, block, member: member.id, memberExternalId, memberToken, media: stored.filename, feed, article, space, restrictedSpace, attrKey,
-      allNeedles: [...new Set([...canaries, ...harvested, stored.filename])],
+      allNeedles: [...new Set([...canaries, ...harvested, stored.filename, temporary.sessionId, temporary.credential, temporaryActor])],
       // Tags are workspace-wide (not in a space), so their names are not secret from a member.
       restrictedNeedles: ["Title", "Body", "Para", "Item", "AttrValue", "Child", "ChildBody", "Task", "TaskBody", "Canvas", "NoteView",
         "Pointer", "MentionNote", "AgentPrompt", "AgentThought", "AgentMessage", "Proposed", "SuggestComment"]

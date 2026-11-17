@@ -166,7 +166,7 @@ describe.skipIf(!isTestDb)("assertAuthority decisions", () => {
     it("a space that does not exist is 'not found', and a delegated token cannot act on spaces at all", async () => {
       const missing = await refusal(owner, { kind: "space", spaceId: randomUUID(), need: "read" });
       expect(missing.reason).toBe("space");
-      expect(missing.message).toMatch(/^space .* not found$/);
+      expect(missing.message).toMatch(/^space( .*)? not found$/);
       for (const who of [writeAgent, readAgent]) {
         const e = await refusal(who, { kind: "space", spaceId: sharedSpace, need: "read" });
         expect(e.reason).toBe("space");

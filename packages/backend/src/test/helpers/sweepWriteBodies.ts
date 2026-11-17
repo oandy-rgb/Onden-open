@@ -92,6 +92,8 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
   "DELETE /api/spaces/:id": (o) => ({ params: { id: o.space }, json: {} }),
   "PUT /api/spaces/:id/members/:actorId": (o, r) => ({ params: { id: o.space, actorId: r.member }, json: { permission: "view" } }),
   "DELETE /api/spaces/:id/members/:actorId": (o, r) => ({ params: { id: o.space, actorId: r.member } }),
+  "POST /api/spaces/sessions": (o) => ({ headers: { "x-onden-fresh-proof": o.openSessionTicket }, json: { spaces: [{ space_id: o.space, permission: "view" }] } }),
+  "DELETE /api/spaces/sessions/:id": (o) => ({ params: { id: o.temporarySession } }),
   "POST /api/spaces/move": (o, r) => ({ json: { node_id: r.otherNote, to_space_id: o.space, membership_epoch: r.epoch } }),
   // ── workspace, preferences, push, query, sync ────────────────────────────
   "PATCH /api/workspace": (_o, r) => ({ json: { home_node_id: r.note } }),

@@ -105,3 +105,43 @@ describe("read guard — files that read domain_events are classified", () => {
     }
   });
 });
+
+// ── A temporary session takes the same read path as everyone ──────────────────────────────────────────────────────────────────────────────────
+// docs/architecture/proposals/sessions-core-2026-11-17.md: a session is a member of exactly the spaces it was opened on, so every read entry above judges it
+// by the one rule (spine/spaceAccess.ts) with no code of its own. What could still give it a path round that rule is a file that asks "is this a session?"
+// and answers differently. Only the files below may say what a session is, and each narrows or refuses; a new file that branches on it is a decision, so it fails here.
+// ratchet:list session-actor-branches
+const SESSION_AWARE: Readonly<Record<string, string>> = {
+  "types.ts": "the actor type and its scope (SessionScope); eventActorType: a session's events are a person's, not an agent's",
+  "spine/currentActor.ts": "the ONE place an ActorCtx for a session is made: from its row, refused when ended or past its time",
+  "spine/spaceAccess.ts": "temporarySql: a session reaches a space only while the person who opened it does (narrows)",
+  "spine/spaceScope.ts": "tagScopeSql / hiddenTagIds: a session is not told a tag used only in spaces it does not reach, nor the events about one (narrows)",
+  "spine/authority.ts": "isPerson / requirePerson refuse a session; writesAsPerson; `own_personal` refuses its personal writes (refuses)",
+  "services/spaces.ts": "a session has no personal space: a new note names its space or lands in the one it may write in (placement only; authority is asserted after)",
+  "services/participantSessions.ts": "the service that opens, lists, ends and resolves sessions",
+  "app.ts": "a session never reaches the AI tool surface (refuses)",
+};
+const SESSION_BRANCH = /\.type\s*(?:===|!==)\s*"session"|\btype:\s*"session"|\bsessionScope\b/;
+
+describe("read guard — a temporary session takes the same read path as everyone", () => {
+  const knowing = allSrcFiles(srcDir)
+    .map((full) => ({ rel: relative(srcDir, full).split(sep).join("/"), src: readFileSync(full, "utf8") }))
+    .filter(({ src }) => SESSION_BRANCH.test(src))
+    .map(({ rel }) => rel)
+    .sort();
+
+  it("only the listed files branch on what a session is (a new one needs a reason here, and review)", () => {
+    expect(knowing, "a file that asks whether the actor is a session gives it a path of its own: say why in SESSION_AWARE").toEqual(Object.keys(SESSION_AWARE).sort());
+  });
+
+  it("the listed ones all still do (drop a stale line)", () => {
+    for (const file of Object.keys(SESSION_AWARE)) expect(knowing, file).toContain(file);
+  });
+
+  it("an actor of a session is built from its row in one place, never by hand", () => {
+    const builders = allSrcFiles(srcDir)
+      .map((full) => ({ rel: relative(srcDir, full).split(sep).join("/"), src: readFileSync(full, "utf8") }))
+      .filter(({ src }) => /\bsessionScope\s*:\s*\{/.test(src)).map(({ rel }) => rel);
+    expect(builders).toEqual(["spine/currentActor.ts"]);
+  });
+});

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getWorkspaceId } from "../services/workspaceId.js";
 import { requireActor } from "../spine/mutate.js";
-import { isWorkspaceOwner } from "../spine/authority.js";
+import { isPerson, isWorkspaceOwner } from "../spine/authority.js";
 import { z } from "zod";
 import {
   createSharedSpace, deleteSpace, isCapabilityKey, listMembers, memberCandidates, moveToSpace, previewMove, previewSpaceDelete, setMember,
@@ -10,6 +10,8 @@ import {
 import type { ActorCtx } from "../types.js";
 import { SPACE_PERMISSIONS } from "../spine/spaceAccess.js";
 import { spaceOverview } from "../services/spaceOverview.js";
+import { endTemporarySession, listTemporarySessions, openTemporarySession } from "../services/participantSessions.js";
+import { FRESH_PROOF_HEADER } from "../services/freshProof.js";
 import { SPACE_NAME_MAX } from "@onden/markdown";
 import { parseBody, uuidParam, uuidQuery } from "./params.js";
 
@@ -29,6 +31,33 @@ router.get("/", async (c) => {
 // switches, what each AI can actually reach and the first reason it cannot.
 // Owner only (403 owner_only); personal spaces never appear.
 router.get("/overview", async (c) => c.json(await spaceOverview(c.get("actor"), await getWorkspaceId())));
+
+// Temporary sessions (services/participantSessions.ts): one person on a computer that is not theirs, on the spaces they pick. These paths come before
+// /:id so "sessions" is never read as a space.
+// POST /api/spaces/sessions {spaces: [{space_id, permission}], minutes?, max_requests?, max_bytes?} — the owner, a person (not a token, not a session),
+//   with a fresh confirmation in the X-Onden-Fresh-Proof header (purpose open_session). The credential is in the answer, once.
+// GET /api/spaces/sessions — the live sessions. DELETE /api/spaces/sessions/:id — end one now.
+const openSessionSchema = z.object({
+  spaces: z.array(z.object({ space_id: z.string().uuid(), permission: z.enum(SPACE_PERMISSIONS) }).strict()).min(1).max(50),
+  minutes: z.number().int().positive().optional(),
+  max_requests: z.number().int().positive().optional(),
+  max_bytes: z.number().int().positive().optional(),
+}).strict();
+router.post("/sessions", async (c) => {
+  const actor = requireActor(c.get("actor"));
+  const input = await parseBody(c, openSessionSchema);
+  const opened = await openTemporarySession(actor, await getWorkspaceId(), {
+    spaces: input.spaces.map((s) => ({ spaceId: s.space_id, permission: s.permission })),
+    minutes: input.minutes, maxRequests: input.max_requests, maxBytes: input.max_bytes,
+  }, c.req.header(FRESH_PROOF_HEADER));
+  c.header("Cache-Control", "no-store"); // the credential is in this answer
+  return c.json({
+    session_id: opened.sessionId, credential: opened.credential, label: opened.label, expires_at: opened.expiresAt,
+    spaces: opened.spaces.map((s) => ({ space_id: s.spaceId, permission: s.permission })),
+  }, 201);
+});
+router.get("/sessions", async (c) => c.json({ sessions: await listTemporarySessions(requireActor(c.get("actor")), await getWorkspaceId()) }));
+router.delete("/sessions/:id", async (c) => c.json({ ok: true, ...(await endTemporarySession(requireActor(c.get("actor")), await getWorkspaceId(), uuidParam(c, "id"))) }));
 
 // POST /api/spaces {name} — create a shared space; the workspace owner only, and
 // they start as an editing member of it.
@@ -85,7 +114,9 @@ router.delete("/:id", async (c) => {
 router.get("/:id/members", async (c) => {
   const actor = requireActor(c.get("actor"));
   const id = uuidParam(c, "id");
-  return c.json({ members: await listMembers(actor, await getWorkspaceId(), id) });
+  const workspaceId = await getWorkspaceId();
+  // The live temporary sessions on this space ride along for whoever may see them (the owner); a session itself sees none.
+  return c.json({ members: await listMembers(actor, workspaceId, id), sessions: isPerson(actor) ? await listTemporarySessions(actor, workspaceId, { spaceId: id }) : [] });
 });
 
 // GET /api/spaces/:id/candidates — people the owner can add (names only).

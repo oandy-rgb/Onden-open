@@ -38,6 +38,7 @@ import type { ActorCtx } from "../types.js";
 import { viewLayouts } from "./viewLayouts.js";
 import { CodedStatusError } from "../statusError.js";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
+import { spaceScopeSql } from "../spine/spaceScope.js";
 import { isTag, isTagNameShape } from "@onden/markdown/contract";
 
 export class TagNameConflictError extends Error {
@@ -425,15 +426,16 @@ export async function fullTagPath(
  * Fetch the workspace's full tag tree as a flat list with parent links.
  * Caller builds the tree in-memory — keeps the SQL simple.
  */
-export async function listTagTree(workspaceId: string): Promise<TagRow[]> {
+export async function listTagTree(actor: ActorCtx | null, workspaceId: string): Promise<TagRow[]> {
   // A1.6: list tree via content_nodes shadow.
-  const result = await pool.query<TagRow>(
-    `SELECT id, title AS name, parent_id::text, tag_color AS color
-       FROM content_nodes
-      WHERE workspace_id = $1
-        AND ${liveTagNodeSql()}
-      ORDER BY parent_id NULLS FIRST, title ASC`,
-    [workspaceId],
+  const params: unknown[] = [workspaceId];
+  const result = await q<TagRow>(
+    `SELECT n.id, n.title AS name, n.parent_id::text, n.tag_color AS color
+       FROM content_nodes n
+      WHERE n.workspace_id = $1
+        AND ${liveTagNodeSql("n")} AND ${spaceScopeSql(actor, "n", params)}
+      ORDER BY n.parent_id NULLS FIRST, n.title ASC`,
+    params,
   );
   return result.rows;
 }

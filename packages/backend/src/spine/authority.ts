@@ -90,6 +90,9 @@ export type Authority =
   // authority used to be enforced by-discipline (each dispatcher remembered to
   // call cascadeAllowed); now it's by-construction.
   | { kind: "cascade" }
+  // The actor's OWN personal data or settings (mutatePersonal): a person's own rows, never a temporary session's: a session reads
+  // its person's personal rows but never writes them back (it runs on a computer that is not theirs).
+  | { kind: "own_personal" }
   // A background job's own write (spine/systemJobs.ts): valid only for a system
   // actor, whose declaration (event kinds, targets, module) mutate() checks per
   // event. The only authority a system actor holds besides `cascade`.
@@ -116,22 +119,26 @@ export async function isWorkspaceOwner(actor: ActorCtx): Promise<boolean> {
   return r.rows.length > 0;
 }
 
-/** A person (a signed-in human or the native app), not a delegated token. */
+/** A person (a signed-in human or the native app), not a delegated token and not a temporary session: a session is a person's hands on
+ *  a computer that is not theirs, and what needs the person themselves (backups, the whole export, opening sessions, starting an AI,
+ *  proving who they are again) is not for it. */
 export function isPerson(actor: ActorCtx): boolean {
-  return !actor.tokenScope;
+  return !actor.tokenScope && actor.type !== "session";
 }
 
-/** The write is a person's: a human acting for themselves. A system job, an AI agent and any delegated token are not: only a person's write resolves a conflict (migration 206). What an AI proposed and a person accepted is the person's write. */
+/** The write is a person's: a human acting for themselves, or their temporary session (their own typing on another computer, so it resolves a conflict
+ *  in a space it may write in). A system job, an AI agent and any delegated token are not: only a person's write resolves a conflict (migration 206).
+ *  What an AI proposed and a person accepted is the person's write. */
 export function writesAsPerson(actor: ActorCtx): boolean {
-  return actor.type === "human" && !actor.tokenScope;
+  return (actor.type === "human" && !actor.tokenScope) || actor.type === "session";
 }
 
 /** Operations only a person may do (backups, creating spaces, ...): a delegated
- *  token is refused with one answer — 403, `{ error: <message> }` through
+ *  token or a temporary session is refused with one answer — 403, `{ error: <message> }` through
  *  AuthorityError — whichever operation it tried. `capability` names it in
  *  AuthorityError.reason. Call before any lookup, so a token learns nothing. */
 export function requirePerson(actor: ActorCtx, capability: string): void {
-  if (!isPerson(actor)) throw new AuthorityError(capability, "this is reserved to a person; a delegated token cannot do it");
+  if (!isPerson(actor)) throw new AuthorityError(capability, "this is reserved to a person; a delegated token or a temporary session cannot do it");
 }
 
 /** May `actor` approve or reject agent changes in the inbox — the one rule
@@ -186,6 +193,10 @@ export async function assertAuthority(actor: ActorCtx, a: Authority): Promise<vo
     case "open":
       return;
 
+    case "own_personal":
+      if (actor.type === "session") throw new AuthorityError("session", "a temporary session never writes its person's personal data");
+      return;
+
     case "cascade":
       // Already gated at the cascade root (see the Authority union note). The
       // confinement that makes this safe lives in mutate(), not here: a `cascade`
@@ -207,7 +218,8 @@ export async function assertAuthority(actor: ActorCtx, a: Authority): Promise<vo
         throw new AuthorityError("space", "a delegated token cannot act on spaces directly; propose the change instead");
       }
       const access = await spaceAccess(actor, a.spaceId);
-      if (!access) throw new AuthorityError("space", `space ${a.spaceId} not found`);
+      // A space the actor cannot even read answers as a space that is not there: one answer, so the id of a space they are not in cannot be told apart from an unused one.
+      if (!access || (!access.read && !access.manage)) throw new AuthorityError("space", "space not found");
       if (access.manage || access[a.need]) return; // managing covers every level (the owner intervenes)
       throw new AuthorityError("space", `space access is below required '${a.need}'`);
     }

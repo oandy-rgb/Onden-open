@@ -205,6 +205,14 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   unknown_tool: "That tool doesn't exist.",
   nothing_to_change: "There is nothing to change.",
   token_scope: "This token only works for agent tools (MCP).",
+  // Temporary sessions (a session is a short visit by someone the person let in; it reaches these only through its own credential).
+  session_scope: "A temporary session can't use the AI tools.",
+  session_limit_reached: "This temporary session has used everything it was given.",
+  session_not_found: "That temporary session doesn't exist.",
+  session_space_unavailable: "One of the chosen spaces isn't available.",
+  session_spaces_invalid: "A temporary session needs between one and fifty spaces.",
+  session_limit_invalid: "A temporary session needs a positive time and limits.",
+  body_too_large: "That request is too large.",
   tool_not_allowed: "This token isn't allowed to use that tool.",
   // Other requests.
   effect_unavailable: "No feature that is on can carry out this action any more.",

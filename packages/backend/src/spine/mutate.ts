@@ -334,7 +334,7 @@ export function mutatePersonal<T>(m: {
   return mutate({
     actor: m.actor,
     workspaceId: m.workspaceId,
-    authority: { kind: "open", why: "the actor's own personal data (mutatePersonal)" },
+    authority: { kind: "own_personal" },
     idempotencyKey: m.idempotencyKey,
     apply: () => m.apply({ actor: cascade.getStore()!.rootActor }),
   });

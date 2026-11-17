@@ -25,6 +25,8 @@ import { Readable } from "node:stream";
 import { encodeInk } from "@onden/markdown/ink";
 import { createSuggestions } from "../../services/aiSuggestions.js";
 import { endSession, startSession } from "../../services/agentSessions.js";
+import { openTemporarySession } from "../../services/participantSessions.js";
+import { ticketWithoutEvidence } from "./freshProofTicket.js";
 import { updateNode } from "../../services/nodeUpdate.js";
 import { callTool } from "../../services/agentTools/index.js";
 import { setNodeAttribute } from "../../services/attributeWrites.js";
@@ -76,6 +78,8 @@ export type SweepObjects = {
   attrKey: string;
   /** two @mentions in `aiNote`: one session still open, one cancelled; a pending suggestion of the open one */
   session: string; endedSession: string; suggestion: string;
+  /** a temporary session of the owner on `space` (id), and a fresh-confirmation ticket for opening another */
+  temporarySession: string; openSessionTicket: string;
   /** a note the agent edited (agentNote), that edit's event (agentEvent; an unreviewed change in the inbox) and its run (agentRun) */
   agentNote: string; agentEvent: string; agentRun: string;
   /** a tag pack the agent proposed and the owner has not decided (outbox approvals), a failed delivery and its kind */
@@ -104,7 +108,7 @@ export const SWEEP_SECRET_KEY = "cd".repeat(32);
 /** Every id and name this world minted that must never show up in another workspace. */
 export function needlesOf(o: SweepObjects): string[] {
   return [o.canary, o.note, o.child, o.otherNote, o.trashed, o.tag, o.otherTag, o.task, o.edge, o.canvas, o.event,
-    o.noteView, o.tagView, o.space, o.moduleTag, o.fnTag, o.agent, o.aiNote, o.credential, o.reviewNote, o.placedTask, o.pointer, o.deleteEvent, o.focus, o.member, o.memberToken, o.feed, o.article, o.media].concat([o.session, o.endedSession, o.suggestion, o.agentNote, o.agentEvent, o.agentRun, o.approval, o.deadEffect, o.deadKind, o.conflictEvent, o.calendar, o.upload, o.rewindNote, o.rewindId, o.block, o.mute])
+    o.noteView, o.tagView, o.space, o.moduleTag, o.fnTag, o.agent, o.aiNote, o.credential, o.reviewNote, o.placedTask, o.pointer, o.deleteEvent, o.focus, o.member, o.memberToken, o.feed, o.article, o.media].concat([o.temporarySession, o.session, o.endedSession, o.suggestion, o.agentNote, o.agentEvent, o.agentRun, o.approval, o.deadEffect, o.deadKind, o.conflictEvent, o.calendar, o.upload, o.rewindNote, o.rewindId, o.block, o.mute])
     .filter((n) => n.length >= 12);
 }
 
@@ -112,7 +116,7 @@ export function needlesOf(o: SweepObjects): string[] {
 const NEEDS: Partial<Record<keyof SweepObjects, Array<keyof SweepObjects>>> = {
   note: ["tag"], child: ["note"], edge: ["note", "otherNote"], noteView: ["note", "tag"], tagView: ["tag"], event: ["note"],
   pointer: ["child", "otherNote"], reviewNote: [], fnTag: ["moduleTag"], handle: ["agent"], agent: ["note"], aiNote: ["space", "agent"], deleteEvent: ["trashed"], placedTask: ["note"], focus: ["task"], article: ["feed"],
-  session: ["aiNote"], endedSession: ["aiNote"], suggestion: ["session"], agentNote: ["aiNote"], agentEvent: ["agentNote"], agentRun: ["agentEvent"],
+  temporarySession: ["space"], openSessionTicket: ["space"], session: ["aiNote"], endedSession: ["aiNote"], suggestion: ["session"], agentNote: ["aiNote"], agentEvent: ["agentNote"], agentRun: ["agentEvent"],
   approval: ["agent"], deadEffect: ["deadKind"], conflictEvent: ["note"], upload: ["backupZipBase64"], rewindId: ["rewindNote"], inkEvent: ["note"], block: ["moduleTag"],
 };
 
@@ -149,7 +153,7 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
   const add = (k: keyof SweepObjects) => { if (need.has(k)) return; need.add(k); for (const d of NEEDS[k] ?? []) add(d); };
   for (const k of wanted ?? (["note", "child", "otherNote", "trashed", "tag", "otherTag", "task", "edge", "canvas", "event", "noteView", "tagView", "space", "member",
     "memberToken", "feed", "article", "media", "moduleTag", "fnTag", "agent", "aiNote", "credential", "reviewNote", "placedTask", "pointer", "deleteEvent", "focus",
-    "session", "endedSession", "suggestion", "agentRun", "approval", "deadEffect", "conflictEvent", "calendar", "upload", "rewindId", "inkEvent", "block", "mute"] as const)) add(k);
+    "temporarySession", "openSessionTicket", "session", "endedSession", "suggestion", "agentRun", "approval", "deadEffect", "conflictEvent", "calendar", "upload", "rewindId", "inkEvent", "block", "mute"] as const)) add(k);
   if (need.has("memberToken")) add("member");
   const canary = `SWW${label}${randomUUID().slice(0, 8)}`;
   const c = (what: string) => `${canary}${what}`;
@@ -159,7 +163,7 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
     ws, canary, attrKey: SWEEP_ATTR_KEY, epoch: "", note: id("note"), child: id("child"), otherNote: id("otherNote"), trashed: id("trashed"),
     tag: "", otherTag: "", task: "", edge: "", canvas: id("canvas"), event: "", noteView: "", tagView: "", space: "", moduleTag: "", placedTask: "",
     pointer: "", deleteEvent: "", focus: "", reviewNote: id("reviewNote"), fnTag: "", agent: "", handle: "", aiNote: id("aiNote"), credential: "", member: "", memberToken: "", feed: "", article: "", media: "",
-    session: "", endedSession: "", suggestion: "", agentNote: id("agentNote"), agentEvent: "", agentRun: "", approval: "", deadEffect: "", deadKind: need.has("deadKind") ? `sweepdead${canary.toLowerCase()}` : "",
+    temporarySession: "", openSessionTicket: "", session: "", endedSession: "", suggestion: "", agentNote: id("agentNote"), agentEvent: "", agentRun: "", approval: "", deadEffect: "", deadKind: need.has("deadKind") ? `sweepdead${canary.toLowerCase()}` : "",
     conflictEvent: "", calendar: "", upload: "", backupZipBase64: "", rewindNote: id("rewindNote"), rewindId: "", inkEvent: "", block: "", mute: "",
   };
   let agentActor: ActorCtx | undefined;
@@ -248,6 +252,10 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
     await createNote({ ...common, spaceId: o.space, id: o.aiNote, title: c("AiNote"),
       markdown: `${c("AiNoteBody")}\n\n@${o.handle} ${c("AskOne")} please tidy this\n\n@${o.handle} ${c("AskTwo")} please tidy this too` });
   }
+  if (need.has("temporarySession")) {
+    o.temporarySession = (await openTemporarySession(actor, ws, { spaces: [{ spaceId: o.space, permission: "view" }] }, await ticketWithoutEvidence(actor, "open_session"))).sessionId;
+  }
+  if (need.has("openSessionTicket")) o.openSessionTicket = await ticketWithoutEvidence(actor, "open_session");
   if (need.has("session")) {
     o.session = (await startSession(ws, { actor, nodeId: o.aiNote, target: { blockText: `@${o.handle} ${c("AskOne")} please tidy this` } })).session.id;
   }

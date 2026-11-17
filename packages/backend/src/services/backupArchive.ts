@@ -511,7 +511,7 @@ async function backupSpaces(actor: ActorCtx, workspaceId: string): Promise<Backu
   for (const space of spaces) {
     const members = (await q<{ id: string; name: string; permission: string }>(
       `SELECT a.id::text, a.name, m.permission FROM space_members m JOIN actors a ON a.id = m.actor_id
-        WHERE m.space_id = $1 ORDER BY a.name, a.id`, [space.id],
+        WHERE m.space_id = $1 AND a.type <> 'session' ORDER BY a.name, a.id`, [space.id],
     )).rows;
     result.push({ ...space, members });
   }

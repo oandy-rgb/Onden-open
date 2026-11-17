@@ -1476,7 +1476,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（55）
+## 後端（56）
 
 ### 要寫日誌
 
@@ -1963,3 +1963,15 @@ export async function example(actor: ActorCtx, password: string, request: Reques
 - 取代：只在頁面上要求再輸入密碼、伺服器不查
 - 守門：`guard:freshProof`
 - 為什麼：票限時 2 分鐘、只能用一次、綁人與用途；伺服器只存雜湊、不寫入日誌。新的受保護路由在 FRESH_PROOF_PURPOSES 加一行用途即可。
+
+### 要讓一個人在別人的電腦上暫時用自己的幾個空間（開、列出、結束、憑證；不是登入、不是 AI 權杖）
+
+- 入口：`backend/src/services/participantSessions.ts`（`openTemporarySession`、`listTemporarySessions`、`endTemporarySession`、`endTemporarySessionsOpenedBy`、`resolveTemporarySessionActor`）　項目 `be-participant-sessions`
+- 寫法：`import type { ActorCtx } from "./types.js";
+import { endTemporarySession, openTemporarySession } from "./services/participantSessions.js";
+export async function example(owner: ActorCtx, workspaceId: string, spaceId: string, ticket: string) {
+  const opened = await openTemporarySession(owner, workspaceId, { spaces: [{ spaceId, permission: "edit" }], minutes: 120 }, ticket);
+  await endTemporarySession(owner, workspaceId, opened.sessionId);
+}`
+- 取代：另做一把只限某幾個空間的權杖，或在每個讀取入口另寫「這個人只能看這幾個空間」的判斷
+- 為什麼：工作階段是 actors 的一列（type 'session'），所以它能讀寫什麼由 space_members 與同一條空間規則決定，並且永遠不比開它的人寬；沒有第二條權限判斷。結束與到期由資料庫時間在每個請求判斷，憑證只存雜湊。

@@ -7,6 +7,7 @@ import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
 /** Reload authority using IDs from trusted authentication or a durable intent.
  * Earlier role/scopes are never grants. Call inside the read snapshot, or AFTER
  * acquiring the workspace event lock and BEFORE any write in that transaction.
+ * A temporary session (type 'session') is also refused here once it is ended or past its time (participant_sessions).
  * Returns a new value; never mutates a request's captured actor. Missing actors,
  * workspace mismatch and invalid/mismatched tokens are 401; DB errors propagate.
  * A token held by the built-in System actor is never valid: System cannot be
@@ -25,13 +26,20 @@ export async function resolveCurrentActor(
     token_id: string | null;
     allowed_tools: string[] | null; access: TokenAccess | null; write_mode: WriteMode; session_write_mode: WriteMode | null;
     expires_at: Date | null; issued_by: string | null; session_id: string | null;
+    temp_session_id: string | null; temp_opened_by: string | null; temp_expires_at: Date | null;
   }>(
     `SELECT a.id, a.name, a.type, a.write_mode, s.write_mode AS session_write_mode,
-            t.id AS token_id, t.allowed_tools, t.access, t.expires_at, t.issued_by::text AS issued_by, t.session_id::text AS session_id
+            t.id AS token_id, t.allowed_tools, t.access, t.expires_at, t.issued_by::text AS issued_by, t.session_id::text AS session_id,
+            ps.id::text AS temp_session_id, ps.opened_by::text AS temp_opened_by, ps.expires_at AS temp_expires_at
        FROM actors a
        LEFT JOIN agent_tokens t ON t.id::text=$3 AND t.actor_id=a.id
        LEFT JOIN agent_sessions s ON s.id = t.session_id
+       LEFT JOIN participant_sessions ps ON ps.actor_id = a.id
       WHERE a.id::text=$1 AND a.workspace_id=$2
+        -- A temporary session is good only while its row says so, judged HERE, at the statement's own time: ended or past its time is
+        -- "no such actor" (401), on every request and again under the event lock of every write, so a write that was waiting when the
+        -- session ended does not commit. A session never holds a bearer token.
+        AND (a.type <> 'session' OR (ps.id IS NOT NULL AND ps.ended_at IS NULL AND ps.expires_at > statement_timestamp() AND $3::text IS NULL))
         AND ($3::text IS NULL OR (t.id IS NOT NULL AND t.revoked_at IS NULL
           AND (t.expires_at IS NULL OR t.expires_at > statement_timestamp())
           AND a.external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL}))`,
@@ -48,6 +56,7 @@ export async function resolveCurrentActor(
       writeMode: row.session_write_mode === "suggest" ? "suggest" : row.write_mode,
       issuedBy: row.issued_by, sessionId: row.session_id,
     } } : {}),
+    ...(row.temp_session_id ? { sessionScope: { sessionId: row.temp_session_id, openedBy: row.temp_opened_by!, expiresAt: row.temp_expires_at! } } : {}),
   };
   assertCurrentToolAllowed(current);
   return current;

@@ -47,7 +47,7 @@ import { sha256Hex } from "../utils.js";
 import { getWorkspaceId } from "./workspaceId.js";
 
 /** What a ticket is for. A new guarded route adds its own name here. */
-export const FRESH_PROOF_PURPOSES = ["snapshot_export"] as const;
+export const FRESH_PROOF_PURPOSES = ["snapshot_export", "open_session"] as const;
 type FreshProofPurpose = (typeof FRESH_PROOF_PURPOSES)[number];
 
 /** The request header that carries a ticket to the guarded route (never a URL: URLs are logged). A custom header also makes a cross-site GET go through a

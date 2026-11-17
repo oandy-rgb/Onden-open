@@ -22,6 +22,7 @@
 import { q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { isWorkspaceOwner } from "../spine/authority.js";
+import { hiddenTagIds } from "../spine/spaceScope.js";
 import type { ActorCtx } from "../types.js";
 import { NODE_TARGET_TYPES } from "./eventTargets.js";
 import { readableTrashedNodeIds } from "./readPolicy.js";
@@ -44,6 +45,9 @@ export type EventAudience = {
     /** Every note of the workspace (trashed ones too) the reader cannot read.
      *  An event of theirs that names one of these is hidden. */
     unreadableNoteIds: ReadonlySet<string>;
+    /** Tag definitions the reader may not know the name of (spine/spaceScope.ts tagScopeSql: only a temporary session has any), so the events about
+     *  them are hidden too; a view of a tag (`collection_view`) is hidden from a reader who has any. Empty for everyone else. */
+    hiddenTagIds?: ReadonlySet<string>;
   };
 };
 
@@ -66,7 +70,7 @@ export async function eventAudience(actor: ActorCtx | null, workspaceId: string,
   const trashed = await readableTrashedNodeIds(actor, workspaceId);
   const allNotes = await db.selectFrom("content_nodes").select("id").where("workspace_id", "=", workspaceId).execute();
   const unreadableNoteIds = new Set(allNotes.map((r) => r.id).filter((id) => !readable.has(id) && !trashed.has(id)));
-  return { readable, others: { actorId: actor.id, spaceIds: spaces.rows.map((r) => r.id), unreadableNoteIds } };
+  return { readable, others: { actorId: actor.id, spaceIds: spaces.rows.map((r) => r.id), unreadableNoteIds, hiddenTagIds: await hiddenTagIds(actor, workspaceId) } };
 }
 
 /** The rule as a SQL predicate over an event row aliased `alias` (pushes its
@@ -78,8 +82,10 @@ export function eventVisibleSql(alias: string, audience: EventAudience, params: 
   const other = `${alias}.target_type NOT IN ${sqlList(NOTE_TARGETS)}`;
   if (audience.others === "all") return `(${note} OR ${other})`;
   const { actorId, spaceIds, unreadableNoteIds } = audience.others;
+  const hiddenTagIds = audience.others.hiddenTagIds ?? new Set<string>();
   return `(${note}
-    OR ${alias}.target_type IN ${sqlList(TAG_DEFINITION_TARGETS)}
+    OR (${alias}.target_type IN ${sqlList(TAG_DEFINITION_TARGETS)}
+        AND ${hiddenTagIds.size === 0 ? "true" : `${alias}.target_type = 'tag' AND NOT ${alias}.target_id = ANY(${p([...hiddenTagIds])}::text[])`})
     OR (${alias}.target_type = 'space' AND ${alias}.target_id = ANY(${p(spaceIds)}::text[]))
     OR (${other} AND ${alias}.actor_id::text = ${p(actorId)} AND ${namesNoUnreadableNoteSql(alias, p([...unreadableNoteIds]))}))`;
 }
@@ -118,7 +124,10 @@ export function eventVisible(
   if (NOTE_TARGETS.includes(row.target_type)) return audience.readable.has(row.target_id);
   if (audience.others === "none") return false;
   if (audience.others === "all") return true;
-  if (TAG_DEFINITION_TARGETS.includes(row.target_type)) return true;
+  if (TAG_DEFINITION_TARGETS.includes(row.target_type)) {
+    const hiddenTagIds = audience.others.hiddenTagIds ?? new Set<string>();
+    return hiddenTagIds.size === 0 || (row.target_type === "tag" && !hiddenTagIds.has(row.target_id));
+  }
   if (row.target_type === "space") return audience.others.spaceIds.includes(row.target_id);
   if (row.actor_id !== audience.others.actorId) return false;
   const { unreadableNoteIds } = audience.others;

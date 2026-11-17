@@ -62,7 +62,7 @@ const router = new Hono<Env>();
 // POST /api/tags                        — create one plain tag (client id kept)
 router.get("/tree", async (c) => {
   const workspaceId = await getWorkspaceId();
-  const tree = await listTagTree(workspaceId);
+  const tree = await listTagTree(c.get("actor"), workspaceId);
   return c.json({ tags: tree });
 });
 

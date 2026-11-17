@@ -251,6 +251,13 @@
 - **機制**：進行中〔目標第 1 層〕：`docs/agents/appearance-rules.md` 要列出**每一種**影響外觀的數值並逐項標「有規則／沒有規則」；`packages/frontend/e2e/style-census/` 對每個畫面量實際算出來的值並出總覽圖；新種類用與 `fe-css-*` 相同的只減不增基準（分支 `test/style-census`，尚未合併）。回報這類清理時，沒涵蓋的種類寫在數字前面。
 - **還沒擋住的**：上面的工具與規則都還沒進 main；四種數值目前沒有任何檢查。
 
+### 2026-11-17　工作階段的請求本文先整個讀進記憶體才計量（邊界沒走到；審查放過缺口）
+- **發生了什麼**：#1800 的位元組上限在 `app.ts` 用 `await c.req.arrayBuffer()` 讀完整個本文才計；持有效憑證的不可信電腦可以先讓伺服器吃下最多 1 GiB 的本文，上限才說話。第 1 輪我把「算實際讀到的」當成對的做法回報了，沒有問「讀到哪裡停」。
+- **證據**：`git show 3a812daf6:packages/backend/src/app.ts` 的 `chargeTemporarySessionBytes(…, (await c.req.arrayBuffer()).byteLength)`；擁有者在第 3 輪讀 diff 時發現。
+- **發現者**：擁有者審查。
+- **為什麼沒擋到**：我只測「計的是讀到的而不是標頭宣稱的」，沒有測「本文大於上限時伺服器持有多少」；威脅模型寫了「陌生電腦不可信」，卻沒有逐項問每個資源（記憶體、磁碟、時間）有沒有上限。
+- **類別**：邊界沒走到；審查放過缺口。
+- **機制**：`participantSessions.integration.test.ts`「the size of one request body」三條：超過單一請求上限（有／沒有 `Content-Length`）與超過剩餘額度，都檢查串流被取消（拉取的區塊數）、不寫、不計、之後仍可用；變異檢查（拿掉串流中的 `refuse`）兩條失敗。一般人的請求在 nginx 以外沒有本文上限，尚無機制（見提案第 10 節）。
 ### 2026-11-16　一個測試直接重跑舊的 migration，把後來重新定義的函式換回舊版（測試之間互相污染）
 - **發生了什麼**：PR #1778 第 2 輪讓 migration 209 的屬性觸發器不再逐區段蓋章。`syncStampsS3.integration.test.ts` 的「區段只有一個單位」在 PGlite 上時過時不過：同一檔另一個測試用 `pool.query(MIGRATION)` 直接重跑 199，把 199 版的 `sync_stamp_attribute_trigger`（逐區段蓋章）放回資料庫；檔內測試的順序是打亂的，排在它後面的測試就用到舊觸發器。
 - **證據**：失敗訊息 `expected [ 'section:s1', 'section:s2' ] to deeply equal []`；同一輪 `stampedBundleSources` 查 `pg_proc` 沒有任何函式提到那個標籤（每個檔從同一份範本開始，所以只能是檔內的改寫）；執行開頭印 `[order] shuffled with seed …`。改用 `helpers/rerunMigration.ts`（重跑後把之後每個 migration 的函式依序放回）後通過。`rerunMigration` 的函式樣式原本只認 `$$` 引號，認不到 `$fn$`（`sync_genesis_pass`），一併修正。

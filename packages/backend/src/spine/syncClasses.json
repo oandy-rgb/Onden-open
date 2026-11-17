@@ -201,6 +201,10 @@
   "class": "node-local",
   "note": "how many wrong passwords a person typed on this server and until when they wait (services/freshProof.ts); about this server's own door"
  },
+ "participant_sessions": {
+  "class": "node-local",
+  "note": "the credential, expiry, limits and use of a temporary session (services/participantSessions.ts); a credential is for this server's door and means nothing on another device. The session's own actors row (type 'session') travels like any member's"
+ },
  "backup_restore_jobs": {
   "class": "node-local",
   "note": "belongs to the node on duty"

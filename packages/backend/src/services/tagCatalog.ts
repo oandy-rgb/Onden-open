@@ -51,6 +51,7 @@ function withTagAbilities<T extends AbilityColumns>(
 export async function readTagCatalog(actor: ActorCtx | null, workspaceId: string) {
   const params: unknown[] = [workspaceId];
   const countScope = spaceScopeSql(actor, "m", params);
+  const tagScope = spaceScopeSql(actor, "n", params); // for a tag definition (no space) this is the tag branch alone: a temporary session is not told the names of tags used only in spaces it does not reach
   const result = await q(
     `SELECT n.id, n.title AS name, n.reserved_key, n.tag_color AS color,
             -- Hidden by the owner (「隱藏標籤」, D104): still applied and working,
@@ -90,7 +91,7 @@ export async function readTagCatalog(actor: ActorCtx | null, workspaceId: string
           WHERE ${countScope}
           GROUP BY nt.tag_id
        ) uc ON uc.tag_id = n.id
-      WHERE n.workspace_id=$1 AND ${liveTagNodeSql("n")}
+      WHERE n.workspace_id=$1 AND ${liveTagNodeSql("n")} AND ${tagScope}
       ORDER BY n.title`, params,
   );
   return withTagAbilities(result.rows as Array<AbilityColumns>, await functionIndex(actor, workspaceId));

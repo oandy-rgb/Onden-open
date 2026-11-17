@@ -29,7 +29,7 @@ export async function spaceOverview(authenticated: ActorCtx | null, workspaceId:
       `SELECT m.space_id::text, a.id::text AS actor_id, a.name, a.type, m.permission
          FROM space_members m JOIN actors a ON a.id = m.actor_id JOIN spaces s ON s.id = m.space_id
         WHERE s.workspace_id = $1 AND s.kind = 'shared' AND s.deleted_at IS NULL
-          AND a.external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL}
+          AND a.external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} AND a.type <> 'session'
         ORDER BY a.type DESC, a.name, a.id`, [workspaceId])).rows;
     const tokens = new Map((await q<{ actor_id: string; live: string; writes: string }>(
       `SELECT t.actor_id::text, count(*)::text AS live, count(*) FILTER (WHERE t.access = 'write')::text AS writes
@@ -73,7 +73,7 @@ export async function spaceOverview(authenticated: ActorCtx | null, workspaceId:
 
     const people = (await q<{ id: string; name: string; type: "human" | "agent"; invite_pending: boolean }>(
       `SELECT id::text, name, type, (type = 'human' AND external_id IS NULL AND invite_email IS NOT NULL) AS invite_pending
-         FROM actors WHERE workspace_id = $1 AND external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} ORDER BY type DESC, name, id`, [workspaceId])).rows;
+         FROM actors WHERE workspace_id = $1 AND external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} AND type <> 'session' ORDER BY type DESC, name, id`, [workspaceId])).rows;
     return {
       owner_id: owner,
       spaces: spaces.map((s) => ({ id: s.id, name: s.name, kind: "shared" as const, is_default: s.is_default, capabilities: s.capabilities, members: overviewMembers.get(s.id)! })),

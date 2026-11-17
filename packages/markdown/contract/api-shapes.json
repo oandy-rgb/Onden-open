@@ -2663,6 +2663,9 @@
             "permission": "string",
             "type": "string"
           }
+        ],
+        "sessions": [
+          "unknown"
         ]
       }
     },
@@ -2738,6 +2741,14 @@
           }
         ],
         "unplaced": [
+          "unknown"
+        ]
+      }
+    },
+    "GET /api/spaces/sessions": {
+      "status": 200,
+      "shape": {
+        "sessions": [
           "unknown"
         ]
       }

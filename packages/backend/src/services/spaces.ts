@@ -13,7 +13,7 @@ import { relinkTarget, syncWikilinkEdges, uniqueSlug } from "./nodes.js";
 import { canReadNode } from "./readPolicy.js";
 import { canWriteSomewhere, spaceReadableNodeIds, spaceScopeSql } from "../spine/spaceScope.js";
 import { hasTaskRefSql } from "../spine/taskIdentity.js";
-import { writableSpaceIds, type StoredSpacePermission } from "../spine/spaceAccess.js";
+import { spaceAccess, writableSpaceIds, type StoredSpacePermission } from "../spine/spaceAccess.js";
 export { canWriteSomewhere, spaceReadableNodeIds, spaceScopeSql };
 import { mutate } from "../spine/mutate.js";
 import { assertAuthority, isWorkspaceOwner, requirePerson } from "../spine/authority.js";
@@ -64,7 +64,7 @@ export async function newNoteSlugScope(
   actor: ActorCtx, workspaceId: string, parentId?: string | null,
 ): Promise<{ parentId: string } | { spaceId: string | null }> {
   if (parentId) return { parentId };
-  return { spaceId: await personalOrDefaultSpaceId(actor, workspaceId) };
+  return { spaceId: actor.type === "session" ? null : await personalOrDefaultSpaceId(actor, workspaceId) };
 }
 
 /** Which space a new note goes to — the one rule (docs/architecture/spaces.md,
@@ -86,7 +86,8 @@ export async function newNoteSpace(
     if (parent && !isTag(parent)) return null;
   }
   let spaceId = opts.spaceId ?? null;
-  if (!spaceId && !actor.tokenScope) {
+  // A token and a temporary session have no personal space of their own and never fall back to the shared one: they name a space, or write in the one they may.
+  if (!spaceId && !actor.tokenScope && actor.type !== "session") {
     spaceId = await personalOrDefaultSpaceId(actor, workspaceId);
   }
   if (!spaceId) {
@@ -163,7 +164,7 @@ async function loadSpace(workspaceId: string, spaceId: string): Promise<SpaceMet
 async function members(spaceId: string): Promise<Array<{ id: string; name: string; type: "human" | "agent"; permission: SpacePermission }>> {
   const r = await q<{ id: string; name: string; type: "human" | "agent"; permission: SpacePermission }>(
     `SELECT a.id::text, a.name, a.type, m.permission FROM space_members m JOIN actors a ON a.id = m.actor_id
-      WHERE m.space_id = $1 AND a.external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} ORDER BY a.name, a.id`,
+      WHERE m.space_id = $1 AND a.external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} AND a.type <> 'session' ORDER BY a.name, a.id`,
     [spaceId],
   );
   return r.rows;
@@ -484,7 +485,7 @@ export async function memberCandidates(authenticated: ActorCtx, workspaceId: str
   await assertAuthority(actor, { kind: "space", spaceId, need: "manage" });
   const r = await q<{ id: string; name: string; type: string }>(
     `SELECT id::text, name, type FROM actors
-      WHERE workspace_id = $1 AND external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} ORDER BY type DESC, name, id`, [workspaceId]);
+      WHERE workspace_id = $1 AND external_id IS DISTINCT FROM ${SYSTEM_EXTERNAL_ID_SQL} AND type <> 'session' ORDER BY type DESC, name, id`, [workspaceId]);
   return r.rows;
 }
 
@@ -521,6 +522,11 @@ const sameIdSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 async function deletableSpace(actor: ActorCtx, workspaceId: string, spaceId: string): Promise<SpaceMeta> {
+  // A temporary session must not be able to tell a space it cannot read from one that is not there. (A member keeps the 403 they have always had.)
+  if (actor.type === "session") {
+    const access = await spaceAccess(actor, spaceId);
+    if (!access || (!access.read && !access.manage)) throw new SpaceMoveError(404, "not_found", "space not found");
+  }
   const space = await loadSpace(workspaceId, spaceId);
   if (!space) throw new SpaceMoveError(404, "not_found", "space not found");
   if (space.kind !== "shared") throw new SpaceMoveError(409, "not_deletable", "only a shared space can be deleted");

@@ -213,8 +213,8 @@ describe("L1 listTagTree", () => {
       ],
       rowCount: 2,
     });
-    const tree = await listTagTree("ws-1");
+    const tree = await listTagTree(null, "ws-1");
     expect(tree).toHaveLength(2);
-    expect(queries[0].sql).toMatch(/ORDER BY parent_id NULLS FIRST/);
+    expect(queries[0].sql).toMatch(/ORDER BY n\.parent_id NULLS FIRST/);
   });
 });

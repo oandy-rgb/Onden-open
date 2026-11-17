@@ -729,6 +729,22 @@ export interface OwnerMemberMigrationLog {
   workspace_id: string;
 }
 
+export interface ParticipantSessions {
+  actor_id: string;
+  byte_count: Generated<Int8>;
+  created_at: Generated<Timestamp>;
+  credential_hash: string;
+  ended_at: Timestamp | null;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  last_used_at: Timestamp | null;
+  max_bytes: Int8;
+  max_requests: number;
+  opened_by: string;
+  request_count: Generated<Int8>;
+  workspace_id: string;
+}
+
 export interface PublishSnapshots {
   artifact_ref: string | null;
   created_at: Generated<Timestamp>;
@@ -1029,6 +1045,7 @@ export interface DB {
   note_pointers: NotePointers;
   outbox: Outbox;
   owner_member_migration_log: OwnerMemberMigrationLog;
+  participant_sessions: ParticipantSessions;
   publish_snapshots: PublishSnapshots;
   push_reminder_sent: PushReminderSent;
   push_subscriptions: PushSubscriptions;

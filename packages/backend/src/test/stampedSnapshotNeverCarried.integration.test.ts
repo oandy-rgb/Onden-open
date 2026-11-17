@@ -9,7 +9,7 @@ import { SNAPSHOT_SPECS, wholeWorkspace } from "../spine/snapshotTables.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 
-const NEVER_TABLES = ["agent_tokens", "agent_runners", "agent_sessions", "session", "account", "user", "verification", "ai_credentials", "push_subscriptions", "idempotency_keys", "outbox", "domain_events", "structure_log", "sync_node", "sync_clock", "sync_join", "browser_app_state", "publish_snapshots", "rate_limit_hits"];
+const NEVER_TABLES = ["participant_sessions", "agent_tokens", "agent_runners", "agent_sessions", "session", "account", "user", "verification", "ai_credentials", "push_subscriptions", "idempotency_keys", "outbox", "domain_events", "structure_log", "sync_node", "sync_clock", "sync_join", "browser_app_state", "publish_snapshots", "rate_limit_hits"];
 const SECRET_COLUMN = /token|secret|password|passwd|cipher|credential|invite|api_?key|vapid|private_?key|session_?id/i;
 
 describe.skipIf(!isTestDb)("what a snapshot never carries", () => {

@@ -20,7 +20,7 @@ import { z } from "zod";
 import { localDateTimeId, localDayId, sqlLocalDay } from "../../localDay.js";
 import { getWorkspaceId, q, withSavepoint } from "../../db.js";
 import { mutate, requireActor } from "../../spine/mutate.js";
-import { assertAuthority, AuthorityError } from "../../spine/authority.js";
+import { assertAuthority, AuthorityError, requirePerson } from "../../spine/authority.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../../spine/currentActor.js";
 import { appendedBody } from "@onden/markdown";
@@ -99,6 +99,7 @@ export async function startFocus(authenticated: ActorCtx | null, input: z.infer<
   const workspaceId = await getWorkspaceId();
   return withEventTransaction(workspaceId, async () => {
     const actor = await resolveCurrentActor(requireActor(authenticated), workspaceId);
+    requirePerson(actor, "focus"); // a focus record is its person's own: a temporary session never writes one (these writes go through mutate, not mutatePersonal)
     const id = input.id ?? crypto.randomUUID();
     const replay = (await q<FocusRow>(`SELECT ${COLUMNS} FROM focus_sessions WHERE id = $1`, [id])).rows[0];
     if (replay) return replay.actor_id === actor.id ? toSession(replay) : refuse(409, "id_conflict");
@@ -138,6 +139,7 @@ export async function endFocus(authenticated: ActorCtx | null, id: string, input
   const workspaceId = await getWorkspaceId();
   return withEventTransaction(workspaceId, async () => {
     const actor = await resolveCurrentActor(requireActor(authenticated), workspaceId);
+    requirePerson(actor, "focus"); // a focus record is its person's own: a temporary session never writes one (these writes go through mutate, not mutatePersonal)
     const row = await ownRow(actor, id);
     const written = { diary: false, task: false };
     if (row.ended_at) return { ...toSession(row), written };
@@ -193,6 +195,7 @@ export async function editFocus(authenticated: ActorCtx | null, id: string, inpu
   const workspaceId = await getWorkspaceId();
   return withEventTransaction(workspaceId, async () => {
     const actor = await resolveCurrentActor(requireActor(authenticated), workspaceId);
+    requirePerson(actor, "focus"); // a focus record is its person's own: a temporary session never writes one (these writes go through mutate, not mutatePersonal)
     const row = await ownRow(actor, id);
     if (input.ended_at !== undefined && row.ended_at === null) refuse(400, "focus_still_running");
     const startedAt = input.started_at ? new Date(input.started_at) : row.started_at;

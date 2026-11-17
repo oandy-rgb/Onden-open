@@ -3919,6 +3919,7 @@ INSERT INTO schema_migrations (version) VALUES ('205_stamp_saw_heads') ON CONFLI
 INSERT INTO schema_migrations (version) VALUES ('206_sync_change_bundles') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('207_fresh_proofs') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('209_place_is_one_write') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('210_participant_sessions') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5887,3 +5888,23 @@ BEGIN
   RETURN QUERY SELECT v_stamps, v_lines, v_n, v_skips;
 END
 $fn$ LANGUAGE plpgsql;
+-- 210: a session as a temporary participant (db/migrations/210_participant_sessions.sql)
+ALTER TABLE actors DROP CONSTRAINT IF EXISTS actors_type_check;
+ALTER TABLE actors ADD CONSTRAINT actors_type_check CHECK (type IN ('human', 'agent', 'session'));
+CREATE TABLE IF NOT EXISTS participant_sessions (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id    uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  actor_id        uuid NOT NULL UNIQUE REFERENCES actors(id) ON DELETE CASCADE,
+  opened_by       uuid NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  credential_hash text NOT NULL UNIQUE,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  expires_at      timestamptz NOT NULL,
+  ended_at        timestamptz,
+  max_requests    integer NOT NULL CHECK (max_requests > 0),
+  request_count   bigint NOT NULL DEFAULT 0,
+  max_bytes       bigint NOT NULL CHECK (max_bytes > 0),
+  byte_count      bigint NOT NULL DEFAULT 0,
+  last_used_at    timestamptz,
+  CHECK (expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS participant_sessions_opener_idx ON participant_sessions (opened_by) WHERE ended_at IS NULL;

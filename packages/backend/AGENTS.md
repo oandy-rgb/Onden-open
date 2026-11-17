@@ -20,6 +20,7 @@
 | 排序已存檢視 | `services/tagViews.ts` 的 `byPinThenName` | `dupSweep.guard.test.ts` |
 | 要求「剛剛再確認過是本人」才給整個工作區或做不可逆的事（再輸入一次密碼；伺服器強制，不只頁面） | `services/freshProof.ts` 的 `issueFreshProof`／`consumeFreshProof`；新的受保護路由在 `FRESH_PROOF_PURPOSES` 加一個用途 | `freshProof.guard.test.ts` |
 | 「只准人、不准 token」 | `spine/authority.ts` 的 `requirePerson` | `dup-b2-responses.guard.test.ts` |
+| 一個人在別人的電腦上暫時用自己的幾個空間（開、列出、結束、憑證；會被 `requirePerson` 擋掉：工作階段不是人） | `services/participantSessions.ts`；它是 `actors` 的一列（`type 'session'`），能做什麼由 `space_members` 與同一條空間規則決定，沒有自己的權限判斷 | `test/readGuard.test.ts`（只有列出的檔案能問「是不是工作階段」） |
 | 拒絕請求 | 丟 `StatusError`（`statusError.ts`），由 `httpError.ts` 映射；不手寫 4xx 回應本體 | `dup-b2-responses.guard.test.ts` |
 | 新的拒絕類別 | 繼承 `StatusError`，不直接 `extends Error` | `dup-b2-responses.guard.test.ts` |
 | 批次讀取的可讀過濾 | `services/readPolicy.ts`、`services/history` 的 `readableNotes` | `dup-b2-responses.guard.test.ts` |

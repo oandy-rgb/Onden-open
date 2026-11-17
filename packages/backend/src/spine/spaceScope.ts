@@ -18,9 +18,38 @@ import { readableSpaceIdsSql, spaceAccess, workspaceOwnerSql, writableSpaceIds, 
 import { taskHostLiveSql } from "./taskIdentity.js";
 import { liveNodeSql, tagNodeSql } from "./nodeSql.js";
 
+/** The tag-definition branch of the read rule, as a predicate on tag alias `alias`.
+ *
+ *  A tag definition belongs to no space, so for a member it is simply readable: tag names are the workspace's shared vocabulary. A TEMPORARY SESSION
+ *  (type 'session') must not learn that other spaces exist, and a tag named only by notes of another space says so: its name is "teach-biology" and
+ *  the only notes that carry it are in a space the session was not given. So for a session a tag is reachable unless it is IN USE and not in a space
+ *  it reaches: in use = it, or a tag nested under it, is on a live note (a nested tag's path names its parents). A tag nobody uses names nothing (the
+ *  session can make and use its own); a reserved tag (task, page…) is the product's own word, not a person's. A tag that is only INHERITED
+ *  (`extends`) is not followed: that needs the old schema fields, which only functionRefs.ts reads (guards/functionRefs.guard.test.ts). */
+function tagScopeSql(actor: ActorCtx | null, alias: string, params: unknown[]): string {
+  if (actor?.type !== "session") return tagNodeSql(alias);
+  // Two sets, each computed ONCE per query (not per tag): the tags in use on live notes (everywhere / in the spaces the session reaches), each with every tag above it
+  // in the tree. A set of ids read by `IN`, so the cost is two passes over node_tags, not one per tag.
+  const inUse = (scope: string) => `(WITH RECURSIVE u(id) AS (
+        SELECT nt.tag_id FROM node_tags nt JOIN content_nodes n ON n.id = nt.node_id WHERE ${liveNodeSql("n")}${scope}
+        UNION
+        SELECT c.parent_id FROM content_nodes c JOIN u ON c.id = u.id WHERE c.parent_id IS NOT NULL AND ${tagNodeSql("c")})
+      SELECT id FROM u)`;
+  return `(${tagNodeSql(alias)} AND (${alias}.reserved_key IS NOT NULL
+      OR ${alias}.id NOT IN ${inUse("")} OR ${alias}.id IN ${inUse(` AND n.space_id IN (${readableSpaceIdsSql(actor, params)})`)}))`;
+}
+
+/** The tag definitions (live or in the trash) `actor` is not told about: none for anyone but a temporary session (tagScopeSql). */
+export async function hiddenTagIds(actor: ActorCtx, workspaceId: string): Promise<ReadonlySet<string>> {
+  if (actor.type !== "session") return new Set();
+  const reachable = await spaceReadableNodeIds(actor, workspaceId, "any"); // for a tag definition (it has no space) this is the tag branch alone
+  const tags = await db.selectFrom("content_nodes").select("id").where("workspace_id", "=", workspaceId).where(sql<boolean>`${sql.raw(tagNodeSql())}`).execute();
+  return new Set(tags.map((row) => row.id).filter((id) => !reachable.has(id)));
+}
+
 /** The space read rule as a predicate on node alias `alias`. */
 export function spaceScopeSql(actor: ActorCtx | null, alias: string, params: unknown[]): string {
-  return `(${tagNodeSql(alias)} OR ${alias}.space_id IN (${readableSpaceIdsSql(actor, params)}))`;
+  return `(${tagScopeSql(actor, alias, params)} OR ${alias}.space_id IN (${readableSpaceIdsSql(actor, params)}))`;
 }
 
 /** Node ids `actor` may read under the space rule (live by default). */

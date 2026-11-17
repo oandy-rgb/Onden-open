@@ -13,7 +13,8 @@
 //   manage(actor, S) = the workspace owner on a SHARED space, or a person on
 //                      their own PERSONAL space; never a token
 //
-// Members are people and AI agents alike: one table, one permission. An
+// Members are people, AI agents and temporary sessions alike: one table, one permission. A temporary session is also never wider than
+// the person who opened it (temporarySql in spaceAccessSql). An
 // agent's reach is its own membership; its token only narrows it (read-only,
 // or "no external AI" via the space switch).
 //
@@ -78,8 +79,15 @@ export function spaceAccessSql(actor: ActorCtx | null, params: unknown[], opts: 
     return ` AND EXISTS (SELECT 1 FROM agent_sessions x JOIN space_members sm ON sm.space_id = x.space_id AND sm.actor_id = x.initiator_id
                           WHERE x.id::text = $${p} AND x.space_id = s.id${permission})`;
   };
-  const tokenRead = token ? ` AND s.capabilities->>'external_ai' = 'true'${sessionSql("")}` : "";
-  const tokenWrite = token ? ` AND s.capabilities->>'external_ai' = 'true'${sessionSql(" AND sm.permission = 'edit'")} AND ${token.access === "write" ? "true" : "false"}` : "";
+  // A temporary session (participant_sessions) is a member of the spaces it was opened on and never reaches further than the person
+  // it acts for reaches NOW: a space that person has left, or may no longer write in, is closed to the session at the same moment.
+  const temporarySql = (permission: string) => {
+    if (actor?.type !== "session") return "";
+    return ` AND EXISTS (SELECT 1 FROM participant_sessions ps JOIN space_members om ON om.actor_id = ps.opened_by AND om.space_id = s.id
+                          WHERE ps.actor_id::text = $${a}${permission})`;
+  };
+  const tokenRead = token ? ` AND s.capabilities->>'external_ai' = 'true'${sessionSql("")}` : temporarySql("");
+  const tokenWrite = token ? ` AND s.capabilities->>'external_ai' = 'true'${sessionSql(" AND sm.permission = 'edit'")} AND ${token.access === "write" ? "true" : "false"}` : temporarySql(" AND om.permission = 'edit'");
   // can_manage is computed only when asked for (it consults the owner row); the
   // readable / writable subqueries that run inside every list query skip it.
   const manage = token || !opts.manage

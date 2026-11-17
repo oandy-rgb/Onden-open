@@ -5,7 +5,7 @@
 import { q } from "../db.js";
 import type { ActorCtx } from "../types.js";
 import { mutate, requireActor } from "../spine/mutate.js";
-import { isWorkspaceOwner } from "../spine/authority.js";
+import { isWorkspaceOwner, requirePerson } from "../spine/authority.js";
 import { canReadNode } from "./readPolicy.js";
 import { StatusError } from "../statusError.js";
 import { workspaceColumnsSql } from "./syncProjection.js";
@@ -51,8 +51,9 @@ export async function setHomeNode(authenticated: ActorCtx | null, workspaceId: s
   return workspaceWireRow(row);
 }
 
-/** The site config and chrome. */
-export async function readWorkspaceConfig(workspaceId: string) {
+/** The site config and chrome. The workspace's own settings are for the people of the workspace, not for a temporary session on someone else's computer. */
+export async function readWorkspaceConfig(authenticated: ActorCtx | null, workspaceId: string) {
+  requirePerson(requireActor(authenticated), "workspace_settings");
   return { config: await getSiteConfig(workspaceId), chrome: await getChromeBlocks(workspaceId) };
 }
 

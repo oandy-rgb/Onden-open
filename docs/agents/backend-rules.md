@@ -34,6 +34,9 @@
   UI 隱藏按鈕或本機快取不能作為後端授權依據。
 - 操作者從可信任的驗證情境取得；沿用既有 cascade 的根操作者與因果追蹤。
   不接受客戶端任意指定權限種類，也不以 `open`／`cascade` 修掉授權失敗。
+- 臨時工作階段（`actor.type = 'session'`）：`isPerson`／`requirePerson` 對它一律為否；個人資料的寫入權限種類由 `open` 改為 `own_personal`
+  （`mutatePersonal` 使用，工作階段被拒）。它的存活與過期在事件鎖後由 `resolveCurrentActor` 重驗。
+  `services/participantSessions.ts` 的兩個寫入函式登記在 `SERVICE_WRITE_HELPERS`（計數器寫入不在 spine 內，有登記才放行）。
 - 重構應保持既有允許／拒絕結果。不能因為引用 Cedar 或其他論文，就直接更換預設授權語意。
   對政策行為的變更，須說明具體哪些操作者、資源與操作受到影響，並驗證允許與拒絕案例。
 - 政策改變可能影響整個子樹或資料集合。沿用 `membership_epoch` 與可讀集合核對機制，

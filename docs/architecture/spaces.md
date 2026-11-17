@@ -341,6 +341,13 @@ outbox 效果在執行時：若節點已移到關閉該能力的空間、或開�
   - 核准者必須具備執行該動作本身所需的權限（例如移動需要兩個空間的對應角色），而且**不能是發 token 者以外的 agent**。
   - 核准時重新檢查權限與 `expectedAudienceEpoch`，不沿用提案當下的判斷。
 
+### 臨時工作階段
+
+工作階段是 `space_members` 裡的一種成員（`actors.type = 'session'`），讀寫都走上面同一條規則，另加「不比開的人現在的權限寬」。
+`GET /api/spaces/:id/members` 回 `{ members, sessions }`，`sessions` 只給擁有者看，一般成員名單不含工作階段。
+對工作階段而言，不存在的空間與看不到的空間回同一個答案（「space not found」），不能用來探測存在。設計見
+[提案](proposals/sessions-core-2026-11-17.md)。
+
 ### 模組的個人進度
 
 空間讓分享變常見，下列模組狀態目前存在**共用的筆記上**，會在共享空間互相干擾：

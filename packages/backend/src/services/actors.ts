@@ -35,6 +35,7 @@ import type { ActorCtx, ActorType, TokenAccess } from "../types.js";
 import { mutate, requireActor, UnauthorizedError } from "../spine/mutate.js";
 import { isWorkspaceOwner } from "../spine/authority.js";
 import { createToken, revokeToken, setTokenAccess, revokeTokensIssuedBy } from "./agentTokens.js";
+import { endTemporarySessionsOpenedBy } from "./participantSessions.js";
 import { TOKEN_ACCESS_LEVELS, isTokenAccess, toolsForAccess } from "./agentTools/index.js";
 import { recordMemberRemoval, liftMemberRemoval, endUserSessions, isMemberRemoved } from "./memberRemovals.js";
 import {
@@ -115,7 +116,7 @@ export async function listActors(authenticated: ActorCtx | null) {
             (a.id = w.owner_actor_id) IS TRUE AS is_owner,
             (a.external_id = ${SYSTEM_EXTERNAL_ID_SQL}) IS TRUE AS is_system
        FROM actors a JOIN workspaces w ON w.id = a.workspace_id
-      WHERE a.workspace_id = $1 ORDER BY a.created_at ASC`,
+      WHERE a.workspace_id = $1 AND a.type <> 'session' ORDER BY a.created_at ASC`,
     [workspaceId],
   );
   // The System row carries the native bypass state, for the roster to say
@@ -679,6 +680,8 @@ export async function removeActor(authenticated: ActorCtx | null, id: string): P
       // A token never outlives the person who issued it: whichever agent holds
       // it, it is revoked with them (the delete would otherwise null issued_by).
       await revokeTokensIssuedBy(workspaceId, id);
+      // The same for the temporary sessions they opened: they end with the person.
+      await endTemporarySessionsOpenedBy(workspaceId, id);
       // Their personal space becomes a shared space nobody is in, every
       // switch off — through the space service, so its SPACE_UPDATED is
       // recorded and the published site drops their pages (D118).

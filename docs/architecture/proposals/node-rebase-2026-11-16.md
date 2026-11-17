@@ -111,6 +111,11 @@ H 對每個單位回三種答案之一：
 
 ## 6. 伺服器自己的情形
 
+> **2026-11-17 更新**：第 10 節第 1 步已做（PR `feat/restore-renews-node-id`）：換號是 migration 213 的 `sync_renew_node_id()`（取號規則 `sync_take_node_id()` 與瀏覽器版共用），
+> 由 `scripts/lib/renewNodeId.sh` 從 `restore.sh` 與 `restore-drill.sh` 呼叫；演練的不變條件 `node_id_renewed`；說明在 [deploy.md「還原」](../../agents/deploy.md)。
+> 與下表的差異：沒有 `packages/backend/scripts/renewNodeId.ts`／`spine/nodeRenewal.ts`（`restore.sh` 只用 psql 就能呼叫 SQL 函式）；`restore.sh` 在**載入後、migration 前**換號（理由在 PR）。
+> 下面保留原文。
+
 **問題**【讀到】：`scripts/restore.sh` 載入的 `pg_dump` 包含 `sync_node` 與 `sync_clock`，所以還原後伺服器**拿回當時的節點編號與序號**，接著把同樣的編號又寫一遍，內容不同（Active Directory 的 USN rollback，對照論文第 1 項）。
 今天：`scripts/restore.sh`、`scripts/restore-drill.sh`、`packages/backend/scripts/drillInvariants.ts` 都不提 `sync_node`（釘住在 `restoreRenewsNodeId.guard.test.ts`，通過）；演練只比較「標記數不減」（`write_stamps`，`non-decreasing`），看不到「誰蓋的」。
 【讀到】應用程式內的**邏輯還原**（`services/backupRestore.ts`）不受影響：備份不含 `sync_node`（`backupInventory.ts`：`notInBackup`），還原經領域寫入、由**目前的**節點蓋新標記。

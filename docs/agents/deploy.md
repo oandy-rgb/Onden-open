@@ -106,10 +106,35 @@
 - 備份還原演練見下一節「還原演練」；`scripts/restore.sh`、`scripts/backup.sh` 是通用版本。
   備份不含 `.env` 密鑰，重建主機時另行保管。
 
+## 還原：還原後的資料庫換一個新的節點編號
+
+每個伺服器有一個節點編號（`sync_node`），它寫下的每一筆修改都記著「哪個編號、第幾號」。備份裡帶著當時的編號與號碼；
+伺服器在備份之後又往下編了號，所以還原後如果沿用舊編號，接下來的修改會用到**已經發出去過、內容不同**的號碼。
+因此 `scripts/restore.sh` 載入備份之後、任何寫入之前（包括開機時的 migration），會讓資料庫換一個新編號
+（`scripts/lib/renewNodeId.sh` → migration 213 的 `sync_renew_node_id()`）：
+
+- 新編號從第 1 號開始編；**已經存著的東西一筆都不改**：備份之前的修改仍記在舊編號名下。
+- 舊編號改記成「這台握有的另一個來源，握到第 N 號」（`sync_origins`，`vouched_by = 'self-restore'`）。
+- 時鐘不會比資料庫裡任何一筆修改記的時間早。
+- 換號之後仍能給新裝置快照：快照把舊編號當成這台自己的（`former`），新裝置加入後同時記著新、舊兩個編號（舊的記成「這台伺服器帶來的來源」），之後雙向的修改包照常收（migration 214；測試 `nodeRenewal.integration.test.ts`「gives a new device its snapshot」）。
+  舊編號是來源自己報的，所以加入時會核對：每個編號都要是節點編號的格式、最多 32 個、每一頁都相同，而且送來的舊編號標記不能超過它報的號碼；不合就整個拒收（`join_bad_former`、`join_wrong_former`、`join_stamp_beyond_former`）。
+  資料形狀升到 3，所以**版本 2 與版本 3 的節點之間**快照與修改包一律拒收（`join_data_shape`／`bundle_data_shape`），要兩邊都升級。
+
+看到什麼：還原成功時多一行 `[restore] the restored database is a new node: id <舊> -> <新> …`。
+若備份來自 migration 213 之前的版本，資料庫裡沒有這個函式：還原照常完成，但印一行 `WARNING`，說這次**沒有換編號**（見 PR 的「需要決定」）。
+換號失敗時腳本以結束碼 1 停下，請**不要啟動後端**，照訊息重跑 `bash scripts/lib/renewNodeId.sh …`。
+
+- 後端開機**從不**換編號（守門：`packages/backend/src/test/guards/restoreRenewsNodeId.guard.test.ts`）：只有還原指令知道資料庫被還原過。
+- `scripts/upgrade.sh rollback` 經過 `restore.sh`，所以自動涵蓋。
+- `scripts/deploy-vps.sh rollback` **不是還原**：它只把映像標籤換回 `before-<sha>`，資料庫不動，所以編號不換也不該換。
+  需要把 VPS 的資料庫倒回部署前備份時（`manual-*/database.dump`，手動 `pg_restore`），還原完、啟動後端之前自己跑一次：
+  `bash scripts/lib/renewNodeId.sh <連到那個資料庫的 psql 指令>`（例如 `psql "$DATABASE_URL"`；VPS 上 compose 的專案名、服務名與帳號以 `deploy-vps.sh` 與該主機的 `.env` 為準，這裡沒有核對）。
+  整機或磁碟快照回滾也一樣：沒有腳本可掛，要手動跑這一步。
+
 ## 還原演練
 
 備份從沒被證明能還原，migration 也只在空資料庫測過（migration 110 曾因此刪掉使用者標籤）。`scripts/restore-drill.sh`
-在**自己的電腦**上把真備份還原到拋棄式資料庫、跑 migration、核對資料不變。它不連任何遠端主機，只碰名稱以 `_drill`
+在**自己的電腦**上把真備份還原到拋棄式資料庫、換新節點編號（與 `restore.sh` 同一步，見上一節）、跑 migration、核對資料不變。它不連任何遠端主機，只碰名稱以 `_drill`
 結尾的本機資料庫，輸出只有數量、id 與雜湊，不印筆記內容。
 
 何時跑：**每次含新 migration 的部署之前**（用要部署的 commit），以及**每週一次**（用最新的 `manual-*` 備份）。
@@ -128,6 +153,9 @@
 - ✗ **結構**：父層不存在、筆記掛在標籤底下、標籤套用或連結指向不存在的列。訊息會註明是 migration 造成還是備份原本就有。
 - ✗ **媒體**：現行筆記引用的檔案不在 `content.tar`（備份不完整）。
 - ✗ **migration 失敗**：只印失敗的檔號、PostgreSQL 錯誤代碼與表／約束名稱。
+- ✗ **節點編號**（`node_id_renewed`）：還原後沒有換成新編號、舊編號名下的修改標記在還原後被寫入或改寫、舊編號沒有變成「握有到第 N 號」的來源、
+  或時鐘比備份裡的標記還早。成功時印「節點編號：已換新」。這一項不能用 `-- drill: allows` 聲明掉。
+  第 5b 步在 migration **之前**換號（`restore.sh` 的位置）；備份早於 migration 213 時演練印 △、改在 migration 之後換，以檢查換號本身。
 - 失敗時暫存目錄保留（路徑會印出；內含計數、id 與雜湊，不含內容）供查詢，通過時自動刪除；容器一律刪除。
 
 要加新檢查：在 `drillInvariants.ts` 的 `COUNTS`（數量）或 `STRUCTURE`（回傳違規 id 的查詢）加一列。

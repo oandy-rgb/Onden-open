@@ -1,6 +1,6 @@
 // The wire form of a stamped snapshot: lines of JSON (NDJSON), one message each, so neither side holds more than a page.
 //
-//   {"kind":"hello","dataShape":<SYNC_DATA_SHAPE_VERSION>,"workspaceId":…,"source":…,"cut":…,"person":…}     first
+//   {"kind":"hello","dataShape":<SYNC_DATA_SHAPE_VERSION>,"workspaceId":…,"source":…,"former":{…},"cut":…,"person":…}     first (`former`: StampedPage.former)
 //   {"kind":"page","page":{…}}  × N                                    pages of services/stampedSnapshot.ts
 //   {"kind":"manifest","pages":N,"digest":[…]}                         last: what the pages must add up to
 //   {"kind":"error","code":…}                                          instead of the manifest, when the source gave up half way
@@ -35,7 +35,7 @@ import { abandonJoin, applyJoinPage, databaseJoinReadiness, finishJoin, JOIN_NO_
 const MAX_SNAPSHOT_LINE_BYTES = 64 * 1024 * 1024;
 
 type Message =
-  | { kind: "hello"; dataShape: number; workspaceId: string; source: string; cut: number; person: string }
+  | { kind: "hello"; dataShape: number; workspaceId: string; source: string; former?: Record<string, number>; cut: number; person: string }
   | { kind: "page"; page: StampedPage }
   | { kind: "manifest"; pages: number; digest: TableDigest[] }
   | { kind: "error"; code: string };
@@ -85,7 +85,7 @@ export async function exportSnapshotStream(actor: ActorCtx, workspaceId: string,
   const run = readStampedPages(actor, workspaceId, { since: null, layer: "rows" }, async (page) => {
     if (!sentHello) {
       sentHello = true;
-      await writer.write(line({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, source: page.source, cut: page.cut, person: actor.id }));
+      await writer.write(line({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, source: page.source, former: page.former, cut: page.cut, person: actor.id }));
     }
     await writer.write(line({ kind: "page", page }));
     first();
@@ -142,7 +142,7 @@ export async function importSnapshotStream(actor: ActorCtx, body: ReadableStream
             ? "the file does not say which data shape it has, so it was not made by a version that can be read here"
             : `the file has data shape ${String(message.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: make the file again on a device with the same version`, 409);
         }
-        await startJoin({ workspaceId: message.workspaceId, sourceNode: message.source, cutSeq: message.cut, personActorId: message.person, shellPersonId: actor.id });
+        await startJoin({ workspaceId: message.workspaceId, sourceNode: message.source, cutSeq: message.cut, personActorId: message.person, shellPersonId: actor.id, former: message.former });
         join = { workspaceId: message.workspaceId };
       } else if (message.kind === "page") {
         if (!join) throw joinRefused("join_bad_line", "a page before the hello");

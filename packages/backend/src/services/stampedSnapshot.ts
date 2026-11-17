@@ -31,6 +31,7 @@ import { CodedStatusError } from "../statusError.js";
 import { requirePerson } from "../spine/authority.js";
 import { stampUnstampedRowsAsGenesis } from "../spine/stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
+import { heldOfAll } from "../spine/stampedBundle.js";
 import { withActorReadSnapshot } from "./actorReadSnapshot.js";
 import { snapshotScopeFor } from "./readPolicy.js";
 import { SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
@@ -41,7 +42,7 @@ import type { ActorCtx } from "../types.js";
 const SNAPSHOT_PAGE_BYTES = 4 * 1024 * 1024;
 const CHUNK_ROWS = 200; // rows read per query: each query has a fixed cost (the reader's scope is worked out in it), so more rows per query is much faster; a chunk is in memory once
 
-type SnapshotSummary = { source: string; cut: number; pages: number; digest: TableDigest[] };
+type SnapshotSummary = { source: string; former: Record<string, number>; cut: number; pages: number; digest: TableDigest[] };
 
 type ReadStampedPagesOptions = {
   /** Null: the whole snapshot. Anything else is refused until changes-since is done. */
@@ -58,13 +59,24 @@ class SnapshotForeignOrigin extends CodedStatusError {
 const sizeOf = (item: SnapshotItem) => new TextEncoder().encode(JSON.stringify(item)).length;
 
 /** This node's id, when a snapshot of `workspaceId` can be made here: refused (409 `snapshot_foreign_origin`) when the database holds stamps made on another node,
- *  which this first stage cannot vouch for. The one definition: the read opens with it, and the route asks it before it spends a fresh-proof ticket. */
+ *  which this first stage cannot vouch for. The ids this node had before it was restored and renewed (migration 213: sync_origins rows vouched 'self-restore') are
+ *  not another node: they are this one's, and travel as `former`. The one definition: the read opens with it, and the route asks it before it spends a fresh-proof ticket. */
 export async function snapshotSourceNode(workspaceId: string): Promise<string> {
   const node = (await snapshotRows<{ node_id: string }>(`SELECT node_id FROM sync_node WHERE singleton`)).rows[0]?.node_id;
   if (!node) throw new Error("this database has no node id yet");
-  const foreign = await snapshotRows(`SELECT 1 FROM sync_stamps WHERE workspace_id = $1 AND origin NOT IN ($2, 'genesis') LIMIT 1`, [workspaceId, node]);
+  const foreign = await snapshotRows(
+    `SELECT 1 FROM sync_stamps s WHERE s.workspace_id = $1 AND s.origin NOT IN ($2, 'genesis')
+        AND NOT EXISTS (SELECT 1 FROM sync_origins o WHERE o.workspace_id = s.workspace_id AND o.origin = s.origin AND o.vouched_by = 'self-restore') LIMIT 1`, [workspaceId, node]);
   if (foreign.rows.length > 0) throw new SnapshotForeignOrigin();
   return node;
+}
+
+/** The ids this node had before it was restored (sync_origins vouched 'self-restore'), each held up to the number of every label a bundle carries
+ *  (spine/stampedBundle.ts heldOfAll: the number migration 213 wrote). What a page names as `former`. */
+async function formerIdsOf(workspaceId: string): Promise<Record<string, number>> {
+  const rows = (await snapshotRows<{ origin: string; have: Record<string, number> }>(
+    `SELECT origin, have FROM sync_origins WHERE workspace_id = $1 AND vouched_by = 'self-restore' ORDER BY origin`, [workspaceId])).rows;
+  return Object.fromEntries(rows.map((r) => [r.origin, heldOfAll(r.have)]));
 }
 
 export async function readStampedPages(
@@ -80,6 +92,7 @@ export async function readStampedPages(
   return withActorReadSnapshot(authenticated, workspaceId, async (actor) => {
     await snapshotRows(`SELECT set_config('TimeZone', 'UTC', true)`);
     const node = await snapshotSourceNode(workspaceId);
+    const former = await formerIdsOf(workspaceId);
     const cut = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
     const scopeOf = await snapshotScopeFor(actor);
 
@@ -89,7 +102,7 @@ export async function readStampedPages(
     const flush = async () => {
       if (items.length === 0) return;
       pages += 1;
-      const page: StampedPage = { layer: "rows", dataShape: SYNC_DATA_SHAPE_VERSION, page: pages, cut, source: node, workspaceId, items };
+      const page: StampedPage = { layer: "rows", dataShape: SYNC_DATA_SHAPE_VERSION, page: pages, cut, source: node, former, workspaceId, items };
       items = []; bytes = 0;
       await emit(page);
     };
@@ -142,6 +155,6 @@ export async function readStampedPages(
     }
     await flush();
     const digest = await computeSnapshotDigest(workspaceId, scopeOf);
-    return { source: node, cut, pages, digest };
+    return { source: node, former, cut, pages, digest };
   });
 }

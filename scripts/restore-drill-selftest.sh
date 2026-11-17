@@ -81,6 +81,9 @@ UPDATE content_nodes SET markdown = markdown || ' x' WHERE slug = 'note-3';")"
 run_case "擋下：migration 本身失敗" 1 "migration 失敗：999_drill_selftest" "$work/good" \
   --commit "$(fake_commit "SELECT 1/0;")"
 run_case "擋下：content.tar 少一個被引用的媒體檔" 1 "不在 content.tar" "$work/missing-media"
+run_case "通過：還原後換了新的節點編號，舊編號的標記沒變" 0 "節點編號：已換新" "$work/good"
+run_case "擋下：migration 改寫還原前（舊編號）的寫入標記" 1 "舊編號的寫入標記" "$work/good" \
+  --commit "$(fake_commit "UPDATE sync_stamps SET hlc_counter = hlc_counter + 1 WHERE origin <> 'genesis';")"
 
 # 備份檔被改動：SHA256SUMS 必須擋下。
 cp -r "$work/good" "$work/tampered"; printf 'x' >>"$work/tampered/content.tar"

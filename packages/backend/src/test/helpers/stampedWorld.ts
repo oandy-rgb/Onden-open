@@ -179,7 +179,7 @@ export function capture(node: RealNode | null, world: Pick<SourceWorld, "ws" | "
 /** Fill the empty database `node` from a capture, the way the service does (start, every page, finish). */
 export function fillFrom(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, cap: Capture, options: { localLogin?: string | null } = {}): Promise<void> {
   return onNode(node, async () => {
-    await startJoin({ workspaceId: world.ws, sourceNode: cap.summary.source, cutSeq: cap.summary.cut, personActorId: world.owner.id });
+    await startJoin({ workspaceId: world.ws, sourceNode: cap.summary.source, cutSeq: cap.summary.cut, personActorId: world.owner.id, former: cap.summary.former });
     try {
       for (const page of cap.pages) await applyJoinPage(page);
       await finishJoin({ workspaceId: world.ws, pages: cap.pages.length, digest: cap.summary.digest, localLogin: options.localLogin ?? null });

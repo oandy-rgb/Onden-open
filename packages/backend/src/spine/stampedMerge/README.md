@@ -190,6 +190,8 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
   統計在節點還小時取過一次就夠（`stampedBundleScale.integration.test.ts`「a sender whose statistics were taken once…」，3.7 倍）。**完全沒有統計**時計畫看運氣：同一個設定跑 5 次，3 次組合鍵的查詢走錯索引（`node_tags` 每個鍵讀同一個標籤的所有列，4 倍的標記讀 14.4 倍的列）、2 次是 0.5 倍；時過時不過的結果不能釘成 `it.fails`，所以沒有釘。傳輸那一批要讓節點在讀包之前至少有過一次統計。
 - **同一個任務行在兩台是兩個任務**（錨點提案第 3 步：id 由寫入者鑄一次、跟著帶）。2b-2a 起任務筆記連同它的任務引用與 `_task_status` 跟著包走，所以收的一方的任務清單會列出兩個（對方的、和自己由同一行再做出的一個）；2b-2a 之前重複也在，只是收的一方看不到。`anchorIdsTwoNodes.integration.test.ts` 釘住現在的樣子，`it.fails`「the same ONE task on both nodes」等第 3 步翻過來。沒解掉之前接上傳輸，人會看到重複的任務。
 - **觸發器不知道誰在寫**：一個普通寫入碰到有衝突的單位會把它解決（上面「系統與背景工作的寫入」）；要在寫入路徑上擋。
+- **`scripts/upgrade.sh rollback` 改成先切版本再還原**，`scripts/restore.sh` 才能在備份缺 `sync_renew_node_id()`（migration 213 之前的版本做的備份）時先補上函式再換號。
+  在那之前，213 之前的備份還原到全新的資料庫後**節點編號不變**（`restore.sh` 印 WARNING、結束碼 0；釘住在 `restoreRenewsNodeId.guard.test.ts`「a backup older than migration 213」）。今天沒有任何交換，所以沒有人握有會撞號的號碼；有了傳輸就有。
 
 ### （父層、排序鍵）是一個位置
 

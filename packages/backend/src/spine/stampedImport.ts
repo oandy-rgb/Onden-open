@@ -28,6 +28,7 @@
 
 import { discardUnfinishedJoins, ensureShellWorkspace, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
 import { nativeBypassEnabled } from "../nativeBypass.js";
+import { isUuid } from "@onden/markdown";
 import { CodedStatusError } from "../statusError.js";
 import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
@@ -48,9 +49,34 @@ export const joinRefused = refuse;
 /** `shellPersonId`: the signed-in person of this (empty) database who is joining. Their row is saved with the join and put back if it is given
  *  up (cancelJoin) or cut off by a dead process (db.ts migrate()): a refused join leaves the same person, with the same sign-in, in the
  *  empty database. Null: the shell has no person of its own to keep. */
-export type JoinInput = { workspaceId: string; sourceNode: string; cutSeq: number; personActorId: string; shellPersonId?: string | null };
+/** `former`: the ids the source had before it was restored and took a new one (StampedPage.former, the snapshot's first line), each with the highest
+ *  number of it the source holds; their stamps are the source's own. Absent or `{}`: a source that was never restored. */
+export type JoinInput = { workspaceId: string; sourceNode: string; cutSeq: number; personActorId: string; shellPersonId?: string | null; former?: Record<string, number> };
 
-type JoinRow = { workspace_id: string; source_node: string; cut_seq: string; state: "joining" | "done"; person_actor_id: string | null; page_hashes: Record<string, string>; applied_through: number };
+type JoinRow = { workspace_id: string; source_node: string; cut_seq: string; source_former: Record<string, number>; state: "joining" | "done"; person_actor_id: string | null; page_hashes: Record<string, string>; applied_through: number };
+
+/** A node id as sync_take_node_id (migration 213) and db.ts make it: gen_random_uuid() as text. The one check for an id a snapshot or a change bundle
+ *  names (its source or sender, its former ids, the origins it holds): `sync_origins.vouched_by` also holds the words 'snapshot', 'admitted' and
+ *  'self-restore', and a node named like one of them would make a row mean something else (applyChangeBundle: who may send; snapshotSourceNode: an id of
+ *  this very node). Genesis is not a node id; it is dropped or allowed by name where it may appear. */
+const isNodeId = (id: unknown): id is string => typeof id === "string" && isUuid(id);
+
+/** How many former ids a snapshot may name. A server takes one more id each time it is restored from a backup (scripts/restore.sh), so the list is
+ *  as long as the number of restores in its life; 32 restores is far past any server this is for, and the bound keeps a file from naming millions. */
+const MAX_FORMER_IDS = 32;
+
+/** The `former` of a join, checked: at most MAX_FORMER_IDS node ids (not the source, not this node) with whole numbers. Refused whole otherwise. */
+function checkedFormer(former: unknown, sourceNode: string, local: string | null): Record<string, number> {
+  if (former === undefined) return {};
+  const bad = () => refuse("join_bad_former", "the ids a restored source had before are an object of node ids and whole numbers");
+  if (former === null || typeof former !== "object" || Array.isArray(former)) throw bad();
+  const entries = Object.entries(former);
+  if (entries.length > MAX_FORMER_IDS) throw refuse("join_bad_former", `a snapshot names at most ${MAX_FORMER_IDS} ids its source had before`);
+  for (const [origin, n] of entries) {
+    if (!isNodeId(origin) || origin === sourceNode || origin === local || !Number.isSafeInteger(n) || (n as number) < 0) throw bad();
+  }
+  return former as Record<string, number>;
+}
 
 // The tables a fresh install already holds rows in (the class tags and settings the migrations make, the default and system spaces, the
 // System account). Every OTHER carried table (spine/snapshotTables.json) must be empty in a shell: a new table added to the list is
@@ -147,6 +173,7 @@ export async function readJoinRemoval(): Promise<JoinRemoval> {
  *  what is being filled. Until `markJoinDone` the database is not a working one (it has no workspace). */
 export async function beginJoin(input: JoinInput): Promise<void> {
   if (!Number.isSafeInteger(input.cutSeq) || input.cutSeq < 0) throw refuse("join_bad_cut", "the cut is a whole number of at least 0");
+  if (!isNodeId(input.sourceNode)) throw refuse("join_bad_source", "the source of a snapshot is named by its node id");
   await withTransaction(async () => {
     const decision = await decideJoin({ sourceNode: input.sourceNode });
     if (!decision.ready) throw refuse(decision.code, decision.message, decision.code === "join_from_self" ? 422 : 409);
@@ -167,10 +194,14 @@ export async function beginJoin(input: JoinInput): Promise<void> {
       await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1`, [shellId]);
       await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1`, [shellId]);
       await snapshotRows(`DELETE FROM sync_clock WHERE workspace_id = $1`, [shellId]);
+      // and what it knew of other nodes: a shell restored and renewed (or one an owner admitted a node to) has rows, and under the same workspace id (copies of one
+      // packaged database share it) they would stand beside the snapshot's own, ON CONFLICT DO NOTHING keeping the shell's meaning of an id the source names
+      await snapshotRows(`DELETE FROM sync_origins WHERE workspace_id = $1`, [shellId]);
     }
+    const former = checkedFormer(input.former, input.sourceNode, await localNodeId().catch(() => null));
     await snapshotRows(
-      `INSERT INTO sync_join (workspace_id, source_node, cut_seq, person_actor_id, shell_person) VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [input.workspaceId, input.sourceNode, input.cutSeq, input.personActorId, shellPerson ? JSON.stringify(shellPerson) : null]);
+      `INSERT INTO sync_join (workspace_id, source_node, cut_seq, person_actor_id, shell_person, source_former) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+      [input.workspaceId, input.sourceNode, input.cutSeq, input.personActorId, shellPerson ? JSON.stringify(shellPerson) : null, JSON.stringify(former)]);
   });
 }
 
@@ -194,6 +225,11 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
   if (page.workspaceId !== join.workspace_id) throw refuse("join_wrong_workspace", "the page is of another workspace");
   if (page.source !== join.source_node) throw refuse("join_wrong_source", "the page was made on another node");
   if (page.cut !== Number(join.cut_seq)) throw refuse("join_wrong_cut", "the page belongs to another export of the source (a different cut)");
+  if (sortedJson(page.former ?? {}) !== sortedJson(join.source_former)) throw refuse("join_wrong_former", "the page names other former ids of the source than the snapshot's first line");
+  // the origins the snapshot vouches for: the source, the ids it had before it was restored, and the genesis stamp
+  const vouched = new Set([join.source_node, GENESIS_ORIGIN, ...Object.keys(join.source_former)]);
+  // a former id is held only as far as the source says (markJoinDone writes that number): a stamp of it past the number is a lie, as bundle_stamp_beyond_cut is in a bundle
+  const beyondFormer = () => refuse("join_stamp_beyond_former", "a stamp of a former id of the source is beyond what the source says it holds of it");
   if (!Number.isInteger(page.page) || page.page < 1) throw refuse("join_bad_page", "a page number is a whole number from 1");
   const seen = new Map<string, string>();
   const readings: ClockReading[] = [];
@@ -219,7 +255,8 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
     }
     for (const stamp of stampsOf(item)) {
       if (stamp.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
-      if (stamp.origin !== join.source_node && stamp.origin !== "genesis") throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
+      if (!vouched.has(stamp.origin)) throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
+      if (stamp.seq > (join.source_former[stamp.origin] ?? Infinity)) throw beyondFormer();
       if (!spec.stamps?.some((d) => d.label === stamp.label)) throw refuse("join_stamp_label", "a stamp of a kind this table does not have");
       if (![stamp.seq, stamp.wall, stamp.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw refuse("join_stamp_number", "a stamp number that is not a whole number");
       const content = `${stamp.wall}/${stamp.counter}/${stamp.author ?? "~"}/${stamp.device ?? "~"}`;
@@ -230,7 +267,8 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
       checkSaw(stamp.saw);
       for (const head of stamp.heads ?? []) {
         if (head.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
-        if (head.origin !== join.source_node && head.origin !== "genesis") throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
+        if (!vouched.has(head.origin)) throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
+        if (head.seq > (join.source_former[head.origin] ?? Infinity)) throw beyondFormer();
         if (![head.seq, head.wall, head.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw refuse("join_stamp_number", "a stamp number that is not a whole number");
         if (typeof head.contentHash !== "string" || (head.origin === "genesis") !== /^[0-9a-f]{64}$/.test(head.contentHash)) throw refuse("join_head_shape", "a head of a unit that does not say what it holds");
         checkSaw(head.saw);
@@ -297,7 +335,7 @@ async function clearWhatInsertTriggersMade(workspaceId: string): Promise<void> {
 
 async function lockJoin(workspaceId: string): Promise<JoinRow> {
   const row = (await snapshotRows<JoinRow>(
-    `SELECT workspace_id::text, source_node, cut_seq::text, state, person_actor_id::text, page_hashes, applied_through FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
+    `SELECT workspace_id::text, source_node, cut_seq::text, source_former, state, person_actor_id::text, page_hashes, applied_through FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
   if (!row) throw refuse("join_not_started", "no join was started for this workspace", 409);
   return row;
 }
@@ -405,6 +443,12 @@ export async function markJoinDone(workspaceId: string, expected: { pages: numbe
     await snapshotRows(
       `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, 'snapshot', $3::jsonb)
        ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, join.source_node, JSON.stringify(haveOfAll(Number(join.cut_seq)))]);
+    // the ids the source had before it was restored: origins the source brought (vouched_by = the source, as applyChangeBundle writes them; not a sender), held up to what the source held
+    for (const [origin, held] of Object.entries(join.source_former)) {
+      await snapshotRows(
+        `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (workspace_id, origin) DO NOTHING`,
+        [workspaceId, origin, join.source_node, JSON.stringify(haveOfAll(held))]);
+    }
     await snapshotRows(`UPDATE sync_join SET state = 'done', finished_at = now() WHERE workspace_id = $1`, [workspaceId]);
   });
 }
@@ -478,7 +522,9 @@ function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
   if (bundle.workspaceId !== workspaceId) throw bundleRefused("bundle_wrong_workspace", "the bundle is of another workspace", 422);
   normalizeHave(bundle.base);
   normalizeHave(bundle.upTo);
-  if (!bundle.sender || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender and its cut", 422);
+  if (!isNodeId(bundle.sender) || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender by its node id, and its cut", 422);
+  // every origin it speaks of is a node id (or genesis); a stamp of any other origin is refused below as beyond the cut (upTo has no number for it)
+  if (![...Object.keys(bundle.upTo), ...Object.keys(bundle.base)].every((o) => o === GENESIS_ORIGIN || isNodeId(o))) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
   for (const item of bundle.items) {
     // only the labels this node carries (stampedMerge/dbUnits.ts CARRIED_LABELS): anything else is not a bundle of this shape
     if (!CARRIED_LABELS.includes(item.table)) throw bundleRefused("bundle_scope", "a bundle item of a table a bundle does not carry", 422);

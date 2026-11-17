@@ -40,7 +40,7 @@
 
 ## 相關檔案與狀態備註
 
-- 第一層：`packages/backend/src/spine/stampedImport.ts`（快照與修改包的入口）。PR #1801 第 3 輪正在補「還原過的來源報的舊編號」的檢查（2026-11-17 尚未合併）。
+- 第一層：`packages/backend/src/spine/stampedImport.ts`（快照與修改包的入口）。PR #1801（2026-11-17）起：節點編號只收產生時的形式（`isNodeId`；快照的來源與舊編號、修改包的 `sender` 與 `upTo`／`base` 的來源），還原過的來源報的舊編號最多 32 個、每一頁都要和開頭報的相同，舊編號的標記不得超過它報的號碼（`join_stamp_beyond_former`）；每一種拒絕在 `nodeRenewal.integration.test.ts` 有測試。
 - 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）；「工作階段的任何東西不離開這一台」還在做。
 - 接納名單的移除畫面：還沒做。
 - 相關決定：[身分只有擁有者與成員](identity-owner-member.md)、[不做點對點同步](no-p2p-intermittent-server.md)。

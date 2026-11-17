@@ -911,6 +911,7 @@ export interface SyncJoin {
   person_actor_id: string | null;
   rows_applied: Generated<Int8>;
   shell_person: Json | null;
+  source_former: Generated<Json>;
   source_node: string;
   started_at: Generated<Timestamp>;
   state: Generated<string>;

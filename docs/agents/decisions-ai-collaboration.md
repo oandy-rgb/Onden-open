@@ -1,31 +1,24 @@
 # AI 協作的決定：AI 的修改先是「待審建議」
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行
+> 涵蓋：packages/backend/src/services/aiSuggestions.ts, packages/backend/src/services/aiSuggestionBlocks.ts, packages/backend/src/services/agentRuntime/**, packages/backend/src/services/agentSessionMemory.ts, packages/backend/src/services/aiRoles.ts, packages/backend/src/services/aiSetup.ts, packages/backend/src/services/selectionDelivery.ts, packages/backend/src/services/panelChat.ts, packages/backend/src/spine/toolScope.ts, packages/frontend/src/settings/ai/**, packages/frontend/src/components/infoAi/**
 
-何時讀：改 AI（MCP、訂閱 runner、@ai）對筆記的寫入、待審建議（接受／拒絕／過時）、`write_mode`、@ai 的回覆、
+分批的範圍、被取代的做法與當時的進度在 [decisions-ai-collaboration-history.md](decisions-ai-collaboration-history.md)；本文只寫現在成立的規則。
+
+何時讀：改 AI（API 跑法、MCP、@ai）對筆記的寫入、待審建議（接受／拒絕／過時）、`write_mode`、@ai 的回覆、
 AI 工作階段的整組復原，或在 `mutate` 附近加「某種操作者只能寫某些事件」的規則時。
 
 > 2026-11-01：AI 整個是可關閉的模組 `ai`（預設關著、同意一次才開、關掉資料照留），見 [ai-is-a-module.md](../decisions/ai-is-a-module.md)。
->
-> 2026-10-30 起另有「批 3＋4：API 跑法」一節，在文末。
 
-來源與範圍：設計提案 [ai-collaboration-2026-10-27.md](../architecture/proposals/ai-collaboration-2026-10-27.md)（PR #874）。
-業主 2026-10-30 說「AI 也派」，並授權第 9 節照建議做，**只做第 10 節的最小可用切片＝批 0＋1＋2**：
-不需要 API 跑法、不需要新跑法；現有訂閱 runner、MCP 與 @ai 的 AI 修改改成「待審建議」，使用者在筆記裡逐處接受或拒絕。
-批 0＝本文；批 1＝後端（`feat/ai-suggest-core`）；批 2＝筆記裡的畫面與 @ai 回覆（`feat/ai-suggest-ui`）。
+設計提案：[ai-collaboration-2026-10-27.md](../architecture/proposals/ai-collaboration-2026-10-27.md)（PR #874）。AI 只有兩種跑法（API、MCP），兩者的修改都先是「待審建議」；
+伺服器呼叫模型只在 API 跑法，用使用者自己的金鑰，永遠只能提建議（根目錄 `AGENTS.md` 的規則）。
 
-## 第 9 節各題怎麼處理
+## 已定的規則
 
-| 題 | 決定 | 本切片 |
-| --- | --- | --- |
-| 1 重新引入 API 跑法 | **業主 2026-10-30 同意：「加回來，但共用 mcp 的架構」**（部分推翻 10/23）。API 跑法在 `feat/ai-runtime-api` 實作，見下方「批 3＋4」 | 本切片（批 0＋1＋2）本身仍沒有伺服器端模型呼叫；API 跑法是疊在它上面的另一個 PR |
-| 2 既有角色與 MCP token 的審核規則 | **和提案建議不同**：新建立的角色（`createActor` 建的 agent）預設 `suggest`；**已存在的角色與其 MCP token 維持現行直接寫入（`apply`），不自動遷移**。原因：業主目前有 Claude Code 等工作階段用 MCP 直接寫入，不在沒告知下改變它們 | migration 把既有 agent 設為 `apply`；`actors.write_mode` 預設值是 `apply`（其他建立路徑如 System、測試不變），`createActor` 明確寫 `suggest`。角色卡上的切換屬批 3（角色卡），本切片只有資料與強制 |
-| 3 誰能提建議 | 可編輯＝可提建議；可看只能讀（與之後的留言）。v1 建議只涵蓋內文、標題、留言 | 提建議要對該筆記有 `write_node`；新增筆記與標籤變更在 `suggest` 下被 `mutate` 拒絕（`suggest_only`），訊息指引改用留言 |
-| 4 @ai 回覆 | (b) 回覆顯示在側欄，要寫進筆記時按「插入筆記」＝一則建議 | `suggest` 模式的 agent 完成時回覆存在 session（`reply_markdown`），不寫筆記；「插入筆記」呼叫 `insertReplyAsSuggestion` 建一則 insert 建議。`apply` 模式的既有 agent 照舊把回覆寫進筆記 |
-| 10 總覽 | v1 只做筆記內逐處接受，不做收件匣總覽 | 沒有總覽 |
-| 11 `[[` 參考 | v1 只限同空間 | 沒有側欄對話，無此項 |
-| 13 未處理的建議 | 不刪除；30 天未處理標「較舊」，不自動拒絕 | `suggestionsForNode` 回 `older`，畫面標示 |
-| 其餘（5–9、12、14） | 屬 API 跑法／角色卡／計畫門檻，本切片不涉及 | 未實作 |
+- **預設審核規則**：新建立的角色（`createActor` 建的 agent）預設 `suggest`；已存在的角色與其 MCP token 維持直接寫入（`apply`），不自動遷移。`actors.write_mode` 欄位預設值是 `apply`，只有 `createActor` 對 agent 明確寫 `suggest`。
+- **誰能提建議**：對該筆記有 `write_node` 才能提；新增筆記與標籤變更在 `suggest` 下被 `mutate` 拒絕（`suggest_only`），訊息指引改用留言。
+- **@ai 回覆**：`suggest` 角色完成時，回覆存在 session（`reply_markdown`），不寫筆記；使用者按「插入筆記」呼叫 `insertReplyAsSuggestion`，建一則 insert 建議。`apply` 的既有 agent 照舊把回覆寫進筆記。
+- **未處理的建議**：不刪除、不自動拒絕；超過 `OLDER_AFTER_DAYS`（30 天）標「較舊」（`suggestionsForNode` 回 `older`）。
 
 ## 已實作的契約
 
@@ -63,72 +56,55 @@ AI 工作階段的整組復原，或在 `mutate` 附近加「某種操作者只�
 ## 和提案文件不同之處
 
 - **表名** `ai_edit_suggestions*`，不是 `ai_suggestions*`：後者已被一張無人使用的舊表（summary／tags／edge，bootstrap 仍會讀）占用，本批不動它。
-- **migration 編號** 147（提案寫 142–145，main 已到 146）。
+- **migration**：`149_ai_suggestions.sql`（提案原寫 142–145）。
 - `AI_SUGGESTION_ACCEPTED` 由 `NODE_UPDATED` 的 `within` 在同一交易以級聯寫入，因果上在 `NODE_UPDATED` 之後（提案寫它是根）；分組靠 `suggested_by`，不靠因果鏈。
 - `suggested_by` 放 `tx_meta`，不放 `payload`（payload 是同步與歷史消費者讀的內容欄位）。
 - 被刪進垃圾桶的筆記：建議隱藏（讀取一律只看 live 節點），從垃圾桶還原後回來；不標 `void`。移到別的空間才標 `void`。
-- 「重試」（讓 AI 重跑）需要執行層，屬批 3；本批只有「同一 session 再提一組取代舊的」與「重送同一提議不重複」。
 
-## 沒做的（之後的批次）
+## 還沒做
 
-角色卡與跑法層（批 3）、API 跑法（批 4，待第 1 題）、設定畫面（批 5）、「交給 AI」（批 6）、資訊欄 AI 分頁與計畫門檻（批 7）、
-留言邊欄與收件匣總覽（批 8）、新增筆記／標籤變更的建議（批 9）。`write_mode` 目前只能改資料庫欄位，沒有設定畫面。
+- 新增筆記與標籤變更的建議：`suggest` 下一律被 `mutate` 拒絕，只能用留言說明。
+- MCP 跑法沒有「列出待領取請求」的工具：請求等使用者的 Claude 經 runner 介面領取。
 
 ## 測試在哪
 
 `packages/backend/src/test/aiSuggestions.integration.test.ts`（授權允許／拒絕、撤權、競態、stale、void、冪等重送、交易回滾、整組復原含已接受的處）、
 `aiSuggestionBlocks.test.ts`（段落差異與套用）。
 
-## 批 3＋4：API 跑法（2026-10-30，`feat/ai-runtime-api`，疊在上面的建議核心之上）
+## API 跑法
 
-**業主決定**：提案第 9 節第 1 題，「加回來，但共用 mcp 的架構」。同意**部分**推翻 2026-10-23：伺服器可以用使用者自己的 API 金鑰呼叫模型，
-但工具、權限、寫入、紀錄全部與 MCP 同一份（提案 §4.1 方案 B），不准另寫第二套工具或第二套權限。
-既定：既有 MCP token 與既有角色維持直接寫入（不遷移）；**API 跑法永遠 suggest**；提案 Q12（runner 用 API key 跑）不做。
+業主 2026-10-30：「加回來，但共用 mcp 的架構」（部分推翻 2026-10-23）。伺服器可以用使用者自己的金鑰呼叫模型，但工具、權限、寫入、紀錄全部與 MCP 同一份，不另寫第二套工具或權限。
+既有 MCP token 與既有角色維持直接寫入（不遷移）；**API 跑法永遠 suggest**。
 
-### 已實作、已測試的契約
+### 契約
 
-- **跑法層** `services/agentRuntime/`：`AgentRuntime { availability(role), dispatch(session) }`。`subscription`＝既有 pull runner 包一層、`mcp`＝既有 MCP，兩者行為不變
-  （`dispatch` 什麼都不做）；`chooseRuntime()` 只檢查 `api`，其餘照舊排隊。角色的跑法欄位目前放在既有的 `agent_runners`（提案的改名 `ai_roles` 與 `runner_seen_at`、
-  `listPendingRequests` 屬批 3 其餘部分，沒做）。
-- **API 跑法**（只在 `services/agentRuntime/api/`；唯一允許 import `@anthropic-ai/sdk`，版本固定 1.3.0；`harnessBoundary.test.ts` 擋其他處）：
-  - 工具：`listTools()` registry 的每個工具轉成 `betaZodTool`，`run` 內呼叫**同一個 `callTool`**（同樣的許可檢查、限速、`AGENT_TOOL_*` 稽核）。
-    用 `client.beta.messages.toolRunner`（Tool Runner 目前是 beta，SDK 升級可能改介面，所以版本寫死），`max_iterations` ＝ 12 回合。
-    不給 `proposeTagPack`（它走 outbox 的待核准，不經 `mutate`，spine 的規則管不到）與 `publish` 類工具。
-  - 身分：`actorForRuntimeSession(session)` 是唯一能做出 API session 身分的函式（`test/guards/aiRuntime.guard.test.ts` 鎖定呼叫者）。它是一般 session token
-    （`agent_tokens.session_id`），所以空間範圍、撤權、事件鎖後重讀都沿用。
-  - **只能提建議**：`agent_sessions.write_mode` 由資料庫約束——`runtime='api'` 的列一定是 `suggest`；`resolveCurrentActor` 重讀時，session 列是 `suggest` 就蓋過 agent 自己的
-    `actors.write_mode`（所以設成 `apply` 的角色，它的 API session 仍是 suggest），`mutate()` 對 `suggest` 身分只放行 `AI_SUGGESTION_CREATED`（`assertWriteModeAllows`，含巢狀事件）。
-    請求內容不能改它。測試：API 身分直接 `mutate` 寫 `NODE_UPDATED` 等一律拒絕；模型要 `updateNode` 得到建議、要 `createNode` 被擋。
-  - 交付：@ai 提及的最終文字存在 session 的 `reply_markdown`，由人按「插入筆記」才成為一則建議（與其他 suggest 角色相同）；小動作的結果在串流結束後以一則 `replace` 建議交付
-    （選取文字已變或出現多次 ⇒ `selection_changed`，不建議）。
-  - 讀取：送給模型的內容只經 `harness.prompt()`（讀取政策 ∩ 空間 `external_ai`）。
-  - 金鑰：`ai_credentials`，AES-256-GCM（`ONDEN_SECRET_KEY`，row id 當 AAD），只回傳標籤與後四碼；明文只能由 `loadApiKey()` 取得，且只有 `agentRuntime/api/` 能 import（守門測試）。
-    沒有 `ONDEN_SECRET_KEY` 或沒有金鑰 ⇒ `GET /api/ai/roles` 不回 `api`、`/api/ai/status` 回不提供，前端不出現 API 選項（不是灰掉）。
-  - 模型：**沒有預設**；清單用金鑰呼叫 `GET /v1/models`；設定時驗證該模型對這把金鑰存在且未停用；run 時 404 ⇒ `api_model_retired_at`，API 暫停、角色顯示要重選，不自動換。
-  - 上限：每 session 最多 12 回合；第一次啟用 API 要答「每月上限」或「不限」（`api_cap_choice`，沒答不能跑）；每回合 `usage` 寫進 session 與紀錄。
-    金額是估計（程式內單價表 `prices.ts`，2026-10-06 的公開價；表外的模型只有 token，且有設上限的角色不能用它——算不出就不放行）。
-  - outbox 一次性領取：`dispatch` 在建立 session 的同一交易入列 `agent_session_run`；`perform` 只做 `queued→running` 的單一 UPDATE 然後在背景跑（不佔住 drain）；
-    中途崩潰 ⇒ 每分鐘的掃描標 `failed(interrupted)`，**不自動重跑**（避免重複花錢）。失敗只留短代碼，不留供應商的錯誤文字；不重試（`maxRetries: 0`）。
-  - 小動作（`kind='selection_action'`）：`POST /api/ai/selection-actions`，單次串流呼叫，結束才建立建議；`request_id` 語意冪等。**串流預覽的 SSE 與選取工具列是批 6，這批沒有。**
-  - 網頁搜尋：角色欄位，預設關；只記查詢長度，不記內容。
-- **設定畫面**（最小入口）：設定›空間與成員頂部「API 金鑰」（新增／撤銷、後四碼；只在伺服器有 `ONDEN_SECRET_KEY` 時出現）；AI 角色的「設定」裡選執行方式、金鑰、模型、每月上限。
-- 部署：`ONDEN_SECRET_KEY` 與備份分管見 [deploy.md](deploy.md)。
+- **跑法層** `services/agentRuntime/`：`AgentRuntime { kind, availability(role), dispatch(session) }`，`RuntimeKind` 只有 `api`、`mcp`（`types.ts`），用 `runtimeFor(kind)` 取得、`chooseRuntime()` 決定新 session 用哪一種。
+  `mcp` 是被動的：`dispatch` 什麼都不做，session 排隊等使用者的 AI 用戶端（手動開，或放在某台機器自動領）來取；`api` 的 `dispatch` 在建立 session 的同一交易入列 `agent_session_run`。
+- **API 跑法**只在 `services/agentRuntime/api/`。**不用任何模型 SDK**（`harnessBoundary.test.ts` 擋）：`protocols/` 是唯一知道供應商與傳輸格式的地方（`/v1/messages`、`/v1/chat/completions`，見下方〈AI 中立〉），工具迴圈由 `run.ts` 自己跑，每個 session 最多 `MAX_TURNS`（12）回合、每次回覆最多 `MAX_OUTPUT_TOKENS`。
+  - 工具：`tools.ts` 把 `listTools()` registry 的讀取與寫入工具描述給服務，模型要呼叫時走**同一個 `callTool`**（同樣的許可檢查、限速、`AGENT_TOOL_*` 稽核）。不給 `proposeTagPack`（它走 outbox 的待核准，不經 `mutate`，spine 的規則管不到）；registry 裡沒有發布類工具。
+  - 身分：`actorForRuntimeSession(session)` 是唯一能做出 API session 身分的函式（`test/guards/aiRuntime.guard.test.ts` 鎖定呼叫者）。它是一般 session token（`agent_tokens.session_id`），所以空間範圍、撤權、事件鎖後重讀都沿用。
+  - **只能提建議**：`agent_sessions.write_mode` 由資料庫約束——`runtime = 'api'` 的列一定是 `suggest`（遷移 150）；`resolveCurrentActor` 重讀時 session 列是 `suggest` 就蓋過 agent 自己的 `actors.write_mode`（設成 `apply` 的角色，它的 API session 仍是 `suggest`），`mutate()` 對 `suggest` 身分只放行 `AI_SUGGESTION_CREATED`（`assertWriteModeAllows`，含巢狀事件）。請求內容不能改它。
+  - 交付（`deliver.ts`）：@ai 提及的最終文字存在 session 的 `reply_markdown`，由人按「插入筆記」才成為一則建議；小動作（`kind='selection_action'`）的結果在串流結束後以一則 `replace` 建議交付（`selectionDelivery.ts`；選取文字已變或出現多次 ⇒ `selection_changed`，不建議）。
+  - 讀取：送給模型的內容只經 `renderSessionPrompt`／`harness.prompt()`（讀取政策 ∩ 空間 `external_ai`）。
+  - 金鑰：`ai_credentials`，AES-256-GCM（`ONDEN_SECRET_KEY`，row id 當 AAD），只回傳標籤與後四碼；明文只能由 `loadApiKey()`（經 `loadService`）取得，且只有 `agentRuntime/api/` 能讀（`aiRuntime.guard.test.ts`）。沒有 `ONDEN_SECRET_KEY` 或沒有金鑰 ⇒ `runtimeAvailability` 不列 `api`，前端不出現 API 選項（不是灰掉）。
+  - 模型：**沒有預設**；清單用金鑰向服務即時取得；設定角色時驗證該模型對這把金鑰存在且未停用（`aiRoles.ts`）；run 時服務回模型不存在 ⇒ `markModelRetired` 寫 `api_model_retired_at`，API 暫停、角色顯示要重選，不自動換。
+  - 上限：第一次啟用 API 要答「每月上限」或「不限」（`api_cap_choice`，沒答不能跑，`cap_unanswered`）；上限以 token 為準（`monthly_cap_tokens`，`monthTokensUsed` 算本月 UTC 的輸入＋輸出）；每回合 `recordUsage` 把用量寫進 session 與紀錄。
+    金額只是估計：價格是使用者在金鑰上自己填的每百萬 token 價格，沒填就只有 token（`cost_estimate_micro_usd` 為 NULL）。
+  - outbox 一次性領取：`perform`（`startApiRun`）只做 `queued→running` 的單一 UPDATE 然後在背景跑（不佔住 drain）；中途崩潰 ⇒ `failInterruptedApiSessions` 標 `failed(interrupted)`，**不自動重跑**（避免重複花錢）。失敗只留短代碼（`fail_code`），不留供應商的錯誤文字。
+  - 小動作：`POST /api/ai/selection-actions`，單次串流呼叫（`selectionAction.ts`，不給工具），結束才建立建議；`request_id` 冪等。串流預覽與選取工具列見〈批 6：交給 AI〉。
+  - 網路搜尋：角色欄位（`api_web_search`），預設關；只記查詢長度，不記內容。
+- **設定畫面**：設定 › AI（見〈設定 › AI〉）。部署：`ONDEN_SECRET_KEY` 與備份分管見 [deploy.md](deploy.md)。
 
-### 為什麼和 2026-10-23 拿掉的不同（沒消除的風險要說）
+### 沒消除的風險
 
-被拿掉的是全域 key、預設模型、直接寫入、獨立聊天入口。這次重新引入「伺服器呼叫模型」本身，所以：模型的回答仍可能是錯的（只是不能改你的內容）；
+伺服器呼叫模型這件事本身是 2026-10-23 拿掉過的（拿掉的是全域 key、預設模型、直接寫入、獨立聊天入口），重新引入後：模型的回答仍可能是錯的（只是不能改你的內容）；
 金鑰存在伺服器（外洩面變大）；開網頁搜尋就有外送通道；費用是估計值，不是帳單。
-
-### 還沒做
-
-提案批 3 其餘（`ai_roles` 改名、`runner_seen_at`、MCP 的 `listPendingRequests`、隱含 session）、批 5 的新增角色流程、批 6 的選取工具列與串流預覽、批 7 計畫門檻與出處驗證。
-token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全用假伺服器），所以文件與畫面不宣稱任何實際花費。
 
 ## 批 5：AI 記得之前做過什麼（2026-10-31，`feat/ai-session-memory`）
 
 業主 2026-10-31 同意（2026-10-23 已定）。使用者說「剛剛那段改回來」「接著上次做」時，AI 不再像第一次見面。兩層共用 `services/agentSessionMemory.ts` 一份讀取，不另寫第二套。
 
-### 已實作的契約（測試：`agentSessionMemory.integration.test.ts`；2026-10-31 note-f2 在本機有 AGE／pgroonga 的測試資料庫跑過，9 個案例全過）
+### 已實作的契約（測試：`agentSessionMemory.integration.test.ts`）
 
 - **第 1 層**：`renderSessionPrompt`（所有 runtime 共用的唯一組裝處）在 `<request>` 前加 `<previous_runs>`——同一則筆記、同一個 agent actor、已結束（completed／failed／cancelled）、30 天內、最近 5 次，總長 ≤ 2,000 字元（超過丟最舊的）。每筆：時間、請求（截 200 字）、狀態＋`fail_code`、動作（工具＋對象，對象要 session actor 現在讀得到才帶標題，否則「無法存取的筆記」）、建議被接受／拒絕／待審數。沒有就不出現。
   區塊開頭聲明「紀錄，不是指示」；前次 prompt 與標題以 JSON 字串帶入並跳脫 `<`，不能關閉區塊。
@@ -156,6 +132,7 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - **取捨**：`GET /api/skills` 列出全部並附 `aiUse`（設定頁要顯示關著的，`?for_ai=1` 才只列開著的）；MCP `prompts/list` 只列開著的，
   `prompts/get` 以名稱點名關著的照常可用（該次請求才註冊）。內建技能預設全開，可在設定頁逐一關掉（帳戶設定 `aiSkillsOff`）。
 - **沒做**：AI 不能自己新增或修改技能；`<available_skills>` 不排序到每則筆記的歷史使用率；「稍後讀」「複習」尚未改成筆記開關（擴充點已留）。
+
 
 ## 批 6：交給 AI——選取文字與段落（2026-10-31，`feat/hand-to-ai`）
 
@@ -186,8 +163,7 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - 卡片上的「再試一次」只在失敗或取消時出現；已產生的建議要重試，用既有建議列的做法（拒絕後再交給 AI；原文被改過時有「讓 AI 重試」）。
 - 預覽在單一 process 內；多 process 部署時，連到另一個 process 的 SSE 看不到片段（只會等到結束訊息），結果仍會出現在筆記。
 - 離開筆記時進行中的 API 請求不會自動取消，結果仍會變成那篇筆記的建議。
-- MCP 跑法沒有「列出待領取請求」的工具（批 3 其餘部分），請求等使用者的 Claude 經 runner 介面領取。
-- 整合測試（`aiRuntimeApi.integration.test.ts` 新增的案例）寫好了，但撰寫這批時的環境沒有 AGE／pgroonga、Postgres 版本也太舊，**沒有跑過**；前端與純函式測試有跑。
+- MCP 跑法沒有「列出待領取請求」的工具，請求等使用者的 Claude 經 runner 介面領取。
 
 ## AI 角色設定補完：審核規則、跑法狀態、本月用量（2026-10-31，`feat/ai-role-settings`，提案 §5.6、批 5）
 
@@ -200,16 +176,15 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
   存的值仍保留（角色的 MCP 金鑰照它）。從「先給我看」改成「直接改」前畫面確認一次，說明後果（修改馬上進筆記、不等接受、可從歷史復原）；反方向不用確認。
 - **只有擁有者、不收委派 token**：`GET`／`PATCH`／`PUT runtime` 先 `requirePerson`（403），再 `isWorkspaceOwner`；路徑 id 不是 uuid 回 400；
   body 不認識的欄位（含想直接傳 `write_mode`）回 400。
-- **跑法能不能用從事實算**：訂閱＝`agent_runners.runner_seen_at`（遷移 152；執行程式每次輪詢 `/api/mcp/sessions/pending` 時更新，同一角色 10 秒內不重寫，
-  不產生事件）。2 分鐘內有輪詢＝在線；沒有＝`runner_offline`；從沒有＝`runner_never_seen`。MCP＝有沒有未撤銷的金鑰，加上金鑰 `last_used_at` 的最大值（有沒有收到過呼叫）。
-  API 沿用原有判斷。**這只影響顯示**：訂閱角色的工作階段離線時照樣排隊（`chooseRuntime` 沒變），畫面也允許選離線的訂閱當預設。
-- **本月用量**：本月（UTC）`agent_sessions` 的輸入／輸出 token 加總；金額只在「本月有 API 工作階段且每一筆都有價格」時給（價格來自 `agentRuntime/api/prices.ts` 的表），
-  否則為 null、畫面不顯示金額。訂閱與 MCP 沒有金額。
+- **跑法能不能用從事實算**：API 沿用 `apiAvailability`；MCP＝有沒有未撤銷的角色金鑰（`mcpRuntime.availability`），畫面另顯示「上次來」（`last_seen_at`：輪詢 `/api/mcp/sessions/pending` 的時間 `agent_runners.runner_seen_at`（遷移 152）與金鑰 `last_used_at` 較晚者）。
+  **這只影響顯示**：沒有「離線」或「從沒來過」的不可用狀態，MCP 角色的工作階段一律排隊（見〈加入 AI 角色只剩 API 與 MCP〉）。
+- **本月用量**：本月（UTC）`agent_sessions` 的輸入／輸出 token 加總（回應的 `usage_this_month`）；金額只在「本月有 API 工作階段且每一筆都有價格」時給（價格是使用者在金鑰上自己填的），
+  否則為 null、畫面不顯示金額。MCP 沒有金額。
 - **沒做**：新增角色精靈沒改（已有）；本機沒有顯示 API 的「模型顯示名稱」（只存模型字串，要顯示得再用金鑰查一次清單）；`GET` 的 `spaces` 目前只有後端回，畫面仍用既有的名冊。
 
 ## 資訊欄「AI」分頁（2026-10-31，`feat/info-panel-ai`，提案 §5.3、批 7 的前半）
 
-業主決定：要一個能「隨口問 AI」的地方，不用寫 `@ai` 進筆記；不另開側欄，放進筆記右邊的資訊欄當第 4 個分頁「AI」。
+業主決定：要一個能「隨口問 AI」的地方，不用寫 `@ai` 進筆記；不另開側欄，放進筆記右邊的資訊欄當第 4 個分頁「AI」（資訊畫面取代內容的窄寬度沒有這個分頁，改用筆記上方的底部面板，見〈手機上的 AI〉）。
 **不改既有決定**：API 跑法永遠只能提建議；沒有預設模型；既有 MCP token 維持直接寫入；不新增全域 API key；模型 SDK 仍只在 `agentRuntime/api/`。
 
 ### 三個入口各管什麼（底層共用同一套 session、角色、跑法、工具、紀錄）
@@ -228,7 +203,7 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
   代價：「一段對話」沒有自己的 id，是查詢的結果；每一則回答都是一次獨立的模型呼叫，前面的問答由伺服器每次重新帶進去（最近 8 則完成的往返）。
 - **B（不採用）**：新增 `ai_conversations`／`ai_messages` 表。對話會有穩定 id，可以分享或命名，但要重做用量、取消、逾時與稽核，
   而且「這是不是 AI 做的事」會有兩個來源。目前沒有需要對話本身有 id 的功能；若之後要多條對話或分享，再從 A 遷移（`parent_session_id` 已經把序列存下來了）。
-- **存哪裡**：`agent_sessions`（遷移 153 加 `scope_node_ids`、`scope_tag_ids`、`chat_cleared_at`）。跟著筆記與提問者，不跟裝置，所以換裝置或下次打開都在。
+- **存哪裡**：`agent_sessions`（遷移 154 加 `scope_node_ids`、`scope_tag_ids`、`chat_cleared_at`）。跟著筆記與提問者，不跟裝置，所以換裝置或下次打開都在。
   這些欄位是顯示與帳務用的事實，不是領域事件：不同步、不復原。`AGENT_SESSION_STARTED`／`ENDED` 仍照 session 的規則記一筆（只有 node_id 與 kind，不含問題文字）。
 - **清除這段對話**：`DELETE /api/ai/panel-chat/:nodeId` 只設 `chat_cleared_at`（session 與用量留著，帳要算得清楚）；之後的提問不接這些 session、模型也不再看到。
   有回答還在寫時拒絕（`chat_busy`），要先按停止。清除只影響自己的對話。
@@ -276,17 +251,19 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - 遷移：`156_ai_any_service.sql`；既有金鑰補上當時固定的網址與格式，已存的金鑰與角色設定照樣能用。
 - 伺服器會連使用者填的網址（包含本機網路上的模型伺服器）；只有工作區擁有者能新增金鑰。
 
+
 ## 加入 AI 角色只剩 API 與 MCP（2026-11-01，`feat/ai-vendor-neutral`）
 
 業主決定：跑法只剩兩種。原本的 `subscription`（執行程式用角色金鑰長輪詢 `/api/mcp/sessions/pending` 領工作）本質上就是一個自動跑的 MCP 用戶端，併進 `mcp`。
 
-- `RuntimeKind` 只剩 `api`、`mcp`；`services/agentRuntime/subscription.ts` 刪除。遷移 `157_ai_runtime_api_or_mcp.sql` 把角色與 session 的 `subscription` 轉成 `mcp`，
-  金鑰、排隊中的 session、`runner_seen_at` 都保留；`pending`／`claim` 只看 `runtime <> 'api'`，已在跑的 runner 不用改。
-- `runner_never_seen`／`runner_offline` 不再是「不可用」的理由，併進 mcp 的「上次來」（`last_seen_at`＝輪詢時間與金鑰最近使用時間較晚者）。
-  `chooseRuntime` 不再有「離線也照樣排隊」的例外：mcp 只在沒有金鑰或角色停用時才拒絕，其餘一律排隊等用戶端來領。
+- `RuntimeKind` 只有 `api`、`mcp`，沒有 `subscription` 的跑法檔案。遷移 `157_ai_runtime_api_or_mcp.sql` 把角色與 session 的 `subscription` 轉成 `mcp`，
+  金鑰、排隊中的 session、`runner_seen_at` 都保留；領工作的 `pending`／`claim` 只看 `runtime <> 'api'`，已在跑的 runner 不用改。
+- 沒有「離線」或「從沒來過」的不可用狀態：mcp 的「上次來」是 `last_seen_at`（輪詢時間與金鑰最近使用時間較晚者），只用來顯示。
+  `chooseRuntime` 沒指定 `wanted` 時，mcp 一律排隊等用戶端來領；指定 `wanted`（「這次用…」）時，mcp 必須現在可用（有未撤銷的金鑰、角色未停用），否則回 `runtime_unavailable`。
 - 前端「加入 AI 角色」兩個選項：API（選金鑰、模型、token 上限；建好後直接設成 API）、MCP（發金鑰，顯示一次）。兩者都設 @名稱並啟用。
 - 自動領工作的做法：`docs/self-host/ai-client-on-a-machine.md`；程式是 `packages/ai-answerer`（2026-11-15 起取代手寫輪詢腳本）。AI 命令列工具一律被關起來執行（無內建工具、不讀個人設定、空資料夾、只用 session 金鑰連 Onden 的 MCP），旗標由 `adapters/safety.guard.test.ts` 鎖住。
 - 桌面版的「用這台電腦上的 AI 回答」按鈕（2026-11-15）：設計見 [desktop-ai-answering-2026-11-15.md](../architecture/proposals/desktop-ai-answering-2026-11-15.md)；連線碼只存在桌面版的加密儲存，網頁只能經 `window.ondenDesktop.ai` 那幾個動作要求開／關。
+
 
 ## AI 建議多一個「比較」看法（2026-11-02，`feat/text-compare`）
 
@@ -295,7 +272,7 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - 元件是共用的 `components/compare` 的 `TextCompare`（契約在 `comparePlaces.ts`）。它**只顯示**：不改文件、不用 `acceptChunk`。每一處的按鈕由呼叫者給（`placeActions`）。
 - 「處」不靠重新 diff 猜：`lib/aiSuggestionCompare.ts` 依 `layoutSuggestions` 的 `Place` 自己切（replace 換掉段落、delete 連同後面的空行拿掉、insert 接在段落後，與伺服器 `applyItems` 同一種切法），
   經 `diffConfig.override` 交給比較元件，所以畫面上一處＝一則建議。同一段落上的兩則建議合成一處、一起決定；comment 不改文字，不在比較裡（仍在建議列）。
-- 按鈕呼叫 `useAiSuggestions.decidePlaces`（一個建議一次 `decide`，第一個被拒就停）：伺服器答應前只是處理中（按鈕停用），失敗保留原狀，成功後重讀清單，畫面才少一處。這是預覽：實際寫入以伺服器的 `applyItems` 為準（例如伺服器會保留段落原有的 `^id`，預覽不顯示這點）。
+- 按鈕呼叫 `lib/aiSuggestionCompare.ts` 的 `decidePlaces`（對 `useAiSuggestions` 的 `decide` 一個建議一次，第一個被拒就停）：伺服器答應前只是處理中（按鈕停用），失敗保留原狀，成功後重讀清單，畫面才少一處。這是預覽：實際寫入以伺服器的 `applyItems` 為準（例如伺服器會保留段落原有的 `^id`，預覽不顯示這點）。
 
 ## 接受建議要得到 AI 送出的原文；審核卡片只列還沒決定的（2026-11-11，`fix/ai-suggestion-apply-and-card`）
 
@@ -318,6 +295,7 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
   前端在決定之後經 `aiSuggestionsBus` 讓收件匣重讀。審核卡片的動詞走 `eventVerb`，找不到時退回 `eventTypeLabel`，不再顯示事件代碼。
 - 尚未做：審核卡片沒有「全部接受／全部退回」，也不顯示改了什麼；逐處決定仍在筆記內。要不要在卡片上做是介面決定，另議。
 
+
 ## 設定 › AI（擁有者 2026-11-10，`feat/settings-ai-page`，第 1 步）
 
 業主決定：AI 的金鑰、AI 角色精靈、連線碼、統計不再藏在「設定 › 空間與成員」裡，搬到獨立的「設定 › AI」頁（左欄「工作區」，排在「空間與成員」後面，只有擁有者看得到，AI 模組關閉時仍在，因為它就是打開 AI 的入口）。資料表本來就把金鑰（`ai_credentials`）和 AI 身分（角色上的 `api_credential_id`、`api_model`）分開，所以**不動資料表、不做 migration**。分兩步：第 1 步＝新頁面、舊入口先留；第 2 步＝「空間與成員」改版並拿掉舊入口。
@@ -326,11 +304,12 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
 - **一條連線＋一個 AI（最常見）畫成一張合併卡**；連線或 AI 超過一個才分「連線」「你的 AI」兩區。兩種排法用同一批卡片元件（`settings/ai/AiCard`、`ConnectionCards`），版面由 `model.ts` 的 `aiPageLayout` 只看數量決定：`first-use`／`merged`／`split`；一變多、多變一時畫面自然切換。
 - **金鑰先「測試」才能儲存**：`POST /api/ai/credentials/test`（未儲存的金鑰）與 `POST /api/ai/credentials/:id/test`（已儲存的）回格式與該金鑰回報的模型清單；失敗分「金鑰不被接受」（`credential_rejected`）與「連不上」（`service_unreachable`）。模型只來自這份清單，沒有預設模型，整頁不出現廠商或模型品牌名（`aiSettingsPage.guard.test.ts`）。
 - **第一條連線自動建 `@ai`**：`POST /api/ai/roles`（`services/aiSetup.ts` 的 `setUpAi`）在**一個交易**裡依序呼叫既有的領域操作——存金鑰（要的話）、`createActor`、`configureRunner`、`setRoleRuntime`、`setMember`、`setRunnerEnabled`、`mintToken`（連線碼）——任何一步被拒就全部回滾，不會留下沒有連線的 AI 或沒人用的金鑰。查服務（偵測格式）在交易之前，不佔事件鎖。`@ai` 被用了就取第一個沒被用的 `ai2`、`ai3`…（自己指定的代號撞名則回 `handle_taken`，不默默改）。新 AI 一律「先給我審」（`createActor` 本來就讓 agent 從 `suggest` 開始）。前端在建好 AI 後用 `changeModuleImport("ai", true)` 把 AI 模組打開。
-- **空間權限跟著「讓 AI 讀」，而且這個流程絕不打開它**：新 AI 只在「讓 AI 讀」已經開著的共用空間得到「可看」，關著的空間不在。任何流程（第一次使用、新增連線、新增 AI、換連線）都沒有寫空間的程式路徑；`aiSetup.integration.test.ts` 與 `AiSettings.test.tsx` 各自鎖住這點。已知後果：API 跑法要在「讓 AI 讀」開著的空間有「可編輯」才可用（`apiAvailability.reachesAnySpace`），所以新建的 AI 一開始會顯示「在一個讓 AI 讀的空間給它『可編輯』，它才能提建議」，由擁有者在「編輯 AI」的空間列調整。
+- **空間權限跟著「讓 AI 讀」，而且這個流程絕不打開它**：新 AI 只在「讓 AI 讀」已經開著的共用空間得到「可看」，關著的空間不在。任何流程（第一次使用、新增連線、新增 AI、換連線）都沒有寫空間的程式路徑；`aiSetup.integration.test.ts` 與 `AiSettings.test.tsx` 各自鎖住這點。已知後果：API 跑法要在「讓 AI 讀」開著的空間有「可編輯」才可用（`limits.ts` 的 `reachesAnySpace`），所以新建的 AI 一開始會顯示「在一個讓 AI 讀的空間給它『可編輯』，它才能提建議」，由擁有者在「編輯 AI」的空間列調整。
 - **空間權限只有一份元件與一條寫入路徑**：`settings/ai/standing.tsx` 的 `useStandingWriter`（`setMember`＋復原提示）、`useAllowAiRead`（先確認再開關）、`StandingCell`（一個空間一列；「讓 AI 讀」關著的空間，選單停用並寫明「這個空間不讓 AI 讀」，旁邊一顆「打開讓 AI 讀」）。這次接「AI 看各空間」（編輯 AI）與「空間與成員」原本的「人看各空間」；第 2 步「空間看各 AI」直接用同一個 hook 與 cell，不另寫。`PermissionControl` 也搬到 `settings/ai/`。
 - **舊入口先留著但同一批元件**：「空間與成員」的金鑰區塊改用同一組金鑰卡與新增表單（含「測試」），上方加一行提示與「前往 AI 設定」；連線碼、`FreshKey`（只顯示一次）、AI 統計（`AiActivity`）、暫停（`toggleMention`）、`ApiSettingsFields`／`ApiRuntimeSetup`／`AiRoleStatus`／`HelperMention` 都搬到 `settings/ai/` 並由舊位置 import。加入 AI 角色精靈暫時保留它自己「逐空間挑選」的建立順序（第 2 步一起拿掉）。
 - **API 契約**：`GET /api/ai/roles` 的 `api` 多了 `credential_id`（只回還有效的金鑰；金鑰名與末四碼不變）；新增 `/credentials/test`、`/credentials/:id/test`、`POST /roles`。型別在 `@onden/contract` 的 `ai.ts`（前端 `aiRoleInfo.ts` 用它，不再各寫一份）。呼叫端只有 `packages/frontend`（瀏覽器版 browser-app 與 MCP 都不呼叫這些路徑）。
 - **第 2 步（之後）**：「空間與成員」每個空間改「成員｜設定」分頁，用 `useStandingWriter`／`StandingCell` 畫「空間看各 AI」，並拿掉舊的金鑰、精靈、連線碼、AI 詳情入口。
+
 
 ## 手機上的 AI：筆記上方的底部面板；對話的版面與用詞（業主 2026-11-15，`feat/note-ai-phone-sheet`）
 
@@ -340,14 +319,13 @@ token 用量**沒有量過**（沒有對真 API 跑過任何動作；測試全�
   資訊欄在筆記旁邊時（既有判斷：`useIsMobile`，≤900px 資訊畫面取代內容；沒有新增斷點）＝右欄的「AI」分頁（`InfoAiTab`）；資訊畫面取代內容時＝**沒有 AI 分頁**，改成筆記上方的底部面板（`PhoneAiPanel`）。對話仍是同一段伺服器端對話（每則筆記一段），換寬度後同一批問答都在。
 - **面板三種高度**（`lib/notePhoneAi.ts` 只記這個；程式碼首次打開才載入，開機只有頂欄按鈕與 `NotePhoneAiHost` 的殼）：
   - 一列（bar）：貼在底部導覽上方（編輯器開著鍵盤時貼在鍵盤與格式列上方），用幾個字說現在的狀態——「AI 正在回答…」「等你的電腦…」、上一則回答的開頭、或「問問這則筆記」；筆記維持可捲動、**可編輯**（不是 modal：沒有 `<dialog>`、背景沒有 inert、頁面沒有鎖捲動）。點一列＝半版。這一列只在這次造訪、這則筆記打開過面板後才有，或有回答在等時出現（等的時候不給收掉）；可以用 ✕ 收起來，頂欄按鈕再叫回來。
-  - 半版：約半個螢幕，上面的筆記看得到也能捲；往下拖＝一列、往上拖＝全版（拖曳在 `ui/SheetHandle` 的 `SheetDockHandle`）。
+  - 半版：約半個螢幕，上面的筆記看得到也能捲；往下拖＝一列、往上拖＝全版（拖曳在 `ui/SheetDock.tsx` 的 `SheetDockHandle`）。
   - 全版：長回答用。
   - 輸入框有焦點且鍵盤開著時，面板佔滿鍵盤上方的空間（這時看不到筆記，是已知限制）。
   - 上一層：全版 → 半版 → 一列 →（一列時不再接手）離開筆記照舊。走既有的 `useDismiss`（Esc 與系統返回同一個堆疊，`hooks/useEscapeKey.ts`）：全版與半版各登記一次，一列時不登記，所以返回會離開筆記；輸入框有鍵盤時，第一次返回／Esc 只收鍵盤。換筆記時舊筆記的面板不留在畫面上。
   - 「放進筆記」與「到筆記裡看」會先縮成一列，再把位置顯示出來。
 - **Sheet 只有一個主人（`components/ui`）**：非 modal 的底部面板是同資料夾的 `DockedSheet`（`SheetDock.tsx`，三種高度），`ui/Sheet` 原本 modal 的路徑沒動。獨立成檔是為了開機預算：它跟著面板的程式載入，不進第一個畫面。面板把自己的高度發佈成 `--ui-dock-clearance`，頁面底部留出同樣的空間，筆記最後幾行不會被蓋住。
 - **用詞**：不出現 MCP。`runtimeName`／`targetLine`（`lib/handToAi.ts`）改用設定頁的白話：「API 金鑰」「你自己的 AI」；一個 AI 只有一種跑法時只顯示 AI 的名字，真的有選擇（一個 AI 有兩種跑法）才顯示「名字 · 跑法」。「交給 AI」選單與 @ 提及共用同一組字。
-  （任務說明提到的 `fix/ai-settings-connection-code` 分支在 remote 不存在，所以沿用設定 › AI 頁現在的用詞；那個分支改了連線碼的說法時，只需要改 `runtimeName` 一處。）
 - **等待**：不串流的跑法（連線碼）等待時用 session 真的回報的狀態說話：排隊中＝「等你的電腦來接這個問題…」、已送達＝「你的 AI 收到了，正要開始…」、執行中＝「你的 AI 正在處理…」；排隊超過 45 秒沒人接＝「負責回答的電腦可能沒開機，或沒有連上網路」。「取消」呼叫既有的 `/api/agent-sessions/:id/cancel`。伺服器沒有回報「用了某個工具」，所以這裡不編造那個狀態（只有 API 串流有步驟）。一列的高度說同樣的狀態（短版）。
 - **輸入框**：空的時候一行高，長到約六行再捲動，沒有縮放把手；送出是框內右邊的箭頭圖示按鈕（有名稱，手機 44px，可送／不可送看得出來）。桌面 Enter 送出、Shift+Enter 換行；手機 Enter 換行、⌘/Ctrl+Enter 送出；輸入法選字的 Enter 永遠不送（`lib/keys.ts` 的 `isImeComposing`，`imeKeys.guard.test.ts` 的掃描與 `e2e/fullstack/imeInputs.spec.ts` 都涵蓋）。
 - **空白狀態**：一句話（它是做什麼的；你同意之前 AI 不改任何內容）加三個可以直接點的開頭（摘要這則筆記、找相關筆記、建議怎麼改），點了就送出，輸入框裡打到一半的字不動。沒有插圖。

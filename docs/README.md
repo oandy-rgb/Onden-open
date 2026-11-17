@@ -35,7 +35,7 @@
 | [decisions-import-storage.md](agents/decisions-import-storage.md) | 本機備份與匯入的邊界決定（第 6–9 批） |
 | [decisions-core-sync.md](agents/decisions-core-sync.md) | 核心寫入、冪等、同步、membership（第 10–17 批） |
 | [decisions-offline-account.md](agents/decisions-offline-account.md) | 離線佇列、登入、帳號隔離、啟動（第 16–25 批） |
-| [decisions-canvas.md](agents/decisions-canvas.md) | 白板與手寫的邊界決定（第 22、26–38 批） |
+| [decisions-canvas.md](agents/decisions-canvas.md) | 白板與手寫的邊界決定（現行規則；分批紀錄在同資料夾的 decisions-canvas-history.md） |
 | [decisions-ui.md](agents/decisions-ui.md) | 側欄、指令面板、匯出、選位置的邊界決定 |
 | [decisions-modules.md](agents/decisions-modules.md) | 模組分三種：功能／內建模組／核心 |
 | [decisions-ai-collaboration.md](agents/decisions-ai-collaboration.md) | AI 的修改先是待審建議；API／MCP 跑法 |

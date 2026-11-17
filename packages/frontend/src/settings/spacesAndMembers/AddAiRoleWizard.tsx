@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, workspaceAccessWriter, writeErrors } from "../../lib/data";
 import { t as translate, useT } from "../../lib/i18n";
 import { refreshSpaces, spaceApi, spaceLabel } from "../../lib/spaces";
 import { Button, Radio, TextField } from "../../components/ui";
@@ -30,8 +30,8 @@ type RunMode = {
 
 /** Both ways answer to an @name in a note, so both get one and are switched on. */
 async function enableRole(actorId: string, setup: Setup): Promise<void> {
-  await sendWrite("PUT", `/api/agent-sessions/runners/${actorId}`, { handle: setup.handle.trim().toLowerCase() });
-  await sendWrite("POST", `/api/agent-sessions/runners/${actorId}/enabled`, { enabled: true });
+  await aiRoleWriter.setMentionName(actorId, setup.handle.trim().toLowerCase());
+  await aiRoleWriter.setMentionEnabled(actorId, true);
 }
 
 const RUN_MODES: RunMode[] = [
@@ -42,7 +42,7 @@ const RUN_MODES: RunMode[] = [
     ready: (s) => !!s.handle.trim() && apiSettingsReady(s.api),
     finish: async (actorId, setup) => {
       await enableRole(actorId, setup);
-      await sendWrite("PUT", `/api/ai/roles/${actorId}/runtime`, { default_runtime: "api", api: apiSettingsBody(setup.api) });
+      await aiRoleWriter.setRuntime(actorId, { default_runtime: "api", api: apiSettingsBody(setup.api) });
       return null;
     },
   },
@@ -54,8 +54,8 @@ const RUN_MODES: RunMode[] = [
     finish: async (actorId, setup, roleName) => {
       await enableRole(actorId, setup);
       const label = setup.keyName.trim() || (setup.keyAccess === "read" ? translate("Read-only key") : translate("Read and write key"));
-      const minted = await sendWrite<{ token: string }>("POST", `/api/actors/${actorId}/tokens`, { name: label, access: setup.keyAccess });
-      return { name: setup.keyName.trim() || roleName, plaintext: minted.token };
+      const minted = await aiRoleWriter.mintCode(actorId, { name: label, access: setup.keyAccess });
+      return { name: setup.keyName.trim() || roleName, plaintext: (minted as { token: string }).token };
     },
   },
 ];
@@ -90,7 +90,7 @@ export default function AddAiRoleWizard({ spaces, online, defaultSpaceId, onCrea
     setBusy(true);
     let actorId: string | undefined;
     try {
-      actorId = (await sendWrite<{ id?: string }>("POST", "/api/actors", { name: name.trim(), type: "agent" }))?.id;
+      actorId = (await workspaceAccessWriter.addMember({ name: name.trim(), type: "agent" }))?.id;
     } catch (error) { writeErrors.report(error, addToast); setBusy(false); return; }
     if (!actorId) { onCreated(); setBusy(false); onCancel(); return; }
     let key: Created["key"] = null;

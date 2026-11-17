@@ -1,7 +1,7 @@
 import { randomUUID } from "../../lib/uuid";
 import { useEffect, useRef, useState } from "react";
 import { capMegabytes, NODE_MARKDOWN_MAX, NODE_TITLE_MAX } from "@onden/markdown";
-import { reads, sendWrite, WriteActionError, writeErrors } from "../../lib/data";
+import { captureWriter, reads, WriteActionError, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { Button, Checkbox, FieldError, FileInput, Select, TextField } from "../../components/ui";
 import { DataRow } from "../../settings/DataRow";
@@ -133,7 +133,7 @@ export default function FolderImportSetting({ ctx }: { ctx: SettingContext }) {
     try {
       // settings/folderImport.ts: batches under the proxy limit, one result.
       const { result: res, tooLarge } = await uploadFolderImport({ files:includeTrash ? [...upload.files,...upload.trash] : upload.files, source,
-        send: body => sendWrite<ImportResult>("POST", "/api/import/obsidian", body),
+        send: body => captureWriter.importObsidian<ImportResult>(body),
         onProgress: setProgress });
       setResult({ ...res,unsupported_files:(res.unsupported_files ?? 0)+upload.unsupported.length,
         unsupported_exts:[...new Set([...(res.unsupported_exts ?? []),...upload.extensions])].sort() });

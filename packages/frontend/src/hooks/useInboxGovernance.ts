@@ -19,7 +19,7 @@ import { readWithDeadline, type InboxEvent, type InboxFacets, type InboxGroup, t
 import { addToast } from "../lib/appStore";
 import { t } from "../lib/i18n";
 import type { InboxFilters } from "../lib/inboxFilters";
-import { reads, sendWrite, writeErrors } from "../lib/data";
+import { inboxWriter, reads, writeErrors } from "../lib/data";
 
 type Decision = "approve" | "reject";
 type Queues = {
@@ -166,7 +166,7 @@ export function useInboxGovernance(opts: {
   const reviewEvent = useCallback(async (id: string, action: Decision) => {
     await runDecision(id, {
       perform: async () => {
-        await sendWrite("POST", `/api/inbox/${id}/${action}`, "{}");
+        await inboxWriter.decide(id, action);
         return null;
       },
       refreshAfter: action === "reject",
@@ -179,7 +179,7 @@ export function useInboxGovernance(opts: {
   const decideGroup = useCallback(async (rootEventId: string, decision: Decision) => {
     await runDecision(rootEventId, {
       perform: async () => {
-        await sendWrite("POST", `/api/inbox/groups/${rootEventId}/${decision}`, "{}");
+        await inboxWriter.decideGroup(rootEventId, decision);
         return null;
       },
       refreshAfter: decision === "reject",
@@ -192,9 +192,7 @@ export function useInboxGovernance(opts: {
   const batchReview = useCallback(async (ids: string[], decision: Decision) => {
     await runDecision("batch", {
       perform: async () => {
-        const r = await sendWrite<{ decided: number; skipped: Array<{ detail: string }> }>(
-          "POST", "/api/inbox/batch", { decision, event_ids: ids },
-        );
+        const r = await inboxWriter.decideMany(ids, decision);
         if (r.skipped.length === 0) return null;
         return t(
           decision === "approve" ? "{n} approved, {m} skipped" : "{n} rejected, {m} skipped",
@@ -212,7 +210,7 @@ export function useInboxGovernance(opts: {
   const decideHeldEffect = useCallback(async (id: string, decision: Decision) => {
     await runDecision(id, {
       perform: async () => {
-        await sendWrite("POST", `/api/inbox/approvals/${id}/${decision}`, "{}");
+        await inboxWriter.decideHeld(id, decision);
         return decision === "approve" ? t("Approved — running now") : t("Rejected — it won't run");
       },
       errorFallback: t("Decision failed"),

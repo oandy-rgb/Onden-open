@@ -90,8 +90,8 @@ describe("today (hooks/useToday)", () => {
 });
 
 describe("account preferences (lib/accountPrefStore createAccountPref)", () => {
-  it("the /api/me/prefs endpoint is spelled only by the factory (write) and the data layer's read", () => {
-    expectOnlyOwner(/\/api\/me\/prefs\//, ["lib/accountPrefStore.ts", "lib/data/reads.ts"]);
+  it("the /api/me/prefs endpoint is spelled only by the data layer (accountPrefWriter for the write, reads for the read)", () => {
+    expectOnlyOwner(/\/api\/me\/prefs\//, ["lib/data/accountPrefWriter.ts", "lib/data/reads.ts"]);
   });
 
   it("a synced pref is made by the factory, not by hand-wiring createSyncedPrefStore", () => {

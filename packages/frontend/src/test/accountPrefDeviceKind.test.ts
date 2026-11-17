@@ -8,9 +8,11 @@ const writes: { path: string; value: unknown }[] = [];
 let mobile = false;
 vi.mock("../lib/data", () => ({
   reads: { people: { myPref: async (key: string) => ({ value: server.get(key) ?? null }) } },
-  sendWrite: async (_method: string, path: string, body: { value: unknown }) => {
-    writes.push({ path, value: body.value });
-    server.set(path.replace("/api/me/prefs/", ""), body.value);
+  accountPrefWriter: {
+    save: async (key: string, body: { value: unknown }) => {
+      writes.push({ path: `/api/me/prefs/${key}`, value: body.value });
+      server.set(key, body.value);
+    },
   },
 }));
 vi.mock("../lib/mediaQuery", async (original) => ({

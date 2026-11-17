@@ -33,6 +33,16 @@ export { dayNoteParentPref, dayNoteParentStore, parseDayNoteParent, useDayNotePa
 export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError } from "./dayNotes";
 export type { DayNoteSeed, OpenedDayNote } from "./dayNotes";
 export { sendWrite } from "./onlineWrite";
+export { spaceWriter } from "./spaceWriter";
+export { aiRoleWriter } from "./aiRoleWriter";
+export { rssWriter } from "./rssWriter";
+export { calendarWriter } from "./calendarWriter";
+export { inboxWriter } from "./inboxWriter";
+export { captureWriter } from "./captureWriter";
+export { reviewCardWriter } from "./reviewCardWriter";
+export { pushWriter } from "./pushWriter";
+export { workspaceAccessWriter } from "./workspaceAccessWriter";
+export { accountPrefWriter } from "./accountPrefWriter";
 export { isBrowserOnline, prefersSavedData } from "../browserNetwork";
 export { dedupedGet, invalidateQueries, latestOnly } from "./queryCache";
 export { reads } from "./reads";

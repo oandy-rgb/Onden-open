@@ -11,10 +11,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../../lib/api")>();
   return { ...mod, api: apiMock };
 });
-vi.mock("../../lib/data", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../../lib/data")>();
-  return { ...mod, sendWrite: sendWriteMock };
-});
+vi.mock("../../lib/data/onlineWrite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data/onlineWrite")>()), sendWrite: sendWriteMock }));
 
 import RssReaderPanel from "./RssReaderPanel";
 

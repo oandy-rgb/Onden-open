@@ -23,7 +23,7 @@ export default function InviteClaimGate({ children }: { children: React.ReactNod
     // lib/data is the whole data layer: loaded only when there is an invite
     // to claim, so the sign-in page and an ordinary sign-in never fetch it here.
     import("../lib/data")
-      .then(({ sendWrite, writeErrors }) => sendWrite("POST", "/api/invites/claim", { token })
+      .then(({ workspaceAccessWriter, writeErrors }) => workspaceAccessWriter.claimInvite(token)
         .then(() => {
           forgetInviteToken();
           if (alive) setState({ phase: "done" });

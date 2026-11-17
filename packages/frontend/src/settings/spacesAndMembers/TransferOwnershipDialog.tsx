@@ -2,7 +2,7 @@ import { reloadPage } from "../../lib/api";
 import { useId, useState } from "react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { workspaceAccessWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { Button, Modal, Select, TextField } from "../../components/ui";
 import type { RosterPerson } from "./roster";
@@ -24,7 +24,7 @@ export default function TransferOwnershipDialog({ candidates, onClose }: { candi
     if (!target || typed !== target.name || busy) return;
     setBusy(true);
     try {
-      await sendWrite("POST", "/api/workspace/owner-transfer", { to_actor_id: target.id, confirm_name: typed });
+      await workspaceAccessWriter.transferOwnership(target.id, typed);
       addToast(t("{name} is now the owner.", { name: target.name }));
       reloadPage();
     } catch (error) {

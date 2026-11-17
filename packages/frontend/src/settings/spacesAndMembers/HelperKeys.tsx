@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { KeyRound, ShieldOff } from "lucide-react";
 
 import { addToast } from "../../lib/appStore";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, reads, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { dateLabel } from "../../lib/timeLabels";
 import { Button, LoadError, Radio, TextField } from "../../components/ui";
@@ -45,7 +45,7 @@ export default function HelperKeys({ person, online, onChanged }: { person: Rost
     setBusy(true);
     const label = name.trim() || (access === "read" ? t("Read-only key") : t("Read and write key"));
     try {
-      const minted = await sendWrite<{ token: string }>("POST", `/api/actors/${person.id}/tokens`, { name: label, access });
+      const minted = await aiRoleWriter.mintCode(person.id, { name: label, access }) as { token: string };
       setFresh({ name: label, plaintext: minted.token });
       setName("");
       await load();

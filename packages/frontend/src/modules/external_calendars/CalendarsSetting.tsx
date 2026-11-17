@@ -9,7 +9,7 @@ import { Button, FieldError, Pressable, Switch, TextField } from "../../componen
 import { confirmDialog } from "../../components/ConfirmDialog";
 import { EXTERNAL_CALENDAR_NAME_MAX } from "@onden/markdown";
 import { CARD_COLORS } from "../../lib/cardColors";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { calendarWriter, reads, writeErrors } from "../../lib/data";
 import type { ExternalCalendar } from "../../lib/externalCalendars";
 import { useT } from "../../lib/i18n";
 import { dateLabel } from "../../lib/timeLabels";
@@ -69,7 +69,7 @@ export default function CalendarsSetting({ ctx }: { ctx: SettingContext }) {
     setAdding(true);
     setMessage(null);
     try {
-      await sendWrite("POST", "/api/external-calendars", { id: attemptId, name: name.trim(), color, url: url.trim() });
+      await calendarWriter.follow({ id: attemptId, name: name.trim(), color, url: url.trim() });
       setName(""); setUrl(""); setAttemptId(randomUUID());
       await load();
     } catch (e) {
@@ -84,7 +84,7 @@ export default function CalendarsSetting({ ctx }: { ctx: SettingContext }) {
     setBusyId(id);
     setMessage(null);
     try {
-      await sendWrite("PATCH", `/api/external-calendars/${id}`, patch);
+      await calendarWriter.change(id, patch);
       setEditing(null);
       await load();
     } catch (e) {
@@ -98,7 +98,7 @@ export default function CalendarsSetting({ ctx }: { ctx: SettingContext }) {
     setBusyId(id);
     setMessage(null);
     try {
-      await sendWrite("POST", `/api/external-calendars/${id}/refresh`, {});
+      await calendarWriter.refresh(id);
       await load();
     } catch (e) {
       setMessage(writeErrors.message(e));
@@ -112,7 +112,7 @@ export default function CalendarsSetting({ ctx }: { ctx: SettingContext }) {
     setBusyId(calendar.id);
     setMessage(null);
     try {
-      await sendWrite("DELETE", `/api/external-calendars/${calendar.id}`);
+      await calendarWriter.stopFollowing(calendar.id);
       await load();
     } catch (e) {
       setMessage(writeErrors.message(e));

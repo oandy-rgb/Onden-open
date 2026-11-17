@@ -23,8 +23,9 @@ vi.mock("../../lib/api", async (importOriginal) => {
 });
 vi.mock("../../lib/data", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../../lib/data")>();
-  return { ...mod, sendWrite: sendWriteMock, sendOrQueue: sendOrQueueMock };
+  return { ...mod, sendOrQueue: sendOrQueueMock };
 });
+vi.mock("../../lib/data/onlineWrite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data/onlineWrite")>()), sendWrite: sendWriteMock }));
 vi.mock("../../hooks/useIsMobile", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../../hooks/useIsMobile")>();
   return { ...mod, isMobileLayout: () => true };

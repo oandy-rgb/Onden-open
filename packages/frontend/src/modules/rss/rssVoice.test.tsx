@@ -7,7 +7,8 @@ import userEvent from "@testing-library/user-event";
 
 const { apiMock, sendWriteMock, sendOrQueueMock } = vi.hoisted(() => ({ apiMock: vi.fn(), sendWriteMock: vi.fn(), sendOrQueueMock: vi.fn() }));
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), api: apiMock }));
-vi.mock("../../lib/data", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data")>()), sendWrite: sendWriteMock, sendOrQueue: sendOrQueueMock }));
+vi.mock("../../lib/data/onlineWrite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data/onlineWrite")>()), sendWrite: sendWriteMock }));
+vi.mock("../../lib/data", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data")>()), sendOrQueue: sendOrQueueMock }));
 
 import RssReaderPanel from "./RssReaderPanel";
 

@@ -7,7 +7,8 @@ import { applyFontChoices, fontStack, isMissingHere } from "../lib/fontApply";
 import { hasFont, installedFonts } from "../lib/localFonts";
 import { PREFS, setPref, settingPref } from "../lib/prefs";
 import { applyPersistedSettings } from "../settings/appearance";
-import { reads, sendWrite } from "../lib/data";
+import { reads } from "../lib/data";
+import { sendWrite } from "../lib/data/onlineWrite";
 import LocalFontSetting from "../settings/LocalFontSetting";
 import NoteFontCards from "../settings/NoteFontCards";
 
@@ -15,10 +16,11 @@ vi.mock("../lib/data", async (orig) => {
   const actual = await orig<typeof import("../lib/data")>();
   return {
     ...actual,
-    sendWrite: vi.fn(async () => undefined),
     reads: { ...actual.reads, people: { ...actual.reads.people, myPref: vi.fn(async () => ({ value: null })) } },
   };
 });
+
+vi.mock("../lib/data/onlineWrite", async (orig) => ({ ...await orig<typeof import("../lib/data/onlineWrite")>(), sendWrite: vi.fn(async () => undefined) }));
 
 bindAccountStorage("fonts-user", "http://localhost");
 

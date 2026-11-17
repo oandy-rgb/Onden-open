@@ -7,8 +7,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { t } from "./i18n";
-import { reads, sendWrite } from "./data";
-import type { DeletedNotesChoice, MovePreview, SpaceCapability, SpaceDeletePreview, SpaceKind, SpaceOverview, SpacePermission } from "@onden/contract";
+import { reads, spaceWriter } from "./data";
+import type { MovePreview, SpaceCapability, SpaceDeletePreview, SpaceKind, SpaceOverview, SpacePermission } from "@onden/contract";
 
 /** 可看 / 可編輯 (backend spine/spaceAccess.ts SPACE_PERMISSIONS). No row = not in the space. */
 export type Space = {
@@ -96,25 +96,18 @@ export function spaceLabel(space: Pick<Space, "kind" | "is_default" | "name">): 
 }
 
 export const spaceApi = {
-  create: (name: string) => sendWrite<{ id: string }>("POST", "/api/spaces", { name }),
-  update: (id: string, changes: { name?: string; capabilities?: Partial<Record<SpaceCapability, boolean>> }) =>
-    sendWrite("PATCH", `/api/spaces/${id}`, changes),
+  create: (...args: Parameters<typeof spaceWriter.create>) => spaceWriter.create(...args),
+  update: (...args: Parameters<typeof spaceWriter.update>) => spaceWriter.update(...args),
   deletePreview: (id: string) => reads.people.spaceDeletePreview<SpaceDeletePreview>(id),
   /** `expectedDeletedIds`: SpaceDeletePreview.deleted_ids, required for
    *  "purge" — the server refuses (409 plan_changed) if they changed since. */
-  remove: (id: string, deletedNotes?: DeletedNotesChoice, expectedDeletedIds?: string[]) =>
-    sendWrite<{ ok: true; purged: number; moved: number }>("DELETE", `/api/spaces/${id}`, deletedNotes
-      ? { deleted_notes: deletedNotes, ...(deletedNotes === "purge" ? { expected_deleted_ids: expectedDeletedIds } : {}) }
-      : undefined),
+  remove: (...args: Parameters<typeof spaceWriter.remove>) => spaceWriter.remove(...args),
   members: (id: string) => reads.people.spaceMembers<SpaceMember>(id).then((r) => r.members),
   /** `null` takes the person out of the space. */
-  setMember: (id: string, actorId: string, permission: SpacePermission | null) => permission === null
-    ? sendWrite("DELETE", `/api/spaces/${id}/members/${actorId}`)
-    : sendWrite("PUT", `/api/spaces/${id}/members/${actorId}`, { permission }),
+  setMember: (...args: Parameters<typeof spaceWriter.setMember>) => spaceWriter.setMember(...args),
   overview: () => reads.people.spaceOverview<SpaceOverview>(),
   previewMove: (nodeId: string, toSpaceId: string) =>
     reads.people.moveToSpacePreview<MovePreview>(nodeId, toSpaceId)
       .then((preview): MovePreviewNumericEpoch => ({ ...preview, membership_epoch: Number(preview.membership_epoch) })),
-  move: (nodeId: string, toSpaceId: string, membershipEpoch: number) =>
-    sendWrite<{ moved: number }>("POST", "/api/spaces/move", { node_id: nodeId, to_space_id: toSpaceId, membership_epoch: String(membershipEpoch) }),
+  move: (...args: Parameters<typeof spaceWriter.moveNote>) => spaceWriter.moveNote(...args),
 };

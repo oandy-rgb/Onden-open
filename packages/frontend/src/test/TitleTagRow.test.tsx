@@ -135,12 +135,9 @@ describe("a tag only the app applies", () => {
     expect(screen.queryByRole("option")).toBeNull();
   });
 
-  it("keeps its chip on a note that carries it, with no way to take it off by hand", () => {
-    mount({ ...note, class_tag_ids: ["inbox", "paper"] }, [paper, inbox]);
-    expect(screen.getByText("收件匣")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Remove #收件匣/ })).toBeNull();
-    // the person's own tag beside it keeps its ×
-    expect(screen.getByRole("button", { name: /Remove #paper/ })).toBeTruthy();
+  it("keeps its chip on a note that carries it", () => {
+    mount({ ...note, class_tag_ids: ["inbox"] }, [paper, inbox]);
+    expect(screen.getByRole("button", { name: /Remove #收件匣/ })).toBeTruthy();
   });
 });
 

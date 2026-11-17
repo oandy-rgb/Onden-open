@@ -55,8 +55,8 @@ describe("order keys are written in one way", () => {
     }
   });
 
-  it("nothing writes the frozen integer sort_order", () => {
-    expect(files.filter((f) => WRITES_SORT_ORDER.test(f.text)).map((f) => f.file)).toEqual([]);
+  it("nothing writes the frozen integer sort_order, except the tool that takes migration 200 out of a test copy", () => {
+    expect(files.filter((f) => WRITES_SORT_ORDER.test(f.text) && f.file !== "browser/makeOldCopy.ts").map((f) => f.file)).toEqual([]);
   });
 
   it("the pattern catches the writes it is meant to", () => {

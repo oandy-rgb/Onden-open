@@ -1,11 +1,8 @@
 // Test tool (docs/architecture/browser-app.md §3, e2e/browser-app/smoke.mjs): the saved copy an OLDER version of the
 // app would have left in a browser — the database with only the first migrations applied — holding a few notes.
 // `tsx src/browser/makeOldCopy.ts <out.tar.gz> [old|newer|poisoned]`
-//   old       (default) every migration from 192 on is left out of what the copy records, notes are written through the app itself, as a person would;
+//   old       (default) every migration from 192 on is left out, then notes are written through the app itself, as a person would;
 //   newer     the copy also lists a migration this build has never heard of (a copy made by a newer app);
-// Known limit (owner decision 2026-11-17): rows the kept migrations seeded (default and personal spaces, built-in tags) went through the
-// left-out migrations' data steps once before the schema was taken back, so they are not exactly what an older app left; the rows that
-// only an older app wrote (read-later, review, capture inbox) are written after the step back and are.
 //   poisoned  an older copy that already holds an object the next migration would collide with, so the upgrade fails.
 import { readFile, writeFile } from "node:fs/promises";
 import { setEnvironment } from "../config.js";
@@ -14,7 +11,6 @@ setEnvironment({
   NODE_ENV: "production",
   ONDEN_DB_DRIVER: "pglite",
   ONDEN_PGLITE_DIR: "memory://",
-  ONDEN_PGLITE_SNAPSHOT: "", // always from an empty database: a test run's migrated template in the environment must not be the start
   BETTER_AUTH_SECRET: "test-copy-only-never-used-to-sign-a-session",
   BETTER_AUTH_URL: "http://localhost",
   LOG_LEVEL: "warn",
@@ -26,45 +22,38 @@ if (!out || !["old", "newer", "poisoned"].includes(mode)) throw new Error("usage
 
 const { useMigrationSource, listMigrations } = await import("../dbMigrations.js");
 const all = await listMigrations();
+// The notes below are written by today's code, which needs the event hash columns (162), the event device column (187) and the write
+// stamps (190, mutate() allocates one for every write): those stay in the "old" copy.
+const needed = (m: { version: string }) => m.version.startsWith("162_") || m.version.startsWith("187_") || m.version.startsWith("190_");
 // What is left out is a rule, not a count: every migration from 192 on (the upgrade applies what is missing, not a prefix). The read-later
 // part below needs 192 (remove read-later) to be one of them, the review part needs 195 and 196, and leaving 194 out makes the upgrade run its pointer id move on this copy.
-// The number the upgrade should report is printed as `leftOut` and smoke.mjs reads it from there.
+// A count ("the last four") broke each time another migration was merged first; the number the upgrade should report is printed
+// as `leftOut` and smoke.mjs reads it from there.
 const FIRST_LEFT_OUT = 192;
-const leftOut = new Set(all.filter((m) => Number.parseInt(m.version, 10) >= FIRST_LEFT_OUT).map((m) => m.version));
+const leftOut = new Set(all.filter((m) => !needed(m) && Number.parseInt(m.version, 10) >= FIRST_LEFT_OUT).map((m) => m.version));
+// The one exception while the notes are written: migration 200 (order keys) is applied first, because today's code writes order_key.
+// downgradeOrderKeys() takes it out again before the copy is saved, so the saved copy is exactly `kept` and the upgrade runs 200 on it.
+const orderKeys = (m: { version: string }) => m.version.startsWith("200_");
 // A migration can make a table IF NOT EXISTS and then index its columns: a table of that name without those columns
 // fails the index. Found in the SQL, so this keeps working as migrations are added.
 const indexedNewTable = (m: { sql: string }) => [...m.sql.matchAll(/CREATE INDEX IF NOT EXISTS \w+ ON (\w+) \(/g)]
   .map((hit) => hit[1]!).find((name) => m.sql.includes(`CREATE TABLE IF NOT EXISTS ${name} (`));
-// The latest such migration may be older than the last ones (those can be data-only): "poisoned" leaves it out as well.
-const poisonFrom = mode === "poisoned" ? all.filter(indexedNewTable).pop() : undefined;
+// The latest such migration may be older than the last two (those can be data-only): "poisoned" leaves it out as well.
+const poisonFrom = mode === "poisoned" ? all.filter((m) => !needed(m) && indexedNewTable(m)).pop() : undefined;
 if (poisonFrom) leftOut.add(poisonFrom.version);
 const kept = all.filter((m) => !leftOut.has(m.version));
+useMigrationSource(async () => [...kept, ...all.filter(orderKeys)]);
 
 const { migrate, pglite, q } = await import("../db.js");
 const { sqlIdentifier } = await import("../sqlText.js");
 const { auth } = await import("../auth.js");
 const { app } = await import("../app.js");
 const { createLocalSession } = await import("./localSession.js");
-const { readSchemaCatalog, stepBackTo } = await import("./schemaCatalog.js");
 
-// One rule for what today's write path needs: the notes are written on a database that has EVERY migration, and afterwards the schema is
-// taken back to what only the kept migrations left (recorded below, read from the catalog), so what an older app saved is exactly that and
-// the upgrade runs each left-out migration for real. No migration is named here: one the request path starts reading is applied and
-// stepped back like the rest. (Rows the kept migrations seeded went through the left-out migrations' data steps once; the rows
-// that only an older app wrote are made after the step back, below.)
-useMigrationSource(async () => kept);
 await migrate({ seedNativeActor: false });
 await (await auth.$context).runMigrations();
-// The schema work runs on the database itself, not through the app's query helper: it is not a core write (that helper refuses those outside mutate()).
-const rawRun = async (sql: string, params?: unknown[]) => (await pglite!.database()).query(sql, params) as Promise<{ rows: Record<string, unknown>[] }>;
-const keptSchema = await readSchemaCatalog(rawRun);
-useMigrationSource(async () => all);
-await migrate({ seedNativeActor: false });
 // (The module library is brought up to date by the browser app itself when it opens the copy: backfillModuleImports in worker.ts.)
 await q(`UPDATE workspaces SET modules_off = $1::jsonb`, [JSON.stringify(["skills", "external_calendars"])]);
-
-// What only an older app wrote goes straight to the database, and only once the schema is the old one (the SQL lives in files of their own).
-const afterStepBack: string[] = [];
 
 const session = createLocalSession(app, auth.api as never);
 await session.signIn();
@@ -91,11 +80,11 @@ if (mode === "old") {
   const tagId = ((await tag.json()) as { id: string }).id;
   const tagged = await asLocalUser(`/api/nodes/${note.id}/tags/${tagId}`, "PUT", {});
   if (!tagged.ok) throw new Error(`could not tag the note: ${tagged.status} ${await tagged.text()}`);
-  // What only an older app wrote (the SQL lives in a file of its own: no current code writes it).
+  // What only an older app wrote, straight to the database (the SQL lives in a file of its own: no current code writes it).
   // Every value is an id made by the app above, so nothing is interpolated from outside.
   const legacy = (await readFile(new URL("./oldReadLater.sql", import.meta.url), "utf8"))
     .replaceAll("__TAG__", tagId).replaceAll("__WORKSPACE__", note.workspace_id).replaceAll("__NOTE__", note.id);
-  afterStepBack.push(legacy);
+  await (await pglite!.database()).exec(legacy);
 
   // An older app's review: the module tag, a note that was a card through it, and a paragraph card. Migration 195 (left out above)
   // must give both their own reference, so the queue still holds two cards after the upgrade.
@@ -109,7 +98,7 @@ if (mode === "old") {
   if (!reviewTagged.ok) throw new Error(`could not tag the note: ${reviewTagged.status} ${await reviewTagged.text()}`);
   const oldReview = (await readFile(new URL("./oldReview.sql", import.meta.url), "utf8"))
     .replaceAll("__TAG__", reviewTagId).replaceAll("__WORKSPACE__", note.workspace_id).replaceAll("__NOTE__", note.id);
-  afterStepBack.push(oldReview);
+  await (await pglite!.database()).exec(oldReview);
 }
 
 // An older app's capture inbox: the module tag (a random id then) with a note on it. Migration 201 (left out above, so the upgrade runs it)
@@ -126,18 +115,52 @@ if (mode === "old") {
   const capturedId = ((await captured.json()) as { id: string }).id;
   const tagged = await asLocalUser(`/api/nodes/${capturedId}/tags/${inboxId}`, "PUT", {});
   if (!tagged.ok) throw new Error(`could not tag the note: ${tagged.status} ${await tagged.text()}`);
-  afterStepBack.push((await readFile(new URL("./oldCapture.sql", import.meta.url), "utf8")).replaceAll("__TAG__", inboxId));
+  await (await pglite!.database()).exec((await readFile(new URL("./oldCapture.sql", import.meta.url), "utf8")).replaceAll("__TAG__", inboxId));
 }
 
-// The schema goes back to what the kept migrations left, and the record of applied migrations with it.
-await stepBackTo(rawRun, keptSchema);
-await rawRun(`DELETE FROM schema_migrations WHERE version <> ALL($1::text[])`, [kept.map((m) => m.version)]);
-for (const sql of afterStepBack) await (await pglite!.database()).exec(sql);
-
-if (mode === "newer") await rawRun(`INSERT INTO schema_migrations (version) VALUES ('999_from_a_newer_app')`);
+if (mode === "newer") await q(`INSERT INTO schema_migrations (version) VALUES ('999_from_a_newer_app')`);
 if (mode === "poisoned") {
   if (!poisonFrom) throw new Error("no migration creates and indexes a table");
-  await rawRun(`CREATE TABLE ${sqlIdentifier(indexedNewTable(poisonFrom)!)} (poison int)`);
+  await q(`CREATE TABLE ${sqlIdentifier(indexedNewTable(poisonFrom)!)} (poison int)`);
+}
+
+await downgradeOrderKeys();
+
+/** Take the database back to what the kept migrations left: the integer order in sort_order, no order_key / order_stamp, the
+ *  stamp triggers of 190 (194 is left out, so the pointer triggers do not exist yet), and no row for 200 in schema_migrations.
+ *  What an older app saved is exactly this; the upgrade then runs migration 200 on it. */
+async function downgradeOrderKeys(): Promise<void> {
+  const database = await pglite!.database();
+  const text = (prefix: string) => all.find((m) => m.version.startsWith(prefix))?.sql ?? "";
+  const triggersOf = (sql: string, table: string) => [...sql.matchAll(new RegExp(`CREATE OR REPLACE TRIGGER ${table}_sync_stamp_\\w+[\\s\\S]*?;\\n`, "g"))].map((hit) => hit[0]);
+  const restored = [
+    ...triggersOf(text("190_"), "content_nodes"),
+    ...(kept.some((m) => m.version.startsWith("194_")) ? triggersOf(text("194_"), "note_pointers") : []),
+  ];
+  await database.exec(`
+    DROP TRIGGER IF EXISTS content_nodes_order_stamp ON content_nodes;
+    DROP TRIGGER IF EXISTS note_pointers_order_stamp ON note_pointers;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_insert ON content_nodes;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_update ON content_nodes;
+    DROP TRIGGER IF EXISTS content_nodes_sync_stamp_delete ON content_nodes;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_insert ON note_pointers;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_update ON note_pointers;
+    DROP TRIGGER IF EXISTS note_pointers_sync_stamp_delete ON note_pointers;
+    DROP FUNCTION IF EXISTS order_stamp_set();
+    UPDATE content_nodes c SET sort_order = r.rank FROM (SELECT id, row_number() OVER (PARTITION BY workspace_id, parent_id ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id) - 1 AS rank FROM content_nodes) r WHERE c.id = r.id;
+    UPDATE note_pointers p SET sort_order = r.rank FROM (SELECT id, row_number() OVER (PARTITION BY workspace_id, parent_id ORDER BY order_key COLLATE "C", order_stamp COLLATE "C", id) - 1 AS rank FROM note_pointers) r WHERE p.id = r.id;
+    ALTER TABLE content_nodes ALTER COLUMN sort_order SET DEFAULT 0;
+    ALTER TABLE content_nodes ALTER COLUMN sort_order SET NOT NULL;
+    ALTER TABLE note_pointers ALTER COLUMN sort_order SET DEFAULT 0;
+    ALTER TABLE note_pointers ALTER COLUMN sort_order SET NOT NULL;
+    DROP INDEX IF EXISTS content_nodes_order_idx;
+    DROP INDEX IF EXISTS note_pointers_parent_idx;
+    CREATE INDEX IF NOT EXISTS note_pointers_parent_idx ON note_pointers (workspace_id, parent_id, sort_order);
+    ALTER TABLE content_nodes DROP COLUMN order_key, DROP COLUMN order_stamp;
+    ALTER TABLE note_pointers DROP COLUMN order_key, DROP COLUMN order_stamp;
+    ${restored.join("\n")}
+    DELETE FROM schema_migrations WHERE version = '200_order_keys';
+  `);
 }
 
 const dump = await (await pglite!.database()).dumpDataDir("gzip");

@@ -36,10 +36,7 @@ export function registerNoteSwitchModule(moduleId: string): void { noteSwitchMod
 // A module may keep its tag for itself: the capture module's 收件匣 marks a
 // capture still waiting to be filed, and such a note leaves the note tree, so
 // putting it on a note by hand would make that note disappear. The tag stays
-// shown (a chip, the tag list): the pickers leave it out (offersTag), and its
-// chip on a note has no × (TitleTagRow) — taking it off is what filing does,
-// on the inbox page (owner, 2026-11-18: an unlabelled × that files the note is
-// not a way to remove a tag).
+// shown (a chip, the tag list); only the pickers leave it out (offersTag).
 const appliedByAppModules = new Set<string>();
 export function registerAppliedByAppModule(moduleId: string): void { appliedByAppModules.add(moduleId); }
 

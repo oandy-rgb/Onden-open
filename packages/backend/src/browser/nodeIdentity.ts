@@ -9,9 +9,7 @@
 // ever left a copy (no exchange exists yet), so no other node holds a reference to (shared id, sequence number): the
 // one-time step also moves those stamps to the copy's own id — origin only; sequence numbers and clock readings are
 // the copy's own and stay. After it every stamp on the device has an origin no other device has, or is a genesis
-// stamp. (A server restored from a backup also takes a new id, by the same sync_take_node_id, but there the old stamps
-// stay under the old id: others may hold them. Migration 213 sync_renew_node_id, run by scripts/restore.sh.)
-// structure_log is append-only and never leaves the device; its older lines keep the shared id.
+// stamp. structure_log is append-only and never leaves the device; its older lines keep the shared id.
 // The rows the packaged database itself carries were there before any node wrote: stampPackagedRowsAsGenesis gives
 // them the genesis stamp (migration 202's sync_genesis_pass, the one definition of it) instead of the build's own.
 import { sql } from "kysely";
@@ -26,8 +24,10 @@ const STATE_KEY = "own-node-id";
 export async function ensureOwnNodeId(): Promise<boolean> {
   if (await readAppState<{ taken: true }>(STATE_KEY)) return false;
   await withTransaction(async () => {
-    // the one rule by which a node takes a new id (migration 213 sync_take_node_id; a restored server takes its new id by the same one)
-    const { before_id: before, after_id: own } = (await sql<{ before_id: string | null; after_id: string }>`SELECT before_id, after_id FROM sync_take_node_id()`.execute(db)).rows[0]!;
+    const before = (await sql<{ node_id: string }>`SELECT node_id FROM sync_node WHERE singleton FOR UPDATE`.execute(db)).rows[0]?.node_id;
+    const own = (await sql<{ node_id: string }>`
+      INSERT INTO sync_node (singleton, node_id) VALUES (true, gen_random_uuid()::text)
+      ON CONFLICT (singleton) DO UPDATE SET node_id = EXCLUDED.node_id RETURNING node_id`.execute(db)).rows[0]!.node_id;
     if (before) {
       await sql`UPDATE sync_stamps SET origin = ${own} WHERE origin = ${before}`.execute(db);
       // what a write had seen names its writers by origin too (migration 205); the same writes, under the copy's own id

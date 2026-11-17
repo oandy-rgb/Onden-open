@@ -157,7 +157,7 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
 
     const fine = await bundleFor(b, a);
     expect(await refusal(take(a, { ...fine, dataShape: SYNC_DATA_SHAPE_VERSION + 1 }))).toMatchObject({ code: "bundle_data_shape" });
-    expect(await refusal(take(a, { ...fine, sender: "4b1d0000-0000-4000-8000-00000000a0a0" }))).toMatchObject({ code: "bundle_unknown_sender" }); // a node id nobody admitted (a word is not a node id: bundle_malformed)
+    expect(await refusal(take(a, { ...fine, sender: "a-node-nobody-admitted" }))).toMatchObject({ code: "bundle_unknown_sender" });
     expect(await refusal(take(c, fine))).toMatchObject({ code: "bundle_unknown_sender" }); // C joined A and admits only A: B is not its sender
     const beyond = JSON.parse(JSON.stringify(fine)) as ChangeBundle;
     const row = beyond.items.find((i) => i.kind === "row")!;
@@ -823,8 +823,7 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     expect(bundle.items.some((i) => i.table !== "content_nodes")).toBe(true);
     const before = JSON.stringify(await peerStateOf(b));
     expect(await refusal(take(b, { ...bundle, dataShape: SYNC_DATA_SHAPE_VERSION + 1 }))).toMatchObject({ code: "bundle_data_shape" });
-    const nobody = "4b1d0000-0000-4000-8000-00000000b0b0"; // a node id nobody admitted (a word is not a node id: bundle_malformed)
-    expect(await refusal(take(b, { ...bundle, sender: nobody, upTo: { ...bundle.upTo, [nobody]: 0 } }))).toMatchObject({ code: "bundle_unknown_sender" });
+    expect(await refusal(take(b, { ...bundle, sender: "nobody-admitted", upTo: { ...bundle.upTo, "nobody-admitted": 0 } }))).toMatchObject({ code: "bundle_unknown_sender" });
     const origin = await nodeIdOf(a);
     expect(await refusal(take(b, { ...bundle, base: { ...bundle.base, [origin]: bundle.upTo[origin]! - 1 } }))).toMatchObject({ code: "bundle_gap" });
     // the same (origin, seq) with other content, in an attribute's value

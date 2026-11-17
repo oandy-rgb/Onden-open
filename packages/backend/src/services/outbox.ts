@@ -1,4 +1,5 @@
 import { q, pool, withLeaderLock } from "../db.js";
+import { onBeforePoolEnd } from "../dbClose.js";
 import { log } from "../logger.js";
 import { startPeriodicJob } from "../backgroundJobs.js";
 import { writeAndCommit } from "../git.js";
@@ -468,6 +469,9 @@ function kickOutboxDrain(): void {
       .catch((e) => log.error("outbox", "instant drain failed", { err: e }));
   });
 }
+
+// A pass still queued or running when the database closes finishes first (dbClose.ts onBeforePoolEnd).
+onBeforePoolEnd(async () => { await kickChain; });
 
 /** Tests only: arm the instant drain with an injected performer (no real
  *  git/GitHub/embed I/O) so enqueue→performed can be asserted without the

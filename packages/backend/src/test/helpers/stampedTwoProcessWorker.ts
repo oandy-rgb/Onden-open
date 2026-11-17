@@ -109,7 +109,7 @@ function firstRootId(pages: StampedPage[]): string {
   throw new Error("no Root note");
 }
 
-type Case = { name: string; direct?: boolean; pages: StampedPage[]; summary: { source: string; former: Record<string, number>; cut: number; pages: number; digest: TableDigest[] } };
+type Case = { name: string; direct?: boolean; pages: StampedPage[]; summary: { source: string; cut: number; pages: number; digest: TableDigest[] } };
 
 async function refuseHalf(from: string, out: string): Promise<void> {
   await start();
@@ -192,7 +192,7 @@ async function askJoin(ws: string, person: string | null): Promise<string | null
   try {
     // a savepoint (inside a transaction already) or a transaction: either way what startJoin did is undone when it is left
     await withSavepoint(async () => {
-      try { await startJoin({ workspaceId: "00000000-0000-4000-8000-0000000000b1", sourceNode: "50e0e000-0000-4000-8000-0000000000b2" /* a node id that is not this node */, cutSeq: 1, personActorId: person ?? ws, shellPersonId: person }); }
+      try { await startJoin({ workspaceId: "00000000-0000-4000-8000-0000000000b1", sourceNode: "some-other-node", cutSeq: 1, personActorId: person ?? ws, shellPersonId: person }); }
       catch (e) { answer = (e as { code?: string }).code ?? String(e); }
       throw new RollBack();
     });

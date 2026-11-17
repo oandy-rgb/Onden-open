@@ -74,6 +74,7 @@
 //     chains map" mean "not running anywhere".
 
 import { event, pool, q } from "../db.js";
+import { onBeforePoolEnd } from "../dbClose.js";
 import { log } from "../logger.js";
 import { startPeriodicJob } from "../backgroundJobs.js";
 import { isTransientDbError } from "../dbErrors.js";
@@ -107,6 +108,11 @@ export interface QueueOptions {
  *  Bounded on purpose: the chain for this node is blocked while we wait. */
 const RETRY_BACKOFF_MS = [200, 1000, 3000] as const;
 
+/** The database is closing (see closeDispatcher): a task waiting to retry stops waiting and is not re-run. */
+let closing = false;
+const retryWakers = new Set<() => void>();
+const CLOSED_BEFORE_RETRY = Symbol("dispatcher closed before the retry");
+
 /** Run `task`, re-running it after a transient failure. Safe because every
  *  queued task is the convergent reconciler pair described in the header and
  *  runs in one transaction that rolls back on throw, so a failed attempt
@@ -125,8 +131,14 @@ async function runWithRetry(
       if (!retryTransient || wait === undefined || !isTransientDbError(err)) {
         throw { original: err, attempts: attempt } satisfies AttemptedError;
       }
+      if (closing) throw CLOSED_BEFORE_RETRY;
       log.warn("dispatcher", `transient failure, retrying (attempt ${attempt})`, { err });
-      await new Promise<void>((resolve) => setTimeout(resolve, wait));
+      await new Promise<void>((resolve) => {
+        const wake = () => { clearTimeout(timer); retryWakers.delete(wake); resolve(); };
+        const timer = setTimeout(wake, wait);
+        retryWakers.add(wake);
+      });
+      if (closing) throw CLOSED_BEFORE_RETRY;
     }
   }
 }
@@ -192,6 +204,9 @@ export function queueDispatcher(
       try {
         await runWithRetry(task, opts.retryTransient !== false);
       } catch (thrown) {
+        // Closing, not failing: no audit, and returning here skips the intent DELETE below, so the
+        // next boot's catch-up replays the cascade.
+        if (thrown === CLOSED_BEFORE_RETRY) return;
         const { original: err, attempts } = isAttempted(thrown) ? thrown : { original: thrown, attempts: 1 };
         await event(
           opts.workspaceId, "DISPATCHER_FAILED", "node", opts.nodeId,
@@ -271,6 +286,15 @@ export async function awaitNodeDispatcher(nodeId: string): Promise<void> {
 export function inflightNodeIds(): string[] {
   return Array.from(chains.keys());
 }
+
+/** Part of closing the database (dbClose.ts onBeforePoolEnd): tasks waiting to retry stop waiting, then every
+ *  queued or running cascade finishes while the pool is still open, including ones queued by the cascades. */
+async function closeDispatcher(): Promise<void> {
+  closing = true;
+  for (const wake of [...retryWakers]) wake();
+  while (chains.size > 0) await awaitAllDispatchers();
+}
+onBeforePoolEnd(closeDispatcher);
 
 /** Test helper — drop all chains. Use sparingly; only between tests. */
 export function _resetDispatcherQueueForTests(): void {

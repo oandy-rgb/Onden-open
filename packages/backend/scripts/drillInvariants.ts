@@ -2,10 +2,7 @@
 //
 //   tsx drillInvariants.ts snapshot --database-url <url> --out <file.json>
 //   tsx drillInvariants.ts compare  --before <a.json> --after <b.json>
-//        [--migrations-dir <dir>] [--media-dir <dir>] [--report <file.json>] [--node-renewed]
-//
-// --node-renewed: the drill gave the restored database a new node id between the two snapshots (scripts/lib/renewNodeId.sh);
-// `node_id_renewed` then checks it (nodeRenewalFailures). No migration can declare it away.
+//        [--migrations-dir <dir>] [--media-dir <dir>] [--report <file.json>]
 //
 // `snapshot` reads a database (read-only) and writes counts, per-note hashes,
 // structural violations and media references. `compare` judges BEFORE vs AFTER
@@ -156,21 +153,6 @@ export interface Snapshot {
   mediaRefs: Record<string, string[]>;
   eventMaxId: number | null;
   migrations: string[];
-  /** Who this database is as a node (migration 190 onward; null before). Ids and hashes only. */
-  node?: NodeState | null;
-}
-
-/** The node's identity and what it numbered, for `node_id_renewed`. */
-export interface NodeState {
-  id: string | null;
-  /** workspace → its clock: the next sequence number of the node's own origin and the clock reading. */
-  clocks: Record<string, { next: number; wall: number; counter: number }>;
-  /** workspace → the largest clock reading of any stamp or other head it holds. */
-  top: Record<string, { wall: number; counter: number }>;
-  /** every stamp and other head of an origin other than genesis: `kind|workspace|table|row|field[|seq:content hash] origin` → sha256 of the whole row. */
-  stamps: Record<string, string>;
-  /** `${workspace} ${origin}` → the sync_origins row (migration 206 onward). */
-  origins: Record<string, { vouched: string; have: number }>;
 }
 
 async function exists(c: pg.Client, requirement: string): Promise<boolean> {
@@ -232,63 +214,11 @@ export async function takeSnapshot(url: string): Promise<Snapshot> {
       ? Number((await c.query(`SELECT coalesce(max(id),0) AS m FROM domain_events`)).rows[0].m) : null;
     const migrations = (await exists(c, "schema_migrations"))
       ? (await c.query(`SELECT version FROM schema_migrations ORDER BY version`)).rows.map((r) => r.version as string) : [];
-    const node = await nodeState(c);
     await c.query("ROLLBACK");
-    return { takenAt: new Date().toISOString(), counts, structure, notes, mediaRefs: refs, eventMaxId, migrations, node };
+    return { takenAt: new Date().toISOString(), counts, structure, notes, mediaRefs: refs, eventMaxId, migrations };
   } finally {
     await c.end();
   }
-}
-
-async function nodeState(c: pg.Client): Promise<NodeState | null> {
-  if (!(await exists(c, "sync_node")) || !(await exists(c, "sync_clock")) || !(await exists(c, "sync_stamps"))) return null;
-  const id = ((await c.query(`SELECT node_id FROM sync_node WHERE singleton`)).rows[0]?.node_id as string | undefined) ?? null;
-  const clocks: NodeState["clocks"] = {};
-  for (const r of (await c.query(`SELECT workspace_id::text AS ws, next_seq::text AS n, hlc_wall::text AS w, hlc_counter AS k FROM sync_clock`)).rows) {
-    clocks[r.ws] = { next: Number(r.n), wall: Number(r.w), counter: Number(r.k) };
-  }
-  const heads = await exists(c, "sync_stamp_heads");
-  const top: NodeState["top"] = {};
-  for (const r of (await c.query(`SELECT DISTINCT ON (ws) ws, w, k FROM (
-      SELECT workspace_id::text AS ws, hlc_wall AS w, hlc_counter AS k FROM sync_stamps
-      ${heads ? "UNION ALL SELECT workspace_id::text, hlc_wall, hlc_counter FROM sync_stamp_heads" : ""}) x ORDER BY ws, w DESC, k DESC`)).rows) {
-    top[r.ws] = { wall: Number(r.w), counter: Number(r.k) };
-  }
-  const stamps: NodeState["stamps"] = {};
-  for (const r of (await c.query(`SELECT 's|' || workspace_id || '|' || table_name || '|' || row_key || '|' || field || ' ' || origin AS key, to_jsonb(s)::text AS v FROM sync_stamps s WHERE origin <> 'genesis'`)).rows) stamps[r.key] = sha(r.v);
-  if (heads) for (const r of (await c.query(`SELECT 'h|' || workspace_id || '|' || table_name || '|' || row_key || '|' || field || '|' || seq || ':' || content_hash || ' ' || origin AS key, to_jsonb(h)::text AS v FROM sync_stamp_heads h WHERE origin <> 'genesis'`)).rows) stamps[r.key] = sha(r.v);
-  const origins: NodeState["origins"] = {};
-  if (await exists(c, "sync_origins")) {
-    for (const r of (await c.query(`SELECT workspace_id::text AS ws, origin, vouched_by, COALESCE((have->>'content_nodes')::bigint, 0)::text AS have FROM sync_origins`)).rows) {
-      origins[`${r.ws} ${r.origin}`] = { vouched: r.vouched_by, have: Number(r.have) };
-    }
-  }
-  return { id, clocks, top, stamps, origins };
-}
-
-/** `node_id_renewed` (the drill ran scripts/lib/renewNodeId.sh between the two snapshots): the database is a new node; the old id's stamps are
- *  kept as they were (none written or rewritten under it); the old id's numbering became an origin this node holds, up to at least its last
- *  number; every clock reads at least the largest reading the backup held. Returns the failures (empty when it holds). Ids and counts only. */
-export function nodeRenewalFailures(before: NodeState | null | undefined, after: NodeState | null | undefined): string[] {
-  if (!after) return ["沒有節點資料表（sync_node）"];
-  const out: string[] = [];
-  if (!after.id) out.push("還原後的資料庫沒有節點編號");
-  // a backup older than migration 190 had no node id: the one the database has now was made after the restore
-  if (!before?.id) return out;
-  const old = before.id;
-  if (after.id === old) out.push(`節點編號沒有換（仍是 ${old}）`);
-  const underOld = Object.entries(after.stamps).filter(([key]) => key.endsWith(` ${old}`));
-  const rewritten = underOld.filter(([key, h]) => before.stamps[key] !== h).map(([key]) => key);
-  if (rewritten.length) out.push(`${rewritten.length} 筆舊編號的寫入標記是還原後寫的或被改寫：${first(rewritten)}`);
-  for (const [ws, clock] of Object.entries(before.clocks)) {
-    const row = after.origins[`${ws} ${old}`];
-    if (clock.next > 1 && (!row || row.vouched !== "self-restore" || row.have < clock.next - 1)) {
-      out.push(`工作區 ${ws}：舊編號沒有變成「握有到第 ${clock.next - 1} 號」的來源`);
-    }
-    const top = before.top[ws], now = after.clocks[ws];
-    if (top && now && (now.wall < top.wall || (now.wall === top.wall && now.counter < top.counter))) out.push(`工作區 ${ws}：時鐘比備份握有的寫入標記還早`);
-  }
-  return out;
 }
 
 /** Names declared by the migrations that ran between the two snapshots. */
@@ -324,7 +254,7 @@ export interface Verdict { lines: string[]; failures: number; report: Record<str
 
 const first = (ids: string[], n = 10) => ids.slice(0, n).join(", ") + (ids.length > n ? ` …（共 ${ids.length}）` : "");
 
-export function compare(before: Snapshot, after: Snapshot, opts: { migrationsDir?: string; mediaFiles?: Set<string>; /** the drill gave the restored database a new node id between the snapshots */ nodeRenewed?: boolean }): Verdict {
+export function compare(before: Snapshot, after: Snapshot, opts: { migrationsDir?: string; mediaFiles?: Set<string> }): Verdict {
   const applied = after.migrations.filter((v) => !before.migrations.includes(v));
   const declared = declarations(opts.migrationsDir, applied);
   const lines: string[] = [];
@@ -392,16 +322,8 @@ export function compare(before: Snapshot, after: Snapshot, opts: { migrationsDir
     else lines.push(`媒體檔：${new Set(Object.values(after.mediaRefs).flat()).size} 個被引用的檔案都在 content.tar`);
   }
 
-  let nodeRenewal: string[] | null = null;
-  if (opts.nodeRenewed) {
-    nodeRenewal = nodeRenewalFailures(before.node, after.node);
-    for (const f of nodeRenewal) fail(`node_id_renewed：${f}`);
-    if (!nodeRenewal.length) lines.push(`節點編號：已換新（${before.node?.id ?? "備份沒有"} → ${after.node?.id}），舊編號的寫入標記一筆都沒變`);
-  }
-
   lines.push(...notes);
-  const report = { applied, failures, bodyChanged: bodyChanged.length, titleChanged: titleChanged.length, gone: gone.length, missingMedia: missingTotal,
-    nodeIdRenewed: nodeRenewal === null ? null : nodeRenewal.length === 0 };
+  const report = { applied, failures, bodyChanged: bodyChanged.length, titleChanged: titleChanged.length, gone: gone.length, missingMedia: missingTotal };
   return { lines, failures, report };
 }
 
@@ -426,7 +348,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const before = JSON.parse(readFileSync(need("before"), "utf8")) as Snapshot;
     const after = JSON.parse(readFileSync(need("after"), "utf8")) as Snapshot;
     const mediaDir = arg("media-dir");
-    const v = compare(before, after, { migrationsDir: arg("migrations-dir"), mediaFiles: mediaDir ? listFiles(mediaDir) : undefined, nodeRenewed: process.argv.includes("--node-renewed") });
+    const v = compare(before, after, { migrationsDir: arg("migrations-dir"), mediaFiles: mediaDir ? listFiles(mediaDir) : undefined });
     for (const l of v.lines) console.log(l);
     const reportPath = arg("report");
     if (reportPath) writeFileSync(reportPath, JSON.stringify(v.report));

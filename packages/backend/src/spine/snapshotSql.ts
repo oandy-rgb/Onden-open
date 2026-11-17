@@ -176,9 +176,6 @@ export type StampedPage = {
   cut: number;
   /** The node the snapshot was made on. */
   source: string;
-  /** The ids that node had before it was restored from a backup and took a new one (migration 213), each with the highest sequence number of it the
-   *  source holds: their stamps are the source's own. `{}` for a node that was never restored. The same on every page of one snapshot. */
-  former: Record<string, number>;
   workspaceId: string;
   items: SnapshotItem[];
 };

@@ -1192,8 +1192,6 @@ export const ZH_TW_LATE: Record<string, string> = {
 
   // ── Node inspector (NodeInspector / NodeEventHistory) ──
   "Select a node to see details": "選一個筆記以查看細節",
-  "No note is open": "沒有開啟的筆記",
-  "Pick one from the list, or start a new one.": "從左邊的列表選一則，或建立新的。",
   "Parent": "上層",
   "None": "無",
   "Updated": "更新於",

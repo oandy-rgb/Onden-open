@@ -3920,8 +3920,6 @@ INSERT INTO schema_migrations (version) VALUES ('206_sync_change_bundles') ON CO
 INSERT INTO schema_migrations (version) VALUES ('207_fresh_proofs') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('209_place_is_one_write') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('210_participant_sessions') ON CONFLICT (version) DO NOTHING;
-INSERT INTO schema_migrations (version) VALUES ('213_renew_node_id') ON CONFLICT (version) DO NOTHING;
-INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5910,51 +5908,3 @@ CREATE TABLE IF NOT EXISTS participant_sessions (
   CHECK (expires_at > created_at)
 );
 CREATE INDEX IF NOT EXISTS participant_sessions_opener_idx ON participant_sessions (opened_by) WHERE ended_at IS NULL;
--- 213: a restored database takes a new node id (db/migrations/213_renew_node_id.sql)
-CREATE OR REPLACE FUNCTION sync_take_node_id() RETURNS TABLE (before_id text, after_id text) AS $$
-DECLARE v_before text; v_after text;
-BEGIN
-  SELECT n.node_id INTO v_before FROM sync_node n WHERE n.singleton FOR UPDATE;
-  INSERT INTO sync_node (singleton, node_id) VALUES (true, gen_random_uuid()::text)
-    ON CONFLICT (singleton) DO UPDATE SET node_id = EXCLUDED.node_id
-    RETURNING sync_node.node_id INTO v_after;
-  RETURN QUERY SELECT v_before, v_after;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION sync_renew_node_id() RETURNS TABLE (old_node_id text, new_node_id text, workspaces bigint, origins_added bigint) AS $$
-DECLARE v_ws uuid; v_old text; v_new text; v_clocks bigint; v_origins bigint;
-BEGIN
-  -- every writer takes a workspace's event-append lock, then its clock row (spine/stamps.ts); a renewal takes all of them, in one order
-  FOR v_ws IN SELECT c.workspace_id FROM sync_clock c ORDER BY c.workspace_id LOOP
-    PERFORM 1 FROM sync_lock_clock(v_ws);
-  END LOOP;
-  SELECT t.before_id, t.after_id INTO v_old, v_new FROM sync_take_node_id() t;
-  -- the old id's own writes, as an origin held up to the last number it gave (before the clock is renumbered below)
-  IF v_old IS NOT NULL THEN
-    -- held up to that number for every label a change bundle carries: the same shape as spine/stampedBundle.ts haveOfAll, from the one list
-    -- spine/stampedMerge/dbUnits.ts CARRIED_LABELS (restoreRenewsNodeId.guard.test.ts keeps the two equal: a label added there needs a migration here)
-    INSERT INTO sync_origins (workspace_id, origin, vouched_by, have)
-    SELECT c.workspace_id, v_old, 'self-restore', (SELECT jsonb_object_agg(l, c.next_seq - 1) FROM unnest(ARRAY['workspaces', 'spaces', 'space_members', 'content_nodes', 'node_attributes', 'node_tags', 'node_edges', 'note_pointers', 'node_positions', 'function_refs', 'rss_subscriptions', 'rss_mutes', 'external_calendars', 'actor_module_settings', 'content_nodes.tag_schema', 'spaces.capabilities', 'function_refs.config', 'workspaces.modules_off', 'workspaces.modules_confirmed']) AS l)
-      FROM sync_clock c WHERE c.next_seq > 1;
-    GET DIAGNOSTICS v_origins = ROW_COUNT;
-  ELSE
-    v_origins := 0;
-  END IF;
-  WITH top AS (
-    SELECT s.workspace_id, s.hlc_wall, s.hlc_counter FROM sync_stamps s
-    UNION ALL SELECT h.workspace_id, h.hlc_wall, h.hlc_counter FROM sync_stamp_heads h
-  ), best AS (
-    SELECT DISTINCT ON (workspace_id) workspace_id, hlc_wall, hlc_counter FROM top ORDER BY workspace_id, hlc_wall DESC, hlc_counter DESC
-  )
-  UPDATE sync_clock c SET next_seq = 1,
-         hlc_wall = CASE WHEN b.hlc_wall IS NOT NULL AND (b.hlc_wall, b.hlc_counter) > (c.hlc_wall, c.hlc_counter) THEN b.hlc_wall ELSE c.hlc_wall END,
-         hlc_counter = CASE WHEN b.hlc_wall IS NOT NULL AND (b.hlc_wall, b.hlc_counter) > (c.hlc_wall, c.hlc_counter) THEN b.hlc_counter ELSE c.hlc_counter END
-    FROM sync_clock c2 LEFT JOIN best b ON b.workspace_id = c2.workspace_id
-   WHERE c2.workspace_id = c.workspace_id;
-  GET DIAGNOSTICS v_clocks = ROW_COUNT;
-  RETURN QUERY SELECT v_old, v_new, v_clocks, v_origins;
-END;
-$$ LANGUAGE plpgsql;
--- 214: a snapshot of a restored, renewed server names its former node ids; the join remembers them (db/migrations/214_sync_join_source_former.sql)
-ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_former jsonb NOT NULL DEFAULT '{}'::jsonb;

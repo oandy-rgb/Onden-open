@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 備份還原演練：在本機拋棄式資料庫還原一份備份，換新節點編號（與 restore.sh 同一步），跑 migration，核對資料不變條件。
+# 備份還原演練：在本機拋棄式資料庫還原一份備份，跑 migration，核對資料不變條件。
 # 只在本機執行，從不連線任何遠端主機；只碰名稱以 _drill 結尾的本機資料庫；不印任何筆記內容。
 #
 #   scripts/restore-drill.sh <backup-dir> [--commit <ref>] [--bootstrap]
@@ -145,40 +145,16 @@ fi
 say "✓ 還原完成"
 
 tsx() { (cd "$backend" && npx --no-install tsx "$@"); }
-# 與 restore.sh 同一個換號入口（scripts/lib/renewNodeId.sh → migration 213 sync_renew_node_id）。
-# shellcheck source=lib/renewNodeId.sh
-source "$repo/scripts/lib/renewNodeId.sh"
-if [[ $use_docker == 1 ]]; then db_psql=(docker exec -i "$container" psql -U postgres -d "$dbname"); else db_psql=(psql "$DATABASE_URL"); fi
-renewed=0
-renew_step() { # <何時>
-  local out rc=0
-  out=$(renewNodeId "${db_psql[@]}" 2>>"$work/renew.log") || rc=$?
-  case $rc in
-    0) read -r old_id new_id _ _ <<<"$out"; say "✓ 節點編號已換新（$1）：$old_id → $new_id"; renewed=1 ;;
-    3) return 3 ;;
-    *) die "換新節點編號失敗（見 $work/renew.log）" ;;
-  esac
-}
 
 # ── 5. migration 前的不變條件
 step "5. 記錄 migration 前的狀態"
 tsx scripts/drillInvariants.ts snapshot --database-url "$DATABASE_URL" --out "$work/before.json" || die "讀取還原後的資料庫失敗"
-
-# ── 5b. 換新節點編號：restore.sh 在載入後、任何寫入（包括開機的 migration）之前做這一步，演練在同一個位置做。
-step "5b. 換新節點編號（restore.sh 的同一步）"
-renew_rc=0; renew_step "還原後、migration 前" || renew_rc=$?
-if [[ $renew_rc == 3 ]]; then
-  say "△ 這份備份早於 migration 213：restore.sh 會保留舊的節點編號並印出警告。演練在 migration 之後補做這一步，以檢查換號本身。"
-fi
 
 # ── 6. migration（與後端開機同一支 migrate()）
 step "6. 執行 migration"
 DATABASE_URL=$DATABASE_URL tsx scripts/drillMigrate.ts "$src" >"$work/migrate.log" 2>&1 \
   || { grep '^migration 失敗' "$work/migrate.log" >&2 || say "migrate 執行失敗（見 $work/migrate.log）" >&2; die "migration 沒有跑完，備份在這個版本上不能直接升級"; }
 say "✓ $(tail -n1 "$work/migrate.log")"
-if [[ $renewed == 0 ]]; then
-  renew_step "migration 後補做" || die "migration 之後仍沒有換號的函式（migration 213 沒有套用？）"
-fi
 
 # ── 7. migration 後
 step "7. 記錄 migration 後的狀態"
@@ -205,7 +181,7 @@ say "✓ 已解到暫存目錄（結束時刪除）"
 
 # ── 9. 比對
 step "9. 比對"
-if tsx scripts/drillInvariants.ts compare --before "$work/before.json" --after "$work/after.json" --node-renewed \
+if tsx scripts/drillInvariants.ts compare --before "$work/before.json" --after "$work/after.json" \
      --migrations-dir "$src/packages/backend/db/migrations" --media-dir "$work/media" --report "$work/report.json"; then
   printf '\n通過：還原演練沒有發現問題（備份 %s）\n' "$(basename "$backup")"
   status=0

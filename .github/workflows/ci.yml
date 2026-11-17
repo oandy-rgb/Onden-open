@@ -21,6 +21,10 @@ on:
         description: "The PR description, for the change-note check (it looks for 「不需要更新說明」)"
         type: string
         default: ""
+      grep:
+        description: "Full-stack E2E only: run just the tests whose title matches (Playwright --grep), e.g. rssReader"
+        type: string
+        default: ""
 
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
@@ -30,7 +34,7 @@ concurrency:
 jobs:
   guard:
     name: Guard lane
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # On a PR, and on a manual run: the public mirror has no PRs, its branches are pushed by scripts/public-mirror/public-push.sh
     # and started by hand, so without the second half this job never ran there and the lane stayed on a laptop.
     if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
@@ -58,7 +62,7 @@ jobs:
 
   pairing-relay:
     name: Pairing and relay — typecheck · unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +85,7 @@ jobs:
 
   backend:
     name: Backend — lint · typecheck · unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -128,7 +132,7 @@ jobs:
   # Postgres; a skipped test fails its shard (src/test/helpers/pgliteSkipList.ts names the few that are PGlite-only).
   backend-postgres:
     name: Backend — real Postgres (${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
@@ -219,7 +223,7 @@ jobs:
 
   frontend:
     name: Frontend — lint · typecheck · unit · build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -344,7 +348,7 @@ jobs:
   # stale/misprovisioned stack can never produce a silently-green run.
   e2e-critical:
     name: Critical-path E2E (PR subset)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 20
     steps:
@@ -377,19 +381,20 @@ jobs:
   # cross-engine projects. Shards split by file, so a spec must not depend on another spec's data.
   e2e-fullstack:
     name: Full-stack E2E (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch' && inputs.fullstack
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: "chromium 1/4", args: "--project chromium --shard=1/4" }
-          - { name: "chromium 2/4", args: "--project chromium --shard=2/4" }
-          - { name: "chromium 3/4", args: "--project chromium --shard=3/4" }
-          - { name: "chromium 4/4", args: "--project chromium --shard=4/4" }
-          - { name: "faults", args: "--project faults" }
-          - { name: "cross-engine", args: "--project firefox --project webkit --project mobile-chrome --project mobile-safari" }
+          # `name` is what the deploy gate (scripts/deploy-vps.sh) looks for: do not rename. `slug` only names the artifact.
+          - { name: "chromium 1/4", slug: "chromium-1", args: "--project chromium --shard=1/4" }
+          - { name: "chromium 2/4", slug: "chromium-2", args: "--project chromium --shard=2/4" }
+          - { name: "chromium 3/4", slug: "chromium-3", args: "--project chromium --shard=3/4" }
+          - { name: "chromium 4/4", slug: "chromium-4", args: "--project chromium --shard=4/4" }
+          - { name: "faults", slug: "faults", args: "--project faults" }
+          - { name: "cross-engine", slug: "cross-engine", args: "--project firefox --project webkit --project mobile-chrome --project mobile-safari" }
     steps:
       - uses: actions/checkout@v4
 
@@ -405,5 +410,58 @@ jobs:
         env:
           E2E_REQUIRE_ADMIN: "1"
           E2E_ARGS: ${{ matrix.args }}
+          E2E_GREP: ${{ inputs.grep }}
         # E2E_ARGS comes from the matrix above (not from user input); unquoted on purpose so it splits into flags.
-        run: bash packages/frontend/e2e/fullstack/run.sh $E2E_ARGS
+        # E2E_GREP is user input: it only ever reaches the runner as one quoted argument.
+        run: |
+          set -o pipefail
+          if [ -n "$E2E_GREP" ]; then
+            bash packages/frontend/e2e/fullstack/run.sh $E2E_ARGS --grep "$E2E_GREP" 2>&1 | tee e2e.log
+          else
+            bash packages/frontend/e2e/fullstack/run.sh $E2E_ARGS 2>&1 | tee e2e.log
+          fi
+
+      # The numbers, where a person looks: a suite that rots shows up as a count, not as one red cross among six.
+      - name: Counts (passed · failed · skipped) into the job summary
+        if: always()
+        env:
+          JOB_NAME: ${{ matrix.name }}
+          E2E_GREP: ${{ inputs.grep }}
+        run: |
+          {
+            echo "### Full-stack E2E (${JOB_NAME})"
+            if [ -n "$E2E_GREP" ]; then echo "Only the tests matching \`${E2E_GREP}\` were run: this is NOT the full suite."; fi
+            if [ -f e2e.log ]; then
+              counts="$(sed 's/\x1b\[[0-9;]*m//g' e2e.log | grep -E '^ +[0-9]+ (passed|failed|flaky|skipped|did not run|interrupted)' || true)"
+              if [ -n "$counts" ]; then echo '```'; echo "$counts"; echo '```'; else echo "No test counts in the output: the run stopped before the tests finished."; fi
+            else
+              echo "No output: the run did not start."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the screenshots and traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-${{ matrix.slug }}
+          path: /tmp/pw-host-out
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # A run started without `fullstack=true` runs 39 @critical tests and none of the other ~650. The matrix above is
+  # then "skipped", which reads as fine and is not: nobody ran the full suite for days and 65 tests rotted
+  # (docs/research/e2e-first-full-run-2026-11-17.md). This job exists only to say it, in the job list and the summary.
+  e2e-fullstack-not-run:
+    name: "Full-stack E2E was NOT run (start the run with fullstack=true)"
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' && !inputs.fullstack
+    steps:
+      - name: Say so
+        run: |
+          echo "::warning title=Full-stack E2E was not run::Only the @critical subset ran. This run does not show that the full e2e suite passes; start it again with fullstack=true before a merge or a deploy that needs it."
+          {
+            echo "### Full-stack E2E was NOT run"
+            echo "Only the \`@critical\` subset ran. The six \`Full-stack E2E (…)\` jobs are skipped, and a skipped job is not a passed job."
+            echo "Start the run again with \`fullstack=true\` to run them."
+          } >> "$GITHUB_STEP_SUMMARY"
+

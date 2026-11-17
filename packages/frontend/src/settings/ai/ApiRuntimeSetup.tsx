@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { addToast } from "../../lib/appStore";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, reads, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { Button, Checkbox, Radio } from "../../components/ui";
 import ApiSettingsFields, {
@@ -55,7 +55,7 @@ export default function ApiRuntimeSetup({ actorId, online, onChanged }: { actorI
     if (busy || !apiReady) return;
     setBusy(true);
     try {
-      await sendWrite("PUT", `/api/ai/roles/${actorId}/runtime`, {
+      await aiRoleWriter.setRuntime(actorId, {
         default_runtime: runtime,
         ...(runtime === "api" ? { api: { ...apiSettingsBody(api), small_actions_only: smallOnly, web_search: webSearch } } : {}),
       });

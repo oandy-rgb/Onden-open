@@ -3,7 +3,7 @@ import { copyText } from "../../lib/clipboard";
 import { ChevronLeft } from "lucide-react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, workspaceAccessWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { inviteLinkFor } from "../../lib/invite";
 import { spaceFilterStore } from "../../lib/settingsRequest";
@@ -102,7 +102,7 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
         ? t("Remove {name}? Its keys stop working and it leaves every space.", { name: person.name })
         : t("Remove {name}? They leave every space and can no longer sign in to this workspace.", { name: person.name });
       if (!(await confirmDialog(message, { confirmLabel: t("Remove"), danger: true }))) return;
-      try { await sendWrite("DELETE", `/api/actors/${person.id}`); await refreshSpaces(); setPersonId(null); setPage(false); }
+      try { await aiRoleWriter.remove(person.id); await refreshSpaces(); setPersonId(null); setPage(false); }
       catch (error) { writeErrors.report(error, addToast); }
       await reload();
     },
@@ -110,7 +110,7 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
     async regenerateInvite(person) {
       if (!(await confirmDialog(t("Make a new invite link for {name}? The old link stops working.", { name: person.name }), { confirmLabel: t("Make a new invite link") }))) return;
       try {
-        const reply = await sendWrite<{ invite_path?: string }>("POST", `/api/actors/${person.id}/invite`, {});
+        const reply = await workspaceAccessWriter.renewInvite(person.id);
         if (reply?.invite_path) setLinks((prev) => ({ ...prev, [person.id]: inviteLinkFor(reply.invite_path!) }));
       } catch (error) { writeErrors.report(error, addToast); }
       await reload();
@@ -126,7 +126,7 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
   async function invite(person: NewPerson): Promise<boolean> {
     let created: { id?: string; invite_path?: string };
     try {
-      created = await sendWrite<{ id?: string; invite_path?: string }>("POST", "/api/actors", { name: person.name, type: "human", email: person.email });
+      created = await workspaceAccessWriter.addMember({ name: person.name, type: "human", email: person.email });
     } catch (error) { writeErrors.report(error, addToast); return false; }
     if (!created?.id) { await reload(); return true; }
     if (created.invite_path) setLinks((prev) => ({ ...prev, [created.id!]: inviteLinkFor(created.invite_path!) }));

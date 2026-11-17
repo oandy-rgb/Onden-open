@@ -202,6 +202,10 @@ export function setOnline(online: boolean): void {
 export function setBootstrapped(bootstrapped: boolean): void {
   setAppState({ bootstrapped });
 }
+/** Switch the 「有新版，重新載入」 notice on (lib/buildVersion). Only ever turned on; a reload clears it. */
+export function setNewVersionAvailable(newVersionAvailable: boolean): void {
+  setAppState({ newVersionAvailable });
+}
 export function setAccessRevoked(accessRevoked: boolean): void {
   setAppState({ accessRevoked });
 }

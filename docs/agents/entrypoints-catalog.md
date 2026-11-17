@@ -393,7 +393,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（108）
+## 共用邏輯（109）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -844,6 +844,15 @@ export const edited = (pages: InkPages) => session.apply(pages);`
 - 取代：元件自己 fetch、自己組權限／離線佇列／回復流程
 - 守門：`guard:history`、`fe-literal-api-write`
 - 為什麼：寫入筆記、標籤、屬性、關聯、任務一律透過這些 writer。它們處理權限、離線排隊、失敗回復和畫面立即更新；元件自己 fetch 會漏掉，離線時就直接掉資料。
+
+### 要做空間、AI 角色、RSS、外部日曆、收件匣決定、提醒推播、邀請與轉讓擁有者這類「只在線上、由伺服器決定」的操作
+
+- 入口：`frontend/src/lib/data/index.ts`（`spaceWriter`、`aiRoleWriter`、`rssWriter`、`calendarWriter`、`inboxWriter`、`captureWriter`、`reviewCardWriter`、`pushWriter`、`workspaceAccessWriter`、`accountPrefWriter`）　項目 `online-action-writers`
+- 寫法：`import { calendarWriter } from "./lib/data";
+const refresh = (calendarId: string) => calendarWriter.refresh(calendarId);`
+- 取代：在元件、hook 或設定頁裡寫 sendWrite("POST", "/api/…")
+- 守門：`fe-literal-api-write`
+- 為什麼：伺服器路徑、內容與冪等鍵由這些 writer 擁有，名稱是使用者在做的事（refresh、stopFollowing、decideGroup…）。呼叫者只決定何時呼叫、失敗怎麼說（writeErrors）。
 
 ### 要送出寫入並在離線時排隊
 

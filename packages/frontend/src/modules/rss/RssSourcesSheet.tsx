@@ -3,7 +3,7 @@ import { MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import ShellDialog from "../../components/ShellDialog";
 import { Button, Pressable, Select, TextField } from "../../components/ui";
 import { ApiError } from "../../lib/api";
-import { sendOrQueue, sendWrite, writeErrors } from "../../lib/data";
+import { rssWriter, sendOrQueue, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { displayTitle } from "../../lib/noteLabel";
 import { dateLabel } from "../../lib/timeLabels";
@@ -83,7 +83,7 @@ export default function RssSourcesSheet({ sources, tags, online, quickTagIds, on
 
   async function refresh(id: string) {
     try {
-      await sendWrite("POST", `/api/rss/sources/${id}/refresh`, "{}");
+      await rssWriter.refreshSource(id);
       onNotice(t("Refreshing…"));
       onChangedFeeds();
     } catch (e) {

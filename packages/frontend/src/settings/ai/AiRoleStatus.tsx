@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { addToast } from "../../lib/appStore";
-import { sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, writeErrors } from "../../lib/data";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useT } from "../../lib/i18n";
 import { confirmDialog } from "../../components/ConfirmDialog";
@@ -72,7 +72,7 @@ function ReviewRuleControl({ person, role, online, onChanged }: {
       { confirmLabel: t("Edit directly") }))) return;
     setBusy(true);
     try {
-      await sendWrite("PATCH", `/api/ai/roles/${person.id}`, { review_rule: next });
+      await aiRoleWriter.setReviewRule(person.id, next);
       addToast(t("Saved."), "success");
       onChanged();
     } catch (error) { writeErrors.report(error, addToast); }

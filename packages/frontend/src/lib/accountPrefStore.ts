@@ -48,7 +48,7 @@ import { getPref, getPrefJson, prefKey, removePref, setPrefJson, type Pref } fro
 // first, then the data layer, then back) must find createSyncedPrefStore ready.
 // (reads and sendWrite are only used later, when a pref loads or saves.)
 import { createSyncedPrefStore, useKeepSynced, useSyncedPref, type SyncedPrefStore } from "./syncedPrefStore";
-import { reads, sendWrite } from "./data";
+import { accountPrefWriter, reads } from "./data";
 import { isMobileLayout, mediaQueryList, MOBILE_QUERY } from "./mediaQuery";
 
 type AccountPrefBase<T> = {
@@ -107,8 +107,8 @@ function createDeviceKindPref<T>(spec: AccountPrefBase<T>): AccountPref<T> {
         load: async () => parse((await reads.people.myPref<unknown>(`${serverKey}.${kind}`)).value)
           ?? parse((await reads.people.myPref<unknown>(serverKey)).value),
         save: async (value, editedAt) => {
-          const answer = await sendWrite<{ value?: unknown; applied?: boolean } | undefined>(
-            "PUT", `/api/me/prefs/${serverKey}.${kind}`,
+          const answer = await accountPrefWriter.save(
+            `${serverKey}.${kind}`,
             editedAt === null ? { value } : { value, editAgeMs: Math.max(0, Date.now() - editedAt) },
           );
           if (answer?.applied === false) return parse(answer.value);
@@ -164,19 +164,18 @@ function createSinglePref<T>(spec: AccountPrefBase<T> & Extract<AccountPrefSpec<
     {
       load,
       save: async (value, editedAt) => {
-        const path = `/api/me/prefs/${serverKey}`;
         if (merge && value !== null) {
           // A union of what several devices added is not "the later edit": send
           // it unconditionally (read-then-write; see `merge` above).
           const merged = merge(await load(), value);
-          await sendWrite("PUT", path, { value: merged });
+          await accountPrefWriter.save(serverKey, { value: merged });
           return merged;
         }
         // The server keeps the later edit (and, for `isNewer` keys, the value
         // that is further forward: services/actorPrefs FORWARD_ORDER) in one
         // statement; a refused write answers with what the account holds.
-        const answer = await sendWrite<{ value?: unknown; applied?: boolean } | undefined>(
-          "PUT", path,
+        const answer = await accountPrefWriter.save(
+          serverKey,
           // How long ago the edit was made, measured now on this device's clock
           // (each send, including a retry of a dirty copy, measures again): the
           // server dates the edit by its own clock, so a device clock that runs

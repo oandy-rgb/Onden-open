@@ -3,7 +3,7 @@ import { addToast } from "../lib/appStore";
 import { useIsOwner } from "../lib/capabilities";
 import { t } from "../lib/i18n";
 import { useLiveRefetch } from "../lib/liveInvalidation";
-import { reads, sendWrite, writeErrors } from "../lib/data";
+import { inboxWriter, reads, writeErrors } from "../lib/data";
 
 /** An outbox delivery that ran out of retries (about a day of attempts,
  *  backend migration 101): GET /api/inbox/failed-effects, owner only. */
@@ -49,22 +49,20 @@ export function useFailedDeliveries(online: boolean) {
 
   /** Requeue one failed delivery with a fresh day of retries. */
   const retry = (id: string) => run(id, async () => {
-    const r = await sendWrite<{ status: "requeued" | "merged" | "superseded" }>("POST", `/api/inbox/failed-effects/${id}/retry`, "{}");
+    const r = await inboxWriter.retryDelivery(id);
     addToast(r.status === "superseded" ? t("A newer copy was already sent or queued — this one is cleared") : t("Retrying now"), "info");
   });
 
   /** 「全部重試」: requeue every failed delivery of a kind. */
   const retryKind = (kind: string) => run(`kind:${kind}`, async () => {
-    const r = await sendWrite<{ requeued: number; merged: number; superseded: number }>(
-      "POST", `/api/inbox/failed-effects/kinds/${encodeURIComponent(kind)}/retry`, "{}");
+    const r = await inboxWriter.retryDeliveriesOfKind(kind);
     addToast(t("Retrying {n} now", { n: r.requeued + r.merged }), "info");
   });
 
   /** 「全部清除」: set every failed delivery of a kind aside; they are not
    *  retried any more. Pending work of the kind is not touched. */
   const dismissKind = (kind: string) => run(`kind:${kind}`, async () => {
-    const r = await sendWrite<{ dismissed: number }>(
-      "POST", `/api/inbox/failed-effects/kinds/${encodeURIComponent(kind)}/dismiss`, "{}");
+    const r = await inboxWriter.dismissDeliveriesOfKind(kind);
     addToast(t("Cleared {n}", { n: r.dismissed }), "info");
   });
 

@@ -6,7 +6,7 @@
 
 import { setClientTooOldListener, setServerBuildListener } from "./api";
 import { SESSION_KEYS, readSession, writeSession } from "./sessionPrefs";
-import { setAppState } from "./appStore";
+import { setNewVersionAvailable } from "./appStore";
 import { BUILD_ID, reloadForNewVersion, type ReloadVerdict } from "./lazyWithReload";
 
 /** The server build the person already reloaded for. A frontend-only deploy
@@ -40,7 +40,7 @@ export function noteClientTooOld(): void {
 
 /** The one place the 「有新版，重新載入」 notice is switched on. */
 function offerReload(newer: boolean): void {
-  if (newer) setAppState({ newVersionAvailable: true });
+  if (newer) setNewVersionAvailable(true);
 }
 
 /** The build the server (or, in the trial version, the published folder's build file) says is current. */

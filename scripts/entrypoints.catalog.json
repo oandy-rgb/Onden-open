@@ -2074,6 +2074,34 @@
       "why": "寫入筆記、標籤、屬性、關聯、任務一律透過這些 writer。它們處理權限、離線排隊、失敗回復和畫面立即更新；元件自己 fetch 會漏掉，離線時就直接掉資料。"
     },
     {
+      "id": "online-action-writers",
+      "need": "要做空間、AI 角色、RSS、外部日曆、收件匣決定、提醒推播、邀請與轉讓擁有者這類「只在線上、由伺服器決定」的操作",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/data/index.ts",
+          "exports": [
+            "spaceWriter",
+            "aiRoleWriter",
+            "rssWriter",
+            "calendarWriter",
+            "inboxWriter",
+            "captureWriter",
+            "reviewCardWriter",
+            "pushWriter",
+            "workspaceAccessWriter",
+            "accountPrefWriter"
+          ]
+        }
+      ],
+      "use": "import { calendarWriter } from \"./lib/data\";\nconst refresh = (calendarId: string) => calendarWriter.refresh(calendarId);",
+      "replaces": "在元件、hook 或設定頁裡寫 sendWrite(\"POST\", \"/api/…\")",
+      "rules": [
+        "fe-literal-api-write"
+      ],
+      "why": "伺服器路徑、內容與冪等鍵由這些 writer 擁有，名稱是使用者在做的事（refresh、stopFollowing、decideGroup…）。呼叫者只決定何時呼叫、失敗怎麼說（writeErrors）。"
+    },
+    {
       "id": "write-queue",
       "need": "要送出寫入並在離線時排隊",
       "area": "共用邏輯",

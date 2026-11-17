@@ -4,7 +4,10 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 const calls = vi.hoisted(() => ({ key: vi.fn(), send: vi.fn() }));
 vi.mock("../lib/data", () => ({
   reads: { push: { key: calls.key } },
-  sendWrite: calls.send,
+  pushWriter: {
+    register: (body: unknown) => calls.send("POST", "/api/push/subscriptions", body),
+    remove: (endpoint: string) => calls.send("DELETE", "/api/push/subscriptions", { endpoint }),
+  },
 }));
 
 const sw = vi.hoisted(() => ({ container: undefined as unknown }));

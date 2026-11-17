@@ -1,10 +1,10 @@
 import { addToast } from "../../lib/appStore";
-import { reads, sendWrite, writeErrors } from "../../lib/data";
+import { aiRoleWriter, reads, writeErrors } from "../../lib/data";
 import { changeModuleImport } from "../../lib/moduleLibrary";
 import { t } from "../../lib/i18n";
 import { confirmDialog } from "../../components/ConfirmDialog";
 import { refreshSpaces } from "../../lib/spaces";
-import type { AiConnectionInput, AiMonthlyCap, SetUpAiRequest, SetUpAiResult } from "@onden/contract";
+import type { AiConnectionInput, AiMonthlyCap, SetUpAiRequest } from "@onden/contract";
 import { apiSettingsBody, type ApiSettings } from "./ApiSettingsFields";
 import type { KeyConnection, CodeConnection } from "./model";
 
@@ -20,7 +20,7 @@ export const capOf = (settings: ApiSettings): AiMonthlyCap => apiSettingsBody(se
  *  `idemKey`: the same for a retry of the same form, so a lost reply cannot make two. */
 export async function createAiWithConnection(request: SetUpAiRequest, idemKey: string): Promise<CreatedAi | null> {
   try {
-    const made = await sendWrite<SetUpAiResult | { deduped: true }>("POST", "/api/ai/roles", request, idemKey);
+    const made = await aiRoleWriter.create(request, idemKey);
     await refreshSpaces();
     // A retry of a request the server already carried out answers `deduped` and nothing else: the AI exists, but the
     // reply that held its connection code is gone. Say so; never treat it as "made just now".
@@ -36,7 +36,7 @@ export const apiConnection = (credentialId: string, settings: ApiSettings): AiCo
 /** Keep a key without an AI to use it. Answers the saved key's id, or null (reported). */
 export async function saveKey(fields: Record<string, unknown>, idemKey: string): Promise<{ id: string | null } | null> {
   try {
-    const saved = await sendWrite<{ credential?: { id: string } } | { deduped: true }>("POST", "/api/ai/credentials", fields, idemKey);
+    const saved = await aiRoleWriter.saveKey(fields, idemKey);
     // A replay (`deduped`) carries no key id: the caller finds the key it already saved (findSavedKey).
     return { id: "credential" in saved && saved.credential ? saved.credential.id : null };
   } catch (error) { writeErrors.report(error, addToast); return null; }
@@ -54,7 +54,7 @@ export async function findSavedKey(label: string): Promise<string | null> {
 /** Point an AI at a kept key and a model (PUT runtime): what 「換連線」 and the model fields both do. */
 export async function setAiKey(actorId: string, credentialId: string, settings: ApiSettings): Promise<boolean> {
   try {
-    await sendWrite("PUT", `/api/ai/roles/${actorId}/runtime`, { default_runtime: "api", api: { ...apiSettingsBody(settings), credential_id: credentialId } });
+    await aiRoleWriter.setRuntime(actorId, { default_runtime: "api", api: { ...apiSettingsBody(settings), credential_id: credentialId } });
     return true;
   } catch (error) { writeErrors.report(error, addToast); return false; }
 }
@@ -62,8 +62,8 @@ export async function setAiKey(actorId: string, credentialId: string, settings: 
 /** Let an AI be reached by the owner's own AI with a connection code: the code (shown once) or null (reported). */
 export async function giveCode(actorId: string, name: string, alreadyViaCode: boolean, idemKey: string): Promise<string | null> {
   try {
-    if (!alreadyViaCode) await sendWrite("PATCH", `/api/ai/roles/${actorId}`, { default_runtime: "mcp" });
-    const minted = await sendWrite<{ token?: string } | { deduped: true }>("POST", `/api/actors/${actorId}/tokens`, { name, access: "write" }, idemKey);
+    if (!alreadyViaCode) await aiRoleWriter.useConnectionCode(actorId);
+    const minted = await aiRoleWriter.mintCode(actorId, { name, access: "write" }, idemKey);
     if ("token" in minted && minted.token) return minted.token;
     addToast(t("The connection code was already made, but its reply was lost, so it can't be shown again. Revoke it and make a new one."), "error");
     return null;
@@ -73,13 +73,13 @@ export async function giveCode(actorId: string, name: string, alreadyViaCode: bo
 /** Take a key away, after asking. The AIs that run on it stay and are shown as off until given another connection. */
 export async function deleteKey(key: Pick<KeyConnection, "id" | "label">): Promise<boolean> {
   if (!(await confirmDialog(t("Delete the key “{name}”? AIs that run on it stop until you give them another connection.", { name: key.label }), { confirmLabel: t("Delete"), danger: true }))) return false;
-  try { await sendWrite("DELETE", `/api/ai/credentials/${key.id}`); return true; }
+  try { await aiRoleWriter.deleteKey(key.id); return true; }
   catch (error) { writeErrors.report(error, addToast); return false; }
 }
 
 /** Stop a connection code without asking (the caller's own button was the ask). */
 export async function revokeCodeNow(code: Pick<CodeConnection, "id" | "actorId">): Promise<boolean> {
-  try { await sendWrite("POST", `/api/actors/${code.actorId}/tokens/${code.id}/revoke`, "{}"); return true; }
+  try { await aiRoleWriter.revokeCode(code.actorId, code.id); return true; }
   catch (error) { writeErrors.report(error, addToast); return false; }
 }
 
@@ -93,7 +93,7 @@ export async function revokeCode(code: Pick<CodeConnection, "id" | "actorId" | "
 /** Remove an AI altogether, after asking: its keys stop and it leaves every space. */
 export async function deleteAi(ai: { id: string; name: string }): Promise<boolean> {
   if (!(await confirmDialog(t("Remove {name}? Its connection codes stop working and it leaves every space.", { name: ai.name }), { confirmLabel: t("Remove"), danger: true }))) return false;
-  try { await sendWrite("DELETE", `/api/actors/${ai.id}`); await refreshSpaces(); return true; }
+  try { await aiRoleWriter.remove(ai.id); await refreshSpaces(); return true; }
   catch (error) { writeErrors.report(error, addToast); return false; }
 }
 

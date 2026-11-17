@@ -255,7 +255,6 @@
     "hooks/useWorkspaceCommands.ts": 2,
     "hooks/useWorkspaceFocus.ts": 9,
     "hooks/useWorkspaceModules.ts": 2,
-    "lib/buildVersion.ts": 1,
     "lib/capabilities.ts": 3,
     "lib/dayNode.ts": 1,
     "lib/ensureModuleTag.ts": 1,
@@ -303,34 +302,7 @@
   "fe-focus-steal-guard": {},
   "fe-import-boundaries": {},
   "fe-keyboard-state": {},
-  "fe-literal-api-write": {
-    "components/InviteClaimGate.tsx": 1,
-    "hooks/useFailedDeliveries.ts": 3,
-    "hooks/useInboxGovernance.ts": 4,
-    "hooks/useNodeCreation.ts": 1,
-    "lib/accountPrefStore.ts": 1,
-    "lib/spaces.ts": 6,
-    "lib/webPush.ts": 2,
-    "modules/capture/inbox.ts": 1,
-    "modules/external_calendars/CalendarsSetting.tsx": 4,
-    "modules/importers/FolderImportSetting.tsx": 1,
-    "modules/review/reviewCard.ts": 2,
-    "modules/rss/RssOpmlWidget.tsx": 1,
-    "modules/rss/RssReaderPanel.tsx": 2,
-    "modules/rss/RssSourceSheet.tsx": 3,
-    "modules/rss/RssSourcesSheet.tsx": 1,
-    "modules/rss/rssMutes.ts": 3,
-    "settings/ai/AiEditor.tsx": 2,
-    "settings/ai/AiRoleStatus.tsx": 1,
-    "settings/ai/ApiRuntimeSetup.tsx": 1,
-    "settings/ai/ChangeConnectionFlow.tsx": 1,
-    "settings/ai/HelperMention.tsx": 2,
-    "settings/ai/actions.ts": 8,
-    "settings/spacesAndMembers/AddAiRoleWizard.tsx": 5,
-    "settings/spacesAndMembers/HelperKeys.tsx": 1,
-    "settings/spacesAndMembers/SpacesAndMembers.tsx": 3,
-    "settings/spacesAndMembers/TransferOwnershipDialog.tsx": 1
-  },
+  "fe-literal-api-write": {},
   "fe-native-element:a": {},
   "fe-native-element:button": {},
   "fe-native-element:dialog": {},
@@ -409,7 +381,5 @@
     "settings/listValues.ts": 2
   },
   "fe-store-node-find": {},
-  "fe-store-write": {
-    "lib/buildVersion.ts": 1
-  }
+  "fe-store-write": {}
 }

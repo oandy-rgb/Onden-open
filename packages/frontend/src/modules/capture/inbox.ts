@@ -6,7 +6,7 @@
 // still be answered (capturesOnDay).
 
 import type { ContentNode, Tag } from "../../lib/api";
-import { sendWrite } from "../../lib/data";
+import { captureWriter } from "../../lib/data";
 import { dateIdAt } from "../../lib/localDate";
 import { nodeHasTag } from "../../lib/nodeTags";
 import { isNote } from "@onden/markdown/contract";
@@ -28,7 +28,7 @@ export function inboxTagId(tags: readonly Tag[] | null | undefined): string | nu
 export async function ensureInboxTagId(tags: readonly Tag[] | null | undefined): Promise<string> {
   const known = inboxTagId(tags);
   if (known) return known;
-  const { tag_id } = await sendWrite<{ tag_id: string }>("POST", "/api/capture/inbox", {});
+  const tag_id = await captureWriter.ensureInboxTag();
   ensuredTagId = tag_id;
   return tag_id;
 }

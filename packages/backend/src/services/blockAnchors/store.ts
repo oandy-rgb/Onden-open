@@ -11,7 +11,7 @@ import { db } from "../../dbKysely.js";
 import { eventActorType, type ActorCtx } from "../../types.js";
 import { sha256Hex } from "../../utils.js";
 import { lineAlign, quoteAt, type Span } from "./similarity.js";
-import { moveAnchors, type AnchorState, type MovedHow } from "./mapping.js";
+import { moveAnchors, NO_POSITION, type AnchorState, type MovedHow } from "./mapping.js";
 import { verifiedEditorChanges, type EditorBodyChange } from "./changes.js";
 import { enqueueAnchorRecovery } from "./recoverIntent.js";
 import type { AnchorStatus } from "@onden/contract";
@@ -155,7 +155,8 @@ export async function anchorExcerpts(workspaceId: string, noteId: string, markdo
  *  transaction that wrote the body. */
 export async function retireAnchor(workspaceId: string, noteId: string, anchorId: string): Promise<void> {
   await db.updateTable("block_anchors").set({
-    status: "lost", candidate_from_utf16: null, candidate_to_utf16: null, recovery_pending: false, moved_at: sql`now()`,
+    status: "lost", from_utf16: NO_POSITION.from, to_utf16: NO_POSITION.to,
+    candidate_from_utf16: null, candidate_to_utf16: null, recovery_pending: false, moved_at: sql`now()`,
   }).where("workspace_id", "=", workspaceId).where("note_id", "=", noteId).where("anchor_id", "=", anchorId).execute();
 }
 
@@ -461,12 +462,13 @@ export async function moveAnchorsForBodyChange(move: BodyMove): Promise<BodyMove
   const hashOf = new Map(rows.rows.map((r) => [r.anchor_id, r.at_body_hash]));
   const editorChanges = before !== null && move.bodyChange !== undefined
     ? verifiedEditorChanges(move.bodyChange.changes, before, after) : null;
+  const afterHash = sha256Hex(after);
   const moved = moveAnchors(rows.rows.map(toState), {
     before, after, editorChanges,
     trusted: (id) => beforeHash !== null && hashOf.get(id) === beforeHash,
+    settled: (id) => hashOf.get(id) === afterHash,
   });
 
-  const afterHash = sha256Hex(after);
   const statusBefore = new Map(rows.rows.map((r) => [r.anchor_id, r.status]));
   const changed = moved.filter((m) => m.changed);
   for (const m of moved) {

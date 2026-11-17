@@ -148,13 +148,68 @@ describe("a deleted paragraph comes back from the note's history", () => {
   // The anchors the server holds for note a1: "first" is still valid; gone1 (the lost words) was deleted, and remembers what it said.
   const held = (noteId = "a1") => replaceAllAnchors([
     { anchor_id: "a1", note_id: noteId, from: 9, to: 14, status: "valid", candidate_from: null, candidate_to: null, quote: "first" },
-    { anchor_id: "gone1", note_id: noteId, from: 16, to: 30, status: "lost", candidate_from: null, candidate_to: null, quote: "the lost words" },
+    { anchor_id: "gone1", note_id: noteId, from: 0, to: 0, status: "lost", candidate_from: null, candidate_to: null, quote: "the lost words" }, // a lost anchor stands nowhere
   ]);
 
   it("takes the newest version that had its words and puts it after the paragraph that preceded it", () => {
-    const block = deletedBlockFrom([{ markdown: now }, { markdown: older }, { markdown: "very old the lost words" }], "the lost words", now, "a1")!;
-    expect(block).toEqual({ text: "the lost words", after: "a1" });
+    const block = deletedBlockFrom([{ markdown: now }, { markdown: older }, { markdown: "very old the lost words" }], "the lost words", now, [{ id: "a1", from: 9, to: 14 }])!;
+    expect(block).toEqual({ text: "the lost words", after: "a1", before: null });
     expect(withBlockRestored(now, block, [{ id: "a1", from: 9, to: 14 }])).toBe(older);
+  });
+
+  describe("where it goes is read from the history version (a lost anchor has no position to read)", () => {
+    it("after the nearest paragraph before it that the note still has, found by its words, wherever it stands now", () => {
+      const grown = "# Title\n\na new paragraph above\n\nfirst\n\nlast\n";
+      const at = grown.indexOf("first");
+      const anchors = [{ id: "a1", from: at, to: at + 5 }];
+      const block = deletedBlockFrom([{ markdown: older }], "the lost words", grown, anchors)!;
+      expect(block).toMatchObject({ after: "a1", before: null });
+      expect(withBlockRestored(grown, block, anchors)).toBe("# Title\n\na new paragraph above\n\nfirst\n\nthe lost words\n\nlast\n");
+    });
+    it("every paragraph before it was rewritten or is gone: before the nearest one after it that the note still has", () => {
+      const current = "# Title\n\nfirst, rewritten\n\nlast\n";
+      const at = current.indexOf("last");
+      const anchors = [{ id: "z1", from: at, to: at + 4 }];
+      const block = deletedBlockFrom([{ markdown: older }], "the lost words", current, anchors)!;
+      expect(block).toMatchObject({ after: null, before: "z1" });
+      expect(withBlockRestored(current, block, anchors)).toBe("# Title\n\nfirst, rewritten\n\nthe lost words\n\nlast\n");
+    });
+    // The anchors are the note's paragraphs as held now; `at` finds one by its words in the text.
+    const anchorsFor = (current: string, ...words: string[]) => words.map((w, i) => ({ id: `w${i}`, from: current.indexOf(w), to: current.indexOf(w) + w.length }));
+    const goesAfter = (older: string, current: string, ...words: string[]) => deletedBlockFrom([{ markdown: older }], "the lost words", current, anchorsFor(current, ...words))!;
+
+    it("tags and ids at the end of a paragraph do not matter, on either side", () => {
+      expect(goesAfter("first {考點}\n\nthe lost words\n\nlast\n", "first\n\nlast\n", "first")).toMatchObject({ after: "w0" }); // the old text had a tag, the note's paragraph has none
+      expect(goesAfter("first\n\nthe lost words\n\nlast\n", "first {考點}\n\nlast\n", "first {考點}")).toMatchObject({ after: "w0" }); // the note's paragraph has a tag, the old text had none
+      expect(goesAfter("first ^ffb6f7\n\nthe lost words\n\nlast\n", "first\n\nlast\n", "first")).toMatchObject({ after: "w0" }); // a trailing ^id mark
+      expect(goesAfter("first\n\nthe lost words\n\nlast {考點}\n", "other\n\nlast\n", "last")).toMatchObject({ before: "w0" }); // forward, tag in the old text
+    });
+    it("headings and list items, with or without their marker in the paragraph's range", () => {
+      expect(goesAfter("# Head\n\nthe lost words\n\nlast\n", "# Head\n\nlast\n", "# Head")).toMatchObject({ after: "w0" });
+      expect(goesAfter("# Head\n\nthe lost words\n\nlast\n", "# Head\n\nlast\n", "Head")).toMatchObject({ after: "w0" });
+      // the last item of a list stands before it; the first item of a list stands after it
+      expect(goesAfter("- a\n- b\n\nthe lost words\n", "- a\n- b\n", "- b")).toMatchObject({ after: "w0" });
+      expect(goesAfter("- a\n- b\n\nthe lost words\n", "- a\n- b\n", "b")).toMatchObject({ after: "w0" });
+      expect(goesAfter("the lost words\n\n- a\n- b\n", "- a\n- b\n", "a")).toMatchObject({ before: "w0" });
+      expect(goesAfter("the lost words\n\n1. a\n2. b\n", "1. a\n2. b\n", "1. a")).toMatchObject({ before: "w0" });
+    });
+    it("line ends written \\r\\n in the old text or in the note", () => {
+      expect(goesAfter("first\r\n\r\nthe lost words\r\n\r\nlast\r\n", "first\n\nlast\n", "first")).toMatchObject({ after: "w0" });
+      expect(goesAfter("first\n\nthe lost words\n\nlast\n", "first\r\n\r\nlast\r\n", "first")).toMatchObject({ after: "w0" });
+    });
+    it("two paragraphs with the same words: the one in the same order among its twins as in the old text", () => {
+      const current = "dup\n\nmiddle\n\ndup\n\nend\n";
+      const both = (older: string) => deletedBlockFrom([{ markdown: older }], "the lost words", current, [{ id: "d1", from: 0, to: 3 }, { id: "d2", from: current.indexOf("dup", 4), to: current.indexOf("dup", 4) + 3 }])!;
+      expect(both("dup\n\nmiddle\n\ndup\n\nthe lost words\n\nend\n")).toMatchObject({ after: "d2" }); // it followed the second
+      expect(both("dup\n\nthe lost words\n\nmiddle\n\ndup\n\nend\n")).toMatchObject({ after: "d1" }); // it followed the first
+    });
+    it("nothing on either side is left: the end of the note", () => {
+      const current = "# Title\n\nfirst, rewritten\n\nlast, rewritten\n";
+      const anchors = [{ id: "a1", from: 9, to: 26 }, { id: "z1", from: 28, to: 44 }];
+      const block = deletedBlockFrom([{ markdown: older }], "the lost words", current, anchors)!;
+      expect(block).toMatchObject({ after: null, before: null });
+      expect(withBlockRestored(current, block, anchors)).toBe(`${current.trimEnd()}\n\nthe lost words\n`);
+    });
   });
 
   it("restores the whole paragraph even when the anchor only remembers its first words", () => {
@@ -184,7 +239,7 @@ describe("a deleted paragraph comes back from the note's history", () => {
     vi.spyOn(reads.notes, "rawVersions").mockResolvedValue([{ markdown: older }] as never);
     expect(await findDeletedBlock("a1", "a1", now)).toBeNull();
     expect(await findDeletedBlock("a1", "nope", now)).toBeNull();
-    expect(await findDeletedBlock("a1", "gone1", now)).toEqual({ text: "the lost words", after: "a1" });
+    expect(await findDeletedBlock("a1", "gone1", now)).toEqual({ text: "the lost words", after: "a1", before: null });
   });
 
   const alpha = { id: "a1", title: "Alpha", slug: "alpha", markdown: now, node_type: "content" } as unknown as ContentNode;

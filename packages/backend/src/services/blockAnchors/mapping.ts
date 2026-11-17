@@ -10,6 +10,10 @@
 //   2. otherwise (positions not measured on `before`, deleted ends, doubtful, lost) look the quote up
 //      in the whole note: findQuote() decides valid / maybe / lost. It never answers "valid" for a
 //      doubtful or non-unique match.
+// Only a `valid` anchor has a position: a `maybe` or `lost` anchor's `span` is NO_POSITION and its best guess lives in `candidate`.
+// The span such an anchor used to keep was where it last stood, a value that depended on which saves happened after it stopped being valid.
+// An anchor is looked up once per body: one that is `maybe`/`lost`, not pending, and was concluded on exactly `after` (ctx.settled)
+// is left as it is and takes no lookup, so the pass over pending anchors ends however many `maybe`/`lost` ones the note holds.
 // At most FIND_BUDGET lookups per save (a whole-note scan costs ~50 ms at 175k characters); the rest
 // are marked `recoveryPending` and are looked up by the next body write.
 
@@ -20,6 +24,11 @@ import type { AnchorStatus } from "@onden/contract";
 import { splitAnchorSpan } from "@onden/markdown";
 
 export const FIND_BUDGET = 5;
+
+/** The `span` of an anchor that is not `valid`: "stands nowhere". block_anchors.from_utf16/to_utf16 are NOT NULL (and the wire row's
+ *  `from`/`to` are numbers), so an empty span at 0 says it; every reader that places a block looks at `valid` anchors only
+ *  (the others are read by `candidate` and `quote`). */
+export const NO_POSITION: Span = { from: 0, to: 0 };
 
 export type MovedHow = "editor" | "diff" | "found" | "unchanged";
 
@@ -43,6 +52,12 @@ export type MoveContext = {
   editorChanges?: ChangeSet | null;
   /** Anchor ids whose stored positions were measured on `before`; others are found by their quote. */
   trusted: (anchorId: string) => boolean;
+  /** Lookups allowed in this call. Product code leaves it out (FIND_BUDGET); the tests vary it to show that where the
+   *  budget is cut changes only how many passes it takes, never where the passes end (anchorPath.property.test.ts). */
+  findBudget?: number;
+  /** The anchor's `maybe`/`lost` conclusion was reached on exactly `after` (its stored body hash is the hash of `after`). Such an anchor
+   *  is not looked up again unless it is pending. Leave out where nothing is known (every anchor is then looked up when it needs it). */
+  settled?: (anchorId: string) => boolean;
 };
 
 /** What puts a paragraph into a list item: text inserted before it that opens with a list marker (`- `, `1. `). */
@@ -54,6 +69,17 @@ const startsListItem = (inserted: string): boolean => !inserted.includes("\n") &
 const sameSpan = (a: Span | null, b: Span | null) => (a === null || b === null ? a === b : a.from === b.from && a.to === b.to);
 
 export function moveAnchors(anchors: AnchorState[], ctx: MoveContext): MovedAnchor[] {
+  return moveByPositionThenQuote(anchors, ctx).map(onlyValidHasPosition);
+}
+
+/** One rule for every way an anchor ends up `maybe` or `lost` (a lookup, a budget overflow, a row written before this rule): its span is
+ *  NO_POSITION. A row that still holds an old span counts as changed once. */
+function onlyValidHasPosition(m: MovedAnchor): MovedAnchor {
+  if (m.status === "valid" || sameSpan(m.span, NO_POSITION)) return m;
+  return { ...m, span: NO_POSITION, changed: true };
+}
+
+function moveByPositionThenQuote(anchors: AnchorState[], ctx: MoveContext): MovedAnchor[] {
   let changeSet: ChangeSet | null = null;
   let how: MovedHow = "diff";
   const changes = (): ChangeSet => {
@@ -63,11 +89,16 @@ export function moveAnchors(anchors: AnchorState[], ctx: MoveContext): MovedAnch
   };
   let table: LineTable | null = null;
   const quoteInAfter = (span: Span): Quote => quoteAt(ctx.after, span, (table ??= lineTable(ctx.after)));
-  let budget = FIND_BUDGET;
+  let budget = ctx.findBudget ?? FIND_BUDGET;
   const out: Array<MovedAnchor | undefined> = anchors.map(() => undefined);
   const lookups: number[] = [];
 
   anchors.forEach((a, index) => {
+    // Already looked up on this very body and not waiting for a lookup: the answer cannot change.
+    if (a.status !== "valid" && !a.recoveryPending && ctx.settled?.(a.anchorId)) {
+      out[index] = { ...a, how: "unchanged", changed: false };
+      return;
+    }
     // 1. Follow the text by position.
     if (a.status === "valid" && ctx.before !== null && ctx.trusted(a.anchorId)) {
       const cs = changes();
@@ -112,7 +143,10 @@ export function moveAnchors(anchors: AnchorState[], ctx: MoveContext): MovedAnch
   // anchors had in the note: a block is found by one anchor only, and two paragraphs that read alike are told
   // apart by which anchor stood first, not by which one scores a hair higher.
   const claimed: Span[] = out.flatMap((m) => (m && m.status === "valid" ? [m.span] : []));
-  lookups.sort((x, y) => anchors[x]!.span.from - anchors[y]!.span.from || x - y);
+  // An anchor with no position (lost) comes after those that have one, and equal positions are told apart by the anchor's id —
+  // not by where the row happens to sit in the table: ids are data, row order is not.
+  const standsNowhere = (i: number) => (sameSpan(anchors[i]!.span, NO_POSITION) ? 1 : 0);
+  lookups.sort((x, y) => standsNowhere(x) - standsNowhere(y) || anchors[x]!.span.from - anchors[y]!.span.from || (anchors[x]!.anchorId < anchors[y]!.anchorId ? -1 : anchors[x]!.anchorId > anchors[y]!.anchorId ? 1 : 0));
   for (const index of lookups) {
     const a = anchors[index]!;
     if (budget <= 0) {

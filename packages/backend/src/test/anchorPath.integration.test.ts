@@ -11,7 +11,7 @@ import { ChangeSet } from "@codemirror/state";
 import { q } from "../db.js";
 import { apiOnError } from "../httpError.js";
 import nodesRouter from "../routes/nodes.js";
-import { ensureBlockAnchor, listNoteAnchors, recoverAnchors } from "../services/blockAnchors/index.js";
+import { anchorRowsForNotes, ensureBlockAnchor, FIND_BUDGET, listNoteAnchors, moveAnchorsForBodyChange, recoverAnchors, rehomeAnchor, blockSpanAt } from "../services/blockAnchors/index.js";
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { seedQ } from "./helpers/seedQ.js";
@@ -131,5 +131,63 @@ describe.skipIf(!isTestDb)("anchor path through the save path (DB)", () => {
       expect(a.map((x) => x.quote.text)).toEqual(b.map((x) => x.quote.text));
       expect(a.every((x) => text.slice(x.span.from, x.span.to) === x.quote.text)).toBe(true);
     });
+  });
+
+  it("a note with more lost anchors than FIND_BUDGET settles: the background pass ends, and a later save leaves nothing pending", async () => {
+    const n = await note(P);
+    await patch(n.id, doc([P[0]!, P[1]!])); // six of eight paragraphs deleted: five lost, the sixth over the budget
+    const lostAfterSave = (await stateOf(n.id, n.ids)).filter((a) => a.status === "lost").length;
+    expect(lostAfterSave).toBe(FIND_BUDGET);
+    await recoverAnchors(workspaceId, n.id); // used to throw after MAX_PASSES: the same five lost anchors took the whole budget every pass
+    const settled = await stateOf(n.id, n.ids);
+    expect(settled.filter((a) => a.status === "lost")).toHaveLength(6);
+    expect(settled.some((a) => a.recoveryPending)).toBe(false);
+    // The body changed, so the lost anchors are looked up again (a text may have come back): the one over the budget waits for the pass, which then ends too.
+    await patch(n.id, doc([P[0]!, P[1]! + "再補一句。"]));
+    await recoverAnchors(workspaceId, n.id);
+    expect((await stateOf(n.id, n.ids)).some((a) => a.recoveryPending)).toBe(false);
+  });
+
+  it("a paragraph put back by hand (what 「救回」 writes) is found again by the save that puts it back: valid at its old id, and the link reads it as a part again", async () => {
+    const n = await note(P);
+    const original = await bodyOf(n.id);
+    await patch(n.id, doc(P.filter((_, i) => i !== 3)));
+    expect((await stateOf(n.id, n.ids))[3]).toMatchObject({ status: "lost", span: { from: 0, to: 0 } });
+    await patch(n.id, original);
+    const back = await stateOf(n.id, n.ids);
+    expect(back[3]).toMatchObject({ status: "valid", recoveryPending: false });
+    const wire = (await anchorRowsForNotes(workspaceId, [n.id])).find((r) => r.anchor_id === n.ids[3])!;
+    expect(wire).toMatchObject({ status: "valid", from: original.indexOf(P[3]!), to: original.indexOf(P[3]!) + P[3]!.length });
+  });
+
+  it("a lost anchor the person points at a paragraph (重新指定) is valid, is measured on the body it was pointed on, and the next save follows it", async () => {
+    const n = await note(P);
+    await patch(n.id, doc(P.filter((_, i) => i !== 3)));
+    const body = await bodyOf(n.id);
+    expect((await stateOf(n.id, n.ids))[3]!.status).toBe("lost");
+    const at = body.indexOf(P[5]!);
+    expect(await rehomeAnchor(workspaceId, n.ids[3]!, n.id, body, blockSpanAt(body, at)!)).toBe(true);
+    await patch(n.id, "新的第一行\n\n" + body);
+    const moved = (await stateOf(n.id, n.ids))[3]!;
+    expect(moved.status).toBe("valid");
+    const next = await bodyOf(n.id);
+    expect(next.slice(moved.span.from, moved.span.to)).toBe(P[5]);
+  });
+
+  it("a note with 18 lost anchors (far over the budget): the pass ends, the same body saved again looks up nothing and queues nothing, and no job failed", async () => {
+    const many = Array.from({ length: 20 }, (_, i) => `獨一無二的第${i}條筆記內容：${"字詞".repeat(5 + i)}${i}。`);
+    const n = await note(many);
+    await patch(n.id, doc(many.slice(0, 2)));
+    await recoverAnchors(workspaceId, n.id);
+    const settled = await stateOf(n.id, n.ids);
+    expect(settled.filter((a) => a.status === "lost")).toHaveLength(18);
+    expect(settled.some((a) => a.recoveryPending)).toBe(false);
+    const jobs = async () => (await q<{ n: number }>(`SELECT count(*)::int AS n FROM outbox WHERE effect_kind = 'block_anchor_recover' AND payload->>'note_id' = $1`, [n.id])).rows[0]!.n;
+    const before = await jobs();
+    const body = await bodyOf(n.id);
+    const again = await moveAnchorsForBodyChange({ workspaceId, noteId: n.id, before: body, after: body });
+    expect(again).toMatchObject({ moved: 0, pending: 0 });
+    expect(await jobs()).toBe(before);
+    expect((await q(`SELECT 1 FROM outbox WHERE effect_kind = 'block_anchor_recover' AND last_error IS NOT NULL`)).rowCount).toBe(0);
   });
 });

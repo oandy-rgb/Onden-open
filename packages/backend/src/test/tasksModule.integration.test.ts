@@ -452,8 +452,8 @@ describe.skipIf(!isTestDb)("tasks module (DB)", () => {
       expect(await bodyOf(t.id)).toBe("the task's own text");
       expect((await q(`SELECT 1 FROM block_nodes WHERE task_id = $1`, [t.id])).rows).toHaveLength(0);
       // The line is gone on purpose: its anchor is not left as a "maybe here" that points at some other text.
-      expect((await q<{ status: string; candidate_from_utf16: number | null }>(`SELECT status, candidate_from_utf16 FROM block_anchors WHERE note_id = $1 AND anchor_id = $2`, [host.id, placed.block_ref])).rows)
-        .toEqual([{ status: "lost", candidate_from_utf16: null }]);
+      expect((await q<{ status: string; candidate_from_utf16: number | null; from_utf16: number; to_utf16: number }>(`SELECT status, candidate_from_utf16, from_utf16, to_utf16 FROM block_anchors WHERE note_id = $1 AND anchor_id = $2`, [host.id, placed.block_ref])).rows)
+        .toEqual([{ status: "lost", candidate_from_utf16: null, from_utf16: 0, to_utf16: 0 }]); // a lost anchor stands nowhere (mapping.ts NO_POSITION)
       // the same task can go in again
       const again = await send("POST", `/api/tasks/${t.id}/place`, { note_id: host.id });
       expect(again.status).toBe(200);
@@ -466,8 +466,8 @@ describe.skipIf(!isTestDb)("tasks module (DB)", () => {
       const t = await create({ title: "Buy milk and eggs" });
       const placed = await json<Row & { block_ref: string }>(await send("POST", `/api/tasks/${t.id}/place`, { note_id: host.id }));
       expect((await send("POST", `/api/tasks/${t.id}/unplace`)).status).toBe(200);
-      expect((await q<{ status: string; candidate_from_utf16: number | null }>(`SELECT status, candidate_from_utf16 FROM block_anchors WHERE note_id = $1 AND anchor_id = $2`, [host.id, placed.block_ref])).rows)
-        .toEqual([{ status: "lost", candidate_from_utf16: null }]);
+      expect((await q<{ status: string; candidate_from_utf16: number | null; from_utf16: number; to_utf16: number }>(`SELECT status, candidate_from_utf16, from_utf16, to_utf16 FROM block_anchors WHERE note_id = $1 AND anchor_id = $2`, [host.id, placed.block_ref])).rows)
+        .toEqual([{ status: "lost", candidate_from_utf16: null, from_utf16: 0, to_utf16: 0 }]); // a lost anchor stands nowhere (mapping.ts NO_POSITION)
     });
 
     it("takes out a task that was added under a note without a line: it only moves", async () => {

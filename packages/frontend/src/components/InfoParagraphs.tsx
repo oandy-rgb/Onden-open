@@ -131,8 +131,8 @@ function LostRow({ row, node, canEdit, onDone }: { row: Row; node: ContentNode; 
   const body = node.markdown ?? "";
   const [at, setAt] = useState("");
   const [saving, setSaving] = useState(false);
-  // The server's best guess, when it has one, comes first.
-  const guess = anchorsOf(node.id).find((a) => a.status === "lost" && a.candidate_from !== null)?.candidate_from ?? null;
+  // The server's best guess for THIS paragraph's anchor, when it has one, comes first.
+  const guess = anchorsOf(node.id).find((a) => a.anchor_id === row.blockRef && a.status === "lost" && a.candidate_from !== null)?.candidate_from ?? null;
   const choices = useMemo(() => {
     const all = splitParagraphs(body).filter((p) => p.kind === "text" || p.kind === "listItem" || p.kind === "heading");
     return Array.from({ length: Math.min(MAX_CHOICES, all.length) }, (_, i) => all[i]!);

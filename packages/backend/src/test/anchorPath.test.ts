@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { FIND_BUDGET } from "../services/blockAnchors/mapping.js";
-import { anchorOn, csOf, diffStates, recoveryPass, save, walk, withoutLostSpan } from "./helpers/anchorPath.js";
+import { anchorOn, csOf, diffStates, recoveryPass, save, walk } from "./helpers/anchorPath.js";
 
 const P = [
   "二分搜尋要先排序，再比較中間值，找不到就縮小範圍。",
@@ -107,10 +107,37 @@ describe("anchor path (c): more anchors needing a lookup than FIND_BUDGET", () =
   it("anchor path: after the recovery pass the one-save result agrees with the many-save result", () => {
     same(recoveryPass(save(start, d0, reversed), reversed), bubble());
   });
-  it.fails("anchor path: a pending anchor whose paragraph is then rewritten — with the pass run in between it is lost at the new place, without it the next save finds it elsewhere (when the pass runs changes the stored state; recover.ts / mapping.ts lookup uses the current body)", () => {
+  // Flipped by 1a although the proposal §5.1 names two pins: the one thing that differed was the stale span of the lost anchor (proposal §1 row #12, listed there as a cause of this case).
+  it("anchor path: a pending anchor whose paragraph is then rewritten ends in the same state whether the recovery pass ran in between or not (the lost anchor has no position, mapping.ts NO_POSITION)", () => {
     const rewritten = reversed.replace(P[7]!, "AVL 樹與紅黑樹都靠旋轉；查詢最壞也是對數時間。");
     const s1 = save(start, d0, reversed);
     same(save(s1, reversed, rewritten), save(recoveryPass(s1, reversed), reversed, rewritten));
+  });
+});
+
+describe("anchor path (c2): settle with a budget smaller than the number of anchors still to look up", () => {
+  // Six of eight paragraphs deleted in one save: six anchors are lost, FIND_BUDGET is 5.
+  const d0 = doc(P), start = anchorsOf(d0, P);
+  const kept = doc([P[0]!, P[1]!]);
+  it("anchor path: lost anchors are told apart by id, not by where the rows sit (the same anchors in any row order end in the same state)", () => {
+    const shuffled = [...start].reverse();
+    const byId = (a: ReturnType<typeof save>) => [...a].sort((x, y) => (x.anchorId < y.anchorId ? -1 : 1));
+    const settled = (rows: typeof start) => byId(recoveryPass(save(rows, d0, kept), kept));
+    expect(settled(shuffled)).toEqual(settled(start));
+  });
+  it("anchor path: with more lost anchors than the budget, settle finishes — an anchor is looked up once per body, so the lost ones already concluded on it take no part in the next pass", () => {
+    const after = save(start, d0, kept);
+    expect(after.filter((a) => a.status === "lost")).toHaveLength(FIND_BUDGET); // five lost, the sixth is left pending
+    expect(after.filter((a) => a.recoveryPending)).toHaveLength(1);
+    const settled = recoveryPass(after, kept);
+    expect(settled.filter((a) => a.recoveryPending)).toEqual([]);
+    expect(settled.filter((a) => a.status === "lost")).toHaveLength(6);
+  });
+  it("anchor path: with no more lost anchors than the budget, settle finishes", () => {
+    const fewer = doc(P.slice(0, 4));
+    const after = save(start, d0, fewer);
+    expect(after.filter((a) => a.status === "lost")).toHaveLength(4);
+    expect(recoveryPass(after, fewer).filter((a) => a.recoveryPending)).toEqual([]);
   });
 });
 
@@ -154,7 +181,7 @@ describe("anchor path (e): two orders of the same two edits", () => {
     const afterBoth = up(up(P, 0, E1), 2, E2);
     same(walk(start, [d0, doc(up(P, 0, E1)), doc(afterBoth)]), walk(start, [d0, doc(up(P, 2, E2)), doc(afterBoth)]));
   });
-  it.fails("anchor path: an edit that loses one paragraph and an unrelated edit before it — in either order the lost anchor's stored span differs (it is where the anchor last stood; mapping.ts lookup branch copies `...a`)", () => {
+  it("anchor path: an edit that loses one paragraph and an unrelated edit before it end in the same state in either order — a lost anchor has no position (mapping.ts NO_POSITION), so there is no stale span to differ", () => {
     const d0 = doc(P), start = anchorsOf(d0, P);
     const lostEdit = P[3]!.replace(/.*/, "完全不同的內容：樹狀結構與遞迴走訪，先序、中序、後序三種順序各有用途。");
     const upstream = P[0]! + "多加了幾個字。";
@@ -162,13 +189,5 @@ describe("anchor path (e): two orders of the same two edits", () => {
     const lostFirst = walk(start, [d0, withEdits(false, true), withEdits(true, true)]);
     const shiftFirst = walk(start, [d0, withEdits(true, false), withEdits(true, true)]);
     same(lostFirst, shiftFirst);
-  });
-  it("anchor path: the same two edits agree in status, candidate, quote and pending flag (the lost anchor's span aside)", () => {
-    const d0 = doc(P), start = anchorsOf(d0, P);
-    const lostEdit = "完全不同的內容：樹狀結構與遞迴走訪，先序、中序、後序三種順序各有用途。";
-    const withEdits = (a: boolean, b: boolean) => doc(P.map((p, i) => (i === 0 && a ? P[0]! + "多加了幾個字。" : i === 3 && b ? lostEdit : p)));
-    const x = walk(start, [d0, withEdits(false, true), withEdits(true, true)]);
-    const y = walk(start, [d0, withEdits(true, false), withEdits(true, true)]);
-    expect(withoutLostSpan(x)).toEqual(withoutLostSpan(y));
   });
 });

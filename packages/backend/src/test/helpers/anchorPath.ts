@@ -5,21 +5,24 @@ import { ChangeSet } from "@codemirror/state";
 import { moveAnchors, type AnchorState } from "../../services/blockAnchors/mapping.js";
 import { lineAlign, quoteAt } from "../../services/blockAnchors/similarity.js";
 
-export type Stored = Pick<AnchorState, "anchorId" | "span" | "quote" | "status" | "candidate" | "recoveryPending">;
+/** What the table keeps of an anchor, with `atBody`: the body its position or conclusion was measured on (the table's at_body_hash). */
+export type Stored = Pick<AnchorState, "anchorId" | "span" | "quote" | "status" | "candidate" | "recoveryPending"> & { atBody: string };
 
 /** An anchor on the first occurrence of `paragraph` in `doc`, measured on `doc` (what ensureBlockAnchor writes). */
-export function anchorOn(doc: string, paragraph: string, anchorId: string): AnchorState {
+export function anchorOn(doc: string, paragraph: string, anchorId: string): AnchorState & { atBody: string } {
   const start = doc.indexOf(paragraph);
   if (start < 0) throw new Error(`paragraph not in doc: ${paragraph}`);
   const span = lineAlign(doc, { from: start, to: start + paragraph.length });
-  return { anchorId, span, quote: quoteAt(doc, span), status: "valid", candidate: null, recoveryPending: false };
+  return { anchorId, span, quote: quoteAt(doc, span), status: "valid", candidate: null, recoveryPending: false, atBody: doc };
 }
 
-const keep = (a: AnchorState): Stored => ({ anchorId: a.anchorId, span: a.span, quote: a.quote, status: a.status, candidate: a.candidate, recoveryPending: a.recoveryPending });
+/** After a move every anchor is measured on the new body, as moveAnchorsForBodyChange writes at_body_hash for all of them. */
+const keep = (body: string) => (a: AnchorState): Stored => ({ anchorId: a.anchorId, span: a.span, quote: a.quote, status: a.status, candidate: a.candidate, recoveryPending: a.recoveryPending, atBody: body });
+const settledOn = (anchors: Stored[], body: string) => { const done = new Set(anchors.filter((a) => a.atBody === body).map((a) => a.anchorId)); return (id: string) => done.has(id); };
 
 /** One save: the store's trusted rule (all anchors were measured on the previous body) applied by hand. */
-export function save(anchors: Stored[], before: string, after: string, editorChanges?: ChangeSet | null): Stored[] {
-  return moveAnchors(anchors as AnchorState[], { before, after, editorChanges: editorChanges ?? null, trusted: () => true }).map(keep);
+export function save(anchors: Stored[], before: string, after: string, editorChanges?: ChangeSet | null, findBudget?: number): Stored[] {
+  return moveAnchors(anchors as AnchorState[], { before, after, editorChanges: editorChanges ?? null, trusted: () => true, findBudget, settled: settledOn(anchors, after) }).map(keep(after));
 }
 
 /** A walk along `versions` (versions[0] is where the anchors were measured), one save per step. */
@@ -30,10 +33,10 @@ export function walk(anchors: Stored[], versions: string[]): Stored[] {
 }
 
 /** The outbox pass (recover.ts): before = null, so nothing is trusted by position; repeat until nothing is pending. */
-export function recoveryPass(anchors: Stored[], body: string): Stored[] {
+export function recoveryPass(anchors: Stored[], body: string, findBudget?: number): Stored[] {
   let cur = anchors;
   for (let pass = 0; pass < 40 && cur.some((a) => a.recoveryPending); pass++) {
-    cur = moveAnchors(cur as AnchorState[], { before: null, after: body, trusted: () => false }).map(keep);
+    cur = moveAnchors(cur as AnchorState[], { before: null, after: body, trusted: () => false, findBudget, settled: settledOn(cur, body) }).map(keep(body));
   }
   return cur;
 }
@@ -52,7 +55,3 @@ export function diffStates(a: Stored[], b: Stored[]): string[] {
 
 /** An editor ChangeSet from a list of {from,to,insert} against `doc`. */
 export const csOf = (doc: string, ...ops: Array<{ from: number; to?: number; insert?: string }>) => ChangeSet.of(ops, doc.length);
-
-/** The same state without the span of a LOST anchor: that span is where the anchor last stood, not a claim about the text. */
-export const withoutLostSpan = (a: Stored[]): Array<Omit<Stored, "span"> & { span?: Stored["span"] }> =>
-  a.map((x) => (x.status === "lost" ? { anchorId: x.anchorId, quote: x.quote, status: x.status, candidate: x.candidate, recoveryPending: x.recoveryPending } : x));

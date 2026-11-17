@@ -9,8 +9,9 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { dice } from "../../services/blockAnchors/similarity.js";
-import { FIND_BUDGET } from "../../services/blockAnchors/mapping.js";
-import { anchorOn, csOf, diffStates, recoveryPass, save, walk, withoutLostSpan, type Stored } from "../helpers/anchorPath.js";
+import { FIND_BUDGET, moveAnchors, type AnchorState } from "../../services/blockAnchors/mapping.js";
+import { anchorOn, csOf, diffStates, recoveryPass, save, walk, type Stored } from "../helpers/anchorPath.js";
+import { lineAlign, quoteAt } from "../../services/blockAnchors/similarity.js";
 import { check } from "../helpers/propsConfig.js";
 
 const CHARS = Array.from("甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏閏餘成歲");
@@ -76,12 +77,8 @@ describe("anchor path: properties", () => {
     return { start: first.start, a: walk(first.start, first.versions), b: walk(second.start, second.versions) };
   };
 
-  it.fails("anchor path: edits to different paragraphs in either order — a LOST anchor keeps the span it had when it was lost (mapping.ts lookup branch copies `...a`), so an unrelated edit before or after the loss changes it", () => {
+  it("anchor path: edits to different paragraphs in either order end in the same state, span included — a lost anchor has no position (mapping.ts NO_POSITION), so an unrelated edit before or after the loss cannot change it", () => {
     check(fc.property(scenario, (s) => { const { a, b } = twoOrders(s); agree(a, b); }));
-  });
-
-  it("anchor path: edits to different paragraphs in either order end in the same status, candidate, quote and pending flag (the span of a lost anchor aside)", () => {
-    check(fc.property(scenario, (s) => { const { a, b } = twoOrders(s); expect(withoutLostSpan(a)).toEqual(withoutLostSpan(b)); }));
   });
 
   it("anchor path: the editor's ChangeSet vs the derived diff for ONE sentence rewritten (random text) end in the same state", () => {
@@ -106,5 +103,81 @@ describe("anchor path: properties", () => {
       }
       agree(recoveryPass(save(start, d0, target), target), anchors);
     }), 100);
+  });
+
+  // settle ("find again") = the first save, then the background pass until nothing is pending. The per-call budget (FIND_BUDGET) decides only how
+  // many passes that takes, so the end state must not depend on it. Paragraphs here may repeat or nearly repeat (a copy with one word changed), because
+  // that is where the order of lookups, and so the budget cut, could matter: which anchor claims which block.
+  describe("settle does not depend on the per-round budget", () => {
+    const UNLIMITED = Number.MAX_SAFE_INTEGER;
+    const BUDGETS = [1, FIND_BUDGET, UNLIMITED];
+    const jumbled = fc.integer({ min: FIND_BUDGET + 2, max: FIND_BUDGET + 7 }).chain((n) =>
+      fc.record({
+        paras: fc.array(paragraph, { minLength: n, maxLength: n }),
+        order: fc.shuffledSubarray(Array.from({ length: n }, (_, i) => i), { minLength: n, maxLength: n }),
+        copies: fc.array(fc.record({ from: fc.nat({ max: n - 1 }), onto: fc.nat({ max: n - 1 }), word: fc.constantFrom(...CHARS) }), { maxLength: 3 }),
+        edits: edits(n),
+      }));
+    const anchorsAt = (d: string, ps: string[][]): Stored[] => {
+      let at = 0;
+      return ps.map((p, i) => {
+        const text = p.join(""), start = d.indexOf(text, at);
+        at = start + text.length;
+        const span = lineAlign(d, { from: start, to: start + text.length });
+        return { anchorId: `a${i}`, span, quote: quoteAt(d, span), status: "valid" as const, candidate: null, recoveryPending: false, atBody: d };
+      });
+    };
+    function endStates(s: { paras: string[][]; order: number[]; copies: Array<{ from: number; onto: number; word: string }>; edits: Edit[] }) {
+      const d0 = docOf(s.paras);
+      let target = s.order.map((i) => s.paras[i]!);
+      for (const c of s.copies) target = target.map((p, i) => (i === c.onto % target.length ? [...target[c.from % target.length]!.slice(0, 3), c.word + "，"] : p));
+      for (const e of s.edits) target = apply(target, { ...e, para: e.para % target.length });
+      const dT = docOf(target), start = anchorsAt(d0, s.paras);
+      return BUDGETS.map((b) => recoveryPass(save(start, d0, dT, null, b), dT, b));
+    }
+    const settledSame = (s: Parameters<typeof endStates>[0]) => { const [one, five, all] = endStates(s); agree(one!, all!); agree(five!, all!); };
+
+    // Every paragraph survives and no two look alike: each lookup ends `valid`, so nothing can be starved.
+    it("anchor path: paragraphs only reordered (all distinct, all kept) settle to the same states with a budget of 1, FIND_BUDGET or no limit", () => {
+      check(fc.property(jumbled.map((s) => ({ ...s, copies: [], edits: [] })).filter((s) => distinct(s.paras)), settledSame), 100);
+    });
+
+    // Paragraphs that read alike, or rewritten ones, end `maybe`/`lost`. Such an anchor used to be looked up again by every pass and spend the budget before the anchors behind it
+    // got a turn (a smaller budget then left an anchor pending where a larger one settled it). An anchor is now looked up once per body, so this holds.
+    it("anchor path: a jumbled note with repeated and rewritten paragraphs settles to the same states whatever the budget", () => {
+      check(fc.property(jumbled, settledSame), 100);
+    });
+
+    // A `maybe` anchor used to keep the span it last had as a valid one, which depends on the saves in between (the same reason a lost one did).
+    // Same start, same final text, one save vs two: where both paths end `maybe`, the span is the same (NO_POSITION; the guess is in `candidate`).
+    const maybeOnBothPaths = (s: Parameters<typeof endStates>[0]) => {
+      const d0 = docOf(s.paras), start = anchorsAt(d0, s.paras);
+      let mid = s.order.map((i) => s.paras[i]!);
+      for (const c of s.copies) mid = mid.map((p, i) => (i === c.onto % mid.length ? [...mid[c.from % mid.length]!.slice(0, 3), c.word + "，"] : p));
+      let target = mid;
+      for (const e of s.edits) target = apply(target, { ...e, para: e.para % target.length });
+      const twoSaves = save(save(start, d0, docOf(mid)), docOf(mid), docOf(target)), oneSave = save(start, d0, docOf(target));
+      return twoSaves.flatMap((a) => { const b = oneSave.find((x) => x.anchorId === a.anchorId)!; return a.status === "maybe" && b.status === "maybe" ? [[a, b] as const] : []; });
+    };
+    it("anchor path: an anchor that ends maybe by one save and by two saves holds the same span", () => {
+      let compared = 0;
+      check(fc.property(jumbled, (s) => { for (const [a, b] of maybeOnBothPaths(s)) { compared++; expect(a.span).toEqual(b.span); } }), 100);
+      expect(compared, "the property saw no anchor that is maybe on both paths").toBeGreaterThan(0);
+    });
+    // The guess itself still differs by path: the intermediate save refreshes the quote, the one save looks for the older one (same cause as (a): KEEP_MOVED / quote refresh). Flips in step 3.
+    it.fails("anchor path: an anchor that ends maybe by one save and by two saves holds the same candidate — the intermediate save refreshes the quote the guess is made from", () => {
+      check(fc.property(jumbled, (s) => { for (const [a, b] of maybeOnBothPaths(s)) expect(a.candidate).toEqual(b.candidate); }), 100);
+    });
+
+    it("anchor path: however many anchors end maybe or lost, settle ends within as many passes as there are anchors, and one more pass changes nothing", () => {
+      check(fc.property(jumbled, (s) => {
+        for (const settled of endStates(s)) {
+          expect(settled.filter((a) => a.recoveryPending)).toEqual([]);
+          const body = settled[0]!.atBody;
+          const again = moveAnchors(settled as AnchorState[], { before: null, after: body, trusted: () => false, settled: (id) => settled.find((a) => a.anchorId === id)!.atBody === body });
+          expect(again.filter((m) => m.changed)).toEqual([]);
+        }
+      }), 100);
+    });
   });
 });

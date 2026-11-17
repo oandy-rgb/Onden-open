@@ -16,6 +16,8 @@
 // Also prints the size of what the writer knows and a reader cannot compute from (before, after): the editor's ChangeSet. Here it is the
 // derived one (diffByLinesThenChars → ChangeSet JSON) as a proxy: the editor's real one is typed keystrokes and is usually larger.
 import { ChangeSet } from "@codemirror/state";
+import { brotliCompressSync, constants as zc, gzipSync } from "node:zlib";
+import { cutToUnits, newBlockId } from "@onden/markdown";
 import { loadHistories } from "../../../scripts/experiments/block-anchor-mapping/history.ts";
 import { DEFAULTS, fuzzyFind, quoteAt, classify, iou, Oracle, segment, eligible, lineAlign, m3Init, m3Step, diffByLinesThenChars, type Range, type CharAnchor } from "../../../scripts/experiments/block-anchor-mapping/lib.ts";
 
@@ -25,10 +27,12 @@ const tally: Record<string, T> = { chain: mk(), jump: mk(), B: mk(), Bs: mk() };
 const bump = (m: string, c: string) => { tally[m]![c.startsWith("wrong") ? "wrong" : (c as "correct" | "lost")]++; };
 let n = 0, differ = 0, foundVsLost = 0, files = 0, versions = 0;
 const csBytes: number[] = [];
+const latestTexts: string[] = [];
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
 
 for (const h of loadHistories(30)) {
   const texts = h.versions.map((v) => v.text); files++; versions += texts.length;
+  latestTexts.push(texts.at(-1)!);
   for (let k = 1; k < texts.length; k++) {
     const ops = diffByLinesThenChars(texts[k - 1]!, texts[k]!);
     csBytes.push(JSON.stringify(ChangeSet.of(ops, texts[k - 1]!.length).toJSON()).length);
@@ -75,3 +79,30 @@ console.log(`ChangeSet JSON per version step (derived, proxy for the editor's): 
 // Design 甲 carries per anchor: id (newBlockId, 8 chars), from, to, status, candidate span (maybe/lost only).
 const rowBytes = (from: number, to: number) => JSON.stringify({ id: "abcd1234", from, to, status: "valid" }).length;
 console.log(`design 甲 row per anchor (valid, offsets < 1,000,000): ${rowBytes(999999, 999999)} B raw JSON; 50 anchors ≈ ${50 * rowBytes(999999, 999999)} B, 200 ≈ ${200 * rowBytes(999999, 999999)} B per save before compression`);
+
+// Design 甲, size of one save's anchor rows COMPRESSED (proposal §3.1 / §5.1 step 1b). Rows are built from the paragraphs of the latest
+// version of each history file (this repo's docs, never a workspace), as the writer would send them: id, from, to, status, and for the "full" form
+// the selector too (quote cut to the wire cap ANCHOR_QUOTE_WIRE_MAX = 120, prefix and suffix line). N anchors are taken from consecutive files'
+// paragraphs with offsets running on, so a 200-anchor note is a long note. Compressors: gzip (zlib default level 6 and 9) and brotli (quality 5 and 11),
+// the two an HTTP layer would use; the snapshot stream itself (stampedSnapshotStream.ts) is plain NDJSON with no compression of its own.
+type WireRow = { id: string; from: number; to: number; status: string; quote?: string; prefix?: string; suffix?: string };
+const rows: WireRow[] = [];
+let base = 0;
+for (const t of latestTexts) {
+  for (const seg of segment(t).filter((x) => eligible(t, x))) {
+    const span = lineAlign(t, { from: seg.from, to: seg.to });
+    const q = quoteAt(t, span);
+    rows.push({ id: newBlockId(), from: base + span.from, to: base + span.to, status: "valid", quote: cutToUnits(q.text, 120), prefix: q.prefix, suffix: q.suffix });
+  }
+  base += t.length;
+}
+const kb = (n: number) => (n / 1024).toFixed(1).padStart(6) + " KB";
+console.log(`anchor rows available: ${rows.length} (from ${latestTexts.length} files)`);
+for (const n of [50, 200]) {
+  const pick = rows.slice(0, n);
+  for (const [form, shape] of [["positions only (id,from,to,status)", (r: WireRow) => ({ id: r.id, from: r.from, to: r.to, status: r.status })], ["full (+quote ≤120, prefix, suffix)", (r: WireRow) => r]] as const) {
+    const raw = Buffer.from(pick.map((r) => JSON.stringify(shape(r))).join("\n"));
+    const sizes = [gzipSync(raw).length, gzipSync(raw, { level: 9 }).length, brotliCompressSync(raw, { params: { [zc.BROTLI_PARAM_QUALITY]: 5 } }).length, brotliCompressSync(raw).length];
+    console.log(`N=${String(pick.length).padEnd(3)} ${form.padEnd(38)} raw ${kb(raw.length)}  gzip6 ${kb(sizes[0]!)}  gzip9 ${kb(sizes[1]!)}  brotli5 ${kb(sizes[2]!)}  brotli11 ${kb(sizes[3]!)}`);
+  }
+}

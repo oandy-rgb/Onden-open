@@ -12,7 +12,7 @@ import { findBacklinkSnippet } from "../lib/backlinks";
 import { resolveEmbed, embedExcerpt } from "../lib/embeds";
 import { holdAnchored } from "./helpers/anchoredText";
 import { replaceAllAnchors, replaceAllBindings, type NoteAnchor } from "../lib/blockAnchorStore";
-import { partLinkWords } from "../lib/blockLinks";
+import { partLinkHref, partLinkWords, readPartLink } from "../lib/blockLinks";
 import { loadPartLinks } from "../lib/partLinkModule";
 import { blockLinkWriter } from "../lib/data";
 import { noWorkspaceData, type ContentNode } from "../lib/api";
@@ -89,8 +89,15 @@ describe("the reading view", () => {
     expect(screen.queryByRole("button", { name: "就是這段" })).toBeNull();
   });
 
+  it("lost, as the server sends it now (no position, no guess): the address names the note only, never a place in it", () => {
+    replaceAllAnchors([anchor({ status: "lost", from: 0, to: 0 })]); bind();
+    const read = readPartLink("吃飯紀錄/舊的開頭", { nodes: [meal, source], from: source });
+    expect(read.kind).toBe("lost");
+    expect(partLinkHref(read)).toBe("#wl:n1?lost=a1");
+  });
+
   it("lost: the link falls back to the note itself, never to another paragraph", async () => {
-    replaceAllAnchors([anchor({ status: "lost" })]); bind();
+    replaceAllAnchors([anchor({ status: "lost", from: 0, to: 0 })]); bind();
     const { onNavigate } = read([meal, source]);
     expect(await screen.findByText("段落已不存在")).toBeTruthy();
     expect(screen.queryByText("也許是這段")).toBeNull();

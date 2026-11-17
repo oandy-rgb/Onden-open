@@ -1,7 +1,7 @@
 // Block anchor mapping rules (services/blockAnchors/mapping.ts) — pure, no database.
 import { describe, expect, it } from "vitest";
 import { ChangeSet, Text } from "@codemirror/state";
-import { moveAnchors, FIND_BUDGET, type AnchorState } from "../services/blockAnchors/mapping.js";
+import { moveAnchors, FIND_BUDGET, NO_POSITION, type AnchorState } from "../services/blockAnchors/mapping.js";
 import { dice, findQuote, lineAlign, quoteAt } from "../services/blockAnchors/similarity.js";
 import { deriveChangeSet, verifiedEditorChanges } from "../services/blockAnchors/changes.js";
 import { blockSpanAt } from "../services/blockAnchors/store.js";
@@ -101,6 +101,42 @@ describe("finding by quote", () => {
     const [m] = run([anchorOn(DOC, 1)], DOC, after);
     expect(m!.status).toBe("lost");
     expect(m!.quote.text).toBe(P[1]);
+  });
+  it("a lost anchor stands nowhere: its span is NO_POSITION and the best guess is the candidate", () => {
+    const gone = [P[0], P[2]].join("\n\n");
+    const [lost] = run([anchorOn(DOC, 1)], DOC, gone);
+    expect(lost!.span).toEqual(NO_POSITION);
+    expect(lost!.candidate === null || lost!.candidate.from >= 0).toBe(true);
+  });
+  it("a lost row written before that rule (it still holds the span it last stood on) is rewritten once, then left alone", () => {
+    const gone = [P[0], P[2]].join("\n\n");
+    const stale: AnchorState = { ...anchorOn(DOC, 1), status: "lost", candidate: null };
+    const [first] = run([stale], gone, gone);
+    expect(first).toMatchObject({ status: "lost", span: NO_POSITION, changed: true });
+    const [again] = run([first!], gone, gone);
+    expect(again).toMatchObject({ status: "lost", span: NO_POSITION, changed: false });
+  });
+  it("a maybe anchor stands nowhere either: from a lookup, and when a save had no lookups left for it (the guess is the candidate)", () => {
+    const edited = P[1]!.replace("雜湊表用鍵直接算出位置，碰撞要另外處理", "雜湊表把鍵算成位置，碰撞再另外處理");
+    const [found] = run([anchorOn(DOC, 1)], DOC, [P[0], edited, P[2]].join("\n\n"), { trusted: () => false });
+    expect(found!.status).toBe("maybe");
+    expect(found!.span).toEqual(NO_POSITION);
+    expect(found!.candidate).not.toBeNull();
+    const many = Array.from({ length: FIND_BUDGET + 1 }, (_, i) => `獨一無二的第${i}條內容：${"字".repeat(9 + i)}${i}`);
+    const doc = many.join("\n\n");
+    const anchors = many.map((t, i): AnchorState => { const at = doc.indexOf(t); const real = { from: at, to: at + t.length }; return { anchorId: `m${i}`, span: { from: 0, to: 1 }, quote: quoteAt(doc, real), status: "valid", candidate: null, recoveryPending: false }; });
+    const out = run(anchors, null, doc, { trusted: () => false }).filter((m) => m.recoveryPending);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((m) => m.status === "maybe" && m.span.from === 0 && m.span.to === 0)).toBe(true);
+  });
+  it("an anchor already concluded (maybe/lost, not pending) on this very body takes no lookup; a pending one, or one concluded on another body, is looked up", () => {
+    const gone = [P[0], P[2]].join("\n\n");
+    const [lost] = run([anchorOn(DOC, 1)], DOC, gone);
+    expect(lost!.status).toBe("lost");
+    // the text is back, but the anchor says its conclusion was reached on this body: nothing is looked up
+    expect(run([lost!], null, DOC, { trusted: () => false, settled: () => true })[0]).toMatchObject({ status: "lost", changed: false, how: "unchanged" });
+    expect(run([lost!], null, DOC, { trusted: () => false, settled: () => false })[0]).toMatchObject({ status: "valid" });
+    expect(run([{ ...lost!, recoveryPending: true }], null, DOC, { trusted: () => false, settled: () => true })[0]).toMatchObject({ status: "valid" });
   });
   it("a lost anchor comes back when the text returns", () => {
     const gone = [P[0], P[2]].join("\n\n");

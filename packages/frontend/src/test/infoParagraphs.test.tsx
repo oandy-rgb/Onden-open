@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import InfoParagraphs from "../components/InfoParagraphs";
 import type { ContentNode } from "../lib/api";
-import { setBlockAnchorsEnabled } from "../lib/blockAnchorStore";
+import { replaceAllAnchors, setBlockAnchorsEnabled } from "../lib/blockAnchorStore";
 import { holdAnchored } from "./helpers/anchoredText";
 import { toolLabel, SELECTION_TOOLS } from "../lib/toolbarLayout";
 import type { NoteParagraph } from "@onden/contract";
@@ -79,6 +79,26 @@ describe("InfoParagraphs", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Point here" })); });
     expect(served.reassign).toHaveBeenCalledWith("n1", "l", body.indexOf("第二段"), body);
     // A read-only reader sees the list but no way to change it.
+  });
+
+  it("each lost paragraph shows ITS OWN best guess: two lost paragraphs with different guesses are marked on different choices", async () => {
+    setBlockAnchorsEnabled(true);
+    const body = "第一段文字。\n\n第二段文字。\n";
+    const first = body.indexOf("第一段"), second = body.indexOf("第二段");
+    replaceAllAnchors([
+      { anchor_id: "ra", note_id: "n1", from: 0, to: 0, status: "lost", candidate_from: first, candidate_to: first + 6, quote: "甲" },
+      { anchor_id: "rb", note_id: "n1", from: 0, to: 0, status: "lost", candidate_from: second, candidate_to: second + 6, quote: "乙" },
+    ], ["n1"]);
+    served.rows = [
+      row({ id: "a", label: "甲", where: "lost", anchorStatus: "lost", blockRef: "ra" }),
+      row({ id: "b", label: "乙", where: "lost", anchorStatus: "lost", blockRef: "rb" }),
+    ];
+    render(<InfoParagraphs node={node(body)} canEdit onOpen={vi.fn()} />);
+    await screen.findAllByText("Paragraphs not found");
+    const selects = screen.getAllByLabelText("Point it at") as HTMLSelectElement[];
+    const marked = (el: HTMLSelectElement) => Array.from(el.options).filter((o) => o.text.startsWith("Most likely")).map((o) => o.text);
+    expect(marked(selects[0]!)).toEqual([expect.stringContaining("第一段文字")]);
+    expect(marked(selects[1]!)).toEqual([expect.stringContaining("第二段文字")]);
   });
 
   it("offline (the server cannot answer) the note's own text is listed", async () => {

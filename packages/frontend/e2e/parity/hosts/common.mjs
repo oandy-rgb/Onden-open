@@ -1,6 +1,17 @@
 // 宿主轉接器共用：用 cookie 與 origin 打一個 http 網址（Node 後端與桌面版；瀏覽器版在頁面內 fetch）。
 import { createServer } from "node:net";
 
+import { readFileSync } from "node:fs";
+
+// The protocol number the app's own pages send, read from where it is defined. A number written here went stale when the protocol
+// went from 3 to 4 (2026-11): every write of the script was then refused with 426 client_too_old and the parity run stopped at step 1.
+const CLIENT_PROTOCOL = (() => {
+  const source = readFileSync(new URL("../../../../markdown/src/sharedContract.ts", import.meta.url), "utf8");
+  const found = /^export const CLIENT_PROTOCOL = (\d+);/m.exec(source);
+  if (!found) throw new Error("parity: CLIENT_PROTOCOL not found in packages/markdown/src/sharedContract.ts");
+  return found[1];
+})();
+
 export const freePort = () => new Promise((ok, fail) => {
   const probe = createServer();
   probe.once("error", fail);
@@ -28,7 +39,7 @@ export function cookieClient(base, origin = base, initialCookie = "") {
     cookieHeader: header,
     async request({ method, path, json, upload, binary, headers: extra, raw }) {
       // 與頁面一樣說自己懂段落錨點（伺服器對舊頁面的筆記寫入回 426：packages/backend/src/clientGate.ts）。
-      const headers = { origin, cookie: header(), "x-onden-client-protocol": "3", ...extra };
+      const headers = { origin, cookie: header(), "x-onden-client-protocol": CLIENT_PROTOCOL, ...extra };
       if (extra?.authorization) delete headers.cookie; // 帶權杖時不帶登入（權杖本來就是另一個身分）
       let body;
       if (upload) { const form = new FormData(); form.append("file", new Blob([upload.bytes], { type: upload.type }), upload.name); body = form; }

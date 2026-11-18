@@ -5,8 +5,9 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { isHiddenImportPath, planImportBatches, type FolderImportFile } from "../../modules/importers/folderImport";
+import { PROPS_SEED } from "../helpers/propsConfig";
 
-const seed = process.env.PROPS_SEED ? Number(process.env.PROPS_SEED) : 20261114;
+const seed = PROPS_SEED;
 const numRuns = Number(process.env.PROPS_RUNS ?? 150);
 
 const seg = fc.constantFrom("課程", "演算法", "Notes", "任務", "a", "B", "b");

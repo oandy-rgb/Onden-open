@@ -21,6 +21,8 @@ export function setPendingFind(nodeId: string, query: string): void {
   pendingFromSearch.set(nodeId, text);
   rememberFindText(text);
 }
+/** Words wait for this note's editor (set, not yet taken): an explicit place to land, which a remembered scroll position never overrides. */
+export const hasPendingFind = (nodeId: string): boolean => pendingFromSearch.has(nodeId);
 export function takePendingFind(nodeId: string): string | null {
   const text = pendingFromSearch.get(nodeId) ?? null;
   pendingFromSearch.delete(nodeId);

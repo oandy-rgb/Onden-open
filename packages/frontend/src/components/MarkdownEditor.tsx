@@ -68,6 +68,7 @@ const HandToAiPreview = lazyWithReload(() => import("./HandToAiPreview"));
 import { editorFind, openFind, revealFirstMatch, revealRange } from "../lib/editorFind";
 import { isCoarsePointer } from "../lib/mediaQuery";
 import { takePendingFind } from "../lib/findInNote";
+import { scrollClaimedFor } from "../lib/pageScrollRestore";
 import "../lib/editorFind.css";
 import "../lib/editorTools.css";
 import { applyFoldMarks, foldAllHeadings, revealFolded, headingFolding, unfoldAllHeadings } from "../lib/editorFold";
@@ -1351,9 +1352,11 @@ function MarkdownEditor({
       } else {
         // A plain position restore must NOT steal focus. Like the body swap, it is not the person moving the caret
         // (ExternalSync): it closes no list and does not overwrite the stash it was read from.
+        // After a Back or Forward that put the page's scroll back (lib/pageScrollRestore) the caret stays where it
+        // was but does not scroll the page again: the entry's own position is the one to see.
         view.dispatch({
           selection: { anchor, head },
-          effects: EditorView.scrollIntoView(head, { y: "center" }),
+          ...(scrollClaimedFor(nodeKey) ? {} : { effects: EditorView.scrollIntoView(head, { y: "center" }) }),
           annotations: ExternalSync.of(true),
         });
       }

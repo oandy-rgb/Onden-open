@@ -42,6 +42,12 @@
 //   |   → neighbour, reload) — `navigate(go, { history: "replace" })`|         |
 //   | the same address again                                        | nothing |
 //
+// Back and Forward also return the page to where it was scrolled when that entry was left (owner decision
+// 2026-11-18; lib/pageScrollRestore): the position belongs to the entry, whose id is in `state.ondenEntry`
+// (a new one for each push, kept by each replace), so the same note visited twice has two positions. A page opened
+// any other way, and a reload, starts at the top; a target the opening asks for (a line, a found word, a caret
+// handoff) wins over a remembered position. Memory of this session only.
+//
 // `navigate(go, { history })` is the one place a caller states the intent when the
 // default (above) is wrong. Nothing else calls history.pushState / replaceState
 // (lib/pageUrl only strips one-shot query parameters, never adds an entry).
@@ -67,7 +73,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { AppMode, CoreMode } from "./useUiMode";
 import { isModuleScreen, isReadingSection } from "../modules";
 import type { NodeLens } from "../lib/nodeLens";
-import { markBackNavigation } from "../lib/pageScrollRestore";
+import { markHistoryStep } from "../lib/pageScrollRestore";
 import { markHistoryArrival, navigate, takeHistoryIntent, type HistoryIntent } from "../lib/historyIntent";
 import { isNoteGone } from "../lib/appStore";
 import { PREFS, setPref } from "../lib/prefs";
@@ -122,6 +128,19 @@ let urlSyncs = 0;
 // 0 = the first entry (the default screen); each push adds one. A reload keeps the
 // entry's state, so "was this session already seeded" survives it.
 const DEPTH_STATE = "ondenDepth";
+// Which entry this is: unique, kept by replaceState, new for every pushState. The depth cannot say it (Back, then a push,
+// makes a new entry at the depth of the one it replaced in the forward direction), and what is remembered per entry
+// (lib/pageScrollRestore: where it was scrolled) must not pass to another.
+const ENTRY_STATE = "ondenEntry";
+const sessionTag = Date.now().toString(36); // a reload starts the counter again: the tag keeps the ids apart from the entries it left
+let entryCount = 0;
+const newEntryId = (): string => `${sessionTag}.${++entryCount}`;
+function entryOf(state: unknown): string | null {
+  const id = (state as Record<string, unknown> | null)?.[ENTRY_STATE];
+  return typeof id === "string" ? id : null;
+}
+/** The history entry the app is on (null where the state carries none: a test, an address rewritten from outside). */
+export const currentEntryId = (): string | null => (typeof window === "undefined" ? null : entryOf(window.history.state));
 // Marks every overlay entry (pushOverlayEntry): a detail screen that tapping its own tab again closes.
 const OVERLAY_STATE = "ondenOverlay";
 // The markers of every overlay that is open on an entry, oldest first.
@@ -160,6 +179,7 @@ function pushEntry(url: string, extra: Record<string, unknown> = {}): void {
     ...(shown !== null ? { [SHOWN_TAB_STATE]: shown } : {}),
     ...extra,
     [DEPTH_STATE]: hereDepth,
+    [ENTRY_STATE]: newEntryId(),
   }, "", url);
 }
 
@@ -534,7 +554,7 @@ export function useUrlSync(
       toDefault = false;
       hereDepth = arrivedDepth;
       hereTab = TAB_STATE in (window.history.state ?? {});
-      markBackNavigation();
+      markHistoryStep("entry");
       const step = trailDirection(window.history.state);
       trailHere = serialOf(window.history.state);
       trailFresh = false;
@@ -622,13 +642,17 @@ export function useUrlSync(
 /** The first entry of this session of the app. A phone with nothing in-app behind the page it was
  *  entered on gets the default screen (the notes list) as that first entry, the page on top of it. */
 function seedFirstEntry(seedDefaultScreen: boolean, onDefault: boolean): void {
-  if (depthOf(window.history.state) !== null) return; // reload / restored: already seeded
+  if (depthOf(window.history.state) !== null) { // reload / restored: already seeded
+    // ...possibly by a build that wrote no entry id.
+    if (entryOf(window.history.state) === null) window.history.replaceState({ ...window.history.state, [ENTRY_STATE]: newEntryId() }, "", window.location.href);
+    return;
+  }
   const here = window.location.href;
   const keep = window.history.state;
   if (!seedDefaultScreen || onDefault) {
-    window.history.replaceState({ ...keep, [DEPTH_STATE]: 0 }, "", here);
+    window.history.replaceState({ ...keep, [DEPTH_STATE]: 0, [ENTRY_STATE]: newEntryId() }, "", here);
     return;
   }
-  window.history.replaceState({ [DEPTH_STATE]: 0 }, "", locationToSearch({ view: "notes", nodeId: null, lens: "editor" }));
-  window.history.pushState({ ...keep, [DEPTH_STATE]: 1 }, "", here); // the sync below then writes it in canonical form
+  window.history.replaceState({ [DEPTH_STATE]: 0, [ENTRY_STATE]: newEntryId() }, "", locationToSearch({ view: "notes", nodeId: null, lens: "editor" }));
+  window.history.pushState({ ...keep, [DEPTH_STATE]: 1, [ENTRY_STATE]: newEntryId() }, "", here); // the sync below then writes it in canonical form
 }

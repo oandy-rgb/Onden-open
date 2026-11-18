@@ -8,7 +8,7 @@ import type { OverviewMobileTab, useUiMode } from "../../hooks/useUiMode";
 import { useWelcomeBanner } from "../../hooks/useWelcomeBanner";
 import type { useWorkspaceFocus } from "../../hooks/useWorkspaceFocus";
 import type { useWorkspacePanes } from "../../hooks/useWorkspacePanes";
-import { markBackNavigation } from "../../lib/pageScrollRestore";
+import { markHistoryStep } from "../../lib/pageScrollRestore";
 import { goBackInApp, navigate } from "../../hooks/useUrlLocation";
 import { ViewTabs, ViewStripBar, ViewStripProvider, useViewOwner, useViewStripHost } from "../viewTabs";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -54,7 +54,7 @@ type Props = {
 /** The notes list is a page: `history` says whether leaving the note is a new page (the location's 筆記) or only
  *  the way out of a window with nothing behind it. */
 function showNotesList(setOverviewMobileTab: (tab: OverviewMobileTab) => void, history: "push" | "replace") {
-  markBackNavigation();
+  markHistoryStep("in place");
   navigate(() => { setSelectedId(null); setOverviewMobileTab("list"); }, { history });
 }
 

@@ -1,7 +1,7 @@
 # 邊界決定：介面（側欄與頂欄、指令面板、匯出、選位置、視角分頁、設定、編輯器）
 
-> 狀態：現行（最後確認 2026-11-17）
-> 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts
+> 狀態：現行（最後確認 2026-11-18）
+> 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts
 
 何時讀：改側欄與頂欄、寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置、筆記與標籤頁的視角分頁、並排、設定頁、編輯器的輸入與鍵盤行為之前。
 這份只留今天成立的規則。當時的比較、理由、分批進度與已被取代的做法（原文一字未改）在 [decisions-ui-history.md](decisions-ui-history.md)；
@@ -25,6 +25,13 @@
 - **上一頁／下一頁沒有按鈕**。`Alt+←`／`Alt+→`（`nav-back`／`nav-forward`，不含 `$mod`，所以編輯器裡不觸發）與瀏覽器、手機的「‹」是同一件事。
   歷史由 `useUrlLocation` 一個擁有者管：何時 push、何時 replace 的表在該檔檔頭；連結跳轉先經 `openTrailEntry` 標記一筆（序號在 `state.ondenTrail`，
   一次跳轉只記一筆），上一頁／下一頁由序號大小判斷，不靠「目前筆記是不是軌跡頂」猜。軌跡堆疊上限 50（`useWorkspaceFocus`）。
+- **上一頁／下一頁回到離開時的捲動位置**（業主 2026-11-18「做」）：位置屬於**歷史紀錄的那一筆**，不屬於筆記——每筆歷史的 `state.ondenEntry` 是唯一 id（每次 push 新一個、replace 保留），
+  同一篇筆記在軌跡裡出現兩次就有兩個位置。Back 與 Forward 都放回（`lib/pageScrollRestore`：`markHistoryStep` → `arriveAtScreen`，在版面效果裡先放回再繪製）；
+  別的方式打開的筆記（列表、搜尋、面板、連結）從最上面開始（桌面的捲動容器會比筆記活得久，手機的視窗也是，所以開新頁時主動放回 0；2026-11-18 量到過新筆記沿用上一篇的位置），重新載入也是（記憶只在這個工作階段的記憶體，不存儲、不同步、不寫進筆記，上限 50 筆）。
+  **明確的目標永遠贏**：要揭露的行（`pendingReveal`）、要找的字（`hasPendingFind`）、游標交接（`hasPendingCursor`）存在時不放回位置。放回位置的筆記，編輯器不再為游標捲動（`scrollClaimedFor`），游標本身不動。
+  實測的捲動容器（不是猜的）：桌面是 `.obsidian-main.note-document` 這一個元素（編輯與預覽都是它；`.cm-scroller`、`.obsidian-preview` 在頁面裡不捲動），標 `data-scroll-memory`（`note-edit`／`note-preview`，所以只放回離開時所在的那個檢視）；手機是視窗。
+  離開前最後的位置由 `markHistoryStep` 當下讀取（捲動事件可能在畫面換掉之後才送到，那一筆不屬於任何頁面）；其餘靠 `scroll` 事件記錄，換頁的過程中（版面效果到寫入歷史之間）的事件不記。
+  並排的右欄沒有自己的歷史，不在範圍；頁籤／檢視切換是 replace，不算上一頁。使用者在放回過程中捲動、按鍵、觸控就立刻停手，最長等 4 秒（本文延後載入、圖片撐高）。
 - **「返回」先關最上面那一層**：浮層、面板、模式用 `hooks/useEscapeKey.ts` 的 `useDismiss(onDismiss, open)`，Esc 與返回只關最新登記的；`ui/usePopover`（所有 Menu／Popover／sheet）已內建。
   實作是瀏覽器的 `CloseWatcher`（與原生 `<dialog>` 同一個堆疊、不留歷史）；沒有的瀏覽器 Esc 照舊、返回維持離開頁面。整頁式的詳細畫面（手機資訊頁、RSS 文章）仍用歷史紀錄（`useHistoryEntry`），
   不用 `useDismiss`。只聽 Esc 的例外（取色器、全域 Esc、編輯器尋找列）與手勢類在 `dismissStack.guard.test.ts`，只准變少。需要真機驗：Android Brave（PWA）、Samsung Internet 按返回鍵。

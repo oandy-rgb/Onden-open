@@ -3898,4 +3898,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "This account could not open the notes after they are added, so nothing was added.": "這個帳號在加入後沒辦法打開筆記，所以沒有加入任何東西。",
   "This file was made on this very device.": "這個檔案就是在這台裝置上做的。",
   "This device got its notes from another device, so it cannot make a file for a third one yet.": "這台裝置的筆記是從另一台帶來的，目前還不能再做檔案給第三台。",
+  "No value": "無值",
+  "Σ {sum} · avg {avg}": "Σ {sum} · 平均 {avg}",
+  "{n} values": "{n} 個值",
 };

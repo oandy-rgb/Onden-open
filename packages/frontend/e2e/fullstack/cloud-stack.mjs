@@ -14,7 +14,7 @@
 //   可用 E2E_BROWSER_TZ 覆寫（要測別的時區就連工作區時區一起設）。
 // - 沒有 docker：用 docker exec／docker stop 的 spec（zz*）在這裡跳過，見 helpers.ts 的 e2eContainer。
 import { spawn, execFileSync } from "node:child_process";
-import { createServer, request as httpRequest } from "node:http";
+import { Agent, createServer, request as httpRequest } from "node:http";
 import { createServer as createTcpServer } from "node:net";
 import { mkdtempSync, rmSync, existsSync, writeFileSync, createWriteStream, readdirSync, symlinkSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +57,11 @@ async function waitFor(url, label, okCodes, timeoutMs = 180_000) {
   throw new Error(`${label} 沒有在 ${timeoutMs / 1000} 秒內就緒（最後：${last}）`);
 }
 
+// 每個轉發請求自己開一條連線，不重用：Node 22 預設重用連線（keep-alive），而後端的 keep-alive 逾時是 5 秒；後端被長請求占住時
+// （單連線 PGlite 上一個 /api/sync 可以停 12 秒），逾時的計時器在它醒來時先於已寫進該連線的請求執行，轉發就收到 ECONNRESET 回 502。
+// 完整套件跑到後面常因此在建資料的 API 呼叫上看到 502（雲端堆疊的環境差異，不是產品）。
+const upstreamAgent = new Agent({ keepAlive: false });
+
 /** nginx.conf 的同源轉發：/api、/_astro、其餘 → 後端或前端。X-Real-IP／X-Forwarded-For 一律覆寫成連線位址。 */
 function startProxy() {
   const server = createServer((req, res) => {
@@ -64,7 +69,7 @@ function startProxy() {
     const port = toBackend ? BACKEND_PORT : FRONTEND_PORT;
     const ip = req.socket.remoteAddress?.replace(/^::ffff:/, "") ?? "";
     const headers = { ...req.headers, "x-real-ip": ip, "x-forwarded-for": ip };
-    const upstream = httpRequest({ host: "127.0.0.1", port, method: req.method, path: req.url, headers }, (up) => {
+    const upstream = httpRequest({ host: "127.0.0.1", port, method: req.method, path: req.url, headers, agent: upstreamAgent }, (up) => {
       const out = { ...up.headers };
       delete out["x-content-type-options"];
       delete out["referrer-policy"];

@@ -5,9 +5,15 @@
 // reproducible from Playwright; this is the closest faithful approximation.)
 //
 // Required afterwards: typed text still reaches the server, or the app says the
-// local copy is unavailable. Today `worker.onerror` only fires for load errors,
-// so a worker that exits silently leaves every call pending forever and the
-// write path (which asks the local queue first) hangs: fix/b2-sync-liveness.
+// local copy is unavailable, within 30 s. `worker.onerror` does not fire for a
+// worker that exits silently. Since #617 every call has a deadline
+// (LOCAL_DB_CALL_TIMEOUT_MS, 60 s in lib/localDb.ts): then the worker is
+// replaced, the page says "Local copy temporarily unavailable" and the save goes
+// on. So nothing hangs forever any more, but for that minute a save waits on the
+// dead worker and nothing is shown. This test used to poll for 60 s, the same
+// length as that deadline, so it passed or failed by a second or two (it
+// "passed" at 63 s in the 2026-11-18 audit run); at 30 s it fails every time,
+// for that reason. localDbWorkerHealth.test.ts pins the same at unit level.
 import { test, expect } from "@playwright/test";
 import {
   FAULTS_TAG, expectColdConvergence, openNote, seedNote, serverMarkdown, skipUnlessRequested, typeInNote, uniqueToken,
@@ -16,7 +22,7 @@ import {
 test.beforeEach(skipUnlessRequested);
 
 test("7: a dead local-db worker must not hang saving", { tag: FAULTS_TAG }, async ({ page }) => {
-  test.fail(true, "fix/b2-sync-liveness: calls to a dead worker are never rejected");
+  test.fail(true, "known open: a silently exited local-db worker is noticed only by the 60 s call timeout; until then a save waits and nothing is shown");
   test.setTimeout(120_000);
   const text = uniqueToken("worker");
   const id = await seedNote(page);
@@ -38,7 +44,7 @@ test("7: a dead local-db worker must not hang saving", { tag: FAULTS_TAG }, asyn
         .filter({ hasText: /local|storage|unavailable|device|本機/i })
         .filter({ visible: true });
       return (await notice.count()) > 0 ? "says local copy unavailable" : "hung";
-    }, { timeout: 60_000, message: "after the worker died the text must be saved or the app must say why not" })
+    }, { timeout: 30_000, message: "within 30 s of the worker dying the text must be saved or the app must say why not" })
     .not.toBe("hung");
 
   await expectColdConvergence(page.context(), id, [text]);

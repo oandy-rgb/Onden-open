@@ -144,6 +144,18 @@ describe("one snapshot key shared by several tabs", () => {
     expect(await cold.send("getLastEventId")).toBeGreaterThanOrEqual(5);
   });
 
+  // An order the fault e2e cannot hold in a real browser (A's record is compacted within seconds): A's offline edit is
+  // only journaled when B, opened before it, stores its own snapshot. This is not a #616 regression test: it passed
+  // before #616 too (a snapshot drops only the journal records it contains). It pins that the order stays safe.
+  it("order: a write another tab only journaled survives this tab's snapshot save and that tab closing (safe before #616 too)", async () => {
+    const a = await openTab();
+    const b = await openTab();
+    await a.send("addPendingWrite", "PATCH", "/api/nodes/n", '{"markdown":"offline in a"}', "a-offline");
+    await b.send("setLastEventId", 6); // B's live update: its mirror changed, a save is scheduled
+    await settle(); // B's snapshot lands (and A's 15 s compaction, which this order makes stale too)
+    expect(await queued(await openTab())).toEqual(["a-offline"]);
+  });
+
   it("a replaced database (wipe) is stored even over a newer snapshot", async () => {
     const a = await openTab();
     const b = await openTab();

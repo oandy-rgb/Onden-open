@@ -134,8 +134,9 @@ export function journalEntryCount(page: Page): Promise<number> {
   });
 }
 
-/** A cheap fingerprint of every local snapshot (key + length + FNV-1a hash):
- *  changes exactly when a snapshot save lands, whichever tab wrote it. */
+/** A cheap fingerprint of every local snapshot (key + length + FNV-1a hash, and
+ *  the generation each save writes): changes exactly when a snapshot save
+ *  lands, whichever tab wrote it. */
 export function snapshotFingerprint(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const known = await indexedDB.databases();
@@ -151,7 +152,10 @@ export function snapshotFingerprint(page: Page): Promise<string> {
         const values = store.getAll();
         values.onsuccess = () => {
           const parts = (keys.result as IDBValidKey[]).map((key, i) => {
-            const bytes = new Uint8Array(values.result[i] as ArrayBuffer);
+            const value = values.result[i] as unknown;
+            // The generation is a string: every save writes a new one, even when the database bytes come out the same.
+            if (typeof value === "string") return `${String(key)}=${value}`;
+            const bytes = new Uint8Array(value as ArrayBuffer);
             let hash = 0x811c9dc5;
             for (let j = 0; j < bytes.length; j++) hash = Math.imul(hash ^ bytes[j], 0x01000193);
             return `${String(key)}:${bytes.length}:${hash >>> 0}`;

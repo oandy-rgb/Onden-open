@@ -22,11 +22,27 @@ export class SkipGateReporter {
   /** @param {{ strict?: "all" | "gated", isGated: (file: string, text: string) => boolean, expected?: { pglite?: Record<string, number>, postgres?: Record<string, number> } }} options */
   constructor(options) {
     this.options = { strict: "all", expected: {}, ...options };
+    /** test file -> background jobs it left running at pool.end(), by registrant (see onUserConsoleLog) */
+    this.leftBehind = new Map();
   }
 
   onInit(ctx) {
     this.root = ctx.config.root;
     this.filtered = Boolean(ctx.config.testNamePattern);
+  }
+
+  /** backend/src/dbClose.ts logs "pool.end() waited for N background job(s) in <file> [<registrant>: n, …]" when a test
+   *  file closes the database with work still running. Recorded here, never a failure (decision in #1860). */
+  onUserConsoleLog(log) {
+    const m = /pool\.end\(\) waited for (\d+) background job\(s\) in (\S+) \[([^\]]*)\]/.exec(log.content);
+    if (!m) return;
+    const entry = this.leftBehind.get(m[2]) ?? { jobs: 0, byName: new Map() };
+    entry.jobs += Number(m[1]);
+    for (const part of m[3].split(", ")) {
+      const [name, n] = part.split(": ");
+      entry.byName.set(name, (entry.byName.get(name) ?? 0) + Number(n));
+    }
+    this.leftBehind.set(m[2], entry);
   }
 
   onTestRunEnd(testModules, _unhandledErrors, reason) {
@@ -49,6 +65,12 @@ export class SkipGateReporter {
     }
     const total = (key) => tally.gated[key] + tally.other[key];
     console.log(`\n[tests] mode: ${mode}. ran ${total("ran")}, skipped ${total("skipped")}; DB-gated files: ran ${tally.gated.ran}, skipped ${tally.gated.skipped}.`);
+    if (this.leftBehind.size > 0) {
+      console.log(`[tests] ${this.leftBehind.size} test file(s) closed the database with background work still running (recorded only; each should await it, e.g. awaitAllDispatchers):`);
+      for (const [file, { jobs, byName }] of [...this.leftBehind].sort(([a], [b]) => a.localeCompare(b))) {
+        console.log(`  ${file} -> ${[...byName].map(([name, n]) => `${name}: ${n}`).join(", ")} (${jobs} job${jobs === 1 ? "" : "s"})`);
+      }
+    }
     if (noDatabase || this.filtered || reason !== "passed") return;
 
     const expected = this.options.expected[driver] ?? {};

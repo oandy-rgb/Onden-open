@@ -25,6 +25,8 @@ PGlite 只有一條連線，而後端假設「握著交易的 client 之外，�
 1. `connect()` 是 FIFO 互斥鎖：誰握著 client，誰就獨佔資料庫直到 `release()`；兩個請求的交易不會交錯。等待者有逾時（預設 10 秒，同 `PG_CONNECT_TIMEOUT_MS`），錯誤訊息與 `pg` 相同；放棄等待的人不會讓鎖卡住。
 2. 在交易裡呼叫 `pool.query()`（`db.ts` 的交易 context 回答「現在在哪個交易」）就用該交易的 client。例如 `blobs.putBlob` 原本刻意走另一條連線，現在跟著交易提交或回滾；它以內容雜湊為鍵、冪等，無影響。其餘約 160 處 `pool.query` 在 PGlite 上同理：**語意差異**是「原本會先於交易提交」的寫入現在跟著交易；整合測試在 PGlite 上全跑過（§6）。
 
+3. `end()` 之後，`query()`／`connect()`／`database()`（含已取得的 client）一律拒絕，與 `pg` 的 `Cannot use a pool after calling end on the pool` 同義；以前會悄悄開第二個資料庫（`memory://` 是空的）。重新開始必須是新的 `PglitePool`，產品裡沒有這條路（桌面關閉、`admin.ts`、建置腳本都是 `end()` 後離開）。 **界線**：這只保護「有呼叫 `end()`」的關閉；瀏覽器版的 worker 從不 `end()`，被瀏覽器終止（分頁關閉、bfcache 淘汰）時沒有任何事件，「結束後丟錯」不涵蓋那條路（那是存檔與 #1877 處理的另一類）。建置腳本（`prepareSnapshot.ts`、`makeOldCopy.ts`）在傾印前 `awaitAllDispatchers()`，結束走 `pool.end()`（先排空），不直接 `pglite.end()`。
+
 另外對齊 `pg` 的行為：`bigint`／`numeric` 回字串（事件游標、`parseBigintId` 依賴）；沒有參數的字串走簡單協定（可含多個語句，遷移檔需要）；對已中止的交易 `COMMIT` 回 `command: "ROLLBACK"`（`db.ts` 因此把它判為失敗，不是成功）。
 
 ### 1.2 Node 專屬清單與處理狀態

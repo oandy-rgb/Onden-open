@@ -57,6 +57,9 @@ test("a note with nothing under it is kept off in one press, with no question", 
   await unpublish.click();
   await expect(putBack).toBeVisible({ timeout: 15_000 });
   await expect(row.locator(".publish-left-out-confirm")).toHaveCount(0);
+  // 「Put back」 shows as soon as the page has the change; the server gets it a moment later (a background write). A
+  // preview taken before that and a publish after it are two different sites, and the publish is refused as stale.
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${leaf.id}`)).json()).attrs?._published).toBe("false");
   await publishSite(page.request);
   expect((await siteIds(page)).has(leaf.id)).toBe(false);
 });

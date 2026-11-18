@@ -11,7 +11,7 @@ import type { makeNodeMutations } from "./nodeMutations";
 import type { DataCtx } from "./types";
 import { noteLabel } from "../noteLabel";
 import { neighborAfterDelete } from "../childOrder";
-import { markBackNavigation } from "../pageScrollRestore";
+import { markHistoryStep } from "../pageScrollRestore";
 import { nodeOf } from "../nodeIndex";
 import { navigate } from "../historyIntent";
 
@@ -51,7 +51,7 @@ export function makeNodeActions(ctx: Pick<DataCtx, "data">, mutations: Mutations
       let handoff: string | null = null;
       if (wasFocused) {
         handoff = selection.listIsSeparateScreen ? null : neighborAfterDelete(ctx.data.nodes, id);
-        if (selection.listIsSeparateScreen) markBackNavigation();
+        if (selection.listIsSeparateScreen) markHistoryStep("in place");
         handOffFocus(() => { if (handoff) selection.select(handoff); else selection.clear(); });
       }
       const accepted = await mutations.deleteNode(id, title);

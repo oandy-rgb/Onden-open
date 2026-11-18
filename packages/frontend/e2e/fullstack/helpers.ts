@@ -892,7 +892,11 @@ export async function openSettingsFromAvatar(page: Page, section?: string): Prom
   const gear = page.locator(".app-topbar .topbar-settings");
   // The bar draws the gear and the avatar in one render: wait for the bar before asking which layout this is,
   // or a page that has only just loaded reads as "no gear" and is sent down the phone path.
-  await expect(page.locator(".app-topbar .user-chip").or(page.getByRole("button", { name: "Back to notes list" }))).toBeVisible();
+  // A phone that reopens on the note it last had open keeps BOTH in the page (the top bar is only hidden), so ask which
+  // one is visible instead of a `.or()` locator, which is a strict-mode error when two elements match.
+  const chip = page.locator(".app-topbar .user-chip");
+  const back = page.getByRole("button", { name: "Back to notes list" });
+  await expect.poll(async () => (await chip.isVisible()) || (await back.isVisible()), { message: "the top bar or a way back to it" }).toBe(true);
   if (await gear.isVisible()) await gear.click();
   else await accountSheetAction(page, /^(Settings|設定)$/);
   if (section) await page.locator(".settings-nav-item", { hasText: section }).click();

@@ -24,17 +24,19 @@ for a quick pass. Without Docker, `npx playwright test --list` (in
 
 | Spec | Scenario | Expected on current `main` |
 | --- | --- | --- |
-| `twoTabQueue.spec.ts` | 1 stale tab's snapshot vs. other tab's queue; 2 same after A compacted; 9a phone variant of 1 | fails (`test.fail`) — `fix/b1-offline-queue` |
-| `stalledSave.spec.ts` | 3 request that never answers; 9b phone variant | passes — fixed by #616 (2026-10-24, the write attempt times out); the `test.fail` marks were removed 2026-11-17 |
-| `stuckWrite.spec.ts` | 4 one write answered 500 forever | fails — `fix/b1-offline-queue` |
-| `closeMidSave.spec.ts` | 5a graceful close mid-save; 5b hard context close; 9c phone variant of 5a | 5a, 9c pass; 5b fails — `fix/a1-save-path` |
-| `storageQuota.spec.ts` | 6 snapshot saves fail on quota | passes (Chromium 153, 2026-11-17); the quota is set through the page's CDP session — the browser-level one answers "Internal error" |
-| `workerDeath.spec.ts` | 7 local-DB worker dies | fails — `fix/b2-sync-liveness` |
-| `staleDeploy.spec.ts` | 8a stale chunk → one reload keeps draft; 8b guard spent → error screen + Reload | pass; runs with service workers blocked, because the offline warm-up (`lib/offlineWarmup.ts`) loads every lazy screen at idle, leaving no unloaded chunk to refuse |
+| `twoTabQueue.spec.ts` | 1 stale tab's snapshot vs. other tab's queue; 2 same after A compacted; 9a phone variant of 1 | pass — fixed by #616; B's snapshot comes from a server change over live sync, and B may not send the note's writes (removing the generation check turns them red: PR #1877) |
+| `stalledSave.spec.ts` | 3 request that never answers; 9b phone variant | pass — fixed by #616 (25 s attempt deadline); the held route stays installed |
+| `stuckWrite.spec.ts` | 4 one write answered 500 forever | fails (`test.fail`) — known open: the stuck notice comes after 8 tries (~4.4 min) |
+| `closeMidSave.spec.ts` | 5a graceful close mid-save; 5b hard context close; 9c phone variant of 5a | 5a, 9c pass; 5b fails (`test.fail`) — known open: a save on the wire is not queued; "only in the editor" does not count as kept |
+| `storageQuota.spec.ts` | 6 snapshot saves fail on quota | expected to pass — `fix/storage-quota-notice` (not yet run on a real browser) |
+| `workerDeath.spec.ts` | 7 local-DB worker dies | fails (`test.fail`) at 30 s — known open: noticed only by the 60 s call timeout (#617) |
+| `staleDeploy.spec.ts` | 8a stale chunk → one reload keeps draft; 8b guard spent → error screen + Reload | pass (behavior already exists) |
 
 A test marked `test.fail()` is reported as *passed* while the bug exists and as
 **failed ("expected to fail, but passed")** once the fix lands. That is the
-signal to delete the `test.fail(...)` line. Those expectations were written from
+signal to delete the `test.fail(...)` line. The open ones are listed in
+[e2e-first-full-run-2026-11-17.md](../../../../../docs/research/e2e-first-full-run-2026-11-17.md)
+(「預期失敗（已知但沒人在修）」). Those expectations were first written from
 reading the source, not from running the stack: if one flips unexpectedly, check
 whether the assertion or the app is wrong before blaming either.
 

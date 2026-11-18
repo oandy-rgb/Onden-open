@@ -16,7 +16,7 @@ import { peekOwnerViews } from "../lib/ownerViews";
 import { opensOnWhiteboard, ownsBoard } from "../lib/whiteboardNote";
 import { useStableCallback } from "./useStableCallback";
 import type { useUiMode } from "./useUiMode";
-import { markBackNavigation } from "../lib/pageScrollRestore";
+import { markHistoryStep } from "../lib/pageScrollRestore";
 import { markHistoryArrival, takeHistoryArrival } from "../lib/historyIntent";
 import { navigate, openTrailEntry, pushPageEntry, stepTrailInHistory, type TrailPopStep } from "./useUrlLocation";
 import { TAG_NODE_TYPE } from "@onden/markdown/contract";
@@ -309,22 +309,21 @@ export function useWorkspaceFocus({ ui, initialLocation, boards, canvasImported,
   // (hooks/useUrlLocation), so the browser's own Back / Forward / mouse side
   // buttons and these end in the same place.
   const isPlaceGone = (place: Place) => place.id !== null && isNoteGone(place.id);
-  /** `restore` false: the step is only taken in the stacks (its place is gone; the address shows the page). */
-  const stepBack = (restore = true) => {
-    const prev = navStack[navStack.length - 1];
-    if (!prev) return;
-    markBackNavigation();
-    setForwardStack((s) => [...s.slice(-49), currentPlace()]);
-    setNavStack((s) => s.slice(0, -1));
-    if (restore) restorePlace(prev);
+  /** One step along the trail: the place on top of `from` becomes the page, the page just left goes on `to`. Back and
+   *  Forward are the same move. `restore` false: the step is only taken in the stacks (its place is gone; the address
+   *  shows the page). No history entry of its own to go to: the scroll comes back from the latest page of that name left. */
+  const stepAlongTrail = (direction: "back" | "forward", restore: boolean) => {
+    const back = direction === "back";
+    const [from, setFrom, setTo] = back ? [navStack, setNavStack, setForwardStack] : [forwardStack, setForwardStack, setNavStack];
+    const place = from[from.length - 1];
+    if (!place) return;
+    markHistoryStep("in place");
+    setTo((s) => [...s.slice(-49), currentPlace()]);
+    setFrom((s) => s.slice(0, -1));
+    if (restore) restorePlace(place);
   };
-  const stepForward = (restore = true) => {
-    const next = forwardStack[forwardStack.length - 1];
-    if (!next) return;
-    setNavStack((s) => [...s.slice(-49), currentPlace()]);
-    setForwardStack((s) => s.slice(0, -1));
-    if (restore) restorePlace(next);
-  };
+  const stepBack = (restore = true) => stepAlongTrail("back", restore);
+  const stepForward = (restore = true) => stepAlongTrail("forward", restore);
   const goBack = useStableCallback(() => {
     if (navStack.length > 0 && !stepTrailInHistory("back")) stepBack();
   });

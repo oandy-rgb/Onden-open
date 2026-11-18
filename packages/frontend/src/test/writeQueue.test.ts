@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ api: vi.fn(), toast: vi.fn(), online: false }));
 vi.mock("../lib/api", async (original) => ({ ...await original<typeof import("../lib/api")>(), api: mocks.api }));
 vi.mock("../lib/appStore", () => ({ addToast: mocks.toast, getAppState: () => ({ online: mocks.online }) }));
-vi.mock("../lib/localDb", () => ({
+// Hoisted so a test that reloads the modules (a new page life) gets the same fakes: the queue they hold is the disk.
+const localDbFakes = vi.hoisted(() => ({
   catchUpWithOtherTabs: vi.fn(), getOldestPendingWriteAt: vi.fn(), addPendingWrite: vi.fn(), getPendingWrites: vi.fn(), clearPendingWrite: vi.fn(), bumpPendingWriteAttempt: vi.fn(), rejectPendingWrite: vi.fn(), storeRejectedWrite: vi.fn(), getRejectedWrites: vi.fn(), dismissRejectedWrite: vi.fn(),
 }));
+vi.mock("../lib/localDb", () => localDbFakes);
 
 import { ApiError } from "../lib/api";
 import { addPendingWrite, catchUpWithOtherTabs, getOldestPendingWriteAt, getPendingWrites, clearPendingWrite, bumpPendingWriteAttempt, rejectPendingWrite, storeRejectedWrite, getRejectedWrites, type PendingWrite } from "../lib/localDb";
@@ -310,6 +312,46 @@ describe("a request that never answers", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  // The fault e2e closeMidSave.spec.ts 5b at the queue level: a save is on the wire and unanswered, and the tab is
+  // killed without pagehide (a browser crash, the OS killing the process). Required: the next page load sends it, or
+  // shows it in recovery. Today the only copy is the in-flight slot (sessionStorage, which a closed tab loses) until
+  // the answer or the 25 s deadline queues it. The text may also have reached the local mirror; that half is pinned
+  // in localDbJournal.test.ts. Known open; FAULTS_FLIP=1 runs it as `it` to show why.
+  const knownOpen = process.env.FAULTS_FLIP ? it : it.fails;
+  knownOpen("a save on the wire when the tab is killed is sent by the next page load, or shown in recovery", async () => {
+    vi.useFakeTimers();
+    const wire = deferred<unknown>();
+    let dead: Promise<unknown> = Promise.resolve();
+    try {
+      mocks.online = true;
+      mocks.api.mockImplementation(() => wire.promise);
+      dead = submitWrite({ ...request, idemKey: "on-the-wire" }).catch(() => null);
+      await vi.waitFor(() => expect(mocks.api).toHaveBeenCalledOnce());
+      // The tab dies: its timers and module state go, so do its session storage; the queue and localStorage stay.
+      vi.clearAllTimers();
+      sessionStorage.clear();
+      vi.resetModules();
+      const nextLife = await import("../lib/data/writeQueue");
+      const nextRecovery = await import("../lib/data/writeRecovery");
+      (await import("../lib/accountStorage")).bindAccountStorage("unit-test-account", "");
+      mocks.api.mockReset().mockResolvedValue({});
+      await nextLife.flushPendingWrites();
+      await nextRecovery.refreshRecoveryWrites();
+      const sent = mocks.api.mock.calls.some((call) => call[1]?.headers && new Headers(call[1].headers).get("Idempotency-Key") === "on-the-wire");
+      const shown = nextRecovery.getRecoveryWrites().some((write) => write.idemKey === "on-the-wire");
+      expect({ sent, shown }, "the next page load neither sends the unanswered save nor shows it").not.toEqual({ sent: false, shown: false });
+      nextLife.stopWriteRetry();
+    } finally {
+      // The dead page's lane is this module's, which later tests share: let its request end so the lane frees.
+      wire.resolve({});
+      await dead;
+      stopWriteRetry();
+      forgetAbandonedAttempts();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("gives up on a stalled replay too, and keeps the write queued", async () => {
     vi.useFakeTimers();
     try {
@@ -378,6 +420,28 @@ describe("a queue head that keeps failing", () => {
     writes = [{ ...poison, attempts: 1 }];
     await expect(moveStuckWritesToRecovery()).resolves.toBe(0);
     expect(rejected).toEqual([]);
+  });
+
+  // The fault e2e stuckWrite.spec.ts (scenario 4) at the queue level, on fake timers: the server answers 500 for one
+  // note every time, and a write to ANOTHER note waits behind it. drain() stops at the first retryable failure, so the
+  // other write is not sent, and the queue only counts as stuck (the sync status' way out) after
+  // STUCK_AFTER_ATTEMPTS tries on the retry ladder, minutes later. Known open; FAULTS_FLIP=1 runs it as `it` to show why.
+  const knownOpen = process.env.FAULTS_FLIP ? it : it.fails;
+  knownOpen("a write to another note behind a head answered 500 goes out, or the queue says it is stuck, within a minute", async () => {
+    vi.useFakeTimers();
+    try {
+      writes = [{ ...poison }, { ...unrelated }];
+      vi.mocked(getOldestPendingWriteAt).mockResolvedValue(null); // without it refreshPendingCount throws and the stuck notice is never computed
+      mocks.api.mockImplementation(async (path: string) => {
+        if (path === poison.path) throw new ApiError(500, "{}");
+        return {};
+      });
+      await flushPendingWrites();
+      await vi.advanceTimersByTimeAsync(60_000);
+      const otherSent = mocks.api.mock.calls.some((call) => call[0] === unrelated.path);
+      const outcome = otherSent ? "other write landed" : getPendingStuck() ? "stuck item with a way out" : "trapped";
+      expect(outcome, `head tried ${writes[0]!.attempts} times`).not.toBe("trapped");
+    } finally { stopWriteRetry(); vi.useRealTimers(); }
   });
 });
 

@@ -74,6 +74,7 @@ site 套件測試、後端與前端的 `src/test/guards/`、`ratchet:check`、`c
 後端與前端的 vitest 每一輪結尾都印一行 `[tests] mode: <模式>. ran N, skipped M; DB-gated files: ran X, skipped Y.`，
 **跳過了不該跳過的測試就失敗**（`scripts/lib/skipGateReporter.mjs`）。以前約 457 個檔、2,905 個測試躲在 `describe.skipIf(!isTestDb…)` 後面，
 沒有資料庫時整批消失、結束碼 0，沒有任何一條通道會失敗。現在只有五種合法的跑法：
+（同一個回報器在 `[tests] mode` 行之後，另外列出「關閉資料庫時還有背景工作在跑」的測試檔：檔名 → 登記者與個數；只記錄、不失敗，資料來自 `dbClose.ts` 的警告行，兩邊格式一起改。）
 
 | 跑法 | 指令 | 模式 | 什麼可以跳過 |
 | --- | --- | --- | --- |

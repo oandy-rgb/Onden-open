@@ -145,6 +145,9 @@ test("TAG-10: round trip, malformed, versions, multi-file partial, starter, expo
     out.proposeReal = `${await propose(`T10prop${stamp}`)} pendingDelta=${(await approvals()).length - pBefore}`;
     out.proposeAgainSameName = `${await propose(`T10prop${stamp}`)} pendingDelta=${(await approvals()).length - pBefore}`;
     out.proposeBadName = await propose(`bad name ${stamp}`);
+    // Decide it so it does not wait in the shared inbox: its name has a space, which the zh-TW screen sweep reads as English.
+    const badOne = (await approvals()).find((a) => a.payload.pack.name === `bad name ${stamp}`);
+    if (badOne) await page.request.post(`/api/inbox/approvals/${badOne.id}/reject`, H);
     out.proposeExisting = await propose(`T10src${stamp}`);
     out.agentDirectImport = String((await agent.post("/api/tags/import", { data: { name: `T10agentimp${stamp}` } })).status());
     out.agentApproveSelf = String((await agent.post(`/api/inbox/approvals/${(await approvals())[0]?.id}/approve`)).status());

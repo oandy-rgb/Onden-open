@@ -15,6 +15,27 @@ async function agent(page: Page, name: string) {
   return pwRequest.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] }, extraHTTPHeaders: { origin: BASE, authorization: `Bearer ${made.token}` } });
 }
 
+// The inbox is one per workspace and earlier specs leave things in it: agent changes nobody decided and captures nobody
+// filed. This spec asserts the empty state and exact counts, so it first settles what is there — accepts the waiting
+// agent changes as they are and files the captures (takes the inbox tag off; the notes stay) — instead of assuming
+// it runs on a fresh workspace.
+async function startFromAnEmptyInbox(page: Page) {
+  for (let round = 0; round < 10; round++) {
+    const queue = (await (await page.request.get("/api/inbox?limit=500")).json()).events as Array<{ id: string }>;
+    if (queue.length === 0) break;
+    const res = await page.request.post("/api/inbox/batch", { ...H, data: { decision: "approve", event_ids: queue.map((e) => e.id) } });
+    expect(res.ok(), `accept ${queue.length} waiting changes: ${res.status()}`).toBe(true);
+  }
+  const tags = (await (await page.request.get("/api/tags")).json()) as Array<{ id: string; schema_module?: string | null }> | { tags: Array<{ id: string; schema_module?: string | null }> };
+  const inboxTag = (Array.isArray(tags) ? tags : tags.tags).find((tag) => tag.schema_module === "capture");
+  if (!inboxTag) return;
+  const nodes = (await (await page.request.get("/api/bootstrap?bodies=none", H)).json()).nodes as Array<{ id: string; deleted_at?: string | null; class_tag_ids?: string[]; label_tag_ids?: string[] }>;
+  for (const node of nodes.filter((n) => !n.deleted_at && [...(n.class_tag_ids ?? []), ...(n.label_tag_ids ?? [])].includes(inboxTag.id))) {
+    const res = await page.request.delete(`/api/nodes/${node.id}/tags/${inboxTag.id}`, H);
+    expect(res.ok(), `file capture ${node.id}: ${res.status()}`).toBe(true);
+  }
+}
+
 test("AI-05: inbox decisions from several agents, empty, volume, failure and phone", async ({ page, browser }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
@@ -22,6 +43,8 @@ test("AI-05: inbox decisions from several agents, empty, volume, failure and pho
   const shared = await defaultSpaceId(page.request); // an agent edits only where it is a member (the default space)
   const waiting = page.locator(".capture-decide");
   const rowFor = (title: string) => page.getByRole("button", { name: `Open “${title}” to decide`, exact: true });
+
+  await startFromAnEmptyInbox(page);
 
   // Failure on the very first load: the pane says so and offers a retry, instead of looking empty.
   await page.route("**/api/inbox?*", (r) => r.fulfill({ status: 503, body: "{\"error\":\"unavailable\"}" }));

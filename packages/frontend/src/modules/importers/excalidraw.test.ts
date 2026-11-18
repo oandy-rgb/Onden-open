@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compressToBase64 } from "lz-string";
 import { decodeExcalidraw, isExcalidrawFile, withoutPluginFrontmatter } from "./excalidraw";
-import { decodeInk, encodeInk } from "../../lib/ink";
+import { decodeInk, encodeInk } from "@onden/markdown/ink";
 
 // An Obsidian Excalidraw note becomes a handwriting page: freehand strokes
 // keep their points (offset by x/y), pressure, colour and width; lines and

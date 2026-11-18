@@ -1,10 +1,10 @@
-import { isInkReadOnly, INK_DATA_ATTR } from "@onden/markdown/ink";
+import { isInkReadOnly, INK_DATA_ATTR, encodeInk } from "@onden/markdown/ink";
 import { upsertAttribute } from "../localDb";
 import { announceDrawingChange } from "../drawingChanges";
 import { domainContext } from "./domainWriters";
 import { makeWriteLifecycle } from "./writeLifecycle";
 import { runBackgroundWrite } from "./backgroundWrite";
-import { encodeInk, type InkPageAttr } from "../ink/store";
+import { type InkPageAttr } from "../ink/store";
 import type { InkDocument } from "../ink/types";
 import type { InkMultiPageDoc } from "../pdf";
 import type { NodeAttribute } from "../api";

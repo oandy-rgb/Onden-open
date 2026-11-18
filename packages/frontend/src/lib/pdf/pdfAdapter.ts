@@ -16,8 +16,8 @@
 // highlight = one ink stroke group.
 
 import type { PdfDrawingStroke, PdfHighlightRecord, PdfShapeData } from "./coords";
-import { inkHasContent, inkPageOrder, notePages, type InkEnvelope } from "@onden/markdown/ink";
-import { decodeInk, describeInkDiff, diffInk, isEmptyInkDiff, type InkDiff, type InkDocument, type InkPoint, type InkStroke } from "../ink";
+import { inkHasContent, inkPageOrder, notePages, type InkEnvelope, decodeInk } from "@onden/markdown/ink";
+import { describeInkDiff, diffInk, isEmptyInkDiff, type InkDiff, type InkDocument, type InkPoint, type InkStroke } from "../ink";
 
 export type { PdfDrawingStroke, PdfShapeData } from "./coords";
 

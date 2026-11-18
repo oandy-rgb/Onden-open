@@ -1,7 +1,10 @@
 // Feature-audit deepening (2026-10-07): NAV-02 — lens availability, deep links,
 // refresh and history navigation across Content / Canvas / History. The
-// Table lens was removed (#486); an old ?lens=table link opens Content, and
-// the deep-link loop below still visits it to log that redirect.
+// Table lens was removed (#486), and the Timeline and local-graph lenses are
+// gone too: an old ?lens=table|timeline|local-graph link opens Content
+// (hooks/useUrlLocation.ts parseLocation). History is a window opened from
+// the note's header (c38ff179), not a lens; switching a tab inside one note
+// is a history `replace` (the table at the top of useUrlLocation.ts).
 import { test, expect, type Page } from "@playwright/test";
 import { ready, H } from "./helpers";
 
@@ -28,52 +31,47 @@ test("NAV-02: lens availability, deep links, refresh and back/forward", async ({
   // having children no longer earns one. Give the parent that tab; the leaf keeps only Content.
   const canvasTab = await page.request.post(`/api/nodes/${parent}/views`, { ...H, data: { name: "Canvas", layout: "canvas", visible_fields: [] } });
   expect(canvasTab.ok(), await canvasTab.text()).toBeTruthy();
-  const out: Record<string, string> = {};
 
   // Availability: a leaf has only Content; a parent shows the Canvas tab it was given.
   await ready(page, `/?view=notes&node=${leaf}`);
-  out.leafTabs = JSON.stringify(await tabs(page));
+  expect(await tabs(page)).toEqual(["Content"]);
   await ready(page, `/?view=notes&node=${parent}`);
-  out.parentTabs = JSON.stringify(await tabs(page));
-  expect(out.leafTabs).toBe(JSON.stringify(["Content"]));
-  expect(out.parentTabs).toBe(JSON.stringify(["Content", "Canvas"]));
+  expect(await tabs(page)).toEqual(["Content", "Canvas"]);
 
-  // Deep links land on the right pane and survive refresh.
+  // Deep links land on the right pane and survive refresh. The lenses that were removed open Content
+  // (hooks/useUrlLocation.ts parseLocation: local-graph, table and timeline read as the editor lens).
+  const expected: Record<string, string> = { table: "editor/editor", timeline: "editor/editor", canvas: "canvas/canvas", editor: "editor/editor", "local-graph": "editor/editor" };
   for (const lens of ["table", "timeline", "canvas", "editor", "local-graph"]) {
     await ready(page, `/?view=notes&node=${parent}&lens=${lens}`);
-    await page.waitForTimeout(800);
-    const first = `${lensParam(page)}/${await pane(page)}`;
+    await expect.poll(async () => `${lensParam(page)}/${await pane(page)}`).toBe(expected[lens]);
     await page.reload({ waitUntil: "load" });
-    await page.waitForTimeout(1500);
-    out[`deep:${lens}`] = `${first} → reload ${lensParam(page)}/${await pane(page)}`;
-    if (lens === "canvas") expect(out[`deep:${lens}`]).toBe("canvas/canvas → reload canvas/canvas");
-    if (lens === "canvas") await page.screenshot({ path: "/tmp/pw-output/nav02-canvas.png" });
+    await expect.poll(async () => `${lensParam(page)}/${await pane(page)}`, { message: `?lens=${lens} survives a reload` }).toBe(expected[lens]);
   }
-  // A gated lens on a node that cannot fill it.
+  // A lens the note cannot fill (the Table link on a note with nothing to show) opens Content too.
   await ready(page, `/?view=notes&node=${leaf}&lens=table`);
-  await page.waitForTimeout(800);
-  out["deep:table-on-leaf"] = `${lensParam(page)}/${await pane(page)}`;
-  await page.screenshot({ path: "/tmp/pw-output/nav02-table-leaf.png" });
+  await expect.poll(async () => `${lensParam(page)}/${await pane(page)}`).toBe("editor/editor");
 
-  // Back / forward across lens switches made in the strip.
+  // Switching tabs inside one note is a history `replace`, so Back leaves the note instead of undoing a tab switch
+  // (hooks/useUrlLocation.ts, the history table: "switch tab / lens inside one note → replace").
   await ready(page, `/?view=notes&node=${parent}&lens=editor`);
+  const entries = await page.evaluate(() => history.length);
   await page.locator('.view-tabs [role=tab]:has-text("Canvas")').click();
   await expect(page).toHaveURL(/lens=canvas/);
   await page.locator('.view-tabs [role=tab]:has-text("Content")').click();
   await expect(page).toHaveURL(/lens=editor/);
-  const seq: string[] = [];
-  await page.goBack(); await page.waitForTimeout(1500); seq.push(`${lensParam(page)}/${await pane(page)}`);
-  await page.goBack(); await page.waitForTimeout(600); seq.push(`${lensParam(page)}/${await pane(page)}`);
-  await page.goForward(); await page.waitForTimeout(1500); seq.push(`${lensParam(page)}/${await pane(page)}`);
-  out.backForward = seq.join(" → ");
+  expect(await page.evaluate(() => history.length), "tab switches add no history entry").toBe(entries);
+  await page.goBack();
+  await expect(page, "Back leaves the note for the page before it").toHaveURL(new RegExp(`node=${leaf}`));
+  await page.goForward();
+  await expect(page).toHaveURL(new RegExp(`node=${parent}.*lens=editor`));
+  await expect.poll(() => pane(page)).toBe("editor");
 
-  // History: inspector entry vs History lens show the same node's versions.
+  // History is a window opened from the note's header (not a lens); Escape closes it and leaves the page where it was.
   await ready(page, `/?view=notes&node=${parent}`);
   await page.locator(".note-history-link").click();
-  const dialog = page.locator("[role='dialog']").filter({ hasText: /version|Version|版本/ }).first();
-  out.inspectorHistory = `dialog=${await dialog.isVisible({ timeout: 5000 }).catch(() => false)} anyDialog=${await page.locator("[role='dialog'], dialog[open], .history-view, .version-dialog").count()}`;
-  await page.screenshot({ path: "/tmp/pw-output/nav02-history.png" });
+  await expect(page.locator(".nh")).toBeVisible();
   await page.keyboard.press("Escape");
-  out.afterEscape = `lens=${lensParam(page)} pane=${await pane(page)}`;
-  console.log(`AUDIT NAV-02 ${JSON.stringify(out)}`);
+  await expect(page.locator(".nh")).toBeHidden();
+  expect(lensParam(page)).toBe("editor");
+  expect(await pane(page)).toBe("editor");
 });

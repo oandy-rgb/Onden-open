@@ -7,8 +7,7 @@
 // nothing queued, the server answers (it may hold another device's edits);
 // offline or on a network error, the mirror does.
 
-import { decodeInk as decodeSharedInk, encodeInk as encodeSharedInk, type DecodedInk, type InkAnnotation, type InkEnvelope } from "@onden/markdown/ink";
-import { isInkReadOnly, INK_DATA_ATTR, INK_PAGE_ATTRS } from "@onden/markdown/ink";
+import { decodeInk, isInkReadOnly, INK_DATA_ATTR, INK_PAGE_ATTRS } from "@onden/markdown/ink";
 import { addToast } from "../appStore";
 import { reads } from "../data";
 import { t } from "../i18n";
@@ -20,23 +19,9 @@ export async function loadInkAttributes<K extends InkAttributeKey>(nodeId: strin
   return reads.notes.attributeValues(nodeId, keys);
 }
 
-// ── The one ink_data codec ─────────────────────────────────────────────────
-// ink_data holds one of two shapes: a single page (handwriting note, canvas
-// layer) or the PDF envelope {version:1, pages, annotations} — the PDF's
-// per-page strokes AND its highlight/drawing records, so one PDF edit is one
-// attribute write. Every reader decodes here; nothing else parses ink_data.
-// The codec itself is shared with the server (@onden/markdown/ink), which
-// merges a save into what another device stored meanwhile.
-
-export type { DecodedInk };
-
-/** Decode a stored ink_data value. Empty, unreadable or unrecognised values
- *  are "none" (a note opens an empty surface instead of failing); a PDF
- *  envelope keeps only its readable pages. `A` is the host's highlight record
- *  type (the PDF's, lib/pdf/pdfAdapter) — this module does not know it. */
-export function decodeInk<A extends InkAnnotation = InkAnnotation>(raw: string | null | undefined): DecodedInk<A> {
-  return decodeSharedInk<A>(raw);
-}
+// ink_data holds one of two shapes (a single page, or the PDF envelope); the codec for both is
+// @onden/markdown/ink decodeInk / encodeInk, shared with the server. Every reader decodes with it;
+// nothing else parses ink_data.
 
 /** The attributes a single drawing page lives in: `ink_data` (a handwriting page) or `board_ink` (the pen
  *  layer of the note's whiteboard view). Two places, one format: a page drawn on a board is not the note's content. */
@@ -48,11 +33,6 @@ export async function loadInkPage(nodeId: string, attr: InkPageAttr = INK_DATA_A
   const stored = (await loadInkAttributes(nodeId, [attr] as const))[attr];
   const ink = decodeInk(stored);
   return ink.kind === "page" ? ink.doc : null;
-}
-
-/** The stored form of either shape. */
-export function encodeInk(doc: InkDocument | InkEnvelope): string {
-  return encodeSharedInk(doc);
 }
 
 // ── Drawings made with a newer version ──────────────────────────────────────

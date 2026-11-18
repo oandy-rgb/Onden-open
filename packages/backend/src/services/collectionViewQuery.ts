@@ -32,12 +32,12 @@ import { sqlIdentifier } from "../sqlText.js";
 import { MANUAL_ORDER_N_ASC, MANUAL_ORDER_N_DESC, UNSORTED_ORDER_N } from "./orderKeys.js";
 import { memberTagIds } from "./tagHierarchy.js";
 
-import { appendFilterClauses, BUILT_IN_FIELDS, type FilterClause } from "./filter/index.js";
+import { appendFilterClauses, type FilterClause } from "./filter/index.js";
 import { numericValueSql } from "./attributeNumber.js";
 import { LISTED_NODE_SQL } from "../spine/reservedNodes.js";
 import { MAX_OFFSET, pageOf, pageSql, type PageInput } from "./paging.js";
 import type { ExecRow, Page } from "@onden/contract";
-import { BUILT_IN_FIELD_NAMES } from "@onden/markdown";
+import { BUILT_IN_FIELDS } from "@onden/markdown";
 import { liveNodeSql } from "../spine/nodeSql.js";
 export type { FilterClause };
 
@@ -82,7 +82,7 @@ export function placementFields(view: { group_by?: string | null; layout_config?
 export const VIEW_PAGE = { default: 200, max: 500 };
 
 // Every built-in field is a column a view can sort by (the one list: @onden/markdown sharedContract).
-const SORT_WHITELIST = new Set<string>(BUILT_IN_FIELD_NAMES);
+const SORT_WHITELIST = new Set<string>(BUILT_IN_FIELDS);
 
 /**
  * Execute a saved view's query against the live data. Read-only.

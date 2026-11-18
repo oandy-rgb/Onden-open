@@ -636,7 +636,7 @@ export function noteIdOf(path: string): string | null {
 function pick<T extends object>(source: T, keys: string[]): Partial<T> {
   return Object.fromEntries(Object.entries(source).filter(([k]) => keys.includes(k))) as Partial<T>;
 }
-export function subtreeOf(notes: Map<string, { parent_id: string | null }>, rootId: string): string[] {
+export function simSubtreeIds(notes: Map<string, { parent_id: string | null }>, rootId: string): string[] {
   const out = [rootId];
   for (let i = 0; i < out.length; i++) for (const [id, n] of notes) if (n.parent_id === out[i] && !out.includes(id)) out.push(id);
   return out;

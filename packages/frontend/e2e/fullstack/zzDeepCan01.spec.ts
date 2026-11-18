@@ -34,39 +34,49 @@ async function findRow(page: Page, text: string) {
 test("CAN-01: board create / rename / delete through the UI", async ({ page, browser }) => {
   test.setTimeout(300_000);
   const stamp = Date.now();
-  const out: Record<string, string> = {};
   const boards = async () => (await (await page.request.get("/api/canvases")).json()) as Array<{ id: string; title: string }>;
-  const toasts = async () => (await page.locator(".toast").allInnerTexts().catch(() => [])).join(" | ").replace(/\s+/g, " ").slice(0, 160);
-  try {
+  const serverTitle = async (id: string) => (await boards()).find((b) => b.id === id)?.title;
+  // The one wording of a refused write (lib/serverErrors.ts: forbidden), on a toast and in the recovery panel.
+  const forbiddenText = "You don't have permission to do that.";
+  // Deleting is a soft delete with an Undo prompt, not a question (docs/decisions/soft-delete-no-trash.md): no native or in-app confirmation appears.
+  const dialogs: string[] = [];
+  page.on("dialog", (d) => { dialogs.push(d.message()); void d.dismiss(); });
   const before0 = new Set((await boards()).map((b) => b.id));
-  const n0 = before0.size;
+  const newBoards = async () => (await boards()).filter((b) => !before0.has(b.id));
   await ready(page, "/?view=notes");
   const sheet = await openCreateSheet(page);
-  await page.waitForTimeout(1500);
-  out.sheetCreatesNothing = `${n0}→${(await boards()).length}`;
-  expect((await boards()).length, "opening the Create sheet and choosing a kind creates nothing").toBe(n0);
+  await page.waitForTimeout(1500); // an absence check: nothing may be created while the sheet only sits open
+  expect(await newBoards(), "opening the Create sheet and choosing a kind creates nothing").toHaveLength(0);
 
   // Double click "Create" with Canvas chosen.
   const posts: string[] = [];
   page.on("request", (r) => { if (r.method() === "POST" && r.url().endsWith("/api/canvases")) posts.push(r.postData() ?? ""); });
   await sheet.getByRole("button", { name: "Create", exact: true }).dblclick();
-  await page.waitForTimeout(2500);
-  const after = await boards();
-  out.doubleClickCreate = JSON.stringify({ posts: posts.length, delta: after.length - n0, url: page.url().replace(BASE, ""), boardShown: await page.locator(".kw-canvas-wrap").isVisible().catch(() => false) });
+  await expect.poll(async () => (await newBoards()).length).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(1500); // an absence check: a second create from the second click would land by now
   expect(posts.length, "a double click on Create sends one create").toBe(1);
-  expect(after.length - n0, "and makes one board").toBe(1);
-  const created = after.find((b) => !before0.has(b.id));
+  const created = await newBoards();
+  expect(created, "and makes one board").toHaveLength(1);
+  // The new board opens as the open note on its Canvas tab (docs/architecture/canvas-as-view.md: a board is a note with a Canvas tab).
+  await expect(page).toHaveURL(new RegExp(`node=${created[0].id}`));
+  expect(new URL(page.url()).searchParams.get("lens"), "it opens on the Canvas tab").toBe("canvas");
+  await expect(page.locator(".kw-canvas-wrap")).toBeVisible();
 
-  // Refused create (403).
+  // Refused create (403): nothing is made; the refused input is kept in the recovery panel (decisions-offline-account.md, batch 16:
+  // a refusal is not a discard; 403 gets a readable sentence).
   await page.route("**/api/canvases", (r) => r.request().method() === "POST" ? r.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "forbidden" }) }) : r.continue());
   const n1 = (await boards()).length;
   const sheet403 = await openCreateSheet(page);
   await sheet403.getByRole("button", { name: "Create", exact: true }).click();
-  await page.waitForTimeout(2000);
-  out.create403 = JSON.stringify({ delta: (await boards()).length - n1, sheetStill: await sheet403.isVisible().catch(() => false), buttonEnabled: await sheet403.getByRole("button", { name: "Create", exact: true }).isEnabled().catch(() => "gone"), toast: await toasts() });
+  const recovery = page.locator(".failed-write-recovery").filter({ visible: true });
+  await expect(recovery).toContainText("This change was rejected");
+  await expect(recovery).toContainText(forbiddenText);
+  await expect(recovery, "the refused input is kept").toContainText("Untitled canvas");
   expect((await boards()).length - n1, "a refused create makes no board").toBe(0);
+  // The Create sheet closes once the write is handed to the recovery panel; its input lives there.
+  await expect(sheet403).toBeHidden(); // pinned: today's behaviour, no written rule
   await page.unroute("**/api/canvases");
-  if (await sheet403.isVisible().catch(() => false)) await page.keyboard.press("Escape");
+  await recovery.getByRole("button", { name: "Minimize recovery panel" }).click().catch(() => {});
 
   // Rename + delete from the sidebar, on a board with two member notes.
   const m1 = await (await page.request.post("/api/nodes", { ...H, data: { title: `Mem1 ${stamp}`, markdown: "m1" } })).json();
@@ -76,63 +86,71 @@ test("CAN-01: board create / rename / delete through the UI", async ({ page, bro
   await ready(page, `/?view=notes&node=${bd.id}`);
   await page.locator(".react-flow__node").first().waitFor({ timeout: 30_000 });
   const row = () => findRow(page, `C01Board ${stamp}`);
-  out.sidebarRowVisibleWithoutScroll = String(await page.locator(".obsidian-page-button", { hasText: `C01Board ${stamp}` }).first().isVisible().catch(() => false));
-  const rename = async (to: string) => {
-    await (await row()).click({ button: "right" });
+  // The open note's row is scrolled into view in the sidebar (components/OverviewSidebar.tsx: scrollIntoView of the active row).
+  await expect(page.locator(".obsidian-page-button.active", { hasText: `C01Board ${stamp}` }).first()).toBeInViewport();
+  const rename = async (from: string, to: string) => {
+    await (await findRow(page, from)).click({ button: "right" });
     await page.locator(".ctx-menu").getByRole("menuitem", { name: "Rename", exact: true }).click();
     const input = page.locator(".sb-rename-input");
     await input.fill(to); await input.press("Enter");
-    await page.waitForTimeout(1500);
   };
-  await rename(`C01Renamed ${stamp}`);
-  out.rename = JSON.stringify({ server: (await boards()).find((b) => b.id === bd.id)?.title, sidebar: await (await findRow(page, `C01Renamed ${stamp}`)).count() });
-  // Refused rename (403) — sidebar must go back to the server title.
+  await row();
+  await rename(`C01Board ${stamp}`, `C01Renamed ${stamp}`);
+  await expect.poll(() => serverTitle(bd.id)).toBe(`C01Renamed ${stamp}`);
+  await expect(page.locator(".obsidian-page-button", { hasText: `C01Renamed ${stamp}` })).toHaveCount(1);
+  await expect(page.locator(".toast").filter({ hasText: "Renamed" }).first()).toBeVisible(); // nodeMutations.renameNode: "Renamed"
+  // Refused rename (403): the server title stays, the sidebar never shows the refused title as a row, and the form stays open with
+  // the typed text (nodeMutations.renameNode: false keeps the rename form open; the writer has reported why).
   await page.route(`**/api/nodes/${bd.id}`, (r) => r.request().method() === "PATCH" ? r.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "forbidden" }) }) : r.continue());
   await page.route(`**/api/canvases/${bd.id}`, (r) => r.request().method() === "PATCH" ? r.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "forbidden" }) }) : r.continue());
-  await (await findRow(page, `C01Renamed ${stamp}`)).click({ button: "right" });
-  await page.locator(".ctx-menu").getByRole("menuitem", { name: "Rename", exact: true }).click();
-  await page.locator(".sb-rename-input").fill(`C01Refused ${stamp}`); await page.locator(".sb-rename-input").press("Enter");
-  await page.waitForTimeout(1500);
-  out.rename403 = JSON.stringify({ server: (await boards()).find((b) => b.id === bd.id)?.title, sidebarRefused: await page.locator(".obsidian-page-button", { hasText: `C01Refused ${stamp}` }).count(), inputStill: await page.locator(".sb-rename-input").count(), toast: await toasts() });
+  await rename(`C01Renamed ${stamp}`, `C01Refused ${stamp}`);
+  await expect(page.locator(".failed-write-recovery").filter({ visible: true })).toContainText(forbiddenText);
+  expect(await serverTitle(bd.id), "a refused rename changes nothing on the server").toBe(`C01Renamed ${stamp}`);
+  await expect(page.locator(".obsidian-page-button", { hasText: `C01Refused ${stamp}` }), "the refused title is not a row").toHaveCount(0);
+  await expect(page.locator(".sb-rename-input"), "the form stays open").toHaveValue(`C01Refused ${stamp}`);
   await page.unrouteAll({ behavior: "ignoreErrors" });
-  if (await page.locator(".sb-rename-input").count()) await page.locator(".sb-rename-input").press("Escape");
-  // Empty title.
+  await page.locator(".sb-rename-input").press("Escape");
+  // Empty title: no write; the form stays open.
   await ready(page, `/?view=notes&node=${bd.id}`);
   await (await findRow(page, `C01Renamed ${stamp}`)).click({ button: "right" });
   await page.locator(".ctx-menu").getByRole("menuitem", { name: "Rename", exact: true }).click();
   await page.locator(".sb-rename-input").fill("   "); await page.locator(".sb-rename-input").press("Enter");
-  await page.waitForTimeout(1500);
-  out.renameBlank = JSON.stringify({ server: (await boards()).find((b) => b.id === bd.id)?.title, toast: await toasts() });
-  if (await page.locator(".sb-rename-input").count()) await page.locator(".sb-rename-input").press("Escape");
+  await expect(page.locator(".sb-rename-input"), "a blank title keeps the form open (nodeMutations.renameNode)").toBeVisible();
+  expect(await serverTitle(bd.id), "a blank title is no rename").toBe(`C01Renamed ${stamp}`);
+  await page.locator(".sb-rename-input").press("Escape");
 
   // Delete: refused first, then for real.
   await ready(page, `/?view=notes&node=${bd.id}`);
   const delRow = await findRow(page, `C01Renamed ${stamp}`);
   await page.route(`**/api/nodes/${bd.id}`, (r) => r.request().method() === "DELETE" ? r.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "forbidden" }) }) : r.continue());
   await page.route(`**/api/canvases/${bd.id}`, (r) => r.request().method() === "DELETE" ? r.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "forbidden" }) }) : r.continue());
-  page.once("dialog", (d) => { out.deleteDialog403 = d.message(); void d.accept(); });
   await delRow.click({ button: "right" });
   await page.locator(".ctx-menu").getByRole("menuitem", { name: "Delete", exact: true }).click();
-  const confirm = page.locator(".confirm-dialog");
-  if (await confirm.isVisible().catch(() => false)) { out.confirmText403 = (await confirm.innerText()).replace(/\s+/g, " "); await confirm.getByRole("button", { name: /Delete|Move/ }).last().click(); }
-  await page.waitForTimeout(1500);
-  out.delete403 = JSON.stringify({ live: (await boards()).some((b) => b.id === bd.id), sidebar: await page.locator(".obsidian-page-button", { hasText: `C01Renamed ${stamp}` }).count(), toast: await toasts() });
+  await expect(page.locator(".toast").filter({ hasText: forbiddenText }).first()).toBeVisible();
+  expect((await boards()).some((b) => b.id === bd.id), "a refused delete leaves the board live").toBe(true);
+  await expect(page.locator(".obsidian-page-button", { hasText: `C01Renamed ${stamp}` })).toHaveCount(1);
+  // A refused delete gives the focus back: the page the user is on stays (lib/data/nodeActions.ts, delete).
+  await expect(page).toHaveURL(new RegExp(`node=${bd.id}`));
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await ready(page, `/?view=notes&node=${bd.id}`);
-  page.once("dialog", (d) => { out.deleteDialog = d.message(); void d.accept(); });
   await (await findRow(page, `C01Renamed ${stamp}`)).click({ button: "right" });
   await page.locator(".ctx-menu").getByRole("menuitem", { name: "Delete", exact: true }).click();
-  if (await confirm.isVisible().catch(() => false)) { out.confirmText = (await confirm.innerText()).replace(/\s+/g, " "); await confirm.getByRole("button", { name: /Delete|Move/ }).last().click(); }
-  await page.waitForTimeout(2000);
-  const memLive = async () => `${(await page.request.get(`/api/nodes/${m1.id}`)).status()}/${(await page.request.get(`/api/nodes/${m2.id}`)).status()}`;
-  out.deleted = JSON.stringify({ live: (await boards()).some((b) => b.id === bd.id), members: await memLive(), url: page.url().replace(BASE, ""), main: (await page.locator("main, .notes-main").first().innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 100) });
+  const memLive = async () => [(await page.request.get(`/api/nodes/${m1.id}`)).status(), (await page.request.get(`/api/nodes/${m2.id}`)).status()];
+  // Soft delete with an Undo prompt, and the open note moves to its neighbour (docs/decisions/soft-delete-no-trash.md).
+  await expect(page.locator(".toast").getByRole("button", { name: "Undo" }).first()).toBeVisible();
+  await expect.poll(async () => (await boards()).some((b) => b.id === bd.id), "the deleted board is not listed").toBe(false);
+  expect(await memLive(), "member notes are untouched").toEqual([200, 200]);
+  expect(page.url(), "the open note moved on to a neighbour").not.toContain(bd.id);
+  expect(new URL(page.url()).searchParams.get("node"), "and a note is open").not.toBeNull();
+  expect(dialogs, "no confirmation question for a soft delete").toEqual([]);
+  await expect(page.locator(".confirm-dialog")).toHaveCount(0);
   // A deleted board is gone from the notes list and from the boards the server lists; undelete brings it back with its layout.
-  out.listAfterDelete = String(await page.locator(".obsidian-page-button", { hasText: `C01Renamed ${stamp}` }).count());
+  await expect(page.locator(".obsidian-page-button", { hasText: `C01Renamed ${stamp}` })).toHaveCount(0);
   const und = await page.request.post(`/api/nodes/${bd.id}/undelete`, { ...H, data: {} });
   const back = await (await page.request.get(`/api/canvases/${bd.id}`)).json().catch(() => ({}));
-  out.undelete = `${und.status()} nodes=${JSON.stringify((back.data?.nodes ?? []).map((n: { nodeId: string; x: number }) => `${n.nodeId === m1.id ? "m1" : n.nodeId === m2.id ? "m2" : "?"}@${n.x}`))}`;
-  expect(JSON.parse(out.deleted).live, "the deleted board is not listed").toBe(false);
-  expect(out.undelete, "undelete keeps both cards where they were").toBe(`200 nodes=["m1@40","m2@400"]`);
+  const placedAt = (back.data?.nodes ?? []).map((n: { nodeId: string; x: number }) => `${n.nodeId === m1.id ? "m1" : n.nodeId === m2.id ? "m2" : "?"}@${n.x}`);
+  expect(und.status()).toBe(200);
+  expect(placedAt, "undelete keeps both cards where they were").toEqual(["m1@40", "m2@400"]);
 
   // Phone: the Create sheet is a bottom sheet over the notes list.
   const phone = await browser.newContext({ baseURL: BASE, storageState: await page.context().storageState(), viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -142,16 +160,13 @@ test("CAN-01: board create / rename / delete through the UI", async ({ page, bro
   if (await toList.count()) await toList.first().click();
   const psheet = await openCreateSheet(pp);
   const nb = psheet.getByRole("button", { name: "Create", exact: true });
-  const box = await nb.boundingBox().catch(() => null);
-  out.phoneSheet = JSON.stringify({ btn: box ? `${Math.round(box.width)}x${Math.round(box.height)}` : null, sw: await pp.evaluate(() => document.documentElement.scrollWidth) });
-  const before = (await boards()).length;
+  const box = await nb.boundingBox();
+  // A phone tap target is at least 44 px (frontend/e2e/layout-audit README: 手機點擊目標) and the page does not scroll sideways.
+  expect(box!.height, "the Create button is a 44px tap target").toBeGreaterThanOrEqual(44);
+  expect(await pp.evaluate(() => document.documentElement.scrollWidth), "no sideways scroll on the phone").toBeLessThanOrEqual(390);
+  const phoneBefore = new Set((await boards()).map((b) => b.id));
   await nb.click();
-  await pp.waitForTimeout(2500);
-  out.phoneCreate = JSON.stringify({ delta: (await boards()).length - before, board: await pp.locator(".kw-canvas-wrap").isVisible().catch(() => false) });
-  expect((await boards()).length - before, "the phone's Create sheet makes one board").toBe(1);
+  await expect.poll(async () => (await boards()).filter((b) => !phoneBefore.has(b.id)).length).toBe(1);
+  await expect(pp.locator(".kw-canvas-wrap"), "the new board opens").toBeVisible();
   await phone.close();
-  if (created) out.cleanupNote = created.id;
-  } finally {
-    console.log("CAN01 " + JSON.stringify(out, null, 2));
-  }
 });

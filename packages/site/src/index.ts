@@ -2,6 +2,7 @@
 // tools. No React and no Puck here; the backend imports this entry.
 // React / Puck: "@onden/site/react".
 export type { BoxPick, FontKind, HomePresetId, PuckComponentData, PuckData, SiteBoxes, SiteDesign, SiteDesignV2, SiteFrames, SiteScheme, SiteStyle, StylePresetName } from "./design.js";
+export { chromeRevision } from "./design.js";
 export * from "./registry.js";
 export { validateDesignV2, type DesignValidationV2 } from "./validate.js";
 export { cleanPick, defaultDesign, isDefaultHome, migrateV2, usesLegacyHome, validateDesign, type DesignValidation } from "./designV3.js";

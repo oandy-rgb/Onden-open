@@ -6,10 +6,11 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { ready, openInfoTags, defaultSpaceId, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
 
 
+// 2026-11-18 (owner: 「都改成檢查」): every value this probe used to record is now a check. Each `expect` names the written
+// rule it follows; a line marked `pinned:` has no written rule and only records today's behaviour.
 test("TAG-05: multi-value, relation, media, stale options, failures", async ({ page, browser }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
-  const out: Record<string, string> = {};
   const FIELDS = [
     { name: "m_txt", type: "text", cardinality: "many" },
     { name: "m_sel", type: "select", options: ["a", "b"], cardinality: "many" },
@@ -28,120 +29,139 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
   const attrs = async (id: string, p: Page = page) => Object.fromEntries(((await (await p.request.get(`/api/nodes/${id}/attributes`)).json()) as { key: string; value: string; value_type: string }[]).map((a) => [a.key, `${a.value}|${a.value_type}`]));
   const put = async (id: string, key: string, value: string, value_type = "text", p: Page = page) => {
     const r = await p.request.put(`/api/nodes/${id}/attributes/${key}`, { ...H, data: { value, value_type } });
-    return r.status() === 200 ? "200" : `${r.status()} ${(await r.text()).slice(0, 80)}`;
+    return { status: r.status(), error: r.status() === 200 ? "" : (await r.json()).error as string, detail: r.status() === 200 ? "" : String((await r.json()).detail ?? "") };
   };
   const schema = async () => ((await (await page.request.get("/api/tags")).json()) as { id: string; schema_fields: Record<string, unknown>[] }[]).find((t) => t.id === tagId)?.schema_fields ?? [];
   const setOptions = async (name: string, options: string[]) =>
     (await page.request.patch(`/api/tags/${tagId}/schema`, { ...H, data: { fields: (await schema()).map((f) => f.name === name ? { ...f, options } : f) } })).status();
+  const serverIs = (id: string, key: string, want: string | undefined) => expect.poll(async () => (await attrs(id))[key], { message: `${key} on the server`, timeout: 60_000 }).toBe(want);
 
-  // A) API matrix.
+  // A) API matrix. A "many" field stores a JSON list as text (attributeValue.ts encodeValues); empty slots are skipped by fieldViolation;
+  //    a scalar is one value; a relation is free-form (elementViolation), so an id nobody holds is accepted.
   const N = await mk(`T05Note ${stamp}`);
   const target = await mk(`RelTarget ${stamp}`, false);
-  const api: string[] = [];
-  api.push(`m_txt dup ["a","a"] → ${await put(N, "m_txt", JSON.stringify(["a", "a"]))} stored=${(await attrs(N)).m_txt}`);
-  api.push(`m_txt [""] → ${await put(N, "m_txt", JSON.stringify([""]))}`);
-  api.push(`m_sel ["a"] → ${await put(N, "m_sel", JSON.stringify(["a"]))}`);
-  api.push(`m_sel "a" (scalar) → ${await put(N, "m_sel", "a")}`);
-  api.push(`rel target → ${await put(N, "rel", target, "node_ref")}`);
-  api.push(`rel not-a-uuid → ${await put(N, "rel", "not-a-uuid", "node_ref")}`);
-  api.push(`rel random uuid → ${await put(N, "rel", "00000000-0000-4000-8000-000000000000", "node_ref")}`);
-  await put(N, "rel", target, "node_ref");
-  out.api = api.join("\n");
+  expect((await put(N, "m_txt", JSON.stringify(["a", "a"]))).status).toBe(200);
+  // pinned: today's behaviour, no written rule (a list keeps a repeated value)
+  expect((await attrs(N)).m_txt).toBe('["a","a"]|text');
+  expect((await put(N, "m_txt", JSON.stringify([""]))).status).toBe(200);
+  expect((await put(N, "m_sel", JSON.stringify(["a"]))).status).toBe(200);
+  expect((await put(N, "m_sel", "a")).status).toBe(200);
+  expect((await put(N, "m_sel", JSON.stringify(["a", "zzz"]))).status, "every element must be one of the options").toBe(422);
+  expect((await put(N, "rel", target, "node_ref")).status).toBe(200);
+  expect((await put(N, "rel", "not-a-uuid", "node_ref")).status).toBe(200);
+  expect((await put(N, "rel", "00000000-0000-4000-8000-000000000000", "node_ref")).status).toBe(200);
+  expect((await put(N, "rel", target, "node_ref")).status).toBe(200);
+  expect((await attrs(N)).rel).toBe(`${target}|node_ref`);
 
-  // B) Deleted reference: trash the target, look at API + UI.
+  // B) The target is deleted. Delete is a soft delete that keeps the reference (docs/decisions/soft-delete-no-trash.md);
+  //    the panel shows the target's title while it lives (RelationFieldEditor.tsx: "look it up on each render"), and a name it cannot find as
+  //    「Untitled」, never the id (AGENTS.md 「找不到名稱時顯示「未命名」，不退回 id」).
   const panel = page.locator(".attr-panel");
   const openPanel = (p: Page) => openInfoTags(p);
   const row = (p: Page, name: string) => p.locator(".attr-panel .attr-row", { has: p.locator(".attr-key", { hasText: new RegExp(`\\b${name}$`) }) });
+  const featured = (p: Page, name: string) => p.locator(".ff-cell", { has: p.locator(".ff-label", { hasText: new RegExp(`^${name}$`) }) });
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
-  out.relLive = (await row(page, "rel").innerText()).replace(/\s+/g, " ");
-  const del = await page.request.delete(`/api/nodes/${target}`, H);
-  out.trashTarget = String(del.status());
+  await expect(row(page, "rel")).toContainText(`RelTarget ${stamp}`);
+  expect((await page.request.delete(`/api/nodes/${target}`, H)).status()).toBe(200);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
-  out.relAfterTrash = `ui=${JSON.stringify((await row(page, "rel").innerText()).replace(/\s+/g, " "))} api=${(await attrs(N)).rel}`;
-  out.featuredRelAfterTrash = JSON.stringify(await page.locator(".ff-cell", { has: page.locator(".ff-label", { hasText: /^rel$/ }) }).innerText().catch(() => "-"));
-  const restore = await page.request.post(`/api/nodes/${target}/restore`, H).catch(() => null);
-  out.restore = String(restore?.status());
+  await expect(row(page, "rel")).toContainText("Untitled");
+  await expect(row(page, "rel")).not.toContainText(target);
+  expect((await attrs(N)).rel).toBe(`${target}|node_ref`);
+  // pinned: today's behaviour, no written rule (the featured cell words a missing target 「Unknown note」, the panel 「Untitled」)
+  await expect(featured(page, "rel")).toHaveText(/Unknown note/);
+  // (The probe also tried POST /api/nodes/:id/restore here; trash and that route are gone — soft-delete-no-trash.md: restore is from the history.)
 
   // C) Multi-value text through the panel: add, duplicate, remove.
-  await put(N, "m_txt", "");
+  expect((await put(N, "m_txt", "")).status).toBe(200);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
   const mrow = row(page, "m_txt");
-  out.multiWidget = (await mrow.innerHTML()).replace(/\s+/g, " ").slice(0, 160);
-  await mrow.locator(".attr-multi-add").click(); await page.waitForTimeout(800);
-  out.multiAfterAddEmpty = (await attrs(N)).m_txt ?? "(none)";
+  await expect(mrow.locator(".attr-multi-empty")).toBeVisible();
+  await mrow.locator(".attr-multi-add").click();
+  await serverIs(N, "m_txt", '[""]|text');
   const slots = mrow.locator(".attr-multi-slot");
   const editSlot = async (i: number, v: string) => {
     const s = slots.nth(i);
     const btn = s.locator("button.attr-value");
     if (await btn.isVisible().catch(() => false)) await btn.click();
-    await s.locator("input").fill(v); await s.locator("input").press("Enter"); await page.waitForTimeout(900);
+    await s.locator("input").fill(v); await s.locator("input").press("Enter");
   };
   await editSlot(0, "dup");
-  await mrow.locator(".attr-multi-add").click(); await page.waitForTimeout(800);
+  await serverIs(N, "m_txt", '["dup"]|text');
+  await mrow.locator(".attr-multi-add").click();
   await editSlot(1, "dup");
-  out.multiDup = (await attrs(N)).m_txt;
-  await mrow.locator(".attr-multi-remove").first().click(); await page.waitForTimeout(900);
-  out.multiAfterRemove = (await attrs(N)).m_txt;
+  // pinned: today's behaviour, no written rule (the same value can be entered twice)
+  await serverIs(N, "m_txt", '["dup","dup"]|text');
+  await mrow.locator(".attr-multi-remove").first().click();
+  await serverIs(N, "m_txt", '["dup"]|text');
 
-  // D) Stale select options: the server value no longer in options.
-  await put(N, "s_sel", "c");
-  out.removeOptionC = String(await setOptions("s_sel", ["a", "b"]));
+  // D) Stale select options: the stored value is no longer in the options.
+  expect((await put(N, "s_sel", "c")).status).toBe(200);
+  expect(await setOptions("s_sel", ["a", "b"])).toBe(200);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
-  // A select with a few short options is a group of option chips (SelectValue), the chosen one pressed; a stored
-  // value the tag no longer lists stays on screen as its own chip.
+  // A select with a few short options is a group of option chips (OptionChips.tsx), the chosen one pressed; a stored value the tag no longer
+  // lists stays on screen as its own chip, and stays stored.
   const ssel = row(page, "s_sel").getByRole("group", { name: "s_sel", exact: true });
-  const chosen = async (group: Locator = ssel) => JSON.stringify(await group.locator("[aria-pressed=true]").allInnerTexts());
-  const listed = async () => JSON.stringify(await ssel.locator(".attr-choice:not(.attr-choice--add)").allInnerTexts());
-  out.staleSelectUi = `shown=${await chosen()} options=${await listed()} server=${(await attrs(N)).s_sel}`;
-  out.staleFeatured = JSON.stringify(await page.locator(".ff-cell", { has: page.locator(".ff-label", { hasText: /^s_sel$/ }) }).innerText().catch(() => "-"));
-  // Another tab removes option "b" while this tab still lists it; pick "b".
-  out.removeOptionBElsewhere = String(await setOptions("s_sel", ["a"]));
-  await page.waitForTimeout(2500);
-  out.optionsAfterRemoteChange = await listed();
-  await ssel.getByRole("button", { name: "b", exact: true }).click().catch((e) => { out.pickStale = String(e).slice(0, 80); });
-  await page.waitForTimeout(1500);
-  out.pickRemovedOption = `ui=${await chosen().catch(() => "?")} server=${(await attrs(N)).s_sel} err=${JSON.stringify((await page.locator(".attr-panel-error, .failed-write-recovery, [role=alert]").allInnerTexts()).join(" | ").replace(/\s+/g, " ").slice(0, 200))}`;
-  const rec = page.locator(".failed-write-recovery");
-  if (await rec.isVisible().catch(() => false)) await page.getByRole("button", { name: "Minimize recovery panel" }).click().catch(() => {});
+  const chosen = async (group: Locator = ssel) => group.locator("[aria-pressed=true]").allInnerTexts();
+  const listed = async () => ssel.locator(".attr-choice:not(.attr-choice--add)").allInnerTexts();
+  await expect.poll(chosen).toEqual(["c"]);
+  expect(await listed()).toEqual(["a", "b", "c"]);
+  expect((await attrs(N)).s_sel).toBe("c|text");
+  await expect(featured(page, "s_sel")).toHaveText(/c/);
+  // Another tab removes option "b": this tab follows the tag (the chip goes), the stored "c" stays, and "b" can no longer be picked.
+  expect(await setOptions("s_sel", ["a"])).toBe(200);
+  await expect.poll(listed, { timeout: 30_000 }).toEqual(["a", "c"]);
+  await expect(ssel.getByRole("button", { name: "b", exact: true })).toHaveCount(0);
+  expect((await attrs(N)).s_sel).toBe("c|text");
+  const stale = await put(N, "s_sel", "b");
+  expect(stale.status, "a value the field no longer lists is refused (fieldViolation)").toBe(422);
+  expect(stale.detail).toContain("must be one of: a");
+  expect((await attrs(N)).s_sel).toBe("c|text");
 
-  // E) 503 on a select change: does the selection stay?
-  await setOptions("s_sel", ["a", "b", "c"]);
-  await put(N, "s_sel", "a");
+  // E) 503 on a select change is retryable (errors-and-saves.md): the change waits in the queue and shows as waiting to sync, and lands later.
+  expect(await setOptions("s_sel", ["a", "b", "c"])).toBe(200);
+  expect((await put(N, "s_sel", "a")).status).toBe(200);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
+  await expect.poll(chosen).toEqual(["a"]);
   await page.route(`**/api/nodes/${N}/attributes/s_sel`, (r) => r.request().method() === "PUT" ? r.fulfill({ status: 503, body: "{}" }) : r.continue());
   await row(page, "s_sel").getByRole("group", { name: "s_sel", exact: true }).getByRole("button", { name: "b", exact: true }).click();
-  await page.waitForTimeout(1500);
-  out.on503 = `ui=${await chosen(row(page, "s_sel"))} server=${(await attrs(N)).s_sel} sync=${JSON.stringify((await page.locator(".sync-indicator, [class*=sync-status]").allInnerTexts()).join(" ").slice(0, 80))}`;
+  await expect(page.locator(".sync-indicator, [class*=sync-status]").first()).toContainText("1 change waiting to sync");
+  expect((await attrs(N)).s_sel).toBe("a|text");
+  // pinned: today's behaviour, no written rule (docs/agents/decisions-core-sync.md 「屬性…的樂觀投影…另批處理」: the chips still show the stored "a" while "b" waits)
+  expect(await chosen(row(page, "s_sel"))).toEqual(["a"]);
   await page.unroute(`**/api/nodes/${N}/attributes/s_sel`);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
-  await page.waitForTimeout(3000);
-  out.after503Reload = `ui=${await chosen(row(page, "s_sel"))} server=${(await attrs(N)).s_sel}`;
+  await serverIs(N, "s_sel", "b|text");
+  await expect.poll(() => chosen(row(page, "s_sel"))).toEqual(["b"]);
 
-  // F) Media: upload failure feedback, URL typing writes.
+  // F) Media: the URL is typed into a draft and saved once, on blur or Enter (MediaFieldEditor.tsx); a failed upload is reported.
   const puts: string[] = [];
   page.on("request", (r) => { if (r.method() === "PUT" && r.url().includes("/attributes/med")) puts.push(JSON.parse(r.postData() ?? "{}").value); });
   await row(page, "med").locator("input[type=url]").pressSequentially("https://x.io/a.png", { delay: 30 });
-  await page.waitForTimeout(1500);
-  out.mediaTypingPuts = `count=${puts.length} server=${(await attrs(N)).med}`;
+  expect(puts, "nothing is written while typing").toEqual([]);
+  expect((await attrs(N)).med).toBeUndefined();
+  await row(page, "med").locator("input[type=url]").press("Enter");
+  await serverIs(N, "med", "https://x.io/a.png|text");
+  expect(puts).toEqual(["https://x.io/a.png"]);
   await page.route("**/api/media", (r) => r.request().method() === "POST" ? r.fulfill({ status: 503, body: "{}" }) : r.continue());
   const uploadBtn = row(page, "med").locator("button");
-  out.mediaButtons = JSON.stringify(await uploadBtn.allInnerTexts());
-  const [fc] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }).catch(() => null), uploadBtn.first().click()]);
-  if (fc) await fc.setFiles({ name: "x.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a", "hex") });
-  await page.waitForTimeout(1500);
-  out.mediaUpload503 = `server=${(await attrs(N)).med} feedback=${JSON.stringify((await page.locator("[role=status], [role=alert], .attr-panel-error").allInnerTexts()).join(" | ").replace(/\s+/g, " ").slice(0, 160))}`;
+  expect(await uploadBtn.allInnerTexts()).toEqual(["📎"]); // pinned: today's behaviour, no written rule (the upload button's label)
+  const [fc] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }), uploadBtn.first().click()]);
+  await fc.setFiles({ name: "x.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a", "hex") });
+  await expect(page.locator(".toast-message", { hasText: "Could not reach the server. Try again when the connection is available." }).first()).toBeVisible();
+  expect((await attrs(N)).med, "the failed upload leaves the typed URL").toBe("https://x.io/a.png|text");
   await page.unroute("**/api/media");
 
-  // G) Unreadable relation target, seen by another human (editor).
+  // G) A relation target the other person cannot read (it sits in a space they are not in). They see neither its title nor an id in the screen,
+  //    and the picker does not offer it (read policy: an unreadable note is missing, routes/nodes.ts).
   const secret = await mk(`SecretRel ${stamp}`, false);
   await hideFromOthers(page.request, secret);
-  await put(N, "rel", secret, "node_ref");
+  expect((await put(N, "rel", secret, "node_ref")).status).toBe(200);
   const human = await browser.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] } });
   const signup = await (await human.request.post("/api/auth/sign-up/email", { ...H, data: { name: `T05 ${stamp}`, email: `t05-${stamp}@example.com`, password: `pw-${stamp}-x` } })).json();
   const editorActor = await (await page.request.post("/api/actors", { ...H, data: { name: `T05 ${stamp}`, type: "human", external_id: signup.user.id } })).json();
@@ -149,31 +169,39 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
   const hp = await human.newPage();
   await hp.addInitScript(() => localStorage.setItem("onden.welcomeDismissed", "1"));
   await ready(hp, `/?view=notes&node=${N}`);
-  await openPanel(hp).catch(() => {});
-  out.editorRelApi = (await attrs(N, hp)).rel ?? "(none)";
-  out.editorRelUi = JSON.stringify((await row(hp, "rel").innerText().catch(() => "-")).replace(/\s+/g, " "));
-  await row(hp, "rel").locator("button.attr-value").click().catch(() => {});
-  await hp.locator(".attr-relation-picker input").fill("SecretRel").catch(() => {});
-  out.editorCandidates = JSON.stringify(await hp.locator(".attr-relation-option").allInnerTexts().catch(() => []));
-  out.editorBodyHasSecret = String((await hp.locator("body").innerText()).includes(`SecretRel ${stamp}`));
+  await openPanel(hp);
+  await expect(row(hp, "rel")).toBeVisible();
+  // pinned: today's behaviour, no written rule (the stored value of a note they can read is the id, whatever the target's readability)
+  expect((await attrs(N, hp)).rel).toBe(`${secret}|node_ref`);
+  // The pill names it 「Untitled」, like any name the screen cannot find.
+  await expect(row(hp, "rel")).toContainText("Untitled");
+  expect((await row(hp, "rel").innerText()).replace(/\s+/g, " ")).not.toContain(secret);
+  await row(hp, "rel").getByRole("button", { name: "Change note", exact: true }).click();
+  await hp.getByRole("searchbox", { name: "Search notes…" }).fill("SecretRel");
+  await expect(hp.locator(".attr-relation-option").filter({ hasText: "SecretRel" })).toHaveCount(0);
+  // The picker does list what they can read (so the empty result above is the read policy, not a dead list).
+  await hp.getByRole("searchbox", { name: "Search notes…" }).fill(`T05Note ${stamp}`);
+  await expect(hp.locator(".attr-relation-option").filter({ hasText: `T05Note ${stamp}` })).toHaveCount(1);
+  expect(await hp.locator("body").innerText()).not.toContain(`SecretRel ${stamp}`);
+  expect(await hp.locator("body").innerText()).not.toContain(secret);
   await human.close();
 
-  // H) Phone: the panel / featured cells for select + multi.
+  // H) Phone: the featured cells list the fields in schema order; nothing is wider than the screen; a pick writes like on the desktop.
   const phone = await browser.newContext({ storageState: await page.context().storageState(), viewport: { width: 390, height: 844 }, baseURL: BASE });
   const pp = await phone.newPage();
   await ready(pp, `/?view=notes&node=${N}`);
-  await pp.waitForTimeout(1000);
-  out.phone = JSON.stringify(await pp.evaluate(() => ({
+  await expect(featured(pp, "s_sel")).toBeVisible();
+  const phoneGeo = await pp.evaluate(() => ({
     doc: document.documentElement.scrollWidth,
     ff: [...document.querySelectorAll(".ff-cell .ff-label")].map((e) => e.textContent),
     panel: !!document.querySelector(".attr-panel"),
-  })));
-  const fsel = pp.locator(".ff-cell", { has: pp.locator(".ff-label", { hasText: /^s_sel$/ }) });
-  if (await fsel.isVisible().catch(() => false)) {
-    await fsel.click(); await pp.locator(".ff-cell--editing").getByRole("button", { name: "c", exact: true }).click().catch(() => {});
-    await pp.waitForTimeout(1200);
-    out.phoneSelect = (await attrs(N)).s_sel;
-  }
+  }));
+  expect(phoneGeo.doc).toBeLessThanOrEqual(390);
+  expect(phoneGeo.ff).toEqual(FIELDS.map((f) => f.name));
+  expect(phoneGeo.panel).toBe(true); // pinned: today's behaviour, no written rule (the Properties panel is in the page, not necessarily shown)
+  await featured(pp, "s_sel").click();
+  await pp.locator(".ff-cell--editing").getByRole("button", { name: "c", exact: true }).click();
+  await serverIs(N, "s_sel", "c|text");
   await phone.close();
-  console.log(`AUDIT TAG-05 ${JSON.stringify(out, null, 1)}`);
+  void panel;
 });

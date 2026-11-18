@@ -8,8 +8,7 @@
 //   手寫本（十頁）與白板筆層本來就只有一處變動：約 2.0 KB，不變。
 import { describe, expect, it } from "vitest";
 import { applyPatch, makePatch } from "@onden/markdown";
-import { noteDoc, notePages, withPageAppended, withPageDoc, type InkDocument, type InkStroke } from "@onden/markdown/ink";
-import { encodeInk } from "../lib/ink/store";
+import { noteDoc, notePages, withPageAppended, withPageDoc, type InkDocument, type InkStroke, encodeInk } from "@onden/markdown/ink";
 import { emptyMultiPageDoc, type InkMultiPageDoc } from "../lib/pdf/pdfAdapter";
 import { pdfPageDoc, setPdfPageDoc, emptyPageDoc } from "../lib/pdf/pageUnits";
 import { patchedBody, wholeBody } from "../lib/data/patchedBody";

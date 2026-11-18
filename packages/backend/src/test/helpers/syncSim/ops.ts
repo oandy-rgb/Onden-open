@@ -7,7 +7,7 @@
 // + runner + one plain-words line) to `OPS`. Nothing else needs to know.
 import fc from "fast-check";
 import { randomUUID } from "node:crypto";
-import { SimClient, subtreeOf, mergeIntervals, ownerSlot, type NoteView, type TaskRow, type InkStroke, type Card, type ViewOwnerKey } from "./client.js";
+import { SimClient, simSubtreeIds, mergeIntervals, ownerSlot, type NoteView, type TaskRow, type InkStroke, type Card, type ViewOwnerKey } from "./client.js";
 import type { Fate, SimServer } from "./server.js";
 
 export type ClientIx = 0 | 1 | 2;
@@ -181,7 +181,7 @@ const OPS = {
       const view = c.view();
       const note = w.pick(w.notes(c), op.note);
       if (!note) return;
-      const inside = new Set(subtreeOf(view, note.id));
+      const inside = new Set(simSubtreeIds(view, note.id));
       const parent = op.to === null ? undefined : w.pick(w.notes(c).filter((n) => !inside.has(n.id)), op.to);
       if (op.to !== null && !parent) return;
       w.noteParent(note.id, parent?.id ?? null);

@@ -51,13 +51,14 @@ export default function TaskRow({ task, today, showWhen, justDone = false, disab
         className={classNames("tk-box", task.someday && "tk-box--someday", done && "tk-box--checked")}
         role="checkbox"
         aria-checked={done}
+        data-user-content
         disabled={disabled}
         onClick={() => onToggle(task)}
         aria-label={done ? t("Reopen {title}", { title: task.title }) : t("Mark {title} done", { title: task.title })}
       >
         <span className="tk-box-mark" aria-hidden>{done && <Check size={14} strokeWidth={3} />}</span>
       </Pressable>
-      <Pressable type="button" className="tk-main" onClick={() => onOpen(task)} aria-label={t("Edit {title}", { title: task.title })}>
+      <Pressable type="button" className="tk-main" data-user-content onClick={() => onOpen(task)} aria-label={t("Edit {title}", { title: task.title })}>
         <span className="tk-title">{displayTitle(task.title)}</span>
         {(whenText || late || task.time || task.deadline || task.recur || task.evening || focusedMinutes > 0) && (
           <span className="tk-chips">
@@ -81,17 +82,17 @@ export default function TaskRow({ task, today, showWhen, justDone = false, disab
         {hostNote && <span className="tk-note">{hostNote}</span>}
       </Pressable>
       {onPlanToday && !done && task.whenDate !== today && (
-        <Button size="sm" variant="secondary" className="tk-plan-today" aria-label={t("Plan {title} for today", { title: task.title })} onClick={() => onPlanToday(task)}>
+        <Button size="sm" variant="secondary" className="tk-plan-today" data-user-content aria-label={t("Plan {title} for today", { title: task.title })} onClick={() => onPlanToday(task)}>
           {t("Plan for today")}
         </Button>
       )}
       {onSomeday && late && (
-        <Button size="sm" variant="ghost" className="tk-someday" aria-label={t("Move {title} to Someday", { title: task.title })} onClick={() => onSomeday(task)}>
+        <Button size="sm" variant="ghost" className="tk-someday" data-user-content aria-label={t("Move {title} to Someday", { title: task.title })} onClick={() => onSomeday(task)}>
           {t("Someday")}
         </Button>
       )}
       {onFocus && !done && (
-        <Button variant="icon" className="tk-focus" aria-label={t("Start focus on {title}", { title: task.title })} onClick={() => onFocus(task)}>
+        <Button variant="icon" className="tk-focus" data-user-content aria-label={t("Start focus on {title}", { title: task.title })} onClick={() => onFocus(task)}>
           <Timer size={16} aria-hidden="true" />
         </Button>
       )}

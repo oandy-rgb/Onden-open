@@ -39,7 +39,6 @@ async function startFromAnEmptyInbox(page: Page) {
 test("AI-05: inbox decisions from several agents, empty, volume, failure and phone", async ({ page, browser }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
-  const out: Record<string, string> = {};
   const shared = await defaultSpaceId(page.request); // an agent edits only where it is a member (the default space)
   const waiting = page.locator(".capture-decide");
   const rowFor = (title: string) => page.getByRole("button", { name: `Open “${title}” to decide`, exact: true });
@@ -71,24 +70,27 @@ test("AI-05: inbox decisions from several agents, empty, volume, failure and pho
   await openInbox(page);
   await expect(waiting.getByRole("heading")).toContainText("6", { timeout: 15_000 });
   for (const [i] of notes.entries()) await expect(rowFor(`Inb${i} ${stamp}`)).toBeVisible();
-  out.rows = String(await waiting.locator(".capture-decide-row").count());
+  // One row per note (the spec's own header; DecideSection.tsx renders one row per note), not one per change.
+  await expect(waiting.locator(".capture-decide-row")).toHaveCount(6);
 
   // Volume: 135 agent edits by three agents (three agents × 45 edits stays under the 60/min per-token limit).
   const crew = [await agent(page, `C1 ${stamp}`), await agent(page, `C2 ${stamp}`), await agent(page, `C3 ${stamp}`)];
   const many = await Promise.all(Array.from({ length: 135 }, (_, i) => page.request.post("/api/nodes", { ...H, data: { title: `Vol${i} ${stamp}`, markdown: "x", space_id: shared } }).then((r) => r.json())));
   const statuses: number[] = [];
   for (let i = 0; i < many.length; i += 9) await Promise.all(many.slice(i, i + 9).map((n, j) => crew[(i + j) % 3].post("/api/mcp/tools/updateNode", { data: { args: { id: n.id, markdown: `v${i + j}`, base_markdown: "x" } } }).then((r) => statuses.push(r.status()))));
-  out.volumeWrites = `ok=${statuses.filter((x) => x === 200).length} limited=${statuses.filter((x) => x === 429).length}`;
+  // Three agents x 45 edits stay under the 60-per-minute-per-token limit (services/agentTools/rateLimit.ts DEFAULT_LIMIT_PER_MINUTE):
+  // every edit is accepted, none is rate limited.
+  expect(statuses.filter((x) => x === 200), "all 135 agent edits are accepted").toHaveLength(135);
+  expect(statuses.filter((x) => x === 429), "none is rate limited").toHaveLength(0);
   for (const c of crew) await c.dispose();
   await ready(page, "/?view=notes");
   await openInbox(page);
   const shownTotal = Number((await waiting.getByRole("heading").locator(".capture-decide-count").innerText()).trim());
   const shownRows = await waiting.locator(".capture-decide-row").count();
-  out.volume = `heading=${shownTotal} rows=${shownRows}`;
-  // The queue answers one page of 100 events (GET /api/inbox, limit default 100): with 141 notes waiting the pane
-  // shows 100 and says nothing about the other 41. That is today's behaviour, recorded here as the audit's answer
-  // to "does it show all, page, or cap silently?" — the heading and the rows at least agree with each other.
+  // The queue answers one page of 100 events (routes/inbox.ts: parsePage default 100): with 141 notes waiting the pane
+  // shows that page and says nothing about the other 41. The page size is written; whether the pane should say more is not.
   expect(shownTotal, "the heading never claims more than the queue page it was given").toBeLessThanOrEqual(100);
+  expect(shownTotal, "the pane shows the first page of 100").toBe(100); // pinned: today's behaviour, no written rule
   expect(shownRows, "every counted note has its row").toBe(shownTotal);
 
   // Phone: the same list in the notes tab, no sideways scroll.
@@ -101,5 +103,4 @@ test("AI-05: inbox decisions from several agents, empty, volume, failure and pho
   expect(await pp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll on the phone").toBe(true);
   await pp.screenshot({ path: "/tmp/pw-output/ai05-phone.png" });
   await phone.close(); await ann.dispose(); await bob.dispose();
-  console.log(`AUDIT AI-05 ${JSON.stringify(out)}`);
 });

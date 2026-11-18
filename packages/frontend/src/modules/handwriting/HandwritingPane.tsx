@@ -3,10 +3,10 @@
 // `note_ink` (not `ink_data`, so the note's text stays its content tab), loaded and saved through the same path the
 // handwriting note uses (lib/ink/store, lib/ink/surfaceSaver → lib/data saveInk).
 import { Suspense, useEffect, useState } from "react";
-import { NOTE_INK_ATTR, isInkReadOnly, noteDoc, notePages, type InkPages } from "@onden/markdown/ink";
+import { NOTE_INK_ATTR, isInkReadOnly, noteDoc, notePages, type InkPages, decodeInk } from "@onden/markdown/ink";
 import { lazyWithReload } from "../../lib/lazyWithReload";
 import { useDrawingRestoreSerial } from "../../hooks/useDrawingRestoreSerial";
-import { decodeInk, loadInkAttributes, notifyInkReadOnly, useInkSurfaceSaver } from "../../lib/ink";
+import { loadInkAttributes, notifyInkReadOnly, useInkSurfaceSaver } from "../../lib/ink";
 import type { InkSaveOptions } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import type { NoteViewPaneProps } from "../types";

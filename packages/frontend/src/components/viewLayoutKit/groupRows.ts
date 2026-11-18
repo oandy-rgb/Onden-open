@@ -14,7 +14,7 @@
 // convention). A multi-value attribute (a JSON list, D117) groups by element:
 // a row holding ["ml","db"] sits in both the ml and the db group.
 
-import { attributeValues, BUILT_IN_FIELD_NAMES, encodeValues, isListValue, isStoredNumber } from "@onden/markdown";
+import { attributeValues, BUILT_IN_FIELDS, encodeValues, isListValue, isStoredNumber } from "@onden/markdown";
 import { t } from "../../lib/i18n";
 
 export interface GroupableRow {
@@ -24,10 +24,6 @@ export interface GroupableRow {
   updated_at: string;
   attributes: Record<string, string | null>;
 }
-
-/** Fields every row carries on its top level (not in `attributes`). The one
- *  list the collection layouts and the view toolbar share. */
-export const BUILT_IN_FIELDS: ReadonlySet<string> = new Set(BUILT_IN_FIELD_NAMES);
 
 /** The value of a field on a row (built-in or attribute); missing or "" → null. */
 export function fieldValue(row: GroupableRow, field: string): string | null {

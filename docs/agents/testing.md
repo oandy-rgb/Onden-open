@@ -37,6 +37,13 @@
     立刻讓當下的測試失敗並寫出網址（`helpers/noRealNetwork.ts`）。畫面一掛載就載資料、而測試不關心的檔案，
     第一個 import 放 `./helpers/offlineNetwork`（整個檔案網路都是斷的，請求立刻失敗）；要回應就自己 `vi.stubGlobal("fetch", …)`。
     渲染資訊面板（`NodeInspector`）的檔案，在測試前 `await loadNoteFunctionModules()`，避免測試結束時模組還在動態載入。
+- 端對端不得只記錄不斷言（業主 2026-11-18：「都改成檢查」）：spec 量到的每個值都是 `expect`，不寫進 `out` 物件再 `console.log`。
+  期望值來自成文規則（`docs/agents/decisions-*.md`、`docs/decisions/`、`docs/architecture/`、產品程式的註解、i18n 字典、spec 檔頭），
+  在該行旁用一句短註解寫出處；規則是**最新**的決定，探針當年量到的舊值不算依據（功能改版後探針過時，改成現行流程再斷言）。
+  成文規則存在而產品沒做：獨立成 `test("FINDING: …")` 並 `test.fail()`，標題後一句寫產品實際怎麼做（沒有任何決定或改版能解釋的差異才用）。
+  找不到成文規則：照現況斷言並在該行寫 `// pinned: today's behaviour, no written rule`，PR 說明列出讓擁有者決定。
+  量到的耗時、截圖路徑這類無法檢查的值不留在 spec 裡，PR 說明列出。
+  等「不會發生的事」（沒有多一次寫入、畫面不再變）時用有上限的 `expect.poll(…, { timeout }).…catch(() => {})` 後再斷言結果，不用固定睡眠。
 - 完成時說明：哪些入口已遷移、呼叫者少理解哪些概念、保留了哪些行為、測試結果和剩餘限制。
   當本批使用案例已符合契約且驗證通過，停止擴大重構。
 

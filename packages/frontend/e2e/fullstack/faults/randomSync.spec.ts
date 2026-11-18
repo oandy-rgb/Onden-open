@@ -40,7 +40,7 @@
 //        one round with exactly these operations (the list a failure prints)
 // Run:  packages/frontend/e2e/fullstack/run.sh fullstack/faults/randomSync.spec.ts --grep @faults
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { H, fillWhenReady, openQuickCapture, ready, reloadColdStart, saveQuickCapture } from "../helpers";
+import { H, ensureInbox, fillWhenReady, openQuickCapture, ready, reloadColdStart, saveQuickCapture } from "../helpers";
 import {
   BASE, FAULTS_TAG, editor, openNote, offlineIndicator, setPageOffline, skipUnlessRequested,
 } from "./faultKit";
@@ -93,6 +93,10 @@ class Round {
 
   async start(): Promise<void> {
     const first = await this.ctxA.newPage();
+    // An offline quick capture needs the inbox's tag already in the tab: the server makes it on the first capture, and a tab that
+    // went offline before that cannot (the box then keeps the text and says "Connect once…", nothing is queued). Make it
+    // before any tab loads, as a workspace that has captured once would have it (helpers.ensureInbox).
+    await ensureInbox(first);
     for (let i = 0; i < SEED_NOTES; i++) {
       const title = `Rnd${this.run}-${SEED}-seed${i}`;
       const res = await this.api.post("/api/nodes", { ...H, data: { title, markdown: `seed ${i}` } });

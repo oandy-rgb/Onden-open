@@ -4,7 +4,7 @@
 // instead of a Markdown note full of compressed text. What couldn't be drawn
 // is reported per file; a drawing that can't be read goes up as Markdown, as
 // before, and is listed.
-import { encodeInk } from "../../lib/ink";
+import { encodeInk } from "@onden/markdown/ink";
 import { decodeExcalidraw, isExcalidrawFile, type ExcalidrawSkip } from "./excalidraw";
 
 /** A drawing as the import request carries it (backend modules/importers/routes.ts). */

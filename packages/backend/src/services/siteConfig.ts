@@ -18,7 +18,7 @@ import { adoptReservedTag, reservedTagId, reservedTagPredicate, RESERVED_TAGS } 
 import { derivedIdName, inferFromValue, parseValue, serializeValue } from "@onden/markdown";
 import { newIdFor } from "./derivedIds.js";
 import { claimUploadedMedia, presentationText } from "./mediaOwners.js";
-import { validateDesign } from "@onden/site";
+import { chromeRevision, validateDesign } from "@onden/site";
 import { CodedStatusError } from "../statusError.js";
 import type { SiteConfig } from "@onden/contract";
 import { liveNodeSql, tagNodeSql } from "../spine/nodeSql.js";
@@ -227,13 +227,6 @@ export async function chromeBlocksAt(nodeId: string): Promise<unknown> {
     [nodeId],
   );
   return res.rows[0]?.presentation ?? null;
-}
-
-/** The revision of a stored chrome (`rev`), or null for none (no chrome, or
- *  one saved before revisions). Every chrome write stores a new one. */
-export function chromeRevision(presentation: unknown): string | null {
-  const rev = presentation && typeof presentation === "object" ? (presentation as { rev?: unknown }).rev : undefined;
-  return typeof rev === "string" && rev ? rev : null;
 }
 
 /** A chrome save started from a revision that is no longer the stored one:

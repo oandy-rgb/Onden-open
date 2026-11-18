@@ -8,15 +8,16 @@ import { ready, H } from "./helpers";
 
 test("HIST-05: preview target stable across merged saves and offline", async ({ page }) => {
   test.setTimeout(120_000);
-  const s = Date.now(); const out: Record<string, string> = {};
+  const s = Date.now();
   const n = await (await page.request.post("/api/nodes", { ...H, data: { title: `H05 ${s}`, markdown: `FIRST ${s}` } })).json();
-  await page.waitForTimeout(1100);
+  await page.waitForTimeout(1100); // the two saves are a second apart, so they are two moments of the note's history
   await page.request.patch(`/api/nodes/${n.id}`, { ...H, data: { markdown: `SECOND ${s}` } });
   await ready(page, `/?view=notes&node=${n.id}`);
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type(" draft-typed");
-  const versionsBefore = (await (await page.request.get(`/api/nodes/${n.id}/versions`, H)).json()).length;
+  const versionCount = async () => (await (await page.request.get(`/api/nodes/${n.id}/versions`, H)).json()).length;
+  const versionsBefore = await versionCount();
 
   await page.locator(".note-history-link").first().click();
   await expect(page.locator(".nh")).toBeVisible();
@@ -24,43 +25,33 @@ test("HIST-05: preview target stable across merged saves and offline", async ({ 
   await slider.press("Home");
   const pane = page.locator(".nh-paper");
   await expect(pane).toContainText(`FIRST ${s}`);
-  out.selectedOldest = "FIRST";
+  // What is listed when the window opens: the saved versions and the live "Current" entry.
+  const rowsAtOpen = await page.locator(".nh-versions .nh-row").count();
 
-  // More saves land (same actor, same session → merge into the newest row).
+  // More saves land (same actor, same session → merge into the newest row, docs/architecture/history-api.md: 修改次數).
   for (const i of [1, 2, 3]) await page.request.patch(`/api/nodes/${n.id}`, { ...H, data: { markdown: `SECOND ${s} more${i}` } });
-  await page.waitForTimeout(2500);
-  const versionsAfter = (await (await page.request.get(`/api/nodes/${n.id}/versions`, H)).json()).length;
-  out.merge = `versions ${versionsBefore}→${versionsAfter}`;
-  out.previewStillOldest = String((await pane.innerText()).includes(`FIRST ${s}`));
-  out.selectionStill = String((await slider.getAttribute("aria-valuenow")) === "0");
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${n.id}`, H)).json()).markdown as string).toContain("more3");
+  expect(await versionCount(), "saves by the same actor in the same session merge into one version").toBe(versionsBefore);
+  // The version being looked at stays put while later saves land (decisions-restore-history.md, batch 5: 已開啟的版本預覽擁有內容快照).
+  await expect(pane).toContainText(`FIRST ${s}`);
+  expect(await slider.getAttribute("aria-valuenow"), "and stays selected").toBe("0");
 
-  // Current entry shows the live draft, not the server copy.
+  // Current entry shows the live draft, not the server copy (decisions-restore-history.md, batch 5: Current 顯示即時草稿).
   await slider.press("End");
-  out.currentShowsDraft = String((await pane.innerText()).includes("draft-typed"));
+  await expect(pane).toContainText("draft-typed");
   await slider.press("Home");
 
-  // Offline: inspector list clears; the open window keeps its preview; restore refuses or queues clearly.
+  // Offline: the open window keeps the list and the preview it opened with (decisions-restore-history.md, batch 5: 完整視窗保留開啟時的版本列表),
+  // and restoring is refused (the Restore button is disabled; restore is a write that needs the server, lib/useVersionRestore).
   await page.context().setOffline(true);
-  await page.waitForTimeout(2000);
-  out.offlinePreviewKept = String((await pane.innerText()).includes(`FIRST ${s}`));
-  out.offlineEntries = String(await page.locator(".nh-versions .nh-row").count());
-  const restore = page.locator(".nh-actions .ui-btn--primary");
-  out.offlineRestore = `disabled=${await restore.isDisabled()}`;
-  if (!(await restore.isDisabled())) {
-    await restore.click();
-    await page.waitForTimeout(1500);
-    out.offlineRestore += ` modalOpen=${await page.locator(".nh").count()} notice=${JSON.stringify(await page.locator(".nh-notice").innerText().catch(() => ""))}`;
-  }
+  await expect(pane, "the preview is kept offline").toContainText(`FIRST ${s}`);
+  expect(await page.locator(".nh-versions .nh-row").count(), "the list is kept offline").toBe(rowsAtOpen);
+  await expect(page.locator(".nh-actions .ui-btn--primary"), "Restore is not offered offline").toBeDisabled();
   await page.context().setOffline(false);
-  await page.waitForTimeout(3000);
-  out.afterReconnect = `modalOpen=${await page.locator(".nh").count()} server=${JSON.stringify(((await (await page.request.get(`/api/nodes/${n.id}`, H)).json()).markdown as string).slice(0, 30))}`;
-  console.log(`AUDIT HIST-05 ${JSON.stringify(out)}`);
-  // What this protects: the version the person is looking at stays put while later saves land,
-  // "now" shows what they are typing, and going offline neither closes the window nor lets a restore through.
-  expect(out.previewStillOldest).toBe("true");
-  expect(out.selectionStill).toBe("true");
-  expect(out.currentShowsDraft).toBe("true");
-  expect(out.offlinePreviewKept).toBe("true");
-  expect(out.offlineRestore).toBe("disabled=true");
-  expect(out.afterReconnect).toContain("modalOpen=1");
+  // Back online the window is still open, and the typed draft reached the server beside the saves that landed meanwhile: two sides that
+  // only added text to the same line both stay (docs/decisions/body-three-way-merge.md, exception of 2026-11-17).
+  await expect(page.locator(".nh")).toHaveCount(1);
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${n.id}`, H)).json()).markdown as string, { timeout: 30_000 }).toContain("draft-typed");
+  const server = (await (await page.request.get(`/api/nodes/${n.id}`, H)).json()).markdown as string;
+  expect(server, "and the saves that landed meanwhile are kept").toContain("more3");
 });

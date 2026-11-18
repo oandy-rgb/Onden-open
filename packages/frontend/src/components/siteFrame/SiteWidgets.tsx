@@ -152,11 +152,12 @@ function YearGroups({ notes, ctx }: { notes: readonly PublishedNode[]; ctx: BoxC
 
 /** The built-in widgets' drawings, by widget id. */
 export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
+  // In the app (website screen) the note's own paragraph is the owner's content, not interface text; the published page is not marked.
   intro(variant, ctx) {
     const note = introNoteOf(ctx.data);
     if (!note) return null;
     const paragraph = firstParagraph(note);
-    return <div className="s-prose s-intro" data-note={note.id}>{ctx.meta.renderMarkdown(variant === "sentence" ? firstSentence(paragraph) : paragraph)}</div>;
+    return <div className="s-prose s-intro" data-note={note.id} data-user-content={ctx.editing ? true : undefined}>{ctx.meta.renderMarkdown(variant === "sentence" ? firstSentence(paragraph) : paragraph)}</div>;
   },
   latest(variant, ctx) {
     const note = [...articlesOf(ctx.data)].sort((a, b) => Date.parse(b.created_at ?? "") - Date.parse(a.created_at ?? "") || byUpdated(a, b))[0];

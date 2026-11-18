@@ -2377,7 +2377,7 @@
             "PUBLISHED_EDGE_TYPES",
             "PASSWORD_MIN_LENGTH",
             "TAG_NAME_MAX",
-            "BUILT_IN_FIELD_NAMES",
+            "BUILT_IN_FIELDS",
             "FILTER_OP_NAMES"
           ]
         }

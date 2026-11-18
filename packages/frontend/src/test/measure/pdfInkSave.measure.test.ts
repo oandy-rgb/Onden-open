@@ -4,8 +4,7 @@
 // (MEASURE_EVERY: only every n-th save is encoded; the state is still built stroke by stroke. 5000 strokes takes ~10 minutes.)
 // The server side of the same table is backend src/test/pdfInkStorage.measure.integration.test.ts.
 import { describe, it } from "vitest";
-import { noteDoc, notePages, withPageAppended, withPageDoc, type InkDocument, type InkStroke } from "@onden/markdown/ink";
-import { encodeInk } from "../../lib/ink/store";
+import { noteDoc, notePages, withPageAppended, withPageDoc, type InkDocument, type InkStroke, encodeInk } from "@onden/markdown/ink";
 import { emptyMultiPageDoc, type InkMultiPageDoc } from "../../lib/pdf/pdfAdapter";
 import { pdfPageDoc, setPdfPageDoc, emptyPageDoc } from "../../lib/pdf/pageUnits";
 import { patchedBody, wholeBody } from "../../lib/data/patchedBody";

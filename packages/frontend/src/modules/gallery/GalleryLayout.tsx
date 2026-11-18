@@ -10,10 +10,10 @@
 // scheme, not absolute) is served from /api/media/<id>.
 
 import { Pressable } from "../../components/ui";
-import { mediaSrc, graphemes, isImageName, isSafeImageSrc, SAFE_DATA_IMAGE_SRC } from "@onden/markdown";
+import { BUILT_IN_FIELDS, mediaSrc, graphemes, isImageName, isSafeImageSrc, SAFE_DATA_IMAGE_SRC } from "@onden/markdown";
 import { getApiBase } from "../../lib/api";
 import type { ExecResponse } from "../../lib/viewExec";
-import { BUILT_IN_FIELDS, fieldValue } from "../../components/viewLayoutKit";
+import { fieldValue } from "../../components/viewLayoutKit";
 import { useT } from "../../lib/i18n";
 import { dateLabel } from "../../lib/timeLabels";
 import { displayTitle } from "../../lib/noteLabel";

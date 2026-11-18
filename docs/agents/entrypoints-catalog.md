@@ -948,7 +948,7 @@ const refresh = (calendarId: string) => calendarWriter.refresh(calendarId);`
 
 ### 要用前後端必須一致的常數（任務模組 id、發布邊類型、密碼長度、名稱長度上限）
 
-- 入口：`markdown/src/sharedContract.ts`（`TASKS_MODULE_ID`、`TASK_ATTR`、`PUBLISHED_EDGE_TYPES`、`PASSWORD_MIN_LENGTH`、`TAG_NAME_MAX`、`BUILT_IN_FIELD_NAMES`、`FILTER_OP_NAMES`）　項目 `shared-contract`
+- 入口：`markdown/src/sharedContract.ts`（`TASKS_MODULE_ID`、`TASK_ATTR`、`PUBLISHED_EDGE_TYPES`、`PASSWORD_MIN_LENGTH`、`TAG_NAME_MAX`、`BUILT_IN_FIELDS`、`FILTER_OP_NAMES`）　項目 `shared-contract`
 - 寫法：`import { PASSWORD_MIN_LENGTH } from "@onden/markdown";`
 - 取代：兩邊各寫一份的常數
 - 守門：`guard:crossPackage`

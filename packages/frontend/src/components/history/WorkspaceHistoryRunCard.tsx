@@ -36,7 +36,7 @@ export default function WorkspaceHistoryRunCard({ run, online, onOpenNoteHistory
   const when = timeLabel(run.started_at);
   const agent = run.agent_name;
   const text: UndoCardText = {
-    tag: agent, when,
+    tag: agent, tagIsName: true, when,
     ariaLabel: t("{agent} run at {time}", { agent, time: when }),
     summary: run.summary?.trim() || null,
     undoButton: t("Undo this run"),

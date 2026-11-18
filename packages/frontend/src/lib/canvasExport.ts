@@ -4,7 +4,7 @@ import { DEFAULT_CARD_H, DEFAULT_CARD_W } from "./cardGeometry";
 import { reads, WriteActionError } from "./data";
 import { t } from "./i18n";
 import { drawsInGraph } from "./edgeKinds";
-import { decodeInk } from "./ink";
+import { decodeInk } from "@onden/markdown/ink";
 import { BOARD_INK_ATTR, inkToSvgFrame } from "@onden/markdown/ink";
 
 /** Prepare the whole board, independent of focus, search and display density.

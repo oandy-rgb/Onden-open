@@ -47,7 +47,7 @@ const PAGE_MAX = 100;
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** First http(s) image in an article body: the list's thumbnail. */
-export function firstImageUrl(html: string): string | null {
+function firstImageUrlInHtml(html: string): string | null {
   const m = /<img\b[^>]*?\ssrc\s*=\s*["'](https?:\/\/[^"'\s]+)["']/i.exec(html ?? "");
   return m ? m[1]! : null;
 }
@@ -77,7 +77,7 @@ function itemJson(row: StagingRow) {
     saved_node_id: row.saved_node_id,
     // For the reading list: a line of summary and a thumbnail.
     excerpt: htmlToText(row.body ?? "", 140),
-    image: firstImageUrl(row.body ?? ""),
+    image: firstImageUrlInHtml(row.body ?? ""),
     media: firstMedia(row.body ?? ""),
   };
 }

@@ -50,10 +50,21 @@
 | 派出去的工作沒有確認真的在做 | 交給雲端或同伴的工作停了、失敗了或沒有啟動，派的人不知道，還照著「正在做」回報 |
 | 交代分散 | 一輪要做的事散在好幾則留言或訊息裡，接手的一方只處理最新的一則 |
 | 沒查現況就定規則 | 定一個值或行為的新定義時，沒有先查今天哪些測試與程式刻意依賴舊的 |
+| 背景工作比測試活得久 | 提交後才跑的背景工作（派發佇列、重試等待、立即清送）在測試關掉資料庫連線池之後還在用它，失敗被報成之後某個檔案的匿名未處理拒絕 |
 | 跨時區比較日曆日 | 把兩個沒有（或不同）時區的日期字串互相比較，來決定「誰先誰後」；差一天的那幾個小時就判錯 |
 | 散布的東西沒帶授權 | 隨軟體或 repo 散布的第三方檔案沒有授權聲明，或用了沒人看過條款的授權 |
 
 ## 紀錄
+
+### 2026-11-17　派發工作比測試的連線池活得久，公開 CI 紅在一個匿名的未處理拒絕（背景工作比測試活得久）
+- **發生了什麼**：公開庫 ci.yml 第 44083441388 次執行，「Backend — real Postgres (1/4)」約 2000 個測試全過，卻因一個未處理拒絕變紅：`Cannot use a pool after calling end on the pool`，堆疊 `services/dispatcherQueue.ts` → `db.ts event()` → `withTransaction`。同一個分片在第 44074610697 次是綠的（間歇性）。
+- **證據**：`npx vitest run src/test/dispatcherClose.integration.test.ts` 在舊程式上紅（`ran` 為空：呼叫 `pool.end()` 時派發工作還沒跑，連線池已結束）、新程式上綠。約 118 個測試檔直接呼叫 `pool.end()`，只有 40 個檔提到 `awaitAllDispatchers`。
+- **發現者**：測試（CI），但被報在別的檔案、沒有名字。
+- **為什麼沒擋到**：`pool.end()` 不管還有沒有排隊的派發工作；各檔自己記得先排空才不會壞。失敗時 `DISPATCHER_FAILED` 的稽核寫入也因連線池已結束而拒絕，這個拒絕沒有人在等，成為整個程序的未處理拒絕。
+- **類別**：背景工作比測試活得久。
+- **機制**：〔第 1 層〕關閉資料庫就是「停止重試等待 → 排空佇列 → 結束連線池」：`dbClose.ts` 的 `onBeforePoolEnd` 讓提交後才跑的工作登記，`pool.end()` 重複整輪排空到沒有待做（派發佇列、`outbox` 立即清送、週期工作、語意索引續跑），有時間上限，排空出錯連線池照樣結束。所有呼叫 `pool.end()` 的測試、腳本與關閉流程自動得到同一順序；工作若在排空時出錯，錯誤落在呼叫 `pool.end()` 的那個測試的 `afterAll`，帶著檔名。測試：`src/test/dispatcherClose.integration.test.ts`。
+- **擋住新的**：`test/guards/backgroundWriters.guard.test.ts` 掃產品程式的計時器與 `afterCommit`，沒登記也沒列在附理由的清單上就失敗；測試輪裡 `pool.end()` 等到工作時記一行檔名（`dbClose.ts`），讓沒自己排空的檔被看見。
+- **還沒擋住的**：未 `await` 的 `void fn()` 不在掃描內（數量多、多數不寫資料庫）；PGlite 在 `end()` 之後的查詢會悄悄重新開一個空資料庫，不像 Postgres 那樣丟錯。
 
 ### 2026-11-16　審查放行了明知有缺口的修正（過渡修補）
 - **發生了什麼**：一個人打字卻出現「已合併」。#1753 只用 `updated_at` 擋筆記列；審查（note-96）已指出兩個缺口（時間不是可靠的依據；屬性、連結、標籤、任務等十多種資料仍會被晚到的回應蓋掉），仍寫「可以當成立即修正」並建議先部署；note-cf 明知缺口而合併。
@@ -311,6 +322,14 @@
 - **還沒擋住的**：在部署的門裝好之前只有第 4 層。其他同樣「存在但沒有任何工作在跑」的測試還沒處理：瀏覽器版的功能腳本、10 個模糊測試檔、發布網站頁面的 3 個測試檔、版面檢查、效能預算檢查——每一組要嘛給它一個工作，要嘛刪掉。這兩天合併與部署的東西沒有經過這 686 個測試；第一次補跑是 run 44074610697（main fe370e44a）。
 - 再次出現：2026-11-17，#1800（每個請求都讀 `participant_sessions`，migration 210）弄壞了瀏覽器版升級夾具 `makeOldCopy.ts`（舊版複本；它靠手寫的例外清單決定哪些 migration 要先套），CI 不跑 `e2e/browser-app`，隔天由另一個 PR 的作者手動跑 smoke 才發現（發現者：測試，晚了一天）。機制：〔第 1 層〕夾具改成自己推導——先在完整 schema 寫筆記，再依 catalog 退回只剩保留的 migration，不再手寫編號；`src/test/makeOldCopy.test.ts` 跑工具的三種模式並比對 catalog。瀏覽器 smoke 本身仍沒有 CI 工作（ci.yml 由別的工作階段處理）。
 
+### 2026-11-18　新測試只在一種跑法驗過就回報「通過」（#1860 第 1 輪）
+- **發生了什麼**：#1860 新增三個 `*.integration.test.ts`（`dbCloseDrainThrows`、`dispatcherClose`、`dispatcherCloseFeedsOutbox`），前一輪回報它們通過，但只在一種跑法（有資料庫）跑過。公開 CI 上：無資料庫那一輪，三個檔都沒有測試資料庫的門（`src/test/testDatabaseGate.test.ts` 失敗三次），其中兩個連不上 5432、`dispatcherClose` 因查詢失敗得到 `[]`；真 Postgres 那一輪，`dispatcherCloseFeedsOutbox` 用共用的 `default` 工作區，別的檔留下的 40 筆待處理列（每輪處理 20 筆、最舊先）把它自己的兩筆擠在後面，沒被處理。
+- **證據**：public CI run 44225481558（Backend 無資料庫那個 job 與 Backend - real Postgres (1/4)）；本輪修法：三檔加 `describe.skipIf(!isTestDatabase())`，`dispatcherCloseFeedsOutbox` 改用自己的工作區並另放 40 筆別人留下的列，拿掉範圍設定時該測試會紅（`expected [ …(40) ] to deeply equal ArrayContaining`），有範圍時綠；`dispatcherClose` 在 PGlite 與真 Postgres 都通過，所以 `[]` 只是沒有資料庫，不是產品缺陷。
+- **發現者**：測試（公開 CI，推上去之後）。
+- **為什麼沒擋到**：門的守門測試 `testDatabaseGate.test.ts` 本來就會擋，但它在後端整套無資料庫那一輪才跑；前一輪只跑了新檔案本身，沒跑那一輪，也沒在真 Postgres 與無資料庫兩種模式各跑一次。
+- **類別**：新測試只在一條通道驗證（回報前沒有逐一跑每種模式）。
+- **機制**：〔第 1 層〕既有：`testDatabaseGate.test.ts`（每個 integration 檔必須有可辨識的門）與測試結尾的 `[tests] mode: …` 行。〔第 4 層〕新增測試檔的回報要列出 no-database、PGlite、真 Postgres 三種模式各自的最後幾行與 `ran／skipped`，跑不了的寫「未跑」；本輪三種模式都實際跑過（真 Postgres 是本機 16 版，另裝 pgvector）。
+- **還沒擋住的**：尚無機制強迫「推送前三種模式都跑過」——只有 CI 事後擋；「共用資料庫上別的檔留下列」類型的測試（斷言範圍沒限定在自己的工作區）沒有守門掃它。
 ### 2026-11-17　打開時「丟掉找不到的選取」把白板連結和新筆記連結都送去別的筆記，而且已經上線（沒有先看選取的 id 有哪幾種）
 - **發生了什麼**：#1864 為了不讓編輯區停在空白，在啟動時把「不在已載入筆記裡的選取」當成無效、丟掉後照「打開時」的設定開別的筆記。但選取的 id 不一定是筆記：白板用自己的 id 被選取；在別的裝置剛建立的筆記也還不在快取的開機資料裡。結果這些連結一打開就被換成今天的日記或上次那則。b7e26b32（2026-11-17 20:16 UTC）帶著它上線。
 - **證據**：note-cf 的 #1856 帶 fullstack=true 的 run 比 main 的清單多紅 22 個（canvasEmptyState:9、inkCanvas、tagBoardLens、navBackStack:9、reviewLoop:21、rssReader:183…），形狀都是「元素看得到卻點不下去」；`canvasEmptyState.spec.ts` 用 `/?view=notes&node=<白板 id>` 打開。#1864 自己的公開庫 run 44159117717 沒帶 fullstack（Full-stack E2E：skipped），所以沒看到。原因由本次修正的 run 驗證（見 PR）。

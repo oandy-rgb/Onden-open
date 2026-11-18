@@ -1,7 +1,7 @@
 # 後端規則：事件、權限、交易與復原
 
-> 狀態：現行（最後確認 2026-11-01）
-> 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/spine/currentActor.ts, packages/backend/src/spine/systemJobs.ts, packages/backend/src/services/readPolicy.ts, packages/backend/src/services/tagMembershipWrites.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/test/guards/systemActor.guard.test.ts
+> 狀態：現行（最後確認 2026-11-17）
+> 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/spine/currentActor.ts, packages/backend/src/spine/systemJobs.ts, packages/backend/src/services/readPolicy.ts, packages/backend/src/services/tagMembershipWrites.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/test/guards/systemActor.guard.test.ts, packages/backend/src/dbClose.ts, packages/backend/src/test/guards/backgroundWriters.guard.test.ts
 
 何時讀：改後端寫入、權限、事件、交易或復原的任何程式之前。硬規則的精簡版在 [AGENTS.md](../../AGENTS.md)。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -55,6 +55,12 @@
 - 事件內容須服務明確用途，避免傾倒整個請求、憑證或不必要的內容。
   修改事件格式時，檢查既有歷史、復原與同步消費者的相容性。
 - 外部副作用沿用既有 outbox；不新增與資料庫交易各自提交的臨時傳送流程。
+- 提交後或計時器才寫資料庫的背景工作（派發佇列與重試、outbox 立即清送、週期工作、語意索引續跑）要向 `dbClose.ts` 的
+  `onBeforePoolEnd(名稱, { pending, drain })` 登記：`pool.end()` 先重複整輪排空到沒有待做（排空時新排的工作也會被等到），
+  最多等 `DRAIN_LIMIT_MS`，超過就記一行並照樣結束連線池，來不及做完的留著 intent 列由下次開機補跑；排空出錯，連線池照樣結束、錯誤給呼叫者。
+  一個行程只關一次，`isPoolClosing()` 之後不再重試。新增計時器或 `afterCommit` 的檔案若不登記，必須列在
+  `test/guards/backgroundWriters.guard.test.ts` 的 `EXCEPTIONS` 並寫為什麼它不會寫資料庫（守門會擋，清單只減不增）。
+  測試輪裡 `pool.end()` 真的等到工作時會記一行「哪個檔、幾個工作」（只記不紅），該檔應自己 `awaitAllDispatchers()`。
 - 沒人觸發、到時間自己跑的背景工作（目前是任務排程器與段落標記修復，見 `SYSTEM_JOBS`）用系統身分走 `mutate`（`spine/systemJobs.ts`）：
   事件 `actor_type` 為 `system`，`actor_id` 由工作推導；它只有 `{ kind: "system" }`／`cascade` 權限，
   允許的事件種類、對象種類與所需模組寫在 `SYSTEM_JOBS`，每個事件（含連帶）都核對，越界丟 `AuthorityError`。

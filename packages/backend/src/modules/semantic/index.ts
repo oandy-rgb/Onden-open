@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from "../types.js";
 import { log } from "../../logger.js";
+import { onBeforePoolEnd } from "../../dbClose.js";
 import { enqueueEffect, requireString, type OutboxEffect } from "../../services/outbox.js";
 import { embedNode, semanticSearchNodes } from "../../services/embeddings.js";
 import { workspaceHasModule } from "../../services/workspaceModules.js";
@@ -44,8 +45,17 @@ export const semanticModule: ModuleDefinition = {
   outboxEffects: [embedEffect, embedBackfillEffect],
   // Never under test. Files intents only; the outbox does the work (modules/types.ts startBackground).
   startBackground: () => {
-    const start = setTimeout(() => { resumeIndexing().catch((err) => log.error("semantic", "could not resume indexing", { err })); }, 15_000);
+    let resuming: Promise<void> | null = null;
+    let handled = false; // the timer fired and its resume finished, or closing cancelled it
+    const start = setTimeout(() => {
+      resuming = resumeIndexing().catch((err) => log.error("semantic", "could not resume indexing", { err }));
+    }, 15_000);
     start.unref?.();
+    // Closing the database (dbClose.ts): a resume not started yet never starts; one running finishes.
+    onBeforePoolEnd("semantic-resume", {
+      pending: () => (handled ? 0 : 1),
+      drain: async () => { clearTimeout(start); await resuming; handled = true; },
+    });
   },
   nodeHooks: {
     // Rides the outbox in the write transaction: one pending intent per node,

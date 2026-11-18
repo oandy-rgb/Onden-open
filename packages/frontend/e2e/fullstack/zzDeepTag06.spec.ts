@@ -6,7 +6,7 @@
 // always shares its parent's space, so "locked child under an open parent" and
 // "open child under a locked parent" no longer exist. UI vs API at 1280 and 390px.
 import { test, expect, type Page } from "@playwright/test";
-import { ready, defaultSpaceId, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
+import { ready, openInfoTags, defaultSpaceId, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
 
 
 test("TAG-06: inheritance, overrides, rollup, sources, revoked access", async ({ page, browser }) => {
@@ -49,11 +49,7 @@ test("TAG-06: inheritance, overrides, rollup, sources, revoked access", async ({
   await page.request.delete(`/api/nodes/${C}/attributes/owner`, H);
 
   // B) UI: the child's panel, live parent change, inheritable off.
-  const openPanel = async (p: Page) => {
-    const pn = p.locator(".attr-panel");
-    await p.locator(".attr-panel").first().waitFor({ timeout: 10_000 }).catch(() => {});
-    await expect(pn).toBeVisible({ timeout: 10_000 });
-  };
+  const openPanel = (p: Page) => openInfoTags(p);
   const inhSection = (p: Page) => p.locator(".attr-panel-inherited");
   await ready(page, `/?view=notes&node=${C}`);
   await openPanel(page);

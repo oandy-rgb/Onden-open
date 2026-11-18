@@ -40,7 +40,7 @@
 //        one round with exactly these operations (the list a failure prints)
 // Run:  packages/frontend/e2e/fullstack/run.sh fullstack/faults/randomSync.spec.ts --grep @faults
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { H, fillWhenReady, openQuickCapture, ready, reloadColdStart } from "../helpers";
+import { H, fillWhenReady, openQuickCapture, ready, reloadColdStart, saveQuickCapture } from "../helpers";
 import {
   BASE, FAULTS_TAG, editor, openNote, offlineIndicator, setPageOffline, skipUnlessRequested,
 } from "./faultKit";
@@ -202,8 +202,7 @@ class Round {
         const title = `Rnd${this.run}-${SEED}-new${++this.createSeq}`;
         await openQuickCapture(page);
         await page.locator(".quick-capture-textarea").fill(title);
-        await page.locator(".quick-capture-save").click();
-        await expect(page.locator(".quick-capture-textarea")).toBeHidden({ timeout: 15_000 });
+        await saveQuickCapture(page); // saving keeps the box open for the next thought (2c7682d5b): the helper waits for "Saved" and closes it
         this.notes.push({ index: this.notes.length, createdTitle: title, titles: [title], history: [] });
         tab.current = null; // the app may have opened it; not worth assuming
         return `用快速記錄建立新筆記「${title}」${tab.offline ? "（離線中，先排進佇列）" : ""}`;
@@ -311,7 +310,10 @@ class Round {
       { timeout: 60_000, message: "notes created by quick capture must reach the server" }).toBe(0);
     for (const tab of this.tabs.values()) {
       await expect(tab.page.locator(".sync-pending-count"), "queued writes must drain").toHaveCount(0, { timeout: 60_000 });
-      await expect(tab.page.locator(".sync-status:visible .status-dot.online").first()).toBeVisible({ timeout: 60_000 });
+      // Connected is the quiet state: the sync status sits in the account panel and the avatar shows a badge only for
+      // trouble. Offline is the one that means "not connected"; an error badge ("Recovery inputs") is a rejected write kept
+      // for the person, which this test's deletes and renames produce on purpose.
+      await expect(tab.page.locator(".user-badge--offline"), "back online once settled").toHaveCount(0, { timeout: 60_000 });
     }
     // Quiet = the server's picture of our notes is unchanged over consecutive looks.
     let last = "";
@@ -422,23 +424,33 @@ class Round {
 
   async checkSidebar(tab: Tab, server: Map<Note, { title: string; markdown: string } | null>, when: string): Promise<string[]> {
     const out: string[] = [];
-    const buttons = tab.page.locator(".obsidian-page-button");
+    // A note made by quick capture is filed in the Inbox, not the Notes list (2c7682d5b, 2026-10-29): each kind is looked
+    // for in its own sidebar pane, and the Notes pane is put back afterwards (later operations read it).
+    const pane = (name: "Notes" | "Inbox") => tab.page.locator(".sidebar-tab").filter({ hasText: new RegExp(`^${name}`) });
+    const titlesIn = async (name: "Notes" | "Inbox"): Promise<string[]> => {
+      await pane(name).click();
+      return name === "Inbox"
+        ? tab.page.locator(".capture-inbox-item-title").allInnerTexts()
+        : tab.page.locator(".obsidian-page-button").allInnerTexts();
+    };
     for (const n of this.notes) {
       const row = server.get(n);
       const stale = n.titles.filter((t) => t !== row?.title);
       // Every title the note ever had but the server's current one must be gone; the current one present.
       const want = row ? row.title : null;
+      const where = n.createdTitle ? "Inbox" : "Notes";
       try {
         await expect.poll(async () => {
-          const shown = await buttons.allInnerTexts();
+          const shown = await titlesIn(where);
           const has = (t: string) => shown.some((s) => s.includes(t));
           return [...(want && !has(want) ? [`缺「${want}」`] : []), ...stale.filter(has).map((t) => `多「${t}」`)];
         }, { timeout: 30_000, intervals: [500, 1_000] }).toEqual([]);
       } catch {
-        const shown = (await buttons.allInnerTexts()).filter((s) => s.includes(`Rnd${this.run}-${SEED}`));
-        out.push(`#${row ? 4 : 3} ${when}：${tab.slot} 側欄與伺服器不一致（筆記原名「${n.titles[0]}」，伺服器${row ? `標題「${row.title}」` : "已刪除"}）；側欄顯示：${JSON.stringify(shown)}`);
+        const shown = (await titlesIn(where)).filter((s) => s.includes(`Rnd${this.run}-${SEED}`));
+        out.push(`#${row ? 4 : 3} ${when}：${tab.slot} ${where === "Inbox" ? "收件匣" : "側欄"}與伺服器不一致（筆記原名「${n.titles[0]}」，伺服器${row ? `標題「${row.title}」` : "已刪除"}）；顯示：${JSON.stringify(shown)}`);
       }
     }
+    await pane("Notes").click();
     return out;
   }
 }

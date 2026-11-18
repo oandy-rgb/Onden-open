@@ -17,6 +17,11 @@ import type { Page } from "@playwright/test";
 
 test.beforeEach(skipUnlessRequested);
 
+// With a service worker controlling the page, the app fetches the code of every screen that loads on use, once idle
+// (lib/offlineWarmup.ts, 033259067, 2026-11-12), so by the time a chunk could be refused the lazy feature is already in
+// memory and nothing fails. A stale tab hits this only for a screen it has not loaded; without a worker nothing is warmed.
+test.use({ serviceWorkers: "block" });
+
 /** 404 every script request until the next document navigation. */
 async function breakChunks(page: Page): Promise<() => number> {
   let broken = true;

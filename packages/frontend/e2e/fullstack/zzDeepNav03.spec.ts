@@ -24,7 +24,11 @@ test("NAV-03: back across wikilink / search / graph, scroll restore, phone", asy
   await ready(page, `/?view=notes&node=${A}`);
   await switchNoteView(page, "preview");
   const link = page.locator(".obsidian-preview").getByText(`NavB ${stamp}`).first();
-  await link.scrollIntoViewIfNeeded();
+  // Scroll by the container, not by the link: while the workspace hydrates the preview re-creates its [[link]] buttons
+  // (the `components` map in MarkdownRenderer changes with `nodes`), so a link-bound scroll can find its element gone.
+  // click() below re-finds the link and scrolls to it itself.
+  await expect(link).toBeVisible();
+  await page.evaluate(() => { for (const e of document.querySelectorAll<HTMLElement>(".obsidian-preview, .cm-scroller, .note-document, .overview-editor")) e.scrollTop = e.scrollHeight; });
   await page.waitForTimeout(500);
   const before = await scrollTop(page);
   await link.click();

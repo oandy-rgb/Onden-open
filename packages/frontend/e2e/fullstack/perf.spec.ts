@@ -44,8 +44,11 @@ test.describe("performance", () => {
   test("lens-switch interaction latency", async ({ page }) => {
     const parent = await (await page.request.post("/api/nodes", { ...H, data: { title: `Perf parent ${Date.now()}`, markdown: "p" } })).json();
     await page.request.post("/api/nodes", { ...H, data: { title: `Perf child ${Date.now()}`, markdown: "c", parent_id: parent.id } });
+    // The whiteboard is a view tab the note has (added from the tab row's ＋, docs/architecture/canvas-as-view.md);
+    // having children no longer earns one (same as soak.spec.ts), so give the note that tab.
+    const view = await page.request.post(`/api/nodes/${parent.id}/views`, { ...H, data: { name: "Canvas", layout: "canvas", visible_fields: [] } });
+    expect(view.ok(), await view.text()).toBeTruthy();
     await page.goto(`/?view=notes&node=${parent.id}`, { waitUntil: "load" });
-    // A parent earns the Canvas lens (the Table lens was removed in #486).
     const tab = page.locator('.view-tabs [role=tab]:has-text("Canvas")');
     await tab.waitFor();
     const t = Date.now();

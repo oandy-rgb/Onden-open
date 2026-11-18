@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { ContentNode, NodeAttribute, Tag } from "../lib/api";
 import { addToast, useTagRows, useAllNodes } from "../lib/appStore";
 import { propertyWriter, tagSchemaWriter } from "../lib/data";
@@ -46,9 +46,11 @@ type Props = {
   onAttrUpsert?: (nodeId: string, key: string, value: string, opts?: { value_type?: string; is_inheritable?: boolean }) => Promise<unknown>;
   onAttrRemove?: (nodeId: string, key: string) => Promise<unknown>;
   onTagsChanged?: () => void | Promise<void>;
+  /** Drawn when the note has no tag, no property of its own and nothing shared down from a parent. */
+  whenEmpty?: ReactNode;
 };
 
-export default function InfoTagsTab({ node, canEdit, onOpen, onAttrUpsert = propertyWriter.set, onAttrRemove = propertyWriter.remove, onTagsChanged }: Props) {
+export default function InfoTagsTab({ node, canEdit, onOpen, onAttrUpsert = propertyWriter.set, onAttrRemove = propertyWriter.remove, onTagsChanged, whenEmpty }: Props) {
   const t = useT();
   const nodes = useAllNodes();
   const tags = useTagRows() ?? NO_TAGS;
@@ -154,6 +156,7 @@ export default function InfoTagsTab({ node, canEdit, onOpen, onAttrUpsert = prop
         renderTagHead={head}
         renderTagFoot={foot}
         canEditTags={canEditTags}
+        whenEmpty={whenEmpty}
         onUpsert={(key, value, opts) => onAttrUpsert(node.id, key, value, opts)}
         onRemove={(key) => onAttrRemove(node.id, key)}
         onOpenNote={onOpen}

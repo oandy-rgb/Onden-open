@@ -110,13 +110,17 @@ test("F6: a card made by double-clicking the board takes typing in its title", a
   // lands on a board with no canvas to place the card on.
   await expect(page.locator(".canvas-empty-hint")).toBeVisible({ timeout: 30_000 });
 
-  const box = (await pane.boundingBox())!;
+  // The empty-board hint (with its 「Add a note from your library」 button, canvasEmptyState) sits in the middle of the
+  // board, so a double-click at the middle presses that button and adds an existing note. Aim off to one side, and use the
+  // board's own box: the pane's box spans the whole viewport, sidebar included.
+  const wrap = (await page.locator(".kw-canvas-wrap").first().boundingBox())!;
+  const at = { x: wrap.x + wrap.width * 0.25, y: wrap.y + wrap.height * 0.3 };
   // A double-click during the cold-start membership gate lands on its scrim
   // and is dropped (only typing is kept), so retry while no card exists yet.
   const title = page.locator(".card-node-title-input:focus");
   await expect(async () => {
     if (await page.locator(".react-flow__node").count() === 0) {
-      await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.dblclick(at.x, at.y);
     }
     await expect(title).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 30_000 });

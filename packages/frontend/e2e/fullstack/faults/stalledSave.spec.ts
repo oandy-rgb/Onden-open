@@ -1,8 +1,8 @@
 // Scenario 3 — a request that never answers. The first save is held by a route
 // that never fulfils it (a dead connection that neither fails nor completes).
 // Once the "network" is back, later saves must still go through and nothing may
-// wait on the stalled request forever. Today every write shares one lane, so a
-// stalled request blocks all later saves: fix/a1-save-path.
+// wait on the stalled request forever. Fixed by 030909176 (#616, 2026-10-24): a write attempt
+// times out (lib/data/writeQueue.ts, "Write attempt timed out") and no longer holds the lane.
 import { test, expect, type Route } from "@playwright/test";
 import {
   FAULTS_TAG, PHONE, expectColdConvergence, expectServerHas, openNote, seedNote, skipUnlessRequested,
@@ -42,7 +42,6 @@ async function stalledThenRecovered(page: Page): Promise<void> {
 }
 
 test("3: a never-answered save must not block later saves", { tag: FAULTS_TAG }, async ({ page }) => {
-  test.fail(true, "fix/a1-save-path: one stalled request blocks the shared write lane");
   test.setTimeout(150_000);
   await stalledThenRecovered(page);
 });
@@ -50,8 +49,7 @@ test("3: a never-answered save must not block later saves", { tag: FAULTS_TAG },
 test.describe("phone viewport", () => {
   test.use({ ...PHONE });
   test("9b (scenario 3 on a Pixel-like phone)", { tag: FAULTS_TAG }, async ({ page }) => {
-    test.fail(true, "fix/a1-save-path: one stalled request blocks the shared write lane");
-    test.setTimeout(150_000);
+      test.setTimeout(150_000);
     await stalledThenRecovered(page);
   });
 });

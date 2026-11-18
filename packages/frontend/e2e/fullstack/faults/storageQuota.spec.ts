@@ -22,8 +22,10 @@ test("6: snapshot saves failing on quota are reported and edits survive", { tag:
   await expect.poll(() => snapshotFingerprint(page), { timeout: 30_000 }).not.toBe("none");
 
   const origin = new URL(page.url()).origin;
-  const browserCdp = await context.browser()!.newBrowserCDPSession();
-  await browserCdp.send("Storage.overrideQuotaForOrigin", { origin, quotaSize: 1024 });
+  // The page's own session: on Chromium 153 the browser-level one answers "Internal error" to this call,
+  // the page-level one applies it (a 5 MB IndexedDB write then fails with QuotaExceededError; checked 2026-11-17).
+  const pageCdp = await context.newCDPSession(page);
+  await pageCdp.send("Storage.overrideQuotaForOrigin", { origin, quotaSize: 1024 });
   try {
     // The edit reaches the server even though nothing can be written locally.
     await typeInNote(page, "end", ` ${text}`);
@@ -37,7 +39,7 @@ test("6: snapshot saves failing on quota are reported and edits survive", { tag:
       .filter({ visible: true });
     await expect(notice.first(), "the app must report that the local copy could not be saved").toBeVisible({ timeout: 30_000 });
   } finally {
-    await browserCdp.send("Storage.overrideQuotaForOrigin", { origin }); // no quotaSize: back to default
+    await pageCdp.send("Storage.overrideQuotaForOrigin", { origin }); // no quotaSize: back to default
   }
   await expectColdConvergence(context, id, [text]);
 });

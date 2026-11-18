@@ -2,25 +2,27 @@
 // not look seen, counts agree across entry points, reopen keeps state, source
 // scope for another human, and whether seen-state is shared.
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
-import { ready, defaultSpaceId, moveToSpace, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
+import { ready, defaultSpaceId, createSpace, addToDefaultSpace, BASE, H } from "./helpers";
+import { publishFeedArticles, siteFeedUrl } from "./feedHelpers";
 
 type Item = { id: string; title: string; seen: boolean };
-// Feed articles are published, so they live in the default space (a personal
-// space never publishes). The source note itself is shared with the default
-// space too, so the second human can see it until the test hides it.
-async function seed(page: Page, stamp: number, n = 3) {
-  const space_id = await defaultSpaceId(page.request);
-  for (let i = 0; i < n; i++) {
-    const node = await (await page.request.post("/api/nodes", { ...H, data: { title: `R04 art ${i} (${stamp})`, markdown: `Body ${i} of ${stamp}.`, space_id } })).json();
-    await page.request.put(`/api/nodes/${node.id}/attributes/_published`, { ...H, data: { value: "true", value_type: "bool" } });
-  }
-  const sub = await (await page.request.post("/api/rss/subscribe", { ...H, data: { url: `http://nginx/site/feed.xml?run=${stamp}` } })).json();
+// The feed's articles are published from a space that publishes (the default space does not). A subscription is a
+// row in a space, not a note (2026-10-28, migration 145): it lives where the workspace setting 訂閱放在 says
+// (`PUT /api/rss/source-space`), so the source is shared with the default space — the second human sees it —
+// until a run puts it in a space nobody else is in.
+const putSourceSpace = async (page: Page, spaceId: string) =>
+  expect((await page.request.put("/api/rss/source-space", { ...H, data: { space_id: spaceId } })).ok(), `訂閱放在 ${spaceId || "(own space)"}`).toBe(true);
+
+async function seed(page: Page, stamp: number, n = 3, sourceSpace?: string) {
+  await publishFeedArticles(page.request, Array.from({ length: n }, (_, i) => `R04 art ${i} (${stamp})`), (i) => `Body ${i} of ${stamp}.`);
+  await putSourceSpace(page, sourceSpace ?? await defaultSpaceId(page.request));
+  const sub = await (await page.request.post("/api/rss/subscribe", { ...H, data: { url: siteFeedUrl(stamp) } })).json();
   await page.request.post(`/api/rss/sources/${sub.id}/refresh`, { ...H, data: {} });
   await expect.poll(async () => (await items(page.request, stamp)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(n);
-  const source = await (await page.request.get(`/api/nodes/${sub.id}`)).json() as { space_id?: string };
-  if (source.space_id !== space_id) await moveToSpace(page.request, sub.id, space_id);
   return sub.id as string;
 }
+// 訂閱放在 is a workspace setting: put it back, so the specs after this one subscribe into each person's own space again.
+test.afterEach(async ({ page }) => { await putSourceSpace(page, ""); });
 const items = async (req: APIRequestContext, stamp: number): Promise<Item[]> =>
   (((await (await req.get("/api/rss/items?limit=200", H)).json()).items ?? []) as Item[]).filter((i) => i.title.includes(`(${stamp})`));
 const unseenFor = async (req: APIRequestContext, sourceId: string) =>
@@ -32,13 +34,11 @@ test("RSS-04: skip failure, counts, reopen, scope, shared state", async ({ page,
   const sourceId = await seed(page, stamp, 3);
   out.initial = `unseen=${await unseenFor(page.request, sourceId)} items=${(await items(page.request, stamp)).filter((i) => !i.seen).length}`;
 
-  // Open the reader from the inbox strip.
-  await ready(page, "/?view=notes");
-  await page.locator('.sidebar-tab:has-text("Inbox")').click();
-  const strip = page.locator(`.inbox-review-item-rss[data-source-id="${sourceId}"]`);
-  await expect(strip).toBeVisible({ timeout: 20_000 });
-  out.stripText = JSON.stringify((await strip.innerText()).replace(/\s+/g, " ").slice(0, 80));
-  await strip.locator(".inbox-review-read").click();
+  // Open the reader (Reading › RSS: new articles left the inbox for it on 2026-10-18).
+  await ready(page, "/?view=rss");
+  const chips = page.locator(".rss-source-bar");
+  await expect(chips).toContainText("Onden", { timeout: 20_000 }); // the feed's chip (the site's title); its count shows only when the reader is set to count
+  out.chipsText = JSON.stringify((await chips.innerText()).replace(/\s+/g, " ").slice(0, 80));
   await page.locator(".rss-item", { hasText: `(${stamp})` }).first().click();
   await expect(page.locator(".rss-article-body")).toBeVisible({ timeout: 15_000 });
   const firstTitle = (await page.locator(".rss-article-title").textContent()) ?? "";
@@ -62,11 +62,11 @@ test("RSS-04: skip failure, counts, reopen, scope, shared state", async ({ page,
   const afterReload = await items(page.request, stamp);
   out.skipReload = `skipped=${JSON.stringify(cur.slice(0, 30))} seen=${afterReload.find((i) => i.title === cur)?.seen} unseenNow=${afterReload.filter((i) => !i.seen).length} sourceUnseen=${await unseenFor(page.request, sourceId)}`;
 
-  // Count agreement: inbox strip / sources API / items API.
-  await ready(page, "/?view=notes");
-  await page.locator('.sidebar-tab:has-text("Inbox")').click();
-  const stripNow = await page.locator(`.inbox-review-item-rss[data-source-id="${sourceId}"]`).innerText().catch(() => "(gone)");
-  out.counts = `strip=${JSON.stringify(stripNow.replace(/\s+/g, " ").slice(0, 60))} sources=${await unseenFor(page.request, sourceId)} items=${afterReload.filter((i) => !i.seen).length}`;
+  // Count agreement: the reader's feed chips / sources API / items API.
+  await ready(page, "/?view=rss");
+  await page.waitForTimeout(1500);
+  const chipsNow = await page.locator(".rss-source-bar").innerText().catch(() => "(gone)");
+  out.counts = `chips=${JSON.stringify(chipsNow.replace(/\s+/g, " ").slice(0, 80))} sources=${await unseenFor(page.request, sourceId)} items=${afterReload.filter((i) => !i.seen).length}`;
 
   // Another human (editor): shared seen-state and source scope.
   const human = await browser.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] } });
@@ -79,8 +79,7 @@ test("RSS-04: skip failure, counts, reopen, scope, shared state", async ({ page,
   out.sharedState = `editorMarked=${edItems.length} ownerUnseenAfter=${(await items(page.request, stamp)).filter((i) => !i.seen).length}`;
   // Restricted source: owner moves the source to a space only they are in.
   const stamp2 = stamp + 1;
-  const src2 = await seed(page, stamp2, 1);
-  await hideFromOthers(page.request, src2);
+  await seed(page, stamp2, 1, await createSpace(page.request, `R04 hidden ${stamp}`));
   const hiddenItems = await items(human.request, stamp2);
   const ownerItems2 = await items(page.request, stamp2);
   const edSeen = ownerItems2[0] ? (await human.request.post(`/api/rss/items/${ownerItems2[0].id}/seen`, { ...H, data: {} })).status() : -1;

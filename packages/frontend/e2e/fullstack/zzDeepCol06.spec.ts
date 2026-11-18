@@ -10,6 +10,14 @@ test("COL-06: calendar date change, year boundary, undated, crowded day, timezon
   test.setTimeout(240_000);
   const stamp = Date.now();
   const out: Record<string, string> = {};
+  // Dates are relative to today (the workspace's day: this stack's browser and server both run UTC), because the calendar opens on
+  // the current month; fixed October 2026 dates only landed on it while it was October. The year boundary is the coming
+  // 31 Dec / 1 Jan, however many months away.
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-based
+  const ym = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const monthsToDec = 11 - month;
   const tag = await (await page.request.post("/api/tags/import", { ...H, data: { name: `C06T${stamp}`, fields: [
     { name: "due", type: "date" },
     { name: "exam", type: "date" },
@@ -21,12 +29,12 @@ test("COL-06: calendar date change, year boundary, undated, crowded day, timezon
     if (exam) await page.request.put(`/api/nodes/${n.id}/attributes/exam`, { ...H, data: { value: exam, value_type: "date" } });
     return n.id as string;
   };
-  const idOct = await mk(`Oct15 ${stamp}`, "2026-10-15", "2026-10-20");
-  await mk(`Dec31 ${stamp}`, "2026-12-31");
-  await mk(`Jan01 ${stamp}`, "2027-01-01");
+  const idOct = await mk(`Mid15 ${stamp}`, `${ym}-15`, `${ym}-20`);
+  await mk(`Dec31 ${stamp}`, `${year}-12-31`);
+  await mk(`Jan01 ${stamp}`, `${year + 1}-01-01`);
   await mk(`Undated ${stamp}`);
-  for (let i = 1; i <= 5; i++) await mk(`Crowd${i} ${stamp}`, "2026-10-22");
-  const view = await (await page.request.post(`/api/tags/${tag.id}/views`, { ...H, data: { name: "Cal", layout: "calendar", visible_fields: ["title", "due"] } })).json();
+  for (let i = 1; i <= 5; i++) await mk(`Crowd${i} ${stamp}`, `${ym}-22`);
+  const view = await (await page.request.post(`/api/tags/${tag.id}/views`, { ...H, data: { name: "Cal", layout: "calendar", visible_fields: ["title", "due"], layout_config: { date_field: "due" } } })).json();
   const vPath = `/api/tags/${tag.id}/views/${view.id}`;
 
   const openCal = async (p: Page) => {
@@ -62,8 +70,8 @@ test("COL-06: calendar date change, year boundary, undated, crowded day, timezon
     await page.waitForTimeout(400);
     out.moreClickShowsAll = String((await page.locator(".cv-cal-chip", { hasText: /^Crowd/ }).count()) >= 5);
 
-    // Year boundary: Oct → Dec → Jan 2027 → back.
-    await step(page, "Next month", 2);
+    // Year boundary: this month → December → January → back.
+    await step(page, "Next month", monthsToDec);
     out.dec = JSON.stringify(await grid(page));
     await step(page, "Next month");
     out.jan = JSON.stringify(await grid(page));
@@ -71,30 +79,41 @@ test("COL-06: calendar date change, year boundary, undated, crowded day, timezon
     out.todayBack = (await grid(page))._title as string;
 
     // Real date change while the calendar is open (another client changes due).
-    await page.request.put(`/api/nodes/${idOct}/attributes/due`, { ...H, data: { value: "2026-10-03", value_type: "date" } });
+    await page.request.put(`/api/nodes/${idOct}/attributes/due`, { ...H, data: { value: `${ym}-03`, value_type: "date" } });
     let moved = false;
     try {
-      await expect.poll(async () => JSON.stringify((await grid(page))["3"] ?? []), { timeout: 12_000 }).toContain("Oct15");
+      await expect.poll(async () => JSON.stringify((await grid(page))["3"] ?? []), { timeout: 12_000 }).toContain("Mid15");
       moved = true;
     } catch { /* recorded below */ }
     out.liveMove = `moved=${moved} grid=${JSON.stringify(await grid(page))}`;
     // Change in the UI: open the note via the chip, edit the due field in the Table layout of the same view.
-    await page.locator(".cv-layout-btn", { hasText: "Table" }).click();
+    // The layout is switched in the view's 「View options」 menu (a checked item per layout), not by toolbar buttons.
+    const layout = async (name: "Table" | "Calendar") => {
+      await page.getByRole("button", { name: "View options", exact: true }).click();
+      await page.getByRole("menuitemradio", { name, exact: true }).click();
+      // A layout that is placed by a field asks for it (the dialog's 「Change layout」); the calendar goes back to its date field.
+      if (name === "Calendar") {
+        const form = page.locator(".cv-add-view-form");
+        await form.getByRole("combobox").selectOption("due");
+        await form.getByRole("button", { name: "Change layout", exact: true }).click();
+      }
+    };
+    await layout("Table");
     await page.waitForTimeout(800);
-    const cell = page.locator(".cv-table tr", { hasText: `Oct15 ${stamp}` }).locator("td").nth(1);
+    const cell = page.locator(".cv-table tr", { hasText: `Mid15 ${stamp}` }).locator("td").nth(1);
     await cell.click();
     const inp = page.locator(".cv-table input").first();
     out.cellInputType = await inp.getAttribute("type").catch(() => "none");
-    await inp.fill("2026-10-09").catch(async () => { await inp.press("Control+a"); await inp.type("2026-10-09"); });
+    await inp.fill(`${ym}-09`).catch(async () => { await inp.press("Control+a"); await inp.type(`${ym}-09`); });
     await inp.press("Enter");
     await page.waitForTimeout(1200);
     const attrsRes = await (await page.request.get(`/api/nodes/${idOct}/attributes`)).json() as Array<{ key: string; value: string }>;
     out.uiEditSaved = attrsRes.find((a) => a.key === "due")?.value ?? "none";
-    await page.locator(".cv-layout-btn", { hasText: "Calendar" }).click();
+    await layout("Calendar");
     await page.waitForTimeout(800);
     out.afterUiEdit = JSON.stringify(await grid(page));
     // Click chip → opens that note.
-    await page.locator(".cv-cal-chip", { hasText: `Oct15 ${stamp}` }).click();
+    await page.locator(".cv-cal-chip", { hasText: `Mid15 ${stamp}` }).click();
     await page.waitForTimeout(800);
     out.chipOpens = String(page.url().includes(idOct));
 
@@ -105,19 +124,19 @@ test("COL-06: calendar date change, year boundary, undated, crowded day, timezon
     out.reopenMonth = (await grid(page))._title as string;
 
     // A date-typed field whose name has no date hint ("exam").
-    await page.request.patch(vPath, { ...H, data: { visible_fields: ["title", "exam"] } });
+    await page.request.patch(vPath, { ...H, data: { layout_config: { date_field: "exam" } } });
     await openCal(page);
     out.examField = `${await page.locator(".cv-cal-field").innerText()} grid=${JSON.stringify(await grid(page))}`;
-    await page.request.patch(vPath, { ...H, data: { visible_fields: ["title", "due"] } });
+    await page.request.patch(vPath, { ...H, data: { layout_config: { date_field: "due" } } });
 
-    // Negative-UTC timezone: date-only "2026-10-15"-style values.
+    // Negative-UTC timezone: date-only "YYYY-MM-15"-style values.
     const la = await browser.newContext({ storageState: await page.context().storageState(), baseURL: BASE, timezoneId: "America/Los_Angeles" });
     const lp = await la.newPage();
     await lp.addInitScript(() => localStorage.setItem("onden.welcomeDismissed", "1"));
     await openCal(lp);
     out.laTz = await lp.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
     out.laOctober = JSON.stringify(await grid(lp));
-    await step(lp, "Next month", 3);
+    await step(lp, "Next month", monthsToDec + 1);
     out.laJan = JSON.stringify(await grid(lp));
     await step(lp, "Previous month");
     out.laDec = JSON.stringify(await grid(lp));

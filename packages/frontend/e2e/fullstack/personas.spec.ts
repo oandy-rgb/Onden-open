@@ -1,6 +1,6 @@
 import { makeReviewCard } from "./reviewFixtures";
 import { test, expect, type Page } from "@playwright/test";
-import { createAgent, ready, openNoteDecisions, openInfoFunctions, openPublishRow, publishFromInfoPanel, defaultSpaceId, seedLayout, publishSite, H } from "./helpers";
+import { createAgent, ready, openNoteDecisions, openInfoFunctions, openPublishRow, defaultSpaceId, createPublishingSpace, seedLayout, publishSite, H } from "./helpers";
 
 // PERSONA INTENT journeys — the same primitives the feature specs cover, but
 // chained the way a given OCCUPATION actually works, asserting the FELT end
@@ -19,8 +19,8 @@ async function settled(page: Page, url: string): Promise<void> {
   await expect(page.locator(".membership-gate")).toHaveCount(0, { timeout: 15_000 });
 }
 
-const mkNote = async (page: Page, title: string, markdown: string): Promise<{ id: string; slug: string }> =>
-  (await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title, markdown } })).json());
+const mkNote = async (page: Page, title: string, markdown: string, space_id?: string): Promise<{ id: string; slug: string }> =>
+  (await (await page.request.post("/api/nodes", { ...H, data: { space_id: space_id ?? await defaultSpaceId(page.request), title, markdown } })).json());
 
 // 1 — STUDENT: capture a lecture fact, mark it for review, recall+grade it, and
 //     it leaves today's queue — the retention loop a student lives in.
@@ -66,20 +66,21 @@ test("student: a captured fact becomes a review card, graded, and leaves the que
 test("writer: a drafted post with a wikilink publishes and is publicly readable", async ({ page }) => {
   const stamp = Date.now();
   const marker = `PUBPOST${stamp}`;
-  await mkNote(page, `About ${stamp}`, "I write about gardens.");
-  const post = await mkNote(page, `Field notes ${stamp}`, `# Field notes\n\n${marker} — see [[About ${stamp}]] for who I am.`);
+  // A space that publishes puts its notes on the site (owner 2026-11-10, 211dda77): no per-note opt-in any more.
+  // The default space does not publish, so the post lives in one that does.
+  const site = await createPublishingSpace(page.request);
+  await mkNote(page, `About ${stamp}`, "I write about gardens.", site);
+  const post = await mkNote(page, `Field notes ${stamp}`, `# Field notes\n\n${marker} — see [[About ${stamp}]] for who I am.`, site);
 
   await settled(page, `/?view=notes&node=${post.id}`);
-  // Mark it for the site from the info panel (default-private → opt-in): 功能 › 還能用在這則 › 網站.
-  // A note not marked has no 「網站」 row yet.
+  // 功能 › 網站: the row says the note goes live with the next site publish.
   await openInfoFunctions(page);
-  await expect(page.locator(".info-publish")).toHaveCount(0);
-  await publishFromInfoPanel(page);
-  const { unpublish } = await openPublishRow(page);
+  const { unpublish, status } = await openPublishRow(page);
   await expect(unpublish).toBeVisible({ timeout: 10_000 });
+  await expect(status).toHaveText(/^Goes (on the site|live with the next site publish)$/);
 
-  // Snapshot model B (docs/architecture/site-render-model.md): the toggle only
-  // opts the note in; /api/site serves the last PUBLISHED snapshot, so publish.
+  // Snapshot model B (docs/architecture/site-render-model.md): the note is only
+  // on the next snapshot; /api/site serves the last PUBLISHED snapshot, so publish.
   await publishSite(page.request);
 
   // The served site now carries the post, and its body renders at /site.
@@ -109,17 +110,18 @@ test("project manager: tasks partition into overdue, today, and unscheduled buck
   await mkTask(`Backlog grooming ${stamp}`);      // unscheduled
 
   await settled(page, "/?view=tasks");
-  // Tasks page since 2026-11-06 (changes/2026-11-06-tasks-left-over.md): 今天 holds the day's
-  // tasks without a slot under 「還沒排時間」, the overdue ones on top in their own block
-  // 「前幾天留下的」 saying which day they were left from; a task with no date is in 隨時.
+  // Tasks page since 2026-11-09 (changes/2026-11-09-tasks-today.md): 今天 lists what is late or
+  // due by tomorrow in its own card at the top, 「可以排進今天的」, each row saying which day it was
+  // left over from; the day's tasks without a slot are under 「還沒排時間」; a task with no date is in 隨時.
   const today = page.getByRole("tabpanel", { name: /^Today/ });
+  const candidates = today.getByRole("region", { name: /^Can go on today/ });
   const notScheduled = today.getByRole("region", { name: "Not scheduled yet" });
-  const leftOver = notScheduled.getByRole("group", { name: /^Left over from earlier days/ });
   const row = (scope: typeof page | typeof today, title: string) => scope.locator(".tk-row", { hasText: title });
-  await expect(row(leftOver, `Ship release ${stamp}`)).toBeVisible({ timeout: 15_000 });
-  await expect(row(leftOver, `Ship release ${stamp}`)).toContainText(/Left over from/);
+  await expect(row(candidates, `Ship release ${stamp}`)).toBeVisible({ timeout: 15_000 });
+  await expect(row(candidates, `Ship release ${stamp}`)).toContainText(/Left over from/);
+  await expect(row(notScheduled, `Ship release ${stamp}`)).toHaveCount(0);
   await expect(row(notScheduled, `Standup ${stamp}`)).toBeVisible();
-  await expect(row(leftOver, `Standup ${stamp}`)).toHaveCount(0);
+  await expect(row(candidates, `Standup ${stamp}`)).toHaveCount(0);
   await expect(row(today, `Backlog grooming ${stamp}`)).toHaveCount(0);
   await page.getByRole("tab", { name: /^Anytime/ }).click();
   const anytime = page.getByRole("tabpanel", { name: /^Anytime/ });

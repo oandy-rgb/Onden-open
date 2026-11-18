@@ -160,7 +160,7 @@
       "packages/backend/src/services/bookmarkMarkdown.ts": ["escapeMarkdownText", "safeHttpDestination"],
       "packages/backend/src/services/collectionViewQuery.ts": ["ExecOptions", "ExecSource"],
       "packages/backend/src/services/dayNotes.ts": ["newDayNoteParent"],
-      "packages/backend/src/services/dispatcherQueue.ts": ["_resetDispatcherQueueForTests", "awaitAllDispatchers", "awaitNodeDispatcher", "inflightNodeIds", "pendingCascadeIntents", "runDispatcherCatchup"],
+      "packages/backend/src/services/dispatcherQueue.ts": ["_resetDispatcherQueueForTests", "awaitNodeDispatcher", "inflightNodeIds", "pendingCascadeIntents", "runDispatcherCatchup"],
       "packages/backend/src/services/edgeManifest.ts": ["EdgeArrowMode", "EdgeTypeSpec", "registerEdgeType"],
       "packages/backend/src/services/edgeWrites.ts": ["EdgeRow", "NewEdge"],
       "packages/backend/src/services/embedder.ts": ["EmbedRole", "Embedder", "__setEmbedderForTest"],

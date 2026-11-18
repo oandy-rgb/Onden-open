@@ -25,7 +25,7 @@ Electron 主程序（packages/desktop/src/main.mjs）
 - **同源**：視窗載入的網址就是 API 的網址，不需要 CORS；登入 cookie、來源檢查（`BETTER_AUTH_URL`、`CORS_ORIGIN`）都指向它。
 - **埠盡量固定**：瀏覽器端的本機資料（IndexedDB、離線佇列）綁 origin（含埠）。第一次選好的埠記在 `desktop.json`，之後優先用同一個；被別的程式占走才換，換了就像換一台電腦（本機副本重新同步）。
 - **子程序用 `child_process.fork`**（`ELECTRON_RUN_AS_NODE`），不用 `utilityProcess`：行為與普通 `node serverEntry.mjs` 相同，開發與測試不需要 Electron；有 IPC，Windows 也能「請它關資料庫再離開」。
-- **乾淨關閉**：後端本身沒有 SIGTERM 處理。`serverEntry.mjs` 先裝好關閉處理（先 `pglite.end()` 再離開）再載入既有的 `server.js`，所以後端程式碼沒動。關掉視窗 → 請後端關好 → 退出；8 秒內沒結束才強制結束。
+- **乾淨關閉**：後端本身沒有 SIGTERM 處理。`serverEntry.mjs` 先裝好關閉處理（先 `db.pool.end()`：等提交後的背景寫入做完再關資料庫，見後端 `dbClose.ts`；然後離開）再載入既有的 `server.js`，所以後端程式碼沒動。關掉視窗 → 請後端關好 → 退出；8 秒內沒結束才強制結束。
 - **安全**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；不動 `webSecurity`。有一個 preload（`src/preload.cjs`），只用 `contextBridge` 對網頁暴露 `window.ondenDesktop.ai`（見下一節「AI 橋」），沒有通用的 `invoke`／`send`，網頁拿不到 `ipcRenderer`。外部連結用系統瀏覽器開，視窗不會被導到別的網址；只放行剪貼簿、通知、全螢幕權限；網頁伺服器檢查 `Host`（防 DNS rebinding）並蓋掉用戶端自帶的 `X-Real-IP`；只允許一個實例（再雙擊會把原視窗叫到前面）。
 
 ### AI 橋：用這台電腦上的 AI 回答

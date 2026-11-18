@@ -244,7 +244,9 @@ Astro node 伺服器 → 以 Node 內建 http 做同源轉發（取代 compose �
   `ONDEN_DB_DRIVER=pglite DATABASE_URL=postgres://x@localhost/onden_cloud_test`（測試自己跑 migration）。
   已知問題以 `it.fails("KNOWN: …")` 留在檔尾，隨機測試預設繞開；`SIM_INCLUDE_KNOWN=1` 不繞、`SIM_STRICT_RETRY=1` 也要求「已生效寫入的重送要回成功」，`SIM_STATS=1` 印出實際打到哪些故障。
 - **重現**：失敗時 fast-check 印出種子與縮小後的反例；`PROPS_SEED=<種子> PROPS_RUNS=<次數> npm -w packages/<套件> exec vitest -- run <測試檔>`。
-  預設種子固定（20261023），所以平常的 `npm test` 是確定的；夜間跑換新種子。
+  種子預設每次執行、每個測試檔各取一個新的（擁有者 2026-11-18「種子都隨機」；`helpers/propsConfig.ts`），所以每次跑都走沒走過的案例，
+  代價是與本次修改無關的既有問題也會讓這次變紅：照下一條處理，不加重試、不改回固定種子。同步模擬器（`syncSimulator*.integration.test.ts`，`SYNC_SIM_SEED`）
+  與畫面層的隨機同步（`faults/randomSync.spec.ts`，`E2E_RANDOM_SEED`）同樣每次新種子，開頭與失敗訊息都會印出來。
 - **找到反例怎麼處理**：小錯同一個 PR 修掉，並把種子與最小反例寫成同檔案的 `describe("regressions …")` 固定案例；會改變行為的，用 `it.fails("FINDING …")`
   寫下最小反例，另在 PR 列出讓擁有者決定。目前行為尚待決定的（全形／半形、零寬字元、排序語系）寫成「current behaviour」案例，改行為時它會變紅。
 - **截斷使用者文字一律走 `@onden/markdown` 的 `graphemes.ts`**（`cutToUnits`、`cutToGraphemes`、`cutToCodePoints`、`cutToBytes`、`ellipsize`）。

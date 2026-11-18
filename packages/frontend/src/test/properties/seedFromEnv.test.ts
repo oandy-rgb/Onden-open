@@ -1,6 +1,6 @@
 // Every property suite here must take its seed and run count from
 // PROPS_SEED / PROPS_RUNS (helpers/propsConfig). A hard-coded `seed: 123` or
-// `numRuns: 200` makes the nightly fresh-seed run replay the same cases forever.
+// `numRuns: 200` makes every run replay the same cases forever (the seed is fresh on each run).
 // A per-property cap is fine as an expression, e.g. Math.min(PROPS_RUNS, 50).
 // fc.sample (checking what a generator reaches, not a property) may fix its seed.
 

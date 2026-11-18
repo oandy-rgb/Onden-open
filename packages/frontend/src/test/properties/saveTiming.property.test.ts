@@ -43,6 +43,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fc from "fast-check";
 import { readFileSync } from "node:fs";
+import { PROPS_SEED } from "../helpers/propsConfig";
 import { resolve } from "node:path";
 
 vi.mock("../../lib/api", async (original) => ({
@@ -81,7 +82,7 @@ world.makeApiError = (status) => new ApiError(status, JSON.stringify({ error: "x
  *  would report it first every time and hide the others. */
 const SKIP = (process.env.PROPS_SKIP ?? "").split(",").filter(Boolean).map((n) => `#${n} `);
 const RUNS = Number(process.env.PROPS_RUNS ?? 100);
-const SEED = Number(process.env.PROPS_SEED ?? 20261024);
+const SEED = PROPS_SEED;
 
 // ── the editor, wired like useOverviewMode ──────────────────────────────────
 

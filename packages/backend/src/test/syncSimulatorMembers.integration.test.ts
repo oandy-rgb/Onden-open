@@ -12,6 +12,7 @@ import fc from "fast-check";
 import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
+import { PROPS_SEED } from "./helpers/propsConfig.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { setWorkspaceOwner } from "./helpers/setOwner.js";
 import { awaitAllDispatchers } from "../services/dispatcherQueue.js";
@@ -93,7 +94,8 @@ async function play(ops: Op[], checks: Checks = {}, membershipFaults = false): P
 }
 
 describe.skipIf(!isTestDatabase())("members sync simulator (DB)", () => {
-  const seed = Number(process.env.SYNC_SIM_SEED ?? 20261109);
+  const seed = Number(process.env.SYNC_SIM_SEED ?? PROPS_SEED);
+  console.log(`[sync-sim members] seed=${seed} (SYNC_SIM_SEED=${seed})`);
   const numRuns = Number(process.env.SYNC_SIM_MEMBERS_RUNS ?? process.env.SYNC_SIM_RUNS ?? 100);
 
   it(`holds the member rules and converges (seed ${seed}, ${numRuns} runs)`, async () => {

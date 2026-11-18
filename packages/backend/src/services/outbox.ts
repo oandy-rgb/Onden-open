@@ -1,5 +1,4 @@
 import { q, pool, withLeaderLock } from "../db.js";
-import { onBeforePoolEnd } from "../dbClose.js";
 import { log } from "../logger.js";
 import { startPeriodicJob } from "../backgroundJobs.js";
 import { writeAndCommit } from "../git.js";
@@ -456,27 +455,19 @@ let instantPerform: Perform | null = null;
 let instantScope: (() => string) | null = null;
 let kickQueued = false;
 let kickChain: Promise<void> = Promise.resolve();
-/** Passes queued or running. */
-let kickPasses = 0;
 
 function kickOutboxDrain(): void {
   if (!instantDrainArmed || kickQueued) return; // the queued pass will see our row
   kickQueued = true;
-  kickPasses++;
   kickChain = kickChain.then(async () => {
     kickQueued = false;
-    try {
-      await drainOutbox({
-        ...(instantPerform ? { perform: instantPerform } : {}),
-        ...(instantScope ? { workspaceId: instantScope() } : {}),
-      })
-        .catch((e) => log.error("outbox", "instant drain failed", { err: e }));
-    } finally { kickPasses--; }
+    await drainOutbox({
+      ...(instantPerform ? { perform: instantPerform } : {}),
+      ...(instantScope ? { workspaceId: instantScope() } : {}),
+    })
+      .catch((e) => log.error("outbox", "instant drain failed", { err: e }));
   });
 }
-
-// A pass still queued or running when the database closes finishes first (dbClose.ts onBeforePoolEnd).
-onBeforePoolEnd("outbox", { pending: () => kickPasses, drain: async () => { await kickChain; } });
 
 /** Tests only: arm the instant drain with an injected performer (no real
  *  git/GitHub/embed I/O) so enqueue→performed can be asserted without the

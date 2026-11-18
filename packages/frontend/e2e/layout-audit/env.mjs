@@ -51,8 +51,7 @@ export async function openApp(browser, site, vp, { seed = true } = {}) {
     await page.goto(site.base);
     await page.getByText(READY_TEXT).first().waitFor({ state: "attached", timeout: 120_000 });
   }
-  await dismissWhatsNew(page);
-  await installHelpers(page);
+    await installHelpers(page);
   return { context, page, errors };
 }
 
@@ -62,7 +61,7 @@ export async function installHelpers(page) {
   // The browser app's own 「試用版」 pill floats over the corner of every screen; the real app has no such thing,
   // so it is taken out of the picture (it would "cover" whatever list sits under it). The same for the floating
   // 「這次更新」 card, which comes and goes on its own timing and would make the result depend on when it appeared.
-  await page.addStyleTag({ content: ".trial-notice, .trial-notice-button, [class*='trial-notice'], .device-notice-card[aria-label='這次更新'] { display: none !important; }" }).catch(() => {});
+  await page.addStyleTag({ content: ".trial-notice, .trial-notice-button, [class*='trial-notice'], .device-notices--whats-new { display: none !important; }" }).catch(() => {});
 }
 
 /** Wait until the worker says the browser's storage has the latest copy (a reload before that loses the last writes). */
@@ -74,18 +73,4 @@ export async function waitSaved(page, ms = 30_000) {
     await page.waitForTimeout(300);
   }
   throw new Error("the browser app did not save in time");
-}
-
-/** The 「這次更新」 card floats over every screen until it is closed once (the choice is kept with the account). */
-async function dismissWhatsNew(page) {
-  await page.getByRole("button", { name: /^(筆記|任務)$/ }).first().waitFor({ timeout: 60_000 });
-  const closed = await page.evaluate(() => {
-    const title = [...document.querySelectorAll("*")].find((e) => e.children.length === 0 && e.textContent.trim() === "這次更新");
-    for (let p = title; p; p = p.parentElement) {
-      const b = p.querySelector('button[aria-label="關閉"]');
-      if (b) { b.click(); return true; }
-    }
-    return false;
-  });
-  if (closed) await waitSaved(page).catch(() => {});
 }

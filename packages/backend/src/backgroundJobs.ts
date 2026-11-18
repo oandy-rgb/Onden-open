@@ -16,7 +16,6 @@
 // The timer itself comes from ticker.ts, the one owner of `setInterval(` (guards/dup-b2-infra.guard.test.ts).
 
 import { withLeaderLock } from "./db.js";
-import { onBeforePoolEnd } from "./dbClose.js";
 import { log } from "./logger.js";
 import { startTicker } from "./ticker.js";
 
@@ -35,8 +34,6 @@ export interface PeriodicJob {
 }
 
 const running = new Map<string, PeriodicJob>();
-/** Passes that have started and not yet finished. */
-const passesInFlight = new Set<Promise<void>>();
 
 type JobRunner = (job: () => Promise<void>) => Promise<void>;
 let runJob: JobRunner = (job) => job();
@@ -54,7 +51,7 @@ export function startPeriodicJob(opts: PeriodicJobOptions, run: () => Promise<vo
   const existing = running.get(opts.name);
   if (existing) return existing;
 
-  const runPass = (): Promise<void> => runJob(async () => {
+  const pass = (): Promise<void> => runJob(async () => {
     try {
       if (opts.exclusive) await runExclusive(opts.name, run);
       else await run();
@@ -62,11 +59,6 @@ export function startPeriodicJob(opts: PeriodicJobOptions, run: () => Promise<vo
       log.error(opts.name, "periodic job failed", { err: e });
     }
   });
-  const pass = (): Promise<void> => {
-    const started = runPass().finally(() => passesInFlight.delete(started));
-    passesInFlight.add(started);
-    return started;
-  };
 
   let first: ReturnType<typeof setTimeout> | null = null;
   if (opts.runFirstAfterMs !== undefined) {
@@ -90,12 +82,3 @@ export function startPeriodicJob(opts: PeriodicJobOptions, run: () => Promise<vo
 export function stopAllPeriodicJobs(): void {
   for (const job of [...running.values()]) job.stop();
 }
-
-// Closing the database (dbClose.ts): no new passes start, the ones running finish while the pool is still open.
-onBeforePoolEnd("periodic-jobs", {
-  pending: () => passesInFlight.size,
-  drain: async () => {
-    stopAllPeriodicJobs();
-    await Promise.all([...passesInFlight]);
-  },
-});

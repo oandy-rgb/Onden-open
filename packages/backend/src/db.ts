@@ -6,7 +6,6 @@ import { listMigrations, portableMigrationSql } from "./dbMigrations.js";
 import { afterCommit, withTxHookScope } from "./spine/txHooks.js";
 import { replayedOpId } from "./spine/replicatedOp.js";
 import { log } from "./logger.js";
-import { closeDatabase } from "./dbClose.js";
 import { translateUnitInConflict } from "./spine/unitInConflict.js";
 import { EVENT_APPEND_LOCK_SQL, acquireEventAppendLock } from "./spine/eventLock.js";
 import { notifyChanged, notifyMembershipChanged } from "./services/realtime.js";
@@ -96,13 +95,6 @@ function createPglitePool(): PglitePool {
 }
 
 export const pool: pg.Pool = pglite ? asPgPool(pglite) : createPostgresPool();
-
-const endPool = pool.end.bind(pool) as () => Promise<void>;
-let ending: Promise<void> | null = null;
-pool.end = (() => {
-  ending ??= closeDatabase(endPool);
-  return ending;
-}) as typeof pool.end;
 
 // When Postgres restarts, every IDLE pooled client gets "terminating connection
 // due to administrator command" and the pool re-emits it as 'error'. With no

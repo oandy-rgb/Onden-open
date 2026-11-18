@@ -23,6 +23,7 @@ export default defineConfig({
   envPrefix: ["VITE_", "PUBLIC_"],
   define: {
     "import.meta.env.VITE_NATIVE": JSON.stringify("true"),
+    __ONDEN_BUILT_AT__: Date.now(), // lib/buildTime
   },
   build: {
     outDir: "dist-cap",

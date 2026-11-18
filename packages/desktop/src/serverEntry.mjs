@@ -17,8 +17,7 @@ async function shutdown() {
   const hardStop = setTimeout(() => process.exit(1), 8000);
   hardStop.unref();
   try {
-    // pool.end() 先讓提交後的背景寫入做完（dbClose.ts），再關資料庫；直接 pglite.end() 會略過這一步。
-    await db.pool.end();
+    await db.pglite?.end();
   } finally {
     process.exit(0);
   }

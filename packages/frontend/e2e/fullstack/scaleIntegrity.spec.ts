@@ -99,7 +99,7 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   const bodyTail = `SCALEINT-TAIL-${stamp}`;
   const bodyMarker = `SCALEINT-BODY-${stamp} ${"unique body content ".repeat(20)}${bodyTail}`;
   const lazyNode = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-lazy ${run}`,
     markdown: bodyMarker,
   });
@@ -107,7 +107,7 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   // A node with a UNIQUE ALL-LETTERS token in its title, for search (#3).
   const searchToken = `scaleintfind${run}q`; // one unbroken FTS token, unique
   const searchNode = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-search ${searchToken}`,
     markdown: `searchable target body (${stamp})`,
   });
@@ -117,12 +117,12 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   // B already exists (services/nodes.ts:63 + :105 knowledge_link edge).
   const linkTargetTitle = `scaleint-target ${run}b`;
   const nodeB = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: linkTargetTitle,
     markdown: `backlink target body (${stamp})`,
   });
   const nodeA = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-source ${run}a`,
     markdown: `links to [[${linkTargetTitle}]] (${stamp})`,
   });

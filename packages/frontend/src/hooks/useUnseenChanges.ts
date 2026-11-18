@@ -4,22 +4,27 @@
 // already closed never flashes here.
 //
 // An account with nothing recorded yet is either brand new (its first look is
-// at today's list: nothing to show) or older than the newest change (it never
-// saw the list: show it). The account's creation day tells which.
+// at this build's list: nothing to show) or older than this build (it never
+// saw the list: show it). Two instants tell which: when the account was created
+// and when the running build was made (lib/buildTime, whatsNewText.createdWithThisBuild).
+// A change's `date:` plays no part: it has no time zone, so comparing it with
+// the creation day gave a new account the card whenever a note was dated
+// "tomorrow" in some zone.
 
 import { isBrowserOnline } from "../lib/data";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "../lib/auth-client";
 import { changesSeenBound, changesSeenStore } from "../lib/changesSeenStore";
-import { todayId } from "../lib/localDate";
+import { BUILT_AT_MS } from "../lib/buildTime";
 import { useSyncedPref } from "../lib/syncedPrefStore";
-import { unseenChanges, type Change } from "../lib/whatsNewText";
+import { createdWithThisBuild, unseenChanges, type Change } from "../lib/whatsNewText";
 
-/** The day this account was created, or null when the session can't say. */
-async function accountCreatedDay(): Promise<string | null> {
+/** When this account was created (epoch ms), or null when the session can't say. */
+async function accountCreatedAtMs(): Promise<number | null> {
   try {
     const created = (await authClient.getSession()).data?.user.createdAt;
-    return created ? todayId(new Date(created)) : null;
+    const ms = created ? new Date(created).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : null;
   } catch { return null; }
 }
 
@@ -28,8 +33,9 @@ let bundled: Promise<readonly Change[]> | null = null;
 const loadBundledChanges = () => (bundled ??= import("../lib/whatsNew").then((m) => m.CHANGES).catch((): readonly Change[] => { bundled = null; return []; }));
 const NONE: readonly Change[] = [];
 
-/** `changes` given: that list (tests). Otherwise the bundled one, which counts as empty until it has loaded. */
-export function useUnseenChanges(given?: readonly Change[]): { unseen: Change[]; markAllSeen: () => void } {
+/** `changes` given: that list (tests). Otherwise the bundled one, which counts as empty until it has loaded.
+ *  `builtAtMs`: when this build was made; null (a build that does not know) shows nothing to an account without a mark. */
+export function useUnseenChanges(given?: readonly Change[], builtAtMs: number | null = BUILT_AT_MS): { unseen: Change[]; markAllSeen: () => void } {
   const [loaded, setLoaded] = useState<readonly Change[]>(NONE);
   useEffect(() => {
     if (given) return;
@@ -43,18 +49,18 @@ export function useUnseenChanges(given?: readonly Change[]): { unseen: Change[];
   const offline = !isBrowserOnline();
   const known = bound && (settled || (offline && value !== null));
   const newest = changes[0] ?? null;
-  const [createdDay, setCreatedDay] = useState<string | null>(null);
+  const [createdAtMs, setCreatedAtMs] = useState<number | null>(null);
 
-  const needsCreatedDay = known && newest !== null && value === null;
+  const needsCreatedAt = known && newest !== null && value === null && builtAtMs !== null;
   useEffect(() => {
-    if (!needsCreatedDay) return;
+    if (!needsCreatedAt) return;
     let live = true;
-    void accountCreatedDay().then((day) => { if (live) setCreatedDay(day); });
+    void accountCreatedAtMs().then((ms) => { if (live) setCreatedAtMs(ms); });
     return () => { live = false; };
-  }, [needsCreatedDay]);
+  }, [needsCreatedAt]);
 
-  // A new account starts at the newest change, as if it had already seen it.
-  const startsFresh = needsCreatedDay && createdDay !== null && createdDay >= newest.date;
+  // An account made with this build starts at the newest change, as if it had already seen it.
+  const startsFresh = needsCreatedAt && createdAtMs !== null && createdWithThisBuild(createdAtMs, builtAtMs);
   useEffect(() => {
     if (startsFresh) save(newest.id);
   }, [startsFresh, newest, save]);
@@ -64,6 +70,6 @@ export function useUnseenChanges(given?: readonly Change[]): { unseen: Change[];
     if (newest && (current === null || newest.id > current)) save(newest.id);
   }, [newest, save]);
 
-  const ready = known && newest !== null && (value !== null || (createdDay !== null && !startsFresh));
+  const ready = known && newest !== null && (value !== null || (createdAtMs !== null && !startsFresh));
   return { unseen: ready ? unseenChanges(changes, value) : [], markAllSeen };
 }

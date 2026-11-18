@@ -1,6 +1,6 @@
 # Onden 功能解構地圖
 
-> 狀態：現行
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/modules/index.ts, packages/frontend/src/modules/index.ts, packages/frontend/src/lib/tagModules.ts, packages/backend/src/routes/mcpProtocol.ts
 
 這份地圖把專案拆成可以分別理解、驗證和重構的能力。它是手寫的（沒有腳本產生它），表格列出的是現在的入口；
@@ -43,7 +43,7 @@ flowchart TB
 | 標籤、屬性與集合 | 套標籤、填欄位、建 schema、切表格／看板 | 欄位定義與值、成員關係、查詢／檢視設定 | 節點、屬性、標籤 | `components/NodeAttributesPanel.tsx`、`components/tagPage/`、`components/collections/`、`lib/data/propertyWriter.ts`、`lib/data/tagWriter.ts`、`lib/data/tagSchemaWriter.ts` |
 | 任務 | 新增、完成、延期、設定重複 | 任務狀態、日期清單、重複任務規則 | 筆記、任務屬性、背景排程 | `modules/tasks/TasksMode.tsx`、`lib/data/taskWriter.ts`、`lib/data/taskAgenda.ts`、後端 `modules/tasks/`（[任務模組](tasks-module.md)、[日子時間線](day-timeline.md)） |
 | RSS 閱讀 | 訂閱、略過、保存文章、把重點放進筆記 | 文章暫存、已看狀態、保存成筆記、來源關聯 | 筆記、關聯、背景抓取 | 前後端 `modules/rss/`（保存：後端 `modules/rss/save.ts`；摘錄：前端 `modules/rss/rssQuote.ts`） |
-| 標籤功能 | 啟用複習等功能、查看來源標籤與直接成員 | 功能綁定、配置權限、保存結果；不授予額外讀寫權 | 標籤 schema、既有成員關聯 | `lib/tagModules.ts`、後端 `services/functionRefs.ts`、`services/tagCatalog.ts`、`components/tagPage/`、`lib/data/tagConfigWriter.ts`（[模組庫](module-library.md)） |
+| 功能的開關與既有的標籤功能引用 | 在設定開關內建功能；標籤頁只顯示、移除舊的功能引用（2026-11-12 起標籤頁沒有「＋ 加功能」，使用者的標籤只帶欄位與檢視） | 哪些功能開著、功能引用的保存；不授予額外讀寫權 | 工作區設定、功能引用表 | `lib/tagModules.ts`、後端 `services/functionRefs.ts`、`services/tagCatalog.ts`、`components/tagPage/`、`lib/data/tagConfigWriter.ts`（[模組庫](module-library.md)） |
 | 複習 | 套用具複習功能的標籤、取得到期卡片、評分 | 複習排程、記憶狀態、每日數量 | 筆記、複習屬性 | 前後端 `modules/review/` |
 | 白板與關係圖 | 加卡片、拖移、連線、整理布局 | 白板保存座標；關係操作保存語意連結 | 筆記 ID、關聯、布局資料 | `hooks/useCanvasActions.ts`、`modules/graph/LocalGraphLens.tsx`、`lib/data/canvasWriter.ts`、`lib/data/relationWriter.ts` |
 | 搜尋與查詢 | 搜尋筆記、篩選、查反向連結 | 可讀資料範圍、查詢條件、排序與結果 | 資料核心、搜尋索引、權限 | `hooks/useOverviewSearch.ts`、`lib/data/noteSearch.ts`（`reads.notes.search`）、後端 `routes/query.ts` |

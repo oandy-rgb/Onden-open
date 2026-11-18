@@ -60,7 +60,8 @@
   最多等 `DRAIN_LIMIT_MS`，超過就記一行並照樣結束連線池，來不及做完的留著 intent 列由下次開機補跑；排空出錯，連線池照樣結束、錯誤給呼叫者。
   一個行程只關一次，`isPoolClosing()` 之後不再重試。新增計時器或 `afterCommit` 的檔案若不登記，必須列在
   `test/guards/backgroundWriters.guard.test.ts` 的 `EXCEPTIONS` 並寫為什麼它不會寫資料庫（守門會擋，清單只減不增）。
-  測試輪裡 `pool.end()` 真的等到工作時會記一行「哪個檔、幾個工作」（只記不紅），該檔應自己 `awaitAllDispatchers()`。
+  測試輪裡 `pool.end()` 真的等到工作時會記一行「哪個檔、哪個登記者、幾個工作」，一輪結束時由 `scripts/lib/skipGateReporter.mjs` 彙整成一份清單（只記不紅），該檔應自己 `awaitAllDispatchers()`。
+  結束後的連線池不可再用：PGlite 的 `PglitePool` 與真 Postgres 一樣拒絕之後的 `query`／`connect`（不會悄悄開一個空資料庫）；要重新開始必須是新的連線池，不是一次查詢的副作用。
 - 沒人觸發、到時間自己跑的背景工作（目前是任務排程器與段落標記修復，見 `SYSTEM_JOBS`）用系統身分走 `mutate`（`spine/systemJobs.ts`）：
   事件 `actor_type` 為 `system`，`actor_id` 由工作推導；它只有 `{ kind: "system" }`／`cascade` 權限，
   允許的事件種類、對象種類與所需模組寫在 `SYSTEM_JOBS`，每個事件（含連帶）都核對，越界丟 `AuthorityError`。

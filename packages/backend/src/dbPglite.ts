@@ -83,6 +83,8 @@ class Mutex {
 
 export class PglitePool {
   private opened: Promise<PGlite> | null = null;
+  /** Set by end(): who ended the pool. Once set nothing opens the database again (see refuseAfterEnd). */
+  private endedBy: Error | null = null;
   private readonly mutex = new Mutex();
   private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   // pg.Pool counters some diagnostics read.
@@ -92,8 +94,16 @@ export class PglitePool {
 
   constructor(private readonly settings: PgliteSettings) {}
 
-  /** The database handle, opened on first use. */
-  database(): Promise<PGlite> {
+  /** pg.Pool throws on use after end(); without this a late query would open a second, unclosed PGlite (an EMPTY database
+   *  for memory://) and a job that outlived the pool would write into it with no trace. Starting again means a new
+   *  PglitePool (no product path does: see dbClose.ts). The stack is the late caller's; `cause` is who ended the pool. */
+  private refuseAfterEnd(use: string): void {
+    if (this.endedBy) throw new Error(`the database pool was ended; ${use} was called after pool.end()`, { cause: this.endedBy });
+  }
+
+  /** The database handle, opened on first use; refused after end(). */
+  async database(): Promise<PGlite> {
+    this.refuseAfterEnd("database()");
     this.opened ??= openPglite(this.settings);
     return this.opened;
   }
@@ -109,6 +119,7 @@ export class PglitePool {
   }
 
   async connect(): Promise<PoolClientLike> {
+    this.refuseAfterEnd("connect()");
     this.waitingCount++;
     let release: () => void;
     try { release = await this.mutex.acquire(this.settings.connectTimeoutMs); } finally { this.waitingCount--; }
@@ -123,6 +134,7 @@ export class PglitePool {
   }
 
   async query(text: string | QueryConfig, params?: unknown[]): ReturnType<PoolClientLike["query"]> {
+    this.refuseAfterEnd("query()");
     const ambient = this.settings.ambientClient();
     if (ambient) {
       this.settings.onPoolQueryInTransaction?.(typeof text === "string" ? text : text.text);
@@ -133,6 +145,7 @@ export class PglitePool {
   }
 
   async end(): Promise<void> {
+    this.endedBy ??= new Error("pool.end() was called here");
     if (!this.opened) return;
     const db = await this.opened;
     this.opened = null;
@@ -140,7 +153,7 @@ export class PglitePool {
   }
 
   private async run(text: string | QueryConfig, params?: unknown[]): ReturnType<PoolClientLike["query"]> {
-    const db = await this.database();
+    const db = await this.database(); // refuses after end(): a client that outlives it cannot reopen the database
     const sql = typeof text === "string" ? text : text.text;
     const values = params ?? (typeof text === "string" ? undefined : text.values);
     // pg runs a parameterless string on the simple protocol, which allows several statements

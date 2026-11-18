@@ -1,5 +1,8 @@
 // The single-connection stand-in for pg.Pool (dbPglite.ts), driven directly with its own in-memory
 // database: independent of ONDEN_DB_DRIVER, so it runs in every environment.
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PglitePool, type PoolClientLike } from "../dbPglite.js";
 
@@ -84,5 +87,57 @@ describe("PglitePool as pg.Pool", () => {
     await expect(client.query("SELECT 1")).rejects.toThrow(/released/);
     client.release(); // twice is harmless
     (await pool.connect()).release();
+  });
+});
+
+// Real pg throws "Cannot use a pool after calling end on the pool". Before: a query after end() opened a SECOND PGlite
+// instance (an empty database for memory://, a second handle on the same directory on disk), so a job that outlived the
+// pool wrote into a database nobody closes, with no error.
+describe("PglitePool after end()", () => {
+  const settings = { connectTimeoutMs: 300, ambientClient: () => undefined };
+  let dir = "";
+  afterAll(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
+
+  it("rejects query, connect and database(), naming the call and keeping the caller's stack", async () => {
+    const ended = new PglitePool({ dataDir: "memory://", ...settings });
+    await ended.query("CREATE TABLE t (id int)");
+    await ended.end();
+    await expect(ended.query("SELECT 1")).rejects.toThrow(/pool was ended.*query\(\)/);
+    await expect(ended.connect()).rejects.toThrow(/pool was ended.*connect\(\)/);
+    await expect(ended.database()).rejects.toThrow(/pool was ended.*database\(\)/);
+    const err = await ended.query("SELECT 1").then(() => new Error("did not reject"), (e: Error) => e);
+    expect(err.stack).toContain("dbPglite.test.ts"); // the late caller, not only the pool's internals
+    expect((err.cause as Error).stack).toContain("dbPglite.test.ts"); // and who ended it
+  });
+
+  it("an in-flight client that outlives end() is refused instead of reopening the database", async () => {
+    const ended = new PglitePool({ dataDir: "memory://", ...settings });
+    const client = await ended.connect();
+    await client.query("SELECT 1");
+    await ended.end();
+    await expect(client.query("SELECT 1")).rejects.toThrow(/pool was ended/);
+    client.release();
+  });
+
+  it("ending a pool that was never opened still refuses later use, and a second end() is harmless", async () => {
+    const ended = new PglitePool({ dataDir: "memory://", ...settings });
+    await ended.end();
+    await ended.end();
+    await expect(ended.query("SELECT 1")).rejects.toThrow(/pool was ended/);
+  });
+
+  it("writes nothing to the data directory after end()", async () => {
+    dir = await mkdtemp(join(tmpdir(), "pglite-ended-"));
+    const data = join(dir, "data");
+    const ended = new PglitePool({ dataDir: data, ...settings });
+    await ended.query("CREATE TABLE t (id int)");
+    await ended.end();
+    const before = (await readdir(data)).sort();
+    await expect(ended.query("INSERT INTO t VALUES (1)")).rejects.toThrow(/pool was ended/);
+    expect((await readdir(data)).sort()).toEqual(before);
+    // Starting again is a new pool on purpose, and it sees what the first one committed.
+    const again = new PglitePool({ dataDir: data, ...settings });
+    expect((await again.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_name = 't'")).rows[0]).toEqual({ n: 1 });
+    await again.end();
   });
 });

@@ -45,6 +45,9 @@ export default defineConfig({
     "import.meta.env.VITE_BROWSER_APP": JSON.stringify("true"),
     // One id per build: lib/lazyWithReload.ts reloads at most once per build when a stale chunk is asked for.
     __ONDEN_BUILD_ID__: JSON.stringify(process.env.ONDEN_BUILD_ID || Date.now().toString(36)),
+    // When it was made: lib/buildTime. ONDEN_BUILT_AT_MS only for e2e/layout-audit, which builds a "future" build so
+    // that its fresh accounts count as older than it and the 「這次更新」 card appears (screen whats-new-card).
+    __ONDEN_BUILT_AT__: Number(process.env.ONDEN_BUILT_AT_MS) || Date.now(),
   },
   build: {
     outDir,

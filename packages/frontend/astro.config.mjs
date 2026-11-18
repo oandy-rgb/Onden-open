@@ -17,7 +17,8 @@ export default defineConfig({
     plugins: [tailwindcss(), bootReportPlugin()],
     // A hover tint only with a pointer that hovers; on a touch screen it would stick to the last tap.
     css: { postcss: { plugins: [hoverWithPointer()] } },
-    define: { __ONDEN_BUILD_ID__: JSON.stringify(BUILD_ID) },
+    // The build time is its own constant: lib/buildTime (「這次更新」 compares it with when the account was created).
+    define: { __ONDEN_BUILD_ID__: JSON.stringify(BUILD_ID), __ONDEN_BUILT_AT__: Date.now() },
     // @onden/markdown is read from source (the backend image alone builds its dist).
     resolve: { alias: [
     // The subpath entries first: an alias matches by prefix, and the local-DB

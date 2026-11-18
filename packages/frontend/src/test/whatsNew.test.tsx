@@ -16,12 +16,14 @@ vi.mock("../lib/auth-client", () => ({
   authClient: { getSession: vi.fn(async () => ({ data: { user: { createdAt } } })) },
 }));
 
+import { authClient } from "../lib/auth-client";
 import { useUnseenChanges } from "../hooks/useUnseenChanges";
 import WhatsNewCard from "../components/WhatsNewCard";
 import { changesSeenStore, parseChangesSeen } from "../lib/changesSeenStore";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { onSettingsRequest } from "../lib/settingsRequest";
 import { changeText, CHANGES, parseChange, parseChanges, unseenChanges, type Change } from "../lib/whatsNew";
+import { createdWithThisBuild } from "../lib/whatsNewText";
 
 const change = (id: string, zh = `中文 ${id}`, en: string | null = null): Change => ({ id, date: id.slice(0, 10), zh, en });
 const LIST = [change("2026-10-29-d"), change("2026-10-28-c"), change("2026-10-27-b"), change("2026-10-26-a")];
@@ -79,6 +81,17 @@ describe("unseenChanges / parseChangesSeen", () => {
   });
 });
 
+const CLOCK_SKEW_MS = 10 * 60_000; // the documented tolerance (lib/whatsNewText)
+
+describe("createdWithThisBuild", () => {
+  it("is about instants: at or after the build, or within the clock skew before it", () => {
+    expect(createdWithThisBuild(1_000_000, 1_000_000)).toBe(true);
+    expect(createdWithThisBuild(1_000_000 + 1, 1_000_000)).toBe(true);
+    expect(createdWithThisBuild(1_000_000 - CLOCK_SKEW_MS, 1_000_000)).toBe(true);
+    expect(createdWithThisBuild(1_000_000 - CLOCK_SKEW_MS - 1, 1_000_000)).toBe(false);
+  });
+});
+
 describe("useUnseenChanges", () => {
   it("lists what is after the account's mark, and nothing after marking all seen (on every device)", async () => {
     serverPrefs.changesSeen = "2026-10-27-b";
@@ -90,24 +103,66 @@ describe("useUnseenChanges", () => {
     await waitFor(() => expect(serverPrefs.changesSeen).toBe("2026-10-29-d"));
   });
 
-  it("a new account starts at the newest change: nothing to show, and the mark is saved", async () => {
-    createdAt = "2026-10-29T08:00:00.000Z";
-    const { result } = renderHook(() => useUnseenChanges(LIST));
+  // The newest change is dated 2026-10-29 (the Taiwan day). The build was made 2026-10-28 17:00 UTC = 2026-10-29 01:00 in Taiwan.
+  const BUILT = Date.parse("2026-10-28T17:00:00.000Z");
+
+  it("a new account (made with this build) starts at the newest change: nothing to show, and the mark is saved", async () => {
+    createdAt = "2026-10-28T18:00:00.000Z";
+    const { result } = renderHook(() => useUnseenChanges(LIST, BUILT));
     await waitFor(() => expect(serverPrefs.changesSeen).toBe("2026-10-29-d"));
     expect(result.current.unseen).toEqual([]);
   });
 
-  it("an account older than the newest change that never saw the list gets it", async () => {
+  it("made one UTC day before the newest change's date, but after the build: no card (calendar days in two zones used to say otherwise)", async () => {
+    createdAt = "2026-10-28T17:30:00.000Z"; // 10-28 in UTC, 10-29 in Taiwan; the note is dated 10-29
+    const { result } = renderHook(() => useUnseenChanges(LIST, BUILT));
+    await waitFor(() => expect(serverPrefs.changesSeen).toBe("2026-10-29-d"));
+    expect(result.current.unseen).toEqual([]);
+  });
+
+  it("an account older than this build that never saw the list gets it", async () => {
     createdAt = "2026-09-01T08:00:00.000Z";
-    const { result } = renderHook(() => useUnseenChanges(LIST));
+    const { result } = renderHook(() => useUnseenChanges(LIST, BUILT));
     await waitFor(() => expect(result.current.unseen).toHaveLength(4));
     expect(serverPrefs.changesSeen).toBeNull();
   });
 
-  it("shows nothing while the account's creation day is unknown", async () => {
-    const { result } = renderHook(() => useUnseenChanges(LIST));
+  it("tolerates a server clock a few minutes behind the build's, not hours", async () => {
+    createdAt = new Date(BUILT - 5 * 60_000).toISOString();
+    const fresh = renderHook(() => useUnseenChanges(LIST, BUILT));
+    await waitFor(() => expect(serverPrefs.changesSeen).toBe("2026-10-29-d"));
+    expect(fresh.result.current.unseen).toEqual([]);
+    fresh.unmount();
+
+    changesSeenStore.save(null);
+    serverPrefs = {};
+    createdAt = new Date(BUILT - 60 * 60_000).toISOString();
+    const older = renderHook(() => useUnseenChanges(LIST, BUILT));
+    await waitFor(() => expect(older.result.current.unseen).toHaveLength(4));
+  });
+
+  it("shows nothing while the account's creation time is unknown, or this build's time is", async () => {
+    const unknownAccount = renderHook(() => useUnseenChanges(LIST, BUILT));
     await act(async () => { await Promise.resolve(); });
-    expect(result.current.unseen).toEqual([]);
+    expect(unknownAccount.result.current.unseen).toEqual([]);
+    unknownAccount.unmount();
+
+    createdAt = "2026-09-01T08:00:00.000Z";
+    const unknownBuild = renderHook(() => useUnseenChanges(LIST, null));
+    await act(async () => { await Promise.resolve(); });
+    expect(unknownBuild.result.current.unseen).toEqual([]);
+    expect(serverPrefs.changesSeen ?? null).toBeNull();
+  });
+
+  it("offline on a first run, the session cannot say when the account was made: nothing shown, nothing saved", async () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    vi.mocked(authClient.getSession).mockRejectedValueOnce(new Error("offline"));
+    try {
+      const { result } = renderHook(() => useUnseenChanges(LIST, BUILT));
+      await act(async () => { await Promise.resolve(); });
+      expect(result.current.unseen).toEqual([]);
+      expect(serverPrefs.changesSeen ?? null).toBeNull();
+    } finally { online.mockRestore(); }
   });
 
   it("never moves the mark back", async () => {

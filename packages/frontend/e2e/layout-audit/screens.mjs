@@ -80,6 +80,14 @@ export const SCREENS = [
   { id: "tags-list", name: "標籤頁（列表）", async go(h) { await openTag(h); } },
   { id: "tags-table", name: "標籤頁（表格檢視）", async go(h) { await openTag(h); await click(h.page.getByRole("button", { name: "新增檢視" }), "新增檢視"); await settle(h);
     await click(h.page.getByText("表格", { exact: true }), "表格"); await settle(h, 1500); } },
+  // The card is hidden everywhere else (env.mjs). It shows only to an account older than the build: build with
+  // ONDEN_BUILT_AT_MS far in the future (see the README), or this screen has nothing to look at and says so.
+  { id: "whats-new-card", name: "「這次更新」卡片（桌面）／「有新功能」小條（手機）浮在筆記上", async go(h) {
+    await open(h, note(IDS.long));
+    await h.page.addStyleTag({ content: ".device-notices--whats-new { display: flex !important; }" });
+    try { await h.page.locator(".device-notices--whats-new").first().waitFor({ state: "visible", timeout: 12_000 }); }
+    catch { skip("這個建置不會對新帳號顯示卡片（要用 ONDEN_BUILT_AT_MS 建一個「未來」的建置）"); }
+  } },
   { id: "daily", name: "日記／今天", go: (h) => open(h, "?view=daily") },
   { id: "daily-date-picker", name: "日期選擇器／月曆", async go(h) {
     await open(h, "?view=daily");

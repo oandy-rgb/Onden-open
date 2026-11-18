@@ -25,3 +25,15 @@ export const isNewerChange = (a: string, b: string): boolean => a > b;
 export function unseenChanges(changes: readonly Change[], seenUpTo: string | null): Change[] {
   return seenUpTo === null ? [...changes] : changes.filter((c) => isNewerChange(c.id, seenUpTo));
 }
+
+/** How far the account's server clock may be behind the clock that stamped the build and still count as "made with this build". */
+const CLOCK_SKEW_MS = 10 * 60_000;
+
+/** Whether an account created at `createdAtMs` (the server's clock) has seen everything in a build made at
+ *  `builtAtMs` (the build machine's clock): it did not exist before the build, so no earlier list was ever its own.
+ *  The two clocks are different machines: a creation within CLOCK_SKEW_MS before the build counts as after it.
+ *  A skew the wrong way costs a new person a card of updates that sits over buttons; the other way costs an
+ *  account made minutes before a deploy one missed update note, which the settings list still holds. */
+export function createdWithThisBuild(createdAtMs: number, builtAtMs: number): boolean {
+  return createdAtMs >= builtAtMs - CLOCK_SKEW_MS;
+}

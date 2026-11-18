@@ -80,6 +80,42 @@ describe("a local DB worker that hangs or dies", () => {
     FakeWorker.all[0]!.reply([]); // too late
     expect(getLocalCopyState()).toBe("restarting");
   });
+
+  // The fault e2e workerDeath.spec.ts (scenario 7) at this level: a worker that ended itself (`self.close()`, the
+  // closest Playwright has to a crash) sends no `error` event, so the page learns of it only from the call timeout.
+  // For that whole minute a save waits on the dead worker and nothing is shown. A fix must tell "dead" from "busy"
+  // (an export can take seconds on a phone, LOCAL_DB_CALL_TIMEOUT_MS): a shorter timeout alone would end a live
+  // worker in the middle of its work. The busy fake below answers every other message at once (its thread is free;
+  // the call itself waits on storage). Known open; FAULTS_FLIP=1 runs it as `it` to show why.
+  const knownOpen = process.env.FAULTS_FLIP ? it : it.fails;
+  knownOpen("a worker that ended itself is noticed within 30 seconds, and a busy one is left alone for 40", async () => {
+    const outcomeOf = (call: Promise<unknown>) => {
+      const seen = { value: "waiting" };
+      void call.then(() => { seen.value = "answered"; }, () => { seen.value = "failed"; });
+      return seen;
+    };
+    // Dead: it never answers and raises no event.
+    const dead = outcomeOf(getPendingWrites());
+    await vi.advanceTimersByTimeAsync(30_000);
+    const deadResult = { outcome: dead.value, state: getLocalCopyState() };
+    _resetLocalDbForTests();
+    _resetLocalCopyForTests();
+
+    // Busy: the call is answered after 40 s; anything else it is sent is answered at once.
+    const busy = outcomeOf(getPendingWrites());
+    const worker = FakeWorker.all.at(-1)!;
+    const post = worker.postMessage.bind(worker);
+    worker.postMessage = (req) => { post(req); if (worker.sent.length > 1) worker.reply(null); };
+    await vi.advanceTimersByTimeAsync(40_000);
+    if (!worker.terminated) worker.reply([], 0);
+    await vi.advanceTimersByTimeAsync(0);
+    const busyResult = { outcome: busy.value, terminated: worker.terminated };
+
+    expect({ dead: deadResult, busy: busyResult }).toEqual({
+      dead: { outcome: "failed", state: "restarting" },
+      busy: { outcome: "answered", terminated: false },
+    });
+  });
 });
 
 describe("a copy that cannot be opened (memory-only)", () => {

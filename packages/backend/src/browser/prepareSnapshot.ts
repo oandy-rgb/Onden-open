@@ -16,7 +16,8 @@ setEnvironment({
 const out = process.argv[2];
 if (!out) throw new Error("usage: prepareSnapshot.ts <out.tar.gz>");
 
-const { migrate, pglite } = await import("../db.js");
+const { migrate, pglite, pool } = await import("../db.js");
+const { awaitAllDispatchers } = await import("../services/dispatcherQueue.js");
 const { auth } = await import("../auth.js");
 const { backfillModuleImports } = await import("../modules/index.js");
 const { LOCAL_ACCOUNT } = await import("./localSession.js");
@@ -38,9 +39,10 @@ const identity = await import("./nodeIdentity.js");
 await identity.stampPackagedRowsAsGenesis();
 await identity.forgetNodeId();
 
+await awaitAllDispatchers(); // anything the setup queued post-commit must be in the dump
 const database = await pglite!.database();
 const dump = await database.dumpDataDir("gzip");
 await writeFile(out, Buffer.from(await dump.arrayBuffer()));
 process.stdout.write(`snapshot: ${(dump.size / 1024 / 1024).toFixed(2)} MiB → ${out}\n`);
-await pglite!.end();
+await pool.end(); // drains background work, then ends
 process.exit(0);

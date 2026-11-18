@@ -336,3 +336,32 @@ describe("replay", () => {
     d.close();
   });
 });
+
+// The fault e2e closeMidSave.spec.ts 5b, second half. A note save first writes the typed text into this mirror
+// (lib/data/writeLifecycle.ts `mirror()` before `submitWrite`, lib/data/noteWriter.ts `upsertNode`), and the
+// mirror save follows on its 2 s debounce; the queue row exists only if the save is answered "queued" (or its
+// 25 s deadline queues it). A page killed in between leaves the text in this device's copy with no queue row:
+// it shows as saved after a reopen, nothing sends it, and the next whole refresh or a server copy of the note
+// (both protect only notes with a queued write: pendingNoteProjection.ts) puts the server's text back.
+// Known open; FAULTS_FLIP=1 runs it as `it` to show why.
+describe("a save the page died during, after its text reached the mirror", () => {
+  const knownOpen = process.env.FAULTS_FLIP ? it : it.fails;
+  const stored = async () => ((await ok("getStoredBody", "n")) as { markdown?: string } | string | null);
+  const bodyOf = (value: Awaited<ReturnType<typeof stored>>) => (typeof value === "string" ? value : value?.markdown ?? null);
+  knownOpen("is still on its way to the server after a reopen and the daily whole refresh", async () => {
+    await ok("persistBootstrap", bootstrap); // the server's text: "body"
+    await settle();
+    await ok("upsertNode", { ...node, markdown: "body typed" }); // the save's mirror step
+    await settle(); // its 2 s mirror save lands; the page is killed before the save is answered
+    await reopenWorker();
+    const afterReopen = bodyOf(await stored());
+    const queued = (await bodies()).length;
+    await ok("persistBootstrap", bootstrap); // the daily whole refresh (syncEngine refreshOnReopen)
+    const afterRefresh = bodyOf(await stored());
+    await ok("upsertNode", { ...node, markdown: "body typed" });
+    await ok("persistRemoteNode", node); // opening it in a large workspace (hydrateNode) reads the server's copy
+    const afterServerCopy = bodyOf(await stored());
+    expect({ afterReopen, queued, afterRefresh, afterServerCopy })
+      .toEqual({ afterReopen: "body typed", queued: 1, afterRefresh: "body typed", afterServerCopy: "body typed" });
+  });
+});

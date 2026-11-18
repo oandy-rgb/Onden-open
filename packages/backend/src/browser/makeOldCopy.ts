@@ -40,7 +40,8 @@ const poisonFrom = mode === "poisoned" ? all.filter(indexedNewTable).pop() : und
 if (poisonFrom) leftOut.add(poisonFrom.version);
 const kept = all.filter((m) => !leftOut.has(m.version));
 
-const { migrate, pglite, q } = await import("../db.js");
+const { migrate, pglite, pool, q } = await import("../db.js");
+const { awaitAllDispatchers } = await import("../services/dispatcherQueue.js");
 const { sqlIdentifier } = await import("../sqlText.js");
 const { auth } = await import("../auth.js");
 const { app } = await import("../app.js");
@@ -130,6 +131,8 @@ if (mode === "old") {
 }
 
 // The schema goes back to what the kept migrations left, and the record of applied migrations with it.
+// Writing notes queued post-commit cascades: let them land before the schema is stepped back and the copy is dumped.
+await awaitAllDispatchers();
 await stepBackTo(rawRun, keptSchema);
 await rawRun(`DELETE FROM schema_migrations WHERE version <> ALL($1::text[])`, [kept.map((m) => m.version)]);
 for (const sql of afterStepBack) await (await pglite!.database()).exec(sql);
@@ -143,5 +146,5 @@ if (mode === "poisoned") {
 const dump = await (await pglite!.database()).dumpDataDir("gzip");
 await writeFile(out, Buffer.from(await dump.arrayBuffer()));
 process.stdout.write(`${JSON.stringify({ applied: kept.length, last: kept[kept.length - 1]!.version, latest: all[all.length - 1]!.version, leftOut: leftOut.size })}\n`);
-await pglite!.end();
+await pool.end(); // drains background work, then ends
 process.exit(0);

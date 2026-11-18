@@ -41,9 +41,9 @@ export function isPoolClosing(): boolean {
 
 /** Repeat whole passes until one finds nothing pending: a drained job may queue work for a registrant that was
  *  already checked in this pass, whatever the registration (import) order is. */
-async function drainToFixedPoint(): Promise<number> {
+async function drainToFixedPoint(): Promise<Map<string, number>> {
   let busiest = "";
-  let total = 0;
+  const drained = new Map<string, number>();
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     let found = 0;
     for (const [name, drain] of registered) {
@@ -51,10 +51,10 @@ async function drainToFixedPoint(): Promise<number> {
       if (jobs === 0) continue;
       found += jobs;
       busiest = name;
+      drained.set(name, (drained.get(name) ?? 0) + jobs);
       await drain.drain();
     }
-    if (found === 0) return total;
-    total += found;
+    if (found === 0) return drained;
   }
   throw new Error(`closing the database: "${busiest}" still had work after ${MAX_PASSES} passes`);
 }
@@ -71,10 +71,13 @@ export async function closeDatabase(endPool: () => Promise<void>): Promise<void>
     const outcome = await Promise.race([draining, limit]);
     if (outcome !== "limit") {
       // The test run only: a test file that leaves work behind without awaiting it becomes visible (log only; the drain
-      // made the run safe), so it can get its own awaitAllDispatchers().
-      if (outcome > 0 && caller) {
+      // made the run safe), so it can get its own awaitAllDispatchers(). The line's shape is read by
+      // scripts/lib/skipGateReporter.mjs, which lists these per file at the end of the run: change both together.
+      if (outcome.size > 0 && caller) {
         const file = /src\/test\/([^:)\s]+)/.exec(caller)?.[1] ?? "an unknown test file";
-        log.warn("tests", `pool.end() waited for ${outcome} background job(s) in ${file}; await them in the test (awaitAllDispatchers)`);
+        const jobs = [...outcome.values()].reduce((a, b) => a + b, 0);
+        const byName = [...outcome].map(([name, n]) => `${name}: ${n}`).join(", ");
+        log.warn("tests", `pool.end() waited for ${jobs} background job(s) in ${file} [${byName}]; await them in the test (awaitAllDispatchers)`);
       }
     } else {
       const waiting = [...registered].map(([name, d]) => [name, d.pending()] as const).filter(([, n]) => n > 0);

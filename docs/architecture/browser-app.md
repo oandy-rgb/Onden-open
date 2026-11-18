@@ -100,7 +100,7 @@
 
 ## 5. 預先遷移好的快照：首次開啟不跑遷移
 
-`prepareSnapshot.ts` 在建置時用 Node 跑完全部遷移與 better-auth 的表、建立本機帳號、關掉需要網路的模組，輸出 `snapshot.tar.gz`（gzip，約 5.5 MiB）。
+`prepareSnapshot.ts` 在建置時用 Node 跑完全部遷移與 better-auth 的表、建立本機帳號、關掉需要網路的模組，輸出 `snapshot.tar.gz`（gzip，約 5.5 MiB）。傾印前先 `awaitAllDispatchers()`（設定過程排入的提交後工作要進快照），結束走 `pool.end()`（先排空再結束；`makeOldCopy.ts` 同）。
 首次開啟時 worker 從它還原，**不跑 150 支遷移**（實驗量到記憶體建庫＋遷移約 3.6–4.0 秒）。之後的新版若多了遷移，worker 仍內嵌了遷移 SQL，開機時先在記憶體裡對已存的副本補跑，成功並存好新副本才取代舊的；失敗、或副本比程式新，都不動舊副本（§12.1）。
 
 首次開啟（`e2e/browser-app/measure.mjs`：本機 Chromium headless、無 HTTP 快取、靜態檔不經壓縮傳輸，重複兩次的結果相差 < 5%）：

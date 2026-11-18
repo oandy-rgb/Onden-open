@@ -3,7 +3,7 @@
 // agent's write_mode, so the member the product refuses is the view-only one). The owner can also remove a
 // member or change a member's permission while that member's device is offline with queued writes.
 // Same layer, replay and safety rules as syncSimulator.integration.test.ts; read its header first.
-//   SYNC_SIM_MEMBERS_RUNS=<n> (default 40), SYNC_SIM_SEED, SYNC_SIM_PATH, SYNC_SIM_REPLAY as there.
+//   SYNC_SIM_MEMBERS_RUNS=<n> (default 100), SYNC_SIM_SEED, SYNC_SIM_PATH, SYNC_SIM_REPLAY as there.
 // Each run gets a workspace of its own (people, space, notes), because a person's readable set would
 // otherwise grow with every earlier run. Devices send who they are in `x-sim-user`, which the mocked
 // session lookup turns into the person's login.
@@ -94,7 +94,7 @@ async function play(ops: Op[], checks: Checks = {}, membershipFaults = false): P
 
 describe.skipIf(!isTestDatabase())("members sync simulator (DB)", () => {
   const seed = Number(process.env.SYNC_SIM_SEED ?? 20261109);
-  const numRuns = Number(process.env.SYNC_SIM_MEMBERS_RUNS ?? process.env.SYNC_SIM_RUNS ?? 40);
+  const numRuns = Number(process.env.SYNC_SIM_MEMBERS_RUNS ?? process.env.SYNC_SIM_RUNS ?? 100);
 
   it(`holds the member rules and converges (seed ${seed}, ${numRuns} runs)`, async () => {
     if (process.env.SYNC_SIM_REPLAY) {

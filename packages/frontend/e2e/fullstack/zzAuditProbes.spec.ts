@@ -53,28 +53,37 @@ test("SITE-10: static export returns an archive and excludes private notes", asy
   await page.request.delete(`/api/nodes/${priv.id}`, H);
 });
 
-test("HIST-10: empty trash purges only the named trashed notes; a live note is skipped", async ({ page }) => {
-  // D95: the workspace-wide POST /api/maintenance/prune is gone; a person
-  // empties the trash they see through POST /api/nodes/trash/empty.
+// The trash was removed on 2026-10-19 (86ee37124, D111): GET /api/nodes/trash, POST /api/nodes/trash/empty and
+// the maintenance prune are gone and a deleted note is brought back from History › Recently deleted. What
+// "empty the trash" protected is now POST /api/history/deleted/purge: it deletes for good only the deleted notes
+// that are named (with the plan the person saw), refuses a note that is still live, and a purged note cannot come back.
+test("HIST-10: delete for good removes only the named deleted notes; a live note is refused", async ({ page }) => {
   const stamp = Date.now();
   const live = await (await page.request.post("/api/nodes", { ...H, data: { title: `Prune live ${stamp}`, markdown: "keep" } })).json();
   const doomed = await (await page.request.post("/api/nodes", { ...H, data: { title: `Prune doomed ${stamp}`, markdown: "bye" } })).json();
+  const spared = await (await page.request.post("/api/nodes", { ...H, data: { title: `Prune spared ${stamp}`, markdown: "still in recently deleted" } })).json();
   expect((await page.request.delete(`/api/nodes/${doomed.id}`, H)).ok()).toBe(true);
+  expect((await page.request.delete(`/api/nodes/${spared.id}`, H)).ok()).toBe(true);
 
-  const real = await page.request.post("/api/nodes/trash/empty", { ...H, data: { node_ids: [doomed.id, live.id] } });
-  const body = await real.json();
-  console.log("AUDIT HIST-10 empty:", real.status(), JSON.stringify(body));
+  const real = await page.request.post("/api/history/deleted/purge", { ...H, data: { items: [{ node_id: doomed.id, expected_ids: [doomed.id] }, { node_id: live.id, expected_ids: [live.id] }] } });
   expect(real.ok()).toBe(true);
-  expect(body).toMatchObject({ purged: 1, skipped: 1 });
-  const liveAfter = await page.request.get(`/api/nodes/${live.id}`, H);
-  const doomedAfter = await page.request.get(`/api/nodes/${doomed.id}`, H);
-  console.log("AUDIT HIST-10 live/doomed after purge:", liveAfter.status(), doomedAfter.status());
-  expect(liveAfter.status()).toBe(200);
-  expect(doomedAfter.status()).toBe(404);
-  const undelete = await page.request.post(`/api/nodes/${doomed.id}/undelete`, H);
-  console.log("AUDIT HIST-10 undelete after purge:", undelete.status());
+  const { results } = await real.json() as { results: Array<{ node_id: string; purged: boolean; code?: string }> };
+  expect(results.find((r) => r.node_id === doomed.id)).toMatchObject({ purged: true });
+  expect(results.find((r) => r.node_id === live.id)).toMatchObject({ purged: false, code: "not_deleted" });
 
+  expect((await page.request.get(`/api/nodes/${live.id}`, H)).status()).toBe(200);
+  expect((await page.request.get(`/api/nodes/${doomed.id}`, H)).status()).toBe(404);
+  // Not named, so still there to bring back; the purged one cannot come back.
+  const deleted = await (await page.request.get("/api/history/deleted?days=30", H)).json() as { notes: Array<{ id: string }> };
+  expect(deleted.notes.map((n) => n.id)).toContain(spared.id);
+  expect(deleted.notes.map((n) => n.id)).not.toContain(doomed.id);
+  expect((await page.request.post(`/api/nodes/${doomed.id}/undelete`, H)).ok()).toBe(false);
+  expect((await page.request.post(`/api/nodes/${spared.id}/undelete`, H)).ok()).toBe(true);
+
+  // The old workspace-wide routes stay gone.
   expect((await page.request.post("/api/maintenance/prune", { ...H, data: { retention_days: 0 } })).ok()).toBe(false);
+  expect((await page.request.post("/api/nodes/trash/empty", { ...H, data: { node_ids: [live.id] } })).ok()).toBe(false);
+  expect((await page.request.get(`/api/nodes/${live.id}`, H)).status()).toBe(200);
 });
 
 test("NOTE-09: reading + character templates are reachable from the slash menu", async ({ page }) => {

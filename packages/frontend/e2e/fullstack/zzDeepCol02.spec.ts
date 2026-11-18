@@ -54,7 +54,9 @@ test("COL-02: multi-sort, compound filter, partial PATCH, builder offline/503, p
     await ready(p, `/?view=notes&node=${tag.id}`);
     await openSavedViewTab(p);
     await expect(p.locator(".cv-table")).toBeVisible();
-    await p.locator('button[title="Filter, sort and group this view"]').click();
+    // The builder is an item of the view's 「View options」 menu (CollectionView), not a toolbar button of its own.
+    await p.getByRole("button", { name: "View options", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Filter, sort and group this view", exact: true }).click();
     await expect(p.locator(".cv-builder")).toBeVisible();
   };
   await openViews(page);

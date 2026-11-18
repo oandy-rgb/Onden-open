@@ -117,8 +117,8 @@ Not run by the author; Playwright only supports part of this, as noted.
 Random operations on the real app: device A (one context, two tabs on one
 IndexedDB) and device B (a second context). Invariants, replay and the known
 open issues it annotates instead of failing are described at the top of the
-spec. Needs the full stack (about 5–10 minutes for the default 3 rounds × 25
-operations):
+spec. Needs the full stack (about 8–10 minutes for the default 12 rounds × 25
+operations; `E2E_RANDOM_RUNS=3` for a quick pass):
 
 ```sh
 packages/frontend/e2e/fullstack/run.sh fullstack/faults/randomSync.spec.ts --grep @faults

@@ -24,13 +24,19 @@ test("NAV-02: lens availability, deep links, refresh and back/forward", async ({
   const parent = await mk(`Parent ${stamp}`);
   await mk(`Child1 ${stamp}`, { parent_id: parent });
   await mk(`Child2 ${stamp}`, { parent_id: parent });
+  // The whiteboard is a view tab a note has (added from the tab row's ＋; docs/architecture/canvas-as-view.md, 2026-11-02 title-bar tabs):
+  // having children no longer earns one. Give the parent that tab; the leaf keeps only Content.
+  const canvasTab = await page.request.post(`/api/nodes/${parent}/views`, { ...H, data: { name: "Canvas", layout: "canvas", visible_fields: [] } });
+  expect(canvasTab.ok(), await canvasTab.text()).toBeTruthy();
   const out: Record<string, string> = {};
 
-  // Availability: a leaf earns no gated lens; a parent earns Canvas (from its children).
+  // Availability: a leaf has only Content; a parent shows the Canvas tab it was given.
   await ready(page, `/?view=notes&node=${leaf}`);
   out.leafTabs = JSON.stringify(await tabs(page));
   await ready(page, `/?view=notes&node=${parent}`);
   out.parentTabs = JSON.stringify(await tabs(page));
+  expect(out.leafTabs).toBe(JSON.stringify(["Content"]));
+  expect(out.parentTabs).toBe(JSON.stringify(["Content", "Canvas"]));
 
   // Deep links land on the right pane and survive refresh.
   for (const lens of ["table", "timeline", "canvas", "editor", "local-graph"]) {
@@ -40,6 +46,7 @@ test("NAV-02: lens availability, deep links, refresh and back/forward", async ({
     await page.reload({ waitUntil: "load" });
     await page.waitForTimeout(1500);
     out[`deep:${lens}`] = `${first} → reload ${lensParam(page)}/${await pane(page)}`;
+    if (lens === "canvas") expect(out[`deep:${lens}`]).toBe("canvas/canvas → reload canvas/canvas");
     if (lens === "canvas") await page.screenshot({ path: "/tmp/pw-output/nav02-canvas.png" });
   }
   // A gated lens on a node that cannot fill it.

@@ -65,32 +65,48 @@ export function createEdgeAutoScroll(
  *  belongs to the press, can be swallowed: the press opens the menu itself when the finger lifts. */
 export function createTouchPressGuard() {
   let pressed = false;
+  let armedAt = 0;
   return {
     begin: () => { pressed = true; },
-    // The browser's contextmenu can trail the lift a little.
-    end: () => { window.setTimeout(() => { pressed = false; }, 400); },
+    // The browser's contextmenu can trail the lift a little. Kept as a moment on the clock, not a timer: a timer
+    // would outlive the element that owns this guard (and the test window it runs in).
+    end: () => { pressed = false; armedAt = Date.now(); },
     swallow(e: { preventDefault(): void }): boolean {
-      if (!pressed) return false;
+      if (!pressed && !within(armedAt, 400)) return false;
       e.preventDefault();
       return true;
     },
   };
 }
 
+/** Whether `now` is still inside the `ms` after `since`. A clock that went backwards (a test swapping its fake clock
+ *  for the real one) counts as over. */
+function within(since: number, ms: number): boolean {
+  const elapsed = Date.now() - since;
+  return elapsed >= 0 && elapsed < ms;
+}
+
 /** After a lifted press ends, the browser still sends the click that belongs
  *  to the touch, at the finger. The menu (or drop) has just opened there, so
  *  that click would pick its first item: swallow the next click, briefly. */
 export function swallowNextClick(ms = 500) {
-  // The window the listener was put on, kept: the timer can outlive the page that started it (a test's window is
-  // gone 500 ms later, and `window` is then not defined), and it must take its listener off that same window.
-  const host = window;
-  const stop = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); done(); };
-  const timer = host.setTimeout(() => done(), ms);
-  function done() {
-    host.clearTimeout(timer);
-    host.removeEventListener("click", stop, true);
-  }
-  host.addEventListener("click", stop, true);
+  swallowUntilMs = ms;
+  swallowSince = Date.now();
+  if (swallowArmed) return;
+  swallowArmed = true;
+  window.addEventListener("click", swallowClick, true);
+}
+// One shared listener and a moment on the clock, no timer: a timer would fire after the element (or the test's
+// window) is gone. The listener removes itself on the next click, swallowed or not.
+let swallowUntilMs = 0;
+let swallowSince = 0;
+let swallowArmed = false;
+function swallowClick(ev: Event) {
+  window.removeEventListener("click", swallowClick, true);
+  swallowArmed = false;
+  if (!within(swallowSince, swallowUntilMs)) return;
+  ev.preventDefault();
+  ev.stopPropagation();
 }
 
 /** How long a press must stay still to count as a long press (opens a menu or shows an embed's

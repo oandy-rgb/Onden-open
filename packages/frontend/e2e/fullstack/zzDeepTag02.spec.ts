@@ -6,7 +6,7 @@
 // a #word written in a note's body or title is text, not a tag: inline-only
 // notes are never members, and quick capture leaves its #word as text.
 import { test, expect, type Page } from "@playwright/test";
-import { ready, openQuickCapture, titleTags, applyTagFromTitle, H } from "./helpers";
+import { ready, openQuickCapture, titleTags, titleTagAdd, applyTagFromTitle, H } from "./helpers";
 
 
 test("TAG-02: projections agree, duplicate names, offline entries, renamed task tag", async ({ page, context }) => {
@@ -75,7 +75,7 @@ test("TAG-02: projections agree, duplicate names, offline entries, renamed task 
   const pick = await mk(`T02 picker ${stamp}`);
   await ready(page, `/?view=notes&node=${pick}`);
   const sources = titleTags(page);
-  await sources.locator(".prop-tag--add").click();
+  await (await titleTagAdd(page)).click();
   await sources.getByRole("combobox", { name: "Add a tag" }).fill(String(stamp));
   await expect.poll(async () => (await sources.getByRole("option").allTextContents()).join("|").includes(L), { timeout: 15_000 }).toBe(true).catch(() => {});
   const opts = await sources.getByRole("option").allTextContents();

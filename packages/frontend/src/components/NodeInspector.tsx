@@ -151,7 +151,11 @@ function NodeInspector({
         {tab === "ai" ? <Suspense fallback={<p className="info-panel-quiet">{t("Loading…")}</p>}><InfoAiTab key={node.id} node={node} onSelectNode={onSelectNode} /></Suspense>
           : tab === "tags" && empty ? <p className="info-panel-quiet">{t("This note has no tags, features or connections yet.")}</p>
           // Picked by hand while the note has functions or relations but no tag: say so, not a blank panel.
-          : tab === "tags" && tagsEmpty && !noHeadings ? <p className="info-panel-quiet">{t("No tags yet")}</p>
+          // The panel still loads: a parent may share values down to a note that has nothing itself ("From parent").
+          : tab === "tags" && tagsEmpty && !noHeadings ? (
+            <InfoTagsTab key={node.id} node={node} canEdit={canEdit} onOpen={onSelectNode} onAttrUpsert={onAttrUpsert} onAttrRemove={onAttrRemove}
+              onTagsChanged={onTagsChanged} whenEmpty={<p className="info-panel-quiet">{t("No tags yet")}</p>} />
+          )
           : tab === "functions" ? (
             <>
               <Suspense fallback={null}><InfoFunctions node={node} rows={functionRows} /></Suspense>

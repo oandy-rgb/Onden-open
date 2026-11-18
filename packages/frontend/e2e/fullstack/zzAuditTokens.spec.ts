@@ -20,9 +20,8 @@ async function rpc(req: APIRequestContext, token: string, method: string, params
 test("TOKEN-05/07 + FIND-02: scoped read-only token across REST and MCP protocol", async ({ page }) => {
   const stamp = Date.now();
   const word = `zebrafish${stamp}`;
-  // Scope is a space: "In" is a space the agent belongs to (external AI on)
-  // and the token reaches; "Out" sits in the default space, which the agent
-  // also belongs to but the token's scope excludes.
+  // Scope is a space, and a token reaches the spaces its agent is a member of (2026-10-22): "In" is a space the
+  // agent belongs to (external AI on); "Out" sits in the default space, which the agent is taken out of below.
   const actor = await (await page.request.post("/api/actors", { ...H, data: { name: `Reader ${stamp}`, type: "agent" } })).json();
   requireAdmin(!!actor.id, "actor creation needs admin");
   const inSpace = await createSpace(page.request, `scopein-${stamp}`);
@@ -31,8 +30,9 @@ test("TOKEN-05/07 + FIND-02: scoped read-only token across REST and MCP protocol
   const nIn = await (await page.request.post("/api/nodes", { ...H, data: { title: `In ${stamp}`, markdown: `${word} inside scope`, space_id: inSpace } })).json();
   const nOut = await (await page.request.post("/api/nodes", { ...H, data: { title: `Out ${stamp}`, markdown: `${word} outside scope [[In ${stamp}]]`, space_id: await defaultSpaceId(page.request) } })).json();
 
-  const minted = await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { template: "read-only", read_space_ids: [inSpace], write_space_ids: [inSpace] } });
-  console.log("AUDIT TOKEN mint:", minted.status());
+  expect((await page.request.delete(`/api/spaces/${await defaultSpaceId(page.request)}/members/${actor.id}`, H)).ok()).toBe(true);
+  const minted = await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { access: "read" } });
+  expect(minted.status(), "mint a read token").toBe(201);
   const tok = await minted.json();
   const auth = { origin: BASE, "content-type": "application/json", authorization: `Bearer ${tok.token}` };
   // Agent calls must not carry the suite's human session cookie: an invalid
@@ -89,7 +89,7 @@ test("TOKEN-05/07 + FIND-02: scoped read-only token across REST and MCP protocol
   expect(afterRest.status()).toBe(401);
 
   // Expired token refused
-  const exp = await (await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { template: "read-only", expires_at: "2020-01-01T00:00:00Z" } })).json();
+  const exp = await (await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { access: "read", expires_at: "2020-01-01T00:00:00Z" } })).json();
   const expRes = await agent.post("/api/mcp/tools/searchNodes", { headers: { ...auth, authorization: `Bearer ${exp.token}` }, data: { args: { query: word } } });
   console.log(`AUDIT TOKEN-03 expired token: ${expRes.status()}`);
 });
@@ -97,7 +97,7 @@ test("TOKEN-05/07 + FIND-02: scoped read-only token across REST and MCP protocol
 test("AI-08 + TOKEN-03: agent stats separate success/failure; soft revoke refuses", async ({ page }) => {
   const stamp = Date.now();
   const actor = await (await page.request.post("/api/actors", { ...H, data: { name: `Stats ${stamp}`, type: "agent" } })).json();
-  const tok = await (await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { template: "researcher" } })).json();
+  const tok = await (await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { access: "write" } })).json();
   const agent = await pwRequest.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] },
     extraHTTPHeaders: { origin: BASE, authorization: `Bearer ${tok.token}` } });
   const call = async (tool: string, args: unknown) => (await agent.post(`/api/mcp/tools/${tool}`, { data: { args } })).status();

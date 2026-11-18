@@ -1,8 +1,8 @@
 // Feature-audit deepening (2026-10-08): CAN-05 — canvas undo against a later
 // edit made elsewhere (another device moves the same card), and switching to
-// another board while a drag's save is still in flight.
+// another board (its row in the notes list) while a drag's save is still in flight.
 import { test, expect } from "@playwright/test";
-import { ready, openFeature, seedLayout, H } from "./helpers";
+import { ready, seedLayout, H } from "./helpers";
 
 
 test("CAN-05: undo vs later remote move; board switch during save", async ({ page }) => {
@@ -48,9 +48,9 @@ test("CAN-05: undo vs later remote move; board switch during save", async ({ pag
   const xBefore = await pos(A.id, X);
   await dragBy(X, 150, 0);
   await page.waitForTimeout(200);
-  // In-app switch: Tags › Canvas card → pick board B (no page navigation).
-  await openFeature(page, "Canvas");
-  await page.locator(".canvas-empty-state").getByRole("button", { name: `C05B ${stamp}`, exact: true }).click();
+  // In-app switch: click board B's row in the notes list (no page navigation). A board is a note with a Canvas tab, so it is
+  // listed there; there is no board chooser page any more (docs/architecture/canvas-as-view.md).
+  await page.locator(".obsidian-sidebar").getByRole("button", { name: `C05B ${stamp}`, exact: true }).click();
   await page.locator(`.react-flow__node[data-id="${P}"]`).waitFor({ timeout: 15_000 });
   await page.waitForTimeout(4500);
   out.switchDuringSave = { xBefore, xAfter: await pos(A.id, X), bHasX: await pos(B.id, X), pOnB: await pos(B.id, P), undoOnB: await undo.isEnabled().catch(() => null) };

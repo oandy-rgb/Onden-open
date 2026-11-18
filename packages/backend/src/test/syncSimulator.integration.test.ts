@@ -12,7 +12,8 @@
 //   SYNC_SIM_SEED=<seed> SYNC_SIM_RUNS=<n> npx vitest run src/test/syncSimulator.integration.test.ts
 //   SYNC_SIM_PATH=<path printed with the failure> to jump to the shrunk case.
 //   SYNC_SIM_REPLAY='[{"kind":"edit",…}]' replays an exact op list (JSON as printed).
-// Defaults: seed 20261023, 80 runs (≈ 2 minutes with three devices); raise SYNC_SIM_RUNS freely.
+// Defaults: seed 20261023, 200 runs (≈ 5 minutes with three devices; the seed is fixed, so these are the same 200 sequences
+// on every run, and the run stops early without failing at 8 minutes); raise SYNC_SIM_RUNS freely.
 //
 // TASKS, REVIEW, SAVED VIEWS. Devices also tick checkbox lines of a body, add / tick / date tasks that belong to no note, make notes
 // review cards and grade / undo / put off a card (two devices may show the same card), and create / change / delete saved views
@@ -94,7 +95,7 @@ async function play(ops: Op[], checks: Checks = {}): Promise<World> {
 
 describe.skipIf(!isTestDatabase())("multi-device sync simulator (DB)", () => {
   const seed = Number(process.env.SYNC_SIM_SEED ?? 20261023);
-  const numRuns = Number(process.env.SYNC_SIM_RUNS ?? 80);
+  const numRuns = Number(process.env.SYNC_SIM_RUNS ?? 200);
 
   it(`keeps every saved line and converges (seed ${seed}, ${numRuns} runs)`, async () => {
     if (process.env.SYNC_SIM_REPLAY) {

@@ -121,31 +121,28 @@ export async function renderSettled(page: Page): Promise<void> {
   });
 }
 
-// The note's publish row: a row of the info panel's 「功能」 section (under the
-// 「標籤」 tab), where the website module says where the note stands on the
-// site and offers Publish (marks the note), Unpublish, and "also publish the
-// notes under it". Opens the panel and the tab when they are not showing.
-// Buttons are found by `data-action`, not by label, so the specs hold in any
-// language.
-/** Mark the open note for the site the way a person starts it: the info panel's 功能 tab ›
- *  「Also usable here」 › Website › 「Publish」 (the website module's note command; the note's ⋯ menu
- *  no longer lists it). The 「網站」 row then shows the note's state. Desktop, either locale. */
-export async function publishFromInfoPanel(page: Page): Promise<void> {
-  await openInfoFunctions(page);
-  const more = page.locator(".info-fn-more");
-  if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
-  await page.locator(".info-fn-idle", { hasText: /^(Website|網站)/ }).getByRole("button", { name: /^(Publish|發布)$/ }).click();
-  await openPublishRow(page);
-}
-
-/** The info panel's 「網站」 row of a note marked for the site (the 功能 tab: the website module's
- *  noteFunctionRows). A note not marked has no row — mark it first with publishFromInfoPanel. `mark` is
- *  kept for older specs and matches nothing now: marking moved to the 功能 tab's 「Also usable here」. */
+// The note's publish row: a row of the info panel's 「功能」 tab where the website module says where the note
+// stands on the site (on it, goes live with the next publish, kept off) and offers 「Keep off the site」 /
+// 「Put back」. A note in a space that publishes has it without any marking (211dda77); make one with
+// createPublishingSpace. Buttons are found by `data-action`, not by label, so the specs hold in any language.
+/** The info panel's 「網站」 row (the 功能 tab: the website module's noteFunctionRows). A note in a space that does
+ *  not publish, or a hidden one, has no row. `mark` matches nothing now (marking is gone: the space decides). */
 export async function openInfoFunctions(page: Page): Promise<void> {
   const inspector = page.locator(".notes-inspector-toggle");
   if ((await inspector.count()) && (await inspector.getAttribute("aria-pressed")) === "false") await inspector.click();
   const tab = page.locator("#info-tab-functions");
   if ((await tab.count()) && (await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+}
+
+/** The info panel's 標籤 tab: the fields of the note's tags (`.attr-panel`, InfoTagsTab). The panel opens on 功能
+ *  (lib/infoPanel.ts), so a spec that reads or edits field values opens this tab first. Desktop widths only. */
+export async function openInfoTags(page: Page): Promise<void> {
+  const inspector = page.locator(".notes-inspector-toggle");
+  if ((await inspector.count()) && (await inspector.getAttribute("aria-pressed")) === "false") await inspector.click();
+  const tab = page.locator(".overview-activity").getByRole("tablist", { name: /^(Info|資訊)$/ }).getByRole("tab", { name: /^(Tags|標籤)$/ });
+  await expect(tab).toBeVisible();
+  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+  await expect(page.locator(".attr-panel")).toBeVisible();
 }
 
 export async function openPublishRow(page: Page) {
@@ -893,6 +890,13 @@ export function taskRow(page: Page, title: string): Locator {
  *  avatar's account sheet › 「Settings」 — then, when given, one section of its side list. */
 export async function openSettingsFromAvatar(page: Page, section?: string): Promise<void> {
   const gear = page.locator(".app-topbar .topbar-settings");
+  // The bar draws the gear and the avatar in one render: wait for the bar before asking which layout this is,
+  // or a page that has only just loaded reads as "no gear" and is sent down the phone path.
+  // A phone that reopens on the note it last had open keeps BOTH in the page (the top bar is only hidden), so ask which
+  // one is visible instead of a `.or()` locator, which is a strict-mode error when two elements match.
+  const chip = page.locator(".app-topbar .user-chip");
+  const back = page.getByRole("button", { name: "Back to notes list" });
+  await expect.poll(async () => (await chip.isVisible()) || (await back.isVisible()), { message: "the top bar or a way back to it" }).toBe(true);
   if (await gear.isVisible()) await gear.click();
   else await accountSheetAction(page, /^(Settings|設定)$/);
   if (section) await page.locator(".settings-nav-item", { hasText: section }).click();

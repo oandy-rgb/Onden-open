@@ -1,54 +1,65 @@
 import { test, expect, type Page } from "@playwright/test";
-import { ready, openPublishRow, publishFromInfoPanel, defaultSpaceId, publishSite, H } from "./helpers";
+import { ready, openPublishRow, defaultSpaceId, createPublishingSpace, publishSite, H } from "./helpers";
 
-// "+ subtree" one-click publish (Notion子樹一鍵發布 parity): publishing a
-// parent note from the info panel can cascade `_published` to every descendant
-// in one action, instead of toggling each page by hand. Guards the D9 opt-in
-// invariant still holds — only the chosen subtree is opted in.
+// The subtree and the site (Notion 子樹一鍵發布 parity). Since 2026-11-10 (211dda77) a space that publishes puts every
+// note in it on the site, so there is no "+ subtree" opt-in to press; the subtree question moved to the other side:
+// 「不發布這則」 on a note with notes under it asks whether to keep those off too (PublishNoteRow). Guards that the
+// choice cascades to the chosen subtree only, and that a leaf is kept off without a question.
 
 async function siteIds(page: Page): Promise<Set<string>> {
   const s = await (await page.request.get("/api/site")).json();
   return new Set((s.payload?.nodes ?? s.nodes ?? []).map((n: { id: string }) => n.id));
 }
 
-test("'+ subtree' cascades publish to every descendant of the note", async ({ page }) => {
+async function mk(page: Page, space_id: string, title: string, parent_id?: string): Promise<{ id: string }> {
+  return (await page.request.post("/api/nodes", { ...H, data: { space_id, title, markdown: title, ...(parent_id ? { parent_id } : {}) } })).json();
+}
+
+test("keeping a note off with 'Keep them all off' takes every note under it off, and only those", async ({ page }) => {
   const stamp = Date.now();
-  const parent = await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title: `Tree ${stamp}`, markdown: "root" } })).json();
-  const child = await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title: `Child ${stamp}`, markdown: "c", parent_id: parent.id } })).json();
-  const grandchild = await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title: `Grand ${stamp}`, markdown: "g", parent_id: child.id } })).json();
-  // A sibling OUTSIDE the subtree must stay private.
-  const outsider = await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title: `Outsider ${stamp}`, markdown: "o" } })).json();
+  const site = await createPublishingSpace(page.request);
+  const parent = await mk(page, site, `Tree ${stamp}`);
+  const child = await mk(page, site, `Child ${stamp}`, parent.id);
+  const grandchild = await mk(page, site, `Grand ${stamp}`, child.id);
+  // A sibling outside the subtree stays on the site; a note in the default space (which does not publish) never is.
+  const sibling = await mk(page, site, `Sibling ${stamp}`);
+  const outsider = await mk(page, await defaultSpaceId(page.request), `Outsider ${stamp}`);
+
+  // Everything in the publishing space is on the next publish without any marking.
+  await publishSite(page.request);
+  const before = await siteIds(page);
+  expect([parent, child, grandchild, sibling].every((n) => before.has(n.id))).toBe(true);
+  expect(before.has(outsider.id)).toBe(false);
 
   await ready(page, `/?view=notes&node=${parent.id}`);
-  await page.waitForTimeout(1000);
+  const { row, unpublish } = await openPublishRow(page);
+  await unpublish.click();
+  const ask = row.getByRole("group", { name: /Notes under this one|這則底下的筆記/ });
+  await expect(ask).toBeVisible({ timeout: 15_000 });
+  await ask.locator("[data-action='keep-off-with-below']").click();
+  await expect(ask).toHaveCount(0, { timeout: 15_000 });
 
-  // The subtree button only appears when the note has descendants (count = 2).
-  // It lives in the info panel's 「網站」 row, which a note has once it is marked (功能 › Also usable here › Website).
-  await publishFromInfoPanel(page);
-  const { unpublish, subtree } = await openPublishRow(page);
-  await expect(subtree).toBeVisible();
-  await subtree.click();
-  // The cascade only opts the subtree in; the site serves it after a publish
-  // (snapshot model B). The cascade lands asynchronously, so publish until
-  // every subtree node is on the served site.
   await expect.poll(async () => {
     await publishSite(page.request);
     const ids = await siteIds(page);
-    return [parent.id, child.id, grandchild.id].every((id) => ids.has(id));
-  }, { timeout: 20_000, intervals: [1_000] }).toBe(true);
-  expect((await siteIds(page)).has(outsider.id)).toBe(false);
-
-  // The parent's own row shows it as marked after the cascade.
-  await expect(unpublish).toBeVisible();
+    return [parent, child, grandchild].some((n) => ids.has(n.id));
+  }, { timeout: 20_000, intervals: [1_000] }).toBe(false);
+  const after = await siteIds(page);
+  expect(after.has(sibling.id)).toBe(true);
+  expect(after.has(outsider.id)).toBe(false);
 });
 
-test("'+ subtree' is absent for a leaf note (no descendants)", async ({ page }) => {
+test("a note with nothing under it is kept off in one press, with no question", async ({ page }) => {
   const stamp = Date.now();
-  const leaf = await (await page.request.post("/api/nodes", { ...H, data: { space_id: await defaultSpaceId(page.request), title: `Leaf ${stamp}`, markdown: "x" } })).json();
+  const leaf = await mk(page, await createPublishingSpace(page.request), `Leaf ${stamp}`);
   await ready(page, `/?view=notes&node=${leaf.id}`);
-  await page.waitForTimeout(1000);
-  await publishFromInfoPanel(page);
-  const { unpublish, subtree } = await openPublishRow(page);
-  await expect(unpublish).toBeVisible();
-  await expect(subtree).toHaveCount(0);
+  const { row, unpublish, putBack } = await openPublishRow(page);
+  await unpublish.click();
+  await expect(putBack).toBeVisible({ timeout: 15_000 });
+  await expect(row.locator(".publish-left-out-confirm")).toHaveCount(0);
+  // 「Put back」 shows as soon as the page has the change; the server gets it a moment later (a background write). A
+  // preview taken before that and a publish after it are two different sites, and the publish is refused as stale.
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${leaf.id}`)).json()).attrs?._published).toBe("false");
+  await publishSite(page.request);
+  expect((await siteIds(page)).has(leaf.id)).toBe(false);
 });

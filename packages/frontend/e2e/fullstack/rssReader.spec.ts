@@ -5,7 +5,7 @@ import { ready, defaultSpaceId, createPublishingSpace, publishSite, BASE, FEED_O
 // STAGING rows, not nodes, until saved: subscribe → the outbox fetch effect
 // lands items in rss_staging → the reader opens an article (sanitized html
 // path) → a text selection becomes an EXCERPT in a chosen note (quote, source
-// line with the original link, ^id; the article itself is NOT saved) → the
+// line with the original link, anchored as a paragraph; the article itself is NOT saved) → the
 // same passage again is recognised instead of written twice → next.
 // Plus: the phone reading immersion — with an article open the app chrome
 // (topbar + bottom nav) and the list-layer chrome (panel header + subscribe
@@ -136,8 +136,8 @@ test("rss loop: subscribe → fetch lands in staging → read → highlight beco
   const openTitle = (await page.locator(".rss-article-title").textContent()) ?? "";
 
   // 5. A highlight becomes an EXCERPT in a chosen note (@onden/markdown
-  //    excerpt.ts): the quote, its source line with the original link, and a
-  //    ^id, so it can be embedded and found again. The article is not saved.
+  //    excerpt.ts): the quote and its source line with the original link,
+  //    anchored as a paragraph so it can be embedded and found again. The article is not saved.
   const selectFirstParagraph = () => page.evaluate(() => {
     const el = document.querySelector(".rss-article-body p");
     if (!el) throw new Error("article paragraph missing");
@@ -154,10 +154,21 @@ test("rss loop: subscribe → fetch lands in staging → read → highlight beco
   const sheet = page.getByRole("dialog", { name: "Put it in…" });
   await sheet.locator("input").fill(`Quote target ${stamp}`);
   await sheet.getByRole("option", { name: `Quote target ${stamp}` }).click();
+  // Since the paragraph anchors (commit 724dd9e7, 2026-11-07) the quote carries no `^id` in its text: its identity is
+  // the anchor the server gives the block the moment it is written (anchorExcerpts, 211fa69f).
   await expect.poll(async () => {
     const n = await (await page.request.get(`/api/nodes/${target.id}`)).json() as { markdown: string };
     return n.markdown;
-  }, { timeout: 10_000 }).toMatch(new RegExp(`^My notes\\.\\n\\n> Highlightable sentence \\d of run ${stamp}\\.\\n>\\n> — \\[[^\\]]+\\]\\([^)]+#:~:text=[^)]+\\)[^\\n]*\\n> \\^[A-Za-z0-9-]+`));
+  }, { timeout: 10_000 }).toMatch(new RegExp(`^My notes\\.\\n\\n> Highlightable sentence \\d of run ${stamp}\\.\\n>\\n> — \\[[^\\]]+\\]\\([^)]+#:~:text=[^)]+\\)[^\\n]*\\n?$`));
+  const written = (await (await page.request.get(`/api/nodes/${target.id}`)).json() as { markdown: string }).markdown;
+  expect(written).not.toMatch(/^> \^/m);
+  // The excerpt can still be pointed back at: an anchor that starts at the quote and is confirmed (a citation of it, an embed, the
+  // reader's 「already in this note」 all resolve through it).
+  const quoteAt = written.indexOf("> Highlightable");
+  await expect.poll(async () => {
+    const { note_anchors = [] } = await (await page.request.get("/api/bootstrap")).json() as { note_anchors?: Array<{ note_id: string; from: number; status: string }> };
+    return note_anchors.filter((a) => a.note_id === target.id && a.from === quoteAt).map((a) => a.status);
+  }, { timeout: 10_000 }).toEqual(["valid"]);
   const afterQuote = (await pollItems(page, `(${stamp})`, 2)).find((it) => it.title === openTitle);
   expect(afterQuote?.saved_node_id ?? null).toBeNull();
 

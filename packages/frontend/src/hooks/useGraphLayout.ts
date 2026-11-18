@@ -12,6 +12,7 @@
 
 import type { MarkerType, Node, Edge } from "@xyflow/react";
 import { useMemo } from "react";
+import { displayTitle } from "../lib/noteLabel";
 import type { Canvas, ContentNode, NodeEdge, Tag } from "../lib/api";
 import { cardsInSection, canvasCardSize } from "../lib/sectionCarry";
 import { classNames } from "../lib/utils";
@@ -275,6 +276,10 @@ export function useGraphLayout({
     const canvasNodeIds = activeCanvas && edgesBoardActive
       ? new Set(activeCanvas.data.nodes.map((cn) => cn.nodeId))
       : null;
+    // The name a screen reader says for an arrow: the two notes' titles. Without one React Flow says
+    // "Edge from <id> to <id>" (English, and ids the owner's UI rule keeps out of sight).
+    const edgeAriaLabel = (from: string, to: string) =>
+      `${displayTitle(noteById.get(from)?.title)} → ${displayTitle(noteById.get(to)?.title)}`;
     const baseEdges = edges
       // What a board draws is lib/edgeRoles' rule (no site navigation, no
       // turned-down suggestions), shared with the other views.
@@ -291,6 +296,7 @@ export function useGraphLayout({
           target: e.target_node_id,
           ...handles,
           type: "default",
+          ariaLabel: edgeAriaLabel(e.source_node_id, e.target_node_id),
           animated: e.status === "suggested",
           // A [[link]]'s arrow can be selected (to see it) but not deleted:
           // it goes when the link leaves the note (lib/edgeRoles canDelete).
@@ -338,6 +344,7 @@ export function useGraphLayout({
           target: node.id,
           ...getHandles(selectedNode.id, node.id),
           type: "default",
+          ariaLabel: edgeAriaLabel(selectedNode.id, node.id),
           label: shared.map(tag => `#${tag}`).join(" · "),
           // Derived tag hints must not offer deletion of a nonexistent edge.
           selectable: false,
@@ -362,6 +369,7 @@ export function useGraphLayout({
           target: n.id,
           ...handles,
           type: "parentEdge",
+          ariaLabel: edgeAriaLabel(n.parent_id!, n.id),
           // Wide enough to tap (GAP-174).
           interactionWidth: 32,
           style: {
@@ -372,7 +380,7 @@ export function useGraphLayout({
         };
       });
     return [...baseEdges, ...parentEdges, ...tagEdges];
-  }, [edges, nodes, mode, notesView, boardActive, graphLocalMode, selectedNode, selectedId, neighborIds, showTagEdges, showSuggestions, tags, displayGraphNodes, activeCanvas, openBoardId, edgeKinds, boardOwnerId]);
+  }, [edges, nodes, mode, notesView, boardActive, graphLocalMode, selectedNode, selectedId, neighborIds, showTagEdges, showSuggestions, tags, displayGraphNodes, activeCanvas, openBoardId, edgeKinds, boardOwnerId, noteById]);
 
   return { displayGraphNodes, displayGraphEdges };
 }

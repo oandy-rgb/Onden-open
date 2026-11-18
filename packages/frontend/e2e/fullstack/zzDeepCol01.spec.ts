@@ -49,12 +49,24 @@ test("COL-01: view CRUD via API vs UI, delete active/last, create failure, reope
   await human.close();
 
   // ── UI reachability ───────────────────────────────────────────────────
+  // A tag's page opens on its first tab, 「List」 (the tagged notes); the saved views are the tabs after it, and a view's
+  // toolbar (.cv-root) exists only while one of them is open. With none left there is only 「List」.
   const openViews = async (p: Page) => {
     await ready(p, `/?view=notes&node=${tag.id}`);
-    await expect(p.locator(".cv-root")).toBeVisible();
+    await expect(p.locator(".view-tabs")).toBeVisible();
     await p.waitForTimeout(600);
-    // The saved views are tabs after 「全部」; with none left there is only 「全部」.
-    if (await p.locator(".view-tabs [role=tab]").count() > 1) await openSavedViewTab(p);
+    if (await p.locator(".view-tabs [role=tab]").count() > 1) {
+      await openSavedViewTab(p);
+      await expect(p.locator(".cv-root")).toBeVisible();
+    }
+  };
+  // 「＋」 opens the panel of ways of seeing the page; a layout the page already has only opens its tab ("Already here"), so
+  // each UI create below picks a layout the tag has no view of. Calendar asks for its date field (the first is taken: Created
+  // date) and Cards for its cover (automatic); Table needs nothing.
+  const addViaUi = async (p: Page, layout: "Table" | "Calendar" | "Cards") => {
+    await p.locator(".view-tab--add").click();
+    await p.getByRole("dialog", { name: "Add a view" }).getByRole("button", { name: layout, exact: true }).click();
+    if (layout !== "Table") await p.locator(".cv-add-view-form").getByRole("button", { name: "Add view", exact: true }).click();
   };
   const chips = (p: Page) => p.locator(".view-tabs [role=tab]:not(:first-child) .view-tab-name");
   await openViews(page);
@@ -81,52 +93,48 @@ test("COL-01: view CRUD via API vs UI, delete active/last, create failure, reope
   const activeName = await page.locator(".view-tab--active .view-tab-name").innerText();
   const activeId = (await list()).find((v) => v.name === activeName)!.id;
   await del(activeId);
-  await page.locator('button[title="Reload query results"]').click();
-  await page.waitForTimeout(800);
+  // There is no reload button on the view any more: give sync the time it needs to bring the deletion to the open page.
+  await page.waitForTimeout(4000);
   out.activeDeletedElsewhere = `error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} chips=${JSON.stringify(await chips(page).allInnerTexts())} rows=${await page.locator(".cv-table tbody tr, .cv-list-row").count()}`;
 
-  // New view via UI: name is "View N" from the count — after a delete it can collide.
-  await page.locator(".view-tab--add").click();
+  // New views via the UI: the name comes from the layout and what it is placed by (freeViewName avoids a taken one), so the old
+  // "View N" collision cannot happen; what is left to check is that each add makes exactly one view.
+  const posts: number[] = [];
+  page.on("response", (r) => { if (r.request().method() === "POST" && r.url().endsWith(`/views`)) posts.push(r.status()); });
+  const n1 = (await list()).length;
+  await addViaUi(page, "Cards");
   await page.waitForTimeout(1000);
-  out.uiNewView1 = `chips=${JSON.stringify(await chips(page).allInnerTexts())} error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))}`;
-  await page.locator(".view-tab--add").click();
+  out.uiNewView1 = `chips=${JSON.stringify(await chips(page).allInnerTexts())} error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} server+${(await list()).length - n1} posts=${JSON.stringify(posts)}`;
+  await addViaUi(page, "Calendar");
   await page.waitForTimeout(1000);
-  out.uiNewView2 = `chips=${JSON.stringify(await chips(page).allInnerTexts())} error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} server=${await names()}`;
-  // Force a collision deterministically: server has N views, one already named "View N+1".
-  const n0 = (await list()).length;
-  await create({ name: `View ${n0 + 1}` });
-  await openViews(page);
-  const reqs: number[] = [];
-  page.on("response", (r) => { if (r.request().method() === "POST" && r.url().endsWith(`/views`)) reqs.push(r.status()); });
+  out.uiNewView2 = `chips=${JSON.stringify(await chips(page).allInnerTexts())} error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} server+${(await list()).length - n1} posts=${JSON.stringify(posts)} server=${await names()}`;
+  // A layout the page already has: no second view, just its tab.
   await page.locator(".view-tab--add").click();
-  await page.waitForTimeout(1000);
-  out.uiNewViewCollision = `posts=${JSON.stringify(reqs)} error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} server=${await names()}`;
-  await page.locator(".view-tab--add").click();
-  await page.waitForTimeout(1000);
-  out.uiNewViewCollisionRetry = `posts=${JSON.stringify(reqs)} server=${await names()}`;
+  out.uiAlreadyHere = await page.getByRole("dialog", { name: "Add a view" }).locator(".cv-add-view-have").count().then(String);
+  await page.keyboard.press("Escape");
 
   // Delete the LAST view (all of them) → reopen shows empty state, New view works.
   for (const v of await list()) await del(v.id);
   await openViews(page);
   out.allDeleted = `empty=${JSON.stringify(await page.locator(".cv-empty").allInnerTexts())} chips=${await chips(page).count()}`;
-  await page.locator(".view-tab--add").click();
+  await addViaUi(page, "Cards");
   await page.waitForTimeout(1000);
   out.afterAllDeletedNew = `chips=${JSON.stringify(await chips(page).allInnerTexts())} rows=${await page.locator(".cv-table tbody tr").count()}`;
 
   // Create failure (503) then retry: exactly one new view; error clears?
   const before = (await list()).length;
   await page.route(`**${base}`, (r) => r.request().method() === "POST" ? r.fulfill({ status: 503, contentType: "application/json", body: '{"error":"down"}' }) : r.continue());
-  await page.locator(".view-tab--add").click();
+  await addViaUi(page, "Calendar");
   await page.waitForTimeout(1000);
-  out.create503 = `error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} addEnabled=${await page.locator(".view-tab--add").isEnabled()} server=${(await list()).length - before}`;
+  out.create503 = `error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} toasts=${JSON.stringify(await page.locator(".toast").allInnerTexts())} addEnabled=${await page.locator(".view-tab--add").isEnabled()} server=${(await list()).length - before}`;
   await page.unroute(`**${base}`);
-  await page.locator(".view-tab--add").click();
+  await addViaUi(page, "Calendar");
   await page.waitForTimeout(1000);
   out.createRetry = `server+${(await list()).length - before} errorStill=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))}`;
 
   // Offline create.
   await page.context().setOffline(true);
-  await page.locator(".view-tab--add").click();
+  await addViaUi(page, "Table");
   await page.waitForTimeout(1000);
   out.createOffline = `error=${JSON.stringify(await page.locator(".cv-error").innerText().catch(() => ""))} addEnabled=${await page.locator(".view-tab--add").isEnabled()}`;
   await page.context().setOffline(false);

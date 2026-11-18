@@ -7,17 +7,15 @@ import { test, expect, request as pwRequest, type Page } from "@playwright/test"
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ready, BASE, H } from "./helpers";
+import { ready, tagMenuAction, openSettingsFromAvatar, createAgent, BASE, H } from "./helpers";
 
 
 async function openYourData(page: Page, phone: boolean) {
-  if (phone) {
-    await page.locator(".mobile-nav-btn", { hasText: "More" }).click();
-    await page.locator(".mobile-more-sheet").getByText("Settings", { exact: true }).click();
-  } else {
-    await page.locator('[title="Settings"]').filter({ visible: true }).first().click();
-  }
-  await page.locator(".settings-nav-item", { hasText: "Your Data" }).click();
+  await openSettingsFromAvatar(page); // the gear on a computer, the avatar's account sheet on a phone
+  await page.locator(phone ? ".settings-list-row" : ".settings-nav-item", { hasText: "Data and backup" }).click();
+  // Importing a tag pack is an advanced setting: folded until 「Show advanced settings」.
+  const advanced = page.locator(".settings-advanced-toggle");
+  if (await advanced.count() && (await advanced.getAttribute("aria-expanded")) === "false") await advanced.click();
   await expect(page.locator(".settings-tagpack-import")).toBeVisible();
 }
 
@@ -129,18 +127,17 @@ test("TAG-10: round trip, malformed, versions, multi-file partial, starter, expo
 
     // ── Tag page export download ─────────────────────────────────────────
     await ready(page, `/?view=notes&node=${src.id}`);
-    const exportBtn = page.locator(".schema-lens-export");
-    if (!(await exportBtn.isVisible().catch(() => false))) await page.getByRole("button", { name: /Tag settings|Schema|Fields/ }).first().click().catch(() => {});
+    // The export sits in the tag page's ⋯ menu, with the other rare actions.
     const dl = page.waitForEvent("download", { timeout: 15_000 });
-    await page.locator(".schema-lens-export").first().click();
+    await tagMenuAction(page, "Export tag");
     const d = await dl;
     const body = JSON.parse(readFileSync((await d.path())!, "utf8"));
     out.exportDownload = `file=${d.suggestedFilename()} sameAsApi=${JSON.stringify(body) === JSON.stringify(exp)}`;
 
     // ── Agent proposal rail: dry-run → approve / reject ──────────────────
-    const actor = await (await page.request.post("/api/actors", { ...H, data: { name: `T10agent ${stamp}`, type: "agent" } })).json();
-    const tok = await (await page.request.post(`/api/actors/${actor.id}/tokens`, { ...H, data: { template: "researcher" } })).json();
-    const agent = await pwRequest.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] }, extraHTTPHeaders: { origin: BASE, authorization: `Bearer ${tok.token}` } });
+    // A token is `access: read | write` since 2026-10-22 (the old "researcher" template is gone); proposing needs write.
+    const made = await createAgent(page.request, `T10agent ${stamp}`, { access: "write" });
+    const agent = await pwRequest.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] }, extraHTTPHeaders: made.headers });
     const approvals = async () => ((await (await page.request.get("/api/inbox/approvals")).json()).approvals as { id: string; effect_kind: string; payload: { pack: { name: string } } }[]).filter((a) => a.effect_kind === "tag_pack");
     const propose = async (name: string, q = "") => { const r = await agent.post(`/api/mcp/tools/proposeTagPack${q}`, { data: { args: { name, fields: [{ name: "k", type: "text" }] } } }); return `${r.status()} ${(await r.text()).slice(0, 120)}`; };
     const pBefore = (await approvals()).length;
@@ -148,6 +145,9 @@ test("TAG-10: round trip, malformed, versions, multi-file partial, starter, expo
     out.proposeReal = `${await propose(`T10prop${stamp}`)} pendingDelta=${(await approvals()).length - pBefore}`;
     out.proposeAgainSameName = `${await propose(`T10prop${stamp}`)} pendingDelta=${(await approvals()).length - pBefore}`;
     out.proposeBadName = await propose(`bad name ${stamp}`);
+    // Decide it so it does not wait in the shared inbox: its name has a space, which the zh-TW screen sweep reads as English.
+    const badOne = (await approvals()).find((a) => a.payload.pack.name === `bad name ${stamp}`);
+    if (badOne) await page.request.post(`/api/inbox/approvals/${badOne.id}/reject`, H);
     out.proposeExisting = await propose(`T10src${stamp}`);
     out.agentDirectImport = String((await agent.post("/api/tags/import", { data: { name: `T10agentimp${stamp}` } })).status());
     out.agentApproveSelf = String((await agent.post(`/api/inbox/approvals/${(await approvals())[0]?.id}/approve`)).status());

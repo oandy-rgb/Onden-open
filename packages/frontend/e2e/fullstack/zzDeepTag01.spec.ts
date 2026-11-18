@@ -3,7 +3,7 @@
 // name check vs resolve-path, a full idempotent resend, rename projections
 // (catalog, tree, search, note chip, sidebar) and rename/colour bounds.
 import { test, expect } from "@playwright/test";
-import { ready, BASE, H } from "./helpers";
+import { ready, titleTags, BASE, H } from "./helpers";
 
 
 test("TAG-01: slug, resolve-path, import vs path, resend, rename projections", async ({ page, browser }) => {
@@ -86,7 +86,7 @@ test("TAG-01: slug, resolve-path, import vs path, resend, rename projections", a
   await page.request.put(`/api/nodes/${note.id}/tags/${R}`, { ...H, data: {} });
   await ready(page, `/?view=notes&node=${note.id}`);
   if (await page.locator(".notes-inspector-toggle").getAttribute("aria-pressed") === "false") await page.locator(".notes-inspector-toggle").click();
-  const sources = page.getByRole("region", { name: "Note tags", exact: true });
+  const sources = titleTags(page);
   await expect(sources.getByRole("button", { name: `#ren${stamp}`, exact: true })).toBeVisible();
   await page.request.patch(`/api/tags/${R}`, { ...H, data: { name: `renamed${stamp}` } });
   await page.waitForTimeout(4000);

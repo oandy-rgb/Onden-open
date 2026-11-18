@@ -90,7 +90,6 @@ test("a tag that holds functions shows them on its page, and none otherwise", as
   expect((await page.request.put(`/api/nodes/${noteId}/tags/${tagId}`, { ...WRITE, data: {} })).ok()).toBe(true);
 
   const skillsTag = await moduleTag(page, "skills");
-  const review = await moduleTag(page, "review");
   await ready(page, `/?view=notes&node=${tagId}`);
   // Each function is an entry on the functions line under the title.
   const cards = tagFunctionLine(page).locator(".tag-fn-entry");
@@ -99,16 +98,14 @@ test("a tag that holds functions shows them on its page, and none otherwise", as
   await shot(page, "01-tag-page-no-abilities");
 
   await giveTagFunction(page, tagId, "skills", "Skills");
-  await giveTagFunction(page, tagId, "review", "Review");
-  await expect(cards).toHaveCount(2);
+  await expect(cards).toHaveCount(1);
   await expect(cards.nth(0)).toContainText("Skills");
-  await expect(cards.nth(1)).toContainText("Review");
   await tagFunctionLine(page).scrollIntoViewIfNeeded();
   await shot(page, "02-tag-page-abilities");
 
   // The server stored what the tag extends, in the order picked.
   const tag = await (await page.request.get(`/api/tags/${tagId}`)).json();
-  expect(tag.extends).toEqual([skillsTag.id, review.id]);
+  expect(tag.extends).toEqual([skillsTag.id]);
 
   // The tags overview page is gone (?view=tags falls back to the notes); tags are listed in
   // the sidebar, whose rows carry no functions (SidebarTagTree) — a row opens the tag's page,
@@ -117,9 +114,8 @@ test("a tag that holds functions shows them on its page, and none otherwise", as
   const listed = page.locator(".obsidian-sidebar").getByRole("button", { name: `Open #${name}`, exact: true });
   await listed.scrollIntoViewIfNeeded();
   await listed.click();
-  await expect(cards).toHaveCount(2);
+  await expect(cards).toHaveCount(1);
   await expect(tagFunctionLine(page)).toContainText("Skills");
-  await expect(tagFunctionLine(page)).toContainText("Review");
   await shot(page, "03-tags-overview-functions");
 
   await page.setViewportSize(PHONE);

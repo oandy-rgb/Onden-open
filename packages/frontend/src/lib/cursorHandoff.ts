@@ -14,7 +14,7 @@
 // referencing text highlighted (Notion/Tana "jump-to-and-highlight"), not a bare
 // caret you still have to hunt for. The editor restore already reads {anchor,head}
 // and scrolls to head, so a range Just Works with no consumer change.
-import { SESSION_KEYS, writeSession } from "./sessionPrefs";
+import { readSession, SESSION_KEYS, writeSession } from "./sessionPrefs";
 
 export function setPendingCursor(nodeId: string, offset: number, end?: number): void {
   if (!nodeId || offset == null || offset < 0) return;
@@ -23,3 +23,6 @@ export function setPendingCursor(nodeId: string, offset: number, end?: number): 
     JSON.stringify({ anchor: offset, head: end != null && end >= offset ? end : offset }),
   );
 }
+
+/** A handoff waits for this note's editor (set, not yet taken): an explicit place to land, which a remembered scroll position never overrides. */
+export const hasPendingCursor = (nodeId: string): boolean => readSession(SESSION_KEYS.pendingCursor(nodeId)) !== null;

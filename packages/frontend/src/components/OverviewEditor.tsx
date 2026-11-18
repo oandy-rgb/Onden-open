@@ -648,7 +648,7 @@ export default function OverviewEditor({
 
   return (
     <section ref={mainRef} className="obsidian-main note-document" data-wide={wide}
-      data-media={!!pdfUrl || inkActive}>
+      data-media={!!pdfUrl || inkActive} data-scroll-memory={view === "preview" ? "note-preview" : "note-edit"}>
       {node ? (
         <>
           <div className="note-topbar">

@@ -165,11 +165,11 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
   const { closeInfo, setNoteFromHistory } = usePhoneInfoScreen({ phone: phoneLayout, tab: displayedMobileTab, selectedId, setTab: setOverviewMobileTab, setSelectedId });
   useUrlSync(mode, selectedId, notesView, setMode, setNoteFromHistory, setNotesView, viewTab, setViewTab, focus.followBrowserStep, split.right, phoneLayout);
 
-  // Phone Back (header, link trail, popstate) returns to the list/note at the
-  // page scroll it was left at.
+  // Back and Forward (browser, Alt+←/→, the top bar, the phone's ‹) return the page to where its entry was left.
+  // After useUrlSync: its effect writes the entry a new screen belongs to.
   usePageScrollRestore(
     `${mode}|${displayedMobileTab}|${displayedMobileTab === "list" ? "" : selectedId ?? selectedTag?.id ?? ""}`,
-    phoneLayout,
+    displayedMobileTab === "list" ? null : selectedId,
   );
 
   // The sidebar's drag state and group expansion live here, not in the

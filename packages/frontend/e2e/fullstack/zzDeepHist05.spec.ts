@@ -1,7 +1,7 @@
 // Feature-audit deepening (2026-10-07): HIST-05 — the open version window
 // keeps its preview target when later saves merge into the session row, the
-// Current entry shows the live draft, and going offline (which clears the
-// inspector's version list) keeps the open preview.
+// Current entry shows the live draft, and going offline keeps the open
+// preview and disables Restore. (Opened from the header's note-history-link since 2026-10-18, c38ff179.)
 import { test, expect } from "@playwright/test";
 import { ready, H } from "./helpers";
 
@@ -18,7 +18,7 @@ test("HIST-05: preview target stable across merged saves and offline", async ({ 
   await page.keyboard.type(" draft-typed");
   const versionsBefore = (await (await page.request.get(`/api/nodes/${n.id}/versions`, H)).json()).length;
 
-  await page.locator(".ov-history-open").first().click();
+  await page.locator(".note-history-link").first().click();
   await expect(page.locator(".nh")).toBeVisible();
   const slider = page.locator(".nh").getByRole("slider");
   await slider.press("Home");
@@ -32,7 +32,7 @@ test("HIST-05: preview target stable across merged saves and offline", async ({ 
   const versionsAfter = (await (await page.request.get(`/api/nodes/${n.id}/versions`, H)).json()).length;
   out.merge = `versions ${versionsBefore}→${versionsAfter}`;
   out.previewStillOldest = String((await pane.innerText()).includes(`FIRST ${s}`));
-  out.selectionStill = String((await slider.inputValue()) === "0");
+  out.selectionStill = String((await slider.getAttribute("aria-valuenow")) === "0");
 
   // Current entry shows the live draft, not the server copy.
   await slider.press("End");
@@ -55,4 +55,12 @@ test("HIST-05: preview target stable across merged saves and offline", async ({ 
   await page.waitForTimeout(3000);
   out.afterReconnect = `modalOpen=${await page.locator(".nh").count()} server=${JSON.stringify(((await (await page.request.get(`/api/nodes/${n.id}`, H)).json()).markdown as string).slice(0, 30))}`;
   console.log(`AUDIT HIST-05 ${JSON.stringify(out)}`);
+  // What this protects: the version the person is looking at stays put while later saves land,
+  // "now" shows what they are typing, and going offline neither closes the window nor lets a restore through.
+  expect(out.previewStillOldest).toBe("true");
+  expect(out.selectionStill).toBe("true");
+  expect(out.currentShowsDraft).toBe("true");
+  expect(out.offlinePreviewKept).toBe("true");
+  expect(out.offlineRestore).toBe("disabled=true");
+  expect(out.afterReconnect).toContain("modalOpen=1");
 });

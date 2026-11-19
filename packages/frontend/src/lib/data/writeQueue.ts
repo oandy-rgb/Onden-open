@@ -8,7 +8,6 @@ import { randomUUID } from "../uuid";
 import { withTabLock } from "../webLock";
 import { isBrowserOnline } from "../browserNetwork";
 import { bumpPending, refreshPendingCount, STUCK_AFTER_ATTEMPTS, type SendFailureReason } from "./syncStatus";
-import { isSendingHere, sendingElsewhere, startSendingHere, stopSendingHere, whenSentElsewhere } from "./sendingHere";
 import { classifyWriteFailure, sendFailureReason, WriteStorageError, writeFailureMessage, reportWriteFailure, isHandledNoteExists } from "./writeErrors";
 import { onProtocolBlockChange } from "../protocolGate";
 import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./patchedBody";
@@ -16,8 +15,7 @@ import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite,
 import { PREFS, prefsAvailable } from "../prefs";
 import { onAppResume } from "../appResume";
 import { settleNodeToServer } from "./serverTruth";
-import { accountStorageKey } from "../accountStorage";
-import { readSession, removeSession, SESSION_KEYS } from "../sessionPrefs";
+import { markInFlight, clearInFlight, takeInterrupted } from "./inFlightWrite";
 
 export type WriteMethod = "POST" | "PUT" | "PATCH" | "DELETE";
 export type WriteResult<T> = { status: "synced"; value: T } | { status: "queued" };
@@ -132,6 +130,19 @@ function serialized<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
+/** The write the previous page load had on the wire when it went away (a
+ *  reload, a navigation) is queued under its own key before anything newer is
+ *  sent: its request may still reach the server, and sent after the newer
+ *  write it would overwrite it; queued first it goes out ahead of it and the
+ *  server's replay of the key makes a late arrival harmless. */
+async function adoptInterruptedWrite(): Promise<void> {
+  const lost = takeInterrupted();
+  if (!lost) return;
+  const queued = await getPendingWrites().catch(() => []);
+  if (queued.some((write) => write.idem_key === lost.idemKey)) return;
+  try { await enqueue(lost); } catch { /* enqueue has handed it to recovery */ }
+}
+
 /** Writes an EARLIER page life left without an answer (pagehide kept them in
  *  recovery, synchronously, because a reload or a closed tab cannot await the
  *  worker or the queue) are queued again under their own keys, in the order
@@ -146,7 +157,6 @@ function serialized<T>(operation: () => Promise<T>): Promise<T> {
  *  put it on the wire from two tabs. The clock cannot tell which is which (pagehide of the old page runs after the new
  *  page's time origin), so each entry names the page load that made it and whether it was leaving. */
 async function adoptUnconfirmedWrites(): Promise<void> {
-  await adoptLegacyInFlight();
   if (!prefsAvailable(PREFS.lostWrites)) return;
   const left = getRecoveryWrites().filter((write) => !write.rejection && !write.unpersisted && write.idemKey && adoptable(write));
   const queued = left.length ? await getPendingWrites().catch(() => null) : [];
@@ -161,29 +171,6 @@ async function adoptUnconfirmedWrites(): Promise<void> {
   }
 }
 
-/** The write a tab of the previous build had on the wire when it was reloaded into this one (its sessionStorage
- *  slot: that build sent saves without a queue row). Queued under its key, like a write left in recovery, and the slot
- *  removed; the server answers a second arrival from its record. Gone with the last tab of that build. */
-async function adoptLegacyInFlight(): Promise<void> {
-  let left: (WriteRequest & { idemKey: string }) | null = null;
-  try {
-    const key = accountStorageKey(SESSION_KEYS.legacyWriteInFlight);
-    const raw = readSession(key);
-    if (!raw) return;
-    removeSession(key);
-    const parsed = JSON.parse(raw) as { method?: WriteMethod; path?: string; body?: string | null; idemKey?: string };
-    if (parsed.idemKey && parsed.method && parsed.path) left = { method: parsed.method, path: parsed.path, body: parsed.body ?? null, idemKey: parsed.idemKey };
-  } catch { return; /* no account bound yet, or nothing readable: nothing to take in */ }
-  if (left) await enqueue(left).catch(() => { /* enqueue has put it in recovery */ });
-}
-
-/** One adoption at a time: recordWrite runs it outside the lane (before its own row), the lane runs it too. */
-let adopting: Promise<void> = Promise.resolve();
-function adoptLeftWrites(): Promise<void> {
-  adopting = adopting.catch(() => {}).then(adoptUnconfirmedWrites);
-  return adopting;
-}
-
 /** Best effort: if the other copies cannot be read, this tab judges by its own. */
 async function absorbOtherTabs(): Promise<void> {
   try { await catchUpWithOtherTabs(); } catch { /* own view */ }
@@ -196,8 +183,8 @@ async function enqueue(request: WriteRequest & { idemKey: string }): Promise<voi
   } catch (cause) {
     bumpPending(-1);
     rememberUnconfirmedWrite(request);
-    // Recovery keeps the SAME key: should the server have it already (a write sent before it was queued), the
-    // resend is answered from the server's record. The worker took its row back out (addPendingWrite).
+    // Recovery keeps the SAME key: the worker's in-memory entry may still be
+    // persisted by a background retry after its first durable save failed.
     if (typeof window !== "undefined") {
       const { method, path, body, idemKey } = request;
       window.dispatchEvent(new CustomEvent<OfflineQueueFailedDetail>(OFFLINE_QUEUE_FAILED_EVENT, {
@@ -215,152 +202,63 @@ let writeEpoch = 0;
 export function getWriteEpoch(): number { return writeEpoch; }
 export function noteWriteStarted(): void { writeEpoch += 1; }
 
-/** A write's durable record: its queue row, committed (one journal record)
- *  before anything else of the write happens: before the local copy shows it
- *  and before its request leaves. From then on a page killed at any instant
- *  leaves it where it WILL be sent from (the queue), under its own key, and the
- *  local copy never holds text the queue does not (docs/architecture/note-writes.md
- *  "送出前先記下"). While this page lives the row is its own to send (sendingHere.ts,
- *  a Web Lock per write): no drain, of this tab or another live
- *  one, sends it first, and it does not count as waiting. Once this page has
- *  given it to the queue (or died), any tab's drain sends it, under its key.
- *  Resolves false when storage cannot take the row: the write then goes as it
- *  did without one (sent, or queued with recovery as the fallback). */
-export function recordWrite(request: WriteRequest & { idemKey: string }): Promise<boolean> {
-  const held = startSendingHere(request.idemKey);
-  // Rows are written in the order recordWrite is CALLED (that is the queue's order, made_at): each waits for the one
-  // before it. Waiting only for its own lock would not do: the spec orders the grants of one lock name, not of
-  // different names, so a later save's lock can come first and its row land ahead of an earlier save's.
-  const recorded = recording.catch(() => {}).then(async () => {
-    // Its own lock, from the moment its row exists, if it can be had at once (it can, unless another live tab holds
-    // this key). A lock another tab holds is not waited out here: that tab is sending this same write (one key, one
-    // write; the server answers a second arrival from its record), and this chain would hold up every save after it,
-    // or wait on a tab that waits on this one's lane. Every other step has an end (worker calls time out).
-    await heldOrMoment(held);
-    // What an earlier page life left in recovery goes into the queue first: it is older than this write.
-    await adoptLeftWrites().catch(() => {});
-    await addPendingWrite(request.method, request.path, request.body, request.idemKey);
-    return true;
-  }).catch(() => false);
-  recording = recorded;
-  return recorded;
-}
-let recording: Promise<unknown> = Promise.resolve();
-
-/** How long a save's row waits for its own write lock: a lock nobody else holds is granted at once. */
-const RECORD_LOCK_WAIT_MS = 1_000;
-function heldOrMoment(held: Promise<void>): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const moment = new Promise<void>((resolve) => { timer = setTimeout(resolve, RECORD_LOCK_WAIT_MS); });
-  return Promise.race([held, moment]).finally(() => clearTimeout(timer));
-}
-
 /** Resolves only after a server acknowledgement OR a durable queue commit.
- * No caller needs to mint retry keys or classify network/HTTP failures.
- * `recorded` is the write's recordWrite, when the caller made it first (the
- * write lifecycle does, before its local copy changes); otherwise it is made here. */
-export function submitWrite<T = unknown>(original: WriteRequest, options: { recorded?: Promise<boolean> } = {}): Promise<WriteResult<T>> {
+ * No caller needs to mint retry keys or classify network/HTTP failures. */
+export function submitWrite<T = unknown>(original: WriteRequest): Promise<WriteResult<T>> {
   const idemKey = original.idemKey ?? randomUUID();
   noteWriteStarted();
   // pagehide cannot await a worker or a Web Lock. Preserve the request now;
   // if the page dies before acknowledgement, recovery offers the same key.
   if (original.init?.keepalive) rememberUnconfirmedWrite({ ...original, idemKey });
   const request = withoutOversizedKeepalive(original);
-  const recorded = options.recorded ?? recordWrite({ ...request, idemKey });
-  // This save's share of its write lock goes back exactly once: when its turn in the lane ends, or, should the lane
-  // never run it (the lane's own lock refused), when it settles. A share left held would keep its row "this page's to
-  // send" with nothing left to send it.
-  let given = false;
-  const giveBack = () => { if (!given) { given = true; stopSendingHere(idemKey); } };
   return serialized(async (): Promise<WriteResult<T>> => {
-    try { return await sendRecorded<T>(request, idemKey, await recorded); }
-    finally { giveBack(); }
-  }).finally(giveBack).then((result) => { confirmRecoveredWrite(idemKey); return result; });
-}
-
-/** Queued rows that are waiting for a drain: not those a live page is sending itself (this one: a save on its way,
- *  waiting for its turn in its lane; or another tab, by its write lock). Those are not work in the queue: their page
- *  sends them, and nothing else waits for them (as before saves on their way had rows). */
-async function waitingIn(queue: PendingWrite[]): Promise<PendingWrite[]> {
-  const elsewhere = await sendingElsewhere();
-  return queue.filter((write) => !isSendingHere(write.idem_key) && !(write.idem_key && elsewhere.has(write.idem_key)));
-}
-
-async function sendRecorded<T>(request: WriteRequest, idemKey: string, durable: boolean): Promise<WriteResult<T>> {
-  // Other tabs and the installed app queue into their own copy: take theirs
-  // in first, or this write would go out ahead of their older edit.
-  if (request.online !== false) await absorbOtherTabs();
-  await adoptLeftWrites();
-  // Consult the queue itself, not the UI's asynchronously refreshed counter.
-  // If storage cannot be read, do not risk sending this edit ahead of unknown older work.
-  const queue = await getPendingWrites().catch(() => null);
-  // Recorded and not in the queue (no other live tab takes it: storage lost it): it goes as if unrecorded, under its key.
-  const own = durable ? queue?.find((write) => write.idem_key === idemKey) : undefined;
-  // In queue order (when each was made), not by id: another tab's older row can carry a higher id here. Only rows
-  // waiting in the queue count: a save of another note still on its way (its row is its page's own) is not ahead.
-  const before = queue === null ? null : own ? queue.slice(0, queue.indexOf(own)) : queue;
-  const ahead = before === null || (await waitingIn(before)).length > 0;
-  let retryOnOwn = false;
-  if (request.online !== false && !ahead) {
-    try {
-      const suppliedHeaders = new Headers(request.init?.headers);
-      suppliedHeaders.delete("Idempotency-Key");
-      const headers = { ...Object.fromEntries(suppliedHeaders.entries()), "Idempotency-Key": idemKey };
-      // This tab's write comes back as a "changed" tick it needn't sync for
-      // (lib/liveInvalidation.ts): open the echo window before sending — the
-      // tick can beat the response — and extend it once the write lands.
-      noteLocalWrite();
-      const value = await sendWithDeadline<T>(request.path, {
-        ...request.init, method: request.method, body: request.body ?? undefined, headers,
-      });
-      noteLocalWrite();
-      // Sent: a row left behind (this removal failed) only sends the key again, and the server answers it again.
-      if (own) await clearPendingWrite(own.id, own.idem_key).catch(() => {});
-      await flushIfWaiting(idemKey);
-      return { status: "synced", value };
-    } catch (error) {
-      if (classifyWriteFailure(error) === "rejected") {
-        if (!isHandledNoteExists(request, error)) {
-          // The refused text goes to recovery (the row itself, when it holds text). Its row never stays queued: a
-          // refusal is not sent again (if recovery's storage failed, its marked in-memory copy is what is left).
+    // Consult the queue itself, not the UI's asynchronously refreshed counter.
+    // If storage cannot be read, try a durable enqueue rather than risk sending
+    // this edit ahead of unknown older work.
+    // Other tabs and the installed app queue into their own copy: take theirs
+    // in first, or this write would go out ahead of their older edit.
+    if (request.online !== false) await absorbOtherTabs();
+    await adoptInterruptedWrite();
+    await adoptUnconfirmedWrites();
+    let retryOnOwn = false;
+    const backlog = request.online === false || await getPendingWrites().then((writes) => writes.length > 0, () => true);
+    if (!backlog) {
+      try {
+        const suppliedHeaders = new Headers(request.init?.headers);
+        suppliedHeaders.delete("Idempotency-Key");
+        const headers = { ...Object.fromEntries(suppliedHeaders.entries()), "Idempotency-Key": idemKey };
+        // This tab's write comes back as a "changed" tick it needn't sync for
+        // (lib/liveInvalidation.ts): open the echo window before sending — the
+        // tick can beat the response — and extend it once the write lands.
+        noteLocalWrite();
+        markInFlight({ ...request, idemKey });
+        const value = await sendWithDeadline<T>(request.path, {
+          ...request.init, method: request.method, body: request.body ?? undefined, headers,
+        });
+        noteLocalWrite();
+        clearInFlight(idemKey);
+        return { status: "synced", value };
+      } catch (error) {
+        if (classifyWriteFailure(error) === "rejected") {
+          clearInFlight(idemKey);
+          if (isHandledNoteExists(request, error)) throw error;
           try { await preserveDirectRejection({ ...request, idemKey }, writeFailureMessage(error), error); }
           catch (storageError) { reportWriteFailure(storageError, addToast); }
+          throw error;
         }
-        if (own) await clearPendingWrite(own.id, own.idem_key).catch(() => {});
-        // What waited behind it is next, as after a send.
-        await flushIfWaiting(idemKey, { absorb: true });
-        throw error;
+        // A replay after re-authentication uses the same key as the first attempt.
+        retryOnOwn = classifyWriteFailure(error) === "retryable" && isBrowserOnline();
       }
-      // A replay after re-authentication uses the same key as the first attempt.
-      retryOnOwn = classifyWriteFailure(error) === "retryable" && isBrowserOnline();
     }
-  }
-  if (own) bumpPending(1);
-  else await enqueue({ ...request, idemKey });
-  if (retryOnOwn) scheduleRetry();
-  // The caller judged "offline" (or saw a backlog) before the drain ahead of this write in the lane finished, and that
-  // drain read the queue before this row existed: with the app online again nothing else would send it.
-  // The store's flag is the one judgment: wentOffline() clears it on the browser's own `offline`, and a server that
-  // does not answer clears it too (syncEngine), so the browser's flag adds nothing here.
-  else if (getAppState().online) void flushPendingWrites();
-  return { status: "queued" };
-}
-
-/** One wait per key for another tab's lock, however many drains pass its row meanwhile. */
-const awaitingElsewhere = new Set<string>();
-function drainWhenSentElsewhere(idemKey: string): void {
-  if (awaitingElsewhere.has(idemKey)) return;
-  awaitingElsewhere.add(idemKey);
-  void whenSentElsewhere(idemKey).then(() => { awaitingElsewhere.delete(idemKey); void flushPendingWrites(); });
-}
-
-/** After this save's turn: rows waiting in the queue (another tab's, one taken in from a closed one) go next. The
- *  queue is read again: it can have changed while this save's request was out. `absorb`: take in other tabs' rows
- *  first (after a refusal: no answer of this save's will bring the drain otherwise). */
-async function flushIfWaiting(idemKey: string, { absorb = false } = {}): Promise<void> {
-  if (absorb) await absorbOtherTabs();
-  const queue = await getPendingWrites().catch(() => []);
-  if ((await waitingIn(queue.filter((write) => write.idem_key !== idemKey))).length) void flushPendingWrites();
+    try { await enqueue({ ...request, idemKey }); } finally { clearInFlight(idemKey); }
+    if (retryOnOwn) scheduleRetry();
+    // The caller judged "offline" (or saw a backlog) before the drain ahead of this write in the lane finished, and that
+    // drain read the queue before this row existed: with the app online again nothing else would send it.
+    // The store's flag is the one judgment: wentOffline() clears it on the browser's own `offline`, and a server that
+    // does not answer clears it too (syncEngine), so the browser's flag adds nothing here.
+    else if (getAppState().online) void flushPendingWrites();
+    return { status: "queued" };
+  }).then((result) => { confirmRecoveredWrite(idemKey); return result; });
 }
 
 /** Compatibility for callers which handle durable-queue failure via recovery. */
@@ -449,15 +347,10 @@ async function drain(): Promise<void> {
   const settleAfter = new Set<string>();
   try {
     await absorbOtherTabs();
-    await adoptLeftWrites();
+    await adoptInterruptedWrite();
+    await adoptUnconfirmedWrites();
     const writes = await getPendingWrites();
-    const elsewhere = await sendingElsewhere();
     for (const write of writes) {
-      // A page that is alive is sending it itself (this one: a save on its way, waiting for its turn in its lane; or
-      // another tab): not work waiting here, and the rows after it do not wait for it (waitingIn). Another tab's:
-      // drain again once its lock is free (sent, queued there, or that tab died).
-      if (isSendingHere(write.idem_key)) continue;
-      if (write.idem_key && elsewhere.has(write.idem_key)) { drainWhenSentElsewhere(write.idem_key); continue; }
       try {
         noteLocalWrite();
         const answer = await sendWithDeadline(write.path, {
@@ -479,7 +372,7 @@ async function drain(): Promise<void> {
           } else {
             // Nothing the user typed (duplicate, move, delete…): there is no
             // input to recover, so the refusal is one plain message.
-            await clearPendingWrite(write.id, write.idem_key);
+            await clearPendingWrite(write.id);
             replayRejectionRevision++;
             addToast(writeFailureMessage(error), "error");
           }
@@ -492,7 +385,7 @@ async function drain(): Promise<void> {
         if (kind === "retryable" && isBrowserOnline()) {
           retryable = true;
           failure = sendFailureReason(error);
-          const attempts = await bumpPendingWriteAttempt(write.id, write.idem_key);
+          const attempts = await bumpPendingWriteAttempt(write.id);
           if (attempts === WARN_AFTER_ATTEMPTS) {
             addToast(t("Sync keeps failing. Your changes remain queued; retry when the server is available."), "error");
           }
@@ -503,7 +396,7 @@ async function drain(): Promise<void> {
       }
       // Storage failure is not a server rejection. Keep the same replay key
       // rather than misclassifying a failed local acknowledgement as HTTP.
-      await clearPendingWrite(write.id, write.idem_key);
+      await clearPendingWrite(write.id);
     }
     await settleReplayedPlaces(settleAfter);
   } catch (error) {

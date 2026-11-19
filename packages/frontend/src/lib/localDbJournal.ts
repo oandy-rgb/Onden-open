@@ -29,8 +29,6 @@ export type JournalRow = {
   rejection: string | null;
   created_at: string;
   targets: string | null;
-  /** When the row was made (localDbWorker.queuedAt); absent in records of older builds. */
-  made_at?: number | null;
 };
 
 export type JournalOp =
@@ -103,13 +101,12 @@ function scopeRange(scopeKey: string): IDBKeyRange {
   return IDBKeyRange.bound([scopeKey], [scopeKey, []]);
 }
 
-async function inTransaction<T>(mode: IDBTransactionMode, body: (store: IDBObjectStore) => T | (() => T), durability?: "strict"): Promise<T> {
+async function inTransaction<T>(mode: IDBTransactionMode, body: (store: IDBObjectStore) => T | (() => T)): Promise<T> {
   const db = await journalDb();
   return new Promise<T>((resolve, reject) => {
-    // Default durability (Chromium: relaxed): committed data survives the tab or the browser being killed, but the
-    // operating system may still hold it in memory. `strict` waits until it is on the disk, so it survives the power
-    // going too: a record that is the only copy of a person's input asks for it (Safari ignores the option).
-    const tx = durability ? db.transaction(STORE, mode, { durability }) : db.transaction(STORE, mode);
+    // Default durability, like the snapshot store: committed data survives the
+    // tab or app being killed.
+    const tx = db.transaction(STORE, mode);
     let result: T | (() => T);
     tx.oncomplete = () => resolve(typeof result === "function" ? (result as () => T)() : result);
     tx.onerror = () => reject(tx.error);
@@ -118,10 +115,9 @@ async function inTransaction<T>(mode: IDBTransactionMode, body: (store: IDBObjec
   });
 }
 
-/** Resolves once the record is committed: only then is the change durable. `strict`: on the disk, not only handed to
- *  the operating system (measured in Chromium, 2026-11-18: 0.7 ms median, 4 ms p95 for a 2 KB record, against 0.2 ms). */
-export function journalAppend(scopeKey: string, entry: JournalEntry, durability?: "strict"): Promise<void> {
-  return inTransaction("readwrite", (store) => { store.put(entry, [scopeKey, entry.session, entry.seq]); }, durability);
+/** Resolves once the record is committed: only then is the change durable. */
+export function journalAppend(scopeKey: string, entry: JournalEntry): Promise<void> {
+  return inTransaction("readwrite", (store) => { store.put(entry, [scopeKey, entry.session, entry.seq]); });
 }
 
 /** Every record of this snapshot key, in key order (by session, then seq).
@@ -193,13 +189,9 @@ function one(d: JournalDb, sql: string, params: BindParams): unknown[] | undefin
  *  id and idempotency key, then by the key alone: another tab may have queued
  *  a different request under the same id, and that one must survive too. */
 function replayPut(d: JournalDb, row: JournalRow): void {
-  // The time it was made goes with the row: in this copy it is ordered among the rows by when they were made, not by
-  // the number it gets here (a record of an older build has none).
-  const made = row.made_at === undefined ? [] : [row.made_at];
-  const cols = [row.method, row.path, row.body, row.idem_key, row.attempts, row.rejection, row.created_at, row.targets, ...made];
-  const madeCol = made.length ? ", made_at" : "";
+  const cols = [row.method, row.path, row.body, row.idem_key, row.attempts, row.rejection, row.created_at, row.targets];
   const update = (id: unknown) => d.run(
-    `UPDATE pending_writes SET method=?, path=?, body=?, idem_key=?, attempts=?, rejection=?, created_at=?, targets=?${made.length ? ", made_at=?" : ""} WHERE id=?`,
+    "UPDATE pending_writes SET method=?, path=?, body=?, idem_key=?, attempts=?, rejection=?, created_at=?, targets=? WHERE id=?",
     [...cols, id] as BindParams,
   );
   const atId = one(d, "SELECT id, idem_key FROM pending_writes WHERE id=?", [row.id]);
@@ -209,7 +201,7 @@ function replayPut(d: JournalDb, row: JournalRow): void {
     if (byKey) { update(byKey[0]); return; }
   }
   d.run(
-    `INSERT INTO pending_writes (${atId ? "" : "id, "}method, path, body, idem_key, attempts, rejection, created_at, targets${madeCol}) VALUES (${atId ? "" : "?, "}?, ?, ?, ?, ?, ?, ?, ?${made.length ? ", ?" : ""})`,
+    `INSERT INTO pending_writes (${atId ? "" : "id, "}method, path, body, idem_key, attempts, rejection, created_at, targets) VALUES (${atId ? "" : "?, "}?, ?, ?, ?, ?, ?, ?, ?)`,
     (atId ? cols : [row.id, ...cols]) as BindParams,
   );
 }

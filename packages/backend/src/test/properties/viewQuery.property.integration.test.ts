@@ -21,7 +21,7 @@
 //
 // Known defects on main (fix: branch fix/views-severe-2026-11-14). Like tags.property.integration.test.ts,
 // each is pinned below as a named `it.fails` with its scenario, and the random properties leave those
-// SITUATIONS out of the generator (the invariants are not weakened). PROPS_VIEWS_KNOWN=include puts the
+// SITUATIONS out of the generator (the invariants are not weakened). PROPS_INCLUDE_KNOWN=1 puts the
 // situations back (the properties then fail with the shrunk case). When the fix merges, change `it.fails`
 // to `it` and drop the exclusions marked `KNOWN`.
 //   K1 an attribute range filter whose value looks like a date but is not one (2026-11-31) → 500
@@ -52,11 +52,10 @@ import { persistActor } from "../helpers/persistActor.js";
 import { registerShippedModules } from "../helpers/registerShippedModules.js";
 import { seedClassTag } from "../helpers/seedClassTag.js";
 import { seedQ } from "../helpers/seedQ.js";
-import { checkAsync } from "../helpers/propsConfig.js";
+import { checkAsync, INCLUDE_KNOWN } from "../helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 /** The situations of K1–K4 stay out of the random properties; "include" puts them back. */
-const INCLUDE_KNOWN = process.env.PROPS_VIEWS_KNOWN === "include";
 /** Default runs: small, so the file stays well under a minute. An explicit PROPS_RUNS wins. */
 const runsCap = (cap: number) => (process.env.PROPS_RUNS ? Infinity : Math.min(cap, 25));
 
@@ -554,7 +553,7 @@ describe.skipIf(!isTestDb)("saved views and filters properties (executeTagView, 
 // ── Named regression cases of the known defects ─────────────────────────────
 // Each is the smallest world and view that shows it, run through the same checks as the properties. They
 // pass today only because `it.fails` turns the failure into a pass: change to `it` once
-// fix/views-severe-2026-11-14 merges. `seed` is the PROPS_SEED under which PROPS_VIEWS_KNOWN=include found it.
+// fix/views-severe-2026-11-14 merges. `seed` is the PROPS_SEED under which PROPS_INCLUDE_KNOWN=1 found it.
 
 const note = (over: Partial<Note> = {}): Note => ({
   title: "a", sortOrder: 0, createdAt: IMPORTED_AT[0]!, updatedAt: IMPORTED_AT[0]!, listed: true, fate: "live", attrs: {}, ...over,

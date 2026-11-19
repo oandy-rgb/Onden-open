@@ -7,7 +7,6 @@
 import { useSyncExternalStore } from "react";
 import { getOldestPendingWriteAt, getPendingWrites, type PendingWrite } from "../localDb";
 import { targetIds } from "../pendingWriteTargets";
-import { isSendingHere } from "./sendingHere";
 
 /** After this many failed sends the head of the queue counts as stuck. */
 export const STUCK_AFTER_ATTEMPTS = 8;
@@ -23,12 +22,6 @@ export type StuckWrites = { count: number; oldestAt: number | null; reason: Send
 
 /** Sending is failing but not yet "stuck": the queue is still retrying. */
 export type SendRetry = { reason: SendFailureReason; attempts: number };
-
-/** The queue as "waiting to sync": every pending row but those this page is sending itself (sendingHere.ts): a save on
- *  its way is not "waiting", so the counter, the stuck notice and "sync pending changes first" leave it out. */
-export async function waitingWrites(): Promise<PendingWrite[]> {
-  return (await getPendingWrites()).filter((write) => !isSendingHere(write.idem_key));
-}
 
 let pendingCount = 0;
 let stuck: StuckWrites | null = null;
@@ -82,7 +75,7 @@ export function setPending(n: number): void {
 export async function refreshPendingCount(sendFailure?: SendFailureReason | null): Promise<void> {
   if (sendFailure !== undefined) noteSendFailure(sendFailure);
   try {
-    const writes = await waitingWrites();
+    const writes = await getPendingWrites();
     setPending(writes.length);
     const next = await stuckFrom(writes);
     if (writes.length === 0) retrying = null;

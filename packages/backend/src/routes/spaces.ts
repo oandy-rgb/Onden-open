@@ -52,7 +52,7 @@ router.post("/sessions", async (c) => {
   }, c.req.header(FRESH_PROOF_HEADER));
   c.header("Cache-Control", "no-store"); // the credential is in this answer
   return c.json({
-    session_id: opened.sessionId, credential: opened.credential, expires_at: opened.expiresAt,
+    session_id: opened.sessionId, credential: opened.credential, label: opened.label, expires_at: opened.expiresAt,
     spaces: opened.spaces.map((s) => ({ space_id: s.spaceId, permission: s.permission })),
   }, 201);
 });

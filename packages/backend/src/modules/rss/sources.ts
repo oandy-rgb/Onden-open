@@ -31,7 +31,7 @@ import { q, allowUnstampedWrite } from "../../db.js";
 import { db } from "../../dbKysely.js";
 import type { ActorCtx } from "../../types.js";
 import { readableSpaceScopeSql } from "../../services/readPolicy.js";
-import { assertAuthority, carriedActorId } from "../../spine/authority.js";
+import { assertAuthority } from "../../spine/authority.js";
 import { enqueueEffect } from "../../services/outbox.js";
 import { feedUrlKey } from "./feedUrl.js";
 import type { Destination } from "./destination.js";
@@ -203,7 +203,7 @@ export async function createSource(
         auto_dismiss_days, default_tag_ids, default_parent_id, voice)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid[], $11, $12)
      RETURNING id`,
-    [workspaceId, opts.spaceId, opts.title, opts.url, carriedActorId(actor), opts.fetchIntervalMinutes ?? DEFAULT_INTERVAL_MINUTES,
+    [workspaceId, opts.spaceId, opts.title, opts.url, actor.id, opts.fetchIntervalMinutes ?? DEFAULT_INTERVAL_MINUTES,
       opts.autoTag ?? null, opts.embed ?? false, opts.autoDismissDays ?? null,
       opts.saveDefault?.tagIds ?? null, opts.saveDefault?.parentId ?? null, opts.voice ?? "media"],
   );

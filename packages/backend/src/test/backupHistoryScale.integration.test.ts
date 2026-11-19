@@ -7,8 +7,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
-import { setFlagsFromString } from "node:v8";
-import { runInNewContext } from "node:vm";
 import { q, withTransaction } from "../db.js";
 
 let current = "";
@@ -62,30 +60,15 @@ async function newWorkspace(name: string) {
   return { ws, owner, personal };
 }
 
-/** A full collection before a baseline. Test workers are not started with --expose-gc, so `global.gc` is undefined there and the baseline used to
- *  include whatever garbage the earlier steps left (the bound failed once at +92.9 MB in a full run while the same file alone gave +23–27). */
-function collectGarbage(): void {
-  const exposed = (globalThis as { gc?: () => void }).gc;
-  if (exposed) return exposed();
-  setFlagsFromString("--expose-gc");
-  (runInNewContext("gc") as () => void)();
-}
-
-/** Peak memory (MB) above the start while `run` goes: what the APPLICATION holds (V8 heap and array buffers: the text, rows, zip pieces), measured
- *  after a full collection. Not the process's resident size: on PGlite the database engine runs in this process, and the native pages it touches
- *  while it stores 16 MB of rows are the database's, not the move's (same code, same file alone: +20 to +50 MB resident, run to run, while heap and
- *  buffers stayed within a few MB). The resident size is still printed. */
-async function peakMemory<T>(run: () => Promise<T>): Promise<{ result: T; peakMb: number; rssMb: number; seconds: number }> {
-  collectGarbage();
-  const held = () => { const m = process.memoryUsage(); return m.heapUsed + m.arrayBuffers; };
-  const start = held(), rssStart = process.memoryUsage().rss;
-  let peak = start, rssPeak = rssStart;
-  const timer = setInterval(() => { peak = Math.max(peak, held()); rssPeak = Math.max(rssPeak, process.memoryUsage().rss); }, 10);
+/** Peak resident memory (MB) above the start while `run` goes. */
+async function peakRss<T>(run: () => Promise<T>): Promise<{ result: T; peakMb: number; seconds: number }> {
+  global.gc?.();
+  const start = process.memoryUsage().rss;
+  let peak = start;
+  const timer = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 10);
   const at = Date.now();
-  try {
-    const result = await run();
-    return { result, peakMb: Math.max(0, peak - start) / 1048576, rssMb: Math.max(0, rssPeak - rssStart) / 1048576, seconds: (Date.now() - at) / 1000 };
-  } finally { clearInterval(timer); }
+  try { const result = await run(); return { result, peakMb: Math.max(0, peak - start) / 1048576, seconds: (Date.now() - at) / 1000 }; }
+  finally { clearInterval(timer); }
 }
 
 describe.skipIf(!isTestDatabase())("a note with thousands of saved versions", () => {
@@ -109,14 +92,14 @@ describe.skipIf(!isTestDatabase())("a note with thousands of saved versions", ()
     expect(Number(total)).toBe(VERSIONS + 1);
 
     appended.length = 0; batches.length = 0; // the seeding above wrote 500 at a time; what is counted is the backup and the move
-    const backup = await peakMemory(async () => Buffer.from(await (await app(source.owner).request("/api/backup/full.zip?history=1")).arrayBuffer()));
+    const backup = await peakRss(async () => Buffer.from(await (await app(source.owner).request("/api/backup/full.zip?history=1")).arrayBuffer()));
     const pages = [...appended];
-    const plain = await peakMemory(async () => Buffer.from(await (await app(source.owner).request("/api/backup/full.zip")).arrayBuffer()));
+    const plain = await peakRss(async () => Buffer.from(await (await app(source.owner).request("/api/backup/full.zip")).arrayBuffer()));
 
     const target = await newWorkspace("scale-target");
     const up = await app(target.owner).request("/api/backup/restore/upload", { method: "POST", headers: { "content-type": "application/zip" }, body: new Uint8Array(backup.result) });
     const uploadId = ((await up.json()) as { upload_id: string }).upload_id;
-    const moved = await peakMemory(async () => {
+    const moved = await peakRss(async () => {
       const started = await app(target.owner).request(`/api/backup/restore/${uploadId}/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ space_id: target.personal, mode: "workspace" }) });
       return waitForJob(app(target.owner), ((await started.json()) as { job: RestoreJob }).job, 600_000);
     });
@@ -143,9 +126,9 @@ describe.skipIf(!isTestDatabase())("a note with thousands of saved versions", ()
     // eslint-disable-next-line no-console
     console.info(`[history-scale] ${VERSIONS} versions, ${textMb.toFixed(1)} MB of text, zip ${(backup.result.length / 1048576).toFixed(1)} MB (plain backup ${(plain.result.length / 1024).toFixed(0)} KB)\n` +
       `  backup with history: peak +${backup.peakMb.toFixed(0)} MB, ${backup.seconds.toFixed(1)} s; plain backup: peak +${plain.peakMb.toFixed(0)} MB, ${plain.seconds.toFixed(1)} s\n` +
-      `  move with history: peak +${moved.peakMb.toFixed(0)} MB (resident +${moved.rssMb.toFixed(0)} MB), ${moved.seconds.toFixed(1)} s`);
-    // A sanity bound only (the counts above are the proof): heap and buffers measured +38 to +45 MB on PGlite, five runs alone (the move
-    // reads the zip and the pages of versions); loading the history whole costs the text's size several times over.
+      `  move with history: peak +${moved.peakMb.toFixed(0)} MB, ${moved.seconds.toFixed(1)} s`);
+    // A sanity bound only (the counts above are the proof): measured +26 MB on Postgres and +64 MB on PGlite, which also
+    // holds the text itself; loading the history whole costs the text's size several times over.
     expect(moved.peakMb).toBeLessThan(textMb * 2 + 60);
   }, 900_000);
 });

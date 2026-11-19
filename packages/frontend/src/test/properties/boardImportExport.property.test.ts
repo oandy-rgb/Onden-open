@@ -329,7 +329,7 @@ describe("board export (prepareCanvasExport)", () => {
 
 // The same defect as a minimal, named case: lib/canvasExport.ts:57 reads the `ink_data` attribute (a handwriting
 // note's page) where the board's pen layer is `board_ink` (components/CanvasInkLayer.tsx, "not `ink_data`").
-// Replay the generated form: PROPS_SEED=20261023 (the default) PROPS_RUNS=200 npx vitest run <this file> -t "FINDING board-ink".
+// Replay the generated form: PROPS_SEED=20261023 (where it was found; the default seed is fresh every run) PROPS_RUNS=200 npx vitest run <this file> -t "FINDING board-ink".
 describe("regressions: the board's ink is board_ink (FINDING board-ink, fix in progress on fix/board-ink-2026-11-14)", () => {
   const stroke = (id: string, color: string): InkStroke => ({ id, color, size: 4, toolId: "pen", points: [[0, 0], [40, 40]] });
   const boardInk = encodeInk(inkDoc([stroke("b", "#aa0000")], []));

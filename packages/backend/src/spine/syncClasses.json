@@ -45,8 +45,7 @@
   "class": "stamped",
   "note": "per (space, member), permission in structure_log; tombstone on remove, also when the whole space is deleted (S3)",
   "wired": true,
-  "snapshot": "rows",
-  "neverLeaves": "the rows of a temporary session (a member that is an actor of type 'session'), and their stamps, tombstones included: the session lives on the node it was opened on"
+  "snapshot": "rows"
  },
  "function_refs": {
   "class": "stamped",
@@ -204,7 +203,7 @@
  },
  "participant_sessions": {
   "class": "node-local",
-  "note": "the credential, expiry, limits and use of a temporary session (services/participantSessions.ts); a credential is for this server's door and means nothing on another device. The session's own actors row and its space_members rows (and their stamps, tombstones included) never leave the node either: `neverLeaves` of actors and space_members"
+  "note": "the credential, expiry, limits and use of a temporary session (services/participantSessions.ts); a credential is for this server's door and means nothing on another device. The session's own actors row (type 'session') travels like any member's"
  },
  "backup_restore_jobs": {
   "class": "node-local",
@@ -270,7 +269,6 @@
   "class": "separate",
   "note": "identity: only changed on the main server",
   "snapshot": "identity",
-  "neverLeaves": "the actors row of a temporary session (type 'session'): the session lives on the node it was opened on; what it wrote keeps its id as the author of its stamps",
   "snapshotNote": "id, name, type, write mode and created time only; the sign-in link (external_id) of a person and every invitation column stay on the node"
  },
  "agent_runners": {

@@ -16,17 +16,12 @@ vi.mock("../lib/localDb", () => ({
   storeRejectedWrite: async (request: import("../lib/localDb").RejectedRequest, rejection: string) => ({ ...request, id: 901, attempts: 0, rejection }),
   addPendingWrite: vi.fn(async () => null),
   getPendingWrites: vi.fn(async () => []),
-  clearPendingWrite: vi.fn(async () => {}),
   upsertAttribute: vi.fn(async () => null),
   removeAttribute: vi.fn(async () => null),
 }));
 
 import { ApiError } from "../lib/api";
-import { addPendingWrite, upsertAttribute as upsertAttributeLocal, clearPendingWrite, getPendingWrites } from "../lib/localDb";
-import { memoryQueue } from "./helpers/memoryQueue";
-
-// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
-let queue: { rows: unknown[] };
+import { addPendingWrite, upsertAttribute as upsertAttributeLocal } from "../lib/localDb";
 import { saveInk } from "../lib/data/inkWriter";
 import { wholeBody } from "../lib/data/patchedBody";
 import type { InkDocument } from "../lib/ink/types";
@@ -47,7 +42,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 describe("saveInk durability", () => {
   beforeEach(() => {
     apiMock.mockReset();
-    vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    vi.mocked(addPendingWrite).mockClear();
     vi.mocked(upsertAttributeLocal).mockClear();
     setPending(0);
     setOnline(true);
@@ -104,7 +99,7 @@ describe("saveInk durability", () => {
     saveInk("node-1", PAGE);
     await flush();
     expect(apiMock).not.toHaveBeenCalled();
-    expect(queue.rows).toHaveLength(1);
+    expect(addPendingWrite).toHaveBeenCalledTimes(1);
     expect(getPendingCount()).toBe(1);
   });
 
@@ -112,7 +107,7 @@ describe("saveInk durability", () => {
     apiMock.mockImplementationOnce(transportFail);
     saveInk("node-1", PAGE);
     await flush();
-    expect(queue.rows).toHaveLength(1);
+    expect(addPendingWrite).toHaveBeenCalledTimes(1);
     expect(getPendingCount()).toBe(1);
   });
 
@@ -120,7 +115,7 @@ describe("saveInk durability", () => {
     apiMock.mockImplementationOnce(fail500);
     saveInk("node-1", PAGE);
     await flush();
-    expect(queue.rows).toHaveLength(1);
+    expect(addPendingWrite).toHaveBeenCalledTimes(1);
     expect(getPendingCount()).toBe(1);
   });
 
@@ -128,7 +123,7 @@ describe("saveInk durability", () => {
     apiMock.mockImplementationOnce(reject422);
     saveInk("node-1", PAGE);
     await flush();
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
     expect(getPendingCount()).toBe(0);
   });
 
@@ -137,7 +132,7 @@ describe("saveInk durability", () => {
     const envelope: InkMultiPageDoc = { version: 1, pages: { 1: PAGE }, annotations: [] };
     saveInk("pdf-1", envelope);
     await flush();
-    expect(queue.rows).toHaveLength(1);
+    expect(addPendingWrite).toHaveBeenCalledTimes(1);
     const call = vi.mocked(addPendingWrite).mock.calls[0];
     expect(call?.[0]).toBe("PUT");
     expect(call?.[1]).toBe("/api/nodes/pdf-1/attributes/ink_data");
@@ -154,7 +149,7 @@ describe("saveInk base", () => {
 
   beforeEach(() => {
     apiMock.mockReset();
-    vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    vi.mocked(addPendingWrite).mockClear();
     vi.mocked(upsertAttributeLocal).mockClear();
     setPending(0);
     setOnline(true);
@@ -202,7 +197,7 @@ describe("saveInk base", () => {
 describe("saveInk never saves a read-only drawing (T1-0)", () => {
   beforeEach(() => {
     apiMock.mockReset();
-    vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    vi.mocked(addPendingWrite).mockClear();
     vi.mocked(upsertAttributeLocal).mockClear();
     setPending(0);
     setOnline(true);
@@ -213,7 +208,7 @@ describe("saveInk never saves a read-only drawing (T1-0)", () => {
     saveInk("node-1", { version: 1, pages: { 1: { ...PAGE, requires: ["clips"] } } } as InkMultiPageDoc);
     await flush();
     expect(apiMock).not.toHaveBeenCalled();
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
     expect(upsertAttributeLocal).not.toHaveBeenCalled();
   });
 

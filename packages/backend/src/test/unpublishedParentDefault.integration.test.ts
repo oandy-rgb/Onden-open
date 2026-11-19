@@ -20,7 +20,6 @@ import { moveBlockToChildNote } from "../services/blockChildNote.js";
 import { ensureBlockAnchor } from "../services/blockAnchors/index.js";
 import { createNote } from "../services/noteCreate.js";
 import { createNode } from "../services/agentTools/createNode.js";
-import { createToken, resolveBearerActor } from "../services/agentTokens.js";
 import { publishedNodeIds, leftOutNotes } from "../modules/website/publishing/publishedSet.js";
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
@@ -82,7 +81,7 @@ describe.skipIf(!isTestDatabase())("a note made under a 「不發布」 note sta
     solo = await persistActor(ws, { id: "", name: `Solo ${stamp}`, type: "human", role: "editor" });
     await setWorkspaceOwner(ws, solo.id);
     await q(`UPDATE spaces SET capabilities = capabilities || '{"publish": true}'::jsonb WHERE workspace_id = $1`, [ws]);
-    site = await makeSpace(ws, `Site ${stamp}`, [{ id: solo.id, permission: "edit" }], { publish: true, external_ai: true, backup: true });
+    site = await makeSpace(ws, `Site ${stamp}`, [{ id: solo.id, permission: "edit" }], { publish: true, external_ai: false, backup: true });
   });
 
   it("REST create: under a kept-off note it is kept off, and says why; under a published one it is as before", async () => {
@@ -111,11 +110,9 @@ describe.skipIf(!isTestDatabase())("a note made under a 「不發布」 note sta
     for (const row of rows) expect(row.caused).toBe(row.created);
   });
 
-  it("the agent's createNode goes the same way (as a real token: the 「不發布」 it takes is not a choice of the mark, PR #1856 round 5)", async () => {
+  it("the agent's createNode goes the same way", async () => {
     const { off, plain } = await parents();
-    const agent = (await resolveBearerActor((await createToken(solo.id, { access: "write" })).plaintext, ws))!;
-    expect(agent.tokenScope, "a real token actor").toBeTruthy();
-    const make = async (parent_id: string, title: string) => String((await createNode.handler({ title, markdown: "agent text", parent_id }, { actor: agent, workspaceId: ws, dryRun: false } as never)).id);
+    const make = async (parent_id: string, title: string) => String((await createNode.handler({ title, markdown: "agent text", parent_id }, { actor: solo, workspaceId: ws, dryRun: false } as never)).id);
     await expectInherited(await make(off, "Agent under off"));
     await expectUntouched(await make(plain, "Agent under plain"));
   });

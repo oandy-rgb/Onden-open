@@ -72,8 +72,6 @@ export class SaveWorld {
   // ── local database fake (lib/localDb) ──
   pending: Array<{ id: number; method: string; path: string; body: string | null; idem_key: string | null; attempts: number }> = [];
   rejected: Array<{ id: number; method: string; path: string; body: string | null; idem_key: string | null; attempts: number; rejection: string }> = [];
-  /** Per note: the text the local copy holds (upsertNode; a test that models the worker's applySync writes it too). */
-  localText = new Map<string, string>();
   private rowSeq = 0;
 
   reset(): void {
@@ -82,7 +80,7 @@ export class SaveWorld {
     this.idem.clear(); this.counter = 0; this.requestSeq = 0;
     this.typed.clear(); this.deleted.clear(); this.userTitles.clear(); this.appliedTitles.clear();
     this.rejectedBodies.clear(); this.rejectedNotes.clear();
-    this.pending = []; this.rejected = []; this.rowSeq = 0; this.localText.clear(); this.reads = [];
+    this.pending = []; this.rejected = []; this.rowSeq = 0;
     for (const id of ["a", "b"]) {
       const lines = [this.nextToken(id), this.nextToken(id)];
       this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n"), at: ++this.serverClock });
@@ -112,20 +110,8 @@ export class SaveWorld {
   // ── transport (lib/api `api`) ──
   get inflight(): WorldRequest[] { return this.requests.filter((r) => r.state === "inflight"); }
 
-  /** GET /api/nodes/:id reads (syncEngine.hydrateNode): the row is read when the request arrives, the answer waits
-   *  until the test delivers it (`answerRead`). */
-  reads: Array<{ row: ContentNode; resolve: (row: ContentNode) => void }> = [];
-  answerRead(index = 0): void {
-    const [read] = this.reads.splice(index % Math.max(this.reads.length, 1), 1);
-    read?.resolve(read.row);
-  }
-
   transport(path: string, init: { method?: string; body?: unknown; headers?: unknown; keepalive?: boolean } = {}): Promise<unknown> {
     const match = /^\/api\/nodes\/([^/?]+)$/.exec(path);
-    if (match && (init.method ?? "GET") === "GET") {
-      const row = this.row(this.server.get(match[1]!)!);
-      return new Promise((resolve) => { this.reads.push({ row, resolve }); });
-    }
     if (!match || init.method !== "PATCH") throw new Error(`saveWorld: unexpected request ${init.method} ${path}`);
     const headers = (init.headers ?? {}) as Record<string, string>;
     const body = JSON.parse(String(init.body)) as PatchBody;
@@ -246,11 +232,7 @@ export class SaveWorld {
     },
     getRejectedWrites: async () => this.rejected.map((w) => ({ ...w })),
     dismissRejectedWrite: async (write: { id: number }) => { this.rejected = this.rejected.filter((w) => w.id !== write.id); },
-    /** The local copy's text of each note, as the writer's mirror leaves it (noteWriter `mirror`: the store row). */
-    upsertNode: async (node: { id: string; markdown?: string | null }) => { this.localText.set(node.id, node.markdown ?? ""); },
-    // syncEngine.hydrateNode: no body stored on this device; the server's row is kept as it came.
-    getStoredBody: async () => null,
-    persistRemoteNode: async <T,>(node: T) => node,
+    upsertNode: async () => {},
     removeNode: async () => {},
     upsertAttribute: async () => {},
     flushLocalDbSync: async () => {},

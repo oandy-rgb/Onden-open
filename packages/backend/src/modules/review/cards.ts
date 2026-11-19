@@ -56,7 +56,7 @@ export async function setNoteCard(identity: ActorCtx | null, noteId: string, on:
         txMeta: { inverse_op: on ? "function_ref.removed" : "function_ref.added", ui_context: "review.card" },
       },
       apply: async () => {
-        if (on) await insertOwnRef(workspaceId, holder, REVIEW_FUNCTION_ID, { by: actor, id: refId });
+        if (on) await insertOwnRef(workspaceId, holder, REVIEW_FUNCTION_ID, { createdBy: actor.id, id: refId });
         else await deleteOwnRef(holder, REVIEW_FUNCTION_ID);
       },
     });

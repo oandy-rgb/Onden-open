@@ -13,18 +13,13 @@ vi.mock("../lib/localDb", () => ({
   searchNodes: vi.fn(async () => []),
   upsertNode: vi.fn(async () => null),
   addPendingWrite: vi.fn(async () => null),
-  clearPendingWrite: vi.fn(async () => {}),
 }));
 
 import { api, ApiError, noWorkspaceData, type Bootstrap, type ContentNode } from "../lib/api";
 import { useOverviewMode } from "../hooks/useOverviewMode";
 import { resetAppState, setSelectedId, getAppState, setData } from "../lib/appStore";
 import { typeIntoDraft, restoreOverviewDraft, prepareEditorForExit, editNoteText, saveNoteBody, beginBodyRewrite, __resetDraftStateForTests } from "../lib/data/draftActions";
-import { addPendingWrite, clearPendingWrite, getPendingWrites, upsertNode, flushLocalDbSync } from "../lib/localDb";
-import { memoryQueue } from "./helpers/memoryQueue";
-
-// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
-let queue: { rows: unknown[] };
+import { addPendingWrite, upsertNode, flushLocalDbSync } from "../lib/localDb";
 
 const apiMock = vi.mocked(api);
 const addPendingWriteMock = vi.mocked(addPendingWrite);
@@ -52,7 +47,7 @@ describe("overview draft autosave reliability", () => {
     apiMock.mockClear();
     apiMock.mockResolvedValue({});
     addPendingWriteMock.mockClear();
-    queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    addPendingWriteMock.mockResolvedValue(null as never);
     vi.mocked(upsertNode).mockReset().mockResolvedValue();
     __resetDraftStateForTests();
     resetAppState({ data: makeData(), online: true, selectedId: "a" });
@@ -241,7 +236,7 @@ describe("overview draft autosave reliability", () => {
     // the recovery entry (not a second toast) told the user
     expect(getAppState().toasts.some((tt) => tt.kind === "error")).toBe(false);
     // and the terminal reject was NOT queued (the drain would silently drop it)
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWriteMock).not.toHaveBeenCalled();
   });
 
   it("retains both title and body after a name conflict and saves them after correction", async () => {
@@ -250,7 +245,7 @@ describe("overview draft autosave reliability", () => {
     act(() => { typeIntoDraft(getAppState().selectedId!, { title: "Occupied", markdown: "Keep this body" }); });
     await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
     expect(getAppState()).toMatchObject({ overviewTitleDraft: "Occupied", overviewDraft: "Keep this body", saveStatus: "rejected" });
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWriteMock).not.toHaveBeenCalled();
     expect(getAppState().data.nodes.find(n => n.id === "a")).toMatchObject({ title: "Node a", markdown: "# A\n\noriginal" });
     apiMock.mockResolvedValueOnce({ ...node("a", "Keep this body"), title: "Available" });
     act(() => { typeIntoDraft(getAppState().selectedId!, { title: "Available" }); });
@@ -295,8 +290,7 @@ describe("overview draft autosave reliability", () => {
   it("keeps a recoverable draft and reports failure when offline persistence fails", async () => {
     resetAppState({ data: makeData(), online: false, selectedId: "a" });
     setup();
-    // Storage that cannot take the row (neither the record before sending nor the queue).
-    addPendingWriteMock.mockRejectedValue(new Error("quota full"));
+    addPendingWriteMock.mockRejectedValueOnce(new Error("quota full"));
     typeInto("Must not disappear");
     await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
     expect(getAppState().saveStatus).toBe("rejected");

@@ -17,6 +17,7 @@ import { addFunction } from "../services/functionRefs.js";
 import { registerStandInFunction } from "./helpers/registerStandInFunction.js";
 import { compareDigests, type ChangeBundle } from "../spine/snapshotSql.js";
 import { readHave, readUnsendable } from "../spine/stampedBundle.js";
+import { PROPS_SEED } from "./helpers/propsConfig.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { NOT_AN_EDIT_FIELDS } from "../spine/stampedMerge/dbUnits.js";
@@ -46,12 +47,16 @@ async function cluster(seed: number): Promise<Cluster> {
 }
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); }); // a PGlite is tens of MB: close the nodes of a test with it
 
+/** The hand-built cases below fill their rows from a named seed: each is a fixed case (a behaviour or a past bug), not a random run.
+ *  The random run is the slug test, which takes fresh seeds (PROPS_SEED, +1, +2; owner 2026-11-18 「種子都隨機」). */
+const fixedCase = (seed: number) => makeRng(seed);
+
 const refusal = async (p: Promise<unknown>) => p.then(() => null, (e: { code?: string; status?: number }) => ({ code: e.code, status: e.status }));
 
 describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
   it("after both wrote without exchanging: the same rows, stamps and heads; taking a bundle again changes nothing; a second round holds", async () => {
     const { a, b } = await cluster(1);
-    const rng = makeRng(11);
+    const rng = fixedCase(11);
     for (let round = 0; round < 2; round++) {
       await writeFor(a, rng, 30); await writeFor(b, rng, 30);
       const ab = await exchange(a, b), ba = await exchange(b, a);
@@ -73,7 +78,7 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
 
   it("delivering B to A before A to B gives the same end state (bundles read before either is taken; the second node is a copy of the first, so both orders start from the same data)", async () => {
     const { a, b, nodes } = await cluster(2);
-    const rng = makeRng(22);
+    const rng = fixedCase(22);
     await writeFor(a, rng, 40); await writeFor(b, rng, 40);
     const a2n = await RealNode.open("a2", nodes[0]!), b2n = await RealNode.open("b2", nodes[1]!);
     open.push(a2n, b2n);
@@ -89,7 +94,7 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
 
   it("a third node that only exchanges with the first (star): after A↔B and A↔C rounds all three are the same", async () => {
     const { a, b, c } = await cluster(3);
-    const rng = makeRng(33);
+    const rng = fixedCase(33);
     for (let round = 0; round < 2; round++) {
       await writeFor(a, rng, 20); await writeFor(b, rng, 20); await writeFor(c, rng, 20);
       await exchange(b, a); await exchange(c, a);
@@ -102,7 +107,7 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
 
   it("a clock 30 minutes ahead: the bundle is refused whole and offered again, and is taken once the receiver's clock has caught up", async () => {
     const { a, b } = await cluster(4);
-    await withClockAhead(30 * 60_000, () => writeFor(b, makeRng(44), 6, { weights: { title: 1, create: 1, body: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } }));
+    await withClockAhead(30 * 60_000, () => writeFor(b, fixedCase(44), 6, { weights: { title: 1, create: 1, body: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } }));
     const bundle = await bundleFor(b, a);
     const stateBefore = JSON.stringify(await peerStateOf(a));
     expect(await refusal(take(a, bundle))).toMatchObject({ code: "stamp_clock_ahead" });
@@ -112,8 +117,8 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
       await take(a, bundle);
       await exchange(a, b);
       await expectSame(a, b);
-      await writeFor(b, makeRng(45), 4, { weights: { title: 1, body: 1, create: 1, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } });
-      await withClockAhead(5 * 60_000, () => writeFor(a, makeRng(46), 4)); // 5 minutes ahead of that is within the bound
+      await writeFor(b, fixedCase(45), 4, { weights: { title: 1, body: 1, create: 1, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } });
+      await withClockAhead(5 * 60_000, () => writeFor(a, fixedCase(46), 4)); // 5 minutes ahead of that is within the bound
       await exchange(a, b); await exchange(b, a);
       await expectSame(a, b);
     });
@@ -124,8 +129,8 @@ describe.skipIf(!isTestDb)("writes that cannot be sent: the refusal, the numbers
   it("a clock that was 30 minutes ahead and is set right again still holds: the writes made after it carry the stored clock, the refusal says both numbers, and the state counts the writes", async () => {
     const { a, b } = await cluster(15);
     const only = { weights: { title: 1, create: 1, body: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } } as const;
-    await withClockAhead(30 * 60_000, () => writeFor(b, makeRng(151), 3, only));
-    await writeFor(b, makeRng(152), 3, only); // the clock is right again: the stored reading (never goes back) is still half an hour on
+    await withClockAhead(30 * 60_000, () => writeFor(b, fixedCase(151), 3, only));
+    await writeFor(b, fixedCase(152), 3, only); // the clock is right again: the stored reading (never goes back) is still half an hour on
     const bundle = await bundleFor(b, a);
     const refused = await take(a, bundle).then(() => null, (e) => e as { code?: string; theirWall?: number; ourWall?: number; aheadMs?: number; side?: string });
     expect(refused).toMatchObject({ code: "stamp_clock_ahead", side: "sender" });
@@ -142,7 +147,7 @@ describe.skipIf(!isTestDb)("writes that cannot be sent: the refusal, the numbers
 describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written", () => {
   it("a gap, another data shape, an unknown sender, a stamp past the cut, a join in progress, a bundle that is not for this workspace", async () => {
     const { a, b, c, joined } = await cluster(5);
-    await writeFor(a, makeRng(55), 10); await writeFor(b, makeRng(56), 10);
+    await writeFor(a, fixedCase(55), 10); await writeFor(b, fixedCase(56), 10);
     const snapshot = async (p: Peer) => JSON.stringify(await peerStateOf(p));
 
     // gap: the bundle was read against a node that held more than this one does
@@ -181,7 +186,7 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
 
   it("a node that was offline for too long: the sender no longer holds the segment the receiver lacks, so the bundle starts after what the receiver has: bundle_gap, nothing written, and the way out is a snapshot", async () => {
     const { a, b } = await cluster(6);
-    await writeFor(a, makeRng(61), 12);
+    await writeFor(a, fixedCase(61), 12);
     const aId = await nodeIdOf(a);
     const have = await onNode(b.node, () => readHave(b.ws));
     // the sender answers as one that kept history only from its 5th write on: the bundle says it starts there (base), while B holds less
@@ -288,7 +293,7 @@ describe.skipIf(!isTestDb)("the rules of the merge, on a database", () => {
 
   it("what comes from another device is in this device's structure log, with the origin and the author of the write; the log itself is never part of a bundle", async () => {
     const { a, b } = await cluster(9);
-    const rng = makeRng(91);
+    const rng = fixedCase(91);
     await writeFor(a, rng, 20, { weights: { create: 6, move: 8, trash: 3, purge: 3, title: 0, body: 0, reorder: 0, undelete: 0, recreate: 0 } });
     const origin = await nodeIdOf(a);
     const before = await onNode(b.node, async () => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM structure_log WHERE origin = $1`, [origin])).rows[0]!.n));
@@ -375,7 +380,7 @@ describe.skipIf(!isTestDb)("a parent deleted for good while another node moves a
       await a.call("POST", `/api/nodes/${parent}/purge`, { expected_ids: preview.ids });
     });
     const made = await onNode(b.node, async () => (await b.call("POST", "/api/nodes", { id: "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b", title: "made under it", markdown: "x", space_id: b.space, parent_id: parent })).id as string);
-    await writeFor(c, makeRng(181), 6, { weights: { title: 1, body: 1, create: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } });
+    await writeFor(c, fixedCase(181), 6, { weights: { title: 1, body: 1, create: 0, move: 0, reorder: 0, trash: 0, undelete: 0, purge: 0, recreate: 0 } });
     const reports = [await exchange(b, a)];
     await exchange(c, a);
     await exchange(a, b); await exchange(a, c); await exchange(b, a); await exchange(c, a);
@@ -426,7 +431,7 @@ describe.skipIf(!isTestDb)("updated_at is a function of the stamps", () => {
 
   it("every note's updated_at is the largest wall time among its units' stamps, on both nodes, after local writes and after bundles; a save never moves it back", async () => {
     const { a, b } = await cluster(14);
-    const rng = makeRng(141);
+    const rng = fixedCase(141);
     const check = (p: Peer) => onNode(p.node, async () => (await q<{ id: string }>(
       `SELECT n.id::text FROM content_nodes n WHERE n.workspace_id = $1 AND EXISTS (SELECT 1 FROM sync_stamps s WHERE s.workspace_id = n.workspace_id AND s.table_name = 'content_nodes' AND s.row_key = n.id::text AND s.origin <> 'genesis' AND ${COUNTS("s")})
           AND n.updated_at <> to_timestamp((SELECT max(w) FROM (SELECT s.hlc_wall AS w FROM sync_stamps s WHERE s.workspace_id = n.workspace_id AND s.table_name = 'content_nodes' AND s.row_key = n.id::text AND s.origin <> 'genesis' AND ${COUNTS("s")}
@@ -534,7 +539,10 @@ describe.skipIf(!isTestDb)("slugs: the same writes, whatever the order they arri
     }
   });
   it("two nodes colliding on titles, bundles in either order and a second round: the slug of every note is the same on both, and unique among the live notes of a space", async () => {
-    for (const seed of [31, 32, 33]) {
+    const seeds = [PROPS_SEED, PROPS_SEED + 1, PROPS_SEED + 2];
+    console.log(`[stampedBundle slugs] seeds ${seeds.join(", ")}`);
+    for (const seed of seeds) {
+      const replay = `replay: PROPS_SEED=${seed} (the first of the three) ONDEN_DB_DRIVER=pglite DATABASE_URL=postgres://x@localhost/onden_cloud_test npm -w packages/backend exec vitest -- run src/test/stampedBundle.integration.test.ts -t slugs`;
       const { a, b } = await cluster(seed);
       const rng = makeRng(3100 + seed);
       await collide(a, rng, 8); await collide(b, rng, 8);
@@ -542,9 +550,9 @@ describe.skipIf(!isTestDb)("slugs: the same writes, whatever the order they arri
       await take(b, ab); await take(a, ba);
       await exchange(a, b); await exchange(b, a);
       const [sa, sb] = [await slugsOf(a), await slugsOf(b)];
-      expect(sa, `seed ${seed}`).toEqual(sb);
+      expect(sa, `seed ${seed}; ${replay}`).toEqual(sb);
       const dup = (p: Peer) => onNode(p.node, async () => (await q(`SELECT space_id, slug FROM content_nodes WHERE workspace_id = $1 AND deleted_at IS NULL GROUP BY space_id, slug HAVING count(*) > 1`, [p.ws])).rows.length);
-      expect([await dup(a), await dup(b)]).toEqual([0, 0]);
+      expect([await dup(a), await dup(b)], `seed ${seed}; ${replay}`).toEqual([0, 0]);
       for (const n of open.splice(0)) await n.close().catch(() => undefined);
     }
   }, 600_000);
@@ -609,7 +617,7 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     const { a, b, c } = await cluster(31);
     // every node holds a function reference whose config the run can change (the world makes one: helpers/stampedWorld.ts buildSourceWorld)
     for (const p of [a, b, c]) expect(await onNode(p.node, async () => (await q(`SELECT 1 FROM function_refs WHERE workspace_id = $1`, [p.ws])).rows.length), p.name).toBeGreaterThan(0);
-    const rng = makeRng(311);
+    const rng = fixedCase(311);
     await writeFor(a, rng, 6, { weights: { tagMake: 1 } }); // some tags every node can apply
     await exchange(a, b); await exchange(a, c);
     // the latest stamp of each table before the run: a table counts as written by the run only with a later one (the world's own rows carry stamps that are not genesis too)
@@ -688,7 +696,7 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
 
   it("either order of delivery gives the same end, for every table", async () => {
     const { a, b, nodes } = await cluster(32);
-    const rng = makeRng(322);
+    const rng = fixedCase(322);
     await writeFor(a, rng, 4, { weights: { tagMake: 1 } });
     await exchange(a, b);
     await writeFor(a, rng, 30, allTables); await writeFor(b, rng, 30, allTables);
@@ -816,9 +824,9 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
 
   it("the refusals hold for a bundle that carries the other tables too: a clashing stamp of an attribute, an unknown sender, another data shape, a gap", async () => {
     const { a, b, c } = await cluster(38);
-    await writeFor(a, makeRng(381), 6, { weights: { tagMake: 1 } });
+    await writeFor(a, fixedCase(381), 6, { weights: { tagMake: 1 } });
     await exchange(a, b);
-    await writeFor(a, makeRng(382), 20, allTables);
+    await writeFor(a, fixedCase(382), 20, allTables);
     const bundle = await bundleFor(a, b);
     expect(bundle.items.some((i) => i.table !== "content_nodes")).toBe(true);
     const before = JSON.stringify(await peerStateOf(b));

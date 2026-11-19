@@ -34,11 +34,11 @@
 //   reviewQueueTool                      the agent's queue: calls queue(), so it is the same number
 //
 // Known defects (each has a named case at the end, marked it.fails; the random run leaves its
-// trigger out so the suite stays green; REVIEW_PROPS_KNOWN=1 puts every trigger back):
+// trigger out so the suite stays green; PROPS_INCLUDE_KNOWN=1 puts every trigger back):
 //   second-undo    a second undo (new key) after two grades deletes the row: the history is gone
 //   double-grade   the same card graded from two devices counts twice (no due / version check);
 //                  the same gap lets a card put off until tomorrow be graded from a stale queue
-//                  (found by REVIEW_PROPS_KNOWN=1 PROPS_SEED=20261023: tomorrow, then grade)
+//                  (found by PROPS_INCLUDE_KNOWN=1 PROPS_SEED=20261023: tomorrow, then grade)
 //   tomorrow-stop  "tomorrow" from a stale device silently un-stops a stopped card
 //   status-day     the status page counts by day, the queue by instant
 //   deck-subtree   a deck counts only direct children; a study session covers the subtree
@@ -61,7 +61,7 @@ import type { ReviewRating, ReviewState } from "@onden/contract";
 import { q } from "../../db.js";
 import { addDays, dayStartInstant, localDayId, resetDayClock, setDayClock } from "../../localDay.js";
 import { schedule } from "../../modules/review/fsrs.js";
-import { checkAsync } from "../helpers/propsConfig.js";
+import { checkAsync, INCLUDE_KNOWN } from "../helpers/propsConfig.js";
 import { registerShippedModules } from "../helpers/registerShippedModules.js";
 import { seedQ } from "../helpers/seedQ.js";
 import { isTestDatabase } from "../helpers/testDatabase.js";
@@ -86,7 +86,6 @@ const isTestDb = isTestDatabase();
 const { app } = isTestDb ? await import("../../app.js") : { app: null as never };
 
 /** Put every known defect's trigger back into the random run. */
-const INCLUDE_KNOWN = process.env.REVIEW_PROPS_KNOWN === "1";
 /** Every run is ~100 requests; stay small unless the caller asks for more. */
 const RUN_CAP = process.env.PROPS_RUNS ? Infinity : 25;
 
@@ -642,7 +641,7 @@ describe.skipIf(!isTestDb)("review progress of one person on two devices (random
   // ── Named regression cases: one per defect, minimal, expected to fail until fixed ──────────
   // Each plays a fixed script through the same runner with every known trigger on; the problem it
   // reports is the invariant that breaks. `it.fails`: when the defect is fixed the case turns red,
-  // delete `.fails`. Found by the random run with REVIEW_PROPS_KNOWN=1 (seed in each comment).
+  // delete `.fails`. Found by the random run with PROPS_INCLUDE_KNOWN=1 (seed in each comment).
 
   /** `REVIEW_PROPS_SHOW=1` prints what each named case breaks (an it.fails hides it). */
   const clean = (problem: string | null) => {

@@ -440,8 +440,7 @@ async function main() {
       `DELETE FROM content_nodes WHERE id = ANY($1::uuid[])`,
       [ourNodes],
     );
-    // never a temporary session's row (migration 217 refuses it anyway; guards/neverLeaves.guard.test.ts reads this file too)
-    await pool.query(`DELETE FROM actors WHERE id = $1 AND type <> 'session'`, [actorId]);
+    await pool.query(`DELETE FROM actors WHERE id = $1`, [actorId]);
     // Audit rows: keep AGENT_TOOL_CALLED for forensics — they reference the
     // (now-deleted) actor via actor_id text, so no FK violation. Prune events
     // older than retention happens via /api/maintenance/prune in normal ops.

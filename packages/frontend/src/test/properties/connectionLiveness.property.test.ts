@@ -58,7 +58,6 @@ const w = theWorld;
 /** A run starts a registry, a sql.js and a fake disk, and walks about two minutes of fake time: capped unless PROPS_RUNS is set on purpose. */
 const RUNS = process.env.PROPS_RUNS ? PROPS_RUNS : Math.min(PROPS_RUNS, 40);
 /** Look at the known defects instead of steering around them. */
-const INCLUDE_KNOWN = !!process.env.PROPS_INCLUDE_KNOWN;
 /** lib/data/connectivity.ts RECONNECT_RETRY_MS, read from the module itself in the checks below. */
 const MINUTE = 60_000;
 
@@ -216,7 +215,6 @@ type Run = {
   disposed: boolean;
   /** Fake time of the last change that restarts "answering for a minute": server mode, the browser's state, a reload, a call into the engine. */
   disturbedAt: number;
-  includeKnown: boolean;
   /** The store said the account was removed (first seen after this command); `onlineBefore`: it was online just before. */
   revokedSeen: { onlineBefore: boolean } | null;
   onlineBefore: boolean;
@@ -257,7 +255,7 @@ async function openTab(run: Run | null, previous?: Run): Promise<Run> {
   const tab = await w.createTab(`P${previous ? previous.tabs + 1 : 1}`);
   tab.online = previous ? previous.tab.online : true;
   const next: Run = previous ?? {
-    tab, win: fakeWindow(tab), dispose: null, disposed: false, disturbedAt: 0, includeKnown: INCLUDE_KNOWN, revokedSeen: null, onlineBefore: false, writes: [],
+    tab, win: fakeWindow(tab), dispose: null, disposed: false, disturbedAt: 0, revokedSeen: null, onlineBefore: false, writes: [],
     counts: { boot: 0, reconnect: 0, sync: 0, wentOffline: 0 }, afterDispose: null, problems: [], tabs: 1, ops: [],
   };
   if (previous) { next.tab = tab; next.win = fakeWindow(tab); next.dispose = null; next.disposed = false; next.afterDispose = null; next.tabs += 1; next.revokedSeen = null; next.onlineBefore = false; /* a reload starts offline: it is not the removal that turned the app offline */ }
@@ -471,7 +469,7 @@ async function finish(run: Run): Promise<string[]> {
   return run.problems;
 }
 
-async function runCommands(commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN, prepare?: () => void, inspect?: (run: Run) => Promise<void>): Promise<string[]> {
+async function runCommands(commands: Iterable<Cmd>, prepare?: () => void, inspect?: (run: Run) => Promise<void>): Promise<string[]> {
   w.install();
   net.reset();
   prepare?.();
@@ -479,7 +477,6 @@ async function runCommands(commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => net.fetch(tabContext.getStore(), String(input), init));
   try {
     const run = await openTab(null);
-    run.includeKnown = includeKnown;
     await fc.asyncModelRun(() => ({ model: {}, real: run }), commands as never);
     await inspect?.(run);
     const problems = await finish(run);
@@ -507,14 +504,15 @@ describe("the connection lifecycle against random server and browser states", ()
 });
 
 // ── minimal reproductions of what the property found ─────────────────────────
-// Each is a command list the shrinker ended on, replayed with the steering off. The seed is the default one
-// (20261023): `PROPS_SEED=20261023 PROPS_RUNS=<n>` reaches the same family at the run count named.
-// Each was `it.fails` until its fix landed; they are kept as plain `it` so the defect stays pinned.
+// Each is a command list the shrinker ended on, replayed with the steering off. They were found at seed
+// 20261023 (the default seed is fresh every run): `PROPS_SEED=20261023 PROPS_RUNS=<n>` reaches the same family at the run count named.
+// Each was `it.fails` until its fix landed; they are kept as plain `it` so the defect stays pinned. Nothing is left out of the
+// random run any more: the property above takes every command, and the shared PROPS_INCLUDE_KNOWN switch has nothing to turn on here.
 
 describe("what the property found (minimal cases, fixed)", () => {
   // Control: with the browser's own `online` event the retry exists, so the app does come back.
   it("a server that is down when the browser comes back online is asked again every 5 s, and the app ends online", async () => {
-    expect(await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(16_000), SetServer("up", 0)], true)).toEqual([]);
+    expect(await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(16_000), SetServer("up", 0)])).toEqual([]);
   });
 
   // seed 20261023, found at 18 runs with `server(bad-gateway), reload`, shrunk 5 times.
@@ -522,18 +520,18 @@ describe("what the property found (minimal cases, fixed)", () => {
   // Expected: the app goes online by itself. Actual: boot() ends offline (syncEngine.ts runBoot catch → setOnline(false), endedOffline = true),
   // connectivity.ts only schedules a retry from handleOnline (the browser's `online` event), which never fires. Offline for good until a reload.
   it("KNOWN stuck-offline-server-unreachable: a page loaded while the server answers 502 never reconnects once it recovers", async () => {
-    expect(await runCommands([SetServer("bad-gateway", 0), Reload()], true)).toEqual([]);
+    expect(await runCommands([SetServer("bad-gateway", 0), Reload()])).toEqual([]);
   });
 
   // seed 20261023, found at 38 runs with `server(slow, 20000ms), reload, sync()`: a server slower than the 15 s read deadline counts as unreachable.
   it("KNOWN stuck-offline-server-unreachable: a page loaded while the server is slower than the read deadline never reconnects", async () => {
-    expect(await runCommands([SetServer("slow", 20_000), Reload()], true)).toEqual([]);
+    expect(await runCommands([SetServer("slow", 20_000), Reload()])).toEqual([]);
   });
 
   // Same family from refresh(): syncEngine.ts refreshWhole `if (isServerUnreachable(error)) setOnline(false)` with nobody scheduled to ask again.
   // (The Advance first lets boot's own deferred full download finish: left pending it would answer later and put the app back online by luck.)
   it("KNOWN stuck-offline-server-unreachable: a refresh() that finds the server down leaves the app offline for good once it recovers", async () => {
-    expect(await runCommands([Advance(1_000), SetServer("down", 0), Refresh()], true)).toEqual([]);
+    expect(await runCommands([Advance(1_000), SetServer("down", 0), Refresh()])).toEqual([]);
   });
 
   // seed 20261023, found at 14 runs, shrunk 5 times to `browser offline, server(revoked), browser online`.
@@ -542,13 +540,13 @@ describe("what the property found (minimal cases, fixed)", () => {
   // Actual: reconnect() (syncEngine.ts: `setOnline(false)` after a sync that is not ok) returns false, and handleOnline
   // (connectivity.ts: `if (!ok && host.navigator?.onLine)`) schedules a retry every 5 s, for good: a request pair each time.
   it("KNOWN revoked-retry-loop: after the account is removed, a reconnect is retried every 5 s forever", async () => {
-    expect(await runCommands([BrowserOffline(), SetServer("revoked", 0), BrowserOnline()], true)).toEqual([]);
+    expect(await runCommands([BrowserOffline(), SetServer("revoked", 0), BrowserOnline()])).toEqual([]);
   });
 
   // seed 20261023, found at 128 runs. The same reconnect() path, with the removal found while the app was online:
   // the app reads as offline afterwards (online false) although the server answered, and the retry loop above follows.
   it("KNOWN revoked-retry-loop: an account removed while a reconnect is running turns into 'offline'", async () => {
-    expect(await runCommands([BrowserOffline(), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), Refresh()], true)).toEqual([]);
+    expect(await runCommands([BrowserOffline(), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), Refresh()])).toEqual([]);
   });
 
   // Nightly 2026-11-15, PROPS_SEED=765832 PROPS_RUNS=5000 (found at run 894). Invariant: an account removed while the app was online does not read as offline.
@@ -557,7 +555,7 @@ describe("what the property found (minimal cases, fixed)", () => {
   // the command", not "online when the removal was answered" (fixed in cmd() above), and reconnect() went on to flip online and start a sync after
   // the drain had been told the account was removed (fixed: it stops there).
   it("revoked-while-reconnecting again: slow server, back online, account removed, server up reads as offline (seed 765832)", async () => {
-    expect(await runCommands([BrowserOffline(), Advance(1_000), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), SetServer("up", 0)], true)).toEqual([]);
+    expect(await runCommands([BrowserOffline(), Advance(1_000), SetServer("slow", 20_000), BrowserOnline(), SetServer("revoked", 0), SetServer("up", 0)])).toEqual([]);
   });
 
   // seed 3 at 500 runs, shrunk to this. Scenario: a save is queued offline; the browser comes back while the server is slow (the drain's PATCH is in
@@ -565,7 +563,7 @@ describe("what the property found (minimal cases, fixed)", () => {
   // the single-flight flushPendingWrites (lib/data/writeQueue.ts) has already read its list, and no retry is scheduled after a pass that succeeded:
   // the save stays queued ("waiting to sync") for good, with the server up and the browser online.
   it("KNOWN queued-during-drain-never-sent: a save made while the queue is being sent stays queued", async () => {
-    expect(await runCommands([BrowserOffline(), Advance(1_000), Write(), SetServer("slow", 3_000), BrowserOnline(), Sync(), Write()], true)).toEqual([]);
+    expect(await runCommands([BrowserOffline(), Advance(1_000), Write(), SetServer("slow", 3_000), BrowserOnline(), Sync(), Write()])).toEqual([]);
   });
 
   // Found as `browser offline, save a note` right after boot, shrunk 0 times; made exact here: the browser drops
@@ -574,7 +572,7 @@ describe("what the property found (minimal cases, fixed)", () => {
   // Actual: maybeReconcileMembership (syncEngine.ts) catches the failed page and calls setMembershipGated(true) after wentOffline()
   // lowered it; the guard `if (!isBrowserOnline()) return;` only looks at the start of the check. The gate stays up, the cached notes stay covered.
   it("KNOWN gate-raised-offline: the browser going offline in the middle of the first membership check leaves the gate up", async () => {
-    const problems = await runCommands([Advance(1_000)], true, () => {
+    const problems = await runCommands([Advance(1_000)], () => {
       let armed = true;
       net.beforeAnswer = (path, tab) => {
         if (!armed || !tab || !path.startsWith("/api/sync/membership?")) return;
@@ -592,7 +590,7 @@ describe("what the property found (minimal cases, fixed)", () => {
   it("gate-raised-offline, other half: after the browser comes back the check runs again and a real membership change raises the gate", async () => {
     const seen: Array<{ path: string; gated: boolean }> = [];
     let armed = true;
-    const problems = await runCommands([Advance(1_000), BrowserOnline(), Advance(5_000)], true, () => {
+    const problems = await runCommands([Advance(1_000), BrowserOnline(), Advance(5_000)], () => {
       net.beforeAnswer = (path, tab) => {
         if (!tab || !path.startsWith("/api/sync/membership?")) return;
         if (armed) {
@@ -628,7 +626,7 @@ const outcomeOf = (run: Run): Outcome => {
 describe("an unreachable server is offline, not locked", () => {
   it("the browser comes back online but the server cannot be reached: offline, no gate, the note readable, a new save queued, then sent once", async () => {
     let seen: Outcome | null = null; let queued = -1;
-    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), Write(), Advance(6_000)], true, undefined, async (run) => {
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), Write(), Advance(6_000)], undefined, async (run) => {
       seen = outcomeOf(run); queued = await pendingRows(run);
     });
     expect(problems).toEqual([]);
@@ -638,7 +636,7 @@ describe("an unreachable server is offline, not locked", () => {
 
   it("the server comes back with the account intact: online again, the queue sent, each save once", async () => {
     let seen: Outcome | null = null; let sent: number[] = [];
-    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Write(), Advance(6_000), SetServer("up", 0), Advance(16_000)], true, undefined, async (run) => {
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Write(), Advance(6_000), SetServer("up", 0), Advance(16_000)], undefined, async (run) => {
       seen = outcomeOf(run); sent = [...net.sentCount.values()];
     });
     expect(problems).toEqual([]);
@@ -648,7 +646,7 @@ describe("an unreachable server is offline, not locked", () => {
 
   it("the server comes back and says the account was removed: the notice, nothing of the workspace readable (fail-closed unchanged)", async () => {
     let seen: Outcome | null = null;
-    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("revoked", 0), Advance(16_000)], true, undefined, async (run) => {
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("revoked", 0), Advance(16_000)], undefined, async (run) => {
       seen = outcomeOf(run);
     });
     expect(problems).toEqual([]);
@@ -658,7 +656,7 @@ describe("an unreachable server is offline, not locked", () => {
   it("the server comes back and the membership changed: the lost note is removed and the gate came up for the check", async () => {
     let seen: Outcome | null = null;
     const gates: boolean[] = [];
-    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), ChangeMembership(), SetServer("up", 0)], true, () => {
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), ChangeMembership(), SetServer("up", 0)], () => {
       net.beforeAnswer = (path, tab) => { if (tab && path.startsWith("/api/sync/membership?")) gates.push(tab.mods.appStore.getAppState().membershipGated); };
     }, async (run) => {
       await pass(run, 16_000);
@@ -672,7 +670,7 @@ describe("an unreachable server is offline, not locked", () => {
 
   it("the server answers but the membership keeps changing and never settles: the gate stays up (fail-closed unchanged)", async () => {
     let seen: Outcome | null = null;
-    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("up", 0)], true, () => {
+    const problems = await runCommands([BrowserOffline(), SetServer("down", 0), BrowserOnline(), Advance(6_000), SetServer("up", 0)], () => {
       net.beforeAnswer = (path) => { if (path.startsWith("/api/sync/membership")) net.epoch += 1; };
     }, async (run) => {
       await pass(run, 16_000);
@@ -686,7 +684,7 @@ describe("an unreachable server is offline, not locked", () => {
   it.each<Mode>(["down", "bad-gateway", "slow", "forbidden", "revoked"])("boot and reconnect end the same way against a server that is %s", async (mode) => {
     const outcome = async (commands: Cmd[]): Promise<Outcome> => {
       let seen: Outcome | null = null;
-      await runCommands(commands, true, undefined, async (run) => { await pass(run, 6_000); seen = outcomeOf(run); });
+      await runCommands(commands, undefined, async (run) => { await pass(run, 6_000); seen = outcomeOf(run); });
       return seen!;
     };
     const viaBoot = await outcome([SetServer(mode, 20_000), Reload()]);

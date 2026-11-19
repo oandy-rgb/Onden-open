@@ -4,7 +4,6 @@
 // seeded ATTRIBUTE_SET points triggered_by at the TAG_APPLIED root and the
 // inbox/cascade-preview see it like any other cascade child.
 
-import { isSystemAttr } from "@onden/markdown";
 import { q } from "../db.js";
 import { runCascade } from "../spine/mutate.js";
 import type { ActorCtx } from "../types.js";
@@ -52,9 +51,6 @@ export async function applyFieldDefaults(
     async () => {
       await withEventTransaction(workspaceId, async () => {
         for (const field of toSeed) {
-          // A system key (`_published`, a task's state…) is never a tag's default: the tag is applied to notes that exist, and a default there
-          // would be the system's own state set by whoever tags (PR #1856 round 6; as childAttributes.ts skips `child:_x`).
-          if (isSystemAttr(field.name)) continue;
           // Only when the key is absent (a concurrent seed or explicit edit
           // keeps its value), recorded from the row actually written so the
           // TAG_APPLIED / TAG_MERGED cascade restore can remove the seed.

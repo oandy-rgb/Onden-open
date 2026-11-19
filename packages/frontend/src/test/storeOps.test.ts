@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { noWorkspaceData, type Bootstrap, type ContentNode } from "../lib/api";
 import type { SyncDelta } from "../lib/localDb";
-import { applySyncDelta, isEmptyDelta, patchNode, dropNode, setNodeAttr, dropNodeAttr, addNodeTag, serverCopyOver } from "../lib/data/storeOps";
-import { optimisticFields } from "../lib/data/optimisticFields";
+import { applySyncDelta, isEmptyDelta, patchNode, dropNode, setNodeAttr, dropNodeAttr, addNodeTag } from "../lib/data/storeOps";
 import { tagFromNode } from "../lib/tagProjection";
 import { resetAppState } from "../lib/appStore";
 import { todayId } from "../lib/localDate";
@@ -195,37 +194,5 @@ describe("applySyncDelta — upsert order", () => {
     const prev = { ...base(), edges: ["e1", "e2", "e3"].map(edge) };
     const next = applySyncDelta(prev, { ...emptyDelta(), edges: { upsert: [edge("e1"), edge("e4")], delete: ["e3"] } });
     expect(next.edges.map((e) => e.id)).toEqual(["e2", "e1", "e4"]);
-  });
-});
-
-// A server copy and a field this device's edit is still waiting on (owner report 2026-11-19; review of #1900, question 1).
-describe("serverCopyOver", () => {
-  const at = (s: number) => new Date(Date.UTC(2026, 10, 19, 0, 0, s)).toISOString();
-  it("an object field waiting for its answer: an equal copy is not held (no extra read), a different one is, and keeps the held value", () => {
-    const held = node("p", { presentation: { site: { theme: "dark", nav: ["a", "b"] } }, updated_at: at(1) });
-    const settle = optimisticFields<ContentNode>("node:p", held, { presentation: held.presentation });
-    try {
-      const same = serverCopyOver(node("p", { presentation: { site: { theme: "dark", nav: ["a", "b"] } }, updated_at: at(1) }), held);
-      expect(same.held).toBe(false);
-      const other = serverCopyOver(node("p", { presentation: { site: { theme: "light", nav: ["a", "b"] } }, updated_at: at(2) }), held);
-      expect(other.held).toBe(true);
-      expect(other.row).toMatchObject({ presentation: held.presentation, updated_at: at(1) });
-    } finally { settle(true); }
-  });
-  it("a slim row held (its text not loaded here) never keeps its empty text over a full copy, even with an edit waiting (review of #1900, round 3)", () => {
-    const held = node("s", { markdown: "", body_len: 12, updated_at: at(1) });
-    const settle = optimisticFields<ContentNode>("node:s", held, { markdown: "" });
-    try {
-      const full = node("s", { markdown: "the real text", updated_at: at(1) });
-      const copy = serverCopyOver(full, held);
-      expect(copy.row).toMatchObject({ markdown: "the real text" });
-      expect(copy.row?.body_len).toBeUndefined();
-    } finally { settle(true); }
-  });
-  it("a copy older than the row held is not taken; nothing waiting: a newer copy is taken whole", () => {
-    const held = node("q", { markdown: "AB", updated_at: at(2) });
-    expect(serverCopyOver(node("q", { markdown: "A", updated_at: at(1) }), held)).toEqual({ row: null, held: false });
-    const newer = node("q", { markdown: "C\nAB", updated_at: at(3) });
-    expect(serverCopyOver(newer, held)).toEqual({ row: newer, held: false });
   });
 });

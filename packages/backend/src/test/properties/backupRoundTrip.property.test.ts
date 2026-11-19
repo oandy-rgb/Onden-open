@@ -224,7 +224,7 @@ describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
   }, 600_000);
 
   // One minimal, named case per loss (helpers/roundTripRichSpec.ts RICH_LOSSES: scenario, expected, actual, where).
-  // Each is a fixed world, so any seed (the default 20261024) shows it.
+  // Each is a fixed world, so any seed shows it.
   // The saved views of tags and notes and the note tabs' settings come back since the restore writes them: ordinary tests now.
   const RESTORED_NOW = new Set(["tag-views", "note-views", "note-tab-settings", "view-ids-tag", "view-ids-note-tab", "tag-functions", "tag-extends", "tag-functions-inherited"]);
   describe.each(RICH_LOSSES.map((loss: RichLoss) => [loss.id, loss] as const))("loss %s", (_id, loss) => {

@@ -7,12 +7,13 @@ const WRITE = H;
 // of its own any more); each imported module with a page follows them on
 // desktop, folding into 「更多 ▾」 when the bar is narrow. The phone bar is
 // 筆記 ＋ 任務 更多; its More sheet lists every other page, grouped as the nav
-// editor does (groupDestinations): 時間 (日記, 歷史 by their order), 整理
+// editor does (groupDestinations): 時間 (今天, 日記, 歷史 by their order: 今天 is the last desktop entry
+// and starts in 更多, 600d0cccf), 整理
 // (the other core pages), then 功能 (the imported features) ending with
 // 「管理功能」. Search is not a page: on a phone it is the top bar's search
 // button (b4829e18), not a More row.
 const MOBILE_MORE_LEADING_GROUPS = [
-  { label: "時間", items: ["日記", "歷史"] },
+  { label: "時間", items: ["今天", "日記", "歷史"] },
   { label: "整理", items: ["關係圖"] },
 ];
 

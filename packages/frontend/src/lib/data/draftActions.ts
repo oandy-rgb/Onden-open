@@ -24,7 +24,6 @@ import { getReplayRejectionRevision } from "./writeQueue";
 import { getRecoveryWrites, recoveryHolding, settleRefusedNoteText } from "./writeRecovery";
 import { getPendingCount } from "./syncStatus";
 import { targetsEntity } from "../pendingWriteTargets";
-import { isOlderCopy } from "../rowAge";
 import {
   getAppState, setAppState, setData, addToast,
   selectOverviewSelectedNode, getNode } from "../appStore";
@@ -64,11 +63,6 @@ const lastAcceptedBody = new Map<string, string>();
 export function ownAcceptedBody(nodeId: string): string | undefined {
   return lastAcceptedBody.get(nodeId);
 }
-// Per note: the server's time (updated_at) on the answer to the newest save this tab had accepted. A row older than
-// that never reaches the draft (applyRemoteNode): it is a copy of the note from before this editor's own save.
-const acceptedAt = new Map<string, string>();
-// The note whose editor has an IME composition open (setEditorComposing). Outside text waits for its end.
-let composingIn: string | null = null;
 // The unsent snapshot whose save was refused. Autosave, a node switch and
 // pagehide do not send it again (each retry was a new idempotency key and a new
 // error); the refused input stays in recovery. Typing makes a new snapshot,
@@ -150,7 +144,6 @@ export function readOverviewDraft(nodeId: string): { title: string; markdown: st
  *  content into the drafts. */
 export function resetDraftForNode(node: ContentNode | null): void {
   editorNodeId = node?.id ?? null;
-  if (composingIn !== editorNodeId) composingIn = null;
   void flushPendingSave();
   if (rejectedSave && rejectedSave === pendingSave && rejectedSave.node.id !== node?.id) {
     // The refused input lives in recovery; it must not keep the next note "dirty".
@@ -304,20 +297,11 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
     void settleRefusedNoteText(nodeId, { markdown: pending.draft, title: pending.title });
     // The server now holds (at least) what we sent: later edits build on it.
     bases.set(nodeId, { markdown: pending.draft, title: pending.title });
-    if (!queued) {
-      lastAcceptedBody.set(nodeId, pending.draft);
-      if (saved?.updated_at && !isOlderCopy(saved, { updated_at: acceptedAt.get(nodeId) })) acceptedAt.set(nodeId, saved.updated_at);
-    }
+    if (!queued) lastAcceptedBody.set(nodeId, pending.draft);
     // A three-way merge may return a body that includes ANOTHER writer's
     // changes — reflect it so the editor doesn't silently diverge. Only if
     // the user is still on this node and hasn't typed again since.
     if (!keepalive && stillVisible() && !isDirty && draftRevision === revision &&
-      saved && typeof saved.markdown === "string" && saved.markdown !== pending.draft && composingIn === nodeId) {
-      // An IME composition is open: the merged text waits for its end like any outside text (setEditorComposing);
-      // the store row already holds it (the writer settled the field with the answer).
-      remoteSkipped.add(nodeId);
-      addToast(t("This note also changed somewhere else while you were typing. Both changes are kept; please check the result."), "info");
-    } else if (!keepalive && stillVisible() && !isDirty && draftRevision === revision &&
       saved && typeof saved.markdown === "string" && saved.markdown !== pending.draft) {
       const merged = saved.markdown;
       setOverviewDraft(merged);
@@ -647,34 +631,16 @@ function applyRestoredDraft(markdown: string, title: string): void {
   });
 }
 
-/** The editor of `nodeId` opened (true) or closed (false) an IME composition. While it is open no outside text
- *  reaches the draft (applyRemoteNode, a merged answer): replacing text under a composition cuts it, and the
- *  composing keystrokes would then write the draft over the outside text. A text that had to wait is offered again
- *  the moment the composition ends, the way a row skipped during a save is offered once the save settles. */
-export function setEditorComposing(nodeId: string, composing: boolean): void {
-  if (composing) { if (nodeId === editorNodeId) composingIn = nodeId; return; }
-  if (composingIn !== nodeId) return;
-  composingIn = null;
-  if (remoteSkipped.has(nodeId) && !isDirty && !activeSaves.has(nodeId)) applyRemoteNode(getNode(nodeId) ?? null);
-}
-
 /** The open note's row changed in the store (sync delta, SSE, another tab, an
  *  agent). With no unsaved input, show the newer server text instead of
  *  keeping a stale copy (GAP-186). With unsaved input, keep the draft: its save
- *  carries the right base, and a merged reply is pushed in by flushPendingSave.
- *
- *  The one rule for outside text at the editor (owner report 2026-11-19): text older than what this editor has
- *  sent or had accepted for the note never reaches the draft. Sent: while a save is unanswered nothing outside is
- *  taken. Accepted: a row whose server time is earlier than the answer to this editor's newest accepted save is a
- *  copy from before that save and is dropped (lib/rowAge.ts, the same rule the store applies). The store keeps such
- *  rows out at the source (storeOps.serverCopyOver); this is the editor's own guard, whatever path a row took. */
+ *  carries the right base, and a merged reply is pushed in by flushPendingSave. */
 export function applyRemoteNode(node: ContentNode | null): void {
   const base = node ? bases.get(node.id) : undefined;
   if (!node || node.id !== editorNodeId || !base) return;
-  if (isOlderCopy(node, { updated_at: acceptedAt.get(node.id) })) return;
   const markdown = node.markdown ?? "";
   const title = node.title ?? "";
-  if (isDirty || composingIn === node.id || activeSaves.has(node.id) || nodeNeedsBody(node)) {
+  if (isDirty || activeSaves.has(node.id) || nodeNeedsBody(node)) {
     if (!nodeNeedsBody(node) && (markdown !== base.markdown || title !== base.title)) remoteSkipped.add(node.id);
     else remoteSkipped.delete(node.id);
     return;
@@ -706,8 +672,6 @@ export function __resetDraftStateForTests(): void {
   bases.clear();
   sentText.clear();
   lastAcceptedBody.clear();
-  acceptedAt.clear();
-  composingIn = null;
   refusedText.clear();
   failedTexts.clear();
   waitingSaves.clear();

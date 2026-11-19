@@ -400,6 +400,7 @@
       "packages/frontend/src/lib/editorCheckboxes.ts": ["checkboxRanges"],
       "packages/frontend/src/lib/editorCodeHighlight.ts": ["FencedBlock", "MAX_CHARS", "MAX_LINES", "fencedBlocks"],
       "packages/frontend/src/lib/editorCompletion.ts": ["CompletionContext", "CompletionFollowUp", "CreateItem", "LinkItem", "Trigger"],
+      "packages/frontend/src/lib/editorComposing.ts": ["composingEnded"],
       "packages/frontend/src/lib/editorEmbeds.ts": ["EditorImage", "editorImageSrc", "embedEditorFocus", "embedLineRanges", "estimateImageLineHeight", "forgetImageSizes", "imageLineRanges", "rememberImageSize"],
       "packages/frontend/src/lib/editorEmptyHint.ts": ["EMPTY_HINT_CLASS"],
       "packages/frontend/src/lib/editorFind.ts": ["FIND_COUNT_CAP", "FindTally", "closeFind", "findStatusText", "firstMatchFor", "tallyMatches"],

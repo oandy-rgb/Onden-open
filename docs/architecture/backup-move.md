@@ -1,6 +1,6 @@
 # 備份還原與搬整個工作區
 
-> 狀態：現行（最後確認 2026-11-18；版本歷史見下節）
+> 狀態：現行（最後確認 2026-11-14；版本歷史見下節）
 > 涵蓋：packages/backend/src/services/backup*.ts, packages/backend/src/spine/importedHistory.ts, packages/backend/src/routes/backup.ts
 
 程式：`packages/backend/src/services/backupArchive.ts`（寫出）、`backupFile.ts`（檢查上傳）、`backupRestore.ts`（還原）、
@@ -67,7 +67,7 @@
 | manifest 的 `history` | 只是說明，不被相信：預覽、「沒搬的」清單、設定頁的提示一律看實際讀到的歷史檔（有幾篇、幾個版本，由 `reader.countHistory()` 逐行數；有沒有歷史檔由檔名判斷）。格式 3 的 manifest 缺 `history` 或數字不符，不影響結果。 |
 | 誰、進哪 | 只有「搬整個工作區」（`mode=workspace`）會讀它：擁有者、目標是新的工作區、筆記是這次還原剛建的（`spine/importedHistory.ts` 驗擁有者）。一般還原（合併／空空間）與別人的工作區**不會**讀，也不會把歷史併進既有歷史。 |
 | id | 筆記 id 沿用搬家已有的對應（`createdIds`）。事件是新的（新 id），來源事件 id 記在 `tx_meta.history_import.event`，用來去重（同一個來源版本不寫第二次）與重新指向「還原自」。 |
-| 作者 | 事件的作者 id 是擁有者（來源的 id 在這裡沒有意義），**`actor_type` 一律寫 `user`**；來源的作者種類與顯示名稱放 `tx_meta.history_import.actor_type`／`actor_name`，版本清單與再次匯出讀它們（`history/bodyEvents.ts` 的 `versionActorTypeSql`、`noteVersions.ts`），不同名稱不會併成同一次修改。寫備份時作者的名稱：這台有那一列就寫它的名字；這台沒有列（被移除的成員或 AI）或那一列是臨時工作階段（`type = 'session'`）就寫 `null`（`services/authorName.ts` `shownAuthorName`），不寫 id，也不寫任何代替的標籤（「臨時工作階段」只是畫面上的字，不是人的名字，而備份檔會比這台活得久）。還原時帶進來的名稱是 `null` 的版本就是沒有名字，**不會**顯示成做還原的人（`versionAuthor`；以前 `coalesce` 到做還原的那一列，會把工作階段的版本算到開啟者頭上）。選這個而不是在三個讀取面各加「排除匯入事件」：審查收件匣（`inboxQueue`）、AI 執行紀錄（`history/agentRuns.ts`）、日記頁的 AI 清單（`dayLens`）本來就用 `actor_type = 'ai_agent'` 找 AI 的工作，匯入事件不再是 `ai_agent`，三處自然排除、不必各抄一份條件；只有「顯示作者」的讀取面多讀一個欄位。搬來的 AI 版本因此不會以「擁有者的待審 AI 修改」出現，版本清單仍標示是 AI 寫的。 |
+| 作者 | 事件的作者 id 是擁有者（來源的 id 在這裡沒有意義），**`actor_type` 一律寫 `user`**；來源的作者種類與顯示名稱放 `tx_meta.history_import.actor_type`／`actor_name`，版本清單與再次匯出讀它們（`history/bodyEvents.ts` 的 `versionActorTypeSql`、`noteVersions.ts`），不同名稱不會併成同一次修改。選這個而不是在三個讀取面各加「排除匯入事件」：審查收件匣（`inboxQueue`）、AI 執行紀錄（`history/agentRuns.ts`）、日記頁的 AI 清單（`dayLens`）本來就用 `actor_type = 'ai_agent'` 找 AI 的工作，匯入事件不再是 `ai_agent`，三處自然排除、不必各抄一份條件；只有「顯示作者」的讀取面多讀一個欄位。搬來的 AI 版本因此不會以「擁有者的待審 AI 修改」出現，版本清單仍標示是 AI 寫的。 |
 | 時間與順序 | 原樣（微秒）：時間以**文字**交給資料庫（`::timestamptz`），不經 JS `Date`（只有毫秒，真 Postgres 上會丟微秒）；格式固定 `YYYY-MM-DDTHH:MM:SS.ffffffZ`、必須是真實的日曆時間。同一時間靠檔案順序決定（事件 id 遞增）。**晚於這次還原替該筆記寫的第一次儲存的版本一律拒絕**（時鐘不準或造假的檔案；夾住的話會與還原自己的那次儲存順序糾纏），該篇歷史整篇不寫。還原建立筆記時多出的那一次儲存，內文與最後一版相同，版本清單會併入最後一版。`base_hash` 沿用同一篇已帶進來的最後一版，所以跨批（200 筆一批）也不會斷。 |
 | 驗證 | 每個版本的內文要符合它的 SHA-256；逐行：來源事件 id 必須是字串（數字不收，否則去重的鍵對不上、重放會重複）、內文／標題／名稱不得含 NUL（資料庫存不了，且會在筆記提交後才爆）、一行最多 16 MB（伺服器對筆記內文沒有上限，這是遠超一般筆記的保護；讀到上限就停，不把整行讀進記憶體）。逐篇兩遍：第一遍只驗，第二遍才寫；任何一行壞掉、雜湊不符、行太長或日期在未來，**那一篇的歷史一個版本都不寫**（整篇在一個 savepoint 裡回滾），結果畫面列出標題（筆記本身仍在），其他篇照常。 |
 | 冪等 | 同一個來源版本在同一篇只寫一次；重跑（同一上傳重放、再次匯入）不會重複。 |

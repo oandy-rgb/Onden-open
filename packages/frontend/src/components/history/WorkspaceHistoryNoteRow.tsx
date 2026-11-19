@@ -34,7 +34,7 @@ export default function WorkspaceHistoryNoteRow({ note, onOpen, selected = false
   const selfName = useAccountSession()?.user.name ?? null;
   // Before the account is known, a lone person is taken to be you (as the screen always did).
   const isYou = (a: DayNote["actors"][number]) => a.kind === "human" && (selfName === null || a.name === selfName);
-  const names = note.actors.every(isYou) ? "" : note.actors.map((a) => (a.kind === "session" ? t("A temporary session") : isYou(a) ? t("You") : a.name)).join(" · ");
+  const names = note.actors.every(isYou) ? "" : note.actors.map((a) => (isYou(a) ? t("You") : a.name)).join(" · ");
   const changed = note.change && note.change.added + note.change.changed + note.change.removed > 0;
   // A note made that day with nothing in it yet is new, not "no change".
   const what = note.change && (changed || !note.created)

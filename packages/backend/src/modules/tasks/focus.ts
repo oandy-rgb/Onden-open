@@ -20,8 +20,7 @@ import { z } from "zod";
 import { localDateTimeId, localDayId, sqlLocalDay } from "../../localDay.js";
 import { getWorkspaceId, q, withSavepoint } from "../../db.js";
 import { mutate, requireActor } from "../../spine/mutate.js";
-import { assertAuthority, AuthorityError, personalDataOwnerId, isTemporarySessionActor, requirePerson } from "../../spine/authority.js";
-import { readableAmong } from "../../services/readPolicy.js";
+import { assertAuthority, AuthorityError, requirePerson } from "../../spine/authority.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../../spine/currentActor.js";
 import { appendedBody } from "@onden/markdown";
@@ -221,26 +220,12 @@ export async function editFocus(authenticated: ActorCtx | null, id: string, inpu
 
 /** The records that began on `day` (default today, on the workspace clock),
  *  oldest first, and the one still running whatever day it began. Only the
- *  person's own; a temporary session reads its person's (personalDataOwnerId),
- *  minus the records on a task it cannot read (the task's id and the sentence
- *  written about it are not for a computer that has no access to the task) and
- *  minus the sentence of a record on no task (time and length only). */
+ *  person's own. */
 export async function focusOfDay(authenticated: ActorCtx | null, input: z.infer<typeof focusDaySchema>): Promise<{ day: string; sessions: FocusSession[]; running: FocusSession | null }> {
   const actor = requireActor(authenticated);
-  const owner = personalDataOwnerId(actor);
   const day = input.day ?? localDayId();
-  const found = (await q<FocusRow>(
-    `SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ${sqlLocalDay("started_at")} = $2 ORDER BY started_at, id`, [owner, day])).rows;
-  const runningRow = (await q<FocusRow>(`SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ended_at IS NULL`, [owner])).rows[0];
-  let rows = found;
-  let running: FocusRow | undefined = runningRow;
-  if (isTemporarySessionActor(actor)) {
-    const readable = await readableAmong(actor, await getWorkspaceId(), [...found, ...(runningRow ? [runningRow] : [])].flatMap((row) => row.task_id ? [row.task_id] : []));
-    const keep = (row: FocusRow) => row.task_id === null || readable.has(row.task_id);
-    // A record on no task has a sentence nothing ties to a space it may read: the session gets its time and length only.
-    const timeOnly = (row: FocusRow): FocusRow => (row.task_id === null ? { ...row, note: "" } : row);
-    rows = found.filter(keep).map(timeOnly);
-    running = runningRow && keep(runningRow) ? timeOnly(runningRow) : undefined;
-  }
+  const rows = (await q<FocusRow>(
+    `SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ${sqlLocalDay("started_at")} = $2 ORDER BY started_at, id`, [actor.id, day])).rows;
+  const running = (await q<FocusRow>(`SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ended_at IS NULL`, [actor.id])).rows[0];
   return { day, sessions: rows.map(toSession), running: running ? toSession(running) : null };
 }

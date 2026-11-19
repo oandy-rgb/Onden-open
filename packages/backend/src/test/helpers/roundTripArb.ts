@@ -319,14 +319,13 @@ export const STANDARD_ATTRIBUTE_KEYS: readonly string[] = STANDARD_KEYS;
 
 // ── Seeds ────────────────────────────────────────────────────────────────────
 
-/** fast-check settings for the round-trip properties. The seed is fixed so a
- *  merge run is the same every time; PROPS_SEED (the nightly fresh seed) or
- *  `ROUNDTRIP_SEED=<n>` runs another one, and a failure prints the seed and
- *  the shrunk world to replay it with. A trip builds, exports and imports
+/** fast-check settings for the round-trip properties. The seed is PROPS_SEED
+ *  (a fresh one on every run unless set) or `ROUNDTRIP_SEED=<n>`, and a failure
+ *  prints the seed and the shrunk world to replay it with. A trip builds, exports and imports
  *  whole workspaces, so the run count is small (`maxRuns`, default 8):
  *  `ROUNDTRIP_RUNS=<n>` raises it. */
 export function roundTripRuns(overrides: { maxRuns?: number } = {}): { seed: number; numRuns: number; endOnFailure: boolean } {
-  const seed = Number(process.env.ROUNDTRIP_SEED ?? (process.env.PROPS_SEED ? PROPS_SEED : 20261024));
+  const seed = Number(process.env.ROUNDTRIP_SEED ?? PROPS_SEED);
   const numRuns = Number(process.env.ROUNDTRIP_RUNS ?? overrides.maxRuns ?? 8);
   // A failing trip is slow to shrink (each step builds a workspace): report the
   // first failing world unless asked to shrink.

@@ -242,9 +242,19 @@ Astro node 伺服器 → 以 Node 內建 http 做同源轉發（取代 compose �
   開著的 IndexedDB 交易保留或捨棄時死掉，用同一份本機儲存重新開機（走 `attachConnectivity`，和 App 一樣）；檢查「告知已保存的內文行、標題、建立不消失」、
   「同一冪等鍵只套用一次」、「裝置認為自己在線時，佇列在安靜時間內自己動」、以及原有的收斂與佇列排空。沒有真 Postgres 時用
   `ONDEN_DB_DRIVER=pglite DATABASE_URL=postgres://x@localhost/onden_cloud_test`（測試自己跑 migration）。
-  已知問題以 `it.fails("KNOWN: …")` 留在檔尾，隨機測試預設繞開；`SIM_INCLUDE_KNOWN=1` 不繞、`SIM_STRICT_RETRY=1` 也要求「已生效寫入的重送要回成功」，`SIM_STATS=1` 印出實際打到哪些故障。
+  已知問題以 `it.fails("KNOWN: …")` 留在檔尾，隨機測試預設繞開；`PROPS_INCLUDE_KNOWN=1` 不繞、`SIM_STRICT_RETRY=1` 也要求「已生效寫入的重送要回成功」，`SIM_STATS=1` 印出實際打到哪些故障。
 - **重現**：失敗時 fast-check 印出種子與縮小後的反例；`PROPS_SEED=<種子> PROPS_RUNS=<次數> npm -w packages/<套件> exec vitest -- run <測試檔>`。
-  預設種子固定（20261023），所以平常的 `npm test` 是確定的；夜間跑換新種子。
+  種子預設每次執行、每個測試檔各取一個新的（擁有者 2026-11-18「種子都隨機」；`helpers/propsConfig.ts`），所以每次跑都走沒走過的案例，
+  代價是與本次修改無關的既有問題也會讓這次變紅：照下一條處理，不加重試、不改回固定種子。同步模擬器（`syncSimulator*.integration.test.ts`，`SYNC_SIM_SEED`）
+  與畫面層的隨機同步（`faults/randomSync.spec.ts`，`E2E_RANDOM_SEED`）同樣每次新種子，開頭與失敗訊息都會印出來。
+- **隨機測試的種子都不寫死，已知問題只有一種排除法**（#1881 審查，2026-11-19）：
+  `packages/markdown/src/test/guards/seedRandom.guard.test.ts` 掃所有套件的測試與 e2e 腳本（語法樹）：變數、迴圈計數、`fc.assert`／`check` 的 `seed`、
+  `random(數字)`／`seeded(數字)` 這類產生器都不准寫死；e2e 腳本用 `browser-app/seed.mjs` 的 `runSeed`（開頭印出種子，環境變數可重現）。
+  還沒處理的檔案列在該檔的 `FIXED_SEED_STILL_OPEN`（`ratchet:list`，只准減少；每筆寫為什麼）。固定的種子清單只留作「一定要跑的回歸案例」，要另外再加新種子。
+  已知（還沒修）的缺陷，隨機屬性排除它的觸發情境時，一律用 `helpers/propsConfig.ts` 的 `INCLUDE_KNOWN`（前端叫 `INCLUDE_KNOWN_CASES`；`PROPS_INCLUDE_KNOWN=1` 放回，屬性會以縮小後的反例失敗），
+  且該檔至少有一個 `it.fails` 釘著它（`knownCases.guard.test.ts`；不再有各檔自己的環境變數）。缺陷修好、`it.fails` 變紅時，連排除一起刪。
+- **模擬器要說明自己跑了幾輪**：`syncSimulator*.integration.test.ts` 有 8 分鐘上限；`helpers/syncSim/assertAllRuns.ts` 在上限讓輪數不足時讓測試**失敗**並寫出「跑了幾輪／設定幾輪」
+  （警告留在沒人讀的 CI 記錄裡，等於安靜地少跑）；機器太慢就明確調低 `SYNC_SIM_RUNS`。
 - **找到反例怎麼處理**：小錯同一個 PR 修掉，並把種子與最小反例寫成同檔案的 `describe("regressions …")` 固定案例；會改變行為的，用 `it.fails("FINDING …")`
   寫下最小反例，另在 PR 列出讓擁有者決定。目前行為尚待決定的（全形／半形、零寬字元、排序語系）寫成「current behaviour」案例，改行為時它會變紅。
 - **截斷使用者文字一律走 `@onden/markdown` 的 `graphemes.ts`**（`cutToUnits`、`cutToGraphemes`、`cutToCodePoints`、`cutToBytes`、`ellipsize`）。

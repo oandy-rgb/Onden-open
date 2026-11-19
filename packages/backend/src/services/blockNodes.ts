@@ -185,7 +185,7 @@ export async function syncBlockNodes(change: {
   // reference away — the paragraph is no longer a card — but every person's schedule stays, so the word coming back resumes it. A
   // paragraph that is gone from the text (hidden) keeps both, and a card made another way (migration 195, a tag) is not tied to the text.
   // Creating or removing this reference is part of saving the text: it writes no event of its own.
-  if (review && cardBlockIds.length > 0) await review.markCards({ workspaceId, holders: cardBlockIds.map((id) => ({ kind: "block" as const, id })), actor, via: "word" });
+  if (review && cardBlockIds.length > 0) await review.markCards({ workspaceId, holders: cardBlockIds.map((id) => ({ kind: "block" as const, id })), actorId: actor.id, via: "word" });
   if (review && wordlessBlockIds.length > 0) await review.unmarkCardsWord({ holders: wordlessBlockIds.map((id) => ({ kind: "block" as const, id })) });
 }
 

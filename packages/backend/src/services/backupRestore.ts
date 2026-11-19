@@ -859,7 +859,7 @@ async function beginRestore(
       if (mode !== "workspace" && reader.extras) {
         // An ordinary restore brings back the functions of the tags it made; a move writes every one with the rest of the extras.
         const made = new Set(definitions.filter((d) => d.made).map((d) => d.backupId));
-        report.skipped.functions += (await importFunctionRefs(workspaceId, actor, reader.extras.functionRefs, ids, new Map(), made)).left_out;
+        report.skipped.functions += (await importFunctionRefs(workspaceId, actor.id, reader.extras.functionRefs, ids, new Map(), made)).left_out;
       }
       return {
         authenticated, workspaceId, reader, items, itemIds: new Set(items.map((i) => i.id)), spaceId, eventId, plan, report,
@@ -1141,7 +1141,7 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
   if (moved) {
     await batch(run, async (actor) => {
       const empty: ExtrasImport = { review: 0, focus: 0, rss: 0, prefs: 0, moduleSettings: 0, modules: false, site: false, functionsLeftOut: 0 };
-      const { functionsLeftOut, ...carried } = run.reader.extras ? await importExtras(run.workspaceId, actor, run.reader.extras, run.ids, moved.spaces.map, run.owner) : empty;
+      const { functionsLeftOut, ...carried } = run.reader.extras ? await importExtras(run.workspaceId, actor.id, run.reader.extras, run.ids, moved.spaces.map, run.owner) : empty;
       run.report.skipped.functions += functionsLeftOut;
       run.report.moved = {
         spaces_created: moved.spaces.created, need_reinvite: moved.spaces.needReinvite, carried, cleared: moved.cleared,
@@ -1358,7 +1358,7 @@ async function restoreOwnContent(run: RestoreRun, actor: ActorCtx, item: Item, a
   }
   // A note that was a review card itself (the backup says so) or through a tag of an old backup (migration 195) is a card of its own.
   if (!full.hidden && (full.review_card === true || full.tags.some((backupTagId) => plan.cardTags.has(backupTagId)))) {
-    await tryWrite(() => reviewSeam()?.markCards({ workspaceId, holders: [{ kind: "node", id: newId }], actor, via: "restore" }) ?? Promise.resolve());
+    await tryWrite(() => reviewSeam()?.markCards({ workspaceId, holders: [{ kind: "node", id: newId }], actorId: actor.id, via: "restore" }) ?? Promise.resolve());
   }
   await restoreBackedUpAttributes(actor, workspaceId, newId, full.attributes, ids, report);
   report.skipped.attributes += await restoreSystemAttrs(actor, workspaceId, newId, full.attributes,

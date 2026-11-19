@@ -70,7 +70,10 @@ test("desktop: stay over a folded note → it opens; drop inside keeps only that
   await expect(rowOf(page, ids.passing.id)).toHaveAttribute("data-sb-expanded", "true", { timeout: 3000 });
 
   // Then another one: the list is longer now, so measure again, and drop inside its child.
+  // Opening the first one pushed this one down: with notes left over from earlier runs it can sit at the clipped
+  // edge of the list, where the pointer would not be over it. Bring it to the middle before measuring.
   const hostHeader = header(page, ids.host.id);
+  await revealRow(page, rowOf(page, ids.host.id));
   p = await center(hostHeader);
   await page.mouse.move(p.x, p.y, { steps: 6 });
   await expect(rowOf(page, ids.host.id)).toHaveAttribute("data-sb-expanded", "true", { timeout: 3000 });

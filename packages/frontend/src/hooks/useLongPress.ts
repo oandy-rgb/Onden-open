@@ -1,4 +1,4 @@
-import { useMemo, useRef, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, type MouseEvent, type PointerEvent } from "react";
 import { createLongPress } from "../lib/touchHold";
 
 /** A long press (touch or mouse held still) or a right click / Android's long-press contextmenu
@@ -8,6 +8,7 @@ export function useLongPress(onLongPress: () => void) {
   const latest = useRef(onLongPress);
   latest.current = onLongPress;
   const press = useMemo(() => createLongPress(() => latest.current()), []);
+  useEffect(() => press.cancel, [press]); // a press still being timed must not fire into an element that is gone
   return {
     onPointerDown: (event: PointerEvent) => press.down(event),
     onPointerMove: (event: PointerEvent) => press.move(event),

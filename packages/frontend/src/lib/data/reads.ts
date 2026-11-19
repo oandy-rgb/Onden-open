@@ -26,8 +26,7 @@ import { searchNotes } from "./noteSearch";
 import type { AiCredentialTestRequest, AiCredentialTestResult, BlockCitationRow, BlockHome, DayInkChange, FocusSession, InkEdit, NoteParagraph, Page } from "@onden/contract";
 
 export type { NoteSearchOutcome, NoteSearchRow } from "./noteSearch";
-/** `actor_kind`: who wrote it as the server words it ('session': a temporary session, sent with no name; services/authorName.ts). */
-export type NoteVersion = { id: string; title: string; markdown: string; changed_at: string; actor_name: string | null; actor_type: string | null; actor_kind?: "human" | "agent" | "system" | "session" };
+export type NoteVersion = { id: string; title: string; markdown: string; changed_at: string; actor_name: string | null; actor_type: string | null };
 export type InkVersion = { id: string; ink_data: string };
 export type { InkKind } from "@onden/markdown/ink";
 const enc = encodeURIComponent;

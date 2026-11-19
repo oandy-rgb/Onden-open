@@ -2,8 +2,6 @@
 // answers null for a note the actor cannot read — the same as a missing one, so the route's 404 is no existence probe.
 import { pool } from "../db.js";
 import type { ActorCtx } from "../types.js";
-import { shownAuthorKind, shownAuthorName } from "./authorName.js";
-import { actorKindOf } from "./history/index.js";
 import { canReadNode } from "./readPolicy.js";
 import type { ServerNode } from "@onden/contract";
 import { nodeRowColumnsSql, nodeEventMetaJoinSql } from "./nodeRowProjection.js";
@@ -15,9 +13,9 @@ import { readInkValues } from "./inkChunks.js";
 /** Saved versions of one of a note's drawings (newest 50). Older saves stored the value inline, hence the COALESCE. */
 export async function listInkVersionRows(actor: ActorCtx, workspaceId: string, nodeId: string, kind: InkKind) {
   if (!(await canReadNode(actor, nodeId))) return null;
-  const result = await pool.query<{ id: string; ink_data: string | null; value_ref: string | null; changed_at: string; actor_name: string | null; author_row_type: string | null; actor_type: string }>(
+  const result = await pool.query<{ id: string; ink_data: string | null; value_ref: string | null; changed_at: string; actor_name: string | null; actor_type: string }>(
     `SELECT e.id, e.payload->>'value' AS ink_data, e.payload->>'value_ref' AS value_ref,
-            e.created_at AS changed_at, a.name AS actor_name, a.type AS author_row_type, e.actor_type
+            e.created_at AS changed_at, a.name AS actor_name, e.actor_type
        FROM domain_events e
   LEFT JOIN actors a ON a.id::text = e.actor_id
       WHERE e.target_id = $1 AND e.workspace_id = $2
@@ -29,7 +27,7 @@ export async function listInkVersionRows(actor: ActorCtx, workspaceId: string, n
   );
   // The drawing of each save: a `blobs` row or the note's chunks (inkChunks.ts).
   const texts = await readInkValues(workspaceId, nodeId, result.rows.flatMap((r) => (r.value_ref ? [r.value_ref] : [])));
-  return result.rows.map(({ value_ref, author_row_type, ...row }) => ({ ...row, actor_name: shownAuthorName(author_row_type, row.actor_name), actor_kind: shownAuthorKind(author_row_type, actorKindOf(row.actor_type)), ink_data: (value_ref ? texts.get(value_ref) : undefined) ?? row.ink_data }));
+  return result.rows.map(({ value_ref, ...row }) => ({ ...row, ink_data: (value_ref ? texts.get(value_ref) : undefined) ?? row.ink_data }));
 }
 
 /** Lightweight body-save history of a note (newest 50), derived from the event log. */

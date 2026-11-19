@@ -3,7 +3,6 @@
 // fetched_at) DESC, cursor = "<ts>~<id>" of the last row. IRON LAW: scoped to
 // readable source ids in SQL.
 
-import { personalDataOwnerId } from "../../spine/authority.js";
 import { isUuid } from "@onden/markdown";
 import { pool, q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
@@ -20,7 +19,7 @@ export async function listStagedItems(actor: ActorCtx | null, workspaceId: strin
   if (req.sourceId) sourceIds = sourceIds.filter((id) => id === req.sourceId);
   if (sourceIds.length === 0) return { rows: [], nextCursor: null };
 
-  const params: unknown[] = [workspaceId, sourceIds, actor ? personalDataOwnerId(actor) : ""];
+  const params: unknown[] = [workspaceId, sourceIds, actor?.id ?? ""];
   let cursorClause = "";
   if (req.cursor) {
     const sep = req.cursor.lastIndexOf("~");

@@ -147,26 +147,6 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **這不是通用離線重播器。** 不解讀每個領域的內部格式；屬性、任務、標籤成員的樂觀投影，
   pending 建立在 full bootstrap／membership 的存續，與未入列草稿另批處理。
   這次核對的是套用時仍 pending 的請求；跨遠端讀取的已提交新編輯、跨分頁副本與完整備份置換另驗。
-- **待送文字蓋過的筆記，由本機副本記著，送完再讀一次（2026-11-18）。** 每次保存現在都先是佇列的一列（[送出前先記下](../architecture/note-writes.md#送出前先記下2026-11-18)），
-  所以 bootstrap、delta、單筆讀取常常遇到「這則筆記還有待送的文字」：照第十七批的規則把待送文字蓋在伺服器較新的那一列上，
-  游標同時越過伺服器那一版。送出那筆寫入的常常是**另一個**分頁（或重開之前的那一頁），只靠這一頁記憶體裡的
-  `heldBehindQueue` 不夠：這一頁、它的快照、從快照打開的頁面，都會一直顯示舊字。所以副本自己記
-  （`localDbWorker` 的 `noteHeldText`，`sync_state.held_text`，跟著快照走）：投影蓋過伺服器的筆記加進去，
-  伺服器那一列真的存進來就拿掉；`syncEngine.releaseHeldNotes` 每輪把「已經沒有待送寫入」的那些（`heldNotesNowSent`）
-  併進同一個集合，`hydrateNode` 一次。delta 的 `applied.heldText` 仍餵頁面的集合（與副本的清單重複但無害；
-  那一段在 #1794 改動的範圍內，等它合併後再收成一條）。
-
-- **伺服器副本不蓋掉還沒有回應的欄位（2026-11-19，擁有者回報：剛打的字消失又回來、游標跑到它們前面）。**
-  一份同步回應或 `GET /api/nodes/:id` 可能是在這台的存檔送到伺服器之前讀的；存檔還在路上時，列的 `updated_at`
-  還是上一次存檔的時間，所以時間規則（`lib/rowAge.ts`）分不出來。規則只有一條，放在 `storeOps.serverCopyOver`，
-  同步回應（`applySyncDelta`）與 `hydrateNode` 都走它：比手上舊的副本不收；這台有一筆還沒有回應的編輯的欄位
-  （`optimisticFields`）保留手上的值，列也保留手上的時間；被保留過的筆記等那筆編輯有了回應（`whenAnswered`）
-  再讀一次（`syncEngine.readAgainWhenAnswered`，與排在佇列後面的筆記同一條 `releaseHeldNotes`），所以別人的較新文字仍會到。
-  編輯器的邊界另有一條（`draftActions.applyRemoteNode`）：比這個編輯器已被接受的最新存檔還舊的列，不會進入草稿；
-  輸入法正在組字時，外來文字不進草稿，組字結束（`setEditorComposing`）時再交給同一條路。`MarkdownEditor` 的外來文字同步在組字中不動文件，
-  組字結束（compositionend）時用同一個區段替換套用，不用計時器。測試：`test/typedTextNeverReplacedByOlder.test.tsx`（真編輯器、隨機順序）、
-  `saveTiming.property.test.ts` 的 2026-11-19 案例、`offlineBodyHydrate.test.ts`。
-  限制：時間規則的限制照舊（伺服器時鐘倒退時，較新的他人修改要等下一次修改才會到）。
 
 實測與入口限制見 [待同步文字驗證](../archive/pending-note-text-fixes-2026-09-13.md)。API 完全不可達
 時的 LoginGate 冷啟動仍阻擋編輯器，登錄 GAP-20；不能以快取存在取代登入／換帳號隔離的契約。
@@ -243,8 +223,6 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 
 > 收工（`journalShutdown`、`journalShutdowns`）已於 2026-11-06 退役：後端不再有這兩個 key，migration 178 刪掉既有的列；
 > 舊版頁面仍送的寫入回成功但不存（`actorPrefs.ts` 的 `RETIRED_PREF_KEYS`），讀取當作沒有。
-> 臨時工作階段讀的是開啟它的人的偏好（`readPref` 問 `personalDataOwnerId`），但內含筆記、標籤、訂閱源或文章 id 的 key 對它讀成「沒設過」
-> （`SESSION_MAY_READ_PREF`：每個 key 都要表態，新增 key 時型別會逼人決定）；寫入仍然被拒。
 
 - **四個原本存在本機、現在跟著帳號的偏好**：RSS「顯示未讀數字」（`rssShowCounts`）、每個訂閱的數字開關（`rssFeedCounts`）、
   閱讀位置（`rssReadingPosition`）、上次打開閱讀的時間（`rssLastVisit`）。

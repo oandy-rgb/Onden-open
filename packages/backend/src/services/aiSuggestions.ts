@@ -32,7 +32,7 @@ import { q, withSavepoint } from "../db.js";
 import { db } from "../dbKysely.js";
 import type { ActorCtx } from "../types.js";
 import { mutate } from "../spine/mutate.js";
-import { assertAuthority, carriedActorId } from "../spine/authority.js";
+import { assertAuthority } from "../spine/authority.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { withIdempotencyClaim } from "../spine/idempotency.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
@@ -206,7 +206,7 @@ async function settle(ids: string[], status: SuggestionItemStatus, actor: ActorC
   if (ids.length === 0) return;
   const r = await q(
     `UPDATE ai_edit_suggestion_items SET status = $2, decided_by = $3, decided_at = now(), decided_event_id = $4::bigint
-      WHERE id = ANY($1::uuid[]) AND status = ANY($5::text[])`, [ids, status, carriedActorId(actor), eventId, from]);
+      WHERE id = ANY($1::uuid[]) AND status = ANY($5::text[])`, [ids, status, actor.id, eventId, from]);
   // The rows are locked and the workspace event lock is held: a loser here is a bug, not a race.
   if ((r.rowCount ?? 0) !== ids.length) throw new Error("suggestion items changed while deciding");
 }

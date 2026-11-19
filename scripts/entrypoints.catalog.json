@@ -3093,8 +3093,7 @@
           "file": "packages/backend/src/spine/authority.ts",
           "exports": [
             "assertAuthority",
-            "requirePerson",
-            "carriedActorId"
+            "requirePerson"
           ]
         }
       ],

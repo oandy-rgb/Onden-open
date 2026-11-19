@@ -12,7 +12,6 @@ import { sql } from "kysely";
 import { db } from "../../dbKysely.js";
 import { canReadSource } from "./sources.js";
 import { mutatePersonal } from "../../spine/mutate.js";
-import { personalDataOwnerId, isTemporarySessionActor } from "../../spine/authority.js";
 import type { ActorCtx } from "../../types.js";
 import { listSources } from "./sources.js";
 
@@ -49,19 +48,16 @@ export function cleanKeyword(raw: string): string | null {
 
 const expiry = (days: number) => sql<Date>`now() + make_interval(days => ${Math.min(Math.max(Math.trunc(days), 1), MUTE_MAX_DAYS)})`;
 
-/** The caller's active mutes, newest first. Feed mutes of feeds the caller can no longer read are left out. A temporary session lists its person's
- *  FEED mutes only: the keywords are the person's own words (what they do not want to read) and the list exists for managing them, which a session
- *  cannot do; the keyword mutes still hide articles from its reads (notMutedSql), it just does not get to read them out. */
+/** The caller's active mutes, newest first. Feed mutes of feeds the caller can no longer read are left out. */
 export async function listMutes(actor: ActorCtx, workspaceId: string): Promise<Mute[]> {
   const readable = new Map((await listSources(actor, workspaceId)).map((s) => [s.id, s.title]));
   const rows = await db.selectFrom("rss_mutes")
     .select(["id", "keyword", "subscription_id", "expires_at"])
-    .where("workspace_id", "=", workspaceId).where("actor_id", "=", personalDataOwnerId(actor))
+    .where("workspace_id", "=", workspaceId).where("actor_id", "=", actor.id)
     .where("expires_at", ">", sql<Date>`now()`)
     .orderBy("created_at", "desc").orderBy("id").execute();
   return rows.flatMap((row) => {
     if (row.subscription_id && !readable.has(row.subscription_id)) return [];
-    if (!row.subscription_id && isTemporarySessionActor(actor)) return [];
     return [{
       id: row.id, keyword: row.keyword, source_id: row.subscription_id,
       source_title: row.subscription_id ? readable.get(row.subscription_id)! : null,

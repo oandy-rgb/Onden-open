@@ -3,15 +3,17 @@
 // agent's write_mode, so the member the product refuses is the view-only one). The owner can also remove a
 // member or change a member's permission while that member's device is offline with queued writes.
 // Same layer, replay and safety rules as syncSimulator.integration.test.ts; read its header first.
-//   SYNC_SIM_MEMBERS_RUNS=<n> (default 40), SYNC_SIM_SEED, SYNC_SIM_PATH, SYNC_SIM_REPLAY as there.
+//   SYNC_SIM_MEMBERS_RUNS=<n> (default 100), SYNC_SIM_SEED, SYNC_SIM_PATH, SYNC_SIM_REPLAY as there.
 // Each run gets a workspace of its own (people, space, notes), because a person's readable set would
 // otherwise grow with every earlier run. Devices send who they are in `x-sim-user`, which the mocked
 // session lookup turns into the person's login.
 import { describe, it, expect, vi } from "vitest";
 import fc from "fast-check";
+import { assertAllRuns } from "./helpers/syncSim/assertAllRuns.js";
 import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
+import { PROPS_SEED } from "./helpers/propsConfig.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { setWorkspaceOwner } from "./helpers/setOwner.js";
 import { awaitAllDispatchers } from "../services/dispatcherQueue.js";
@@ -93,8 +95,9 @@ async function play(ops: Op[], checks: Checks = {}, membershipFaults = false): P
 }
 
 describe.skipIf(!isTestDatabase())("members sync simulator (DB)", () => {
-  const seed = Number(process.env.SYNC_SIM_SEED ?? 20261109);
-  const numRuns = Number(process.env.SYNC_SIM_MEMBERS_RUNS ?? process.env.SYNC_SIM_RUNS ?? 40);
+  const seed = Number(process.env.SYNC_SIM_SEED ?? PROPS_SEED);
+  console.log(`[sync-sim members] seed=${seed} (SYNC_SIM_SEED=${seed})`);
+  const numRuns = Number(process.env.SYNC_SIM_MEMBERS_RUNS ?? process.env.SYNC_SIM_RUNS ?? 100);
 
   it(`holds the member rules and converges (seed ${seed}, ${numRuns} runs)`, async () => {
     if (process.env.SYNC_SIM_REPLAY) {
@@ -104,7 +107,8 @@ describe.skipIf(!isTestDatabase())("members sync simulator (DB)", () => {
       return;
     }
     try {
-      await fc.assert(
+      await assertAllRuns(
+        "sync-sim members",
         fc.asyncProperty(fc.array(opArbitraryMembers, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true }); }),
         { seed, numRuns, path: process.env.SYNC_SIM_PATH, endOnFailure: false, interruptAfterTimeLimit: 8 * 60_000 },
       );

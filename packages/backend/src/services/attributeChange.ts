@@ -22,9 +22,7 @@ import { db } from "../dbKysely.js";
 import type { ActorCtx } from "../types.js";
 import { mutate } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
-import { assertAuthority, isPerson, requirePerson, type Authority } from "../spine/authority.js";
-import { PUBLISHED_KEY } from "./systemAttributes.js";
-import { provesNewNote, type NewNoteProof } from "./newNoteProof.js";
+import { assertAuthority, type Authority } from "../spine/authority.js";
 import { incomingWins, PERSON_SOURCE, writableSource, type AttributeSource, type AttributeWriteSource } from "../spine/attributeSource.js";
 import { encodeSnapshot, type AttributeState } from "./eventLog/index.js";
 import { ATTRIBUTE_KEY_RULE, governingField, isSettableAttributeKey, normalize, normalizeText, type AttributeValueType } from "@onden/markdown";
@@ -90,9 +88,6 @@ export type AttributeChange = {
    *  It is written as source 'derived', which the stamp trigger leaves alone, but another node cannot work it out again
    *  (the parent or the schema may have changed), so it is stamped here; the source stays as it is. */
   inheritedAtCreation?: boolean;
-  /** The note is being made in this write (services/newNoteProof.ts): a 「不發布」 it takes from where it is made or copied from is then written
-   *  for anyone (assertActorMayWriteAttributeKey). Only the code that inserted the note holds one. */
-  newNote?: NewNoteProof;
   /** Extra payload fields (which tag default wrote it, …). */
   payload?: Record<string, unknown>;
   triggeredBy?: string;
@@ -160,11 +155,6 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
 
     let row: AttributeState | null = null;
     if (next) {
-      // 「不發布」 left as 「不發布」 by someone who may not choose the mark: there is nothing to choose, so nothing is written (round 7)
-      if (keepsKeptOff(change.actor, key, previous, next.value)) {
-        await assertAuthority(change.actor, change.authority);
-        return { written: false, current: previous };
-      }
       if (change.rule === "absent" && previous) return { written: false, current: previous };
       if (change.rule === "priority" && (previous?.value === next.value || !incomingWins(next.source ?? PERSON_SOURCE, previous?.source))) {
         return { written: false, current: previous };
@@ -195,11 +185,8 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
     } else {
       if (!previous) {
         // Nothing to remove, nothing written: but an explicit removal still answers only to someone who may remove,
-        // so "not there" and "not yours" cannot be told apart by who is asking (the key's rule included: storeAttributeState's).
-        if (change.rule === "always") {
-          await assertAuthority(change.actor, change.authority);
-          assertActorMayWriteAttributeKey(change.actor, nodeId, key, null, {});
-        }
+        // so "not there" and "not yours" cannot be told apart by who is asking.
+        if (change.rule === "always") await assertAuthority(change.actor, change.authority);
         return { written: false, current: null };
       }
     }
@@ -222,8 +209,17 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
         },
       },
       apply: async ({ eventId }) => {
-        await storeAttributeState(change.actor, workspaceId, nodeId, key, row, { newNote: change.newNote });
-        if (!row) {
+        if (row) {
+          await q(
+            `INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, is_inheritable, source, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+             ON CONFLICT (node_id, key) DO UPDATE
+               SET value = EXCLUDED.value, value_type = EXCLUDED.value_type,
+                   is_inheritable = EXCLUDED.is_inheritable, source = EXCLUDED.source, updated_at = now()`,
+            [workspaceId, nodeId, key, row.value, row.value_type, row.is_inheritable, row.source],
+          );
+        } else {
+          await q(`DELETE FROM node_attributes WHERE workspace_id = $1 AND node_id = $2 AND key = $3`, [workspaceId, nodeId, key]);
           // The trigger leaves a derived row's removal alone; if the row was stamped at creation, say it is gone.
           if (previous && !STAMPED_SOURCES.includes(previous.source ?? "")) await tombstoneStampedAttribute(workspaceId, nodeId, key);
         }
@@ -335,47 +331,4 @@ export async function retypeGoverned(
     [ids, retyped.map((r) => r.new_type)],
   );
   return retyped.length;
-}
-
-/** What is on the website is its owner's to decide (docs/agents/agent-delegation.md: an agent has no publish tool; a temporary session runs on a
- *  computer that is not trusted). Choosing the publish mark (setting it, clearing it, turning an existing note 「不發布」) is a person's only,
- *  whichever path hands the attribute over: a route, an agent tool, createNode's `attributes`, an import, or the restore of an attribute event.
- *  What is not a choice is written for anyone (PR #1856 rounds 5–6): a NEW note taking 「不發布」 ('false', and only that) from where it is made or
- *  what it is copied from (its parent's site default, a copy of a note kept off the site, an imported file that says so). "New" is proven, not
- *  said: the write hands over the proof minted where that very note was inserted (services/newNoteProof.ts). Asked by storeAttributeState, the one
- *  writer every arbitrary-key attribute write goes through. */
-function assertActorMayWriteAttributeKey(actor: ActorCtx, nodeId: string, key: string, state: AttributeState | null, how: AttributeWriteHow): void {
-  if (key !== PUBLISHED_KEY) return;
-  if (state?.value === "false" && provesNewNote(how.newNote, nodeId)) return;
-  requirePerson(actor, "publish_mark");
-}
-
-/** A token or a session writing 「不發布」 ('false') where the note already says 「不發布」 (a re-import of a file that says so; any caller that
- *  sends the value again): not a choice of the mark, and not written either (PR #1856 round 7). Not written rather than let through: writing
- *  would turn a 「不發布」 the note took from its parent (source derived) into one written by that token or session, which is a choice. A
- *  person's write is as before (it makes the mark their own: dropParentSiteDefaultMark). */
-function keepsKeptOff(actor: ActorCtx, key: string, previous: AttributeState | null, nextValue: string): boolean {
-  return key === PUBLISHED_KEY && previous?.value === "false" && nextValue === "false" && !isPerson(actor);
-}
-
-/** How a write came: `newNote` = the proof that the note is being made in this write. */
-type AttributeWriteHow = { newNote?: NewNoteProof };
-
-/** Store (or, with null, remove) one node attribute row for any key: the one writer of recordAttributeChange (every set, removal and derived value)
- *  and of an attribute event's restore (services/eventRestore/attributes.ts restoreAttribute). Who may write the key is asked here, so no such path
- *  skips it. Writers of their own fixed keys (a task's, a board's sections, an import's stamps, the site settings) write their rows themselves. */
-export async function storeAttributeState(actor: ActorCtx, workspaceId: string, nodeId: string, key: string, state: AttributeState | null, how: AttributeWriteHow = {}): Promise<void> {
-  assertActorMayWriteAttributeKey(actor, nodeId, key, state, how);
-  if (state === null) {
-    await q(`DELETE FROM node_attributes WHERE workspace_id = $1 AND node_id = $2 AND key = $3`, [workspaceId, nodeId, key]);
-    return;
-  }
-  await q(
-    `INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, is_inheritable, source, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-     ON CONFLICT (node_id, key) DO UPDATE
-       SET value = EXCLUDED.value, value_type = EXCLUDED.value_type,
-           is_inheritable = EXCLUDED.is_inheritable, source = EXCLUDED.source, updated_at = now()`,
-    [workspaceId, nodeId, key, state.value, state.value_type, state.is_inheritable, state.source],
-  );
 }

@@ -4,7 +4,6 @@
 import { withViews } from "./functionRefs.js";
 import { pool, q } from "../db.js";
 import { mutate, requireActor } from "../spine/mutate.js";
-import { assertKeepsReaders } from "../spine/authority.js";
 import type { ActorCtx } from "../types.js";
 
 /** Un-hide node `id` (write_node on it; NODE_PROMOTED, a visibility change)
@@ -14,10 +13,6 @@ export async function promoteNode(authenticated: ActorCtx | null, workspaceId: s
   const exists = await pool.query(`SELECT id FROM content_nodes WHERE workspace_id = $1 AND id = $2`, [workspaceId, id]);
   if (!exists.rows[0]) return null;
   const actor = requireActor(authenticated);
-  // Promote is the explicit "show it" action: never a temporary session's, whatever the note is now (round 7: a promote of a note that is not
-  // hidden still writes NODE_PROMOTED, moves updated_at and runs the visibility hooks, with no inverse). A save that sends hidden: false is judged
-  // by the note as it is (nodeUpdate.ts assertMayShowHidden).
-  assertKeepsReaders(actor);
   return mutate<Record<string, unknown>>({
     actor,
     workspaceId,

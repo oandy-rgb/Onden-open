@@ -117,6 +117,7 @@ const SESSION_AWARE: Readonly<Record<string, string>> = {
   "spine/spaceAccess.ts": "temporarySql: a session reaches a space only while the person who opened it does (narrows)",
   "spine/spaceScope.ts": "tagScopeSql / hiddenTagIds: a session is not told a tag used only in spaces it does not reach, nor the events about one (narrows)",
   "spine/authority.ts": "isPerson / requirePerson refuse a session; writesAsPerson; `own_personal` refuses its personal writes (refuses)",
+  "services/spaces.ts": "a session has no personal space: a new note names its space or lands in the one it may write in (placement only; authority is asserted after)",
   "services/participantSessions.ts": "the service that opens, lists, ends and resolves sessions",
   "app.ts": "a session never reaches the AI tool surface (refuses)",
 };

@@ -13,7 +13,6 @@
 // (members, tokens, modules, settings) is the owner's too (isWorkspaceOwner).
 
 import type { ActorCtx } from "../types.js";
-import { isUuid } from "@onden/markdown";
 import { q } from "../db.js";
 import { isWorkspaceConfigNode, isWorkspaceConfigTag } from "./reservedNodes.js";
 import { canWriteSomewhere, isTagDefinition, spaceCanRead, spaceCanWrite, spaceWritable } from "./spaceScope.js";
@@ -98,8 +97,6 @@ export type Authority =
   // actor, whose declaration (event kinds, targets, module) mutate() checks per
   // event. The only authority a system actor holds besides `cascade`.
   | { kind: "system" }
-  // A write that cannot be undone (assertUndoableBy): refused to a temporary session; anyone else needs `of`.
-  | { kind: "irreversible"; of: Authority }
   | { kind: "open"; why: string };
 
 /** Is `actor` the workspace owner (workspaces.owner_actor_id)? The owner is the
@@ -126,86 +123,14 @@ export async function isWorkspaceOwner(actor: ActorCtx): Promise<boolean> {
  *  a computer that is not theirs, and what needs the person themselves (backups, the whole export, opening sessions, starting an AI,
  *  proving who they are again) is not for it. */
 export function isPerson(actor: ActorCtx): boolean {
-  return !actor.tokenScope && !isTemporarySessionActor(actor);
+  return !actor.tokenScope && actor.type !== "session";
 }
 
 /** The write is a person's: a human acting for themselves, or their temporary session (their own typing on another computer, so it resolves a conflict
  *  in a space it may write in). A system job, an AI agent and any delegated token are not: only a person's write resolves a conflict (migration 206).
  *  What an AI proposed and a person accepted is the person's write. */
 export function writesAsPerson(actor: ActorCtx): boolean {
-  return (actor.type === "human" && !actor.tokenScope) || isTemporarySessionActor(actor);
-}
-
-/** Whose personal rows (preferences, review settings and progress, focus records, RSS seen and mutes, external calendars) does `actor` READ?
- *  Their own; a temporary session's are the ones of the person who opened it ("reads yours, never writes back": the person is on a computer that is
- *  not theirs and wants their own settings and progress there). The one answer for every personal read; writes never use it: they run in
- *  mutatePersonal, which refuses a session (`own_personal`) and keys the row by the writer's own id. `openedBy` is re-read from
- *  participant_sessions at every request (spine/currentActor.ts), never taken from the client.
- *  What a session may SEE of those rows is narrower than what the person sees: each read point hides what a session has no use for
- *  (docs/architecture/proposals/sessions-reads-own-2026-11-17.md). */
-export function personalDataOwnerId(actor: ActorCtx): string {
-  if (!isTemporarySessionActor(actor)) return actor.id;
-  if (!actor.sessionScope) throw new AuthorityError("session", "a temporary session without its scope reads nothing"); // fail closed: resolveCurrentActor always sets it
-  return actor.sessionScope.openedBy;
-}
-
-/** The id a CARRIED "who did this" column records for a write by `actor` (function_refs.created_by, ai_edit_suggestion_items.decided_by,
- *  rss_subscriptions.created_by_actor_id: columns of rows that travel to the person's other nodes, spine/snapshotTables.json): the writer's id when it
- *  is a person or an AI, whose `actors` rows travel too; null for a temporary session, whose id must not leave this node (its row never does:
- *  `neverLeaves`), and for an operator with no uuid (the System account, a console), as before. Never the person who opened the session: that would
- *  credit them with what the session did. Who wrote it stays where it is local: the event (domain_events.actor_id) and the stamp's author.
- *  The function that writes such a column calls this itself; carriedActorColumns.integration.test.ts lists every such column of every carried table. */
-export function carriedActorId(actor: ActorCtx): string | null {
-  return isTemporarySessionActor(actor) || !isUuid(actor.id) ? null : actor.id;
-}
-
-/** The device a write by `actor` records (domain_events.device_id, a stamp's `device`, a block anchor event's `device`): the one the client
- *  says it is (X-Onden-Device-Id, an editor save's `body_change.device`) for a person or an AI; null for a temporary session. A session runs on a
- *  computer that is not trusted: what it calls its device is whatever it chose (another node's id, its browser's install id), and a stamp's device
- *  travels with the stamp to the person's other nodes. Null, as for background work, rather than a value this server makes up for the session:
- *  anything derived from the session would put something of it in what leaves this node. */
-export function recordedDeviceId(actor: ActorCtx | null | undefined, supplied: string | null | undefined): string | null {
-  return actor && isTemporarySessionActor(actor) ? null : supplied ?? null;
-}
-
-/** A temporary session never does what cannot be undone. It runs on a computer that is not trusted: what it changes, or throws in the trash, can be
- *  brought back (restoreEvent, the trash); a purge, the emptying of a trash, or the deletion of something no restore brings back (the event types
- *  restoreContract.ts restoreBlockedReason calls "irreversible" or "unsupported": a saved view, a link, a pointer; a cleared AI conversation) cannot.
- *  The class, each member and why: docs/architecture/proposals/sessions-reads-own-2026-11-17.md §2d. An operation in the class declares it: its authority
- *  is `{ kind: "irreversible", of }` (mutate, assertAuthority), or, where nothing else is asserted first, it calls this at its entry. */
-export function assertUndoableBy(actor: ActorCtx): void {
-  if (isTemporarySessionActor(actor)) throw new AuthorityError("session_irreversible", IRREVERSIBLE_REFUSAL);
-}
-/** A temporary session never makes this server fetch from the network (a feed, a page, an article): the computer it runs on is not trusted,
- *  and what it asks for would be fetched from the server's own address, its answer written into notes that travel. Called by every request that
- *  reaches out, BEFORE the fetch (each one also checks its ordinary authority before fetching); the list and the test are
- *  sessionNoOutboundFetch.integration.test.ts. Background work (the outbox) fetches only what a person set up. */
-export function assertMayReachOut(actor: ActorCtx): void {
-  if (isTemporarySessionActor(actor)) throw new AuthorityError("session", "a temporary session does not make this server fetch from the network");
-}
-
-/** A temporary session never changes who can read a note or whether it can reach the website: moving an existing note to another space (it then
- *  has the target space's readers, and a published space puts it on the site at the next publish; leaving one takes the page down at once), or
- *  turning a hidden note into an ordinary one (it becomes a page of a published space at the next publish). Those are a person's (PR #1856 review
- *  round 5: the owner's decision). Moving and ordering inside one space stay a write. Called by the one authorization of a space move
- *  (services/spaces.ts sourceAuthority: the move route, the restore of NODE_MOVED_SPACE, a task's placement into a note of another space) and
- *  by the promote of a hidden note. */
-export function assertKeepsReaders(actor: ActorCtx): void {
-  if (isTemporarySessionActor(actor)) throw new AuthorityError("session", "a temporary session does not change who can read a note or what reaches the website");
-}
-
-/** The refusal's text: the app's routes answer an authority refusal with its message (httpError.ts), as `own_personal`'s; the AI tool surface with the reason. */
-const IRREVERSIBLE_REFUSAL = "a temporary session cannot do what cannot be undone";
-
-/** Is `actor` a temporary session? THE one question: the refusal to write a person's data, the choice of whose rows to read and what a session is not given all ask it, so they
- *  cannot disagree. A session is a type 'session' actor with a `sessionScope`; `ActorCtx` is built with one only in spine/currentActor.ts (readGuard.test.ts). */
-export function isTemporarySessionActor(actor: ActorCtx): boolean {
-  return isSessionActorType(actor.type);
-}
-
-/** The same question of an `actors.type` value read from a row (an author joined in a history read, the actor removeActor is asked to remove). */
-export function isSessionActorType(type: string | null | undefined): boolean {
-  return type === "session";
+  return (actor.type === "human" && !actor.tokenScope) || actor.type === "session";
 }
 
 /** Operations only a person may do (backups, creating spaces, ...): a delegated
@@ -242,7 +167,6 @@ async function assertOwnerForConfig(actor: ActorCtx, what: string, op: Operation
 
 /** The owner-only part of assertAuthority, kept for a replayed op: the config node and the config tag. */
 async function assertReplicatedConfig(actor: ActorCtx, a: Authority): Promise<void> {
-  if (a.kind === "irreversible") return assertReplicatedConfig(actor, a.of); // a replicated author is never a temporary session
   if ((a.kind === "node" || a.kind === "retained_node") && a.op !== "read" && await isWorkspaceConfigNode(a.nodeId)) {
     await assertOwnerForConfig(actor, `node ${a.nodeId}`, a.op);
   }
@@ -270,12 +194,8 @@ export async function assertAuthority(actor: ActorCtx, a: Authority): Promise<vo
       return;
 
     case "own_personal":
-      if (isTemporarySessionActor(actor)) throw new AuthorityError("session", "a temporary session never writes its person's personal data");
+      if (actor.type === "session") throw new AuthorityError("session", "a temporary session never writes its person's personal data");
       return;
-
-    case "irreversible":
-      assertUndoableBy(actor);
-      return assertAuthority(actor, a.of);
 
     case "cascade":
       // Already gated at the cascade root (see the Authority union note). The

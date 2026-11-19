@@ -28,11 +28,9 @@
 //     carries the target; duplicating a note never fails because of a deleted
 //     tag; removing a function keeps the field values
 //
-// Known review items #4 and #5 (docs/archive/research/review-2026-10-24/data-integrity.md)
-// are fixed by PR fix/a2-structure-import-backup. Until that merges, each is pinned
-// below as a named `it.fails`, and the random property leaves those situations
-// out. PROPS_TAGS_KNOWN=include puts them back (the property then fails with the
-// shrunk sequence). #20 does not reproduce through the routes (see its test).
+// Review items #4 and #5 (docs/archive/research/review-2026-10-24/data-integrity.md) are fixed
+// (PR fix/a2-structure-import-backup): the random property takes every situation, and each
+// stays pinned below as a plain `it`. #20 does not reproduce through the routes (see its test).
 //
 // Replay: PROPS_SEED=<seed> PROPS_RUNS=<n> npx vitest run src/test/properties/tags.property.integration.test.ts
 //
@@ -61,9 +59,6 @@ import { PROPS_RUNS, PROPS_SEED, checkAsync } from "../helpers/propsConfig.js";
 const database = process.env.DATABASE_URL ?? "";
 const isTestDb = /onden_test(\?|$)/.test(database) || /_test\b/.test(database);
 
-/** The two situations of the review (#4, #5) stay out of the random
- *  property until their fix lands; "include" puts them back. */
-const INCLUDE_KNOWN = process.env.PROPS_TAGS_KNOWN === "include";
 const FIX_PR = "fix/a2-structure-import-backup";
 /** Default runs: small, so the file stays well under a minute. An explicit PROPS_RUNS wins. */
 const DEFAULT_RUNS = 30;
@@ -154,8 +149,7 @@ class Model {
   groupSeq = 0;
   counter = 0;
 
-  /** true: the review items (#4, #5) are held to their fixed behaviour (the pinned cases, PROPS_TAGS_KNOWN=include). */
-  constructor(world: World, readonly fixed: boolean) {
+  constructor(world: World) {
     for (const [module, id] of Object.entries(world.modules)) {
       this.tags.set(id, { id, name: "", parent: null, module, extends: [], deleted: false, group: 0, groupRoot: false });
     }
@@ -223,10 +217,6 @@ class Model {
     return found;
   }
   hasDeletedDirectTag(note: MNote): boolean { return [...note.tags].some((id) => this.tags.get(id)?.deleted); }
-  /** A merge of `source` would skip a member that sits in the trash (review #4). */
-  hasTrashedMember(source: string): boolean {
-    return [...this.notes.values()].some((n) => n.deleted && n.tags.has(source));
-  }
 }
 
 // ── Reading the real state ──────────────────────────────────────────────────
@@ -464,7 +454,7 @@ class MergeTags implements Cmd {
     const source = at(tags, this.sourcePick)!;
     const target = this.target(m);
     if (source.id === target.id) return false;
-    return m.fixed || !m.hasTrashedMember(source.id);
+    return true;
   };
   /** One pick in five may name a module tag: the preview and the merge refuse it, and the picker leaves it out. */
   private target = (m: Model) => at(this.targetPick % 5 === 0 ? m.liveTags() : m.userTags(), this.targetPick)!;
@@ -484,15 +474,12 @@ class MergeTags implements Cmd {
     const res = await attempt(real, label, () => real.call("POST", `/api/tags/${source.id}/merge`, { target_id: target.id }),
       reasons.length ? { refusedWith: reasons } : { ok: true });
     if (reasons.length) return;
-    const movers = [...m.notes.values()].filter((n) => !n.deleted && n.tags.has(source.id));
-    const gained = movers.filter((n) => !n.tags.has(target.id)).length;
-    if (!m.fixed) expect(res.body.members_gained_target, `${label}: members that gained the target`).toBe(gained);
     // A member in the trash is a member too: it gets the target as well, so it has it when restored (review #4).
     for (const n of m.notes.values()) {
-      if (n.tags.has(source.id) && (m.fixed || !n.deleted)) n.tags.add(target.id);
+      if (n.tags.has(source.id)) n.tags.add(target.id);
     }
     for (const p of m.promises) if (p.tagId === source.id) p.tagId = target.id;
-    for (const n of m.notes.values()) if (n.tags.has(target.id) && n.tags.has(source.id) && (m.fixed || !n.deleted)) m.promises.push({ noteId: n.id, tagId: target.id });
+    for (const n of m.notes.values()) if (n.tags.has(target.id) && n.tags.has(source.id)) m.promises.push({ noteId: n.id, tagId: target.id });
     for (const c of children) c.parent = target.id;
     source.deleted = true;
     source.group = ++m.groupSeq;
@@ -597,7 +584,7 @@ class DuplicateNote implements Cmd {
   constructor(readonly notePick: number) {}
   check = (m: Model) => {
     const live = m.liveNotes();
-    return live.length > 0 && (m.fixed || !m.hasDeletedDirectTag(at(live, this.notePick)!));
+    return live.length > 0;
   };
   async run(m: Model, real: Real) {
     const note = at(m.liveNotes(), this.notePick)!;
@@ -806,7 +793,7 @@ beforeAll(async () => {
 /** Run a fixed command sequence in a fresh world, verifying after each. */
 async function replay(commands: Cmd[]): Promise<void> {
   const real = await newWorld();
-  const model = new Model(real, true);
+  const model = new Model(real);
   await verify(model, real, "setup");
   for (const command of commands) {
     expect(command.check(model), `precondition of ${command}`).toBe(true);
@@ -816,14 +803,14 @@ async function replay(commands: Cmd[]): Promise<void> {
 }
 
 describe.skipIf(!isTestDb)("tags and functions: model-based random test", () => {
-  it(`random command sequences keep every invariant (known review items ${INCLUDE_KNOWN ? "included" : "left out"})`, async () => {
+  it(`random command sequences keep every invariant `, async () => {
     const runs = process.env.PROPS_RUNS ? PROPS_RUNS : DEFAULT_RUNS;
     writeSync(2, `[tags.property] PROPS_SEED=${PROPS_SEED} PROPS_RUNS=${runs} (replay with both set)\n`);
     await checkAsync(fc.asyncProperty(
       fc.commands(commandArbs, { maxCommands: MAX_COMMANDS, size: "large" }),
       async (commands) => {
         const real = await newWorld();
-        const model = new Model(real, INCLUDE_KNOWN);
+        const model = new Model(real);
         await verify(model, real, "setup");
         let step = 0;
         const verifying = [...commands].map((command) => ({
@@ -837,8 +824,7 @@ describe.skipIf(!isTestDb)("tags and functions: model-based random test", () => 
     writeSync(2, `[tags.property] reach: ${[...reach].sort().map(([k, n]) => `${k}=${n}`).join(", ")}\n`);
   }, 600_000);
 
-  // Review items #4 and #5 are fixed by PR fix/a2-structure-import-backup. `it.fails` goes
-  // red when the fix lands: then delete the `.fails` and the PROPS_TAGS_KNOWN switch.
+  // Review items #4 and #5 are fixed (PR fix/a2-structure-import-backup); the cases stay as plain `it`.
   it(`#4 (${FIX_PR}): a merge also gives the target to a member in the trash, so it has it when restored`, async () => {
     // tag a note with #a, delete the note, merge #a into #b, restore the note
     await replay([

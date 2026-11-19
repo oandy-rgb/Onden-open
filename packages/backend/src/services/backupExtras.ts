@@ -25,8 +25,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "../dbKysely.js";
-import { carriedActorId } from "../spine/authority.js";
-import type { ActorCtx } from "../types.js";
 import { isPrefKey, parsePref } from "./actorPrefs.js";
 
 export const EXTRAS_VERSION = 1;
@@ -121,7 +119,7 @@ export type ExtrasImport = { review: number; focus: number; rss: number; prefs: 
  *  its new id, or, when it was not restored, becomes the holder's own. A row whose holder did not come across is counted in
  *  `left_out`, so the restore can say so instead of dropping it. */
 export async function importFunctionRefs(
-  workspaceId: string, by: ActorCtx, refs: BackupExtras["functionRefs"], ids: Map<string, string>, spaces: Map<string, string>, only?: ReadonlySet<string>,
+  workspaceId: string, actorId: string, refs: BackupExtras["functionRefs"], ids: Map<string, string>, spaces: Map<string, string>, only?: ReadonlySet<string>,
 ): Promise<{ written: number; left_out: number }> {
   const result = { written: 0, left_out: 0 };
   for (const r of refs) {
@@ -136,22 +134,20 @@ export async function importFunctionRefs(
     // A reference the restore already made for this holder (a tag's own module function) is kept as it is.
     await db.insertInto("function_refs").values({
       workspace_id: workspaceId, function_id: r.function_id, holder_node_id: holderNode, holder_space_id: holderSpace,
-      config: JSON.stringify(config), created_by: carriedActorId(by),
+      config: JSON.stringify(config), created_by: actorId,
     }).onConflict((c) => c.doNothing()).execute();
     result.written++;
   }
   return result;
 }
 
-/** Write `extras` into the workspace of `by` (a move into a new workspace,
+/** Write `extras` into the workspace of `actorId` (a move into a new workspace,
  *  inside the restore's transaction). `ids` maps a backup note id to its id here,
  *  `spaces` a backup space id to the new one; a row naming one that was not
  *  restored is skipped. */
 export async function importExtras(
-  workspaceId: string, by: ActorCtx, extras: BackupExtras, ids: Map<string, string>, spaces: Map<string, string>, owner: boolean,
+  workspaceId: string, actorId: string, extras: BackupExtras, ids: Map<string, string>, spaces: Map<string, string>, owner: boolean,
 ): Promise<ExtrasImport> {
-  // `actorId` keys the restorer's own personal rows (whose they are); a carried "who did this" column records carriedActorId(by) (spine/authority.ts).
-  const actorId = by.id;
   const done: ExtrasImport = { review: 0, focus: 0, rss: 0, prefs: 0, moduleSettings: 0, modules: false, site: false, functionsLeftOut: 0 };
   const mapped = (id: string | null) => (id ? ids.get(id) ?? null : null);
 
@@ -173,7 +169,7 @@ export async function importExtras(
     // The subscription keeps its id (a note's `_rss_source` names it) unless that id is taken by another workspace's.
     const taken = await db.selectFrom("rss_subscriptions").select("id").where("id", "=", r.id).executeTakeFirst();
     await db.insertInto("rss_subscriptions").values({
-      id: taken ? randomUUID() : r.id, workspace_id: workspaceId, space_id: spaceId, title: r.title, url: r.url, created_by_actor_id: carriedActorId(by),
+      id: taken ? randomUUID() : r.id, workspace_id: workspaceId, space_id: spaceId, title: r.title, url: r.url, created_by_actor_id: actorId,
       fetch_interval_minutes: r.fetch_interval_minutes, embed: r.embed, always_fulltext: r.always_fulltext, auto_dismiss_days: r.auto_dismiss_days,
       auto_tag_id: mapped(r.auto_tag_id), default_tag_ids: r.default_tag_ids ? r.default_tag_ids.map((t) => mapped(t)).filter((t): t is string => !!t) : null,
       default_parent_id: mapped(r.default_parent_id),
@@ -197,7 +193,7 @@ export async function importExtras(
       .onConflict((c) => c.columns(["actor_id", "tag_id"]).doUpdateSet({ settings, updated_at: new Date().toISOString() })).execute();
     done.moduleSettings++;
   }
-  done.functionsLeftOut = (await importFunctionRefs(workspaceId, by, extras.functionRefs, ids, spaces)).left_out;
+  done.functionsLeftOut = (await importFunctionRefs(workspaceId, actorId, extras.functionRefs, ids, spaces)).left_out;
   if (owner && extras.modules) {
     await db.updateTable("workspaces").set({
       modules: extras.modules.modules ? JSON.stringify(extras.modules.modules) : null,

@@ -3,7 +3,7 @@
 // rendering, and the design is saved as the workspace chrome (v: 2).
 // Written for the P1b backend (GET /api/site design, /api/publish/include).
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
-import { defaultSpaceId, ready, H } from "./helpers";
+import { createPublishingSpace, keepOffSite, ready, H } from "./helpers";
 
 
 test.use({ viewport: { width: 1400, height: 900 } });
@@ -12,11 +12,13 @@ const stamp = Date.now();
 let counter = 0;
 const unique = (name: string) => `${name} ${stamp}-${++counter}`;
 
+// Notes live in a space that publishes (the studio lists what the site would show, and a space that does not publish shows
+// nothing: owner 2026-11-10, 211dda77). `published: false` is the note's own 「不發布」.
+let publishingSpace: Promise<string> | undefined;
 async function note(request: APIRequestContext, title: string, body: string, published: boolean): Promise<{ id: string; slug: string }> {
-  // In 共用: a new note lands in the creator's 只有我, whose notes the studio does not list (it never publishes).
-  const space_id = await defaultSpaceId(request);
+  const space_id = await (publishingSpace ??= createPublishingSpace(request));
   const created = (await (await request.post("/api/nodes", { ...H, data: { title, markdown: `# ${title}\n\n${body}`, space_id } })).json()) as { id: string; slug: string };
-  if (published) await request.put(`/api/nodes/${created.id}/attributes/_published`, { ...H, data: { value: "true", value_type: "bool" } });
+  if (!published) await keepOffSite(request, created.id);
   return created;
 }
 async function tagWith(request: APIRequestContext, name: string, noteIds: string[]): Promise<string> {

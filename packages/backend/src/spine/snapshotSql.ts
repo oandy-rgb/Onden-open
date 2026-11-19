@@ -7,7 +7,7 @@ import { inTransaction } from "../db.js";
 import { db } from "../dbKysely.js";
 import { sha256Hex } from "../utils.js";
 import type { Scope, SnapshotSpec } from "./snapshotTables.js";
-import { SNAPSHOT_SPECS, stampMayLeaveSql } from "./snapshotTables.js";
+import { SNAPSHOT_SPECS } from "./snapshotTables.js";
 
 export type ScopeFactory = (params: unknown[]) => Scope;
 
@@ -222,7 +222,7 @@ export async function readStampsOf(workspaceId: string, pairs: { label: string; 
   if (pairs.length === 0) return [];
   const r = await snapshotRows<WireStamp>(
     `SELECT ${STAMP_COLUMNS} FROM sync_stamps s JOIN unnest($2::text[], $3::text[]) AS w(label, row_key) ON s.table_name = w.label AND s.row_key = w.row_key
-      WHERE s.workspace_id = $1 AND ${stampMayLeaveSql()} ORDER BY s.table_name COLLATE "C", s.row_key COLLATE "C", s.field COLLATE "C"`,
+      WHERE s.workspace_id = $1 ORDER BY s.table_name COLLATE "C", s.row_key COLLATE "C", s.field COLLATE "C"`,
     [workspaceId, pairs.map((p) => p.label), pairs.map((p) => p.rowKey)]);
   return r.rows;
 }
@@ -241,7 +241,7 @@ export async function readTombstoneChunk(
   params.push(limit);
   const r = await snapshotRows<WireStamp>(
     `SELECT ${STAMP_COLUMNS} FROM sync_stamps s
-      WHERE s.workspace_id = $1 AND s.table_name = $2 AND s.deleted AND ${stampMayLeaveSql()}${cursor}
+      WHERE s.workspace_id = $1 AND s.table_name = $2 AND s.deleted${cursor}
         AND NOT EXISTS (SELECT 1 FROM ${quote(spec.table)} t WHERE ${def.when ? `(${def.when}) AND ` : ""}${def.rowKey} = s.row_key)
       ORDER BY s.row_key COLLATE "C", s.field COLLATE "C" LIMIT $${params.length}`, params);
   return r.rows;
@@ -310,7 +310,7 @@ export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeF
                                                       h.saw::text, COALESCE(h.meta::text, '~'), COALESCE(h.value, '~')), chr(29) ORDER BY h.origin COLLATE "C", h.seq, h.content_hash)
                                 FROM sync_stamp_heads h WHERE h.workspace_id = s.workspace_id AND h.table_name = s.table_name AND h.row_key = s.row_key AND h.field = s.field), '~')), 'UTF8')), 'hex') AS h
              FROM sync_stamps s
-            WHERE s.workspace_id = $1 AND s.table_name = ${label} AND ${stampMayLeaveSql()}
+            WHERE s.workspace_id = $1 AND s.table_name = ${label}
               AND (EXISTS (SELECT 1 FROM inscope i WHERE i.k = s.row_key)
                    OR (s.deleted AND NOT EXISTS (SELECT 1 FROM every e WHERE e.k = s.row_key)))) r`, sp)).rows[0]!;
       stamps += r.n;

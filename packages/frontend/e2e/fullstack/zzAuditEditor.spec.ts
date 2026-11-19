@@ -3,6 +3,7 @@
 // (CDP IME composition); not a substitute for real IME / device input.
 import { test, expect, type Page } from "@playwright/test";
 import { ready, H } from "./helpers";
+import { createNoteFromFile } from "./createSheetHelpers";
 
 const server = async (page: Page, id: string) =>
   (await (await page.request.get(`/api/nodes/${id}`, H)).json()).markdown as string;
@@ -81,10 +82,7 @@ test("PDF-01: import a PDF from the sidebar, it renders and survives reload", as
   pdf += `trailer<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
 
   await ready(page, "/?view=notes");
-  await page.getByRole("button", { name: "Create new node" }).click();
-  const chooser = page.waitForEvent("filechooser", { timeout: 10_000 });
-  await page.locator(".sidebar-sort-menu").getByText(/PDF/i).first().click();
-  await (await chooser).setFiles({ name: `audit-${Date.now()}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf) });
+  await createNoteFromFile(page, { name: `audit-${Date.now()}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf) });
   const pages = page.locator(".pdf-page, .pdf-node-view canvas, [data-page-key]");
   await expect(pages.first()).toBeVisible({ timeout: 30_000 });
   console.log(`AUDIT PDF-01 rendered page elements=${await pages.count()}`);
@@ -115,10 +113,7 @@ test("PDF-02: text selection → card and Alt+drag area capture keep page + sour
 
   await ready(page, "/?view=notes");
   const before = new Set(((await (await page.request.get("/api/bootstrap")).json()).nodes as Array<{ id: string }>).map((n) => n.id));
-  await page.getByRole("button", { name: "Create new node" }).click();
-  const chooser = page.waitForEvent("filechooser");
-  await page.locator(".sidebar-sort-menu").getByText(/PDF/i).first().click();
-  await (await chooser).setFiles({ name: `cite-${Date.now()}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf) });
+  await createNoteFromFile(page, { name: `cite-${Date.now()}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf) });
   const span = page.locator(".pdf-text-layer span", { hasText: "Mitochondria" }).first();
   await expect(span).toBeVisible({ timeout: 30_000 });
   const pdfId = new URL(page.url()).searchParams.get("node");

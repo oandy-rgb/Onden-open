@@ -59,7 +59,7 @@ import type { ActorCtx } from "../../types.js";
 import { persistActor } from "../helpers/persistActor.js";
 import { makeSpace } from "../helpers/spaceFixtures.js";
 import { registerShippedModules } from "../helpers/registerShippedModules.js";
-import { PROPS_RUNS, checkAsync } from "../helpers/propsConfig.js";
+import { PROPS_RUNS, PROPS_SEED, checkAsync } from "../helpers/propsConfig.js";
 import { seedQ } from "../helpers/seedQ.js";
 
 const database = process.env.DATABASE_URL ?? "";
@@ -638,7 +638,7 @@ describe.skipIf(!isTestDb)("inbox and RSS reader: model-based random test", () =
 
   it(`random command sequences keep every invariant `, async () => {
     const runs = process.env.PROPS_RUNS ? PROPS_RUNS : DEFAULT_RUNS;
-    writeSync(2, `[inboxRss.property] PROPS_SEED=${process.env.PROPS_SEED ?? "(default)"} PROPS_RUNS=${runs} (replay with both set)\n`);
+    writeSync(2, `[inboxRss.property] PROPS_SEED=${PROPS_SEED} PROPS_RUNS=${runs} (replay with both set)\n`);
     await checkAsync(fc.asyncProperty(
       fc.commands(commandArbs, { maxCommands: MAX_COMMANDS, size: "large" }),
       async (commands) => { await runCommands(commands as Iterable<Cmd>); },

@@ -70,7 +70,7 @@ describe("blockHistory", () => {
     const now = "Same\n\nNew wording of it\n\nTail";
     const h = blockHistory(feed(a, b, c), { markdown: now, offset: at(now, "New") });
     expect(texts(h)).toEqual(["Old wording of it", "New wording of it"]);
-    expect(h[1]).toMatchObject({ actorName: "Bot", actorKind: "agent", versionId: b.id, current: true });
+    expect(h[1]).toMatchObject({ actorName: "Bot", actorType: "ai_agent", versionId: b.id, current: true });
   });
 
   it("stops at 建立 for a paragraph added later", () => {

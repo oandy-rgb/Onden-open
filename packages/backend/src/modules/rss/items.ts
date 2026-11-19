@@ -2,7 +2,6 @@
 // routes.ts, depth audit D13): the row shape, the caller's per-person "seen",
 // the live-save pointer, and the read gate for one item.
 
-import { personalDataOwnerId } from "../../spine/authority.js";
 import { q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
 import { readableAmong } from "../../services/readPolicy.js";
@@ -67,7 +66,7 @@ export type GatedItem =
 export async function gateItem(actor: ActorCtx, workspaceId: string, id: string): Promise<GatedItem> {
   const r = await q<StagingRow>(
     `SELECT ${stagingCols("$3")} FROM rss_staging WHERE id = $1 AND workspace_id = $2`,
-    [id, workspaceId, personalDataOwnerId(actor)],
+    [id, workspaceId, actor.id],
   );
   const row = r.rows[0];
   if (!row) return { ok: false, status: 404, error: "item not found" };

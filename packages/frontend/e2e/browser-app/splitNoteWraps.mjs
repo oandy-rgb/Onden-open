@@ -3,6 +3,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, startSite, openApp, waitSaved } from "../layout-audit/env.mjs";
+import { runSeed } from "./seed.mjs";
 
 const shots = process.argv.includes("--shots") ? process.argv[process.argv.indexOf("--shots") + 1] : null;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -41,7 +42,7 @@ export async function measureSide(page, sideSelector, textSelector) {
 }
 
 const SIDES = [["左", ".split-left", ".split-left .obsidian-main.note-document"], ["右", ".split-pane", ".split-pane .split-pane-text"]];
-/** mulberry32: the same sequence every run, so a failure can be replayed. */
+/** mulberry32: the same sequence for the same seed, so a failure can be replayed (SPLIT_SEED). */
 const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const MEASURES = { 窄: "30em", 標準: "41.18em", 寬: "52em", 全寬: "100vw" };
 const TEXT_SCALES = [0.8, 1, 1.15, 1.5];
@@ -87,8 +88,8 @@ const run = async (browser, site, vp, right = `note:${B}:content`) => {
   await page.waitForTimeout(1000);
   await sides("左右對調後的最小");
 
-  // Random widths × 「寬度」 × 「內文大小」: the same pane counts as before, the sequence is fixed.
-  const rnd = seeded(20261116);
+  // Random widths × 「寬度」 × 「內文大小」: the same pane counts as before, the sequence comes from a fresh seed each run.
+  const rnd = seeded(runSeed("splitNoteWraps", "SPLIT_SEED"));
   for (let i = 0; i < 12; i++) {
     const ratio = 0.25 + rnd() * 0.5;
     const measure = Object.keys(MEASURES)[Math.floor(rnd() * 4)];

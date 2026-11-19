@@ -1,6 +1,6 @@
 # 架構總覽（先看這份）
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-01）
 > 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/services/eventLog/bodyMerge.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/writeQueue.ts
 
 結論：Onden 是「筆記樹＋事件紀錄」的離線優先 PWA。**所有寫入都過後端同一道閘門**，所有改動都留事件，
@@ -35,7 +35,7 @@
 
 ## 3. 同步與本機副本
 
-前端把資料存在本機資料庫，寫入先進離線佇列（`writeQueue`；線上的保存也先記成一列再送，頁面當掉也不丟，見[筆記寫入](note-writes.md)），連上線後送出；伺服器回增量與「可讀集合」變化，
+前端把資料存在本機資料庫，寫入先進離線佇列（`writeQueue`），連上線後送出；伺服器回增量與「可讀集合」變化，
 權限改變時以 `membership_epoch` 核對。保存確認只來自「伺服器接受」或「離線佇列已持久化」，兩者在介面上分開顯示。
 
 - 位置：前端 `lib/data/syncEngine.ts`、`lib/data/writeQueue.ts`、`lib/localDbWorker.ts`、`lib/accountStorage.ts`；後端 `routes/sync.ts`、`services/sync/`

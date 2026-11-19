@@ -78,7 +78,7 @@ describe.skipIf(!isTestDb)("personal writes through the write entry", () => {
     const gone = await stamps("external_calendars", id);
     expect(gone.get("*")).toMatchObject({ deleted: true });
     expect(gone.size).toBe(1); // the field stamps go, the tombstone stays
-    expect((await listCalendars(ada)).some((c) => c.id === id)).toBe(false);
+    expect((await listCalendars(ada.id)).some((c) => c.id === id)).toBe(false);
   });
 
   it("an RSS mute: stamped on creation and on being extended, tombstoned when ended early", async () => {
@@ -193,7 +193,7 @@ describe.skipIf(!isTestDb)("personal writes through the write entry", () => {
   it("no response carries a stamp", async () => {
     const id = randomUUID();
     await addCalendar(ws, ada, { id, name: "Shown", color: "#222222", href: "https://calendar.example.com/s.ics", host: "calendar.example.com" });
-    const shown = JSON.stringify([await listCalendars(ada), await listMutes(ada, ws)]);
+    const shown = JSON.stringify([await listCalendars(ada.id), await listMutes(ada, ws)]);
     for (const word of ["hlc", "origin", "row_key", "onden.stamp", "sync_stamps"]) expect(shown).not.toContain(word);
   });
 });

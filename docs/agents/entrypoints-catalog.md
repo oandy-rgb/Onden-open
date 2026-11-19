@@ -1544,7 +1544,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 
 ### 要做一個會寫入並留下事件的領域操作
 
-- 入口：`backend/src/spine/mutate.ts`（`mutate`、`runCascade`、`requireActor`）；`backend/src/spine/authority.ts`（`assertAuthority`、`requirePerson`、`carriedActorId`）　項目 `be-write-spine`
+- 入口：`backend/src/spine/mutate.ts`（`mutate`、`runCascade`、`requireActor`）；`backend/src/spine/authority.ts`（`assertAuthority`、`requirePerson`）　項目 `be-write-spine`
 - 寫法：`import { mutate } from "./spine/mutate.js";`
 - 取代：路由自己開交易、自己寫事件、自己判斷權限
 - 守門：`guard:dup-b2-responses`、`guard:dupPatterns`

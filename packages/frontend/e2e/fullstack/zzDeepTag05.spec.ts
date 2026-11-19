@@ -2,8 +2,8 @@
 // media pickers: duplicates, deleted/unreadable references, stale select
 // options (removed elsewhere), keeping the selection after 503/422, media
 // upload failure, and the phone viewport.
-import { test, expect, type Page } from "@playwright/test";
-import { ready, defaultSpaceId, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
+import { test, expect, type Locator, type Page } from "@playwright/test";
+import { ready, openInfoTags, defaultSpaceId, hideFromOthers, addToDefaultSpace, BASE, H } from "./helpers";
 
 
 test("TAG-05: multi-value, relation, media, stale options, failures", async ({ page, browser }) => {
@@ -50,11 +50,7 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
 
   // B) Deleted reference: trash the target, look at API + UI.
   const panel = page.locator(".attr-panel");
-  const openPanel = async (p: Page) => {
-    const pn = p.locator(".attr-panel");
-    await p.locator(".attr-panel").first().waitFor({ timeout: 10_000 }).catch(() => {});
-    await expect(pn).toBeVisible({ timeout: 10_000 });
-  };
+  const openPanel = (p: Page) => openInfoTags(p);
   const row = (p: Page, name: string) => p.locator(".attr-panel .attr-row", { has: p.locator(".attr-key", { hasText: new RegExp(`\\b${name}$`) }) });
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
@@ -95,16 +91,20 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
   out.removeOptionC = String(await setOptions("s_sel", ["a", "b"]));
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
-  const ssel = row(page, "s_sel").locator("select");
-  out.staleSelectUi = `shown=${JSON.stringify(await ssel.inputValue())} options=${JSON.stringify(await ssel.locator("option").allInnerTexts())} server=${(await attrs(N)).s_sel}`;
+  // A select with a few short options is a group of option chips (SelectValue), the chosen one pressed; a stored
+  // value the tag no longer lists stays on screen as its own chip.
+  const ssel = row(page, "s_sel").getByRole("group", { name: "s_sel", exact: true });
+  const chosen = async (group: Locator = ssel) => JSON.stringify(await group.locator("[aria-pressed=true]").allInnerTexts());
+  const listed = async () => JSON.stringify(await ssel.locator(".attr-choice:not(.attr-choice--add)").allInnerTexts());
+  out.staleSelectUi = `shown=${await chosen()} options=${await listed()} server=${(await attrs(N)).s_sel}`;
   out.staleFeatured = JSON.stringify(await page.locator(".ff-cell", { has: page.locator(".ff-label", { hasText: /^s_sel$/ }) }).innerText().catch(() => "-"));
   // Another tab removes option "b" while this tab still lists it; pick "b".
   out.removeOptionBElsewhere = String(await setOptions("s_sel", ["a"]));
   await page.waitForTimeout(2500);
-  out.optionsAfterRemoteChange = JSON.stringify(await ssel.locator("option").allInnerTexts());
-  await ssel.selectOption("b").catch((e) => { out.pickStale = String(e).slice(0, 80); });
+  out.optionsAfterRemoteChange = await listed();
+  await ssel.getByRole("button", { name: "b", exact: true }).click().catch((e) => { out.pickStale = String(e).slice(0, 80); });
   await page.waitForTimeout(1500);
-  out.pickRemovedOption = `ui=${JSON.stringify(await ssel.inputValue().catch(() => "?"))} server=${(await attrs(N)).s_sel} err=${JSON.stringify((await page.locator(".attr-panel-error, .failed-write-recovery, [role=alert]").allInnerTexts()).join(" | ").replace(/\s+/g, " ").slice(0, 200))}`;
+  out.pickRemovedOption = `ui=${await chosen().catch(() => "?")} server=${(await attrs(N)).s_sel} err=${JSON.stringify((await page.locator(".attr-panel-error, .failed-write-recovery, [role=alert]").allInnerTexts()).join(" | ").replace(/\s+/g, " ").slice(0, 200))}`;
   const rec = page.locator(".failed-write-recovery");
   if (await rec.isVisible().catch(() => false)) await page.getByRole("button", { name: "Minimize recovery panel" }).click().catch(() => {});
 
@@ -114,14 +114,14 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
   await page.route(`**/api/nodes/${N}/attributes/s_sel`, (r) => r.request().method() === "PUT" ? r.fulfill({ status: 503, body: "{}" }) : r.continue());
-  await row(page, "s_sel").locator("select").selectOption("b");
+  await row(page, "s_sel").getByRole("group", { name: "s_sel", exact: true }).getByRole("button", { name: "b", exact: true }).click();
   await page.waitForTimeout(1500);
-  out.on503 = `ui=${await row(page, "s_sel").locator("select").inputValue()} server=${(await attrs(N)).s_sel} sync=${JSON.stringify((await page.locator(".sync-indicator, [class*=sync-status]").allInnerTexts()).join(" ").slice(0, 80))}`;
+  out.on503 = `ui=${await chosen(row(page, "s_sel"))} server=${(await attrs(N)).s_sel} sync=${JSON.stringify((await page.locator(".sync-indicator, [class*=sync-status]").allInnerTexts()).join(" ").slice(0, 80))}`;
   await page.unroute(`**/api/nodes/${N}/attributes/s_sel`);
   await ready(page, `/?view=notes&node=${N}`);
   await openPanel(page);
   await page.waitForTimeout(3000);
-  out.after503Reload = `ui=${await row(page, "s_sel").locator("select").inputValue()} server=${(await attrs(N)).s_sel}`;
+  out.after503Reload = `ui=${await chosen(row(page, "s_sel"))} server=${(await attrs(N)).s_sel}`;
 
   // F) Media: upload failure feedback, URL typing writes.
   const puts: string[] = [];
@@ -170,7 +170,7 @@ test("TAG-05: multi-value, relation, media, stale options, failures", async ({ p
   })));
   const fsel = pp.locator(".ff-cell", { has: pp.locator(".ff-label", { hasText: /^s_sel$/ }) });
   if (await fsel.isVisible().catch(() => false)) {
-    await fsel.click(); await pp.locator(".ff-cell--editing select").selectOption("c").catch(() => {});
+    await fsel.click(); await pp.locator(".ff-cell--editing").getByRole("button", { name: "c", exact: true }).click().catch(() => {});
     await pp.waitForTimeout(1200);
     out.phoneSelect = (await attrs(N)).s_sel;
   }

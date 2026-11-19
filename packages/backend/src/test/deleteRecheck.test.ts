@@ -60,8 +60,7 @@ describe("deleteEdge", () => {
   it("deletes a manual edge whose source is unchanged, authorized on that source", async () => {
     answers = [{ rows: [{ source_node_id: "s" }] }, { rows: [{ source_node_id: "s", derived: false }] }, { rows: [], rowCount: 1 }];
     await deleteEdge(actor, "w", "e1");
-    // a deletion with no inverse: never a temporary session's (round 3), else the write on the source as before
-    expect(mutated[0]!.authority).toEqual({ kind: "irreversible", of: { kind: "node", nodeId: "s", op: "write_node" } });
+    expect(mutated[0]!.authority).toEqual({ kind: "node", nodeId: "s", op: "write_node" });
     expect(calls.at(-1)!.sql).toMatch(/DELETE FROM node_edges/);
   });
 });
@@ -83,6 +82,6 @@ describe("deletePointer", () => {
   it("deletes the pointer it read, authorized on its parent", async () => {
     answers = [{ rows: [{ target_id: "t", parent_id: "p" }] }, { rows: [], rowCount: 1 }];
     await deletePointer(actor, "w", "p1");
-    expect(mutated[0]!.authority).toEqual({ kind: "irreversible", of: { kind: "node", nodeId: "p", op: "write_node" } });
+    expect(mutated[0]!.authority).toEqual({ kind: "node", nodeId: "p", op: "write_node" });
   });
 });

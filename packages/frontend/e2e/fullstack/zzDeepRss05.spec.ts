@@ -5,6 +5,7 @@
 // and an offline save that replays.
 import { test, expect } from "@playwright/test";
 import { ready, BASE, H, PAGE } from "./helpers";
+import { publishFeedArticles, siteFeedUrl } from "./feedHelpers";
 
 type Item = { id: string; title: string; saved_node_id?: string | null };
 
@@ -12,11 +13,8 @@ test("RSS-05: save race, foreign node_id, lost response, deleted note, offline",
   test.setTimeout(300_000);
   const stamp = Date.now();
   const out: Record<string, unknown> = {};
-  for (let i = 0; i < 4; i++) {
-    const node = await (await page.request.post("/api/nodes", { ...H, data: { title: `R05 art ${i} (${stamp})`, markdown: `Body ${i} of ${stamp}.` } })).json();
-    await page.request.put(`/api/nodes/${node.id}/attributes/_published`, { ...H, data: { value: "true", value_type: "bool" } });
-  }
-  const sub = await (await page.request.post("/api/rss/subscribe", { ...H, data: { url: `http://nginx/site/feed.xml?run=${stamp}` } })).json();
+  await publishFeedArticles(page.request, Array.from({ length: 4 }, (_, i) => `R05 art ${i} (${stamp})`), (i) => `Body ${i} of ${stamp}.`);
+  const sub = await (await page.request.post("/api/rss/subscribe", { ...H, data: { url: siteFeedUrl(stamp) } })).json();
   await page.request.post(`/api/rss/sources/${sub.id}/refresh`, { ...H, data: {} });
   const items = async (): Promise<Item[]> => (((await (await page.request.get("/api/rss/items?limit=200")).json()).items ?? []) as Item[]).filter((i) => i.title.includes(`(${stamp})`));
   await expect.poll(async () => (await items()).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);

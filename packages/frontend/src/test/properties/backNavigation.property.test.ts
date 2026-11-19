@@ -52,7 +52,7 @@ import { describe, expect, it, vi } from "vitest";
 import fc from "fast-check";
 import { act, renderHook, type RenderHookResult } from "@testing-library/react";
 import { useEffect, useState } from "react";
-import { PROPS_RUNS, PROPS_SEED } from "../helpers/propsConfig";
+import { INCLUDE_KNOWN_CASES, PROPS_RUNS, PROPS_SEED } from "../helpers/propsConfig";
 import { installFakeCloseWatcher, liveWatchers, requestClose } from "../fakeCloseWatcher";
 
 // The data layer is a long import chain (sync engine, local database) that the location hooks only touch for
@@ -60,7 +60,6 @@ import { installFakeCloseWatcher, liveWatchers, requestClose } from "../fakeClos
 vi.mock("../../lib/data", () => ({ runBackgroundWrite: (work: Promise<unknown>) => { void work.catch(() => {}); }, canvasWriter: {} }));
 
 const RUNS = process.env.PROPS_RUNS ? PROPS_RUNS : Math.min(PROPS_RUNS, 80);
-const INCLUDE_KNOWN = !!process.env.PROPS_INCLUDE_KNOWN;
 
 // ── the app under test ───────────────────────────────────────────────────────
 
@@ -520,7 +519,7 @@ function closePage(run: Run): void {
   vi.resetModules();
 }
 
-async function runCommands(phone: boolean, commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN): Promise<string[]> {
+async function runCommands(phone: boolean, commands: Iterable<Cmd>, includeKnown = INCLUDE_KNOWN_CASES): Promise<string[]> {
   const run = await newRun(phone, includeKnown);
   try {
     await fc.asyncModelRun(() => ({ model: {}, real: run }), commands as never);
@@ -543,7 +542,7 @@ describe("Back is the page before, in a desktop and a phone layout", () => {
 });
 
 // ── minimal reproductions of what the property found ────────────────────────
-// Each is a command list the shrinker ended on, replayed with the steering off (seed 20261023, the default;
+// Each is a command list the shrinker ended on, replayed with the steering off (found at seed 20261023; the default seed is fresh every run;
 // `PROPS_SEED=20261023 PROPS_RUNS=<n> PROPS_INCLUDE_KNOWN=1` finds the same families). `it.fails`: when the fix lands
 // vitest reports "expected to fail", and the case is flipped to `it`.
 
@@ -645,5 +644,21 @@ describe("what the property found (expected to fail until fixed)", () => {
   });
   it("tabless-address-shows-the-remembered-tab: Back and Forward show each entry's own tab, and a reload on them keeps it", async () => {
     expect(await runCommands(true, [OpenNote(0), SwitchTab(1), OpenNote(1), Back(), Reload(), Forward(), Reload(), Back()], true)).toEqual([]);
+  });
+});
+
+// The two situations the random property leaves out unless PROPS_INCLUDE_KNOWN=1 (`OpenSearchResult` while the Info screen is open;
+// a note removed by a sync while it is open or named by an entry's right pane). Each is pinned open here: when its fix lands vitest reports
+// "expected to fail", the case is flipped to `it`, and the matching exclusion in the commands above is deleted.
+describe("known defects still open", () => {
+  // KNOWN palette-bypasses-openNote: found at PROPS_INCLUDE_KNOWN=1 PROPS_SEED=11, shrunk to the palette choosing a note over the open Info screen.
+  it.fails("palette-bypasses-openNote: choosing a search result while the Info screen is open leaves the Info screen over the other note", async () => {
+    expect(await runCommands(true, [OpenNote(0), OpenInfo(), OpenSearchResult(1), Back(), Forward(), Reload()], true)).toEqual([]);
+  });
+
+  // KNOWN split-pane-names-a-removed-note (the `RemovedBySync` exclusion: the removed note is the open one or one an entry's pane names):
+  // found at PROPS_INCLUDE_KNOWN=1 PROPS_SEED=22, shrunk to opening a note, a sync removing it, a reload, Back.
+  it.fails("split-pane-names-a-removed-note: a sync that removes the open note, then a reload and Back, leaves the history out of step", async () => {
+    expect(await runCommands(false, [OpenNote(2), RemovedBySync(2), Reload(), Back()], true)).toEqual([]);
   });
 });

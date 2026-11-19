@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isCalendarDay, isHexColor, daysBetween, EXTERNAL_CALENDAR_NAME_MAX } from "@onden/markdown";
 import { getWorkspaceId } from "../../db.js";
 import { requireActor } from "../../spine/mutate.js";
-import { assertMayReachOut, requirePerson } from "../../spine/authority.js";
+import { requirePerson } from "../../spine/authority.js";
 import { secretKeyConfigured } from "../../services/aiCredentials.js";
 import { CodedStatusError, StatusError } from "../../statusError.js";
 import { parseBody, uuidParam } from "../../routes/params.js";
@@ -27,14 +27,6 @@ function person(c: { get(key: "actor"): ActorCtx | null }): ActorCtx {
   return actor;
 }
 
-/** Who may READ the person's calendars: the person, and a temporary session they opened (it reads what they read, minus the address host and
- *  fetch errors: store.ts). Never a delegated token. Every write stays with `person`. */
-function reader(c: { get(key: "actor"): ActorCtx | null }): ActorCtx {
-  const actor = requireActor(c.get("actor"));
-  if (actor.tokenScope) requirePerson(actor, "external_calendars");
-  return actor;
-}
-
 const color = z.string().refine(isHexColor, "color");
 const address = z.string().max(4000);
 const name = z.string().trim().min(1).max(EXTERNAL_CALENDAR_NAME_MAX);
@@ -42,14 +34,13 @@ const name = z.string().trim().min(1).max(EXTERNAL_CALENDAR_NAME_MAX);
 // GET /api/external-calendars → { available, calendars }. `available` is false on a
 // server with no ONDEN_SECRET_KEY: the page then says why nothing can be added.
 router.get("/", async (c) => {
-  const actor = reader(c);
-  return c.json({ available: secretKeyConfigured(), calendars: await listCalendars(actor) });
+  const actor = person(c);
+  return c.json({ available: secretKeyConfigured(), calendars: await listCalendars(actor.id) });
 });
 
 // POST /api/external-calendars {id?, name, color, url} → 201. The address is never answered back.
 router.post("/", async (c) => {
   const actor = person(c);
-  assertMayReachOut(actor); // the calendar is fetched once it is saved
   const body = await parseBody(c, z.object({ id: z.string().uuid().optional(), name, color, url: address }));
   // The page says why before it offers the form (GET answers available:false); this is the fallback.
   if (!secretKeyConfigured()) throw new StatusError(409, "no secret key");
@@ -60,19 +51,18 @@ router.post("/", async (c) => {
   const saved = await addCalendar(workspaceId, actor, { id, name: body.name, color: body.color, href: parsed.href, host: parsed.host });
   if (saved === "limit") throw new StatusError(409, "too many calendars");
   await refreshCalendar(workspaceId, id).catch(() => false);
-  return c.json((await getCalendar(actor, id)) ?? saved, 201);
+  return c.json((await getCalendar(actor.id, id)) ?? saved, 201);
 });
 
 router.patch("/:id", async (c) => {
   const actor = person(c);
-  assertMayReachOut(actor); // switching one back on fetches it
   const patch = await parseBody(c, z.object({ name: name.optional(), color: color.optional(), enabled: z.boolean().optional() }));
   const workspaceId = await getWorkspaceId();
   const saved = await changeCalendar(workspaceId, actor, uuidParam(c, "id"), patch);
   if (!saved) throw new StatusError(404, "calendar not found");
   // Switching one back on shows its events at once rather than at the next pass.
   if (patch.enabled === true) await refreshCalendar(workspaceId, saved.id).catch(() => false);
-  return c.json((await getCalendar(actor, saved.id)) ?? saved);
+  return c.json((await getCalendar(actor.id, saved.id)) ?? saved);
 });
 
 router.delete("/:id", async (c) => {
@@ -84,21 +74,20 @@ router.delete("/:id", async (c) => {
 // POST /api/external-calendars/:id/refresh → the calendar after the fetch. One per minute per calendar.
 router.post("/:id/refresh", async (c) => {
   const actor = person(c);
-  assertMayReachOut(actor);
   const id = uuidParam(c, "id");
   if ((await refreshByPerson(await getWorkspaceId(), actor.id, id)) === "missing") throw new StatusError(404, "calendar not found");
-  return c.json(await getCalendar(actor, id));
+  return c.json(await getCalendar(actor.id, id));
 });
 
 // GET /api/external-calendars/events?from=YYYY-MM-DD&to=YYYY-MM-DD → events touching those workspace days.
 router.get("/events", async (c) => {
-  const actor = reader(c);
+  const actor = person(c);
   const from = c.req.query("from") ?? "";
   const to = c.req.query("to") ?? "";
   if (!isCalendarDay(from) || !isCalendarDay(to) || to < from || daysBetween(from, to) > MAX_EVENT_WINDOW_DAYS) {
     throw new StatusError(400, "from and to must be days, at most 62 apart");
   }
-  return c.json({ events: await eventsBetween(actor, from, to) });
+  return c.json({ events: await eventsBetween(actor.id, from, to) });
 });
 
 export default router;

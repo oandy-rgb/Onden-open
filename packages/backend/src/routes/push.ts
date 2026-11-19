@@ -40,8 +40,8 @@ const Subscription = z.object({
 });
 router.post("/subscriptions", async (c) => {
   const actor = requireActor(c.get("actor"));
-  requireHuman(actor); // first: a session or a token is answered by the rule, whether or not this server offers push
   requirePushOffered();
+  requireHuman(actor);
   const body = await parseBody(c, Subscription);
   await saveSubscription(actor, await getWorkspaceId(), body, c.req.header("user-agent") ?? null);
   return c.json({ ok: true });
@@ -49,7 +49,6 @@ router.post("/subscriptions", async (c) => {
 
 router.delete("/subscriptions", async (c) => {
   const actor = requireActor(c.get("actor"));
-  requireHuman(actor); // as the POST: a session never subscribes, so it has nothing here to take off (PR #1856 round 5)
   requirePushOffered();
   const body = await parseBody(c, z.object({ endpoint: z.string().max(2048) }));
   await removeSubscription(actor, body.endpoint);

@@ -1,13 +1,12 @@
 // Feature-audit deepening (2026-10-07): FIND-04 — backlinks / mentions update
 // right after a save, removal clears them, clicking hands the caret to the
-// link, and the phone Info tab shows the same.
+// link, and the phone shows the same under the note.
 import { test, expect, type Page } from "@playwright/test";
 import { ready, BASE, H } from "./helpers";
 
-const backlinkCount = async (page: Page) => {
-  if (await page.getByText(/^No backlinks$|No linked notes yet/).filter({ visible: true }).count()) return 0;
-  return Number((await page.locator(".note-relations-section", { hasText: "Backlinks" }).locator(".ov-panel-count").filter({ visible: true }).first().innerText({ timeout: 2000 }).catch(() => "-1")).trim());
-};
+// The "Mentioned in N notes" cards under the note (NoteRelations; there is no "Backlinks" heading with a count any more):
+// the linked cards, not the "Unlinked mentions" ones.
+const backlinkCount = (page: Page) => page.locator(".backlink-card:not(.backlink-card--unlinked)").filter({ visible: true }).count();
 
 test("FIND-04: backlinks follow saves, removal, caret handoff and phone", async ({ page, browser }) => {
   test.setTimeout(150_000);
@@ -30,16 +29,19 @@ test("FIND-04: backlinks follow saves, removal, caret handoff and phone", async 
   const t0 = Date.now();
   await expect.poll(() => backlinkCount(page), { timeout: 20_000 }).toBe(1);
   out.liveAfterSave = `${Date.now() - t0}ms`;
-  const snippet = await page.locator(".backlink-card-match").first().innerText().catch(() => "");
-  out.snippet = JSON.stringify(snippet);
+  // The card knows where the link is only once the source's text is in the app: wait for its quoted line, then click.
+  const quoted = page.locator(".backlink-card-match").first();
+  await expect(quoted).toBeVisible();
+  out.snippet = JSON.stringify(await quoted.innerText());
 
-  // Caret handoff: click the backlink → Source opens with selection on the link.
+  // Caret handoff: click the backlink → Source opens with the caret on the link, scrolled into view, editor focused.
+  // (The link is flashed, not selected — 2026-11-02, MarkdownEditor mount-restore — so there is no DOM selection to read.)
   await page.locator(".backlink-card", { hasText: `Source${stamp}` }).first().click();
   await expect(page).toHaveURL(new RegExp(src.id));
-  await page.waitForTimeout(1200);
-  const sel = await page.evaluate(() => String(window.getSelection()));
-  const lineVisible = await page.locator(".cm-line", { hasText: `Target${stamp}` }).isVisible().catch(() => false);
-  out.caret = `selection=${JSON.stringify(sel.slice(0, 40))} linkLineInView=${lineVisible}`;
+  const linkLine = page.locator(".cm-line", { hasText: `Target${stamp}` });
+  await expect(linkLine).toBeInViewport();
+  await expect(page.locator(".cm-content")).toBeFocused();
+  out.caret = `linkLineInView=${await linkLine.isVisible()}`;
 
   // Removal: delete the link in Source → Target's backlink count drops.
   await editorPage.locator(".cm-content").click();
@@ -66,7 +68,7 @@ test("FIND-04: backlinks follow saves, removal, caret handoff and phone", async 
   const phone = await browser.newContext({ storageState: await page.context().storageState(), viewport: { width: 390, height: 844 }, baseURL: BASE });
   const pp = await phone.newPage();
   await ready(pp, `/?view=notes&node=${target.id}`);
-  await pp.getByText("Info", { exact: true }).filter({ visible: true }).first().click();
+  // The phone shows the same "Mentioned in" cards under the note body; there is no Info tab to open first.
   await expect.poll(() => backlinkCount(pp), { timeout: 15_000 }).toBe(1);
   const card = pp.locator(".backlink-card").first();
   const box = await card.boundingBox();

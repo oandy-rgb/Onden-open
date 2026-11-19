@@ -10,9 +10,6 @@ import { paragraphFrame } from "../lib/editorParagraphFrame";
 import { useBlockHistory } from "../components/useBlockHistory";
 import type { NoteVersion } from "../lib/data/reads";
 
-// The signed-in person is "Ann" (the rows' default author).
-vi.mock("../lib/accountSession", () => ({ useAccountSession: () => ({ user: { id: "u1", name: "Ann" } }) }));
-
 // jsdom has no layout: CodeMirror measures text through these on Range.
 const rect = { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) };
 Range.prototype.getClientRects = () => [rect] as unknown as DOMRectList;
@@ -146,21 +143,5 @@ describe("BlockHistorySheet", () => {
     await open();
     expect(await screen.findByText("Couldn't load this paragraph's history")).toBeTruthy();
     expect(screen.queryByText("boom")).toBeNull();
-  });
-
-  // Who each wording is from: the same rule as the note's history (lib/history/historyAuthor.ts). 「你」 only for the
-  // signed-in person; a temporary session (kind 'session', no name) and a removed member (no row: no name) are not "you".
-  it.each([
-    ["the signed-in person", { actor_name: "Ann", actor_type: "user", actor_kind: "human" }, "You"],
-    ["another member", { actor_name: "Bea", actor_type: "user", actor_kind: "human" }, "Bea"],
-    ["a temporary session", { actor_name: null, actor_type: "user", actor_kind: "session" }, "A temporary session"],
-    ["a removed member", { actor_name: null, actor_type: "user", actor_kind: "human" }, "Someone"],
-  ] as const)("names %s as the author of a wording", async (_who, author, label) => {
-    vi.spyOn(reads.notes, "rawVersions").mockResolvedValue([ROWS[0]!, row("v2", ROWS[1]!.markdown, author), ROWS[2]!]);
-    await open();
-    fireEvent.click(screen.getByText("Older"));
-    expect(screen.getByText("2 / 3")).toBeTruthy();
-    expect(document.querySelector(".bh-actor")!.textContent).toBe(label);
-    if (label !== "You") expect(screen.queryByText("You")).toBeNull();
   });
 });

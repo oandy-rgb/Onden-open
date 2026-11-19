@@ -16,11 +16,9 @@
 //   4. the number of places the tool told the agent (`places`) is the number of new places shown, and what
 //      listSuggestions tells the agent is pending equals what the person is shown as pending.
 //
-// KNOWN DEFECT (pinned, see the FINDING cases at the end): services/aiSuggestions.ts createSuggestions marks EVERY
-// pending place of the session on the note as replaced, not only those of the revised paragraph, comments included.
-// The random property skips the one step that triggers it (a create by a session that holds pending places outside
-// the paragraphs it now revises); AI_SESS_INCLUDE_PINNED=1 runs it anyway, to find more or to confirm a fix.
-// Delete the skip (and the `.fails`) when the fix lands.
+// The defect the FINDING cases at the end pin (createSuggestions marked EVERY pending place of the session on the note as
+// replaced, not only those of the revised paragraph, comments included) is fixed: the random property takes every create
+// and the cases stay as plain `it`.
 //
 // Not covered: inserts and deletes of whole paragraphs, title places, a stale read by the agent (base older than the
 // note), a resident token without a session, a person without write rights, the offline and sync layers.
@@ -47,7 +45,6 @@ import { checkAsync } from "../helpers/propsConfig.js";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 afterAll(async () => { await pool.end(); });
 const RUN_CAP = process.env.PROPS_RUNS ? Infinity : 12;
-const INCLUDE_PINNED = process.env.AI_SESS_INCLUDE_PINNED === "1";
 
 // ── The note: paragraphs of four shapes, each with a unique text per version ─
 
@@ -123,10 +120,10 @@ const scenario = fc.record({
 });
 type Scenario = { shapes: Shape[]; ops: Op[]; order: number[]; personEdits: boolean };
 
-type RunStats = { skippedPinned: number; creates: number };
+type RunStats = { creates: number };
 
 /** One scenario on a fresh note; throws on the first invariant that fails. */
-async function run(w: World, sc: Scenario, stats: RunStats = { skippedPinned: 0, creates: 0 }): Promise<void> {
+async function run(w: World, sc: Scenario, stats: RunStats = { creates: 0 }): Promise<void> {
   const kinds: Shape[] = [...sc.shapes];
   let version = 0;
   const paragraphs = kinds.map((s, k) => paragraphOf(s, k, version++));
@@ -163,9 +160,6 @@ async function run(w: World, sc: Scenario, stats: RunStats = { skippedPinned: 0,
   const create = async (op: Extract<Op, { t: "edit" | "comment" }>) => {
     const session = w.sessions[op.session]!;
     const placed = op.t === "edit" ? [...new Set(op.paras.map(at))] : [];
-    // The pinned defect: places of this session outside the paragraphs it revises are marked replaced too.
-    const survivors = [...model.values()].filter((e) => e.session === op.session && e.state === "pending" && !(e.kind === "replace" && placed.includes(e.para!)));
-    if (survivors.length > 0 && !INCLUDE_PINNED) { stats.skippedPinned++; return; }
     // The same paragraph revised after the person rewrote it: whether that is "the same place" is not settled; not generated.
     if ([...model.values()].some((e) => e.session === op.session && e.state === "pending" && e.kind === "replace" && placed.includes(e.para!) && e.base !== paragraphs[e.para!])) return;
     stats.creates++;
@@ -190,7 +184,7 @@ async function run(w: World, sc: Scenario, stats: RunStats = { skippedPinned: 0,
       calls.push({ tool: "suggestEdit", session: op.session, args: null as never, entries: exp });
       log.push(`comment[s${op.session}]${quote ? " quoted" : ""}`);
     }
-    // The revised places go; everything else of the session stays (nothing else is in `survivors`' way: it is empty or skipped).
+    // The revised places go; everything else of the session stays.
     for (const [id, e] of model) if (e.session === op.session && e.state === "pending" && e.kind === "replace" && placed.includes(e.para!)) model.delete(id);
     const fresh = (await shown(w, nodeId)).filter((s) => !before.has(s.id));
     for (const e of exp) {
@@ -288,14 +282,14 @@ async function run(w: World, sc: Scenario, stats: RunStats = { skippedPinned: 0,
 describe.skipIf(!isTestDb)("an AI's sessions on one note, with the person deciding in between", () => {
   it("the person is shown every pending place, comments included, and accepting gives the base with those edits made", async () => {
     const w = await suggestWorld("sess-prop");
-    const stats: RunStats = { skippedPinned: 0, creates: 0 };
+    const stats: RunStats = { creates: 0 };
     await checkAsync(fc.asyncProperty(scenario, async (sc) => { await run(w, sc, stats); }), RUN_CAP);
-    if (process.env.AI_SESS_STATS) console.log(`[aiSuggestionSessions] creates run=${stats.creates} skipped (pinned defect)=${stats.skippedPinned}`);
+    if (process.env.AI_SESS_STATS) console.log(`[aiSuggestionSessions] creates run=${stats.creates}`);
   }, 1_800_000);
 });
 
 // ── Regressions: the pinned defect, reduced ──────────────────────────────────
-// Each is a minimal NAMED case. `it.fails`: it goes red when the fix lands; then delete `.fails` and the skip in `run`.
+// Each is a minimal NAMED case. They stay as plain `it` now that the fix is in.
 
 const doc = (...paragraphs: string[]) => paragraphs.join("\n\n") + "\n";
 
@@ -307,7 +301,7 @@ describe.skipIf(!isTestDb)("regressions and pinned behaviour (createSuggestions 
     // Scenario: session one suggests a change to paragraph 0, then (base = the note, unchanged) a change to paragraph 1.
     // Expected: the person is shown both places (paragraph 1 is not a revision of paragraph 0).
     // Actual: the first place becomes `replaced` and is no longer listed; only paragraph 1 is shown.
-    // Seed: AI_SESS_INCLUDE_PINNED=1 PROPS_SEED=3 PROPS_RUNS=60 shrinks to this (suggestEdit para 0, suggestEdit para 1, same session).
+    // Found with PROPS_SEED=3 PROPS_RUNS=60 shrinks to this (suggestEdit para 0, suggestEdit para 1, same session).
     // File: services/aiSuggestions.ts:163-168 (the UPDATE … SET status = 'replaced', in createSuggestions).
     const w = await suggestWorld("sess-diff");
     const base = doc("alpha", "beta", "gamma");
@@ -322,7 +316,7 @@ describe.skipIf(!isTestDb)("regressions and pinned behaviour (createSuggestions 
     // Scenario: session one comments on a paragraph, then suggests an edit of another paragraph.
     // Expected: the comment is still shown (a comment is never replaced, and the edit is not a revision of it).
     // Actual: the comment becomes `replaced` and disappears from the person's view.
-    // Seed: AI_SESS_INCLUDE_PINNED=1 PROPS_SEED=1 PROPS_RUNS=60 shrinks to this. File: services/aiSuggestions.ts:163-168.
+    // Found with PROPS_SEED=1 PROPS_RUNS=60 shrinks to this. File: services/aiSuggestions.ts:163-168.
     const w = await suggestWorld("sess-comment");
     const base = doc("alpha", "beta");
     const nodeId = await w.note(base);
@@ -336,7 +330,7 @@ describe.skipIf(!isTestDb)("regressions and pinned behaviour (createSuggestions 
     // Scenario: session one suggests an edit, then leaves a comment (which changes no text).
     // Expected: the edit place is still shown next to the comment.
     // Actual: the comment filing marks the edit `replaced`; only the comment is shown.
-    // Seed: AI_SESS_INCLUDE_PINNED=1 PROPS_SEED=2 PROPS_RUNS=60 shrinks to this. File: services/aiSuggestions.ts:163-168.
+    // Found with PROPS_SEED=2 PROPS_RUNS=60 shrinks to this. File: services/aiSuggestions.ts:163-168.
     const w = await suggestWorld("sess-comment2");
     const base = doc("alpha", "beta");
     const nodeId = await w.note(base);

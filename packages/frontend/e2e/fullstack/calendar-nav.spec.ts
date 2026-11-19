@@ -42,8 +42,7 @@ test("calendar layout: a dated row lands on its day cell; prev/next month naviga
   const { iso, expectedDay } = dueOnThe15thLocalNoon();
 
   // 1) A class_tag (collection class) with a `due` date field. The field name
-  //    matches the calendar's date-field hint regex (/due/), so the layout
-  //    auto-picks it as the placement axis.
+  //    is named by the view's date_field below.
   const tag = await (await page.request.post("/api/tags/import", {
     ...H,
     data: {
@@ -65,6 +64,9 @@ test("calendar layout: a dated row lands on its day cell; prev/next month naviga
       name: `Calendar ${stamp}`,
       layout: "calendar",
       visible_fields: ["title", "due"],
+      // The calendar places rows only by the field the view declares (changes/2026-11-12-calendar-date-field.md);
+      // without it the view falls back to updated_at and the row lands on today, not on the 15th.
+      layout_config: { date_field: "due" },
     },
   })).json();
   expect(view.id).toBeTruthy();

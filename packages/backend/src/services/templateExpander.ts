@@ -39,7 +39,6 @@ import { finishNewNote } from "./newNoteDerived.js";
 import { recordAttributeChange } from "./attributeChange.js";
 import { attachTagInTx } from "./tagMembershipWrites.js";
 import { appendOrderKey } from "./orderKeys.js";
-import { newNoteProof } from "./newNoteProof.js";
 import { applyTemplateVars, slugify } from "@onden/markdown";
 import { localDateTimeId, localDayId } from "../localDay.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
@@ -174,7 +173,7 @@ export async function expandTemplate(
                 // `child:` prefix attributes from the parent flow into spawned
                 // children the same way they do for manual node creation.
                 await applyChildPrefixAttributes(workspaceId, parentNodeId, childId, actor);
-                await applyParentSiteDefault(workspaceId, parentNodeId, childId, actor, undefined, newNoteProof(childId)); // the slot inserted above
+                await applyParentSiteDefault(workspaceId, parentNodeId, childId, actor);
                 // What createNote gives a new note's text (backup, links, block
                 // ids, embedding); the slot's body is the child's text.
                 await finishNewNote({ workspaceId, nodeId: childId, title, slug, markdown }, { eventId, actor });

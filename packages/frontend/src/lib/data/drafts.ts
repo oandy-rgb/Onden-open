@@ -20,8 +20,6 @@ export const drafts = {
   /** The newest body this tab had the server accept for `nodeId` (undefined: never saved here). */
   get acceptedBody() { return actions.ownAcceptedBody; },
   get applyRemote() { return actions.applyRemoteNode; },
-  /** The editor opened or closed an IME composition: outside text waits for its end. */
-  get composing() { return actions.setEditorComposing; },
   get queuedOutcome() { return actions.queuedDraftOutcome; },
   get reset() { return actions.resetDraftForNode; },
   get restore() { return actions.restoreOverviewDraft; },

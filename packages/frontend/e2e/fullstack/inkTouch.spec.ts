@@ -16,6 +16,13 @@ import { ready, H } from "./helpers";
 // PointerEvents with pointerType "touch" on the ink surface. The pen is always
 // a synthetic PointerEvent with pointerType "pen" (no engine emulates one).
 //
+// Since the pagebook (012fcd496, 2026-11-08) the finger is NOT handled by the engine on this page: one finger
+// scrolls natively (the browser's own scroll), two fingers pinch from TouchEvents (lib/ink/touchSplit.ts). Neither can
+// be produced by synthetic PointerEvents, so on engines without CDP (WebKit) the scroll and pinch tests check what a
+// pointer-only finger can show — it must neither draw nor zoom, and the surface must leave the finger to the browser
+// (touch-action) — and the real scroll / pinch run in Chromium only. Real iPad Safari scroll and pinch are NOT
+// covered by any automated test here (no multi-touch driver for WebKit); that stays a device check.
+//
 // Every test seeds its own note through the API, so reruns never collide.
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
@@ -170,7 +177,13 @@ test.describe("handwriting page on touch", () => {
     expect(startY - box.y).toBeGreaterThan(200);
     await touchGesture(page, cdp, [{ from: [x, startY], to: [x, box.y + 20] }]);
 
-    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before + 100);
+    if (cdp) {
+      await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(before + 100);
+    } else {
+      // No real touch: a synthetic finger cannot scroll natively. What is checkable: the surface leaves one finger to the
+      // browser (touch-action allows panning; the root's `manipulation` never takes that away), and the finger drew nothing.
+      expect(await page.locator(".page-ink-surface").evaluate((el) => getComputedStyle(el).touchAction)).toMatch(/pan-y|pan-x pan-y/);
+    }
     // Still just the seeded stroke: the drag drew nothing.
     await page.waitForTimeout(1500);
     expect((await fetchInkDoc(page, nodeId))?.strokes.length).toBe(1);
@@ -191,6 +204,13 @@ test.describe("handwriting page on touch", () => {
       { from: [cx + 40, cy], to: [cx + 120, cy] },
     ], 16);
 
+    if (!cdp) {
+      // Pointer-only fingers: no pinch (that is TouchEvents, touchSplit.ts) and no stroke (the engine ignores fingers here).
+      await page.waitForTimeout(1000);
+      await expect(zoomHost).toHaveAttribute("data-pagebook-zoom", "1");
+      expect((await fetchInkDoc(page, nodeId))?.strokes.length).toBe(1);
+      return;
+    }
     await expect.poll(async () => Number(await zoomHost.getAttribute("data-pagebook-zoom"))).toBeGreaterThan(1.5);
     const widthAfter = (await page.locator(".pagebook-page").boundingBox())!.width;
     expect(widthAfter).toBeGreaterThan(widthBefore * 1.5);

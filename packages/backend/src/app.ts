@@ -46,7 +46,6 @@ import { resolveBearerActor, parseBearer } from "./services/agentTokens.js";
 import { actorForSession } from "./services/actors.js";
 import { readTemporarySessionBody, resolveTemporarySessionActor } from "./services/participantSessions.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./spine/systemActor.js";
-import { isTemporarySessionActor, recordedDeviceId } from "./spine/authority.js";
 import { withRequestDevice, withRequestSession } from "./requestContext.js";
 /** The headers of a request whose body was read and re-wrapped: the declared length is dropped (the body now carries its own). */
 function withoutLength(headers: Headers): Headers {
@@ -248,13 +247,13 @@ app.use("*", async (c, next) => {
   }
   // A temporary session's body is read HERE, counted as it is read and cut at the request cap or what the session has left (services/participantSessions.ts),
   // then handed on as the request's body: a body larger than either is never taken into memory.
-  if (actor && isTemporarySessionActor(actor) && !["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+  if (actor?.type === "session" && !["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
     const body = await readTemporarySessionBody(c.req.raw, actor.sessionScope!.sessionId, c.req.path);
     if (body) c.req.raw = new Request(c.req.url, { method: c.req.method, headers: withoutLength(c.req.raw.headers), body });
   }
   // The MCP surface is for an AI's token: a temporary session is a participant of the app itself and never starts or drives an AI
   // (aiSessionStart refuses it too; this keeps it off the tool list altogether).
-  if (actor && isTemporarySessionActor(actor) && c.req.path.startsWith("/api/mcp")) {
+  if (actor?.type === "session" && c.req.path.startsWith("/api/mcp")) {
     return c.json({ error: "session_scope", detail: "a temporary session does not use the AI tool surface" }, 403);
   }
   // The session rides the request (requestContext.ts) so a fresh-proof ticket is bound to the session it was handed to.
@@ -262,11 +261,10 @@ app.use("*", async (c, next) => {
 });
 
 // Which device a write came from (X-Onden-Device-Id) rides the request so the event it appends records it (db.ts).
-// A missing or malformed value is simply "no device": it never refuses a request. A temporary session records none (spine/authority.ts recordedDeviceId).
+// A missing or malformed value is simply "no device": it never refuses a request.
 app.use("*", async (c, next) => {
-  const supplied = c.req.header(DEVICE_ID_HEADER);
-  const device = recordedDeviceId(c.get("actor"), supplied && isUuid(supplied) ? supplied.toLowerCase() : null);
-  return device ? withRequestDevice(device, next) : next();
+  const device = c.req.header(DEVICE_ID_HEADER);
+  return device && isUuid(device) ? withRequestDevice(device.toLowerCase(), next) : next();
 });
 
 // A page that predates block anchors may not write notes (clientGate.ts); the app tells the person to reload.

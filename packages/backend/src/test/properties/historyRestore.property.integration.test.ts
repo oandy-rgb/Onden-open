@@ -25,7 +25,7 @@
 // Known issues. #22 (empty inverse patch treated as "unchanged", data-integrity.md)
 // is fixed in PR fix/a2-structure-import-backup: the it.fails below names it and
 // the random run leaves its trigger (a lone surrogate in a body line) out;
-// HISTORY_PROPS_KNOWN=1 puts it back. #20 (tag
+// PROPS_INCLUDE_KNOWN=1 puts it back. #20 (tag
 // rename undone onto a taken name) does NOT reproduce on this checkout:
 // eventRestore/tags.ts already answers state_conflict, so it is a plain test.
 // #21 (backup restore job event id) is not an event restore and out of reach.
@@ -45,7 +45,7 @@ import fc from "fast-check";
 import { getWorkspaceId, pool, q } from "../../db.js";
 import { joinDefaultSpace } from "../helpers/spaceFixtures.js";
 import { isTestDatabase } from "../helpers/testDatabase.js";
-import { checkAsync, PROPS_SEED } from "../helpers/propsConfig.js";
+import { checkAsync, INCLUDE_KNOWN, PROPS_SEED } from "../helpers/propsConfig.js";
 import { seedQ } from "../helpers/seedQ.js";
 import { slugForTitle } from "../../services/nodes.js";
 
@@ -61,7 +61,6 @@ const { app } = await import("../../app.js");
 
 const isTestDb = isTestDatabase();
 /** Put the known bugs' triggers back into the random run. */
-const INCLUDE_KNOWN = process.env.HISTORY_PROPS_KNOWN === "1";
 /** Every run is dozens of writes; stay small unless the caller asks for more. */
 const RUN_CAP = process.env.PROPS_RUNS ? Infinity : 20;
 
@@ -415,6 +414,8 @@ describe.skipIf(!isTestDb)("history restore: random multi-step undo (model based
   // ── One world: the real notes/tags of a run, its model, its trace ──────────
 
   class World {
+    /** The known-defect triggers (a lone surrogate in a body line, a rename onto a name another tag may take): in the random run by `PROPS_INCLUDE_KNOWN=1`, in the pinned case always. */
+    constructor(readonly includeKnown = INCLUDE_KNOWN) {}
     readonly prefix = `HP${stamp}r${runSerial++}-`;
     noteIds = new Map<number, string>();
     tagIds = new Map<number, string>();
@@ -453,7 +454,7 @@ describe.skipIf(!isTestDb)("history restore: random multi-step undo (model based
 
     async seedTags(): Promise<void> {
       for (let t = 0; t < 2; t++) {
-        const name = INCLUDE_KNOWN ? `${this.prefix}p${"ab"[t]}` : `${this.prefix}t${t}`;
+        const name = this.includeKnown ? `${this.prefix}p${"ab"[t]}` : `${this.prefix}t${t}`;
         const r = await call("/api/tags", "POST", { name });
         if (r.status !== 201) this.fail(`seed tag failed: ${describeReply(r)}`);
         this.tagIds.set(t, r.body.id);
@@ -479,7 +480,7 @@ describe.skipIf(!isTestDb)("history restore: random multi-step undo (model based
       const m = this.model;
       const pick = <T,>(xs: T[], i: number): T | undefined => (xs.length ? xs[i % xs.length] : undefined);
       const lives = liveNotes(m);
-      const line = (j: number) => `L${idx}.${j}${INCLUDE_KNOWN && sel.c % 4 === 0 && j === 0 ? LONE : ""}`;
+      const line = (j: number) => `L${idx}.${j}${this.includeKnown && sel.c % 4 === 0 && j === 0 ? LONE : ""}`;
       switch (sel.kind) {
         case "createNote": {
           if (Object.keys(m.notes).length >= 6) return null;
@@ -512,7 +513,7 @@ describe.skipIf(!isTestDb)("history restore: random multi-step undo (model based
         }
         case "tagRename": {
           const t = pick(Object.keys(m.tagNames).map(Number), sel.a); if (t === undefined) return null;
-          if (INCLUDE_KNOWN) {
+          if (this.includeKnown) {
             const free = ["pa", "pb", "pc"].map((s) => `${this.prefix}${s}`).filter((nm) => !Object.values(m.tagNames).includes(nm));
             const name = pick(free, sel.b);
             return name === undefined ? null : { t: "tagRename", tag: t, name };
@@ -1025,4 +1026,12 @@ const plan = fc.array(fc.record({ pick: fc.nat(30), again: fc.boolean(), any: fc
     else expect(r.body.error).toBe("history_incomplete");
     expect(before).not.toBe("alpha\n");
   });
+  // The shrunk counterexample of PROPS_INCLUDE_KNOWN=1 PROPS_SEED=31 PROPS_RUNS=25: a body edit whose first line has a lone surrogate, four notes
+  // made after it, then one restore that may be any event. Open: the random run leaves the lone-surrogate trigger out because of it
+  // (the #22 case above passes, so the hole is in another path); when it is fixed this turns red, becomes `it`, and `includeKnown` goes.
+  it.fails("a body edit with a lone surrogate in a world of other edits: the restore keeps the state exact or refuses cleanly (PROPS_SEED=31)", async () => {
+    const w = new World(true);
+    await w.run([{ kind: "editBody", a: 0, b: 0, c: 0 }, ...Array.from({ length: 4 }, () => ({ kind: "createNote" as const, a: 0, b: 0, c: 0 }))]);
+    await restorePhase(w, [{ pick: 0, again: false, any: true }]);
+  }, 120_000);
 });

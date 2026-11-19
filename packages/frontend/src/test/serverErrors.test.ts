@@ -16,101 +16,33 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = (() => {
   return Object.fromEntries([...body.matchAll(/^ {2}([a-z0-9_]+): ("(?:[^"\\]|\\.)*"),$/gm)].map((m) => [m[1]!, JSON.parse(m[2]!) as string]));
 })();
 
-
-// ── Which codes the backend sends ───────────────────────────────────────────
-// The codes are the literals in `error: "<code>"` response bodies and the snake_case arguments of the backend's refusals, which apiOnError (httpError.ts) answers as `error`. A refusal is
-// found by what it IS, not by what it is called: any class that extends StatusError or CodedStatusError (through any number of levels; statusError.ts), and the `super(status, "<code>", …)` call
-// of its constructor. (The first version matched a class NAME ending in Error or Refusal; SessionRefused did not match, and six codes had no sentence and nothing said so.) The suffix match is
-// kept as well: a class named like a refusal that does not extend the base is still read, and `new XxxError("some_code")` calls stay covered.
-const BACKEND = resolve(dirname(fileURLToPath(import.meta.url)), "../../../backend/src");
-function backendFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return name === "test" || name === "vendor" ? [] : backendFiles(path);
-    return name.endsWith(".ts") && !name.endsWith(".test.ts") ? [path] : [];
-  });
-}
-type Source = { where: string; text: string };
-const backendSources = (): Source[] => backendFiles(BACKEND).map((file) => ({ where: relative(BACKEND, file), text: readFileSync(file, "utf8") }));
-/** The names of the classes that are refusals with a status: the two bases and every class that extends one of them. */
-function refusalClasses(sources: Source[] = backendSources()): string[] {
-  const parents = new Map<string, string>();
-  for (const { text } of sources) for (const m of text.matchAll(/\bclass (\w+) extends (\w+)/g)) parents.set(m[1]!, m[2]!);
-  const found = new Set(["StatusError", "CodedStatusError"]);
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const [name, base] of parents) if (!found.has(name) && found.has(base)) { found.add(name); grew = true; }
-  }
-  return [...found];
-}
-function codesTheBackendSends(sources: Source[] = backendSources()): Map<string, string> {
-  const refusals = refusalClasses(sources);
-  const isRefusal = (name: string) => refusals.includes(name) || /(?:Error|Refusal)$/.test(name); // by what it is, or by the suffix the scan always had
-  const snake = (text: string) => [...text.matchAll(/"([a-z][a-z0-9]*(?:_[a-z0-9]+)+)"/g)].map((c) => c[1]!);
-  const sent = new Map<string, string>();
-  // helpers that make a refusal: `const refuse = (code, message) => new FreshProofRefused(403, code, message)`. A call of one is a code in the file that defines it, and in a file that
-  // imports it (only an `export`ed helper can be imported): a same-named function elsewhere (`refuse(op, "reason")` in distributedSync) is not a refusal.
-  const makerPattern = /(export\s+)?\b(?:const|function)\s+(\w+)\s*=?\s*\([^)]*\)\s*(?::\s*[\w<>|\s]+?)?\s*(?:=>)?\s*\{?\s*(?:return\s+|throw\s+)?new\s+(\w+)\(/g;
-  const exported = new Set<string>();
-  const localHelpers = new Map<string, Set<string>>();
-  for (const { text, where } of sources) {
-    for (const m of text.matchAll(makerPattern)) {
-      if (!isRefusal(m[3]!)) continue;
-      (localHelpers.get(where) ?? localHelpers.set(where, new Set()).get(where)!).add(m[2]!);
-      if (m[1]) exported.add(m[2]!);
-    }
-  }
-  for (const { text, where } of sources) {
-    const helpers = new Set([...(localHelpers.get(where) ?? []), ...exported]);
-    for (const m of text.matchAll(/\berror:\s*"([a-z][a-z0-9_]*)"/g)) sent.set(m[1]!, where);
-    // `new <a refusal>(…)` (the arguments are looked AHEAD at, so an earlier `new Set(…)` on the same line does not swallow them)
-    for (const m of text.matchAll(/new ([A-Z]\w*)\((?=([^;]{0,400}))/g)) {
-      if (!isRefusal(m[1]!)) continue;
-      for (const code of snake(m[2]!)) sent.set(code, where);
-    }
-    // a call of a helper that makes one: `const refuse = (code, message) => new FreshProofRefused(403, code, message)`, then `refuse("fresh_proof_used", …)` (the code is the literal given to it)
-    for (const m of text.matchAll(/\b(\w+)\((?=([^;]{0,300}))/g)) if (helpers.has(m[1]!)) for (const code of snake(m[2]!)) sent.set(code, where);
-    // a refusal class that fixes its own code: `class Xxx extends CodedStatusError { constructor() { super(403, "code", …) } }`
-    for (const m of text.matchAll(/\bclass (\w+) extends (\w+)[^{]*\{([\s\S]{0,600}?)\n\}/g)) {
-      if (!refusals.includes(m[2]!) && !refusals.includes(m[1]!)) continue;
-      for (const call of m[3]!.matchAll(/\bsuper\((?=([^;]{0,300}))/g)) for (const code of snake(call[1]!)) sent.set(code, where);
-    }
-  }
-  return sent;
-}
-
 afterEach(() => setLocalePref("en"));
 // The rarer codes' wording loads on use (readErrorBody does this before an ApiError is built).
 beforeAll(() => ensureSentenceWording(JSON.stringify({ error: "owner_only" })));
 
 describe("server error messages", () => {
   it("every error code the backend sends has a message (D115)", () => {
-    expect(codesTheBackendSends().size).toBeGreaterThan(50); // the scan still finds the codes
-    const missing = [...codesTheBackendSends()].filter(([code]) => !SERVER_ERROR_MESSAGES[code] && !LATE_SERVER_ERROR_MESSAGES[code]).map(([code, where]) => `${code} (${where})`);
+    // The codes are the literals in `error: "<code>"` response bodies and the
+    // snake_case arguments of the backend's error classes (new XxxError(…) /
+    // new XxxRefusal(…)), which apiOnError (httpError.ts) answers as `error`.
+    const backend = resolve(dirname(fileURLToPath(import.meta.url)), "../../../backend/src");
+    const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return name === "test" || name === "vendor" ? [] : files(path);
+      return name.endsWith(".ts") && !name.endsWith(".test.ts") ? [path] : [];
+    });
+    const sent = new Map<string, string>();
+    for (const file of files(backend)) {
+      const text = readFileSync(file, "utf8");
+      const where = relative(backend, file);
+      for (const m of text.matchAll(/\berror:\s*"([a-z][a-z0-9_]*)"/g)) sent.set(m[1]!, where);
+      for (const m of text.matchAll(/new [A-Z]\w*(?:Error|Refusal)\(([^;]{0,400})/g)) {
+        for (const c of m[1]!.matchAll(/"([a-z][a-z0-9]*(?:_[a-z0-9]+)+)"/g)) sent.set(c[1]!, where);
+      }
+    }
+    expect(sent.size).toBeGreaterThan(50); // the scan still finds the codes
+    const missing = [...sent].filter(([code]) => !SERVER_ERROR_MESSAGES[code] && !LATE_SERVER_ERROR_MESSAGES[code]).map(([code, where]) => `${code} (${where})`);
     expect(missing).toEqual([]);
-  });
-
-  it("the scan finds a code by what it IS (the value given as the code of a refusal), whatever its class is called", () => {
-    // SessionRefused, FreshProofRefused and BundleOwnerOnly extend CodedStatusError without ending in Error or Refusal: the name-suffix scan this replaces never saw their codes.
-    const codes = codesTheBackendSends();
-    for (const code of ["session_limit_reached", "body_too_large", "fresh_proof_used", "bundle_owner_only"]) expect(codes.has(code), code).toBe(true);
-    // a refusal class is any class that extends StatusError or CodedStatusError, through any number of levels
-    expect(refusalClasses()).toEqual(expect.arrayContaining(["StatusError", "CodedStatusError", "SessionRefused", "BundleOwnerOnly"]));
-  });
-
-  it("self-test: given made-up source with a code that has no sentence, the scan reports it (and a code with a sentence is found too)", () => {
-    const fake: Source[] = [{ where: "fake/thing.ts", text: [
-      "class ThingRefused extends CodedStatusError {}",
-      "class DeepRefused extends ThingRefused {}",
-      "const refuseIt = (code: string, message: string) => new DeepRefused(409, code, message);",
-      "export function a() { throw new ThingRefused(400, \"zz_made_up_one\", \"x\"); }",
-      "export function b() { throw refuseIt(\"zz_made_up_two\", \"y\"); }",
-      "export function c() { const s = new Set(1); throw new ThingRefused(400, \"zz_made_up_three\", \"z\"); }",
-    ].join("\n") }];
-    const found = codesTheBackendSends(fake);
-    expect([...found.keys()].sort()).toEqual(["zz_made_up_one", "zz_made_up_three", "zz_made_up_two"]);
-    const missing = [...found].filter(([code]) => !SERVER_ERROR_MESSAGES[code] && !LATE_SERVER_ERROR_MESSAGES[code]).map(([code]) => code);
-    expect(missing.sort()).toEqual(["zz_made_up_one", "zz_made_up_three", "zz_made_up_two"]); // red: none has a sentence
   });
 
   it("the late table is found, and lateCodeMessage words each of its codes", () => {

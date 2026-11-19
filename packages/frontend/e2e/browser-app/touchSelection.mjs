@@ -13,19 +13,20 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "./serve.mjs";
+import { runSeed } from "./seed.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const playwright = (() => { try { return require("playwright"); } catch { return require(join(process.env.PLAYWRIGHT_LIB ?? "/opt/node-tools/node_modules", "playwright")); } })();
 const flag = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
-const SEED = Number(process.env.SEED ?? 20261115);
+const SEED = runSeed("touchSelection");
 const RUNS = Number(process.env.RUNS ?? 24);
 const KEYBOARD = 320;
 const site = await serve(resolve(here, "../..", flag("--dir", "dist-browser")));
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`); };
 
-/** Small seeded generator (mulberry32): a failure is replayed with the same SEED. */
+/** Small seeded generator (mulberry32): a failure is replayed with the printed SEED (a fresh one every run). */
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pick = (r, list) => list[Math.floor(r() * list.length)];
 const FILLER = ["用變數", "一二三四五六七八九十", "yytext 表示目前比對到的字串", "scanner", "每次都會把結果放進去", "abc def ghi jkl", "之後在動作程式中取用"];

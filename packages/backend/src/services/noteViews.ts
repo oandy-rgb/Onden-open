@@ -117,7 +117,7 @@ export async function createNoteView(actor: ActorCtx, workspaceId: string, nodeI
         if (await viewNameTaken(workspaceId, nodeId, v.name)) throw new TagViewNameConflictError(v.name);
         const now = new Date().toISOString();
         await insertView({
-          workspaceId, holderId: nodeId, viewId, layout: v.layout, by: actor,
+          workspaceId, holderId: nodeId, viewId, layout: v.layout, createdBy: actor.id,
           element: {
             name: v.name, filters: v.filters, sorts: v.sorts, group_by: v.group_by ?? null,
             visible_fields: v.visible_fields, layout_config: v.layout_config,
@@ -142,11 +142,7 @@ export async function updateNoteView(actor: ActorCtx, workspaceId: string, nodeI
     await mutate({
       actor,
       workspaceId,
-      // Changing the view's settings (filters, sorts, grouping, fields, layout) overwrites them, and COLLECTION_VIEW_UPDATED has no inverse
-      // (restoreContract.ts): never a temporary session's, like deleting one (round 4). Renaming it or moving it in the list stays a write.
-      authority: Object.keys(updates).every((k) => k === "name" || k === "pin_order")
-        ? authorityFor(nodeId)
-        : { kind: "irreversible", of: authorityFor(nodeId) },
+      authority: authorityFor(nodeId),
       event: {
         type: "COLLECTION_VIEW_UPDATED",
         targetType: "node",
@@ -172,7 +168,7 @@ export async function deleteNoteView(actor: ActorCtx, workspaceId: string, nodeI
     await mutate({
       actor,
       workspaceId,
-      authority: { kind: "irreversible", of: authorityFor(nodeId) }, // no inverse (restoreContract.ts)
+      authority: authorityFor(nodeId),
       event: {
         type: "COLLECTION_VIEW_DELETED",
         targetType: "node",

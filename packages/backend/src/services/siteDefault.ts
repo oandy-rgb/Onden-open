@@ -16,12 +16,11 @@ import { recordAttributeChange } from "./attributeChange.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { subtreeIds } from "./nodeTree.js";
-import type { NewNoteProof } from "./newNoteProof.js";
 
 /** Give the new note `childId` the site default of its direct parent. Call inside
  *  the note's creation (createNote, a copy, a template slot), whose cascade
  *  authorizes the writes. A `_published` the note already has is kept. */
-export async function applyParentSiteDefault(workspaceId: string, parentId: string, childId: string, actor: ActorCtx, triggeredBy: string | undefined, newNote: NewNoteProof): Promise<void> {
+export async function applyParentSiteDefault(workspaceId: string, parentId: string, childId: string, actor: ActorCtx, triggeredBy?: string): Promise<void> {
   const flag = await db.selectFrom("node_attributes").select("value")
     .where("workspace_id", "=", workspaceId).where("node_id", "=", parentId).where("key", "=", PUBLISHED_ATTR_KEY).executeTakeFirst();
   const attrs = newNoteSiteDefault(flag ? { [PUBLISHED_ATTR_KEY]: flag.value } : null);
@@ -29,7 +28,7 @@ export async function applyParentSiteDefault(workspaceId: string, parentId: stri
   const written = await recordAttributeChange({
     workspaceId, nodeId: childId, key: PUBLISHED_ATTR_KEY, actor,
     next: { value: attrs[PUBLISHED_ATTR_KEY]!, value_type: "text", is_inheritable: false, source: "derived" },
-    rule: "absent", inheritedAtCreation: true, newNote, authority: { kind: "cascade" }, uiContext: "node.site_default", payload: { from_parent: parentId }, triggeredBy,
+    rule: "absent", inheritedAtCreation: true, authority: { kind: "cascade" }, uiContext: "node.site_default", payload: { from_parent: parentId }, triggeredBy,
   });
   if (!written.written) return;
   await recordAttributeChange({

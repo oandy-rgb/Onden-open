@@ -16,7 +16,6 @@ vi.mock("../lib/localDb", () => ({
   storeRejectedWrite: async (request: import("../lib/localDb").RejectedRequest, rejection: string) => ({ ...request, id: 901, attempts: 0, rejection }),
   addPendingWrite: vi.fn(async () => null),
   getPendingWrites: vi.fn(async () => []),
-  clearPendingWrite: vi.fn(async () => {}),
   upsertWorkspace: vi.fn(async () => null),
   upsertNode: vi.fn(async () => null),
   removeNode: vi.fn(async () => null),
@@ -34,11 +33,7 @@ vi.mock("../lib/localDb", () => ({
 }));
 
 import { type Bootstrap, type Canvas, noWorkspaceData, ApiError } from "../lib/api";
-import { addPendingWrite, upsertTask, upsertNode, removeNode, upsertCanvas, removeCanvas, loadCanvas, clearPendingWrite, getPendingWrites } from "../lib/localDb";
-import { memoryQueue } from "./helpers/memoryQueue";
-
-// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
-let queue: { rows: unknown[] };
+import { addPendingWrite, upsertTask, upsertNode, removeNode, upsertCanvas, removeCanvas, loadCanvas } from "../lib/localDb";
 import { setPending } from "../lib/data/syncStatus";
 import { makeTaskWriter } from "../lib/data/taskWriter";
 import { makeTagWriter } from "../lib/data/tagWriter";
@@ -76,7 +71,7 @@ function bootstrapWith(nodes: Bootstrap["nodes"]): Bootstrap {
 
 beforeEach(() => {
   apiMock.mockReset();
-  vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+  vi.mocked(addPendingWrite).mockClear();
   vi.mocked(upsertTask).mockClear();
   vi.mocked(upsertNode).mockClear();
   vi.mocked(removeNode).mockClear();
@@ -120,7 +115,7 @@ describe("domain writer offline coverage", () => {
     await m.tasks.create("n1", "buy milk");
     expect(apiMock).toHaveBeenCalledWith("/api/nodes/n1/tasks", expect.objectContaining({ method: "POST" }));
     expect(store.get().tasks[0]!.id).toBe("srv");
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
   });
 
   it("applyTag offline: queues PUT + mirrors membership (label tag → label_tag_ids)", async () => {
@@ -145,7 +140,7 @@ describe("domain writer offline coverage", () => {
     });
     await m.tags.apply("n1", "t1");
     expect(apiMock).toHaveBeenCalledWith("/api/nodes/n1/tags/t1", expect.objectContaining({ method: "PUT" }));
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
   });
 
   it("removeTag offline: queues DELETE + drops membership", async () => {
@@ -196,7 +191,7 @@ describe("domain writer offline coverage", () => {
     expect(r.queued).toBe(false);
     expect(apiMock).toHaveBeenCalledWith("/api/tags", expect.objectContaining({ method: "POST" }));
     expect(apiMock).not.toHaveBeenCalledWith("/api/tags/import", expect.anything());
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled(); // reconcile with server truth
   });
 
@@ -211,7 +206,7 @@ describe("domain writer offline coverage", () => {
     // Optimistic tag fully removed (node + Tag row) — no phantom class_tag left behind.
     expect(store.get().nodes.some((n) => n.node_type === "class_tag")).toBe(false);
     expect((store.get().tags ?? []).length).toBe(0);
-    expect(queue.rows).toEqual([]); // a 4xx is never queued
+    expect(addPendingWrite).not.toHaveBeenCalled(); // a 4xx is never queued
   });
 
   it("createTag refuses a name with \"/\" before writing anything, reported once", async () => {
@@ -225,7 +220,7 @@ describe("domain writer offline coverage", () => {
     expect(addToast).toHaveBeenCalledTimes(1);
     expect(store.get().nodes.some((n) => n.node_type === "class_tag")).toBe(false);
     expect(apiMock).not.toHaveBeenCalled();
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
   });
 });
 
@@ -241,7 +236,7 @@ describe("nodeMutations offline coverage", () => {
     const store = makeStore(bootstrapWith([{ ...baseNode }]));
     const m = makeNodeMutations(ctx(store, false));
     await m.duplicateNode({ ...baseNode });
-    expect(queue.rows).toHaveLength(1);
+    expect(addPendingWrite).toHaveBeenCalledTimes(1);
     const [method, path] = vi.mocked(addPendingWrite).mock.calls[0]!;
     expect(method).toBe("POST");
     expect(path).toBe("/api/nodes/n1/duplicate");
@@ -279,7 +274,7 @@ describe("nodeMutations offline coverage", () => {
     const store = makeStore(bootstrapWith([{ ...baseNode }]));
     const m = makeNodeMutations(ctx(store, false));
     await expect(m.restoreVersion("n1", "v1", { restoreTitle: false })).rejects.toThrow(/connection/);
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
     expect(apiMock).not.toHaveBeenCalled();
   });
 });
@@ -328,7 +323,7 @@ describe("canvasWriter offline coverage", () => {
     const a = makeCanvasWriter(canvasCtx(true));
     await a.save("c1", { nodes: [{ nodeId: "n1", x: 1, y: 2 }] });
     expect(apiMock).toHaveBeenCalledWith("/api/boards/c1", expect.objectContaining({ method: "PATCH" }));
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
   });
 
   it("createCanvas offline: queues POST with a CLIENT-MINTED id + returns the optimistic canvas (no longer null)", async () => {
@@ -408,7 +403,7 @@ describe("canvasWriter offline coverage", () => {
     // The returned canvas keeps the client-minted id (server honored it).
     const call = apiMock.mock.calls.find(([p]) => p === "/api/canvases")!;
     expect(JSON.parse(String((call[1] as RequestInit).body)).id).toBe(fresh!.id);
-    expect(queue.rows).toEqual([]);
+    expect(addPendingWrite).not.toHaveBeenCalled();
   });
 });
 

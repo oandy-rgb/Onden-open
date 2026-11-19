@@ -40,8 +40,7 @@ export const wholeWorkspace = (): Scope => ({
 type StampDef = { label: string; rowKey: string; when?: string };
 
 type Entry = {
-  pk: string[]; order: string[]; where: string; /** Rows of the table that NEVER leave this node (see `stampMayLeaveSql`): the classification says which in syncClasses.json (`neverLeaves`), this is how to tell. */ neverLeaves?: string;
-  exclude?: string[]; placeholders?: Record<string, string>;
+  pk: string[]; order: string[]; where: string; exclude?: string[]; placeholders?: Record<string, string>;
   override?: Record<string, string>; deferred?: string[]; stamps?: StampDef[]; note?: string;
 };
 
@@ -52,8 +51,6 @@ export type SnapshotSpec = {
   /** SQL expressions over `t` that order rows (text, compared bytewise). */
   order: string[];
   where(s: Scope): string;
-  /** SQL over `t` for the rows that never leave this node (already left out of `where`); see `stampMayLeaveSql`. */
-  neverLeaves?: string;
   exclude?: string[];
   placeholders?: Record<string, string>;
   override?(s: Scope): Record<string, string>;
@@ -81,24 +78,9 @@ export const SHELL_EMPTY_CHECKS: { code: string; sql: string }[] = (data as unkn
 export const RETIRED_STAMP_LABELS: readonly string[] = ["node_attributes._canvas_sections"];
 
 export const SNAPSHOT_SPECS: SnapshotSpec[] = Object.entries(data as unknown as Record<string, Entry>).filter(([table]) => !table.startsWith("$")).map(([table, e]) => ({
-  table, pk: e.pk, order: e.order, where: (s) => e.neverLeaves ? `(${fill(e.where, s)}) AND NOT (${e.neverLeaves})` : fill(e.where, s), neverLeaves: e.neverLeaves, exclude: e.exclude, placeholders: e.placeholders, deferred: e.deferred, stamps: e.stamps,
+  table, pk: e.pk, order: e.order, where: (s) => fill(e.where, s), exclude: e.exclude, placeholders: e.placeholders, deferred: e.deferred, stamps: e.stamps,
   override: e.override ? (s) => Object.fromEntries(Object.entries(e.override!).map(([c, sql]) => [c, fill(sql, s)])) : undefined,
 }));
 for (const spec of SNAPSHOT_SPECS) for (const d of spec.stamps ?? []) if (RETIRED_STAMP_LABELS.includes(d.label)) throw new Error(`snapshotTables.json: ${spec.table} lists the retired stamp label ${d.label}`);
 
 export const snapshotSpec = (table: string): SnapshotSpec | undefined => SNAPSHOT_SPECS.find((s) => s.table === table);
-
-/**
- * SQL that is true when a stamp (a row of the stamp table, on alias `s`) does NOT name a row that never leaves this node: the one rule for what stamps a snapshot, a change bundle and a digest
- * carry. The ROWS that never leave are left out by `where` (above); their STAMPS need this, because a deleted row's tombstone outlives the row and its key still names it (a temporary
- * session's membership: "<space>/<session's actor id>"). A stamp is judged by its key alone, as a row of the table with only its key columns: so `neverLeaves` of a table that has
- * stamps may use only its primary-key columns (syncClasses.guard.test.ts), and the key is "<column>/<column>…" in `pk` order (a part that holds a "/" is not a key of such a table).
- * The classification is `neverLeaves` of syncClasses.json (rows of class X never leave), checked by guards/neverLeaves.guard.test.ts and, on the wire, by sessionsStayOnTheirNode.integration.test.ts.
- */
-export function stampMayLeaveSql(alias = "s"): string {
-  const parts = SNAPSHOT_SPECS.flatMap((spec) => spec.neverLeaves && spec.stamps ? spec.stamps.map((def) => {
-    const row = spec.pk.map((column, i) => `split_part(${alias}.row_key, '/', ${i + 1}) AS "${column}"`).join(", ");
-    return `(${alias}.table_name = '${def.label.replaceAll("'", "''")}' AND EXISTS (SELECT 1 FROM (SELECT ${row}) t WHERE ${spec.neverLeaves}))`;
-  }) : []);
-  return parts.length === 0 ? "true" : `NOT (${parts.join(" OR ")})`;
-}

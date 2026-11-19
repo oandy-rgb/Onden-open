@@ -70,8 +70,7 @@ beforeEach(() => {
 describe("domain write contract", () => {
   it.each(["task", "tag", "relation", "canvas"] as const)("%s creation waits for durable acknowledgement and retains an unconfirmed intent", async (domain) => {
     const h = harness(false); const c = boards(false); const gate = deferred<void>();
-    // Storage that cannot take the row: the record made first and the queue both wait on it and fail.
-    vi.mocked(db.addPendingWrite).mockReturnValue(gate.promise);
+    vi.mocked(db.addPendingWrite).mockReturnValueOnce(gate.promise);
     const save = domain === "task" ? makeTaskWriter(h.ctx).create("n1", "New", { when: "2026-10-01" })
       : domain === "tag" ? makeTagWriter(h.ctx).create("New")
       : domain === "relation" ? makeRelationWriter(h.ctx).connect("n1", "n2", "knowledge_link") : c.writer.create("New");

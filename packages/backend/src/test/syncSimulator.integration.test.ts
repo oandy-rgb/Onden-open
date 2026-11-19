@@ -12,7 +12,9 @@
 //   SYNC_SIM_SEED=<seed> SYNC_SIM_RUNS=<n> npx vitest run src/test/syncSimulator.integration.test.ts
 //   SYNC_SIM_PATH=<path printed with the failure> to jump to the shrunk case.
 //   SYNC_SIM_REPLAY='[{"kind":"edit",…}]' replays an exact op list (JSON as printed).
-// Defaults: seed 20261023, 80 runs (≈ 2 minutes with three devices); raise SYNC_SIM_RUNS freely.
+// Defaults: a fresh seed on every run (owner 2026-11-18 「種子都隨機」; printed at the start and with a failure), 200 runs
+// (≈ 5 minutes with three devices; the run stops early without failing at 8 minutes); raise SYNC_SIM_RUNS freely.
+// A sequence that failed once is kept as a fixed case in helpers/syncSim/regressions.ts.
 //
 // TASKS, REVIEW, SAVED VIEWS. Devices also tick checkbox lines of a body, add / tick / date tasks that belong to no note, make notes
 // review cards and grade / undo / put off a card (two devices may show the same card), and create / change / delete saved views
@@ -25,9 +27,11 @@
 // workspace of its own.
 import { describe, it, expect, vi } from "vitest";
 import fc from "fast-check";
+import { assertAllRuns } from "./helpers/syncSim/assertAllRuns.js";
 import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
+import { PROPS_SEED } from "./helpers/propsConfig.js";
 import { nativeOwnerActor } from "./helpers/persistActor.js";
 import { awaitAllDispatchers } from "../services/dispatcherQueue.js";
 import { SimServer } from "./helpers/syncSim/server.js";
@@ -93,8 +97,9 @@ async function play(ops: Op[], checks: Checks = {}): Promise<World> {
 }
 
 describe.skipIf(!isTestDatabase())("multi-device sync simulator (DB)", () => {
-  const seed = Number(process.env.SYNC_SIM_SEED ?? 20261023);
-  const numRuns = Number(process.env.SYNC_SIM_RUNS ?? 80);
+  const seed = Number(process.env.SYNC_SIM_SEED ?? PROPS_SEED);
+  const numRuns = Number(process.env.SYNC_SIM_RUNS ?? 200);
+  console.log(`[sync-sim] seed=${seed} runs=${numRuns} (SYNC_SIM_SEED=${seed})`);
 
   it(`keeps every saved line and converges (seed ${seed}, ${numRuns} runs)`, async () => {
     if (process.env.SYNC_SIM_REPLAY) {
@@ -104,7 +109,8 @@ describe.skipIf(!isTestDatabase())("multi-device sync simulator (DB)", () => {
       return;
     }
     try {
-      await fc.assert(
+      await assertAllRuns(
+        "sync-sim",
         fc.asyncProperty(fc.array(opArbitrary, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true }); }),
         { seed, numRuns, path: process.env.SYNC_SIM_PATH, endOnFailure: false, interruptAfterTimeLimit: 8 * 60_000 },
       );

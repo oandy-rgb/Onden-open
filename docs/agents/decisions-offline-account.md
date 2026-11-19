@@ -1,6 +1,6 @@
 # 邊界決定：離線佇列、登入與帳號隔離、啟動（第 16、18–21、24、25 批，2026-09-13～15）
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-01）
 > 涵蓋：packages/frontend/src/lib/accountStorage.ts, packages/frontend/src/lib/indexedDbStorage.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeRecovery.ts, packages/frontend/src/components/AccountSessionBoundary.tsx, packages/frontend/src/components/MembershipGate.tsx
 
 何時讀：改離線佇列、拒絕輸入保留、登入檢查、帳號本機副本分區、手機帳號入口或啟動位置之前。
@@ -150,7 +150,7 @@ GAP-22 的手機入口與狀態可見性已修；320／390px、1440px、503 及�
   限制：尚未更新的舊版分頁不寫世代，這個保護對它無效；部署後舊分頁重新載入即可。
 - **各分頁的待送佇列順序：** 檢查「有沒有積壓」之前先 `catchUpWithOtherTabs`——世代變了就改用已存快照，
   否則把別的 session 還在 journal 的紀錄重播進來。尚未存進快照的紀錄一定還在 journal，所以不漏。
-  佇列依做出那一列的時間排（`made_at`，微秒，見下方「送出前先記下」），兩個分頁的列依做出的順序排；同一微秒的兩列順序不定。
+  分頁間的列 id 仍各自遞增，同時離線排隊的兩個分頁順序以各自 id 為準，不保證跨分頁的時間順序。
 - **bootstrap 落地與 `sync()` 互斥（`landBootstrap`）：** 落地等進行中的 sync，sync 等落地；
   `resync_required` 由 sync 自己呼叫，不再等自己。bootstrap 比 mirror 游標舊時，worker 把游標倒回它自己的
   `last_event_id`，引擎隨後呼叫 `sync()` 重播差異（delta 冪等）。比游標新的 bootstrap 仍不會把游標往前推。
@@ -166,29 +166,3 @@ GAP-22 的手機入口與狀態可見性已修；320／390px、1440px、503 及�
   匯入與清除工作區先等前一筆寫完。
 - **超過約 60 KB 的離開頁面儲存不用 keepalive**（瀏覽器上限 64 KiB，會丟 TypeError）；
   仍先同步留下復原副本。
-
-## 送出前先記下：每次保存先成為佇列的一列（2026-11-18）
-
-- **原因**：線上保存直接送出、不進佇列；送出中的那筆只記在 sessionStorage 的一格（活過重新整理、活不過關分頁），
-  本機副本卻在 2 秒的快照防抖後就存下新內文。頁面沒有任何事件就結束時：2 秒內，字不見；2～25 秒（請求卡住），
-  重開後編輯器顯示得像已存，其實沒有任何東西會送它，之後伺服器的版本把它換掉（bootstrap 的投影只保護佇列裡有列的筆記）。
-- **比較過的兩條路**：(A) 先寫進佇列再送；(B) 把那一格搬到關分頁也活得下來的地方（localStorage），用 Web Locks 判斷做它的那一頁是不是還活著。
-  選 A：只有 A 讓「待送紀錄」和本機副本在**同一個儲存**（同一個本機 worker 的同一條工作序列、同一份 IndexedDB），
-  順序可以保證——紀錄先寫進磁碟，本機副本才改，所以任何一份存下來的快照裡有新內文時，紀錄一定已經在。
-  B 的兩邊在不同的儲存，寫進磁碟的時間各自決定，永遠留一個縫；而且 B 是第二套簿記（佇列之外另一格）。
-- **規則與入口**：`writeQueue.recordWrite`（`writeLifecycle` 在更新本機副本之前呼叫；`submitWrite` 沒拿到時自己呼叫）。
-  在頁面活著時那一列是它自己的（`lib/data/sendingHere.ts`：每筆一把以冪等鍵命名的 Web Lock；
-  `syncStatus.waitingWrites` 不把它算成等待同步）。任何分頁的排空停在鎖還被拿著的列前面，鎖放掉後再排空一次。
-  這是選項 B 裡「用 Web Locks 判斷那一頁還活著」的那一半，用在佇列的列上，不是第二套簿記。`inFlightWrite.ts` 與 `adoptInterruptedWrite` 刪除。
-- **連帶的修正**（多分頁性質測試在 A 之後找到的）：(1) 佇列依 `made_at` 排（`localDbWorker.queuedAt`，
-  `pending_writes.made_at`，日誌紀錄帶著它），否則接手另一個分頁的列時，它較舊的文字排到這一頁較新的後面；
-  (2) 依冪等鍵找列（`rowOf`），因為同一個 id 在兩個副本裡可能是不同的寫入，用 id 刪會刪到別人的列；
-  (3) 上一頁留在復原區的寫入在這一頁的第一筆紀錄之前排進佇列（`adoptLeftWrites`，一次一個）；
-  (4) 待送文字蓋過伺服器較新版本的筆記由副本記著（`noteHeldText`，跟著快照），送出後再讀一次，不論是哪個分頁送的（見 decisions-core-sync）。
-  (5) 分頁接手一份**比自己舊**的已存副本（`adoptStoredSnapshot`）時，它在路上的同步請求是從自己較新的游標問的；
-  回應落在舊副本上會讓游標越過中間的變更。之後的下一個請求一律從那份副本的游標開始，重播一次無害
-  （`localDbSharedStorage.test.ts`）。只有送出同步請求的那一次讀取（`getLastEventId({ startingSync: true })`）用掉這個下限；
-  其他讀游標的地方（開機時「同步過沒有」、bootstrap 的前後比較、membership 檢查）看得到它但不用掉，所以誰先讀都一樣。這是既有「接手時取兩個游標中較早的」規則的另一半，也是 multiTab 的已知
-  `it.fails`（重新載入可能畫出比分頁更舊的字）同一族；那一個仍開著（快照存檔失敗時丟掉的是分頁自己套用過的資料，不是游標）。
-- **測試**：`src/test/saveSurvivesKill.test.ts`、`multiTab.property.test.ts`（第 5 條：打開時本機副本沒有無人負責的內文）。
-

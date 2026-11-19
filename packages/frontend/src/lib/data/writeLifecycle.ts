@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { randomUUID } from "../uuid";
-import { recordWrite, submitWrite, type WriteRequest, type WriteResult } from "./writeQueue";
+import { submitWrite, type WriteRequest, type WriteResult } from "./writeQueue";
 import { classifyWriteFailure, isHandledNoteExists, reportWriteFailure } from "./writeErrors";
 import { rememberUnconfirmedWrite, protectPendingWriteOnExit } from "./writeRecovery";
 import type { ToastFn } from "./types";
@@ -35,20 +35,16 @@ export function makeWriteLifecycle(ctx: Context) {
     const prepared = { ...request, idemKey: request.idemKey ?? randomUUID() };
     if (prepared.init?.keepalive) rememberUnconfirmedWrite(prepared);
     const releaseExitProtection = protectPendingWriteOnExit(prepared);
-    // The queue row first, now, in the order writes are made; the local copy only after it is durable: a page killed
-    // at any instant leaves no text in the local copy that the queue does not hold (writeQueue.recordWrite).
-    const recorded = recordWrite(prepared);
     return inWriteOrder(resource, async () => {
       let mirrorFailed = false;
       const mirror = async () => {
         try { await effects.mirror?.(); mirrorFailed = false; }
         catch { mirrorFailed = true; }
       };
-      await recorded;
       if (!effects.destructive) await mirror();
       let result: WriteResult<T>;
       try {
-        result = await submitWrite<T>({ ...prepared, online: ctx.online }, { recorded });
+        result = await submitWrite<T>({ ...prepared, online: ctx.online });
       } catch (error) {
         if (classifyWriteFailure(error) === "rejected") {
           try { await effects.rejected?.(); }

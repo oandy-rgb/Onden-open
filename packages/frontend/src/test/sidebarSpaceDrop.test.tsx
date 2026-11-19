@@ -57,7 +57,8 @@ async function drag(from: HTMLElement, hit: Element | null, pointerType: "mouse"
   from.dispatchEvent(new PointerEvent("pointerdown", { pointerType, isPrimary: true, button: 0, buttons: 1, clientX: 10, clientY: 17, bubbles: true }));
   if (pointerType === "touch") await act(async () => { vi.advanceTimersByTime(350); });
   await act(async () => { pointer("pointermove", 10, 120, pointerType); });
-  await act(async () => { pointer("pointerup", 10, 120, pointerType); await vi.runOnlyPendingTimersAsync(); });
+  // The click that trails a touch is swallowed for a moment (lib/touchHold swallowNextClick): wait that out, as the person would.
+  await act(async () => { pointer("pointerup", 10, 120, pointerType); await vi.advanceTimersByTimeAsync(600); });
 }
 
 async function setup(spaces: Space[]) {

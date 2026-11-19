@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getWorkspaceId } from "../services/workspaceId.js";
 import type { ActorCtx } from "../types.js";
 import { requireActor } from "../spine/actor.js";
-import { assertMayReachOut } from "../spine/authority.js";
 import { addCredentialDetectingFormat, testCredential, testStoredCredential } from "../services/aiCredentialSetup.js";
 import { setUpAi } from "../services/aiSetup.js";
 import { listCredentials, revokeCredential, secretKeyConfigured } from "../services/aiCredentials.js";
@@ -44,7 +43,6 @@ const CredentialBody = z.object({
   input_price_per_m: z.number().min(0).max(1_000_000).nullable().optional(), output_price_per_m: z.number().min(0).max(1_000_000).nullable().optional(),
 });
 router.post("/credentials", async (c) => {
-  assertMayReachOut(requireActor(c.get("actor"))); // the key is tried against its provider
   const body = await parseBody(c, CredentialBody);
   const credential = await addCredentialDetectingFormat(await getWorkspaceId(), {
     label: body.label, apiKey: body.api_key, baseUrl: body.base_url, protocol: body.protocol as ProtocolId | undefined,
@@ -57,7 +55,6 @@ router.post("/credentials", async (c) => {
 // and the models it lists. 422 credential_rejected / service_unreachable / protocol_undetected, like adding the key.
 const TestBody = z.object({ base_url: z.string().min(1).max(500), api_key: z.string().min(8).max(500), protocol: z.string().refine(isProtocolId).optional() });
 router.post("/credentials/test", async (c) => {
-  assertMayReachOut(requireActor(c.get("actor")));
   const body = await parseBody(c, TestBody);
   const result = await testCredential({ apiKey: body.api_key, baseUrl: body.base_url, protocol: body.protocol as ProtocolId | undefined }, { actor: requireActor(c.get("actor")) });
   return c.json({ ok: true, protocol: result.protocol, models: result.models });
@@ -65,7 +62,6 @@ router.post("/credentials/test", async (c) => {
 
 // POST /api/ai/credentials/:id/test — the same, for a key that is kept.
 router.post("/credentials/:id/test", async (c) => {
-  assertMayReachOut(requireActor(c.get("actor")));
   const result = await testStoredCredential(await getWorkspaceId(), uuidParam(c, "id"), { actor: requireActor(c.get("actor")) });
   return c.json({ ok: true, protocol: result.protocol, models: result.models });
 });
@@ -77,7 +73,6 @@ router.delete("/credentials/:id", async (c) =>
 router.get("/credentials/:id/models", async (c) => {
   const workspaceId = await getWorkspaceId();
   const actor = requireActor(c.get("actor"));
-  assertMayReachOut(actor);
   const id = uuidParam(c, "id");
   await listCredentials(workspaceId, { actor }); // owner check
   try {
@@ -112,7 +107,6 @@ const SetUpBody = z.object({
   ]),
 });
 router.post("/roles", async (c) => {
-  assertMayReachOut(requireActor(c.get("actor")));
   const body = await parseBody(c, SetUpBody);
   return c.json(await setUpAi(await getWorkspaceId(), body, { actor: requireActor(c.get("actor")) }), 201);
 });
@@ -131,7 +125,6 @@ const RuntimeBody = z.object({
   }).optional(),
 });
 router.put("/roles/:actor_id/runtime", async (c) => {
-  assertMayReachOut(requireActor(c.get("actor")));
   const body = await parseBody(c, RuntimeBody);
   const runner = await setRoleRuntime(await getWorkspaceId(), uuidParam(c, "actor_id"), {
     defaultRuntime: body.default_runtime as never,
@@ -152,7 +145,6 @@ const RolePatchBody = z.object({
 }).strict().refine((b) => Object.keys(b).length > 0, "nothing to change");
 router.patch("/roles/:actor_id", async (c) => {
   const actor = requireActor(c.get("actor"));
-  assertMayReachOut(actor);
   const agentActorId = uuidParam(c, "actor_id");
   const body = await parseBody(c, RolePatchBody);
   await patchRole(await getWorkspaceId(), agentActorId, {

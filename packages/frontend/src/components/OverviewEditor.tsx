@@ -777,7 +777,6 @@ export default function OverviewEditor({
                 ref={editorRef}
                 value={draft}
                 onChange={onDraftChange}
-                onComposingChange={(on) => { if (node) drafts.composing(node.id, on); }}
                 nodes={nodes}
                 nodeKey={node?.id}
                 noteTitle={node?.title}

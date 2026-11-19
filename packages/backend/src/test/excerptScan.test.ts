@@ -9,6 +9,7 @@
 // and HTML tags dropped); only the link scanning is what it is checked against.
 
 import { describe, expect, it } from "vitest";
+import { PROPS_SEED } from "./helpers/propsConfig.js";
 import { noteSummary, replaceWikilinks, stripLineMarker, wikilinkLabel, withoutFences } from "@onden/markdown";
 
 const excerptOf = (markdown: string, maxLen = 280) => noteSummary(markdown, { maxLen });
@@ -65,10 +66,10 @@ function body(next: () => number, length: number): string {
 
 describe("noteSummary's link scanner", () => {
   it("matches the regex version on random bodies", () => {
-    const next = random(20261014);
+    const next = random(PROPS_SEED);
     for (let n = 0; n < 4000; n++) {
       const markdown = body(next, 1 + Math.floor(next() * 400));
-      expect(excerptOf(markdown, 100_000), JSON.stringify(markdown)).toBe(referenceExcerptOf(markdown, 100_000));
+      expect(excerptOf(markdown, 100_000), `PROPS_SEED=${PROPS_SEED} ${JSON.stringify(markdown)}`).toBe(referenceExcerptOf(markdown, 100_000));
     }
   });
 
@@ -84,10 +85,10 @@ describe("noteSummary's link scanner", () => {
   });
 
   it("keeps the default excerpt length behaviour", () => {
-    const next = random(7);
+    const next = random(PROPS_SEED);
     for (let n = 0; n < 500; n++) {
       const markdown = body(next, 50 + Math.floor(next() * 3000));
-      expect(excerptOf(markdown)).toBe(referenceExcerptOf(markdown));
+      expect(excerptOf(markdown), `PROPS_SEED=${PROPS_SEED} ${JSON.stringify(markdown)}`).toBe(referenceExcerptOf(markdown));
     }
   });
 });

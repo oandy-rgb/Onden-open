@@ -7,7 +7,7 @@
 // or anywhere, decides what a session may do.
 //
 //   openTemporarySession   a person (the owner, for now) opens one on chosen spaces; the credential is handed over ONCE
-//   listTemporarySessions  the live sessions (spaces, time left; no name: the screen words a session)
+//   listTemporarySessions  the live sessions (label, spaces, time left)
 //   endTemporarySession    now: the next request, and any write waiting on the workspace lock, is refused
 //   endTemporarySessionsOpenedBy   a person is removed: their sessions end with them
 //   resolveTemporarySessionActor   a request's credential → the session as an ActorCtx (app.ts), counting the request against its limits
@@ -32,11 +32,8 @@ import type { ActorCtx } from "../types.js";
 import { sha256Hex } from "../utils.js";
 import { MAX_MEDIA_REQUEST_BYTES, MAX_REQUEST_BYTES } from "@onden/markdown";
 
-/** A session's `actors.name`: no text. A name in the database is in one language and reads as a person's; a session is worded by the screen from its
- *  kind, in the reader's language (as history readers do: services/authorName.ts sends the kind 'session' and no name). Never a device or a place.
- *  Rows made before PR #1856 hold the fixed label 「你（臨時）」; nothing reads it (history readers send no name for a session, member lists leave
- *  sessions out) and it is not rewritten (a migration that rewrites rows is a decision, not part of this batch). */
-const SESSION_NAME = "";
+/** What every session is called, wherever a name is shown (history, the member list): the owner's decision (2026-11-16), never a device or a place. */
+const SESSION_LABEL = "你（臨時）";
 const SESSION_CREDENTIAL_PREFIX = "onds_";
 
 /** The longest a session may last, and the most it may be given. A request may ask for less. */
@@ -58,12 +55,14 @@ type OpenedSession = {
   sessionId: string;
   /** The credential, shown this once. Only its hash is kept. */
   credential: string;
+  label: string;
   expiresAt: string;
   spaces: SessionSpaceInput[];
 };
 
 type SessionListing = {
   sessionId: string;
+  label: string;
   expiresAt: string;
   /** Whole seconds until it stops (never negative; a session at 0 is already not live). */
   secondsLeft: number;
@@ -119,7 +118,7 @@ export async function openTemporarySession(authenticated: ActorCtx, workspaceId:
         }
         // Tidy: sessions that ended or ran out leave their membership rows behind (nothing needs them: such a session cannot act); take them with the next opening.
         await sql`DELETE FROM space_members WHERE actor_id IN (SELECT actor_id FROM participant_sessions WHERE workspace_id = ${workspaceId}::uuid AND (ended_at IS NOT NULL OR expires_at <= now()))`.execute(db);
-        await db.insertInto("actors").values({ id: sessionActorId, workspace_id: workspaceId, name: SESSION_NAME, type: "session" }).execute();
+        await db.insertInto("actors").values({ id: sessionActorId, workspace_id: workspaceId, name: SESSION_LABEL, type: "session" }).execute();
         const row = await db.insertInto("participant_sessions")
           .values({
             id: sessionId, workspace_id: workspaceId, actor_id: sessionActorId, opened_by: actor.id, credential_hash: sha256Hex(credential),
@@ -133,7 +132,7 @@ export async function openTemporarySession(authenticated: ActorCtx, workspaceId:
       },
     });
   });
-  return { sessionId, credential, expiresAt, spaces: [...chosen].map(([spaceId, permission]) => ({ spaceId, permission })) };
+  return { sessionId, credential, label: SESSION_LABEL, expiresAt, spaces: [...chosen].map(([spaceId, permission]) => ({ spaceId, permission })) };
 }
 
 /** The live sessions of the workspace, for the owner; anyone else sees the ones they opened (none, until another role may open). */
@@ -141,7 +140,8 @@ export async function listTemporarySessions(authenticated: ActorCtx, workspaceId
   requirePerson(authenticated, "list_sessions");
   const actor = await resolveCurrentActor(authenticated, workspaceId);
   const rows = await db.selectFrom("participant_sessions as p")
-    .select(["p.id", "p.expires_at", "p.request_count", "p.max_requests", "p.opened_by"])
+    .innerJoin("actors as a", "a.id", "p.actor_id")
+    .select(["p.id", "a.name", "p.expires_at", "p.request_count", "p.max_requests", "p.opened_by"])
     .select(sql<number>`GREATEST(0, ceil(extract(epoch FROM p.expires_at - now())))::int`.as("seconds_left"))
     .where("p.workspace_id", "=", workspaceId).where("p.ended_at", "is", null).where(sql<boolean>`p.expires_at > now()`)
     .orderBy("p.created_at").execute();
@@ -155,7 +155,7 @@ export async function listTemporarySessions(authenticated: ActorCtx, workspaceId
     const spaces = memberships.filter((m) => m.session_id === r.id);
     if (filter.spaceId && !spaces.some((s) => s.space_id === filter.spaceId)) continue;
     out.push({
-      sessionId: r.id, expiresAt: r.expires_at.toISOString(), secondsLeft: r.seconds_left,
+      sessionId: r.id, label: r.name, expiresAt: r.expires_at.toISOString(), secondsLeft: r.seconds_left,
       spaces: spaces.map((s) => ({ spaceId: s.space_id, name: s.name, permission: s.permission as "view" | "edit" })),
       requestCount: Number(r.request_count), maxRequests: r.max_requests, canEnd: true,
     });

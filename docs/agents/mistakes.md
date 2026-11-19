@@ -62,6 +62,14 @@
 
 ## 紀錄
 
+### 2026-11-19　剛打的字消失又回來，游標跑到它們前面（零件對、組裝錯；測試的模型錯了）
+- **發生了什麼**：擁有者在手機（Android 15、Brave PWA、Gboard 注音）打字時，最後幾個字消失、自己回來，游標停在回來的字前面（`以日曆為軸來串起|歷史`），接著打的字會落在錯的位置。原因：存檔 1 已被接受後才發出的同步請求，帶著存檔 1 的文字與存檔 1 的時間；存檔 2 還在路上時，畫面上那一列的時間也還是存檔 1 的，時間規則（`lib/rowAge.ts`）判「一樣新」就收下，列回到存檔 1 的文字。存檔 2 的回應只更新「還是它送出的值」的欄位，所以沒有把文字改回來，卻把列的時間換成存檔 2 的；存檔 2 結束後，`applyRemoteNode` 把這一列當成別處的新文字放進編輯器。下一次同步帶回存檔 2 的文字，編輯器用區段替換插回去，游標留在插入點前。重新讀取（`hydrateNode`）有同一個缺口。
+- **證據**：`packages/frontend/src/test/typedTextNeverReplacedByOlder.test.tsx`（真編輯器＋真草稿、寫入、佇列、store）修正前紅：`after save 2 answered: the editor shows "以日曆為軸來串起歷", typed "以日曆為軸來串起歷史"`、`the caret is at 9, the person left it at 10`；隨機順序版本三個新種子都在 1–5 輪內紅。`saveTiming.property.test.ts` 的「report 2026-11-19」案例修正前紅（#S2）。`offlineBodyHydrate.test.ts` 的三個新案例修正前紅。
+- **發現者**：擁有者使用（手機）。
+- **為什麼沒擋到**：`saveTiming.property.test.ts` 的 `sync()` 指令自己替 store 做了「還在等回應的欄位不收」，真正的 `applySyncDelta` 並沒有這樣做，測試的模型比產品好；`syncAnswer` 走真的路，但隨機測試用固定種子跑 100 輪，沒有走到「存檔 1 回應之後才發問、存檔 2 在路上時到達」這一格。各零件（時間規則、回應只更新仍是送出值的欄位、存檔後再看一次）各自有測試，組起來的那一層沒有。
+- **類別**：零件對、組裝錯；測試的模型錯了。
+- **機制**：〔第 1 層〕一條規則放在 store 的入口：`storeOps.serverCopyOver`（同步回應與重新讀取都走它）——比手上舊的不收；還在等回應的欄位保留手上的值與時間，等回應後再讀一次（`whenAnswered` → `releaseHeldNotes`）。編輯器邊界（`draftActions.applyRemoteNode`）：比這個編輯器已被接受的存檔還舊的列不進草稿；組字中外來文字不進草稿、組字結束再給。測試：上列三個檔；新的隨機測試與 `saveTiming` 每次用新種子並印出來。
+- **還沒擋住的**：時間規則本身的限制（伺服器時鐘倒退）；`saveTiming` 的 `sync()` 指令仍是手寫模型，沒有改成走 `applySyncDelta`；真機上的組字結束時序（Android 在 compositionend 之後才補進最後一個字）只有 jsdom 測試，需要擁有者在手機上確認。公開 CI 的 Firefox 全端 e2e（`crossbrowser.spec.ts` 的 `editor mounts and accepts input across engines`）在這個分支紅過一次：打的第一個字 `k` 不見。雲端工作階段下載不到 Firefox（網路政策擋），只在 Chromium 量過；同一順序的單元版本（開筆記後正文到達前後打第一個字、舊的重新讀取晚到）加進 `typedTextNeverReplacedByOlder` 的隨機順序，main 上紅、這個分支綠。公開 CI run 44525016106（7f941df）在 `typedTextNeverReplacedByOlder` 紅 5 個：1 個是 #1888 合併後該改的斷言，另外 4 個是前一個測試失敗後留下的狀態——那個測試留著一個沒回應的存檔，測試世界重設時丟掉請求卻沒有結束它，於是寫入的順序鏈一直等（下一輪的存檔送不出去）、等回應的欄位一直被保留（別台的文字進不來）。產品不會這樣（送出有期限，`sendWithDeadline`）；修在測試：關頁時把還在路上的請求當成斷線結束、把讀取回答完（`Phone.close`），任意順序下一個失敗只報一次（類別：測試的模型錯了）。另一條沒驗證的可能：閘門升起時打的字由 `GateTypingBuffer` 在閘門放下時用 `execCommand("insertText")` 交回，對 contenteditable 失敗時沒有退路，那個字就不見（尚無機制）。
 ### 2026-11-18　送出中的保存只記在像記憶體一樣的地方，頁面當掉就沒了，或留下「看起來已存」的字（寫入在送出途中只記在活不過頁面的儲存）
 - **發生了什麼**：線上保存直接送出、不進佇列；送出中的那筆只記在 sessionStorage 的一格（活過重新整理、活不過關分頁）。本機副本在 2 秒快照防抖後已存下新內文。頁面沒有任何事件就結束時：2 秒內，字不見；2～25 秒（請求卡住），重開後編輯器顯示得像已存，沒有任何東西會送它，之後 bootstrap 的投影（只保護佇列裡有列的筆記）讓伺服器的版本把它換掉。
 - **證據**：`packages/frontend/src/test/saveSurvivesKill.test.ts` 在 main 上 7 個紅（例：`killed after step 5/12 … v1 had left the editor and is neither on the server nor in recovery`、`killed after step 8/12 … the local copy holds v1, the server never accepted it, and no queued write or recovery entry holds it`），修正後 7 綠；#1877 的報告與 `closeMidSave` 5b。多分頁性質測試原本刻意「不讓有送出中寫入的分頁當掉」（`KNOWN (phantom text)`）來繞過它。

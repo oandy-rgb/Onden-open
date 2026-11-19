@@ -3,6 +3,7 @@
  * shared across writer instances and tracks fields independently. */
 type Entry = { before: unknown; value: unknown };
 const resources = new Map<string, Map<PropertyKey, Entry[]>>();
+const answered = new Map<string, Array<() => void>>();
 
 export function optimisticFields<T extends object>(resource: string, before: T, changes: Partial<T>) {
   const fields = resources.get(resource) ?? new Map<PropertyKey, Entry[]>();
@@ -34,7 +35,12 @@ export function optimisticFields<T extends object>(resource: string, before: T, 
       queue.splice(index, 1);
       if (!queue.length) fields.delete(key);
     }
-    if (!fields.size) resources.delete(resource);
+    if (!fields.size) {
+      resources.delete(resource);
+      const waiting = answered.get(resource) ?? [];
+      answered.delete(resource);
+      for (const resolve of waiting) resolve();
+    }
     return { expected, replacement };
   };
 }
@@ -42,4 +48,11 @@ export function optimisticFields<T extends object>(resource: string, before: T, 
 /** The fields of `resource` with an edit still waiting for its answer. */
 export function pendingFields(resource: string): Set<PropertyKey> {
   return new Set(resources.get(resource)?.keys() ?? []);
+}
+
+/** Resolves once no edit of `resource` waits for its answer any more (now, if none does). Each settle runs inside
+ *  the writer's answer handling, so whatever waits here sees the row as that answer left it. */
+export function whenAnswered(resource: string): Promise<void> {
+  if (!resources.has(resource)) return Promise.resolve();
+  return new Promise((resolve) => { answered.set(resource, [...(answered.get(resource) ?? []), resolve]); });
 }

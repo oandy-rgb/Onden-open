@@ -18,6 +18,7 @@ vi.mock("../lib/localDb", () => ({
   }),
   storeDownloadedBodies: vi.fn(async (rows) => { local.saved.push(rows); return rows.length; }),
   forgetBody: vi.fn(async (id: string) => local.stored.delete(id)),
+  getPendingWrites: vi.fn(async () => []),
 }));
 const apiMock = vi.fn();
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof import("../lib/api")>()), api: (...a: unknown[]) => apiMock(...a) }));
@@ -25,6 +26,7 @@ vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof import("../lib/ap
 import { dataSync } from "../lib/data";
 import { ApiError, noWorkspaceData } from "../lib/api";
 import { getAppState, resetAppState, setData } from "../lib/appStore";
+import { optimisticFields } from "../lib/data/optimisticFields";
 
 const { hydrateNode, downloadBodiesForOffline } = dataSync;
 
@@ -130,5 +132,58 @@ describe("background download for offline use", () => {
     local.missing = [["a"]];
     await downloadBodiesForOffline();
     expect(apiMock).not.toHaveBeenCalled();
+  });
+});
+
+// Owner report 2026-11-19: a server copy must not bring back a text from before this device's own save
+// (storeOps.serverCopyOver, the same rule a sync answer goes through).
+describe("a read that crosses this device's own save", () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 10, 19, 0, 0, s)).toISOString();
+  const full = (markdown: string, updated_at: string) => ({ ...slim, markdown, body_len: undefined, updated_at });
+  /** A save of "AB" on its way, the way noteWriter.change starts one: the optimistic row and its journal entry. */
+  function saveOnItsWay() {
+    const before = row();
+    const settle = optimisticFields("node:a", before, { markdown: "AB" });
+    setData((prev) => ({ ...prev, nodes: prev.nodes.map((n) => n.id === "a" ? { ...n, markdown: "AB" } : n) }));
+    /** The save's answer, the way noteWriter.commit takes it: the field settles, the row gets the server's time. */
+    return (updated_at: string) => {
+      settle(true, { markdown: "AB" });
+      setData((prev) => ({ ...prev, nodes: prev.nodes.map((n) => n.id === "a" ? { ...n, markdown: "AB", updated_at } : n) }));
+    };
+  }
+  beforeEach(() => {
+    resetAppState({ data: { ...noWorkspaceData, bodies: "full", nodes: [full("A", at(1)) as never] }, online: true });
+  });
+
+  it("read before the save reached the server, answered while it is on its way: the save's text stays", async () => {
+    const answered = saveOnItsWay();
+    apiMock.mockResolvedValueOnce(full("A", at(1)));
+    await hydrateNode("a");
+    expect(row().markdown).toBe("AB");
+    apiMock.mockResolvedValue(full("AB", at(2)));
+    answered(at(2));
+    await vi.waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+    expect(row()).toMatchObject({ markdown: "AB", updated_at: at(2) });
+  });
+
+  it("read before the save reached the server, answered after the save's answer: older, not taken", async () => {
+    const answered = saveOnItsWay();
+    let answer!: (row: unknown) => void;
+    apiMock.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    const reading = hydrateNode("a");
+    answered(at(2));
+    answer(full("A", at(1)));
+    await reading;
+    expect(row()).toMatchObject({ markdown: "AB", updated_at: at(2) });
+  });
+
+  it("another writer's newer text in a read kept under the save still arrives: the note is read again", async () => {
+    const answered = saveOnItsWay();
+    apiMock.mockResolvedValueOnce(full("C\nAB", at(3)));
+    await hydrateNode("a");
+    expect(row().markdown).toBe("AB");
+    apiMock.mockResolvedValue(full("C\nAB", at(3)));
+    answered(at(2));
+    await vi.waitFor(() => expect(row()).toMatchObject({ markdown: "C\nAB", updated_at: at(3) }));
   });
 });

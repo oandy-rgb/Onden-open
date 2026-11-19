@@ -16,6 +16,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { CheckSquare, Square, Plus, ChevronDown } from "lucide-react";
 import type { ContentNode, NodeAttribute, SchemaField, Tag } from "../lib/api";
 import { editorLinks } from "../lib/editorLinks";
+import { composingEnded, composingField } from "../lib/editorComposing";
 import { blockTaskTagName, editorBlocks } from "../lib/editorBlocks";
 import { carriedInUpdate, editorAnchors, setEditorAnchors } from "../lib/editorAnchors";
 import { anchorSpansOf, anchorsVersion, watchAnchors } from "../lib/blockAnchorStore";
@@ -125,6 +126,9 @@ type ToolbarState = PopoverPoint & {
 type Props = {
   value: string;
   onChange: (v: string) => void;
+  /** An IME composition opened (true) or closed (false). The host keeps outside text away meanwhile
+   *  (draftActions.setEditorComposing); a `value` that changes anyway waits here for the end (see the sync below). */
+  onComposingChange?: (composing: boolean) => void;
   nodes: ContentNode[];
   // G5 cursor state preservation. When set, the editor writes the live caret
   // position to sessionStorage("onden.cursor.<nodeKey>") on every selection
@@ -300,7 +304,7 @@ const editorTheme = EditorView.theme({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function MarkdownEditor({
-  value, onChange, nodes, nodeKey, noteTitle, workspaceTags = [], onMediaInsert, onUnsupportedDrop, placeholder,
+  value, onChange, onComposingChange, nodes, nodeKey, noteTitle, workspaceTags = [], onMediaInsert, onUnsupportedDrop, placeholder,
   extractTags = [], onExtract, attrClassTags = [], onAttrSet, onCreateTask, onInsertPage, moduleInserts, editLeftNote, zen = false, readOnly = false, blockFunctions = NO_FUNCTIONS, taskTagName = null,
   onOpenWikilink, onImportModuleTag, canEditEmbedSource, blockCitations, onOpenBlockCitations, onOpenNoteHistory, mentions, suggestions, handToAi,
 }: Props, ref: React.Ref<MarkdownEditorHandle>) {
@@ -369,6 +373,11 @@ function MarkdownEditor({
 
   // Keep latest prop values accessible from CM closures
   const onChangeRef       = useRef(onChange);
+  const onComposingChangeRef = useRef(onComposingChange);
+  onComposingChangeRef.current = onComposingChange;
+  // An outside text that arrived during an IME composition, waiting for its end; `compositionEnds` re-runs the sync.
+  const outsideWaiting = useRef(false);
+  const [compositionEnds, setCompositionEnds] = useState(0);
   const nodesRef          = useRef(nodes);
   const workspaceTagsRef  = useRef(workspaceTags);
   const onMediaInsertRef  = useRef(onMediaInsert);
@@ -1023,6 +1032,9 @@ function MarkdownEditor({
             ...historyKeymap,
           ]),
           EditorView.updateListener.of(update => {
+            const wasComposing = update.startState.field(composingField, false) === true;
+            if (wasComposing !== (update.state.field(composingField, false) === true)) onComposingChangeRef.current?.(!wasComposing);
+            if (composingEnded(update) && outsideWaiting.current) setCompositionEnds((n) => n + 1);
             // Skip onChange for programmatic value syncs — they aren't user edits.
             const external = update.transactions.some(tr => tr.annotation(ExternalSync));
             if (update.docChanged && nodeKeyRef.current) recordEditorUpdate(nodeKeyRef.current, update.changes, { external, carried: carriedInUpdate(update) });
@@ -1197,7 +1209,11 @@ function MarkdownEditor({
     viewRef.current = view;
     bindEditorNote(view, () => nodeKeyRef.current);
 
-    return () => { view.destroy(); viewRef.current = null; };
+    return () => {
+      // A composition the editor goes away in never sends its end: the host must not keep waiting for it.
+      if (view.state.field(composingField, false)) onComposingChangeRef.current?.(false);
+      view.destroy(); viewRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The numbers beside cited paragraphs follow the host's latest answer.
@@ -1247,7 +1263,12 @@ function MarkdownEditor({
       view.dispatch({ effects: historyRef.current.reconfigure(history()) });
       return;
     }
-    if (cur === value) return;
+    if (cur === value) { outsideWaiting.current = false; return; }
+    // An IME is composing: replacing text now cuts the composition (the candidate is lost or lands in the wrong
+    // place). The text waits; the composition's end re-runs this effect (compositionEnds) and the newest `value`
+    // is applied by the same replacement below. Not a timer: the end is the browser's compositionend.
+    if (view.composing || view.state.field(composingField, false)) { outsideWaiting.current = true; return; }
+    outsideWaiting.current = false;
     // The same note changed elsewhere: replace only the span that differs, so
     // the caret and the undo history map through it instead of collapsing to
     // a whole-document replace (which made undo/redo jump to stale text).
@@ -1260,7 +1281,7 @@ function MarkdownEditor({
       changes: { from: start, to: cur.length - end, insert: value.slice(start, value.length - end) },
       annotations: [ExternalSync.of(true), Transaction.addToHistory.of(false)],
     });
-  }, [value, nodeKey]);
+  }, [value, nodeKey, compositionEnds]);
 
   // The headings this device folded in the note, put back once its text is in
   // (after the sync above, so they are matched against this note's text).

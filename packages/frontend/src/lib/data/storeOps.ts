@@ -3,7 +3,7 @@
 // without React. No I/O, no hooks — every function returns a new tree.
 
 import { isOlderCopy } from "../rowAge";
-import type { Bootstrap, ContentNode } from "../api";
+import { nodeNeedsBody, type Bootstrap, type ContentNode } from "../api";
 import type { SyncDelta, AppliedSyncDelta } from "../localDb";
 import { applyTagCatalog } from "../tagProjection";
 import { applyCanvasMembershipChange } from "../canvasMemberships";
@@ -141,15 +141,45 @@ function upsertRows<T extends { id: string }>(rows: T[], upserts: readonly T[]):
   return kept;
 }
 
+/** What the store takes of a server copy of a note (a /api/sync answer, a GET /api/nodes/:id read) over the row it
+ *  holds. One rule, in two parts:
+ *  - a copy from before the one held is not taken at all (lib/rowAge.ts);
+ *  - a field this device has an edit of still waiting for its answer (optimisticFields) keeps the value held, and the
+ *    row keeps its time: the copy may have been read before that edit reached the server, and an unanswered save does
+ *    not move the row's time, so the age rule cannot tell (owner report 2026-11-19: a copy of save 1 replaced the text
+ *    of save 2 while save 2 was on its way, and the editor showed save 1's text until the next answer).
+ *  `held` says the copy was kept from a field: the note is read again once that edit has its answer
+ *  (syncEngine.readAgainWhenAnswered), so another writer's newer text in the copy still arrives. */
+export function serverCopyOver(incoming: ContentNode, current: ContentNode | undefined): { row: ContentNode | null; held: boolean } {
+  if (!current) return { row: incoming, held: false };
+  if (isOlderCopy(incoming, current)) return { row: null, held: false };
+  const kept: Partial<Record<keyof ContentNode, unknown>> = {};
+  let held = false;
+  // A slim row's empty text is "not loaded here", not a value this device holds: it is never kept over a copy.
+  const slim = nodeNeedsBody(current);
+  for (const key of pendingFields(`node:${incoming.id}`) as Set<keyof ContentNode>) {
+    if (!Object.hasOwn(incoming, key) || (slim && key === "markdown")) continue;
+    kept[key] = current[key];
+    // `presentation` is an object: two copies of the same value are not ===, and reading them as different would read
+    // the note again after every answer. Field values are JSON (they come from the server), so JSON compares them.
+    const a = incoming[key], b = current[key];
+    if (a !== b && (typeof a !== "object" || typeof b !== "object" || a === null || b === null || JSON.stringify(a) !== JSON.stringify(b))) held = true;
+  }
+  if (!held) return { row: incoming, held: false };
+  const row = { ...incoming, ...kept, updated_at: current.updated_at } as ContentNode;
+  // A slim answer's body length describes its text, not the one kept.
+  if (Object.hasOwn(kept, "markdown") && Object.hasOwn(incoming, "body_len")) row.body_len = current.body_len ?? (current.markdown ?? "").length;
+  return { row, held };
+}
+
 /** Apply a /api/sync delta to the in-memory tree. Node/edge/task rows are
  *  whole-row replaces (sync returns the same shape bootstrap does); attribute
  *  deltas patch each node's `attrs` map in place — deletes remove the key,
  *  upserts overwrite. */
 export function applySyncDelta(prev: Bootstrap, delta: AppliedSyncDelta): Bootstrap {
-  // A copy from before the one held is not taken (lib/rowAge.ts): the answer was on its way while this device's
-  // save, or a later answer, got here first.
+  // The answer was on its way while this device's save, or a later answer, got here first (serverCopyOver).
   const held = new Map(prev.nodes.map((n) => [n.id, n]));
-  let nodes = upsertRows(prev.nodes, delta.nodes.upsert.filter((n) => !isOlderCopy(n, held.get(n.id))));
+  let nodes = upsertRows(prev.nodes, delta.nodes.upsert.flatMap((n) => serverCopyOver(n, held.get(n.id)).row ?? []));
   // Node deletes include revocation deletes (a node that left the read set via a
   // permission change — HIGH gap #2). Prune the node's dependent tasks/edges too,
   // so a revoked node leaves no dangling task row or half-edge in memory (mirrors

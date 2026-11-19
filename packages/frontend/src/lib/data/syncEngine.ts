@@ -30,7 +30,8 @@ import { sendWrite } from "./onlineWrite";
 import { flushPendingWrites, getReplayRejectionRevision, hasPendingWrite } from "./writeQueue";
 import { refreshPendingCount } from "./syncStatus";
 import { setIncomingProblem } from "./incomingStatus";
-import { applySyncDelta, isEmptyDelta } from "./storeOps";
+import { applySyncDelta, isEmptyDelta, serverCopyOver } from "./storeOps";
+import { pendingFields, whenAnswered } from "./optimisticFields";
 import { reconcileMembership, type MembershipDigest, type MembershipPage, type MembershipProjection } from "./membershipReconcile";
 import { webCryptoSha256 } from "./membershipDigest";
 import { mergeAttributeRows, mergeBootstrapRelations } from "./bootRest";
@@ -403,12 +404,20 @@ let hydrateSeq = 0;
 // is queued for the note any more, the server's row, which merged both edits, is read again: no later delta carries it.
 const heldBehindQueue = new Set<string>();
 
+// The store kept a field of the note over a server copy because this device's edit of it had no answer yet
+// (storeOps.serverCopyOver): read the note again once it has one, the way a note held behind the queue is.
+function readAgainWhenAnswered(id: string): void {
+  heldBehindQueue.add(id);
+  void whenAnswered(`node:${id}`).then(releaseHeldNotes).catch(() => {});
+}
+
 async function releaseHeldNotes(): Promise<void> {
   // The copy's own list too (any answer the queued text was kept over, here or in another tab, before a reload).
   // A copy that cannot answer releases nothing this round (the list stays in the copy).
   const held = await Promise.resolve().then(() => heldNotesNowSent()).catch(() => [] as string[]);
   for (const id of held) heldBehindQueue.add(id);
   for (const id of [...heldBehindQueue]) {
+    if (pendingFields(`node:${id}`).size) continue;
     if (await hasPendingWrite((write) => targetsEntity(write, "node", id))) continue;
     heldBehindQueue.delete(id);
     await hydrateNode(id);
@@ -440,8 +449,13 @@ export async function hydrateNode(id: string): Promise<void> {
   }
   // Only replace a row nothing else changed since this read began (its text is
   // still what it was, or the stored body shown above): a save made meanwhile
-  // is newer than a response that may have been read before it.
-  adoptBody(id, (row) => row.markdown === before || (stored !== null && row.markdown === stored), full);
+  // is newer than a response that may have been read before it. Nor a row the
+  // read is older than, or a field with an edit still waiting for its answer
+  // (serverCopyOver): a save sent and answered while this read was on its way
+  // leaves the text as it was when the read began.
+  const copy = serverCopyOver(full, getNode(id));
+  if (copy.held) readAgainWhenAnswered(id);
+  if (copy.row) adoptBody(id, (row) => row.markdown === before || (stored !== null && row.markdown === stored), copy.row);
 }
 
 /** Put a body (or a full server row) into the store for one note, keeping the
@@ -715,6 +729,7 @@ async function takeDigestPrefetch(expected: number): Promise<MembershipDigest | 
 async function applyAndShow(delta: SyncDelta): Promise<Awaited<ReturnType<typeof applySync>>> {
   const applied = await applySync(delta);
   applyAnchorsOfDelta(delta);
+  for (const node of applied.nodes.upsert) if (serverCopyOver(node, getNode(node.id)).held) readAgainWhenAnswered(node.id);
   setData((prev) => applySyncDelta(prev, applied));
   announceDrawingChangesOf(delta);
   return applied;

@@ -156,6 +156,18 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   併進同一個集合，`hydrateNode` 一次。delta 的 `applied.heldText` 仍餵頁面的集合（與副本的清單重複但無害；
   那一段在 #1794 改動的範圍內，等它合併後再收成一條）。
 
+- **伺服器副本不蓋掉還沒有回應的欄位（2026-11-19，擁有者回報：剛打的字消失又回來、游標跑到它們前面）。**
+  一份同步回應或 `GET /api/nodes/:id` 可能是在這台的存檔送到伺服器之前讀的；存檔還在路上時，列的 `updated_at`
+  還是上一次存檔的時間，所以時間規則（`lib/rowAge.ts`）分不出來。規則只有一條，放在 `storeOps.serverCopyOver`，
+  同步回應（`applySyncDelta`）與 `hydrateNode` 都走它：比手上舊的副本不收；這台有一筆還沒有回應的編輯的欄位
+  （`optimisticFields`）保留手上的值，列也保留手上的時間；被保留過的筆記等那筆編輯有了回應（`whenAnswered`）
+  再讀一次（`syncEngine.readAgainWhenAnswered`，與排在佇列後面的筆記同一條 `releaseHeldNotes`），所以別人的較新文字仍會到。
+  編輯器的邊界另有一條（`draftActions.applyRemoteNode`）：比這個編輯器已被接受的最新存檔還舊的列，不會進入草稿；
+  輸入法正在組字時，外來文字不進草稿，組字結束（`setEditorComposing`）時再交給同一條路。`MarkdownEditor` 的外來文字同步在組字中不動文件，
+  組字結束（compositionend）時用同一個區段替換套用，不用計時器。測試：`test/typedTextNeverReplacedByOlder.test.tsx`（真編輯器、隨機順序）、
+  `saveTiming.property.test.ts` 的 2026-11-19 案例、`offlineBodyHydrate.test.ts`。
+  限制：時間規則的限制照舊（伺服器時鐘倒退時，較新的他人修改要等下一次修改才會到）。
+
 實測與入口限制見 [待同步文字驗證](../archive/pending-note-text-fixes-2026-09-13.md)。API 完全不可達
 時的 LoginGate 冷啟動仍阻擋編輯器，登錄 GAP-20；不能以快取存在取代登入／換帳號隔離的契約。
 

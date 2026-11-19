@@ -38,6 +38,8 @@ import { resolvePatched } from "./patchedValue.js";
 import { readInkValue } from "./inkChunks.js";
 
 import { INK_PAGE_ATTRS, type AttributeValueType } from "@onden/markdown";
+import { NOTE_PAGES_ATTR } from "@onden/markdown/contract";
+import { decodeNotePages, mergeNotePages } from "@onden/markdown/note-pages";
 import { mergeInk, revertInkConflicts, type InkMergeConflict } from "@onden/markdown/ink";
 import { mergePageImages, revertPageImagesConflicts, type PageImagesConflict } from "@onden/markdown/page-images";
 import { mergePageText, revertPageTextConflicts, type PageTextConflict } from "@onden/markdown/page-text";
@@ -81,8 +83,10 @@ const isPageLayerKey = (key: string): key is PageLayerKey => Object.hasOwn(PAGE_
 /** Keys whose writes merge with a concurrent stored value when the writer
  *  sends its base: a note's drawing — a page, or a PDF's envelope with its
  *  highlight records (the legacy pdf_annotations key is read-only since W20) —
- *  and the text boxes and pictures on its pages. */
-export const MERGED_KEYS: ReadonlySet<string> = new Set([...INK_PAGE_ATTRS, ...Object.keys(PAGE_LAYERS)]);
+ *  and the text boxes and pictures on its pages, and the list of its pages (`note_pages`: a union of the pages
+ *  both sides have, @onden/markdown/note-pages mergeNotePages — it has no items two devices can both change, so it
+ *  never reports a conflict). */
+export const MERGED_KEYS: ReadonlySet<string> = new Set([...INK_PAGE_ATTRS, ...Object.keys(PAGE_LAYERS), NOTE_PAGES_ATTR]);
 
 /** What a merge reports as changed on both sides, and the field of the
  *  ATTRIBUTE_CONFLICT record / API answer that carries it. */
@@ -91,6 +95,13 @@ type MergeConflicts =
   | { field: (typeof PAGE_LAYERS)[PageLayerKey]["field"]; items: Array<PageTextConflict | PageImagesConflict> };
 
 function mergeAttribute(key: string, base: string, stored: string, incoming: string): { value: string; conflicts: MergeConflicts } {
+  // "" = the writer's note had no list: no base, so nothing is removed.
+  if (key === NOTE_PAGES_ATTR) {
+    // A list of a version this server does not read is neither merged nor replaced, and the writer is told (not answered 200).
+    const unread = (value: string) => { const r = decodeNotePages(value); return !r.ok && r.reason === "newer"; };
+    if (unread(stored) || unread(incoming)) throw new AttributeWriteError(409, "pages_version", "the pages of this note are in a version this server does not read");
+    return { value: mergeNotePages(base === "" ? null : base, incoming, stored).merged, conflicts: { field: "ink_conflicts", items: [] } };
+  }
   if (isPageLayerKey(key)) {
     const layer = PAGE_LAYERS[key];
     const merged = layer.merge(base, stored, incoming);
@@ -338,7 +349,8 @@ export async function revertAttributeConflict(input: {
       const value = layer.revert(incoming, overridden, items);
       return setNodeAttribute({ workspaceId, actor, nodeId, attribute: { ...keep, value, base_value: incoming } });
     }
-    if (MERGED_KEYS.has(key)) {
+    // A page list has no item conflicts (mergeAttribute): a record of one is a last-write-wins overwrite, put back below.
+    if (MERGED_KEYS.has(key) && key !== NOTE_PAGES_ATTR) {
       const recorded = found.payload.ink_conflicts;
       const items: InkMergeConflict[] = Array.isArray(recorded) ? recorded as InkMergeConflict[] : [{ kind: "format" }];
       const value = revertInkConflicts(incoming, overridden, items);

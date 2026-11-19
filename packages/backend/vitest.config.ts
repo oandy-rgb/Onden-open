@@ -16,6 +16,7 @@ export default defineConfig({
     "@onden/markdown/snippet": fileURLToPath(new URL("../markdown/src/snippet.ts", import.meta.url)),
     "@onden/markdown/contract": fileURLToPath(new URL("../markdown/src/sharedContract.ts", import.meta.url)),
     "@onden/markdown/ink": fileURLToPath(new URL("../markdown/src/ink.ts", import.meta.url)),
+    "@onden/markdown/note-pages": fileURLToPath(new URL("../markdown/src/notePages.ts", import.meta.url)),
     "@onden/markdown/page-text": fileURLToPath(new URL("../markdown/src/pageText.ts", import.meta.url)),
     "@onden/markdown/page-images": fileURLToPath(new URL("../markdown/src/pageImages.ts", import.meta.url)),
     "@onden/markdown/full": fileURLToPath(new URL("../markdown/src/full.ts", import.meta.url)),

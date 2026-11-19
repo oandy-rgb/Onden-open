@@ -3,6 +3,8 @@
 // one list both PUT and DELETE /api/nodes/:id/attributes/:key check.
 
 import { isHexColor, isSystemAttr, PUBLISHED_ATTR_KEY } from "@onden/markdown";
+import { NOTE_PAGES_ATTR, PDF_TEXT_ATTR } from "@onden/markdown/contract";
+import { decodeNotePages } from "@onden/markdown/note-pages";
 import { db } from "../dbKysely.js";
 
 /** The note is on the published site (D9): the website module redeploys
@@ -35,7 +37,23 @@ export const CAPTURED_KEY = "_captured";
 // note off a space that publishes, publishedSet.ts); for the others only "true" counts.
 const isFlag = (value: string) => value === "true" || value === "false";
 
+/** `note_pages`: a list of pages this version reads, a newer version's (kept as it is, so an older server does not refuse a newer
+ *  app), or empty (no list). */
+const isNotePagesValue = (value: string) => { const r = decodeNotePages(value); return r.ok || r.reason === "empty" || r.reason === "newer"; };
+/** `pdf_text`: `{ [pageKey]: text }`, at most PDF_TEXT_MAX_BYTES (a PDF's text is capped at ~60,000 characters). */
+const PDF_TEXT_MAX_BYTES = 2_000_000;
+function isPdfTextValue(value: string): boolean {
+  if (value === "") return true;
+  if (value.length > PDF_TEXT_MAX_BYTES) return false;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return !!parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.values(parsed).every((v) => typeof v === "string");
+  } catch { return false; }
+}
+
 const VALUE_RULES: Record<string, (value: string) => boolean> = {
+  [NOTE_PAGES_ATTR]: isNotePagesValue,
+  [PDF_TEXT_ATTR]: isPdfTextValue,
   [PUBLISHED_KEY]: isFlag,
   [PINNED_KEY]: isFlag,
   [COLOR_KEY]: isHexColor,

@@ -87,6 +87,7 @@ describe.skipIf(!isTestDb)("reading a note's attributes (DB)", () => {
     const node = await callTool("getNode", { id: nodeId }, { actor: system, workspaceId, dryRun: false }) as { attributes: AttrRow[] } | null;
     const route = (await (await req(`/api/nodes/${nodeId}/attributes`)).json()) as AttrRow[];
     const drawing = new Set(["ink_data", "board_ink", "note_ink", "pdf_annotations"]);
-    expect(keysOf(node!.attributes)).toEqual(keysOf(route.filter((a) => !drawing.has(a.key))));
+    // A note made before `note_pages` (its pdf_url) is told as its one run of pages: the tool's own `note_pages` row (notePages.integration.test.ts).
+    expect(keysOf(node!.attributes.filter((a) => a.key !== "note_pages"))).toEqual(keysOf(route.filter((a) => !drawing.has(a.key))));
   });
 });

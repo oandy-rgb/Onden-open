@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
+    "e2e:note-pages": "node e2e/browser-app/notePages.mjs chromium && node e2e/browser-app/notePages.mjs mobile-chrome",
     "e2e:quote-region": "node e2e/browser-app/quoteRegion.mjs chromium && node e2e/browser-app/quoteRegion.mjs mobile-chrome",
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
     "check:specs": "bash e2e/scripts/checkSpecsLoad.sh",

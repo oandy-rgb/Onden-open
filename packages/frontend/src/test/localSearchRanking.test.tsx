@@ -49,6 +49,9 @@ async function snapshot(): Promise<ArrayBuffer> {
   db.run("INSERT INTO nodes (id, source_type, node_type, title, slug, markdown) VALUES ('typed', 'local', 'content', 'Slides', 'typed', '')");
   const boxes = JSON.stringify({ v: 1, pages: { "pdf:1": { boxes: [{ id: "b", x: 0, y: 0, w: 300, text: "The mitochondria 粒線體 is the powerhouse", size: 22, color: "#000000", align: "left", updated_at: "" }] } } });
   db.run("INSERT INTO node_attributes (node_id, key, value) VALUES ('typed', 'page_text', ?)", [boxes]);
+  // A PDF note: the text of its pages is in `pdf_text` (the server's search reads it; this device's index does not, see below).
+  db.run("INSERT INTO nodes (id, source_type, node_type, title, slug, markdown) VALUES ('lecture', 'local', 'content', 'Lecture slides', 'lecture', '')");
+  db.run("INSERT INTO node_attributes (node_id, key, value) VALUES ('lecture', 'pdf_text', ?)", [JSON.stringify({ "r1:1": "Photosynthesis happens in the chloroplast" })]);
   const bytes = db.export().buffer as ArrayBuffer;
   db.close();
   return bytes;
@@ -92,6 +95,12 @@ describe("local search ranking (on-device index)", () => {
     expect(hit!.snippet!.text).toContain("powerhouse");
     expect(await ids("boxes")).toEqual([]);
     expect(await ids("updated_at")).toEqual([]);
+  });
+
+  it("does not find a word that is only in the text of a PDF's pages (pdf_text): offline search covers titles, text and text boxes, the server's covers PDF text", async () => {
+    expect(await ids("photosynthesis")).toEqual([]);
+    expect(await ids("chloroplast")).toEqual([]);
+    expect(await ids("Lecture slides")).toEqual(["lecture"]); // the note itself is found by its title
   });
 
   it("reads % in the query literally when it matches a title start", async () => {

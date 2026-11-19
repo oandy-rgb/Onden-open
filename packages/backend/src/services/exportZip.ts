@@ -34,6 +34,7 @@ import { q } from "../db.js";
 import { log } from "../logger.js";
 import type { ActorCtx } from "../types.js";
 import { ArchiveClosed, pacedArchive, type ArchiveSink, type PacedArchive } from "./archiveStream.js";
+import { NOTE_PAGES_ATTR, PDF_TEXT_ATTR } from "@onden/markdown/contract";
 import { canReadMedia } from "./mediaAccess.js";
 import { readableScopeSql } from "./readPolicy.js";
 import { spaceScopeSql } from "../spine/spaceScope.js";
@@ -118,11 +119,11 @@ export const EXPORT_KEYS = new Set(["title", "id", "slug", "tags", "updated_at"]
 /** Export keys an author may also use for their own values (Zettel ids, custom slugs). */
 const AUTHOR_KEYS = new Set(["id", "slug", "updated_at"]);
 /** Attributes that are data, not text a vault can carry: drawings, PDF
- *  marks and the text boxes and pictures on pages (the full backup carries all of them).
+ *  marks, the text boxes and pictures on pages, a note's list of pages and its PDF text (the full backup carries all of them).
  *  They don't go into the frontmatter (Markdown export is text). A PDF
  *  note's `pdf_url` does: the bundle pass copies the PDF into attachments/
  *  and the importer points it at the re-uploaded file. */
-const DATA_ATTRIBUTES = new Set([...INK_PAGE_ATTRS, "pdf_annotations", "page_text", "page_images"]);
+const DATA_ATTRIBUTES = new Set([...INK_PAGE_ATTRS, "pdf_annotations", "page_text", "page_images", NOTE_PAGES_ATTR, PDF_TEXT_ATTR]);
 /* Only values a person authored (spine/attributeSource.ts isPersonAuthored:
  * set in the UI — any panel, a table cell, Website › Collections, legacy
  * `explicit` rows included — or in the frontmatter) go into the frontmatter.

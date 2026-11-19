@@ -38,6 +38,7 @@ export const SERVER_ERROR_MESSAGES: Record<string, string> = {
   parent_kind_mismatch: "A note can't go under a tag, and a tag only goes under another tag: tags and notes are kept in separate trees.",
   reserved_tag: "System tag — it can be renamed but not merged or deleted.",
   imported_history: "This version came from a backup or a workspace move and can't be undone as a change. Open the note's version list and restore that version instead.",
+  pages_version: "The pages of this note were changed by a newer version of Onden. Update the app before changing them; your change was not saved.",
   history_incomplete: "The history needed to undo this is no longer available.",
   irreversible: "This kind of change can't be undone.",
   external: "This change reached outside Onden, so it can't be undone from here.",

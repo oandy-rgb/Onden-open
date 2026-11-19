@@ -3,6 +3,9 @@ import { q } from "../../db.js";
 import { readableNote } from "./readableNote.js";
 import { bodyMediaIds, describeAttachment, type NoteAttachment } from "./attachmentRefs.js";
 import { isInkPageAttr } from "@onden/markdown";
+import { NOTE_PAGES_ATTR, PDF_TEXT_ATTR } from "@onden/markdown/contract";
+import { notePagesOf, summarizeNotePages } from "@onden/markdown/note-pages";
+import { pdfTextPageCount } from "../pdfText.js";
 import type { AgentTool } from "./types.js";
 import { liveTagNodeSql } from "../../spine/nodeSql.js";
 
@@ -71,8 +74,20 @@ export const getNodeTool: AgentTool<z.infer<typeof Args>, GetNodeResult> = {
       tags: tagsRes.rows,
       // Drawing data (handwriting, the board's pen layer, a note's 手寫 tab, a PDF's older marks) is megabytes of stroke JSON an agent can
       // neither read nor edit through this tool; any note may carry it now, so it never goes into the tool output.
-      attributes: attrsRes.rows.filter((a) => !isInkPageAttr(a.key) && a.key !== "pdf_annotations"),
+      attributes: agentVisibleAttributes(attrsRes.rows),
       attachments: await Promise.all(bodyMediaIds(node.markdown ?? "").map(describeAttachment)),
     };
   },
 };
+
+/** The attributes a tool is shown. Drawing data and the PDF's text are left out; the list of pages is told as a sentence
+ *  ("5 pages: blank, PDF 1-3, blank") — also for a note made before it, whose `pdf_url` is one run of every page. */
+function agentVisibleAttributes(rows: Array<{ key: string; value: string; value_type: string }>): Array<{ key: string; value: string; value_type: string }> {
+  const byKey = new Map(rows.map((a) => [a.key, a.value]));
+  const pages = notePagesOf({ note_pages: byKey.get(NOTE_PAGES_ATTR), pdf_url: byKey.get("pdf_url") });
+  const out = rows.filter((a) => !isInkPageAttr(a.key) && a.key !== "pdf_annotations" && a.key !== NOTE_PAGES_ATTR && a.key !== PDF_TEXT_ATTR);
+  if (pages) out.push({ key: NOTE_PAGES_ATTR, value: summarizeNotePages(pages), value_type: "text" });
+  const texts = pdfTextPageCount(byKey.get(PDF_TEXT_ATTR));
+  if (texts > 0) out.push({ key: PDF_TEXT_ATTR, value: `text of ${texts} page${texts === 1 ? "" : "s"}`, value_type: "text" });
+  return out;
+}

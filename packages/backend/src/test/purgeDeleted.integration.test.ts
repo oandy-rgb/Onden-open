@@ -4,7 +4,7 @@
 //
 // SAFETY: only runs against a *_test database; skips otherwise.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Hono } from "hono";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -18,6 +18,7 @@ import spacesRouter from "../routes/spaces.js";
 import { buildSyncDelta } from "../services/sync/delta.js";
 import { createNote } from "../services/noteCreate.js";
 import { MEDIA_DIR } from "../services/mediaStore.js";
+import { mediaFiles } from "../services/mediaFiles.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
@@ -151,9 +152,18 @@ describe.skipIf(!isTestDatabase())("deleting a deleted note for good", () => {
     expect(plan.attributes).toBeGreaterThanOrEqual(1);
     expect([...plan.ids].sort()).toEqual([parent, child, task].sort());
 
+    // The purge removes its files after the commit, without the response waiting for them (services/media.ts removeMediaFiles): the
+    // test waits for those very removals instead of reading the disk the moment the response is in (it failed once, under load, doing that).
+    const removals: Array<Promise<unknown>> = [];
+    const store = mediaFiles();
+    const removeFile = store.remove.bind(store);
+    const spy = vi.spyOn(store, "remove").mockImplementation((file: string) => { const done = removeFile(file); removals.push(done); return done; });
     const res = await purge(parent, plan.ids);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ purged: 3, media_removed: 1 });
+    await Promise.all(removals);
+    spy.mockRestore();
+    expect(removals).toHaveLength(1);
 
     for (const id of [parent, child, task]) expect(await exists(id)).toBe(false);
     expect(await exists(live)).toBe(true);

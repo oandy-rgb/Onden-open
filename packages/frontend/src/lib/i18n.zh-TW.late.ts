@@ -1959,6 +1959,8 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Open the source note": "開啟來源筆記",
   "Cannot load this right now": "目前無法載入",
   "You can read this note but not change it, so this opens read-only.": "你可以讀這則筆記但不能修改，所以這裡是唯讀。",
+  "This page is not in the note's page list.": "這頁不在頁面清單裡。",
+  "A PDF of this note is not on this device yet. It appears when you are online.": "這則筆記的 PDF 還沒下載到這台裝置，連上網路後會出現。",
   "Source text": "來源內容",
   "Edit embed syntax": "編輯嵌入語法",
   "This block was not found": "找不到這個段落",

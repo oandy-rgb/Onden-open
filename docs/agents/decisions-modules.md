@@ -114,6 +114,8 @@
 - 單篇筆記嵌入後（`embed` effect）同樣在伺服器端重算它的建議，所以不需要前端呼叫 `POST /api/nodes/:id/suggested-links`；選擇事件後在伺服器做，是因為嵌入完成才是建議有意義的時間點，而且白板端（`useGraphLayout`）本來就會畫 `status = 'suggested'` 的邊。
 - 建議是以工作區擁有者的讀取範圍算的：只建議擁有者讀得到的筆記，擁有者讀不到的筆記不產生建議。邊本身是共用資料，但同步（`sync/bootstrap.ts`）只送出兩端都讀得到的邊，所以別人看不到自己讀不到的筆記。已知限制：多人工作區裡，只有成員自己讀得到的私人筆記沒有建議。
 - 一般搜尋（`reads.notes.search`，`lib/data/noteSearch.ts`）在線上、模組開著、查詢有純文字且沒有 `#標籤`／`key:value` 時，於精確結果（與錯字容忍）之後多一層「意思相近」的筆記，最多 5 則，來自 `GET /api/semantic/search`（`semanticSearchNodes`，讀取範圍下推到查詢）。離線沒有這一層。距離門檻 `MEANING_MAX_DISTANCE` 沒有用真實模型校準（模型只在 Docker 映像裡），部署後要看實際結果調整。
+- 嵌入的文字是標題＋內文，筆記有 PDF 頁面文字（屬性 `pdf_text`）時接在後面（`indexing.ts` 的 `withPdfText`）；`pdf_text` 改了，`nodeHooks.attributeCommitted` 會替那則筆記重排一次 `embed`。
+  已知限制：補嵌入（`embed_backfill`）只挑有標題或內文的筆記（`embeddable`），只有 `pdf_text`、沒有標題與內文的筆記要靠上面那個 hook 才會被嵌入。
 - 設定 › 功能 › 語意搜尋顯示「N 則筆記裡有 M 則準備好了」（`GET /api/semantic/status`，只算這位讀者讀得到的筆記），準備中會自動更新。
 
 ## 移除標籤自動化（2026-11-15，業主決定）

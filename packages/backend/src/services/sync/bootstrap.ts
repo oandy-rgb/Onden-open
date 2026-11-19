@@ -29,6 +29,7 @@ import { eventAudience, eventVisibleSql } from "../eventVisibility.js";
 import { encodeBootstrapNodes } from "./bootstrapWire.js";
 import { config } from "../../config.js";
 import { INK_PAGE_ATTRS } from "@onden/markdown";
+import { PDF_TEXT_ATTR } from "@onden/markdown/contract";
 import { liveNodeSql } from "../../spine/nodeSql.js";
 import { serverIdentityField } from "../../spine/stamps.js";
 
@@ -61,7 +62,9 @@ const BOOTSTRAP_NODE_LIMIT = config.int("BOOTSTRAP_NODE_LIMIT", 5000, { min: 1 }
 //     loads them on open (lib/ink/store → GET /api/nodes/:id/attributes) and
 //     keeps a copy on the device for offline; deltas still carry changes.
 // Older clients send no header and get the old shape.
-export const BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS = [...INK_PAGE_ATTRS, "pdf_annotations"] as const;
+//   • `pdf_text` (a PDF's text for search, up to ~60,000 characters a note) is left out too: the offline local search does not find
+//     PDF text, the server's search and the semantic index do. `note_pages` (a few hundred bytes) stays in.
+export const BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS = [...INK_PAGE_ATTRS, "pdf_annotations", PDF_TEXT_ATTR] as const;
 
 /** The bootstrap payload for `authenticated`, re-read with its current role
  *  and scopes. `slimBodies`: every node without its markdown (body_len

@@ -13,6 +13,7 @@ export default defineConfig({
     { find: "@onden/markdown/ink", replacement: fileURLToPath(new URL("../markdown/src/ink.ts", import.meta.url)) },
     { find: "@onden/markdown/page-text", replacement: fileURLToPath(new URL("../markdown/src/pageText.ts", import.meta.url)) },
     { find: "@onden/markdown/page-images", replacement: fileURLToPath(new URL("../markdown/src/pageImages.ts", import.meta.url)) },
+    { find: "@onden/markdown/note-pages", replacement: fileURLToPath(new URL("../markdown/src/notePages.ts", import.meta.url)) },
     { find: "@onden/markdown/full", replacement: fileURLToPath(new URL("../markdown/src/full.ts", import.meta.url)) },
     { find: "@onden/markdown/snippet", replacement: fileURLToPath(new URL("../markdown/src/snippet.ts", import.meta.url)) },
     { find: "@onden/markdown/contract", replacement: fileURLToPath(new URL("../markdown/src/sharedContract.ts", import.meta.url)) },

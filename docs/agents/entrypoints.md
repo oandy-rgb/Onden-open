@@ -20,7 +20,7 @@
   - 只有 `src/node.ts` 有執行期的 zod 結構：`ServerNode`（bootstrap、同步增量、`GET /api/nodes/:id` 送出的筆記）、`ServerNodeRow`（`POST`／`PATCH /api/nodes` 回的資料列，沒有標籤與事件欄位）、
     `DraftNode`（建立／修改筆記的請求內容，後端用它驗證），以及從 `ServerNode` 推導的 `ContentNode`（前端持有的筆記：只有核心欄位必有）。
     欄位新增或移除先改 `packages/contract/src/node.ts`；`packages/backend/src/test/nodeContract.integration.test.ts` 用 `.strict()` 解析真實回應，兩邊漂移就失敗。
-  - 其他主題（AI 設定、備份還原、段落與引用、白板、bootstrap、歷史、匯入來源、分頁、發布預覽、複習、網站設定、空間、標籤、任務專注、垃圾桶、檢視列）一檔一個主題，**只有型別**，兩邊都用 `import type`，不在執行期解析。
+  - 其他主題（AI 設定、備份還原、段落與引用、白板、bootstrap、歷史、匯入來源、分頁、發布預覽、複習、網站設定、空間、標籤、任務專注、垃圾桶、檢視列、筆記的頁面清單）一檔一個主題，**只有型別**，兩邊都用 `import type`，不在執行期解析。
     API 回應的實際形狀由 `packages/backend/src/test/apiContract.integration.test.ts` 記到 `packages/markdown/contract/api-shapes.json`，前端 `packages/frontend/src/test/apiContract.test.ts` 核對。
   - 後端的節點查詢以 `ServerNode`／`ServerNodeRow` 當型別（只在型別層級，不對每個請求 `parse`）；前端**只准 `import type`**（zod 不進開機包，`packages/frontend/scripts/check-boot-bundle.mjs` 會擋）。
 - 功能地圖：[feature-map.md](../architecture/feature-map.md)。

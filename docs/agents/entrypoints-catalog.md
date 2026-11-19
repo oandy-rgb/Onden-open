@@ -1298,6 +1298,17 @@ navigate(() => setModuleAddress("tag.<id>"), { history: "push" });`
 - 取代：在模組畫面用 useState 記頁裡的位置（重新載入就掉）、自己 pushState、為這個位置另加一個網址參數
 - 為什麼：網址的 `m=` 由 useUrlLocation 寫入與還原，意義由該頁（lazy chunk）自己定義，開機程式不認識任何模組的頁。換位置要不要新增一筆歷史，由呼叫處用 navigate 說明（進入某一組＝push，Back 回上一頁）。
 
+### 要知道一則筆記有哪些頁（空白頁、PDF 檔的幾頁）、頁的鍵、加一頁、合併兩台裝置的加頁
+
+- 入口：`markdown/src/notePages.ts`（`decodeNotePages`、`notePagesOf`、`expandNotePages`、`insertBlankPage`、`mintPageId`、`mergeNotePages`）；`frontend/src/modules/handwriting/notePagesBook.ts`（`buildNoteBook`、`pagesToStore`）　項目 `note-pages`
+- 寫法：`import { notePagesOf, expandNotePages } from "@onden/markdown/note-pages";
+export const pageKeys = (stored: string | null, pdfUrl: string | null) => {
+  const pages = notePagesOf({ note_pages: stored, pdf_url: pdfUrl });
+  return pages ? expandNotePages(pages, () => 3).entries.map((entry) => entry.key) : [];
+};`
+- 取代：自己解析 `note_pages` 的 JSON、自己用 `pdf_url` 數頁、自己用 randomUUID 產生頁 key
+- 為什麼：頁清單（`note_pages`）只存「有哪些頁、什麼順序」，筆跡在 `note_ink`、PDF 文字在 `pdf_text`；頁 key 只由 `mintPageId` 產生且不重複使用，切段的後半拿新 id 但保留 key 前綴。舊的 PDF 筆記用 `pagesFromPdfUrl` 讀成同一種清單（key 仍是 `pdf:<n>`）。伺服器與前端的合併（`mergeNotePages`）是同一個純函式。
+
 ## 功能模組接口（26）
 
 ### 要在筆記的分頁列加一個「只畫這篇筆記本身」的視角（簡報）

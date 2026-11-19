@@ -165,7 +165,7 @@ export function isSystemAttr(key: string): boolean {
 /** Attributes the editors store for their own content (handwriting strokes,
  *  PDF marks, sketches): drawn on the page, never listed as a field to edit.
  *  They are not `_`-prefixed, so a property list asks for both. */
-export const EDITOR_STORAGE_ATTR_KEYS: ReadonlySet<string> = new Set(["ink_data", "page_text", "page_images", "board_ink", "note_ink", "pdf_annotations", "pdf_page", "pdf_url", "sketch_data", "slides_data"]);
+export const EDITOR_STORAGE_ATTR_KEYS: ReadonlySet<string> = new Set(["ink_data", "page_text", "page_images", "board_ink", "note_ink", "note_pages", "pdf_text", "pdf_annotations", "pdf_page", "pdf_url", "sketch_data", "slides_data"]);
 /** Where a note keeps a drawing page. `ink_data` is the note's own content: a handwriting page, or a PDF's
  *  envelope. `board_ink` is the pen layer of its whiteboard view (the same single-page format, the same codec,
  *  the same merging write): a separate attribute so that drawing on the board never turns the note's content
@@ -177,6 +177,13 @@ export const BOARD_INK_ATTR = "board_ink";
  *  attribute, so that a note with text can have strokes without its content tab turning into a handwriting page. It is
  *  the note's own data: removing the tab does not touch it. */
 export const NOTE_INK_ATTR = "note_ink";
+/** Which pages a note has, in order (blank pages and runs of pages of a PDF file): a small JSON list, @onden/markdown/note-pages.
+ *  The strokes of those pages stay in `note_ink` under the page's key. Sent with the lean bootstrap (it is a few hundred bytes). */
+export const NOTE_PAGES_ATTR = "note_pages";
+/** The text of a note's PDF pages for search and the semantic index: `{ [pageKey]: text }`, hidden from the properties panel
+ *  and from the Markdown export, never the note's body. Left out of the lean bootstrap (up to ~60,000 characters a note),
+ *  so the offline local search does not find PDF text. */
+export const PDF_TEXT_ATTR = "pdf_text";
 /** The layout (= the handwriting module's id) of the stored view that is a note's 「手寫」 tab. */
 export const HANDWRITING_LAYOUT = "handwriting";
 /** Every attribute that holds drawing data in the ink page format (large, merged on write, content-addressed in

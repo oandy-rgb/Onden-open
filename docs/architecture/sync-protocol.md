@@ -309,7 +309,7 @@ rather than let a capped full payload replace a large mirror.
 
 The client asks for every whole bootstrap with `X-Onden-Bootstrap: lean`
 (a header, so the URLs and their caches stay as they were). The answer
-(`attrs_omitted: true`, `deferred_attribute_keys: ["ink_data", "board_ink", "pdf_annotations"]`):
+(`attrs_omitted: true`, `deferred_attribute_keys: ["ink_data", "board_ink", "note_ink", "pdf_annotations", "pdf_text"]`):
 
 - nodes carry no `attrs` map; it repeated every typed `attributes` row, and the
   client rebuilds it from them (`syncEngine.fetchBootstrap`);
@@ -329,8 +329,8 @@ A client that sends no header gets the old shape.
 the client downloads the missing ones in the background
 (`syncEngine.downloadDrawingsForOffline`): when idle, online, the tab visible
 and Save-Data off, after the boot gate is down and after a reconnect.
-`GET /api/sync/drawings` lists the readable notes holding `ink_data` / `board_ink` /
-`pdf_annotations`, each value's size and the SHA-256 of its UTF-8 bytes. The
+`GET /api/sync/drawings` lists the readable notes holding any deferred key (`BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`:
+`ink_data` / `board_ink` / `note_ink` / `pdf_annotations` / `pdf_text`), each value's size and the SHA-256 of its UTF-8 bytes. The
 client plans (`planDrawingDownload`): notes it holds without a copy, and copies
 whose hash differs (a missed delta, a migration with no event) unless the note
 has a queued attribute write or the copy was written in the last minute. It

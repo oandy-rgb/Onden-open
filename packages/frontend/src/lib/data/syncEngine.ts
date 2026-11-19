@@ -41,6 +41,7 @@ import { isBrowserOnline, prefersSavedData } from "../browserNetwork";
 import { getLocalCopyState } from "../localCopyState";
 import { BOOTSTRAP_HEADER_VALUE, decodeBootstrapWire } from "./bootstrapWire";
 import { assertBootstrapShape, assertSyncDeltaShape } from "./wireShape";
+import { heldNotesNowSent } from "../localDb";
 
 // ── User-folder export (fs-access) ───────────────────────────────────────────
 
@@ -403,6 +404,10 @@ let hydrateSeq = 0;
 const heldBehindQueue = new Set<string>();
 
 async function releaseHeldNotes(): Promise<void> {
+  // The copy's own list too (any answer the queued text was kept over, here or in another tab, before a reload).
+  // A copy that cannot answer releases nothing this round (the list stays in the copy).
+  const held = await Promise.resolve().then(() => heldNotesNowSent()).catch(() => [] as string[]);
+  for (const id of held) heldBehindQueue.add(id);
   for (const id of [...heldBehindQueue]) {
     if (await hasPendingWrite((write) => targetsEntity(write, "node", id))) continue;
     heldBehindQueue.delete(id);
@@ -939,7 +944,7 @@ export function sync(): Promise<SyncResult> {
       // PG bigint ids are decimal strings in the real JSON response. Compare
       // their numeric value: lexical "1000" > "500" is false and used to trap
       // sync on one page until a manual retry advanced the persisted cursor.
-      let since: number | string = await getLastEventId();
+      let since: number | string = await getLastEventId({ startingSync: true });
       // Step C: the routine sync no longer sends `known[]`. Revocation/grant is
       // the membership pipeline's job now — the epoch-gated reconcile
       // (maybeReconcileMembership) + the cold-start full reconcile + the

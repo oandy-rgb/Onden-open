@@ -292,11 +292,11 @@
 
 - 已修好、拿掉標記的 5 個：`twoTabQueue` 1、2、9a（#616 修好；舊的測試卡在一個只存在不到半秒的前置條件上，而且通過時其實是 B 把 A 的修改送出去的，
   改寫後要拿掉世代檢查才會紅）、`stalledSave` 3、9b（#616 修好；測試的 `page.unroute` 會放掉被扣住的請求，所以從來沒有真的卡住過）。
-- 還在、保留標記的 3 個（標記文字寫的是今天的事實，不再點名分支）：
+- 之後修好的 1 個：`closeMidSave` 5b（存檔途中分頁被直接殺掉；2026-11-18 `fix/save-survives-kill`：每次保存先寫成佇列的一列再改本機副本、再送出，見 [筆記寫入：送出前先記下](../architecture/note-writes.md#送出前先記下2026-11-18)）。標記與兩個單元 `it.fails`（`writeQueue.test.ts`、`localDbJournal.test.ts`）都已翻成一般測試；e2e 的斷言同時收緊成「到伺服器或在復原區」。
+- 還在、保留標記的 2 個（標記文字寫的是今天的事實，不再點名分支）：
 
 | 測試 | 會發生什麼 | 同一件事的確定性測試 |
 | --- | --- | --- |
-| `closeMidSave.spec.ts` 5b | 存檔請求送出、還沒回應時分頁被直接殺掉（當機、系統收回、沒電）。**存檔開始後約 2 秒內**被殺：那段字不見。**約 2 秒到 25 秒之間**被殺：字留在這台裝置的本機副本裡、但沒有排進佇列，重開後編輯器顯示得像存好了，卻永遠不會送出；之後每日的整份重新整理、或在大工作區打開那則筆記，就換回伺服器的版本；在那之前再編輯同一則，改在別的段落時伺服器合併會把那段字當成被刪掉而丟掉，改在同一行時當成衝突留下。都沒有提示。 | `localDbJournal.test.ts`「a save the page died during …」、`writeQueue.test.ts`「a save on the wire when the tab is killed …」（`it.fails`）；後端 `bodyMergeStrandedBase.test.ts`（合併的行為） |
 | `stuckWrite.spec.ts` 4 | 伺服器對某一筆一直回 500 時，佇列停在那一筆，其他筆記的修改也送不出去；要等那一筆失敗 8 次（約 4.4 分鐘）才在同步狀態出現「移到復原區」（電腦在頭像打開的帳號視窗裡，手機在底部那條）。不會丟資料，只是卡住。 | `writeQueue.test.ts`「a write to another note behind a head answered 500 …」（`it.fails`） |
 | `workerDeath.spec.ts` 7 | 本機資料庫的背景執行緒無聲結束時，要等 60 秒的呼叫期限才發現；這一分鐘裡存檔在等、畫面不說。之後會重建並送出。修法要分得出「死了」和「在忙」。 | `localDbWorkerHealth.test.ts`「a worker that ended itself is noticed within 30 seconds, and a busy one is left alone for 40」（`it.fails`） |
 

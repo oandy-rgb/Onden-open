@@ -5,12 +5,16 @@ const mocks = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("../lib/api", async (original) => ({ ...await original<typeof import("../lib/api")>(), api: mocks.api }));
 vi.mock("../lib/localDb", () => ({
   upsertNode: vi.fn(), removeNode: vi.fn(), upsertAttribute: vi.fn(), removeAttribute: vi.fn(async () => {}),
-  addPendingWrite: vi.fn(), getPendingWrites: vi.fn(async () => []),
+  addPendingWrite: vi.fn(), getPendingWrites: vi.fn(async () => []), clearPendingWrite: vi.fn(async () => {}),
   storeRejectedWrite: vi.fn(async (request, rejection) => ({ ...request, id: 301, attempts: 0, rejection })),
 }));
 
 import { ApiError, type ContentNode } from "../lib/api";
-import { upsertNode, removeNode, addPendingWrite, upsertAttribute, removeAttribute } from "../lib/localDb";
+import { upsertNode, removeNode, addPendingWrite, upsertAttribute, removeAttribute, getPendingWrites, clearPendingWrite } from "../lib/localDb";
+import { memoryQueue } from "./helpers/memoryQueue";
+
+// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
+let queue: { rows: unknown[] };
 import { makeNoteWriter } from "../lib/data/noteWriter";
 import { makeNodeMutations } from "../lib/data/nodeMutations";
 import { makeTagWriter } from "../lib/data/tagWriter";
@@ -44,7 +48,8 @@ beforeEach(() => {
   mocks.api.mockReset();
   vi.mocked(upsertNode).mockReset().mockResolvedValue();
   vi.mocked(removeNode).mockReset().mockResolvedValue();
-  vi.mocked(addPendingWrite).mockReset().mockResolvedValue();
+  vi.mocked(addPendingWrite).mockReset();
+  queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
   setPending(0);
   setLocalePref("en");
 });
@@ -68,7 +73,7 @@ describe("note write lifecycle", () => {
     mocks.api.mockRejectedValueOnce(new ApiError(403, "forbidden"));
     await expect(h.writer.duplicate(note)).rejects.toMatchObject({ status: 403 });
     expect(h.get().nodes.map(row => row.id)).toEqual([note.id]);
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
     expect(h.ctx.addToast).toHaveBeenCalled();
   });
 
@@ -137,7 +142,7 @@ describe("note write lifecycle", () => {
     await expect(h.writer.patch(note.id, { title: "Occupied" })).rejects.toMatchObject({ status: 409 });
     expect(h.get().nodes[0]!.title).toBe("Original");
     expect(h.get().tags![0]!.name).toBe("Original");
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
     expect(h.ctx.addToast).not.toHaveBeenCalled(); // the recovery entry (reason + kept input) is the one notification
   });
 
@@ -183,14 +188,17 @@ describe("note write lifecycle", () => {
     expect(mocks.api).not.toHaveBeenCalled();
   });
 
-  it("mirrors an offline creation before acknowledging its durable queue commit", async () => {
+  // The queue row comes first: the local copy changes only once it is durable, so no stored copy ever holds text the
+  // queue does not (docs/architecture/note-writes.md 送出前先記下). The save is acknowledged after both.
+  it("mirrors an offline creation only after its queue row is durable, and acknowledges it then", async () => {
     const h = harness(false);
     const commit = deferred<void>();
     vi.mocked(addPendingWrite).mockReturnValueOnce(commit.promise);
     const saving = h.writer.create({ title: "New note" });
     await vi.waitFor(() => expect(addPendingWrite).toHaveBeenCalledOnce());
-    expect(upsertNode).toHaveBeenCalledWith(expect.objectContaining({ title: "New note" }));
+    expect(upsertNode).not.toHaveBeenCalled();
     commit.resolve();
+    await vi.waitFor(() => expect(upsertNode).toHaveBeenCalledWith(expect.objectContaining({ title: "New note" })));
     const result = await saving;
     expect(result.status).toBe("queued");
     expect(h.get().nodes).toContainEqual(result.node);
@@ -326,7 +334,7 @@ describe("note write lifecycle", () => {
     await expect(h.writer.create({ title: "New", markdown: "x".repeat(2_000_001) })).rejects.toThrow("2,000,000-character limit");
     expect(h.get().nodes).toEqual([note]);
     expect(mocks.api).not.toHaveBeenCalled();
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
     // The two refused saves of typed text are in recovery (that entry is their notice); the create has none.
     expect(h.ctx.addToast).toHaveBeenCalledTimes(1);
     // (the mocked local database gives every refusal row the same id, so one entry stands for both)

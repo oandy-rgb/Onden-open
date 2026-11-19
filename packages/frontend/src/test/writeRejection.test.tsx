@@ -13,6 +13,7 @@ vi.mock("../lib/localDb", () => ({
   storeRejectedWrite: async (request: import("../lib/localDb").RejectedRequest, rejection: string) => ({ ...request, id: 901, attempts: 0, rejection }),
   addPendingWrite: vi.fn(async () => null),
   getPendingWrites: vi.fn(async () => []),
+  clearPendingWrite: vi.fn(async () => {}),
   upsertAttribute: vi.fn(async () => null),
   removeAttribute: vi.fn(async () => null),
   upsertTask: vi.fn(async () => null),
@@ -26,7 +27,8 @@ vi.mock("../lib/localDb", () => ({
 
 import { ApiError, type Bootstrap } from "../lib/api";
 import { noWorkspaceData } from "../lib/api";
-import { addPendingWrite } from "../lib/localDb";
+import { addPendingWrite, clearPendingWrite, getPendingWrites } from "../lib/localDb";
+import { memoryQueue } from "./helpers/memoryQueue";
 import { sendOrQueue } from "../lib/data/writeQueue";
 import { setPending, getPendingCount } from "../lib/data/syncStatus";
 import { makeTaskWriter } from "../lib/data/taskWriter";
@@ -57,22 +59,24 @@ const edge = (id: string) => ({ id, source_node_id: "a", target_node_id: "b", ed
 const reject422 = () => Promise.reject(new ApiError(422, JSON.stringify({ error: "field_invalid", detail: '"rating" must be a number' })));
 const fail500 = () => Promise.reject(new ApiError(500, "internal"));
 
+// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
+let queue: { rows: unknown[] };
 describe("write rejection posture", () => {
   beforeEach(() => {
     apiMock.mockReset();
-    vi.mocked(addPendingWrite).mockClear();
+    queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
     setPending(0);
   });
 
   it("sendOrQueue: 4xx rethrows (never queued); 5xx queues", async () => {
     apiMock.mockImplementationOnce(reject422);
     await expect(sendOrQueue("PUT", "/api/x", "{}")).rejects.toMatchObject({ status: 422 });
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
     expect(getPendingCount()).toBe(0);
 
     apiMock.mockImplementationOnce(fail500);
     await expect(sendOrQueue("PUT", "/api/x", "{}")).resolves.toBeUndefined();
-    expect(addPendingWrite).toHaveBeenCalledTimes(1);
+    expect(queue.rows).toHaveLength(1);
     expect(getPendingCount()).toBe(1);
   });
 
@@ -93,7 +97,7 @@ describe("write rejection posture", () => {
     await expect(m.properties.set("n1", "rating", "not-a-number")).rejects.toMatchObject({ status: 422 });
     expect(state.nodes[0]!.attrs?.rating).toBe("3"); // rolled back
     expect(addToast).not.toHaveBeenCalled(); // the recovery entry shows the reason
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
   });
 
   it("removeAttribute: 422 (required field) restores the value and toasts", async () => {
@@ -125,7 +129,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, tasks: [{ id: "tk1", node_id: "n1", title: "T", status: "todo" }] });
     await writers(h.ctx).tasks.patch("tk1", { status: "done" });
     expect(h.get().tasks[0]!.status).toBe("done");        // optimistic flip kept
-    expect(addPendingWrite).toHaveBeenCalledTimes(1);     // queued for the drain
+    expect(queue.rows).toHaveLength(1);     // queued for the drain
     const init = apiMock.mock.calls[0]![1] as RequestInit;
     expect((init.headers as Record<string, string>)["Idempotency-Key"]).toEqual(expect.any(String));
   });
@@ -135,7 +139,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, tasks: [{ id: "tk1", node_id: "n1", title: "T", status: "todo" }] });
     await expect(writers(h.ctx).tasks.patch("tk1", { status: "done" })).rejects.toMatchObject({ status: 422 });
     expect(h.get().tasks[0]!.status).toBe("todo");        // rolled back
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
   });
 
   it("deleteEdge: a transient 5xx keeps it deleted + queues it (no wrong restore)", async () => {
@@ -143,7 +147,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, edges: [edge("e1")] });
     await writers(h.ctx).relations.remove("e1");
     expect(h.get().edges.map((e) => e.id)).toEqual([]);   // stays deleted
-    expect(addPendingWrite).toHaveBeenCalledTimes(1);
+    expect(queue.rows).toHaveLength(1);
   });
 
   it("deleteEdge: a terminal 4xx restores the edge", async () => {
@@ -151,7 +155,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, edges: [edge("e1")] });
     await expect(writers(h.ctx).relations.remove("e1")).rejects.toMatchObject({ status: 422 });
     expect(h.get().edges.map((e) => e.id)).toEqual(["e1"]); // restored
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
   });
 
   it("deleteNode: a transient 5xx keeps it deleted + queues it (no restore of a server-deleted node)", async () => {
@@ -159,7 +163,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, nodes: [{ id: "n1", title: "N", slug: "n", markdown: "", source_type: "manual", node_type: "content" }] });
     await makeNodeMutations(h.ctx).deleteNode("n1", "N");
     expect(h.get().nodes.map((n) => n.id)).toEqual([]);   // stays deleted (drains later)
-    expect(addPendingWrite).toHaveBeenCalledTimes(1);
+    expect(queue.rows).toHaveLength(1);
   });
 
   it("deleteNode: a terminal 4xx restores the node", async () => {
@@ -167,7 +171,7 @@ describe("write rejection posture", () => {
     const h = harness({ ...noWorkspaceData, nodes: [{ id: "n1", title: "N", slug: "n", markdown: "", source_type: "manual", node_type: "content" }] });
     await makeNodeMutations(h.ctx).deleteNode("n1", "N");
     expect(h.get().nodes.map((n) => n.id)).toEqual(["n1"]); // restored
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
   });
 
   it("deleteNode: a reserved tag is refused before any write or optimistic drop (T1)", async () => {
@@ -176,7 +180,7 @@ describe("write rejection posture", () => {
     expect(await makeNodeMutations(h.ctx).deleteNode("t-task", "Tasks")).toBe(false);
     expect(h.get().nodes.map((n) => n.id)).toEqual(["t-task"]);
     expect(apiMock).not.toHaveBeenCalled();
-    expect(addPendingWrite).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
     expect(h.ctx.addToast).toHaveBeenCalledWith(expect.stringContaining("System tag"), "error");
   });
 

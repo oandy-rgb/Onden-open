@@ -18,8 +18,9 @@ export const SESSION_KEYS = {
   /** The server build the person already reloaded for. */
   buildNotice: "onden.buildNotice",
   inviteToken: "onden.inviteToken",
-  /** The one write this tab has on the wire (lib/data/inFlightWrite), per account. */
-  writeInFlight: "onden-write-in-flight",
+  /** The one write a tab of the build before 2026-11-19 had on the wire, per account (that build sent saves without a
+   *  queue row). Read once and removed after the upgrade (writeQueue.adoptUnconfirmedWrites); no build writes it now. */
+  legacyWriteInFlight: "onden-write-in-flight",
 } as const;
 
 /** A temporary session (lib/temporaryStorage.ts) keeps even this per-tab memory out of the browser's own store, which a

@@ -1,15 +1,16 @@
 // Scenario 5 — the page goes away in the middle of a save. The save request is
 // held in flight (never answered), then the page is closed with its unload
 // handlers (`runBeforeUnload`) or the whole context is killed without them.
-// The same persistent profile is opened again: the last typed text must be on
-// the server or in the recovery panel (in the editor alone is not enough).
+// The same persistent profile is opened again: the last typed text must reach
+// the server, or be shown in the recovery panel. "Still in the editor" does not
+// count: a local copy showing text that nothing will send is the failure itself
+// (it looks saved, and the server's version replaces it later).
 //
 // The graceful close is covered by the pagehide path (unconfirmed-write
-// recovery). The hard close gives the page no event at all: a save on the wire
-// is kept only in memory and in sessionStorage (lib/data/inFlightWrite.ts, which
-// survives a reload, not a closed tab) until it is answered or its 25 s
-// deadline queues it, so it is gone. #609 (fix/a1-save-path) did not change
-// that. Still open; pinned at queue level in writeQueue.test.ts.
+// recovery). The hard close gives the page no event at all: the save was
+// recorded in the queue before it was sent (writeQueue.recordWrite), so the
+// reopened page sends it. Every kill point of a save is covered at unit level
+// (src/test/saveSurvivesKill.test.ts).
 import { chromium, test, expect, type BrowserContext, type Route } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,8 +69,8 @@ async function reopenAndFind(profile: Profile, dir: string, id: string, text: st
         if ((await serverMarkdown(page, id)).includes(text)) return "server";
         const recovery = await page.locator(".failed-write-recovery").innerText().catch(() => "");
         if (recovery.includes(text)) return "recovery";
-        return (await editor(page).innerText()).includes(text) ? "only in the editor" : "missing";
-      }, { timeout: 45_000, message: `the last typed text (${text}) must be on the server or in recovery` })
+        return (await editor(page).innerText()).includes(text) ? "only in this device's copy" : "missing";
+      }, { timeout: 45_000, message: `the last typed text (${text}) must reach the server or be shown in recovery` })
       .toMatch(/^(server|recovery)$/);
   } finally {
     await context.close();
@@ -94,7 +95,6 @@ for (const variant of [
     // The phone variant only repeats the graceful close (scenario 9 asks for 1, 3 and 5).
     if (variant.name === "desktop") {
       test("5b: a hard context close mid-save keeps the last text", { tag: FAULTS_TAG }, async () => {
-        test.fail(true, "known open: a save on the wire is not on disk until answered (or 25 s), so a killed tab loses it");
         test.setTimeout(120_000);
         const { id, text } = await typeThenDie(variant.profile, dir, "context");
         await reopenAndFind(variant.profile, dir, id, text);

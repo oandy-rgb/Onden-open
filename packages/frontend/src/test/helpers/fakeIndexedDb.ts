@@ -12,7 +12,7 @@
 //     journal's [scope, session, seq] key ranges work;
 //   - values are structured-cloned on the way in and out.
 // What it leaves out: versions beyond "create the store on first open",
-// indexes, cursors, durability hints, quota.
+// indexes, cursors, durability hints. Quota is one switch (`full`): while it is on, every put fails as a full disk does.
 
 type Key = number | string | Key[];
 const rank = (k: Key): number => typeof k === "number" ? 0 : typeof k === "string" ? 1 : 2;
@@ -55,6 +55,10 @@ export class FakeIdb {
   onCommit: (tab: unknown, database: string, store: string) => void = () => {};
   /** Number of readwrite transactions that completed, for the tests' sanity checks. */
   commits = 0;
+  /** The disk is full: every put fails (QuotaExceededError) and aborts its transaction. */
+  full = false;
+  /** Puts refused because the disk was full, by database. */
+  refusedPuts = new Map<string, number>();
 
   later(run: () => void): void {
     const tab = this.currentTab();
@@ -208,6 +212,11 @@ class FakeTx {
       }),
       put: (value: unknown, key: Key) => this.request(() => {
         if (this.mode !== "readwrite") throw new DOMException("read-only transaction", "ReadOnlyError");
+        if (this.idb.full) {
+          const database = this.where.split("/")[0]!;
+          this.idb.refusedPuts.set(database, (this.idb.refusedPuts.get(database) ?? 0) + 1);
+          throw new DOMException("the disk is full", "QuotaExceededError");
+        }
         const [database, storeName] = this.where.split("/");
         this.idb.onWrite(this.owner, database!, storeName!);
         const stored = structuredClone(value);

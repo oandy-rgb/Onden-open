@@ -27,7 +27,7 @@ for a quick pass. Without Docker, `npx playwright test --list` (in
 | `twoTabQueue.spec.ts` | 1 stale tab's snapshot vs. other tab's queue; 2 same after A compacted; 9a phone variant of 1 | pass — fixed by #616; B's snapshot comes from a server change over live sync, and B may not send the note's writes (removing the generation check turns them red: PR #1877) |
 | `stalledSave.spec.ts` | 3 request that never answers; 9b phone variant | pass — fixed by #616 (25 s attempt deadline); the held route stays installed |
 | `stuckWrite.spec.ts` | 4 one write answered 500 forever | fails (`test.fail`) — known open: the stuck notice comes after 8 tries (~4.4 min) |
-| `closeMidSave.spec.ts` | 5a graceful close mid-save; 5b hard context close; 9c phone variant of 5a | 5a, 9c pass; 5b fails (`test.fail`) — known open: a save on the wire is not queued; "only in the editor" does not count as kept |
+| `closeMidSave.spec.ts` | 5a graceful close mid-save; 5b hard context close; 9c phone variant of 5a | pass — the text must reach the server or recovery after the reopen ("in the editor" does not count); 5b fixed by queueing every save before it is sent (`fix/save-survives-kill`) |
 | `storageQuota.spec.ts` | 6 snapshot saves fail on quota | expected to pass — `fix/storage-quota-notice` (not yet run on a real browser) |
 | `workerDeath.spec.ts` | 7 local-DB worker dies | fails (`test.fail`) at 30 s — known open: noticed only by the 60 s call timeout (#617) |
 | `staleDeploy.spec.ts` | 8a stale chunk → one reload keeps draft; 8b guard spent → error screen + Reload | pass (behavior already exists) |

@@ -1,6 +1,6 @@
 # 一致的錯誤與保存契約
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/httpError.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeErrors.ts, packages/frontend/src/lib/data/backgroundWrite.ts
 
 何時讀：改前端保存／離線佇列／錯誤處理、依成功才關閉的表單，或後端 HTTP 錯誤映射之前。
@@ -16,6 +16,8 @@
   路由只捕捉自己確實能處理的清理、衝突或部分成功情形，其他錯誤向上傳遞。
 - 前端沿用領域 writer、`writeLifecycle.ts`、`writeQueue.ts` 與 `writeErrors.ts`。
   新功能不得各自發明 HTTP 分類、通知、重試或離線成功的定義。
+- 每次保存先寫成佇列的一列（`writeQueue.recordWrite`），之後才更新本機副本、才送出；頁面沒有任何事件就結束，
+  重開時寫入不是在伺服器就是在會送出或看得到的地方（[筆記寫入：送出前先記下](../architecture/note-writes.md#送出前先記下2026-11-18)）。
 - 保存確認必須來自伺服器接受，或離線佇列已持久化；兩者在 UI 上須能區分。
   只有記憶體更新不能顯示已保存，待同步也不能顯示已同步。
 - 區分永久拒絕、登入失效、可重試失敗與本機儲存失敗，採用既有對應策略。

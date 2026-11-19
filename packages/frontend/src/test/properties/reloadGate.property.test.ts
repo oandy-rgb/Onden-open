@@ -59,6 +59,8 @@ vi.mock("../../lib/localDb", async (importOriginal) => ({
     db.queued.push({ method, path, body, idemKey });
     return null;
   }),
+  // Every save is recorded in the queue before it is sent and leaves it once answered (writeQueue.recordWrite).
+  clearPendingWrite: vi.fn(async (_id: number, idemKey?: string | null) => { db.queued = db.queued.filter((w) => w.idemKey !== idemKey); }),
   catchUpWithOtherTabs: vi.fn(async () => {}),
   flushLocalDbSync: vi.fn(async () => { if (db.flushFails) throw new Error("local copy did not answer"); }),
   searchNodes: vi.fn(async () => []),

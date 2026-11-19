@@ -44,6 +44,7 @@ type Mods = {
   api: typeof import("../../lib/api");
   localCopyState: typeof import("../../lib/localCopyState");
   connectivity: typeof import("../../lib/data/connectivity");
+  onlineWrite: typeof import("../../lib/data/onlineWrite");
 };
 
 export type WriteStatus = "started" | "synced" | "queued" | "refused" | "storage-error" | "failed";
@@ -101,6 +102,8 @@ export class Server {
   /** Keys for which a success response reached a live tab. */
   ackedKeys = new Set<string>();
   appliedNs = new Set<number>();
+  /** Texts another device saved (remoteEdit). */
+  remoteNs = new Set<number>();
   /** Texts the server refused for good (their key answers 422 from then on). */
   refusedNs = new Set<number>();
   /** Per key, how often the request ARRIVED (applied or deduped). */
@@ -114,7 +117,7 @@ export class Server {
     this.notes = new Map(NOTES.map((id) => [id, { n: 0, lastEvent: 0 }]));
     // A real workspace's event log never starts empty: cursor 0 means "this device has no cursor".
     this.head = 10; this.requests = []; this.seq = 0; this.cache.clear(); this.refusedKeys.clear();
-    this.ackedKeys.clear(); this.appliedNs.clear(); this.refusedNs.clear(); this.arrivals = []; this.violations = []; this.log = []; this.nextN = 1;
+    this.ackedKeys.clear(); this.appliedNs.clear(); this.remoteNs.clear(); this.refusedNs.clear(); this.arrivals = []; this.violations = []; this.log = []; this.nextN = 1;
   }
 
   row(id: string) {
@@ -125,6 +128,7 @@ export class Server {
   /** Another device saves a newer text. */
   remoteEdit(id: string): number {
     const n = this.nextN++;
+    this.remoteNs.add(n);
     const note = this.notes.get(id)!;
     note.n = Math.max(note.n, n);
     note.lastEvent = ++this.head;
@@ -267,7 +271,7 @@ export class World {
     this.idb.onRead = (tab, database, store, key) => {
       if (tab && database === "onden-storage" && store === "sqlite" && typeof key === "string" && !key.endsWith(":generation")) (tab as Tab).snapshotReads++;
     };
-    this.server.reset(); this.tabs = []; this.writes = []; this.lockHeld.clear(); this.lockQueue.clear(); this.uuid = 0; this.pick = 0;
+    this.server.reset(); this.tabs = []; this.writes = []; this.lockHeld.clear(); this.lockQueue.clear(); this.lockGate = null; this.lockRefused = null; this.uuid = 0; this.pick = 0;
     // Timers belong to the tab that set them; a closed tab's never fire.
     this.realSetTimeout = globalThis.setTimeout;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -303,7 +307,15 @@ export class World {
       terminate() {}
     });
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => tabContext.getStore()?.online ?? true });
-    Object.defineProperty(navigator, "locks", { configurable: true, value: { request: (name: string, run: () => Promise<unknown>) => this.lockRequest(name, run) } });
+    Object.defineProperty(navigator, "locks", { configurable: true, value: {
+      request: (name: string, run: () => Promise<unknown>) => this.lockRequest(name, run),
+      // Locks belong to one browser: a tab sees the ones held by tabs of its own account (lockName).
+      query: async () => {
+        const tab = tabContext.getStore();
+        const prefix = tab && tab.account !== "u" ? `${tab.account}|` : "";
+        return { held: [...this.lockHeld.keys()].filter((name) => (prefix ? name.startsWith(prefix) : !name.includes("|"))).map((name) => ({ name: name.slice(prefix.length) })), pending: [] };
+      },
+    } });
     // Page lifecycle listeners are per tab: pagehide of one tab is not pagehide of the other.
     const TRACKED = new Set(["pagehide", "visibilitychange", "online", "offline", "beforeunload"]);
     for (const target of [window, document] as EventTarget[]) {
@@ -351,9 +363,17 @@ export class World {
       const queue = this.lockQueue.get(name) ?? [];
       queue.push({ tab, run, resolve, reject });
       this.lockQueue.set(name, queue);
-      queueMicrotask(() => this.grant(name));
+      // The spec orders the grants of ONE name; locks of different names may be granted in any order. A test holds a
+      // grant back (lockGate) to see that nothing relies on the order other names were asked in.
+      if (this.lockRefused?.(unscoped)) { queue.pop(); queueMicrotask(() => reject(new DOMException("lock request failed", "AbortError"))); return; }
+      const gate = this.lockGate?.(unscoped);
+      if (gate) void gate.then(() => this.grant(name)); else queueMicrotask(() => this.grant(name));
     });
   }
+  /** A test's hold on a lock grant: the grant waits for the promise. */
+  lockGate: ((name: string) => Promise<void> | undefined) | null = null;
+  /** A test's refusal of a lock request (the browser rejects it). */
+  lockRefused: ((name: string) => boolean) | null = null;
   private grant(name: string): void {
     if (this.lockHeld.has(name)) return;
     const queue = this.lockQueue.get(name) ?? [];
@@ -392,7 +412,8 @@ export class World {
     const accountStorage = await import("../../lib/accountStorage");
     const localCopyState = await import("../../lib/localCopyState");
     const connectivity = await import("../../lib/data/connectivity");
-    tab.mods = { localDb, writeQueue, writeRecovery, syncEngine, appStore, noteWriter, tagWriter, api, localCopyState, connectivity };
+    const onlineWrite = await import("../../lib/data/onlineWrite");
+    tab.mods = { localDb, writeQueue, writeRecovery, syncEngine, appStore, noteWriter, tagWriter, api, localCopyState, connectivity, onlineWrite };
     tabContext.run(tab, () => {
       accountStorage.bindAccountStorage(account, "");
       localDb.installUnloadFlush();
@@ -416,8 +437,12 @@ export class World {
   kill(tab: Tab, commitInFlightStorage: boolean, deliverKeepalive: boolean): void {
     tab.dead = true;
     this.idb.killTab(tab, commitInFlightStorage);
-    const drainLock = lockName(tab, "onden-pending-drain");
-    if (this.lockHeld.get(drainLock) === tab) { this.lockHeld.delete(drainLock); queueMicrotask(() => this.grant(drainLock)); }
+    // A page that dies lets go of every lock it held.
+    for (const [name, holder] of [...this.lockHeld]) {
+      if (holder !== tab) continue;
+      this.lockHeld.delete(name);
+      queueMicrotask(() => this.grant(name));
+    }
     for (const req of this.server.requests.filter((r) => r.tab === tab && r.state === "inflight")) {
       // The request left the page: the server may well get it (keepalive), nobody reads the answer.
       if (deliverKeepalive && req.keepalive) this.server.arrive(req);
@@ -482,7 +507,7 @@ export class World {
   }
 
   /** Drive until `promise` settles; server answers are given as `autoOutcome`. */
-  async drive<T>(promise: Promise<T>, autoOutcome: Outcome | null = "deliver", limit = 800): Promise<T> {
+  async drive<T>(promise: Promise<T>, autoOutcome: Outcome | null | ((req: Req) => Outcome | null) = "deliver", limit = 800): Promise<T> {
     let settled = false;
     let idle = 0;
     promise.then(() => { settled = true; }, () => { settled = true; });
@@ -493,8 +518,9 @@ export class World {
       await this.macrotask();
       if (settled) return promise;
       if (this.idb.io.length) continue;
-      const open = this.server.inflight[0];
-      if (open && autoOutcome) { this.server.respond(open, autoOutcome); idle = 0; continue; }
+      const answer = (req: Req): Outcome | null => (typeof autoOutcome === "function" ? autoOutcome(req) : autoOutcome);
+      const open = this.server.inflight.find((req) => answer(req) !== null);
+      if (open) { this.server.respond(open, answer(open)!); idle = 0; continue; }
       // Nothing to answer: either the page waits for a timer, or for something
       // really asynchronous (sql.js reading its wasm). Give the latter real time first.
       if (++idle < 4) { await this.realDelay(1); continue; }

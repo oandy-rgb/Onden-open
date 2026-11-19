@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { noteLocalWrite } from "../liveInvalidation";
-import { getPendingWrites } from "../localDb";
+import { waitingWrites } from "./syncStatus";
 import { randomUUID } from "../uuid";
 import { t } from "../i18n";
 import { inWriteOrder } from "./writeLifecycle";
@@ -59,7 +59,7 @@ export function makeOnlineOperation(ctx: DataCtx) {
       let index = 0;
       try {
         if (!(online ?? ctx.online)) throw new WriteActionError(offlineMessage);
-        if ((await getPendingWrites()).length) throw new WriteActionError(t("Sync pending changes before continuing."));
+        if ((await waitingWrites()).length) throw new WriteActionError(t("Sync pending changes before continuing."));
         const result = await operation(async <Result>(path: string, body?: string, method: OnlineMethod = "POST") => {
           const fingerprint = `${method} ${path}:${body ?? ""}`;
           let step = attempt.steps[index];

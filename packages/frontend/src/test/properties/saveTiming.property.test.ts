@@ -681,16 +681,18 @@ describe("save path under random timing", () => {
   // typing overwrites the optimistic row while the keepalive save is in flight; the reseed then reads that row.
   regression("late sync answer (seed 2): rename, answer asked before the save and delivered after it started, reload: the editor shows the old title", [
     C.rename(), C.syncStarts(), C.tick(), C.syncAnswer(0), C.reload(),
-  ], /#4/, true);
+  ], /#4/);
   regression("late sync answer (seed 21): typing, reload, answer, switch away and back: the editor shows the text from before", [
     C.type({ kind: "append", k: 0 }), C.reload(), C.syncStarts(), C.syncAnswer(0), C.switchNote(), C.switchNote(),
-  ], /#4/, true);
+  ], /#4/);
+  // These two and seed 3 below pass since every save is recorded in the queue before it is sent (writeQueue.recordWrite):
+  // the late answer lands with the queued text projected over it (pendingNoteProjection), like any answer that meets a queued write.
 
   // Seed 3 with S2–S4 and #4 skipped (PROPS_SKIP=S2,S3,S4,4): the same family, now with a body save that carries the old title.
   regression("late sync answer (seed 3): rename, reload, answer, typing, a failed save, background: a save carries the old title over the rename", [
     C.rename(), C.reload(), C.syncStarts(), C.syncAnswer(0), C.type({ kind: "append", k: 0 }),
     C.failRetry("503", 0), C.background(), C.type({ kind: "append", k: 0 }),
-  ], /#3/, true);
+  ], /#3/);
 
   // Seed 3: no sync involved. The keepalive save of the first typing is refused after the person typed something
   // the client itself refuses (NUL); the next save still carries the refused text as its base, the server has moved

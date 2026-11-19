@@ -165,6 +165,37 @@ describe("one snapshot key shared by several tabs", () => {
     expect(await queued(await openTab())).toEqual([]);
   });
 
+  // An answer asked from this tab's cursor can land after it took in an older stored copy: it would move the cursor
+  // past the changes the stored copy lacks, and no later sync would bring them (found by multiTab.property).
+  it("after taking in an older stored copy, the next request starts from that copy's cursor, even when an earlier answer lands first", async () => {
+    const a = await openTab();
+    const b = await openTab();
+    await a.send("setLastEventId", 11); // A applied the changes up to 11, in its memory only
+    await b.send("setLastEventId", 10);
+    await b.send("flushLocalDbSync"); // B stores its copy: the newest stored one, its cursor at 10
+    await a.send("catchUpWithOtherTabs"); // A takes it in
+    await a.send("setLastEventId", 12); // the answer A asked from 11 lands
+    expect(await a.send("getLastEventId")).toBe(10);
+    expect(await a.send("getLastEventId")).toBe(10); // and stays there until a sync moves it
+  });
+
+  // Several places read the cursor (the boot's "has it synced before", a bootstrap's before-and-after, the membership
+  // check); only the read that starts a sync request starts from the floor and spends it. A read before it must not
+  // spend it, or the answer that lands next moves the cursor past the changes again.
+  it("the floor holds for the next sync request however many other reads come first", async () => {
+    const a = await openTab();
+    const b = await openTab();
+    await a.send("setLastEventId", 11);
+    await b.send("setLastEventId", 10);
+    await b.send("flushLocalDbSync");
+    await a.send("catchUpWithOtherTabs");
+    expect(await a.send("getLastEventId")).toBe(10); // the boot's check, say: it sees the floor and leaves it
+    await a.send("setLastEventId", 12); // the answer A asked from 11 lands
+    expect(await a.send("getLastEventId", { startingSync: true })).toBe(10);
+    await a.send("setLastEventId", 13); // that sync's own answer
+    expect(await a.send("getLastEventId", { startingSync: true })).toBe(13); // spent: the next one starts from there
+  });
+
   it("catchUpWithOtherTabs brings in a write another tab only journaled", async () => {
     const a = await openTab();
     const b = await openTab();

@@ -242,6 +242,12 @@ async function adoptStoredSnapshot(): Promise<void> {
       fresh.run("DELETE FROM sync_state WHERE key='full_refresh_at'");
     } else if (shown < (eventCursorIn(fresh) ?? shown)) {
       fresh.run("UPDATE sync_state SET value=? WHERE key='last_event_id'", [String(shown)]);
+    } else if (shown > (eventCursorIn(fresh) ?? shown)) {
+      // The other way round: the stored copy is older than what this page applied, and the page may already be
+      // waiting for an answer asked from its own, later cursor. Applied here, that answer would move the cursor past
+      // the changes in between, and no later sync would bring them. So the next request starts from the stored
+      // copy's cursor (getLastEventId), whatever lands before it: replaying a change twice is harmless.
+      adoptedCursor = eventCursorIn(fresh);
     }
   } catch (error) {
     fresh.close();
@@ -316,13 +322,18 @@ function scheduleSave(): void {
 
 /** Make a change durable before its RPC resolves: one journal record, or (no
  *  journal) one whole snapshot. `critical: false` is for a change whose loss
- *  only replays work the server deduplicates; it never waits for a snapshot. */
-async function makeDurable(op: JournalOp, { critical = true } = {}): Promise<void> {
+ *  only replays work the server deduplicates; it never waits for a snapshot.
+ *  `refuseWhileBackingOff`: for a record whose caller keeps the write itself when it is refused (a queue row). While a
+ *  whole-database save waits out its backoff, such a record is refused at once instead of trying the whole export
+ *  again: online the save is then sent without a row; offline it goes to recovery, even if space was freed meanwhile,
+ *  until the backoff's retry (at most 300 s) saves again. */
+async function makeDurable(op: JournalOp, { critical = true, refuseWhileBackingOff = false } = {}): Promise<void> {
   if (journalOn) {
     const seq = ++journalSeq;
     journalWrote = true;
     try {
-      await journalAppend(journalKey(), { session: journalSession, seq, op });
+      // A critical record can be the only copy of what a person typed (a save on its way, a queued edit): on the disk.
+      await journalAppend(journalKey(), { session: journalSession, seq, op }, critical ? "strict" : undefined);
       if (++journalRecordsSinceSnapshot >= COMPACT_AFTER_RECORDS) scheduleSave();
       else compact.schedule();
       return;
@@ -330,11 +341,17 @@ async function makeDurable(op: JournalOp, { critical = true } = {}): Promise<voi
       console.warn("[onden] local journal write failed; saving the whole local database instead", error);
     }
   }
-  if (critical) await saveSnapshot();
-  else scheduleSave();
+  if (critical) {
+    // A whole-database save already failed and waits out its backoff (noteSaveFailed: a full disk). Another export
+    // now would copy 35–100 MB on every save, to fail again. This record is not kept; the caller keeps the write
+    // itself (online: sends it without a row; offline: recovery), as for any record storage refused. A record with no
+    // such fallback (a refusal kept for the person) still tries.
+    if (refuseWhileBackingOff && backoffTimer !== undefined) throw new Error("The local copy is waiting to retry its save");
+    await saveSnapshot();
+  } else scheduleSave();
 }
 
-const PENDING_ROW = "SELECT id, method, path, body, idem_key, attempts, rejection, created_at, targets FROM pending_writes";
+const PENDING_ROW = "SELECT id, method, path, body, idem_key, attempts, rejection, created_at, targets, made_at FROM pending_writes";
 function pendingRow(id: number): JournalRow | undefined {
   return qry<JournalRow>(`${PENDING_ROW} WHERE id = ?`, [id])[0];
 }
@@ -569,7 +586,9 @@ async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
   const drops = data.bodies === "none" ? slimBootstrapNodeDrops(
     new Set(data.nodes.map(n => n.id)), qry<{ id: string }>("SELECT id FROM nodes").map(row => row.id),
   ) : [];
+  const served = data.nodes;
   data = { ...data, nodes: [...projectPendingNoteText(data.nodes, pending), ...missingPendingNoteCreations(data.nodes, pending)] };
+  noteHeldText(served, data.nodes);
   // The remote readable set decides which old mirrors to clear. Only durable
   // creation input supplies missing local notes; never retain the old metadata.
   persistBootstrapInto(getDb(), data, drops);
@@ -600,7 +619,43 @@ async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
 async function persistRemoteNode(node: ContentNode): Promise<ContentNode> {
   const [projected] = projectPendingNoteText([node], await getPendingWrites());
   await upsertNode(projected);
+  noteHeldText([node], [projected]);
   return projected;
+}
+
+// Notes whose stored text is queued text kept over a NEWER server row (a bootstrap, a delta or a single read that
+// came while a write of the note was queued: pendingNoteProjection). The cursor moved past the server's version, so
+// no later delta brings it again: once nothing is queued for the note, the page reads it again
+// (syncEngine.releaseHeldNotes). Kept in the copy (sync_state), so it goes with the snapshot to the next page load and
+// to other tabs: the write is often sent by another page than the one that took the server row.
+const HELD_TEXT = "held_text";
+function heldNoteIds(): Set<string> {
+  try { return new Set(JSON.parse(qry<{ value: string }>("SELECT value FROM sync_state WHERE key=?", [HELD_TEXT])[0]?.value ?? "[]") as string[]); }
+  catch { return new Set(); }
+}
+function writeHeldText(held: Set<string>): void {
+  run("INSERT INTO sync_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [HELD_TEXT, JSON.stringify([...held])]);
+  scheduleSave();
+}
+/** `stored[i]` is what the copy now holds for the server's `served[i]`. */
+function noteHeldText(served: ContentNode[], stored: ContentNode[]): void {
+  const held = heldNoteIds();
+  let changed = false;
+  served.forEach((row, i) => {
+    const kept = stored[i] && (stored[i]!.title !== row.title || stored[i]!.markdown !== row.markdown);
+    if (kept && !held.has(row.id)) { held.add(row.id); changed = true; }
+    else if (!kept && held.delete(row.id)) changed = true;
+  });
+  if (changed) writeHeldText(held);
+}
+/** Held notes nothing is queued for any more: the server's row is to be read again. Notes gone from the copy are forgotten. */
+async function heldNotesNowSent(): Promise<string[]> {
+  const held = heldNoteIds();
+  if (held.size === 0) return [];
+  const present = new Set(qry<{ id: string }>(`SELECT id FROM nodes WHERE id IN (${[...held].map(() => "?").join(",")})`, [...held]).map((row) => row.id));
+  if ([...held].some((id) => !present.has(id))) writeHeldText(new Set([...held].filter((id) => present.has(id))));
+  const queued = queuedNoteIds(await getPendingWrites());
+  return [...held].filter((id) => present.has(id) && !queued.has(id));
 }
 
 /** Resolve `replace_for` against the local mirror: an edge touching a listed
@@ -682,6 +737,7 @@ async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
     previousTags = stored === undefined ? (await loadBootstrap())?.tags : restoreTagCatalog(stored, []);
   }
   const projected = projectPendingNoteText(delta.nodes.upsert, pending);
+  noteHeldText(delta.nodes.upsert, projected);
   const heldText = projected.filter((node, i) => node.title !== delta.nodes.upsert[i]!.title || node.markdown !== delta.nodes.upsert[i]!.markdown).map((node) => node.id);
   delta = { ...delta, nodes: { ...delta.nodes, upsert: projected },
     edges: replaceTouchingEdges(delta.edges, pending),
@@ -810,9 +866,24 @@ function eventCursorIn(database: Database): number | null {
   return typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null;
 }
 
-async function getLastEventId(): Promise<number> {
+/** Set when this tab took in a stored copy older than its own (adoptStoredSnapshot): the cursor the next sync request
+ *  starts from. Any read sees it (the lower of it and the stored cursor); only the read that starts a sync request
+ *  (`startingSync`) spends it, so it does not matter which of the cursor's readers asks first. */
+let adoptedCursor: number | null = null;
+
+async function getLastEventId({ startingSync = false }: { startingSync?: boolean } = {}): Promise<number> {
   const rows = qry<{ value: string }>("SELECT value FROM sync_state WHERE key = 'last_event_id'");
-  return rows.length > 0 ? parseInt(rows[0].value, 10) : 0;
+  const stored = rows.length > 0 ? parseInt(rows[0].value, 10) : 0;
+  if (adoptedCursor === null || stored <= adoptedCursor) {
+    if (startingSync) adoptedCursor = null;
+    return stored;
+  }
+  const floor = adoptedCursor;
+  if (!startingSync) return floor;
+  adoptedCursor = null;
+  run("UPDATE sync_state SET value=? WHERE key='last_event_id'", [String(floor)]);
+  scheduleSave();
+  return floor;
 }
 
 // The membership epoch the client last reconciled to (Step B). Separate cursor
@@ -989,6 +1060,8 @@ async function getStoredBody(id: string): Promise<string | null> {
 async function forgetBody(id: string): Promise<boolean> {
   if (queuedNoteIds(await getPendingWrites()).has(id)) return false;
   getDb().run("UPDATE nodes SET markdown = '', body_len = NULL WHERE id = ?", [id] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const held = heldNoteIds();
+  if (held.delete(id)) writeHeldText(held);
   const changed = getDb().getRowsModified() > 0;
   if (changed) scheduleSave();
   return changed;
@@ -1114,6 +1187,19 @@ async function loadCanvas(id: string): Promise<Canvas | null> {
   };
 }
 
+/** When a queued row was made, in microseconds since 1970 (well inside 2^53): the queue's order (getPendingWrites).
+ *  Every save is a row from the moment it is made (writeQueue.recordWrite), and the rows of several tabs meet in one
+ *  queue when one tab takes in another's journal (a closed tab's save is adopted by the next page). Each copy numbers
+ *  its rows itself, so by id the other tab's older save would come after this tab's newer one: its text would be
+ *  projected over the newer and sent after it. Never below the newest row this copy holds, so one tab's rows keep
+ *  the order they were made in even if the clock steps back; sub-millisecond where the browser gives it
+ *  (performance.now), so two tabs' saves of one millisecond keep theirs (one microsecond apart is a true tie). */
+function queuedAt(): number {
+  const newest = qry<{ at: number | null }>("SELECT MAX(made_at) AS at FROM pending_writes")[0]?.at ?? 0;
+  const now = typeof performance === "undefined" ? Date.now() * 1000 : Math.floor((performance.timeOrigin + performance.now()) * 1000);
+  return Math.max(newest + 1, now);
+}
+
 async function addPendingWrite(method: string, path: string, body: string | null, idemKey?: string | null): Promise<void> {
   // Client-minted idempotency key: the reconnect drain sends it as the
   // Idempotency-Key header so a replay (lost response, a second tab/device
@@ -1121,15 +1207,27 @@ async function addPendingWrite(method: string, path: string, body: string | null
   // supply one (sync-protocol §7 step 2: it's reused as the minted event_id so
   // the event can be marked synced when this write drains); otherwise mint one.
   const key = idemKey ?? randomUUID();
+  // A key names one queued write. The server answers every later request under it as a repeat of the first, so a
+  // second record of the key (two saves of one key overlapping, an attempt sent again, the day's note started from
+  // two places with different seeds) is that write, already queued and durable. Journal replay folds rows by key
+  // the same way (localDbJournal replayPut); a refusal and a removal find the one row by its key (queuedRowOf).
+  if (queuedRowOf(key)) return;
   // Which entities it acts on is read once, now; readers never parse the request.
   const targets = JSON.stringify(writeTargets({ method, path, body }));
-  run("INSERT INTO pending_writes (method, path, body, idem_key, targets) VALUES (?, ?, ?, ?, ?)", [method, path, body ?? null, key, targets]);
+  run("INSERT INTO pending_writes (method, path, body, idem_key, targets, made_at) VALUES (?, ?, ?, ?, ?, ?)", [method, path, body ?? null, key, targets, queuedAt()]);
   // A queued write is durability-critical: while offline it is the ONLY copy of
   // the user's change (the server hasn't seen it). The 2s debounce leaves a
   // window where a crash/kill loses it, so AWAIT its durable record (M14)
   // before resolving: a journal record of the row, not a whole-database save.
   const row = qry<JournalRow>(`${PENDING_ROW} WHERE id = last_insert_rowid()`)[0];
-  await makeDurable({ t: "pw.put", row });
+  try { await makeDurable({ t: "pw.put", row }, { refuseWhileBackingOff: true }); }
+  catch (error) {
+    // Not kept (a full disk): the caller is told, and keeps the write itself (sends it, or puts it in recovery). A row
+    // left here would be a second holder nobody was told of: the lane would take it for older work ahead of the
+    // caller's own write, and a later snapshot could still send it after the caller reported it failed.
+    run("DELETE FROM pending_writes WHERE id = ?", [row.id]);
+    throw error;
+  }
 }
 
 /** When the oldest queued write was queued (SQLite UTC, no zone), or null. */
@@ -1138,7 +1236,7 @@ async function getOldestPendingWriteAt(): Promise<string | null> {
 }
 
 async function getPendingWrites(): Promise<PendingWrite[]> {
-  return withTargets(qry<StoredWrite>("SELECT id, method, path, body, idem_key, attempts, targets FROM pending_writes WHERE rejection IS NULL ORDER BY id ASC"));
+  return withTargets(qry<StoredWrite>("SELECT id, method, path, body, idem_key, attempts, targets FROM pending_writes WHERE rejection IS NULL ORDER BY COALESCE(made_at, 0) ASC, id ASC"));
 }
 
 type StoredWrite = Omit<PendingWrite, "targets"> & { targets: string | null };
@@ -1150,11 +1248,22 @@ function withTargets<T extends StoredWrite>(rows: T[]): Array<Omit<T, "targets">
   });
 }
 
-async function clearPendingWrite(id: number): Promise<void> {
-  const row = pendingRow(id);
-  run("DELETE FROM pending_writes WHERE id = ? AND rejection IS NULL", [id]);
+/** A row is found by its key when it has one: its id is only its number in this copy, and taking in another tab's
+ *  snapshot can give that number to another write (each tab numbers its own rows). */
+function rowOf(id: number, idemKey?: string | null): JournalRow | undefined {
+  return idemKey ? queuedRowOf(idemKey) : pendingRow(id);
+}
+/** The queued (not refused) row of a key: one at most (addPendingWrite). */
+function queuedRowOf(idemKey: string): JournalRow | undefined {
+  return qry<JournalRow>(`${PENDING_ROW} WHERE idem_key = ? AND rejection IS NULL ORDER BY id LIMIT 1`, [idemKey])[0];
+}
+
+async function clearPendingWrite(id: number, idemKey?: string | null): Promise<void> {
+  const row = rowOf(id, idemKey);
+  if (!row) return;
+  run("DELETE FROM pending_writes WHERE id = ? AND rejection IS NULL", [row.id]);
   // Sent: losing this record only replays a request the server deduplicates.
-  if (row && getDb().getRowsModified() > 0) await makeDurable({ t: "pw.del", id, idem_key: row.idem_key }, { critical: false });
+  if (getDb().getRowsModified() > 0) await makeDurable({ t: "pw.del", id: row.id, idem_key: row.idem_key }, { critical: false });
 }
 
 async function getRejectedWrites(): Promise<RejectedWrite[]> {
@@ -1163,13 +1272,24 @@ async function getRejectedWrites(): Promise<RejectedWrite[]> {
 
 async function storeRejectedWrite(request: Pick<PendingWrite, "method" | "path" | "body"> & { idem_key: string }, reason: string): Promise<RejectedWrite> {
   if (!request.idem_key?.trim() || !reason.trim()) throw new Error("A rejected request needs its original key and reason");
-  const matches = qry<PendingWrite>("SELECT id, method, path, body, idem_key, attempts FROM pending_writes WHERE idem_key=?", [request.idem_key]);
-  if (matches.length > 0) {
-    const row = matches[0];
-    if (matches.length !== 1 || !sameQueuedRequest(row, { ...row, ...request })) {
-      throw new Error("The recovery key belongs to a different request");
+  const byKey = "SELECT id, method, path, body, idem_key, attempts FROM pending_writes WHERE idem_key=?";
+  // The server refused the key: the write it names (its one queued row) goes to recovery with its text.
+  const queued = qry<PendingWrite>(`${byKey} AND rejection IS NULL`, [request.idem_key])[0];
+  if (queued) {
+    const kept = await rejectPendingWrite(queued, reason);
+    if (sameQueuedRequest(queued, { ...queued, ...request })) return kept;
+    // The refused request carries other text than that row (a second record of the key kept the first row): its own
+    // text is kept as well, below.
+  } else {
+    // Nothing of the key queued: the same request refused before is that copy; another request under it is an error.
+    const matches = qry<PendingWrite>(byKey, [request.idem_key]);
+    if (matches.length > 0) {
+      const row = matches[0];
+      if (matches.length !== 1 || !sameQueuedRequest(row, { ...row, ...request })) {
+        throw new Error("The recovery key belongs to a different request");
+      }
+      return rejectPendingWrite(row, reason);
     }
-    return rejectPendingWrite(row, reason);
   }
   run("INSERT INTO pending_writes(method,path,body,idem_key,rejection,targets) VALUES(?,?,?,?,?,?)",
     [request.method, request.path, request.body, request.idem_key, reason, JSON.stringify(writeTargets(request))]);
@@ -1214,10 +1334,12 @@ async function dismissRejectedWrite(expected: RejectedWrite): Promise<void> {
 }
 
 // Count transient failures so replay can warn without deleting queued work.
-async function bumpPendingWriteAttempt(id: number): Promise<number> {
-  run("UPDATE pending_writes SET attempts = attempts + 1 WHERE id = ?", [id]);
+async function bumpPendingWriteAttempt(id: number, idemKey?: string | null): Promise<number> {
+  const at = rowOf(id, idemKey)?.id;
+  if (at === undefined) return 0;
+  run("UPDATE pending_writes SET attempts = attempts + 1 WHERE id = ?", [at]);
   scheduleSave();
-  const rows = qry<{ attempts: number }>("SELECT attempts FROM pending_writes WHERE id = ?", [id]);
+  const rows = qry<{ attempts: number }>("SELECT attempts FROM pending_writes WHERE id = ?", [at]);
   return rows[0]?.attempts ?? 0;
 }
 
@@ -1398,6 +1520,7 @@ const ops = {
   storeDownloadedBodies,
   getStoredBody,
   forgetBody,
+  heldNotesNowSent,
   applySync,
   upsertAttribute,
   removeAttribute,

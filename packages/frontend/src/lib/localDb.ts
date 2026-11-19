@@ -237,9 +237,11 @@ export async function setLastEventId(id: number | string): Promise<void> {
   await call<void>("setLastEventId", [id]);
 }
 
-export async function getLastEventId(): Promise<number> {
+/** `startingSync`: the read whose value a sync request is sent from (syncEngine.sync). Only that one moves the cursor
+ *  back to an older stored copy's, once this tab has taken one in (localDbWorker adoptedCursor). */
+export async function getLastEventId(options?: { startingSync?: boolean }): Promise<number> {
   if (getLocalCopyState() === "none") return 0; // no copy, no cursor
-  return call<number>("getLastEventId");
+  return call<number>("getLastEventId", options ? [options] : []);
 }
 
 /** The membership epoch the client last reconciled to (Step B). The client runs
@@ -380,8 +382,15 @@ export async function getOldestPendingWriteAt(): Promise<string | null> {
   return call<string | null>("getOldestPendingWriteAt");
 }
 
-export async function clearPendingWrite(id: number): Promise<void> {
-  await call<void>("clearPendingWrite", [id]);
+/** Notes whose stored text was queued text kept over a newer server row and that nothing is queued for any more: the
+ *  page reads them again (syncEngine.releaseHeldNotes; the worker's noteHeldText). */
+export async function heldNotesNowSent(): Promise<string[]> {
+  return call<string[]>("heldNotesNowSent");
+}
+
+/** `idemKey` (the row's own) finds the row when its id has moved (the worker's rowOf). */
+export async function clearPendingWrite(id: number, idemKey?: string | null): Promise<void> {
+  await call<void>("clearPendingWrite", [id, idemKey ?? null]);
 }
 
 /** Retain the exact request outside automatic replay. Resolves after the
@@ -401,8 +410,8 @@ export async function dismissRejectedWrite(write: RejectedWrite): Promise<void> 
   return call<void>("dismissRejectedWrite", [write]);
 }
 
-export async function bumpPendingWriteAttempt(id: number): Promise<number> {
-  return call<number>("bumpPendingWriteAttempt", [id]);
+export async function bumpPendingWriteAttempt(id: number, idemKey?: string | null): Promise<number> {
+  return call<number>("bumpPendingWriteAttempt", [id, idemKey ?? null]);
 }
 
 export async function searchNodes(query: string): Promise<Array<{ id: string; snippet: Snippet | null }>> {

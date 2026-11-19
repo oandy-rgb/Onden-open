@@ -179,10 +179,6 @@ type Run = {
   writing: Map<Tab, number>;
   cursors: Map<string, number>;
   problems: string[];
-  /** Per tab, the notes a started write has not finished with: where a death can leave the local copy ahead of the queue. */
-  touching: Map<Tab, Map<string, number>>;
-  /** `account|note` pairs whose local copy may legitimately show a write the device died in the middle of (the KNOWN phantom change). */
-  phantom: Set<string>;
   /** Titles a device was told were saved. */
   titled: Titled[];
   /** Notes whose creation a device was told was saved. */
@@ -225,13 +221,10 @@ async function drive<T>(promise: Promise<T>, fate: Fate | null = "deliver", limi
   throw new Error("drive: the operation never finished");
 }
 
-function begin(run: Run, tab: Tab, fn: () => Promise<unknown>, write = false, note?: string): void {
+function begin(run: Run, tab: Tab, fn: () => Promise<unknown>, write = false): void {
   if (write) run.writing.set(tab, (run.writing.get(tab) ?? 0) + 1);
-  const touched = note ? (run.touching.get(tab) ?? run.touching.set(tab, new Map()).get(tab)!) : null;
-  if (touched && note) touched.set(note, (touched.get(note) ?? 0) + 1);
   const done = w.start(tab, fn).finally(() => {
     if (write) run.writing.set(tab, (run.writing.get(tab) ?? 1) - 1);
-    if (touched && note) touched.set(note, (touched.get(note) ?? 1) - 1);
   });
   run.ops.push({ tab, done });
 }
@@ -273,7 +266,8 @@ function cmd<A extends unknown[]>(name: (...a: A) => string, exec: (run: Run, ..
 function act(run: Run, d: Dev, note: string, fn: (tab: Tab, writer: ReturnType<Tab["mods"]["noteWriter"]["makeNoteWriter"]>) => Promise<void>): void {
   const tab = alive(run, d);
   if (!tab) return;
-  begin(run, tab, () => fn(tab, tab.mods.noteWriter.makeNoteWriter(dataCtx(tab))), true, note);
+  void note; // which note it writes: the action's own business (the check reads the server and every device)
+  begin(run, tab, () => fn(tab, tab.mods.noteWriter.makeNoteWriter(dataCtx(tab))), true);
 }
 
 const Create = cmd((d: Dev, parent: number | null, k: number, sd: number) => `create(${d}, under ${parent === null ? "top" : `note#${parent}`}) pump(${k},${sd})`, async (run, d, parent, k, sd) => {
@@ -378,7 +372,7 @@ const Tag = cmd((d: Dev, note: number, tag: number, on: boolean, k: number, sd: 
   begin(run, tab, async () => {
     const writer = tab.mods.tagWriter.makeTagWriter(dataCtx(tab));
     await (on ? writer.apply : writer.remove)(id, simTagIds[tag % simTagIds.length]!).catch(() => {});
-  }, true, id);
+  }, true);
   await w.pump(k, sd);
 });
 
@@ -436,10 +430,8 @@ const ServerOn = cmd(() => "server comes back", async () => { w.backend.down = f
 const Reboot = cmd((d: Dev, steps: number, sd: number, clean: boolean) => `reboot(${d}, ${clean ? "pagehide first" : "crash"}) pump(${steps},${sd})`, async (run, d, steps, sd, clean) => {
   const old = alive(run, d);
   if (!old) return;
-  // KNOWN (phantom change): a write the page has not yet queued or sent when it goes away is in no queue, but the
-  // local copy already shows it (the mirror is written first). Like multiTab's crash, the property does not
-  // close a page that is still writing; SIM_INCLUDE_KNOWN=1 does.
-  if (!run.includeKnown && (run.writing.get(old) ?? 0) > 0) return;
+  // A page that is still writing may go away: every write is queued before the local copy shows it
+  // (writeQueue.recordWrite), so nothing it shows is in no queue (was the KNOWN "phantom change").
   if (clean) {
     begin(run, old, () => old.mods.localDb.flushLocalDbSync());
     old.fire("pagehide");
@@ -465,8 +457,8 @@ type Death = {
 const deathText = (x: Death) => `${x.pagehide ? "pagehide then " : ""}${x.commit ? "disk keeps" : "disk drops"} open storage, ${x.wireArrives ? "wire arrives" : "wire lost"}${x.keepalive ? ", keepalive survives" : ""}`;
 
 /** The page dies after `steps` more storage completions, at a point the test picks: between any two of a write's steps
- *  (mirror, queue row, request, clearing the row). The device is opened again from the same disk. Unlike Reboot, a device
- *  that is in the middle of writing may die; the one outcome that is allowed there is the KNOWN phantom change. */
+ *  (queue row, mirror, request, clearing the row). The device is opened again from the same disk, in the middle of
+ *  writing or not; no outcome is excused (the "phantom change" this used to allow is fixed: the row comes first). */
 const Crash = cmd((d: Dev, steps: number, sd: number, death: Death) => `crash(${d} after ${steps} storage steps: ${deathText(death)})`, async (run, d, steps, sd, death) => {
   const old = alive(run, d);
   if (!old) return;
@@ -476,9 +468,6 @@ const Crash = cmd((d: Dev, steps: number, sd: number, death: Death) => `crash(${
   }
   await w.pump(steps, sd);
   if (death.wireArrives) for (const req of w.backend.inflight.filter((r) => r.tab === old && !r.arrived)) await w.backend.arrive(req);
-  if (!run.includeKnown) {
-    for (const [note, n] of run.touching.get(old) ?? []) if (n > 0) run.phantom.add(`${old.account}|${note}`);
-  }
   run.deaths++;
   stats.deaths++;
   if ((run.writing.get(old) ?? 0) > 0) stats.deathsMidWrite++;
@@ -652,7 +641,7 @@ async function check(run: Run): Promise<string[]> {
   }
   for (const tab of w.live()) {
     for (const id of run.notes) {
-      if (refusedHere.has(`${tab.account}|${id}`) || run.phantom.has(`${tab.account}|${id}`)) continue;
+      if (refusedHere.has(`${tab.account}|${id}`)) continue;
       const s = server.get(id);
       const row = shownNote(tab, id);
       if (!s || s.deleted) { if (row) problems.push(`#1 ${label(id)}: device ${tab.name} still shows a note the server ${s ? "has deleted" : "never kept"}`); continue; }
@@ -785,7 +774,7 @@ async function execute(commands: Cmd[], includeKnown: boolean): Promise<string[]
   const run: Run = {
     nonce: randomUUID().slice(0, 8), counter: 0, uuid: 0, tabs: {} as Run["tabs"], reboots: 0, notes: [], typed: [], removedLines: new Set(),
     editing: { A: null, B: null }, everDeleted: [], includeKnown, ops: [], writing: new Map(), cursors: new Map(), problems: [],
-    touching: new Map(), phantom: new Set(), titled: [], created: [], deaths: 0,
+    titled: [], created: [], deaths: 0,
   };
   // Ids the run mints (notes, idempotency keys) must not repeat across runs: the database lives on.
   let n = 0;
@@ -853,14 +842,15 @@ describe("devices on the real backend over a faulty network", () => {
     expect(await runCommands([ServerOff(), Advance(500), Move("A", 0, 26, 0, 0), Tag("A", 0, 0, false, 5, 0)], true)).toEqual([]);
   });
 
-  // KNOWN (phantom change): the page goes away while a move is still being written; nothing was queued or sent, and
-  // the local copy the next page load opens shows the note under its new parent for good.
   it("a move to the note's own place is neither drawn nor sent (the server reads it as top level)", async (ctx) => {
     if (!enabled || !app) ctx.skip();
     expect(await runCommands([Advance(500), Respond(3, "deliver", 0, 0), GoOffline("B"), Move("B", 0, 0, 9, 601575), Drain("A", 8, 821553)], true)).toEqual([]);
   });
 
-  it.fails("KNOWN: a move still being written when the page goes away stays in the local copy", async (ctx) => {
+  // Was KNOWN (phantom change): the page went away while a move was still being written; nothing was queued or sent,
+  // and the local copy the next page load opened showed the note under its new parent for good. Fixed: the move is
+  // queued before the local copy changes (writeQueue.recordWrite).
+  it("a move still being written when the page goes away is sent by the next page load, not left in the local copy", async (ctx) => {
     if (!enabled || !app) ctx.skip();
     expect(await runCommands([Rename("B", 0, 0, 0), Move("B", 4, 0, 0, 0), Reboot("B", 8, 224439, true), Advance(16000)], true)).toEqual([]);
   });

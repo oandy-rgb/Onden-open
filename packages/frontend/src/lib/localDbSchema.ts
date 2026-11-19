@@ -160,6 +160,9 @@ export function prepareLocalDatabase(database: Database): void {
   // The entities a write acts on (JSON WriteTarget[]), recorded when queued
   // (D45). Rows from older builds keep NULL and are decoded from the request.
   try { database.run("ALTER TABLE pending_writes ADD COLUMN targets TEXT"); } catch { /* column exists */ }
+  // When the row was made (microseconds since 1970): the queue's order across tabs (localDbWorker.queuedAt).
+  // Rows from older builds keep NULL and sort first, in id order, as they did.
+  try { database.run("ALTER TABLE pending_writes ADD COLUMN made_at INTEGER"); } catch { /* column exists */ }
   // Mirrors backend node_attributes. Keyed by (node_id, key); value carries
   // the typed string + value_type tag so we can round-trip exact values
   // (booleans-as-text "true"/"false", dates ISO strings, etc).

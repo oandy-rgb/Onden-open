@@ -16,16 +16,21 @@ vi.mock("../lib/localDb", () => ({
   storeRejectedWrite: async (request: import("../lib/localDb").RejectedRequest, rejection: string) => ({ ...request, id: 901, attempts: 0, rejection }),
   addPendingWrite: vi.fn(async () => null),
   getPendingWrites: vi.fn(async () => []),
+  clearPendingWrite: vi.fn(async () => {}),
   upsertAttribute: vi.fn(async () => null),
 }));
 
 import { ApiError } from "../lib/api";
 import { sendOrQueue } from "../lib/data/writeQueue";
-import { addPendingWrite } from "../lib/localDb";
+import { addPendingWrite, clearPendingWrite, getPendingWrites } from "../lib/localDb";
+import { memoryQueue } from "./helpers/memoryQueue";
+
+// What is left queued once a write settled (every save is recorded first; see helpers/memoryQueue).
+let queue: { rows: unknown[] };
 
 beforeEach(() => {
   apiMock.mockReset();
-  vi.mocked(addPendingWrite).mockClear();
+  vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
 });
 
 describe("sendOrQueue keyless exactly-once (M15)", () => {
@@ -61,7 +66,7 @@ describe("sendOrQueue keyless exactly-once (M15)", () => {
   it("a 4xx is rethrown and NOT queued (poison guard)", async () => {
     apiMock.mockRejectedValue(new ApiError(403, "forbidden"));
     await expect(sendOrQueue("PATCH", "/api/nodes/n1", "{}")).rejects.toBeInstanceOf(ApiError);
-    expect(vi.mocked(addPendingWrite)).not.toHaveBeenCalled();
+    expect(queue.rows).toEqual([]);
   });
 });
 

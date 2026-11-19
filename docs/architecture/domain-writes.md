@@ -1,6 +1,6 @@
 # 領域寫入模組
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/frontend/src/lib/data/domainWriters.ts, packages/frontend/src/lib/data/taskWriter.ts, packages/frontend/src/lib/data/propertyWriter.ts, packages/frontend/src/lib/data/tagWriter.ts, packages/frontend/src/lib/data/relationWriter.ts, packages/frontend/src/lib/data/canvasWriter.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/optimisticFields.ts, packages/frontend/src/lib/taskMirror.ts
 
 延續 `note-writes.md` 的局部重構。這一批把任務、屬性、標籤、關聯、白板的主要寫入流程
@@ -35,6 +35,8 @@
 
 同一節點的筆記、屬性與標籤寫入共享順序。本機副本盡量從當下狀態更新，
 避免把排隊時捕捉的整列蓋回去。刪除本機連帶資料要等提交接受之後才做。
+每次寫入先成為佇列的一列（`recordWrite`），**之後**才更新本機副本、才送出，所以頁面在任何一刻當掉，
+本機副本都不會有佇列沒有的內容（[筆記寫入：送出前先記下](note-writes.md#送出前先記下2026-11-18)）。
 
 `optimisticFields` 追蹤每個欄位的待確認編輯。例如 `原值 → A → B`，若 A、B 都被拒絕，
 必須回到原值，不能讓 B 回復成已被拒絕的 A。它也讓舊回應不覆蓋後續待確認的同欄位修改。

@@ -77,7 +77,7 @@ export async function deletePointer(actor: ActorCtx, workspaceId: string, id: st
   await mutate({
     actor,
     workspaceId,
-    authority: pointerAuthority(parentId, targetId),
+    authority: { kind: "irreversible", of: pointerAuthority(parentId, targetId) }, // no inverse (restoreContract.ts)
     event: { type: "POINTER_DELETED", targetType: "node", targetId, payload: { parent_id: parentId } },
     apply: async () => {
       const removed = await q(

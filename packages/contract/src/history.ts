@@ -54,7 +54,8 @@ export type RewindUndoResult = {
   skipped: string[];
 };
 
-type HistoryActor = { name: string; kind: "human" | "agent" };
+/** Who edited: a person or an AI by name; a temporary session of this server by its kind alone (no name: the screen words it). */
+type HistoryActor = { name: string; kind: "human" | "agent" } | { name: null; kind: "session" };
 
 /** What a day did to one note's text: the body before the day's first save (empty for a new note) against the body
  *  after its last. `sample` is the first changed paragraph, markers stripped, at most 120 characters; `sample_kind` says
@@ -68,7 +69,7 @@ export type DayNoteChange = ChangeSummary & {
 export type DayInkChange = { added: number; erased: number; before_event: string | null; after_event: string };
 
 /** One edit of one of a note's drawings (its handwriting page or its whiteboard's pen layer): a run of saves by one actor. */
-export type InkEdit = DayInkChange & { id: string; changed_at: string; actor_name: string | null; actor_kind: "human" | "agent" | "system"; saves: number };
+export type InkEdit = DayInkChange & { id: string; changed_at: string; actor_name: string | null; actor_kind: "human" | "agent" | "system" | "session"; saves: number };
 
 export type DayNote = {
   id: string;
@@ -105,7 +106,9 @@ export type DayRewind = {
   rewind_id: string;
   to: string;
   at: string;
+  /** "" for a session (then `actor_kind` is 'session') and for someone this server no longer knows (then the kind its event recorded). */
   actor_name: string;
+  actor_kind: "human" | "agent" | "session";
   notes: Array<{ id: string; title: string; space_id: string | null; kind: "restore" | "undelete" | "delete" }>;
   undone: boolean;
 };

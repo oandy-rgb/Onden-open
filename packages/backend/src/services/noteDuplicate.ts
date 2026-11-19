@@ -21,6 +21,7 @@ import { recordAttributeChange } from "./attributeChange.js";
 import { isPersonAuthored, writableSource } from "../spine/attributeSource.js";
 import { applyParentSiteDefault } from "./siteDefault.js";
 import { isKeptOffSite, keptOffFromSource, PUBLISHED_KEY } from "./systemAttributes.js";
+import { newNoteProof, type NewNoteProof } from "./newNoteProof.js";
 import { isTaskSql } from "../spine/taskIdentity.js";
 import { liveNodeSql } from "../spine/nodeSql.js";
 import { isTag, isNote } from "@onden/markdown/contract";
@@ -146,12 +147,13 @@ export async function duplicateNote(options: DuplicateNoteOptions) {
            VALUES($1,$2,'manual','content',$3,$4,$5,$6,$7,$8) RETURNING *`,
           [newNodeId, workspaceId, title, slug, markdown, source.parent_id, copySpace, await appendOrderKey("content_nodes", workspaceId, source.parent_id)],
         )).rows[0]!;
+        const newNote = newNoteProof(newNodeId); // inserted just above (services/newNoteProof.ts)
         // Made under the same note as its source: that note's site default applies (siteDefault.ts).
-        if (source.parent_id) await applyParentSiteDefault(workspaceId, source.parent_id, newNodeId, actor);
+        if (source.parent_id) await applyParentSiteDefault(workspaceId, source.parent_id, newNodeId, actor, undefined, newNote);
         for (const tag of liveTags) await recordCopiedTag(workspaceId, actor, newNodeId, tag);
         // A scoped actor must not create an invisible copy with no allowed tag.
         await assertAuthority(actor, { kind: "node", nodeId: newNodeId, op: "read" });
-        for (const attr of attrs) await recordCopiedAttribute(workspaceId, actor, newNodeId, attr);
+        for (const attr of attrs) await recordCopiedAttribute(workspaceId, actor, newNodeId, attr, newNote);
         // The 「手寫」 tab goes with its strokes (the attribute `note_ink` copied above); other views are the source's own.
         const handwriting = (await viewRecordsOf("note", workspaceId, sourceId)).find((v) => v.layout === HANDWRITING_LAYOUT);
         if (handwriting) await addNoteLayoutTab(newNodeId, HANDWRITING_LAYOUT, { name: String(handwriting.name), layoutConfig: handwriting.layout_config && typeof handwriting.layout_config === "object" ? handwriting.layout_config as Record<string, unknown> : {} });
@@ -181,11 +183,14 @@ async function recordCopiedTag(workspaceId: string, actor: ActorCtx, nodeId: str
   });
 }
 
-async function recordCopiedAttribute(workspaceId: string, actor: ActorCtx, nodeId: string, attr: CopyAttribute) {
+async function recordCopiedAttribute(workspaceId: string, actor: ActorCtx, nodeId: string, attr: CopyAttribute, newNote: NewNoteProof) {
   await recordAttributeChange({
     workspaceId, nodeId, key: attr.key, actor,
     next: { value: attr.value, value_type: attr.value_type, is_inheritable: attr.is_inheritable, source: writableSource(attr.source) },
     rule: "absent",
+    // A copy of a note kept off the site takes 「不發布」 with it: the copy's own value from its source, not a choice of the mark, so an AI or a
+    // temporary session copying it writes it too (attributeChange.ts assertActorMayWriteAttributeKey; the proof is for this copy).
+    ...(isKeptOffSite(attr) ? { newNote } : {}),
     authority: { kind: "node", nodeId, op: "set_attribute" },
     uiContext: "node.duplicate",
   });

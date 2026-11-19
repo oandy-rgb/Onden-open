@@ -3,6 +3,7 @@ import { INK_PRESET_NAME_MAX, isHexColor } from "@onden/markdown";
 import { INK_SHAPE_KINDS } from "@onden/markdown/ink";
 import { q, getWorkspaceId } from "../db.js";
 import { mutatePersonal } from "../spine/mutate.js";
+import { personalDataOwnerId, isTemporarySessionActor } from "../spine/authority.js";
 import { currentStampWall } from "../spine/stamps.js";
 import type { ActorCtx } from "../types.js";
 
@@ -221,9 +222,32 @@ const FORWARD_ORDER: Partial<Record<PrefKey, (value: unknown) => number>> = {
   changesSeen: (value) => Date.parse(`${(value as string).slice(0, 10)}T00:00:00Z`),
 };
 
-/** The caller's stored value, or null when they never set one. */
+/** Whether a temporary session may read the person's value of each key. Every key must say (the type), so a new preference is decided when it is
+ *  added. `false` = the value holds ids of notes, tags, feeds or articles of the workspace, which may sit in a space the session cannot reach: it
+ *  reads as never set, the same answer as a person who never chose. */
+const SESSION_MAY_READ_PREF: Record<PrefKey, boolean> = {
+  nav: true, // destination ids of the app's own pages
+  sidebarTags: false, // tag ids
+  toolbarLayout: true, "toolbarLayout.phone": true, "toolbarLayout.desktop": true,
+  recentBlocks: false, // note ids
+  hintsSeen: true, changesSeen: true,
+  dayNoteParent: false, captureDestination: false, // note ids
+  rssShowCounts: true,
+  rssFeedCounts: false, rssReadingPosition: false, // feed and article ids
+  rssLastVisit: true,
+  focusMinutes: true, focusCycle: true,
+  timeZoneAsk: true, timeZoneAnswered: true,
+  fonts: true, inkPalette: true, inkShape: true, inkAutoShape: true, inkShapeFill: true, inkPresets: true,
+  reviewsPerDay: true, reviewGroupBy: true,
+  aiSkillsOff: true, // ids of the built-in skills
+  splitPane: false, "splitPane.phone": false, "splitPane.desktop": false, // "note:<id>"
+};
+
+/** The caller's stored value, or null when they never set one. A temporary session reads its person's (personalDataOwnerId), without the keys
+ *  that name things of the workspace (SESSION_MAY_READ_PREF). */
 export async function readPref(actor: ActorCtx, key: PrefKey): Promise<unknown> {
-  return readPrefOf(actor.id, key);
+  if (isTemporarySessionActor(actor) && !SESSION_MAY_READ_PREF[key]) return null;
+  return readPrefOf(personalDataOwnerId(actor), key);
 }
 
 /** The stored value of a person by id (a token's issuer, whose choice an agent follows). */

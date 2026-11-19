@@ -10,6 +10,7 @@ import { q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { sql } from "kysely";
 import { mutate } from "../spine/mutate.js";
+import type { Authority } from "../spine/authority.js";
 import type { ActorCtx } from "../types.js";
 import {
   isNoteBoard, readSections, boardCardNotesAmong, patchNodePosition, writeSections, setNodePosition,
@@ -63,14 +64,17 @@ export async function applyBoardChanges(
 ): Promise<{ id: string; cards: number; removed: number }> {
   const id = board.id;
   const isCanvas = isNoteBoard(board);
+  // Arranging a note's board is a write on that note, in its space. A tag's board
+  // is one shared arrangement of the tag's members, not part of the tag
+  // definition (the owner's): anyone who may create content may arrange it,
+  // and only cards they can read are placed or removed (below).
+  const arrange: Authority = isCanvas ? { kind: "node", nodeId: id, op: "write_node" } : { kind: "any_space_write" };
   return mutate({
     actor,
     workspaceId,
-    // Arranging a note's board is a write on that note, in its space. A tag's board
-    // is one shared arrangement of the tag's members, not part of the tag
-    // definition (the owner's): anyone who may create content may arrange it,
-    // and only cards they can read are placed or removed (below).
-    authority: isCanvas ? { kind: "node", nodeId: id, op: "write_node" } : { kind: "any_space_write" },
+    // Removing cards or sections takes away an arrangement nothing brings back (the event records only counts): never a temporary session's
+    // (PR #1856 round 4). Placing, moving and renaming stay a write as before.
+    authority: removeCards.length > 0 || removeSections.length > 0 ? { kind: "irreversible", of: arrange } : arrange,
     event: {
       type: isCanvas ? "CANVAS_UPDATED" : "BOARD_UPDATED",
       targetType: isCanvas ? "canvas" : "node",

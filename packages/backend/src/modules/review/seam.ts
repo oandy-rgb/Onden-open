@@ -22,11 +22,11 @@ const idOf = (target: ReviewTarget) => ("note" in target ? target.note : target.
 
 installReviewSeam({
   cardWords,
-  async markCards({ workspaceId, holders, actorId, via }) {
+  async markCards({ workspaceId, holders, actor, via }) {
     if (!(await workspaceHasModule(workspaceId, "review"))) return;
     for (const holder of holders) {
-      if (via === "word") await markOwnRefViaWord(workspaceId, holder, REVIEW_FUNCTION_ID, { createdBy: actorId });
-      else await insertOwnRef(workspaceId, holder, REVIEW_FUNCTION_ID, { createdBy: actorId });
+      if (via === "word") await markOwnRefViaWord(workspaceId, holder, REVIEW_FUNCTION_ID, { by: actor });
+      else await insertOwnRef(workspaceId, holder, REVIEW_FUNCTION_ID, { by: actor });
     }
   },
   async unmarkCardsWord({ holders }) {

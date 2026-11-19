@@ -37,6 +37,16 @@
 - 臨時工作階段（`actor.type = 'session'`）：`isPerson`／`requirePerson` 對它一律為否；個人資料的寫入權限種類由 `open` 改為 `own_personal`
   （`mutatePersonal` 使用，工作階段被拒）。它的存活與過期在事件鎖後由 `resolveCurrentActor` 重驗。
   `services/participantSessions.ts` 的兩個寫入函式登記在 `SERVICE_WRITE_HELPERS`（計數器寫入不在 spine 內，有登記才放行）。
+  個人資料的**讀取**問「這是誰的列」只用一個函式：`spine/authority.ts` 的 `personalDataOwnerId(actor)`（工作階段＝開啟它的人，其他＝自己；寫入從不用它）。
+  每個個人資料讀取點都要問它；`src/test/guards/personalReads.guard.test.ts` 擋掉沒問的新讀取點。工作階段讀得到的比本人少（每個讀取點各自拿掉它用不到的東西），
+  由 `isTemporarySessionActor(actor)` 判斷；清單與理由見 [工作階段讀開啟者的個人資料](../architecture/proposals/sessions-reads-own-2026-11-17.md)。
+  工作階段的 id 不離開這一台：會被帶走的表裡「誰做的」欄位（`function_refs.created_by` 這類）由寫那一欄的函式填 `carriedActorId(actor)`（工作階段與 System 是 null，不是開啟者），
+  欄位清單由 `carriedActorColumns.integration.test.ts` 從資料庫目錄核對，每個寫入點也由它從程式碼找出來核對。工作階段是**結束**、不是移除：它的 `actors` 列永遠留著
+  （資料庫的觸發器拒絕刪除與改 id、工作區、種類，只有整個工作區被刪時讓開：migration 217；`removeActor` 也回 409 `session_not_removable`），
+  因為「這是工作階段的」只靠這一列判斷（`neverLeaves`、歷史的作者）。工作階段的寫入不記它自稱的裝置（`recordedDeviceId`：記 null），
+  它手動設的屬性是人的值（`source = 'ui'`）。工作階段不得做不可復原的事（永久刪除、清空垃圾桶、刪掉沒有反向操作的東西）：那樣的操作把權限宣告成
+  `{ kind: "irreversible", of: <原本的權限> }`，或在入口呼叫 `assertUndoableBy(actor)`；「有沒有反向操作」照 `restoreContract.ts` `restoreBlockedReason`。
+  工作階段也不改變誰讀得到一則筆記、什麼會上網站（把筆記搬到另一個空間、把隱藏的筆記變一般）：`assertKeepsReaders`。發布標記只有人能**選擇**；新筆記從父筆記、來源或匯入檔帶來的「不發布」任何人照寫（`attributeChange.ts` `assertActorMayWriteAttributeKey`）。
 - 重構應保持既有允許／拒絕結果。不能因為引用 Cedar 或其他論文，就直接更換預設授權語意。
   對政策行為的變更，須說明具體哪些操作者、資源與操作受到影響，並驗證允許與拒絕案例。
 - 政策改變可能影響整個子樹或資料集合。沿用 `membership_epoch` 與可讀集合核對機制，

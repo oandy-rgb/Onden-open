@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { reads } from "../../lib/data";
-import { blockHistory, describeChange, headingAbove, type BlockVersion } from "../../lib/history";
+import { blockHistory, describeChange, headingAbove, historyAuthor, type BlockVersion } from "../../lib/history";
 import { useT } from "../../lib/i18n";
-import { agentLabel } from "../../lib/actorLabel";
+import { useAccountSession } from "../../lib/accountSession";
 import { dayLabel, timeLabel } from "../../lib/timeLabels";
 import ShellDialog from "../ShellDialog";
 import { Button, Pressable } from "../ui";
@@ -36,6 +36,7 @@ const clip = (s: string) => ellipsize(s, SHOWN);
  *  paragraph itself shows the wording being looked at (onPreview). */
 export default function BlockHistorySheet({ nodeId, markdown, offset, canUse, onPreview, onUse, onOpenNoteHistory, onClose }: Props) {
   const t = useT();
+  const selfName = useAccountSession()?.user.name ?? null;
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -60,11 +61,11 @@ export default function BlockHistorySheet({ nodeId, markdown, offset, canUse, on
   const heading = useMemo(() => headingAbove(markdown, offset), [markdown, offset]);
 
   const whenLabel = (v: BlockVersion) => (v.changedAt ? `${dayLabel(v.changedAt)} ${timeLabel(v.changedAt)}` : t("Now, not saved yet"));
+  // The same rule as the note's history (historyAuthor): 「你」 only for the signed-in person, never for an author with no name.
   const author = (v: BlockVersion): { label: string; tone: "agent" | "system" | "member" | "self" } | null => {
     if (!v.changedAt) return null;
-    if (v.actorType === "ai_agent") return { label: agentLabel(v.actorName), tone: "agent" };
-    if (v.actorType === "system") return { label: t("System (automatic)"), tone: "system" };
-    return v.actorName ? { label: v.actorName, tone: "member" } : { label: t("You"), tone: "self" };
+    const who = historyAuthor(v.actorKind, v.actorName, selfName);
+    return { label: who.text, tone: who.tone === "session" ? "member" : who.tone };
   };
 
   const change = shown && current ? describeChange(shown.text, current.text) : null;

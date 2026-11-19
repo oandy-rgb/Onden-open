@@ -36,6 +36,7 @@
 
 import { randomUUID } from "node:crypto";
 import { q, withSavepoint } from "../../db.js";
+import { shownAuthorKind, shownAuthorName } from "../authorName.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { withIdempotencyClaim } from "../../spine/idempotency.js";
 import { AuthorityError } from "../../spine/authority.js";
@@ -175,7 +176,7 @@ export async function rewindWorkspace(
 
 type RewindEvent = {
   id: string; rewind_id: string; rewind_to: string; kind: RewindKind; target_id: string; event_type: string;
-  created_at: Date; actor_id: string; body_hash: string | null; title: string | null;
+  created_at: Date; actor_id: string; actor_type: string; body_hash: string | null; title: string | null;
 };
 
 /** The rewind events in a time window, or of one rewind (`rewindId`). */
@@ -188,7 +189,7 @@ async function rewindEvents(workspaceId: string, which: RewindEventsWhere): Prom
   const params = "rewindId" in which ? [which.rewindId] : [which.from, which.to];
   return (await q<RewindEvent>(
     `SELECT e.id::text, e.tx_meta->>'rewind_id' AS rewind_id, e.tx_meta->>'rewind_to' AS rewind_to, e.tx_meta->>'rewind_kind' AS kind,
-            e.target_id, e.event_type, e.created_at, e.actor_id, e.payload->>'body_hash' AS body_hash, e.payload->>'title' AS title
+            e.target_id, e.event_type, e.created_at, e.actor_id, e.actor_type, e.payload->>'body_hash' AS body_hash, e.payload->>'title' AS title
        FROM domain_events e
       WHERE e.workspace_id = $1 AND e.tx_meta ? 'rewind_id' AND ${where}
       ORDER BY e.id`,
@@ -209,24 +210,31 @@ async function readableNotes(actor: ActorCtx, workspaceId: string, ids: string[]
   return new Map(rows.rows.map((r) => [r.id, { title: r.title, space_id: r.space_id }]));
 }
 
+/** Who did a rewind: a person or an AI by name; a session as the kind 'session' (services/authorName.ts). One this node holds no row for (a removed
+ *  member or AI) has the name "" and the kind its event recorded (`eventActorType`: domain_events.actor_type), as every other history reader does. */
+function rewindAuthor(row: { name: string; type: string } | undefined, eventActorType: string): Pick<DayRewind, "actor_name" | "actor_kind"> {
+  const kind = (row ? row.type === "agent" : eventActorType === "ai_agent") ? "agent" as const : "human" as const;
+  return { actor_name: shownAuthorName(row?.type, row?.name) ?? "", actor_kind: shownAuthorKind(row?.type, kind) };
+}
+
 /** Rewinds done in [from, to), by the notes `actor` can read there. A rewind with none of them is absent. */
 export async function rewindsBetween(actor: ActorCtx, workspaceId: string, from: Date, to: Date, { spaceId }: SpaceScope = {}): Promise<DayRewind[]> {
   const events = (await rewindEvents(workspaceId, { from, to }));
   if (events.length === 0) return [];
   const readable = await readableNotes(actor, workspaceId, [...new Set(events.map((e) => e.target_id))], spaceId);
   const markers = await undoneNodes(workspaceId, [...new Set(events.map((e) => e.rewind_id))]);
-  const names = (await q<{ id: string; name: string }>(
-    `SELECT id::text, name FROM actors WHERE workspace_id = $1 AND id = ANY($2::uuid[])`,
+  const names = (await q<{ id: string; name: string; type: string }>(
+    `SELECT id::text, name, type FROM actors WHERE workspace_id = $1 AND id = ANY($2::uuid[])`,
     [workspaceId, [...new Set(events.map((e) => e.actor_id).filter(isUuid))]],
   )).rows;
-  const nameOf = new Map(names.map((n) => [n.id, n.name]));
+  const rowOf = new Map(names.map((n) => [n.id, n]));
   const byRewind = new Map<string, RewindEvent[]>();
   for (const e of events) if (readable.has(e.target_id)) (byRewind.get(e.rewind_id) ?? byRewind.set(e.rewind_id, []).get(e.rewind_id)!).push(e);
   const cards: DayRewind[] = [];
   for (const [rewindId, rows] of byRewind) {
     const undone = markers.get(rewindId) ?? new Set<string>();
     cards.push({
-      rewind_id: rewindId, to: rows[0]!.rewind_to, at: rows[0]!.created_at.toISOString(), actor_name: nameOf.get(rows[0]!.actor_id) ?? "",
+      rewind_id: rewindId, to: rows[0]!.rewind_to, at: rows[0]!.created_at.toISOString(), ...rewindAuthor(rowOf.get(rows[0]!.actor_id), rows[0]!.actor_type),
       notes: rows.map((e) => ({ id: e.target_id, ...readable.get(e.target_id)!, kind: e.kind as DayRewind["notes"][number]["kind"] })),
       undone: rows.every((e) => undone.has(e.target_id)),
     });

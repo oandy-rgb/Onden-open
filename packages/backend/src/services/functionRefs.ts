@@ -32,7 +32,7 @@ import { db } from "../dbKysely.js";
 import type { JsonObject } from "../dbSchema.generated.js";
 import type { ActorCtx } from "../types.js";
 import { mutate } from "../spine/mutate.js";
-import { assertAuthority } from "../spine/authority.js";
+import { assertAuthority, carriedActorId } from "../spine/authority.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { StatusError } from "../statusError.js";
@@ -290,13 +290,14 @@ export async function ownRefId(holder: OwnRefHolder, functionId: string): Promis
     .where("function_id", "=", functionId).where("instance", "=", "").executeTakeFirst())?.id ?? null;
 }
 
-/** 讓筆記或段落自己引用一個功能（已經有就不動）。回傳新列的 id；本來就有則 null。要在交易內。 */
+/** 讓筆記或段落自己引用一個功能（已經有就不動）。回傳新列的 id；本來就有則 null。要在交易內。
+ *  `by` is the writer; created_by records carriedActorId(by) (null for a temporary session: spine/authority.ts). */
 export async function insertOwnRef(
-  workspaceId: string, holder: OwnRefHolder, functionId: string, { createdBy = null, id = randomUUID(), config = {} }: { createdBy?: string | null; id?: string; config?: Record<string, unknown> } = {},
+  workspaceId: string, holder: OwnRefHolder, functionId: string, { by = null, id = randomUUID(), config = {} }: { by?: ActorCtx | null; id?: string; config?: Record<string, unknown> } = {},
 ): Promise<string | null> {
   requireTransaction("insertOwnRef");
   return (await db.insertInto("function_refs")
-    .values({ id, workspace_id: workspaceId, function_id: functionId, [ownColumn(holder)]: holder.id, config: JSON.stringify(config), created_by: createdBy && isUuid(createdBy) ? createdBy : null })
+    .values({ id, workspace_id: workspaceId, function_id: functionId, [ownColumn(holder)]: holder.id, config: JSON.stringify(config), created_by: by ? carriedActorId(by) : null })
     .onConflict((conflict) => conflict.doNothing()).returning("id").executeTakeFirst())?.id ?? null;
 }
 
@@ -305,9 +306,9 @@ export async function insertOwnRef(
 export const OWN_REF_VIA_WORD = "word";
 
 /** 這個引用是內文的字做的（之後字被拿掉就拿掉它）：沒有引用就補上，已有但不是這樣來的就記上。要在交易內。 */
-export async function markOwnRefViaWord(workspaceId: string, holder: OwnRefHolder, functionId: string, { createdBy = null }: { createdBy?: string | null } = {}): Promise<void> {
+export async function markOwnRefViaWord(workspaceId: string, holder: OwnRefHolder, functionId: string, { by = null }: { by?: ActorCtx | null } = {}): Promise<void> {
   requireTransaction("markOwnRefViaWord");
-  await insertOwnRef(workspaceId, holder, functionId, { createdBy, config: { via: OWN_REF_VIA_WORD } });
+  await insertOwnRef(workspaceId, holder, functionId, { by, config: { via: OWN_REF_VIA_WORD } });
   await db.updateTable("function_refs").set({ config: sql`config || '{"via":"word"}'::jsonb`, updated_at: sql`now()` })
     .where(ownColumn(holder), "=", holder.id).where("function_id", "=", functionId).where("instance", "=", "")
     .where(sql<boolean>`NOT (config ? 'via')`).execute();
@@ -423,7 +424,7 @@ export function addFunction(input: {
       apply: async () => {
         await q(
           `INSERT INTO function_refs (id, workspace_id, function_id, holder_node_id, config, created_by) VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
-          [refId, workspaceId, functionId, tagId, JSON.stringify(stored), isUuid(actor.id) ? actor.id : null],
+          [refId, workspaceId, functionId, tagId, JSON.stringify(stored), carriedActorId(actor)],
         );
         // A label tag that gets a function becomes a class tag with a private schema (never published as a
         // collection), as the module switch always did; a merge into a missing schema would write nothing.
@@ -563,14 +564,14 @@ export async function viewNameTaken(workspaceId: string, holderId: string, name:
 
 /** 新增一個檢視（呼叫者已檢查名字與權限）。`element` 是檢視的內容（不含 id、版面）。 */
 export async function insertView(input: {
-  workspaceId: string; holderId: string; viewId: string; layout: string; element: Record<string, unknown>; createdBy?: string | null;
+  workspaceId: string; holderId: string; viewId: string; layout: string; element: Record<string, unknown>; by?: ActorCtx | null;
 }): Promise<void> {
   requireTransaction("insertView");
   const { tag_id: _tag, node_id: _node, id: _id, layout: _layout, ...config } = input.element;
   await db.insertInto("function_refs").values({
     workspace_id: input.workspaceId, function_id: normalizedLayout(input.layout), instance: input.viewId,
     config: JSON.stringify(config), holder_node_id: input.holderId,
-    created_by: input.createdBy && isUuid(input.createdBy) ? input.createdBy : null,
+    created_by: input.by ? carriedActorId(input.by) : null,
   }).execute();
 }
 

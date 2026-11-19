@@ -30,7 +30,8 @@ import { canReadNode } from "./readPolicy.js";
 import type { AttributeSource } from "../spine/attributeSource.js";
 import { recordAttributeChange, AttributeWriteError } from "./attributeChange.js";
 import { PUBLISHED_KEY, isValidSystemAttributeValue, isWritableAttributeKey } from "./systemAttributes.js";
-import { requirePerson } from "../spine/authority.js";
+import type { NewNoteProof } from "./newNoteProof.js";
+import { isTemporarySessionActor } from "../spine/authority.js";
 import { dropParentSiteDefaultMark } from "./siteDefault.js";
 import { nodeAttributeWriting } from "../spine/nodeHooks.js";
 import { resolvePatched } from "./patchedValue.js";
@@ -126,13 +127,6 @@ function assertWritableAttributeKey(key: string): void {
   if (!isWritableAttributeKey(key)) throw new AttributeWriteError(400, "reserved key");
 }
 
-/** What is on the website is its owner's to decide (docs/agents/agent-delegation.md: an agent has no publish tool).
- *  A connection that came in with a token (an AI role, an external agent) may therefore not set or clear the publish
- *  mark, whichever tool or route hands the attribute over — createNode's `attributes` reached this unchecked. */
-export function assertActorMayWriteAttributeKey(actor: ActorCtx, key: string): void {
-  if (key === PUBLISHED_KEY) requirePerson(actor, "publish_mark");
-}
-
 /** Set (create or overwrite) one attribute under the node's `set_attribute`
  *  authority. Validates against a declared schema field when the key is one;
  *  other keys stay free-form. Runs in its own event transaction, or joins the
@@ -155,17 +149,21 @@ export async function setNodeAttribute(input: {
    *  bringing it back is not adding a new odd key, so the grammar check is
    *  skipped, as it is for a key the node already has. */
   existingKey?: boolean;
+  /** The note is being made in this write (services/newNoteProof.ts; createNote hands it to `within` / `afterDerived`): its source's 「不發布」
+   *  (an imported file's `publish: false`) is then not a choice of the publish mark (attributeChange.ts assertActorMayWriteAttributeKey). */
+  newNote?: NewNoteProof;
 }): Promise<AttributeWriteResult> {
   const { workspaceId, actor, nodeId, valuePatch } = input;
   const { key, client_updated_at, client_edit_age_ms } = input.attribute;
   assertWritableAttributeKey(key);
-  assertActorMayWriteAttributeKey(actor, key);
   const patched = valuePatch !== undefined;
   if (patched && !MERGED_KEYS.has(key)) throw new AttributeWriteError(400, "invalid_patch", `${key} is not saved as a patch`);
   let incomingValue = input.attribute.value == null ? "" : String(input.attribute.value);
   let base_value = input.attribute.base_value;
   if (!patched && !isValidSystemAttributeValue(key, incomingValue)) throw new AttributeWriteError(400, "invalid_value", `invalid value for ${key}`);
-  const source: AttributeSource = actor.type === "human" ? "ui" : "dispatcher";
+  // A person's value: a human's, or their temporary session's (their own typing on another computer; it must outrank a value the body derives,
+  // and count as a person's in an export or a duplicate, as theirs does). An AI's and an automation's is the dispatcher rail.
+  const source: AttributeSource = actor.type === "human" || isTemporarySessionActor(actor) ? "ui" : "dispatcher";
   const merging = (base_value !== undefined || patched) && MERGED_KEYS.has(key);
 
   return withEventTransaction(workspaceId, async () => {
@@ -206,6 +204,7 @@ export async function setNodeAttribute(input: {
       rule: "always",
       validate: true,
       keepStoredKey: input.existingKey,
+      newNote: input.newNote,
       authority: { kind: "node", nodeId, op: "set_attribute" },
       uiContext: "node.attribute.set",
       triggeredBy: input.triggeredBy,

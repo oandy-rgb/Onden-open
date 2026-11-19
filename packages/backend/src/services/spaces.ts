@@ -16,7 +16,7 @@ import { hasTaskRefSql } from "../spine/taskIdentity.js";
 import { spaceAccess, writableSpaceIds, type StoredSpacePermission } from "../spine/spaceAccess.js";
 export { canWriteSomewhere, spaceReadableNodeIds, spaceScopeSql };
 import { mutate } from "../spine/mutate.js";
-import { assertAuthority, isWorkspaceOwner, requirePerson } from "../spine/authority.js";
+import { assertAuthority, assertKeepsReaders, isTemporarySessionActor, isWorkspaceOwner, requirePerson } from "../spine/authority.js";
 import { AuthorityError } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
@@ -64,7 +64,7 @@ export async function newNoteSlugScope(
   actor: ActorCtx, workspaceId: string, parentId?: string | null,
 ): Promise<{ parentId: string } | { spaceId: string | null }> {
   if (parentId) return { parentId };
-  return { spaceId: actor.type === "session" ? null : await personalOrDefaultSpaceId(actor, workspaceId) };
+  return { spaceId: isTemporarySessionActor(actor) ? null : await personalOrDefaultSpaceId(actor, workspaceId) };
 }
 
 /** Which space a new note goes to — the one rule (docs/architecture/spaces.md,
@@ -87,7 +87,7 @@ export async function newNoteSpace(
   }
   let spaceId = opts.spaceId ?? null;
   // A token and a temporary session have no personal space of their own and never fall back to the shared one: they name a space, or write in the one they may.
-  if (!spaceId && !actor.tokenScope && actor.type !== "session") {
+  if (!spaceId && !actor.tokenScope && !isTemporarySessionActor(actor)) {
     spaceId = await personalOrDefaultSpaceId(actor, workspaceId);
   }
   if (!spaceId) {
@@ -183,6 +183,9 @@ function movingIds(workspaceId: string, nodeId: string): Promise<string[]> {
 }
 
 async function sourceAuthority(actor: ActorCtx, from: SpaceMeta): Promise<void> {
+  // Changing a note's space changes who reads it and what reaches the website: never a temporary session's (spine/authority.ts assertKeepsReaders).
+  // Asked first, so the answer is the session's rule, not whichever space permission it happens to lack.
+  assertKeepsReaders(actor);
   if (from.kind === "shared" && from.capabilities.members_can_move_out) {
     await assertAuthority(actor, { kind: "space", spaceId: from.id, need: "write" });
   } else {
@@ -523,7 +526,7 @@ const sameIdSet = (a: readonly string[], b: readonly string[]) =>
 
 async function deletableSpace(actor: ActorCtx, workspaceId: string, spaceId: string): Promise<SpaceMeta> {
   // A temporary session must not be able to tell a space it cannot read from one that is not there. (A member keeps the 403 they have always had.)
-  if (actor.type === "session") {
+  if (isTemporarySessionActor(actor)) {
     const access = await spaceAccess(actor, spaceId);
     if (!access || (!access.read && !access.manage)) throw new SpaceMoveError(404, "not_found", "space not found");
   }

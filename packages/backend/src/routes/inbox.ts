@@ -3,7 +3,7 @@ import { getWorkspaceId } from "../services/workspaceId.js";
 import { reviewEvents, type ReviewDecision, type ReviewOutcome } from "../services/eventReview.js";
 import type { ActorCtx } from "../types.js";
 import { mutate, requireActor } from "../spine/mutate.js";
-import { isPerson, isWorkspaceOwner, reviewAuthority, type Authority } from "../spine/authority.js";
+import { assertMayReachOut, isPerson, isWorkspaceOwner, reviewAuthority, type Authority } from "../spine/authority.js";
 import { drainOutbox, outboxEffectInstalled, approveHeldEffect, rejectHeldEffect, listDeadEffects, listHeldEffects, heldEffectKind, listDeadEffectGroups, requeueDeadEffect, requeueDeadEffectsOfKind, dismissDeadEffects } from "../services/outbox.js";
 import { inboxQueue, loadGroupMembers } from "../services/inboxQueue.js";
 import { parsePage } from "../services/paging.js";
@@ -83,6 +83,7 @@ router.post("/approvals/:id/:decision{approve|reject}", async (c) => {
   const actor = requireActor(c.get("actor"));
   const denied = await reviewerDenied(actor);
   if (denied) return c.json({ error: "forbidden", detail: denied }, 403);
+  assertMayReachOut(actor); // what this queues or retries is sent at once (drainOutbox): asked first, for everyone; a session is never the owner anyway
   const workspaceId = await getWorkspaceId();
 
   const effectKind = await heldEffectKind(workspaceId, id);
@@ -163,6 +164,7 @@ router.post("/failed-effects/kinds/:kind/:action{retry|dismiss}", async (c) => {
   if (!/^[a-z0-9_]{1,64}$/.test(kind)) throw new StatusError(400, "kind must be an effect kind");
   const action = c.req.param("action") as "retry" | "dismiss";
   const actor = requireActor(c.get("actor"));
+  assertMayReachOut(actor); // what this queues or retries is sent at once (drainOutbox): asked first, for everyone; a session is never the owner anyway
   const workspaceId = await getWorkspaceId();
   let retried: Awaited<ReturnType<typeof requeueDeadEffectsOfKind>> | null = null;
   let dismissed = 0;
@@ -193,6 +195,7 @@ router.post("/failed-effects/:id/retry", async (c) => {
   const id = c.req.param("id");
   if (parseBigintId(id) === null) throw new StatusError(400, "id must be a positive integer");
   const actor = requireActor(c.get("actor"));
+  assertMayReachOut(actor); // what this queues or retries is sent at once (drainOutbox): asked first, for everyone; a session is never the owner anyway
   const workspaceId = await getWorkspaceId();
   let result: Awaited<ReturnType<typeof requeueDeadEffect>> = null;
   await mutate({

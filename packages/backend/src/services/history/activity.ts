@@ -9,6 +9,7 @@
 // edit belongs to the day (workspace time zone and day start) of its last save.
 
 import { q } from "../../db.js";
+import { shownAuthorKind, shownAuthorName } from "../authorName.js";
 import { addDays, localDayId, sqlDayStart, sqlLocalDate, sqlLocalDay } from "../../localDay.js";
 import type { ActorCtx } from "../../types.js";
 import { summarizeChange, ellipsize, UUID_SOURCE } from "@onden/markdown";
@@ -60,6 +61,18 @@ function editsSql(readable: string, sinceParam: string): string {
          FROM (SELECT *, sum(boundary) OVER (PARTITION BY target_id ORDER BY created_at, id) AS edit_no FROM marked) s
         GROUP BY target_id, edit_no, actor_id, actor_type
      )`;
+}
+
+/** Who edited a note on a day: the authors this node holds an `actors` row for (a removed member or AI is not listed, as before sessions existed), a
+ *  person or an AI by name, a temporary session by the kind 'session' alone (services/authorName.ts; every session of the day shows once). */
+function shownActors(rows: Array<{ name: string; type: string }>): DayNote["actors"] {
+  const out = new Map<string, DayNote["actors"][number]>();
+  for (const { name, type } of rows) {
+    const kind = shownAuthorKind(type, type === "agent" ? "agent" as const : "human" as const);
+    const shown = shownAuthorName(type, name);
+    out.set(`${kind}:${shown ?? ""}`, kind === "session" ? { name: null, kind } : { name: shown ?? "", kind });
+  }
+  return [...out.values()];
 }
 
 /** Edits per local day for the `days` days ending `until` (default today), `until` last. */
@@ -120,7 +133,7 @@ async function notesEditedBetween(actor: ActorCtx, workspaceId: string, from: st
   // not looked up per row.
   const rows = await q<{
     day: string; id: string; title: string; space_id: string | null; edits: number; first_at: Date; last_at: Date; created: boolean;
-    actors: Array<{ name: string; kind: "human" | "agent" }>; notes_total: number; edits_total: number;
+    actors: Array<{ name: string; type: string }>; notes_total: number; edits_total: number;
   }>(
     `${editsSql(readable, first)},
      in_range AS (
@@ -140,7 +153,7 @@ async function notesEditedBetween(actor: ActorCtx, workspaceId: string, from: st
      ),
      by_actor AS (
        SELECT s.day, s.target_id,
-              jsonb_agg(DISTINCT jsonb_build_object('name', a.name, 'kind', CASE WHEN a.type = 'agent' THEN 'agent' ELSE 'human' END)) AS actors
+              jsonb_agg(DISTINCT jsonb_build_object('name', a.name, 'type', a.type)) AS actors
          FROM (SELECT DISTINCT day, target_id, actor_id FROM in_range) s
          JOIN actors a ON a.id::text = s.actor_id
         GROUP BY s.day, s.target_id
@@ -159,7 +172,7 @@ async function notesEditedBetween(actor: ActorCtx, workspaceId: string, from: st
   for (const r of rows.rows) {
     const note: DayNote = {
       id: r.id, title: r.title, space_id: r.space_id, edits: r.edits, first_at: r.first_at.toISOString(), last_at: r.last_at.toISOString(),
-      actors: r.actors, created: r.created, change: changes.get(`${r.day}:${r.id}`) ?? null, ink: inks.get(`${r.day}:${r.id}`) ?? null, board_ink: boards.get(`${r.day}:${r.id}`) ?? null,
+      actors: shownActors(r.actors), created: r.created, change: changes.get(`${r.day}:${r.id}`) ?? null, ink: inks.get(`${r.day}:${r.id}`) ?? null, board_ink: boards.get(`${r.day}:${r.id}`) ?? null,
     };
     (out.get(r.day) ?? out.set(r.day, { notes: [], notes_total: r.notes_total, edits_total: r.edits_total }).get(r.day)!).notes.push(note);
   }

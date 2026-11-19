@@ -297,6 +297,8 @@ readableSpaceIds(actor) = actor 為成員的空間
 4. 移動後（或關閉能力開關後）：刪除該子樹的 `node_embeddings` 與建議連結，若影響公開內容則排程重新部署。
 5. **不提供 v1 的 `history: "fresh"`**：它會換 id，打斷連結、指標、邊、`^block-id` 與任務 id；以後做成「複製到空間」。
 
+**臨時工作階段不搬**：它不能把既有的筆記搬到另一個空間（會改變誰讀得到它、什麼會上網站），在搬移唯一的授權點（`sourceAuthority`）第一步就拒絕（`spine/authority.ts` `assertKeepsReaders`）；搬移路由、復原、任務放進另一個空間的筆記都經過它。
+
 **復原**：`NODE_MOVED_SPACE` 的逆操作也走 `moveToSpace`，要求復原當下在兩個空間都是編輯者
 （否則編輯者可以「復原」同事的移動，把共享筆記推進同事的私人空間）。復原順序比照 `NODE_DELETED`／`TAG_MERGED`：
 先把節點搬回，再處理子事件（`restore.ts:231-237`）。復原 reparent 時若舊 parent 已在別的空間，回 409。

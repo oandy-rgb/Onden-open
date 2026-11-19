@@ -8,6 +8,7 @@
 // (components/history/BlockHistorySheet) shows it and the editor swaps the text.
 
 import { matchParagraphs, splitParagraphs, type Paragraph } from "@onden/markdown";
+import { authorKindOf, type AuthorKind } from "./noteTimeline";
 
 /** One row of `GET /api/nodes/:id/versions?raw=1`: the note as one save left it. */
 export type BlockSourceVersion = {
@@ -16,6 +17,8 @@ export type BlockSourceVersion = {
   changed_at: string;
   actor_name: string | null;
   actor_type: string | null;
+  /** The kind the server worked out ('session' for a temporary session, which has no name); an older server sends none. */
+  actor_kind?: AuthorKind;
 };
 
 /** The server returns at most this many raw rows; with fewer, the oldest is the first save. */
@@ -28,7 +31,8 @@ export type BlockVersion = {
   versionId: string | null;
   changedAt: string | null;
   actorName: string | null;
-  actorType: string | null;
+  /** Who wrote it, as the history screens word it (historyAuthor). */
+  actorKind: AuthorKind;
   /** The paragraph did not exist before this version. */
   created: boolean;
   /** The wording the note has now: the last entry, always. */
@@ -99,7 +103,7 @@ export function blockHistory(versions: readonly BlockSourceVersion[], target: Bl
       versionId: author?.id ?? null,
       changedAt: author?.changed_at ?? null,
       actorName: author?.actor_name ?? null,
-      actorType: author?.actor_type ?? null,
+      actorKind: author ? authorKindOf(author) : "human",
       created: false,
       current: i === 0,
     });

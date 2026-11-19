@@ -6,7 +6,8 @@ import { dateIdAt } from "../localDate";
 import { summarizeChange, type ChangeSummary } from "@onden/markdown";
 
 export type HistoryMarker = "before_agent" | "restored" | `published:${number}`;
-export type AuthorKind = "human" | "agent" | "system";
+/** "session": a temporary session of this server (the server sends no name for it; the screen words it). */
+export type AuthorKind = "human" | "agent" | "system" | "session";
 
 /** One row of `GET /api/nodes/:id/versions`. The last four fields come from the
  *  server when it sends them; otherwise they are worked out here. */

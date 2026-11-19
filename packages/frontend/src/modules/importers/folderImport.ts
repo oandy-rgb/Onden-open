@@ -43,7 +43,7 @@ export function isHiddenImportPath(rel: string): boolean {
   return (parts.length > 1 ? parts.slice(1) : parts).some(part => part.startsWith("."));
 }
 
-export type SkippedNoteReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "folder_unavailable" | "database_unavailable" | "too_large" | "invalid_text";
+export type SkippedNoteReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "folder_unavailable" | "database_unavailable" | "too_large" | "invalid_text" | "site_mark";
 export type ImportResult = Partial<DrawingReport> & {
   source?: ImportSource;
   /** Every skipped note with its reason (skipped === conflicts.length). */

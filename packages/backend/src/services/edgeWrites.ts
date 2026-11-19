@@ -90,7 +90,8 @@ export async function deleteEdge(actor: ActorCtx, workspaceId: string, id: strin
     // Removing an outgoing link is a write on its source node. Also emits
     // EDGE_DELETED, which the sync delta layer already listens for but never
     // received before (the old handler deleted silently).
-    authority: { kind: "node", nodeId: sourceNodeId, op: "write_node" },
+    // ... and a deletion with no inverse (restoreContract.ts: edges), so never a temporary session's
+    authority: { kind: "irreversible", of: { kind: "node", nodeId: sourceNodeId, op: "write_node" } },
     event: { type: "EDGE_DELETED", targetType: "edge", targetId: id },
     apply: async () => {
       // The authority above was judged on the source read before the lock: the

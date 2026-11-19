@@ -6,6 +6,7 @@
 // (the workspace event lock, the CURRENT actor, the space `edit` permission);
 // a subscription is a setting, so it records no domain event (sources.ts).
 
+import { assertAuthority, assertMayReachOut, personalDataOwnerId } from "../../spine/authority.js";
 import { pool, q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
 import { drainOutbox } from "../../services/outbox.js";
@@ -65,6 +66,11 @@ async function newSourceSpace(actor: ActorCtx, workspaceId: string): Promise<str
  *  the bookmark.ts posture), then create the source + first fetch intent in
  *  one transaction, and kick that one intent now. */
 export async function subscribe(actor: ActorCtx, workspaceId: string, input: SubscribeInput): Promise<Answer> {
+  // Authority before the feed is fetched (mutatePersonal and the space are asked again below, under the lock): a subscriber who may not
+  // subscribe, or not in that space, makes no request leave this server; a temporary session never does.
+  assertMayReachOut(actor);
+  await assertAuthority(actor, { kind: "own_personal" });
+  await newSourceSpace(actor, workspaceId);
   const early = await preferredSpace(actor, workspaceId);
   const dup = early ? await findSource(workspaceId, { url: input.url, spaceId: early }) : null;
   if (dup) return { status: 409, body: { error: "already_subscribed", id: dup.id } };
@@ -252,7 +258,7 @@ export async function subscriptionList(actor: ActorCtx | null, workspaceId: stri
       WHERE workspace_id = $1 AND tombstoned_at IS NULL AND NOT ${seenSql("$2")} AND ${notMutedSql("$2")}
         AND subscription_id = ANY($3::uuid[])
       GROUP BY subscription_id`,
-    [workspaceId, actor?.id ?? "", visible.map((row) => row.id)],
+    [workspaceId, actor ? personalDataOwnerId(actor) : "", visible.map((row) => row.id)],
   );
   const unseen = new Map(counts.rows.map((row) => [row.subscription_id, Number(row.unseen)]));
   // When the newest unseen article arrived: the reader's nav dot compares it

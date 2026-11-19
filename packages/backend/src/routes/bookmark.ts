@@ -19,6 +19,8 @@
 // The fetch and the HTML parsing live in services/pageMeta.ts.
 
 import { requireActor } from "../spine/mutate.js";
+import { assertMayReachOut } from "../spine/authority.js";
+import { newNoteSpace } from "../services/spaces.js";
 import { bookmarkMarkdown, oneLine } from "../services/bookmarkMarkdown.js";
 import { fetchPageMeta } from "../services/pageMeta.js";
 import { isHttpUrl } from "@onden/markdown";
@@ -41,6 +43,7 @@ const urlBody = z.object({ url: z.string().url().refine(isHttpUrl, "http(s) only
 // lib/share/shareInbox.ts). A POST so the URL stays out of access logs.
 router.post("/preview", async (c) => {
   const actor = requireActor(c.get("actor"));
+  assertMayReachOut(actor);
   const parsed = urlBody.safeParse(await readJsonBody(c));
   if (!parsed.success) throw new StatusError(400, "invalid_url");
   const meta = await fetchPageMeta(parsed.data.url, "");
@@ -51,6 +54,9 @@ router.post("/", async (c) => {
   const actor = requireActor(c.get("actor"));
   const workspaceId = await getWorkspaceId();
   const { url, space_id } = await parseBody(c, z.object({ url: z.string().url(), space_id: z.string().uuid().optional() }));
+  // Authority before the page is fetched (createNote asks it again, under its lock): who may not write there makes no request leave.
+  assertMayReachOut(actor);
+  await newNoteSpace(actor, workspaceId, { spaceId: space_id ?? null });
 
   const meta = await fetchPageMeta(url, new URL(url).hostname);
   const title = oneLine(meta?.title ?? "") || new URL(url).hostname;

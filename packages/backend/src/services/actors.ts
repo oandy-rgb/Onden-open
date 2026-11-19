@@ -33,7 +33,7 @@ import { pool, q, getWorkspaceId, withTransaction } from "../db.js";
 import { sqlIdentifier } from "../sqlText.js";
 import type { ActorCtx, ActorType, TokenAccess } from "../types.js";
 import { mutate, requireActor, UnauthorizedError } from "../spine/mutate.js";
-import { isWorkspaceOwner } from "../spine/authority.js";
+import { isSessionActorType, isWorkspaceOwner } from "../spine/authority.js";
 import { createToken, revokeToken, setTokenAccess, revokeTokensIssuedBy } from "./agentTokens.js";
 import { endTemporarySessionsOpenedBy } from "./participantSessions.js";
 import { TOKEN_ACCESS_LEVELS, isTokenAccess, toolsForAccess } from "./agentTools/index.js";
@@ -652,11 +652,17 @@ export async function removeActor(authenticated: ActorCtx | null, id: string): P
   if (actor.id === id) throw new ActorAdminError(403, { error: "cannot delete self" });
   const workspaceId = await getWorkspaceId();
   // Confirm the actor exists before emitting an ACTOR_DELETED event.
-  const target = await pool.query<{ name: string; is_system: boolean }>(
-    `SELECT name, (external_id = ${SYSTEM_EXTERNAL_ID_SQL}) IS TRUE AS is_system FROM actors WHERE workspace_id = $1 AND id = $2`,
+  const target = await pool.query<{ name: string; is_system: boolean; type: string }>(
+    `SELECT name, type, (external_id = ${SYSTEM_EXTERNAL_ID_SQL}) IS TRUE AS is_system FROM actors WHERE workspace_id = $1 AND id = $2`,
     [workspaceId, id],
   );
   if (!target.rows[0]) return { ok: true }; // absent → no-op, no event
+  // A temporary session is ended, never removed: its `actors` row is what this node keeps as the evidence that the id was a session's, for as long as
+  // anything names the id (the stamps of its membership, which must never leave: spine/snapshotTables.json `neverLeaves`; the authors of its writes,
+  // shown as a session: services/authorName.ts). Ending it is services/participantSessions.ts endTemporarySession.
+  if (isSessionActorType(target.rows[0].type)) {
+    throw new ActorAdminError(409, { error: "session_not_removable", detail: "a temporary session is ended, not removed" });
+  }
   // The owner is handed over, never removed (services/ownerTransfer.ts): removing
   // them would leave the workspace with no owner.
   const isOwner = await pool.query(`SELECT 1 FROM workspaces WHERE id = $1 AND owner_actor_id = $2`, [workspaceId, id]);
@@ -687,7 +693,9 @@ export async function removeActor(authenticated: ActorCtx | null, id: string): P
       // recorded and the published site drops their pages (D118).
       await orphanPersonalSpace(actor, workspaceId, id, target.rows[0]!.name);
       const row = await q<{ type: string; external_id: string | null }>(
-        `DELETE FROM actors WHERE workspace_id = $1 AND id = $2
+        // `type <> 'session'`: the one statement that deletes an actor never takes a session's row (above; the invariant
+        // guards/neverLeaves.guard.test.ts names and sessionActorKept.integration.test.ts tests).
+        `DELETE FROM actors WHERE workspace_id = $1 AND id = $2 AND type <> 'session'
          RETURNING type, external_id`,
         [workspaceId, id],
       );

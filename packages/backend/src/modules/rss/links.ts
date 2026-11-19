@@ -10,6 +10,7 @@ import { sql } from "kysely";
 import { db } from "../../dbKysely.js";
 import { pageMetaFromHtml } from "../../services/pageMeta.js";
 import type { ActorCtx } from "../../types.js";
+import { assertMayReachOut } from "../../spine/authority.js";
 import { fetchPageHtml } from "./fetch.js";
 import { extractArticleHtml } from "./sanitize.js";
 import { listSources } from "./sources.js";
@@ -43,6 +44,8 @@ export async function answerArticleLink(actor: ActorCtx, workspaceId: string, su
   }
 
   if (!withinPrefix(address, (await articlePrefixes(workspaceId, [subscriptionId])).get(subscriptionId) ?? null)) return { kind: "outside" };
+  // An article this server holds is read above; one it would fetch is not a temporary session's to ask for (refused, before the fetch).
+  assertMayReachOut(actor);
   try {
     const html = await fetchPageHtml(address);
     const title = pageMetaFromHtml(html, address).title;

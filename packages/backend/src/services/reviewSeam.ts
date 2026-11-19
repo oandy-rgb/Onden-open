@@ -5,6 +5,8 @@
 // module (modules/README.md); with the module not loaded nothing is copied and
 // the schedules stay where they were.
 
+import type { ActorCtx } from "../types.js";
+
 /** Where a card lives: a note or a block node (its schedules: `review_states`). */
 export type ReviewTarget = { note: string } | { block: string };
 
@@ -16,7 +18,7 @@ export type ReviewSeam = {
   /** Give these notes or paragraphs their own review reference. Nothing while the module is off here. Call in the writing transaction.
    *  `via: "word"` is the review word in a paragraph's `{…}`: the reference is remembered as made by the word, so it goes when the word
    *  does (`unmarkCardsWord`). `via: "restore"` is a note restored from a backup that made it a card: no tie to any text. */
-  markCards(opts: { workspaceId: string; holders: ReadonlyArray<{ kind: "node" | "block"; id: string }>; actorId: string; via: "word" | "restore" }): Promise<void>;
+  markCards(opts: { workspaceId: string; holders: ReadonlyArray<{ kind: "node" | "block"; id: string }>; actor: ActorCtx; via: "word" | "restore" }): Promise<void>;
   /** These paragraphs no longer carry the review word: those whose reference the word made stop being cards (the reference goes; every
    *  person's schedule stays, so the word coming back resumes it). References made another way stay. Call in the writing transaction. */
   unmarkCardsWord(opts: { holders: ReadonlyArray<{ kind: "block"; id: string }> }): Promise<void>;

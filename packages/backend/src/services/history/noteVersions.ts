@@ -9,6 +9,7 @@
 // 讀取只經 canReadNode 之後才查事件，不可讀等同不存在（回傳 null，不洩漏存在與否）。
 
 import { replaceWikilinks, splitWikilink } from "@onden/markdown";
+import { shownAuthorKind, shownAuthorName, versionAuthor } from "../authorName.js";
 import { q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
 import { canReadNode } from "../readPolicy.js";
@@ -59,7 +60,7 @@ export function describeChange(olderMarkdown: string, newerMarkdown: string): Ch
 /* 標記、作者種類（純函式）                                             */
 /* ------------------------------------------------------------------ */
 
-export type ActorKind = "human" | "agent" | "system";
+export type ActorKind = "human" | "agent" | "system" | "session";
 
 /** domain_events.actor_type（'user' | 'ai_agent' | 'system'）→ 前端用的作者種類。 */
 export function actorKindOf(actorType: string): ActorKind {
@@ -75,6 +76,8 @@ export type VersionRow = {
   changed_at: Date | string;
   actor_name: string | null;
   actor_type: string;
+  /** `actors.type` of the author's row on this node (null: no row); only to tell a session's write (services/authorName.ts). */
+  author_row_type?: string | null;
   saves: number;
   is_restore: boolean;
   /** 被還原那一版（所在那一列）的 changed_at；不是這篇的版本則 null。 */
@@ -92,7 +95,7 @@ export function absorbSameText(rows: VersionRow[]): VersionRow[] {
     while (i + 2 < rows.length) {
       const older = rows[i + 1]!;
       if (row.is_restore || older.is_restore || (row.title ?? "") !== (older.title ?? "")) break;
-      if (row.actor_type !== older.actor_type || row.actor_name !== older.actor_name) break;
+      if (row.actor_type !== older.actor_type || row.actor_name !== older.actor_name || (row.author_row_type ?? null) !== (older.author_row_type ?? null)) break;
       if (!sameTextIgnoringIds(older.markdown, row.markdown)) break;
       row = { ...row, saves: row.saves + older.saves };
       i++;
@@ -145,10 +148,10 @@ export function describeVersions(
     if (row.is_restore) markers.push("restored");
     if (newer && actorKindOf(newer.actor_type) === "agent") markers.push("before_agent");
     for (const n of published.get(index) ?? []) markers.push(`published:${n}`);
-    const { is_restore: _isRestore, restored_at, ...rest } = row;
+    const { is_restore: _isRestore, restored_at, author_row_type, ...rest } = row;
     return {
       ...rest,
-      actor_kind: actorKindOf(row.actor_type),
+      actor_kind: shownAuthorKind(author_row_type, actorKindOf(row.actor_type)),
       summary,
       markers,
       restored_from: row.is_restore && restored_at ? iso(restored_at) : null,
@@ -184,9 +187,9 @@ export async function listNoteVersions(
 ): Promise<Array<Record<string, unknown>> | null> {
   if (!(await canReadNode(actor, nodeId))) return null;
   if (opts.raw) {
-    const raw = await q<RawVersion>(
+    const raw = await q<Omit<RawVersion, "actor_name"> & { imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
       `SELECT e.id, (e.payload->>'title') AS title, b.content AS markdown,
-              e.created_at AS changed_at, coalesce(e.tx_meta->'history_import'->>'actor_name', a.name) AS actor_name, ${versionActorTypeSql("e")} AS actor_type
+              e.created_at AS changed_at, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, ${versionActorTypeSql("e")} AS actor_type
          FROM domain_events e
          JOIN blobs b ON b.hash = e.payload->>'body_hash'
     LEFT JOIN actors a ON a.id::text = e.actor_id
@@ -195,14 +198,17 @@ export async function listNoteVersions(
         ORDER BY e.created_at DESC, e.id DESC LIMIT ${VERSION_LIMIT}`,
       [nodeId, workspaceId],
     );
-    return raw.rows.map((r) => ({ ...r, actor_kind: actorKindOf(r.actor_type) }));
+    return raw.rows.map(({ imported, import_name, row_name, row_type, ...r }) => {
+      const author = versionAuthor({ imported, import_name, row_name, row_type });
+      return { ...r, actor_name: shownAuthorName(author.rowType, author.name), actor_kind: shownAuthorKind(author.rowType, actorKindOf(r.actor_type)) };
+    });
   }
 
-  const result = await q<Omit<VersionRow, "restored_at"> & { restored_at: Date | null }>(
+  const result = await q<Omit<VersionRow, "restored_at" | "actor_name" | "author_row_type"> & { restored_at: Date | null; imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
     `WITH saves AS (
        SELECT e.id, e.actor_id, ${versionActorTypeSql("e")} AS actor_type, e.created_at,
               (e.payload->>'title') AS title, e.payload->>'body_hash' AS body_hash,
-              e.event_type, e.tx_meta->'history_import'->>'actor_name' AS import_actor,
+              e.event_type, e.tx_meta->'history_import'->>'actor_name' AS import_actor, (e.tx_meta ? 'history_import') AS imported,
               -- 還原：NODE_RESTORED（版本還原）或 eventRestore 寫的 NODE_UPDATED（tx_meta.restored_from）
               (e.event_type = 'NODE_RESTORED' OR e.tx_meta ? 'restored_from') AS is_restore,
               CASE WHEN e.event_type = 'NODE_RESTORED' THEN e.payload->>'version_id'
@@ -253,14 +259,14 @@ export async function listNoteVersions(
      ),
      collapsed AS (
        SELECT DISTINCT ON (session_no)
-              session_no, id, actor_id, actor_type, import_actor, created_at, title, body_hash,
+              session_no, id, actor_id, actor_type, import_actor, imported, created_at, title, body_hash,
               is_restore, restored_id,
               count(*) OVER (PARTITION BY session_no) AS saves
          FROM sessions
         ORDER BY session_no, created_at DESC, id DESC
      )
      SELECT c.id::text AS id, c.title, b.content AS markdown,
-            c.created_at AS changed_at, coalesce(c.import_actor, a.name) AS actor_name, c.actor_type,
+            c.created_at AS changed_at, c.imported, c.import_actor AS import_name, a.name AS row_name, a.type AS row_type, c.actor_type,
             c.saves::int AS saves, c.is_restore,
             -- 被還原的那個事件落在哪一列（用該列的 changed_at 指它）
             (SELECT c2.created_at FROM anchored v
@@ -277,8 +283,13 @@ export async function listNoteVersions(
   // The query reads one row beyond the list only to describe the list's last
   // row; that row is never merged away (absorbSameText keeps the oldest), and a
   // merge above it only makes the list shorter.
-  const merged = absorbSameText(result.rows);
-  const hasOlder = result.rows.length > VERSION_LIMIT;
+  // A session's write is sent as the kind 'session' with no name (services/authorName.ts; describeVersions sets the kind).
+  const listed: VersionRow[] = result.rows.map(({ imported, import_name, row_name, row_type, ...row }) => {
+    const author = versionAuthor({ imported, import_name, row_name, row_type });
+    return { ...row, actor_name: shownAuthorName(author.rowType, author.name), author_row_type: author.rowType };
+  });
+  const merged = absorbSameText(listed);
+  const hasOlder = listed.length > VERSION_LIMIT;
   const rows = hasOlder ? merged.slice(0, -1) : merged;
 
   // 發布快照序號 = 這個工作區的快照依建立時間排的第幾個（最舊 = #1）

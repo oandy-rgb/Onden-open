@@ -11,6 +11,7 @@
 
 import { INK_KIND_ATTR, inkChangeSummary, type InkKind } from "@onden/markdown/ink";
 import { q } from "../../db.js";
+import { shownAuthorKind, shownAuthorName } from "../authorName.js";
 import type { ActorCtx } from "../../types.js";
 import { sqlDayStart } from "../../localDay.js";
 import { canReadNode } from "../readPolicy.js";
@@ -82,7 +83,7 @@ const INK_EDIT_LIMIT = 20;
  *  cannot read the note (indistinguishable from a missing one). */
 export async function listInkEdits(workspaceId: string, actor: ActorCtx, nodeId: string, kind: InkKind): Promise<InkEdit[] | null> {
   if (!(await canReadNode(actor, nodeId))) return null;
-  const sessions = await q<{ first_id: string; last_id: string; last_at: Date; actor_name: string | null; actor_type: string; saves: number }>(
+  const sessions = await q<{ first_id: string; last_id: string; last_at: Date; actor_name: string | null; author_row_type: string | null; actor_type: string; saves: number }>(
     `WITH saves AS (
        SELECT e.id, e.actor_id, e.actor_type, e.event_type, e.created_at
          FROM domain_events e WHERE e.workspace_id = $1 AND e.target_id = $2 AND ${inkEventSql("e", kind)}
@@ -91,7 +92,7 @@ export async function listInkEdits(workspaceId: string, actor: ActorCtx, nodeId:
      numbered AS (SELECT *, sum(boundary) OVER (ORDER BY created_at, id) AS edit_no FROM marked)
      SELECT (array_agg(n.id ORDER BY n.created_at, n.id))[1]::text AS first_id,
             (array_agg(n.id ORDER BY n.created_at DESC, n.id DESC))[1]::text AS last_id,
-            max(n.created_at) AS last_at, max(a.name) AS actor_name, max(n.actor_type) AS actor_type, count(*)::int AS saves
+            max(n.created_at) AS last_at, max(a.name) AS actor_name, max(a.type) AS author_row_type, max(n.actor_type) AS actor_type, count(*)::int AS saves
        FROM numbered n LEFT JOIN actors a ON a.id::text = n.actor_id
       GROUP BY n.edit_no ORDER BY n.edit_no`,
     [workspaceId, nodeId],
@@ -108,7 +109,7 @@ export async function listInkEdits(workspaceId: string, actor: ActorCtx, nodeId:
     if (summary.added + summary.erased === 0) continue;
     out.push({
       ...summary, id: e.last_id, before_event: e.before_event, after_event: e.last_id, changed_at: e.last_at.toISOString(),
-      actor_name: e.actor_name, actor_kind: actorKindOf(e.actor_type), saves: e.saves,
+      actor_name: shownAuthorName(e.author_row_type, e.actor_name), actor_kind: shownAuthorKind(e.author_row_type, actorKindOf(e.actor_type)), saves: e.saves,
     });
   }
   return out;

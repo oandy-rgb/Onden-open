@@ -40,7 +40,9 @@ export async function reassignBlockNodeAnchor(input: {
   const { workspaceId, noteId, blockNodeId } = input;
   await withEventTransaction(workspaceId, async () => {
     const actor = await resolveCurrentActor(input.actor, workspaceId);
-    await assertAuthority(actor, { kind: "node", nodeId: noteId, op: "write_node" });
+    // Re-pointing an anchor moves where the paragraph's task, schedule and links point, and BLOCK_ANCHOR_CONFIRMED has no inverse
+    // (restoreContract.ts): never a temporary session's (PR #1856 round 5).
+    await assertAuthority(actor, { kind: "irreversible", of: { kind: "node", nodeId: noteId, op: "write_node" } });
     const note = await db.selectFrom("content_nodes").select("markdown")
       .where("workspace_id", "=", workspaceId).where("id", "=", noteId).where("deleted_at", "is", null).where("node_type", "=", "content")
       .forShare().executeTakeFirst();

@@ -43,7 +43,7 @@ import { ancestorIds, subtreeIds } from "./nodeTree.js";
 import { assertTagDefinitionChange } from "./reservedTags.js";
 import { retypeGoverned } from "./attributeChange.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
-import { assertAuthority, AuthorityError } from "../spine/authority.js";
+import { assertAuthority, assertUndoableBy, AuthorityError } from "../spine/authority.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { taskNodeIdsAmong } from "./tasksStore.js";
 import { MEDIA_TYPES } from "@onden/markdown";
@@ -348,6 +348,7 @@ export async function purgePreview(actor: ActorCtx, workspaceId: string, nodeId:
 export async function purgeDeleted(
   actor: ActorCtx, workspaceId: string, nodeId: string, opts: { expected?: readonly string[] } = {},
 ): Promise<PurgeResult> {
+  assertUndoableBy(actor); // delete for good cannot be undone
   return withEventTransaction(workspaceId, async () => {
     const current = await resolveCurrentActor(actor, workspaceId);
     const plan = await buildPurgePreview(current, workspaceId, nodeId);
@@ -368,6 +369,7 @@ export async function purgeDeleted(
 export async function purgeDeletedEach(
   actor: ActorCtx, workspaceId: string, items: ReadonlyArray<{ nodeId: string; expected: readonly string[] }>,
 ): Promise<PurgeItemResult[]> {
+  assertUndoableBy(actor); // delete for good cannot be undone: refused as a whole, not item by item
   const results: PurgeItemResult[] = [];
   for (const item of items) {
     try {
@@ -387,7 +389,7 @@ export async function purgeDeletedEach(
  *  除」). Same erasure and event as purgeDeleted; needs to manage the space. Throws
  *  NodeTrashError 409 live_descendant if a live note is still in the space. */
 export async function purgeSpaceDeleted(actor: ActorCtx, workspaceId: string, spaceId: string): Promise<PurgeResult> {
-  await assertAuthority(actor, { kind: "space", spaceId, need: "manage" });
+  await assertAuthority(actor, { kind: "irreversible", of: { kind: "space", spaceId, need: "manage" } });
   const rows = await q<{ id: string; deleted: boolean }>(
     `SELECT id::text, deleted_at IS NOT NULL AS deleted FROM content_nodes
       WHERE workspace_id = $1 AND space_id = $2 AND ${notTagNodeSql()} FOR UPDATE`,
@@ -408,7 +410,7 @@ async function purgeRows(
   const tasks = await taskNodeIdsAmong(workspaceId, ids);
   return mutate({
     actor, workspaceId,
-    authority: { kind: "space", spaceId, need: "manage" },
+    authority: { kind: "irreversible", of: { kind: "space", spaceId, need: "manage" } },
     // The rows leave every reader's set; clients reconcile on the epoch too.
     affectsMembership: true,
     event: {

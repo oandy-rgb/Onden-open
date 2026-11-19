@@ -111,7 +111,7 @@ POST /api/sync ← field, tag
 | 代價 | — | — | `actors.type` 多一個值（CHECK 放寬）；名冊、成員清單、備份成員表要排除它（5 處，第 6 節） |
 
 欄位：`participant_sessions(id, workspace_id, actor_id, opened_by, credential_hash, created_at, expires_at, ended_at, max_requests, request_count, max_bytes, byte_count, last_used_at)`；
-顯示名稱存在 `actors.name`，固定「你（臨時）」（`SESSION_LABEL`，擁有者決定，不寫裝置或地點）。空間清單＝`space_members` 的列，沒有第二份。Migration 210（加法：放寬一個 CHECK、一張表、一個索引）。
+顯示名稱存在 `actors.name`，固定「你（臨時）」（`SESSION_LABEL`，擁有者決定，不寫裝置或地點）。【PR #1856 第 2 輪改了】`actors.name` 不存字（`SESSION_NAME = ""`），回應不送 `label`，畫面從種類寫「臨時工作階段」（見[第二批提案](sessions-reads-own-2026-11-17.md)第 2c 節）。空間清單＝`space_members` 的列，沒有第二份。Migration 210（加法：放寬一個 CHECK、一張表、一個索引）。
 
 ### B2 開、列、結束、到期
 
@@ -144,7 +144,7 @@ POST /api/sync ← field, tag
 ### B4 歸屬：欄位夠用，沒有第二條歸屬路徑
 
 【查過】`domain_events.actor_id`（text）、`actor_type`、`device_id`（uuid）與 `sync_stamps.author`（text）、`device`（uuid）。工作階段的 `actors.id` 直接寫進 `actor_id` 與 `author`；
-`device` 仍是請求的 `X-Onden-Device-Id`（本來就是這樣，客戶端指定）。`actor_type` 寫 `user`（它是人的手，不是 AI）。測試 `participantSessions.integration.test.ts`
+`device` 仍是請求的 `X-Onden-Device-Id`（本來就是這樣，客戶端指定）。【PR #1856 第 2 輪改了】工作階段的寫入不記它自稱的裝置（`recordedDeviceId`：null），見[第二批提案](sessions-reads-own-2026-11-17.md)第 2c 節。`actor_type` 寫 `user`（它是人的手，不是 AI）。測試 `participantSessions.integration.test.ts`
 「reads and writes… attributed to itself」逐欄比對 `domain_events` 與 `sync_stamps`。**沒有發現「欄位不夠」**，所以沒有停。
 附帶決定：`writesAsPerson` 對 `session` 回 true（本人的手打字，在它可寫的空間可以解決衝突）；若要改成「不算人」，工作階段寫到有衝突的單位會被拒絕（遷移 206）。**需要決定。**
 
@@ -162,7 +162,7 @@ POST /api/sync ← field, tag
 
 **沒做**
 - 通道、配對、碰面點、QR；前端；來賓角色（別人）與人的「只能提建議」；即時打字；範圍化的修改包（`packages/backend/src/spine/stamped*` 沒動）。
-- **「讀你的」**（擁有者回答：陌生電腦讀本人的個人列）：工作階段目前讀不到本人的個人列（個人表以操作者 id 為鍵，工作階段是另一個 id）。要做得補一個「個人資料的主人」函式（`openedBy`），
+- **「讀你的」**（**已在第二批做完**：[工作階段第二批](sessions-reads-own-2026-11-17.md)；下面是當時的說明）（擁有者回答：陌生電腦讀本人的個人列）：工作階段目前讀不到本人的個人列（個人表以操作者 id 為鍵，工作階段是另一個 id）。要做得補一個「個人資料的主人」函式（`openedBy`），
   再改 8 個讀取點（偏好、複習設定與進度、專注、RSS 已讀與靜音、外部行事曆）。不在這批：做一半比不做更糟（有的讀得到有的讀不到）。
 - 位元組上限算伺服器**實際讀到**的請求本文（`readTemporarySessionBody`，邊讀邊計），不看 `Content-Length`；單一請求另有本文上限（第 10 節），上限與剩餘額度都是**精確**的：放不進剩餘額度的請求被拒、不計；回應大小不算。
 - 清掉已到期工作階段留下的 `space_members` 列：下一次「開啟」時順便清（沒有計時器）；它們不影響任何判斷（工作階段已不能行動），只是資料庫裡還在。
@@ -173,6 +173,8 @@ POST /api/sync ← field, tag
 3. 「讀你的」要不要做、先做哪幾個（第 6 節）。
 4. 非開啟者的成員要不要看到「有人在連著」（我選不給，B5）；歷史上其他人看到的顯示名稱仍是「你（臨時）」，要換成相對於讀者的字樣得等來賓那批。
 6. 次數與位元組的預設與上限（2 萬次、256 MiB；上限 10 萬次、1 GiB；最久 24 小時）是具名常數 `SESSION_LIMITS`，是我選的數字，**沒有量測**；擁有者 2026-11-17 同意先用。
+
+> 第二批之後（[sessions-reads-own-2026-11-17.md](sessions-reads-own-2026-11-17.md)）：「讀你的」做完、工作階段的標記不離開那台、`NO_VALID_PROBE` 由 25 條縮到 15 條、一般登入的本文上限寫進第 6 節；下面第 8、9 節的 25 條與 `it.fails` 描述是當時的狀態。
 
 ## 7. 沒驗證的
 

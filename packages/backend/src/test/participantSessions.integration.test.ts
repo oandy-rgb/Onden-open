@@ -82,7 +82,8 @@ describe.skipIf(!isTestDatabase())("temporary sessions", () => {
         body: { spaces: [{ space_id: w.spaceA, permission: "edit" }], minutes: 30 },
       });
       expect(res.status).toBe(201);
-      expect(res.json.label).toBe("你（臨時）");
+      // no name is sent or stored: the screen words a session from what it is (round 2 point 9; was the fixed 「你（臨時）」)
+      expect(res.json).not.toHaveProperty("label");
       expect(res.json.credential).toMatch(/^onds_[A-Za-z0-9_-]{43}$/);
       expect(res.json.spaces).toEqual([{ space_id: w.spaceA, permission: "edit" }]);
       expect(new Date(res.json.expires_at).getTime() - Date.now()).toBeGreaterThan(29 * 60_000);
@@ -131,7 +132,7 @@ describe.skipIf(!isTestDatabase())("temporary sessions", () => {
   });
 
   describe("acting", () => {
-    it("reads and writes what it was opened on, as the person would, and is attributed to itself: the actor of the event and the author of the stamp", async () => {
+    it("reads and writes what it was opened on, as the person would, and is attributed to itself: the actor of the event and the author of the stamp; the device it names is not recorded", async () => {
       const s = await open([{ spaceId: w.spaceA, permission: "edit" }]);
       const device = randomUUID();
       const read = await asSession(s.credential, `/api/nodes/${noteA}`);
@@ -141,11 +142,12 @@ describe.skipIf(!isTestDatabase())("temporary sessions", () => {
       const actorId = (await q<{ actor_id: string }>(`SELECT actor_id::text FROM participant_sessions WHERE id = $1`, [s.sessionId])).rows[0]!.actor_id;
       const event = (await q<{ actor_id: string; actor_type: string; device_id: string | null }>(
         `SELECT actor_id, actor_type, device_id::text FROM domain_events WHERE workspace_id = $1 AND event_type = 'NODE_UPDATED' AND target_id = $2 ORDER BY id DESC LIMIT 1`, [w.ws, noteA])).rows[0]!;
-      expect(event).toEqual({ actor_id: actorId, actor_type: "user", device_id: device });
+      // the untrusted computer's device id is not recorded (spine/authority.ts recordedDeviceId; was recorded before PR #1856, round 2 point 6)
+      expect(event).toEqual({ actor_id: actorId, actor_type: "user", device_id: null });
       const stamp = (await q<{ author: string; device: string | null }>(
         `SELECT author, device::text FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = 'title'`, [w.ws, noteA])).rows[0]!;
-      expect(stamp).toEqual({ author: actorId, device });
-      expect((await q<{ name: string }>(`SELECT name FROM actors WHERE id = $1`, [actorId])).rows[0]!.name).toBe("你（臨時）");
+      expect(stamp).toEqual({ author: actorId, device: null });
+      expect((await q<{ name: string }>(`SELECT name FROM actors WHERE id = $1`, [actorId])).rows[0]!.name).toBe(""); // no text in one language
     });
 
     it("never writes where it only views, or in a space it was not given (the same refusal the person would meet there)", async () => {
@@ -383,16 +385,18 @@ describe.skipIf(!isTestDatabase())("temporary sessions", () => {
     });
   });
 
-  describe("next batch: 'reads yours' (pinned: it does NOT hold yet)", () => {
-    // it.fails: passes while the session cannot read its person's preferences, and starts to FAIL when the next batch (one function: the personal data's owner is
-    // the opener, used at the eight read points at once; writes stay refused) makes it true, which is the signal to turn this into a plain `it`.
-    it.fails("a session reads the preferences of the person who opened it", async () => {
+  describe("reads yours (the rest of the cases: properties/sessionReadsOwn.property.integration.test.ts)", () => {
+    it("a session reads the preferences of the person who opened it", async () => {
       const mine = await asOwner("/api/me/prefs/nav", { method: "PUT", body: { value: { order: ["notes"], phone: 1 } } });
       expect(mine.status).toBe(200);
       try {
         const s = await open([{ spaceId: w.spaceA, permission: "view" }]);
         const read = await asSession(s.credential, "/api/me/prefs/nav");
         expect(read.json?.value).toEqual({ order: ["notes"], phone: 1 });
+        // and it never writes them back
+        const write = await asSession(s.credential, "/api/me/prefs/nav", { method: "PUT", body: { value: { order: ["x"], phone: 0 } } });
+        expect(write.status).toBe(403);
+        expect((await asOwner("/api/me/prefs/nav")).json?.value).toEqual({ order: ["notes"], phone: 1 });
       } finally {
         await seedQ(`DELETE FROM actor_prefs WHERE actor_id = $1::uuid`, [w.owner.id]);
       }
@@ -538,7 +542,8 @@ describe.skipIf(!isTestDatabase())("temporary sessions", () => {
       const owner = await asOwner(`/api/spaces/${w.spaceA}/members`);
       expect(owner.json.members.map((m: { name: string }) => m.name).sort()).toEqual(["Member", "Owner"]);
       const mine = owner.json.sessions.find((x: { sessionId: string }) => x.sessionId === s.sessionId);
-      expect(mine).toMatchObject({ label: "你（臨時）", canEnd: true, spaces: [{ spaceId: w.spaceA, name: "space A", permission: "edit" }] });
+      expect(mine).not.toHaveProperty("label");
+      expect(mine).toMatchObject({ canEnd: true, spaces: [{ spaceId: w.spaceA, name: "space A", permission: "edit" }] });
       expect(mine.secondsLeft).toBeGreaterThan(44 * 60);
       expect(mine.secondsLeft).toBeLessThanOrEqual(45 * 60);
       const member = await call(`/api/spaces/${w.spaceA}/members`, { cookie: w.member.ext });

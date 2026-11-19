@@ -6,6 +6,7 @@ import { q, getWorkspaceId } from "../../db.js";
 import { db } from "../../dbKysely.js";
 import { addDays, dayStartInstant, localDayId } from "../../localDay.js";
 import { mutatePersonal, requireActor } from "../../spine/mutate.js";
+import { personalDataOwnerId } from "../../spine/authority.js";
 import { canReadNode, canSeeTag, readableScopeSql } from "../../services/readPolicy.js";
 import { withActorReadSnapshot, withActorReadSnapshotOrChain } from "../../services/actorReadSnapshot.js";
 import { subtreeIds } from "../../services/nodeTree.js";
@@ -216,7 +217,7 @@ async function cardsInScope(workspaceId: string, actor: ActorCtx, cards: Enrolle
  *  the heavy part), and the cards carry "" / null in their place. */
 async function loadEnrolledCards(workspaceId: string, actor: ActorCtx, tags: ReviewTag[], { bodies = true }: { bodies?: boolean } = {}): Promise<EnrolledCard[]> {
   if (!tags.length) return [];
-  const params: unknown[] = [workspaceId, actor.id];
+  const params: unknown[] = [workspaceId, personalDataOwnerId(actor)];
   const scope = readableScopeSql(actor, "n", params);
   // A card's parent is named only when the actor can read it too.
   const parentScope = readableScopeSql(actor, "p", params);
@@ -246,7 +247,7 @@ async function loadEnrolledCards(workspaceId: string, actor: ActorCtx, tags: Rev
 /** The actor's enrolled block cards: block nodes holding a review reference of their own (a note's reference does not reach the
  *  blocks below it — block-nodes.md 已決定 6), in a note they can read. A card's deck is its note. */
 async function loadBlockCards(workspaceId: string, actor: ActorCtx, sourceIds: string[], bodies: boolean): Promise<EnrolledCard[]> {
-  const params: unknown[] = [workspaceId, actor.id];
+  const params: unknown[] = [workspaceId, personalDataOwnerId(actor)];
   const scope = readableScopeSql(actor, "n", params);
   const rows = await q<BlockCardRow>(
     `SELECT b.id,b.block_ref,b.label,b.note_id,n.title AS note_title,${bodies ? "n.markdown" : "'' AS markdown"},rs.state AS state_raw,
@@ -375,9 +376,9 @@ export async function queue(authenticated: ActorCtx | null, { now = new Date(), 
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshotOrChain(authenticated, workspaceId, async actor => {
     if (scope.tagId) await assertVisibleTag(actor, workspaceId, scope.tagId);
-    const tags = await loadReviewTags(workspaceId, actor.id);
+    const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const cards = await loadEnrolledCards(workspaceId, actor, tags);
-    const left = reviewsLeftToday(cards, await loadDailyLimit(actor.id), now);
+    const left = reviewsLeftToday(cards, await loadDailyLimit(personalDataOwnerId(actor)), now);
     const { scheduled, fresh } = planSession(await cardsInScope(workspaceId, actor, cards, scope), left, now);
     const all = [...scheduled, ...fresh];
     return { cards: all.slice(0, cap).map(card => queueCard(card, tags, now)), total: all.length };
@@ -389,7 +390,7 @@ export async function queue(authenticated: ActorCtx | null, { now = new Date(), 
 export async function deck(authenticated: ActorCtx | null, scope: CardScope = {}): Promise<Card[]> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshotOrChain(authenticated, workspaceId, async actor =>
-    (await cardsInScope(workspaceId, actor, await loadEnrolledCards(workspaceId, actor, await loadReviewTags(workspaceId, actor.id)), scope)).map(publicCard));
+    (await cardsInScope(workspaceId, actor, await loadEnrolledCards(workspaceId, actor, await loadReviewTags(workspaceId, personalDataOwnerId(actor))), scope)).map(publicCard));
 }
 
 export type Deck = { node_id: string; title: string; due: number };
@@ -399,10 +400,10 @@ export type Deck = { node_id: string; title: string; due: number };
 export async function decks(authenticated: ActorCtx | null, now: Date = new Date()): Promise<Deck[]> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
-    const tags = await loadReviewTags(workspaceId, actor.id);
+    const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const cards = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
     // Opening a deck gives at most what the daily cap still allows.
-    const left = reviewsLeftToday(cards, await loadDailyLimit(actor.id), now);
+    const left = reviewsLeftToday(cards, await loadDailyLimit(personalDataOwnerId(actor)), now);
     const ready = cards.filter(card => !isHeld(card, now) && isDue(card.state, now));
     const parents = [...new Set(ready.flatMap(card => card.parent_id ? [card.parent_id] : []))];
     if (!parents.length) return [];
@@ -433,9 +434,9 @@ export type Group = ReviewGroup;
 export async function groups(authenticated: ActorCtx | null, { by, now = new Date() }: { by: ReviewGroupBy; now?: Date }): Promise<ReviewGroups> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
-    const tags = await loadReviewTags(workspaceId, actor.id);
+    const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const all = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
-    const left = reviewsLeftToday(all, await loadDailyLimit(actor.id), now);
+    const left = reviewsLeftToday(all, await loadDailyLimit(personalDataOwnerId(actor)), now);
     const row = (id: string | null, title: string, members: EnrolledCard[]): Group => {
       const { scheduled, fresh } = planSession(members, left, now);
       return { id, title, due: scheduled.length, new: fresh.length };
@@ -475,13 +476,13 @@ export async function stats(authenticated: ActorCtx | null, { tagId, now = new D
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
     if (tagId) await assertVisibleTag(actor, workspaceId, tagId);
-    const tags = await loadReviewTags(workspaceId, actor.id);
+    const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const allCards = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
     const scope = tagId ? await tagScope(workspaceId, tagId) : null;
     const cards = (scope ? allCards.filter(card => inTagScope(card, scope)) : allCards).filter(card => !isHeld(card, now));
     const fresh = cards.filter(card => card.state === null).length;
     // What a person's cap rolls to tomorrow is not due today.
-    const left = reviewsLeftToday(allCards, await loadDailyLimit(actor.id), now);
+    const left = reviewsLeftToday(allCards, await loadDailyLimit(personalDataOwnerId(actor)), now);
     const keptDue = Math.min(cards.filter(card => card.state !== null && isDue(card.state, now)).length, left);
     return { due: Math.min(cards.filter(card => isDue(card.state, now)).length, left), new: fresh, learned: cards.length - fresh, new_available: Math.min(fresh, Math.max(0, left - keptDue)) };
   });
@@ -508,7 +509,7 @@ async function cardNote(actor: ActorCtx, workspaceId: string, target: CardTarget
 export async function cardState(identity: ActorCtx | null, nodeId: string, target: CardTarget = { kind: "node", id: nodeId }): Promise<{ state: ReviewState | null; hold: ReviewHold | null }> {
   const actor = requireActor(identity);
   await cardNote(actor, await getWorkspaceId(), target);
-  const raw = (await readReviewState(target, actor.id)) || null;
+  const raw = (await readReviewState(target, personalDataOwnerId(actor))) || null;
   return { state: parseReviewState(raw), hold: holdOf(raw) };
 }
 
@@ -555,7 +556,7 @@ async function enrolledCard(actor: ActorCtx, workspaceId: string, target: CardTa
     `SELECT node_type FROM content_nodes WHERE id=$1 AND workspace_id=$2 AND ${liveNodeSql()}`, [noteId, workspaceId])).rows[0];
   if (!node) throw new ReviewError(404, "node not found");
   if (!isNote(node)) throw new ReviewError(409, "only content notes can be reviewed");
-  const enabledTags = await loadReviewTags(workspaceId, actor.id);
+  const enabledTags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
   if (!enabledTags.length || !(await ownRefId({ kind: target.kind, id: target.id }, "review"))) {
     throw new ReviewError(409, target.kind === "block" ? "block is not a review card" : "note is not a review card");
   }
@@ -635,14 +636,14 @@ const statusCard = (card: EnrolledCard): ReviewStatusCard => ({ node_id: card.no
 export async function status(authenticated: ActorCtx | null, { now = new Date() }: { now?: Date } = {}): Promise<ReviewStatus> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
-    const tags = await loadReviewTags(workspaceId, actor.id);
+    const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const all = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
     const today = localDayId(now);
     const live = all.filter(card => !card.hold?.suspended);
     const scheduled = live.filter((card): card is EnrolledCard & { state: ReviewState } => card.state !== null);
     const dayOf = (card: EnrolledCard & { state: ReviewState }) => localDayId(new Date(dueAt(card)));
     const dueByToday = scheduled.filter(card => dayOf(card) <= today).sort((a, b) => dueAt(a).localeCompare(dueAt(b)));
-    const limit = await loadDailyLimit(actor.id);
+    const limit = await loadDailyLimit(personalDataOwnerId(actor));
     const left = reviewsLeftToday(all, limit, now);
     const { kept, rolledOver } = withinDailyCap(dueByToday, left);
     const overdue = kept.filter(card => dayOf(card) < today).length;
@@ -676,7 +677,7 @@ export async function stoppedUnder(authenticated: ActorCtx | null, rootId: strin
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
     await cardNote(actor, workspaceId, { kind: "node", id: rootId });
     const subtree = new Set(await subtreeIds(workspaceId, rootId, { lifecycle: "live", includeRoot: true }));
-    const cards = await loadEnrolledCards(workspaceId, actor, await loadReviewTags(workspaceId, actor.id), { bodies: false });
+    const cards = await loadEnrolledCards(workspaceId, actor, await loadReviewTags(workspaceId, personalDataOwnerId(actor)), { bodies: false });
     return cards.filter(card => card.hold?.suspended && subtree.has(card.node_id)).slice(0, statusListMax).map(statusCard);
   });
 }
@@ -692,7 +693,7 @@ export async function personalSettings(identity: ActorCtx | null, tagId: string)
   const actor = requireActor(identity);
   await assertVisibleTag(actor, await getWorkspaceId(), tagId);
   const row = await q<{ settings: Record<string, unknown> }>(
-    "SELECT settings FROM actor_module_settings WHERE actor_id=$1 AND tag_id=$2", [actor.id, tagId]);
+    "SELECT settings FROM actor_module_settings WHERE actor_id=$1 AND tag_id=$2", [personalDataOwnerId(actor), tagId]);
   return row.rows[0]?.settings ?? null;
 }
 

@@ -11,7 +11,7 @@ import { updateNode, restoreNodeVersion } from "../services/nodeUpdate.js";
 import { readEditorBodyChange } from "../services/blockAnchors/index.js";
 import { searchNodes } from "../services/nodeSearch.js";
 import { applyTagToNode, removeTagFromNode } from "../services/tagMembershipWrites.js";
-import { assertActorMayWriteAttributeKey, setNodeAttribute } from "../services/attributeWrites.js";
+import { setNodeAttribute } from "../services/attributeWrites.js";
 import { computeRollupAttributes, computeInheritedAttributes } from "../services/nodeAttributes.js";
 import { fieldForKey } from "../services/schemaValidation.js";
 import { moveGraphPosition } from "../services/boardWrites.js";
@@ -561,7 +561,6 @@ router.delete("/:id/attributes/:key", async (c) => {
   const key = c.req.param("key");
   if (!isWritableAttributeKey(key)) throw new StatusError(400, "reserved key");
   const actor = requireActor(c.get("actor"));
-  assertActorMayWriteAttributeKey(actor, key);
   // Who may remove is decided before anything about the attribute is answered (its tag's required field, whether it exists):
   // a person who may not write here gets the same refusal whether or not the property is there. The same check runs again
   // under the event lock (services/attributeChange.ts) for the case where nothing is there to remove.

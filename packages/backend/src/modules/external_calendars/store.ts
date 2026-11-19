@@ -7,6 +7,7 @@
 
 import { q, allowUnstampedWrite } from "../../db.js";
 import { mutatePersonal } from "../../spine/mutate.js";
+import { isTemporarySessionActor, personalDataOwnerId } from "../../spine/authority.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { sealText, openText } from "../../services/aiCredentials.js";
 import { dayClock, localDayId, sqlDayStart, addDays } from "../../localDay.js";
@@ -24,12 +25,29 @@ const COLS = `id::text, name, color, url_host AS host, enabled, last_fetched_at,
 /** One person may keep this many calendars: each is a fetch every 15 minutes. */
 export const MAX_CALENDARS_PER_PERSON = 10;
 
-export async function listCalendars(actorId: string): Promise<CalendarRow[]> {
-  return (await q<CalendarRow>(`SELECT ${COLS} FROM external_calendars WHERE actor_id = $1 ORDER BY created_at, id`, [actorId])).rows;
+/** What a temporary session reads of a calendar: no address host and no fetch error (those serve the settings page it cannot use; the
+ *  error text can name the address). The address itself is stored sealed and is never in any answer. */
+function forReader(actor: ActorCtx, row: CalendarRow): CalendarRow {
+  return isTemporarySessionActor(actor) ? { ...row, host: "", last_error: null } : row;
 }
 
-export async function getCalendar(actorId: string, id: string): Promise<CalendarRow | null> {
-  return (await q<CalendarRow>(`SELECT ${COLS} FROM external_calendars WHERE actor_id = $1 AND id = $2`, [actorId, id])).rows[0] ?? null;
+/** What a temporary session reads of an EVENT: the time and that the person is busy, nothing else. A location or a description often carries a meeting link and its password
+ *  (a value that is a capability), a title says what the person does, and the calendar is not limited by space: a 62-day window at a time reads the whole history. The calendar's
+ *  own name and colour stay. Held back until the owner decides whether a session may see more (docs/architecture/proposals/sessions-reads-own-2026-11-17.md). */
+const BUSY_TITLE = "忙碌";
+function eventForReader(actor: ActorCtx, event: DayEvent): DayEvent {
+  return isTemporarySessionActor(actor) ? { ...event, title: BUSY_TITLE, location: "", description: "" } : event;
+}
+
+/** The calendars of the person the caller reads for (personalDataOwnerId: a session reads its person's). */
+export async function listCalendars(actor: ActorCtx): Promise<CalendarRow[]> {
+  const rows = (await q<CalendarRow>(`SELECT ${COLS} FROM external_calendars WHERE actor_id = $1 ORDER BY created_at, id`, [personalDataOwnerId(actor)])).rows;
+  return rows.map((row) => forReader(actor, row));
+}
+
+export async function getCalendar(actor: ActorCtx, id: string): Promise<CalendarRow | null> {
+  const row = (await q<CalendarRow>(`SELECT ${COLS} FROM external_calendars WHERE actor_id = $1 AND id = $2`, [personalDataOwnerId(actor), id])).rows[0];
+  return row ? forReader(actor, row) : null;
 }
 
 export async function addCalendar(
@@ -129,8 +147,8 @@ export type DayEvent = {
   start_day: string; end_day: string;
 };
 
-/** The caller's events that touch the workspace days from..to (inclusive), from calendars that are switched on. */
-export async function eventsBetween(actorId: string, from: string, to: string): Promise<DayEvent[]> {
+/** The caller's events that touch the workspace days from..to (inclusive), from calendars that are switched on (a session reads its person's). */
+export async function eventsBetween(actor: ActorCtx, from: string, to: string): Promise<DayEvent[]> {
   const rows = (await q<{
     calendar_id: string; instance_key: string; name: string; color: string; title: string; location: string; description: string;
     all_day: boolean; starts_at: Date; ends_at: Date; start_date: string | null; end_date: string | null;
@@ -141,16 +159,16 @@ export async function eventsBetween(actorId: string, from: string, to: string): 
       WHERE c.actor_id = $1 AND c.enabled
         AND (CASE WHEN e.all_day THEN e.start_date <= $3::date AND e.end_date > $2::date
                   ELSE e.starts_at < ${sqlDayStart("$3::date + 1")} AND e.ends_at >= ${sqlDayStart("$2::date")} END)
-      ORDER BY e.starts_at, e.instance_key`, [actorId, from, to])).rows;
+      ORDER BY e.starts_at, e.instance_key`, [personalDataOwnerId(actor), from, to])).rows;
   const clock = dayClock();
-  return rows.map((r) => {
+  return rows.map((r): DayEvent => {
     const startDay = r.all_day ? r.start_date! : localDayId(r.starts_at, clock);
     // The last instant of a timed event is exclusive: one ending exactly at the next day's start stays on the first day.
     const endDay = r.all_day ? addDays(r.end_date!, -1) : localDayId(new Date(Math.max(r.starts_at.getTime(), r.ends_at.getTime() - 1)), clock);
-    return {
+    return eventForReader(actor, {
       id: `${r.calendar_id}:${r.instance_key}`, calendar_id: r.calendar_id, calendar_name: r.name, color: r.color,
       title: r.title, location: r.location, description: r.description, all_day: r.all_day,
       starts_at: r.starts_at.toISOString(), ends_at: r.ends_at.toISOString(), start_day: startDay, end_day: endDay,
-    };
+    });
   });
 }

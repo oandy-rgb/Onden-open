@@ -71,7 +71,8 @@
   "order": [
    "t.id::text"
   ],
-  "where": "t.workspace_id = $1 AND t.type <> 'session'",
+  "where": "t.workspace_id = $1",
+  "neverLeaves": "t.type = 'session'",
   "exclude": [
    "invite_email",
    "invite_token_hash",
@@ -111,7 +112,8 @@
    "t.space_id::text",
    "t.actor_id::text"
   ],
-  "where": "{space:t.space_id} AND t.space_id IN (SELECT x.id FROM spaces x WHERE x.workspace_id = $1) AND t.actor_id NOT IN (SELECT y.id FROM actors y WHERE y.workspace_id = $1 AND y.type = 'session')",
+  "where": "{space:t.space_id} AND t.space_id IN (SELECT x.id FROM spaces x WHERE x.workspace_id = $1)",
+  "neverLeaves": "t.actor_id::text IN (SELECT x.id::text FROM actors x WHERE x.type = 'session')",
   "stamps": [
    {
     "label": "space_members",

@@ -13,6 +13,7 @@ import { dateLabel, dayLabel, timeLabel } from "../../lib/timeLabels";
 import {
   alignParagraphs, pointChangeText, inkChangeText, inkKindHeading, splitParagraphs, planTakeBack, buildTimeline, initialIndex, scrubReducer, shown,
   type HistoryMarker, type NoteHistoryVersion, type ScrubAction, type ScrubState, type TimelinePoint,
+  historyAuthor,
 } from "../../lib/history";
 import { useVersionRestore } from "../../hooks/useVersionRestore";
 import { Button, LoadError, Modal, Pressable } from "../ui";
@@ -130,9 +131,8 @@ export function NoteHistory({ node, versions: initialVersions = NO_VERSIONS, ini
   const atNow = scrub.index >= points.length - 1;
 
   const whoIs = (kind: TimelinePoint["authorKind"], name: string | null) => {
-    if (kind === "agent") return { text: name || t("AI"), cls: "nh-author--agent" };
-    if (kind === "system") return { text: t("Automatic"), cls: "nh-author--system" };
-    return { text: selfName && name === selfName ? t("You") : name || t("Someone"), cls: "nh-author--human" };
+    const who = historyAuthor(kind, name, selfName);
+    return { text: who.text, cls: who.tone === "agent" || who.tone === "system" ? `nh-author--${who.tone}` : "nh-author--human" };
   };
   const authorOf = (p: TimelinePoint) => (p.versionId === null ? null : whoIs(p.authorKind, p.authorName));
   // What each edit of the note's drawings (its handwriting page, its whiteboard's pen layer) drew and erased

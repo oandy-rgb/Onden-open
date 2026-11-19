@@ -27,6 +27,7 @@ import { listTools } from "./agentTools/index.js";
 import type { ChatScope } from "./panelChatPrompt.js";
 import type { ChatSource, ChatTurn } from "@onden/contract";
 import { liveNodeSql } from "../spine/nodeSql.js";
+import { assertUndoableBy } from "../spine/authority.js";
 
 export const CHAT_TEXT_MAX = 2_000;
 /** Extra notes and tags a question may bring in (the current note is always in). */
@@ -195,6 +196,7 @@ export async function panelChatThread(workspaceId: string, nodeId: string, { act
 /** 「清除這段對話」: the next question starts a new conversation. The sessions are kept (cost, history),
  *  only hidden from the panel and from the model. Refused while an answer is still being written. */
 export async function clearPanelChat(workspaceId: string, nodeId: string, { actor }: { actor: ActorCtx }): Promise<{ cleared: number }> {
+  assertUndoableBy(actor); // nothing brings a cleared AI conversation back to the panel
   if (actor.tokenScope || !(await canReadNode(actor, nodeId))) throw new AgentSessionError("not_found", "note not found", 404);
   const open = await q(
     `SELECT 1 FROM agent_sessions WHERE workspace_id = $1 AND node_id = $2 AND initiator_id = $3 AND kind = 'panel_chat' AND chat_cleared_at IS NULL AND status = ANY($4::text[]) LIMIT 1`,

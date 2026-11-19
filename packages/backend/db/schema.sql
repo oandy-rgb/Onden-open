@@ -3922,6 +3922,7 @@ INSERT INTO schema_migrations (version) VALUES ('209_place_is_one_write') ON CON
 INSERT INTO schema_migrations (version) VALUES ('210_participant_sessions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('213_renew_node_id') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('217_keep_session_actor_rows') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -5958,3 +5959,41 @@ END;
 $$ LANGUAGE plpgsql;
 -- 214: a snapshot of a restored, renewed server names its former node ids; the join remembers them (db/migrations/214_sync_join_source_former.sql)
 ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_former jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- 217: a temporary session's actors row is never deleted, and keeps its id, workspace and type, while its workspace exists (db/migrations/217_keep_session_actor_rows.sql)
+CREATE OR REPLACE FUNCTION actors_keep_session_row() RETURNS trigger
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF TG_OP = 'TRUNCATE' THEN
+    IF EXISTS (SELECT 1 FROM public.actors WHERE type = 'session') THEN
+      RAISE EXCEPTION 'a temporary session''s actors row is kept: actors cannot be truncated while one exists'
+        USING ERRCODE = 'restrict_violation', HINT = 'a session is ended (services/participantSessions.ts), never removed';
+    END IF;
+    RETURN NULL;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.type = 'session' AND EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = OLD.workspace_id) THEN
+      RAISE EXCEPTION 'a temporary session''s actors row is kept: it is ended, never deleted'
+        USING ERRCODE = 'restrict_violation', HINT = 'only deleting its whole workspace takes it';
+    END IF;
+    RETURN OLD;
+  END IF;
+  -- UPDATE
+  IF (OLD.type = 'session' OR NEW.type = 'session')
+     AND (NEW.type IS DISTINCT FROM OLD.type OR NEW.id IS DISTINCT FROM OLD.id OR NEW.workspace_id IS DISTINCT FROM OLD.workspace_id) THEN
+    RAISE EXCEPTION 'a temporary session''s actors row keeps its id, workspace and type'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS actors_keep_session_row ON actors;
+CREATE TRIGGER actors_keep_session_row BEFORE DELETE OR UPDATE OF id, workspace_id, type ON actors
+  FOR EACH ROW EXECUTE FUNCTION actors_keep_session_row();
+
+DROP TRIGGER IF EXISTS actors_keep_session_rows_truncate ON actors;
+CREATE TRIGGER actors_keep_session_rows_truncate BEFORE TRUNCATE ON actors
+  FOR EACH STATEMENT EXECUTE FUNCTION actors_keep_session_row();
+
+ALTER TABLE actors ENABLE ALWAYS TRIGGER actors_keep_session_row;
+ALTER TABLE actors ENABLE ALWAYS TRIGGER actors_keep_session_rows_truncate;

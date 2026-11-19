@@ -36,7 +36,7 @@ async function hasPublishedFlag(nodeId: string): Promise<boolean> {
  *  be a tag (tagHierarchy.ts assertTagNameShape); the note is not imported.
  *  too_large: the body is over the note cap (services/noteSize.ts).
  *  invalid_text: the text holds U+0000 or a lone surrogate, which cannot be stored. */
-export type ImportConflictReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "too_large" | "invalid_text";
+export type ImportConflictReason = "local_changes" | "history_incomplete" | "ambiguous" | "unavailable" | "invalid_tag_name" | "too_large" | "invalid_text" | "site_mark";
 /** `nodeId`: the note the file now is (created, updated or already equal).
  *  titleTruncated: the title (frontmatter or file name) was cut to the cap. */
 export type NoteImportResult = { status: "imported" | "updated" | "unchanged"; nodeId: string; titleTruncated?: boolean } | { status: "refused"; reason: ImportConflictReason };
@@ -116,9 +116,10 @@ export async function importMarkdownNote(options: {
           within: async ({ nodeId, eventId }) => { await attachTags(workspaceId, nodeId, tagIds, actor, eventId); },
           // The baseline hashes the note as created, so what the file sets (the handwriting page, 「不發布」) is written
           // first: a re-import of the unchanged file must find the state it recorded.
-          afterDerived: async ({ nodeId, eventId }) => {
+          afterDerived: async ({ nodeId, eventId, newNote }) => {
             if (drawing) await setNodeAttribute({ workspaceId, actor, nodeId, attribute: { key: "ink_data", value: drawing.inkData }, triggeredBy: eventId });
-            if (keptOff) await setNodeAttribute({ workspaceId, actor, nodeId, attribute: KEPT_OFF_SITE, triggeredBy: eventId });
+            // the note createNote just made (its proof): the file's 「不發布」 is what the new note takes, written for anyone
+            if (keptOff) await setNodeAttribute({ workspaceId, actor, nodeId, attribute: KEPT_OFF_SITE, triggeredBy: eventId, newNote });
             await stampImportedNote(workspaceId, nodeId, source, file.path, keptOff ? file.content : null);
           },
         });
@@ -145,6 +146,8 @@ export async function importMarkdownNote(options: {
           if (drawing) {
             await setNodeAttribute({ workspaceId, actor, nodeId: id, attribute: { key: "ink_data", value: drawing.inkData }, triggeredBy: eventId });
           }
+          // An existing note: its 「不發布」 is a choice of the mark (a person's), not something a new note takes (PR #1856 round 6). A token or
+          // a session is refused (publish_mark): this file is answered `site_mark` below and nothing of it is written; the other files go on.
           if (keptOff) await setNodeAttribute({ workspaceId, actor, nodeId: id, attribute: KEPT_OFF_SITE, triggeredBy: eventId });
           await stampImportedNote(workspaceId,id,source,file.path, keptOff ? file.content : null);
         },
@@ -152,6 +155,9 @@ export async function importMarkdownNote(options: {
       return { status: "updated", nodeId: id, ...truncated };
     });
   } catch (error) {
+    // The file asks to take an existing note off the website, and only a person chooses that: this file is refused and says so, nothing of it is
+    // written (the transaction rolls back), the import goes on with the next file.
+    if (error instanceof AuthorityError && error.reason === "publish_mark") return { status: "refused", reason: "site_mark" };
     if (error instanceof AuthorityError || error instanceof ScopeError || error instanceof NoteCreateError || error instanceof NodeUpdateError) return { status: "refused", reason: "unavailable" };
     if (error instanceof TagNameShapeError) return { status: "refused", reason: "invalid_tag_name" };
     throw error;

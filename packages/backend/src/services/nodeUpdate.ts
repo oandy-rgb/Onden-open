@@ -11,7 +11,7 @@ import type { DraftNode, ServerNodeRow } from "@onden/contract";
 import { NODE_MARKDOWN_MAX, sha256Hex } from "../utils.js";
 import { normalizeText, cutToUnits } from "@onden/markdown";
 import { mutate } from "../spine/mutate.js";
-import { assertAuthority } from "../spine/authority.js";
+import { assertAuthority, assertKeepsReaders, recordedDeviceId } from "../spine/authority.js";
 import { systemJobOf } from "../spine/systemJobs.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { withIdempotencyClaim } from "../spine/idempotency.js";
@@ -140,7 +140,8 @@ export async function updateNode(
       cascadeLabel: event?.cascadeLabel ?? (source === "agent" ? "mcp.updateNode.cascade" : "node.patch.cascade"),
       backupPrefix: event?.backupPrefix ?? "NODE_UPDATED",
       keepUpdatedAt,
-      bodyChange,
+      // the device an editor save names is recorded only for a person or an AI (spine/authority.ts recordedDeviceId)
+      bodyChange: bodyChange && { ...bodyChange, device: recordedDeviceId(actor, bodyChange.device) },
       adoptAnchors,
       within,
     };
@@ -289,12 +290,22 @@ const NODE_COLUMNS = ["title", "slug", "markdown", "node_type", "source_type", "
  *  stay with the caller.
  *
  *  applyNodeColumns(ws, id, { title, slug }, { before: { isTag, parentId }, touchUpdatedAt: true }) */
+/** A hidden note made an ordinary one (shown again) reaches the website at the next publish of a space that publishes, and has no inverse a
+ *  session's write records: never a temporary session's, by any path (spine/authority.ts assertKeepsReaders; PR #1856 rounds 5–6). The one
+ *  check of "hidden goes true → false" on a save: applyNodeColumns (a save, PATCH /api/nodes/:id, and the restore of a NODE_UPDATED) calls it.
+ *  promoteNode (POST /api/nodes/:id/promote), the explicit "show it", refuses a session outright; nothing else writes `hidden = false`. */
+async function assertMayShowHidden(actor: ActorCtx, workspaceId: string, id: string): Promise<void> {
+  const row = await db.selectFrom("content_nodes").select("hidden").where("workspace_id", "=", workspaceId).where("id", "=", id).executeTakeFirst();
+  if (row?.hidden) assertKeepsReaders(actor);
+}
+
 export async function applyNodeColumns(
   workspaceId: string,
   id: string,
   columns: NodeColumns,
   { before, touchUpdatedAt, actor }: { before: { isTag: boolean; parentId: string | null }; touchUpdatedAt: boolean; actor: ActorCtx },
 ): Promise<ServerNodeRow> {
+  if ("hidden" in columns && !columns.hidden) await assertMayShowHidden(actor, workspaceId, id);
   const sets: string[] = [];
   const vals: unknown[] = [workspaceId, id];
   for (const column of NODE_COLUMNS) {

@@ -231,7 +231,7 @@ export async function appendTagView(
       const viewId = randomUUID();
       const now = new Date().toISOString();
       await insertView({
-        workspaceId, holderId: tagId, viewId, layout: v.layout, createdBy: actor.id,
+        workspaceId, holderId: tagId, viewId, layout: v.layout, by: actor,
         element: {
           name: v.name, filters: v.filters, sorts: v.sorts, group_by: v.group_by ?? null,
           visible_fields: v.visible_fields, layout_config: v.layout_config,
@@ -295,7 +295,8 @@ export async function deleteTagView(actor: ActorCtx, workspaceId: string, tagId:
     await mutate({
       actor,
       workspaceId,
-      authority: { kind: "principal_admin" }, // a view is part of the global tag definition
+      // a view is part of the global tag definition; its deletion has no inverse (restoreContract.ts)
+      authority: { kind: "irreversible", of: { kind: "principal_admin" } },
       event: {
         type: "COLLECTION_VIEW_DELETED",
         targetType: "collection_view",

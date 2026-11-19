@@ -38,6 +38,7 @@ import { finishNewNote } from "./newNoteDerived.js";
 import type { AdoptAnchor } from "./blockAnchors/index.js";
 import { applyChildPrefixAttributes } from "./childAttributes.js";
 import { applyParentSiteDefault } from "./siteDefault.js";
+import { newNoteProof, type NewNoteProof } from "./newNoteProof.js";
 import { applyTagToNode, TagMembershipError } from "./tagMembershipWrites.js";
 import { setNodeAttribute, type AttributeInput } from "./attributeWrites.js";
 import { canPlaceUnder } from "./nodePlacement.js";
@@ -114,10 +115,10 @@ export type NewNote = {
   /** The caller's own rows, written in the NODE_CREATED transaction before
    *  the derived state (module attributes, an import stamp, a staging
    *  pointer). `current` is the creator re-read under the event lock. */
-  within?: (ctx: { nodeId: string; eventId: string; current: ActorCtx }) => Promise<void>;
+  within?: (ctx: { nodeId: string; eventId: string; current: ActorCtx; newNote: NewNoteProof }) => Promise<void>;
   /** Rows that must see the finished note, derived state included (an
    *  import's baseline hash), in the same transaction. */
-  afterDerived?: (ctx: { nodeId: string; eventId: string }) => Promise<void>;
+  afterDerived?: (ctx: { nodeId: string; eventId: string; newNote: NewNoteProof }) => Promise<void>;
   /** Anchors the new note's blocks take with ids already promised (an import keeping a vault's `^id`s). */
   adoptAnchors?: AdoptAnchor[];
   /** Give the note the site default of its parent (siteDefault.ts). Default true; false for a note that is
@@ -209,18 +210,19 @@ export async function createNote(input: NewNote): Promise<CreatedNote | DryRunNo
           [id, workspaceId, input.sourceType ?? "manual", input.nodeType ?? "content", title, slug, markdown,
             parentId, input.hidden ?? false, orderKey, spaceId],
         )).rows[0]!;
+        const newNote = newNoteProof(id); // inserted just above (services/newNoteProof.ts)
         await respaceIfTooLong("content_nodes", workspaceId, parentId, orderKey, { actor, nodeId: id });
         if (parentId) {
           await applyChildPrefixAttributes(workspaceId, parentId, id, actor);
-          if (input.siteDefault !== false) await applyParentSiteDefault(workspaceId, parentId, id, actor, eventId);
+          if (input.siteDefault !== false) await applyParentSiteDefault(workspaceId, parentId, id, actor, eventId, newNote);
         }
-        await input.within?.({ nodeId: id, eventId, current });
+        await input.within?.({ nodeId: id, eventId, current, newNote });
         // The derived state an edit would give the same text. Every helper
         // threads eventId, so what it records chains to this NODE_CREATED.
         await syncAttributesAndDispatch(workspaceId, id, markdown, actor, eventId);
         await syncFrontmatterAttributes(workspaceId, id, markdown, actor, eventId);
         await finishNewNote({ workspaceId, nodeId: id, title, slug, markdown }, { eventId, actor, index: input.index, adoptAnchors: input.adoptAnchors });
-        await input.afterDerived?.({ nodeId: id, eventId });
+        await input.afterDerived?.({ nodeId: id, eventId, newNote });
         // After the derived state, so a whiteboard tab written by `within` is in the row.
         return { node: await withViews(workspaceId, node), eventId };
       },

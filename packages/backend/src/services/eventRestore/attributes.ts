@@ -1,5 +1,5 @@
 import { normalize, type AttributeValueType } from "@onden/markdown";
-import { attributeEventType } from "../attributeChange.js";
+import { attributeEventType, storeAttributeState } from "../attributeChange.js";
 import { fieldForKey } from "../schemaValidation.js";
 import { isModuleOwnedAttributeKey } from "../systemAttributes.js";
 import { nodeAttributeCommitted } from "../nodeCommits.js";
@@ -175,18 +175,8 @@ export async function restoreAttribute(row: EventRow, actorContext: ActorCtx): P
   const previousSnapshot = await encodeSnapshot(key, current, scope);
   const restoredSnapshot = await encodeSnapshot(key, previous, scope);
 
-  if (previous === null) {
-    await q(`DELETE FROM node_attributes WHERE workspace_id = $1 AND node_id = $2 AND key = $3`, [row.workspace_id, row.target_id, key]);
-  } else {
-    await q(
-      `INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, is_inheritable, source, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-       ON CONFLICT (node_id, key) DO UPDATE SET value = EXCLUDED.value,
-         value_type = EXCLUDED.value_type, is_inheritable = EXCLUDED.is_inheritable,
-         source = EXCLUDED.source, updated_at = now()`,
-      [row.workspace_id, row.target_id, key, previous.value, previous.value_type, previous.is_inheritable, previous.source],
-    );
-  }
+  // the one writer of an attribute row (services/attributeChange.ts): it asks whether this actor may write the key (the publish mark is a person's)
+  await storeAttributeState(actorContext, row.workspace_id, row.target_id, key, previous);
   // Modules hear about it once the undo commits, as for any attribute change
   // (undoing `_published` takes the page off the website).
   await nodeAttributeCommitted({ workspaceId: row.workspace_id, nodeId: row.target_id, key, value: previous?.value ?? null, actor: actorContext });

@@ -17,6 +17,7 @@ import { StatusError } from "../statusError.js";
 import { sha256Hex } from "../utils.js";
 import { appendImportedVersions, ImportedHistoryError, isImportedAt, type ImportedVersion } from "../spine/importedHistory.js";
 import type { ActorCtx } from "../types.js";
+import { shownAuthorName, versionAuthor } from "./authorName.js";
 import { NO_INVERSE_PATCH } from "./eventLog/index.js";
 import { bodyEventSql, versionActorTypeSql } from "./history/index.js";
 import type { BackupHistoryInfo } from "@onden/contract";
@@ -59,7 +60,7 @@ export async function measureHistory(workspaceId: string, noteIds: readonly stri
   return { notes, versions, bytes };
 }
 
-type PageRow = { id: string; event_type: string; at: string; at_cursor: string; title: string | null; hash: string; version_id: string | null; actor_type: HistoryLine["actor"]["type"]; actor_name: string | null; markdown: string };
+type PageRow = { id: string; event_type: string; at: string; at_cursor: string; title: string | null; hash: string; version_id: string | null; actor_type: HistoryLine["actor"]["type"]; imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null; markdown: string };
 
 /** Write `noteId`'s versions to the scratch file `path`, a page at a time. Returns how many (0: no file is wanted). */
 export async function writeHistoryFile(workspaceId: string, noteId: string, path: string): Promise<{ versions: number; bytes: number }> {
@@ -70,7 +71,7 @@ export async function writeHistoryFile(workspaceId: string, noteId: string, path
       SELECT e.id::text AS id, e.event_type, e.created_at::text AS at_cursor,
              to_char(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at,
              e.payload->>'title' AS title, e.payload->>'body_hash' AS hash, e.payload->>'version_id' AS version_id,
-             ${sql.raw(versionActorTypeSql("e"))} AS actor_type, coalesce(e.tx_meta->'history_import'->>'actor_name', a.name) AS actor_name, b.content AS markdown
+             ${sql.raw(versionActorTypeSql("e"))} AS actor_type, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, b.content AS markdown
         FROM domain_events e
         JOIN blobs b ON b.hash = e.payload->>'body_hash'
    LEFT JOIN actors a ON a.id::text = e.actor_id
@@ -78,9 +79,10 @@ export async function writeHistoryFile(workspaceId: string, noteId: string, path
          AND (${cursor?.at ?? null}::timestamptz IS NULL OR (e.created_at, e.id) > (${cursor?.at ?? null}::timestamptz, ${cursor?.id ?? "0"}::bigint))
        ORDER BY e.created_at, e.id LIMIT ${sql.raw(String(HISTORY_PAGE))}`.execute(db);
     if (page.rows.length === 0) break;
-    const lines = page.rows.map((r): HistoryLine => ({
+    const lines = page.rows.map((r) => ({ r, author: versionAuthor(r) })).map(({ r, author }): HistoryLine => ({
       id: r.id, kind: KIND[r.event_type] ?? "updated", at: r.at, title: r.title, hash: r.hash, markdown: r.markdown,
-      actor: { type: r.actor_type, name: r.actor_name }, restored_from: r.event_type === "NODE_RESTORED" ? r.version_id : null,
+      // a session's save goes with no name (services/authorName.ts): a label is not a person's name, and the file outlives this node
+      actor: { type: r.actor_type, name: shownAuthorName(author.rowType, author.name) }, restored_from: r.event_type === "NODE_RESTORED" ? r.version_id : null,
     })).map((l) => JSON.stringify(l)).join("\n") + "\n";
     await appendFile(path, lines);
     versions += page.rows.length; bytes += page.rows.reduce((n, r) => n + Buffer.byteLength(r.markdown, "utf8"), 0);

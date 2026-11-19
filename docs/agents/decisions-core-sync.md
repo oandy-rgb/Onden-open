@@ -223,6 +223,8 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 
 > 收工（`journalShutdown`、`journalShutdowns`）已於 2026-11-06 退役：後端不再有這兩個 key，migration 178 刪掉既有的列；
 > 舊版頁面仍送的寫入回成功但不存（`actorPrefs.ts` 的 `RETIRED_PREF_KEYS`），讀取當作沒有。
+> 臨時工作階段讀的是開啟它的人的偏好（`readPref` 問 `personalDataOwnerId`），但內含筆記、標籤、訂閱源或文章 id 的 key 對它讀成「沒設過」
+> （`SESSION_MAY_READ_PREF`：每個 key 都要表態，新增 key 時型別會逼人決定）；寫入仍然被拒。
 
 - **四個原本存在本機、現在跟著帳號的偏好**：RSS「顯示未讀數字」（`rssShowCounts`）、每個訂閱的數字開關（`rssFeedCounts`）、
   閱讀位置（`rssReadingPosition`）、上次打開閱讀的時間（`rssLastVisit`）。

@@ -102,7 +102,7 @@ API（都在 tasks 模組的 `/api/tasks/focus` 之下，模組關閉時寫入�
 | `POST /api/tasks/focus` | 開始。`{ id?, task_id?, started_at? }`；已有在跑的回 409 `focus_running`；`started_at` 不可在未來 |
 | `POST /api/tasks/focus/:id/end` | 結束。`{ ended_at?, note?, to_diary?, to_task? }`；結束已結束的紀錄回原樣（重送） |
 | `PATCH /api/tasks/focus/:id` | 修改開始／結束／一句話／任務；結束不早於開始、不超過 24 小時、不在未來 |
-| `GET /api/tasks/focus?day=` | 那天（工作區時區）**開始**的紀錄，加上還在跑的那一筆 |
+| `GET /api/tasks/focus?day=` | 那天（工作區時區）**開始**的紀錄，加上還在跑的那一筆。臨時工作階段讀開啟它的人的紀錄，但綁在它讀不到的任務上的紀錄不給（任務 id 與那句話都不給），沒綁任務的紀錄只給時間與長度、那句話不給；它不能寫（`requirePerson`） |
 
 - `to_diary`：把 `> 09:30–10:25 專注〈任務〉：一句話` 寫成**開始那天**個人空間日記的一行引文（日記不存在而日記模組開著時才建）。
   `to_task`：把同一行加在任務本文底下。兩者各自嘗試，結果在回應的 `written: { diary, task }`；

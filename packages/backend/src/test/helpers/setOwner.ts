@@ -21,9 +21,16 @@ export async function setWorkspaceOwner(workspaceId: string, actorId: string | n
 
 /** Fixture teardown: delete every actor of these workspaces. The owner's actor
  *  row cannot be deleted while it is the owner (migration 128), so the owner is
- *  cleared first, the way an operator would. */
+ *  cleared first, the way an operator would. A workspace that holds a temporary
+ *  session's row cannot be torn down this way (migration 217 keeps that row while
+ *  its workspace exists): said plainly here instead of as the database's refusal;
+ *  such a world is left as it is (tests use workspaces of their own). */
 export async function deleteWorkspaceActors(workspaceIds: string | string[]): Promise<void> {
   const ids = Array.isArray(workspaceIds) ? workspaceIds : [workspaceIds];
+  const kept = (await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM actors WHERE workspace_id = ANY($1::uuid[]) AND type = 'session'`, [ids])).rows[0]!.n;
+  if (kept !== "0") {
+    throw new Error(`deleteWorkspaceActors: ${kept} temporary session row(s) in these workspaces; migration 217 keeps a session's actors row while its workspace exists. Leave this world as it is (it is the test's own workspace).`);
+  }
   for (const id of ids) await setWorkspaceOwner(id, null);
   await pool.query(`DELETE FROM actors WHERE workspace_id = ANY($1::uuid[])`, [ids]);
 }

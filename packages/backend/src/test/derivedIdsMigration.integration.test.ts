@@ -343,7 +343,8 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
     const deferrable = (await q<{ n: number }>(
       `SELECT count(*)::int AS n FROM pg_constraint WHERE contype = 'f' AND condeferrable AND confrelid IN ('content_nodes'::regclass, 'spaces'::regclass)`)).rows[0]!.n;
     expect(deferrable).toBe(0);
-    const off = (await q<{ n: number }>(`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal AND tgenabled <> 'O'`)).rows[0]!.n;
+    // enabled = 'O' (origin and local) or 'A' (always: migration 217's triggers run under replica too); 'D' disabled, 'R' replica only
+    const off = (await q<{ n: number }>(`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal AND tgenabled NOT IN ('O', 'A')`)).rows[0]!.n;
     expect(off).toBe(0);
     await expect(seedQ(`INSERT INTO node_tags (node_id, tag_id) VALUES ($1, $2)`, [uuid(), uuid()])).rejects.toThrow();
   });

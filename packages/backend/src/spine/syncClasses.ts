@@ -23,7 +23,9 @@ export type SyncClass = "stamped" | "derived" | "node-local" | "separate" | "und
  *   no          not carried on purpose (a stamped table that waits for a decision says so in `snapshotNote`).
  *  A table with no `snapshot` is not carried; a `stamped` table must say one of these (syncClasses.integration.test.ts). */
 export type SnapshotMode = "rows" | "genesis" | "dependency" | "identity" | "no";
-export type SyncClassEntry = { class: SyncClass; note: string; wired?: true; snapshot?: SnapshotMode; snapshotNote?: string };
+/** `neverLeaves`: which ROWS of the table (and their stamps) never leave the node, whatever the class says of the rest: a rule of the classification, not of one reader. `snapshotTables.json` says how to tell them
+ *  (`neverLeaves` there, SQL); snapshot, change bundle and digest all read it (snapshotTables.ts `stampMayLeaveSql`); guards/neverLeaves.guard.test.ts keeps the two in step. */
+export type SyncClassEntry = { class: SyncClass; note: string; wired?: true; snapshot?: SnapshotMode; snapshotNote?: string; neverLeaves?: string };
 
 /** The class of every table, by table name (the data is syncClasses.json: a plain table, one line per table). */
 export const SYNC_CLASSES: Record<string, SyncClassEntry> = classes as Record<string, SyncClassEntry>;

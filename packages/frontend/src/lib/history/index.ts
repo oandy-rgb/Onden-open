@@ -14,6 +14,8 @@ export {
   buildTimeline, initialIndex, scrubReducer, shown, authorKindOf, nearestIndex, tickIndexes, MAX_TICKS,
   type HistoryMarker, type NoteHistoryVersion, type ScrubAction, type ScrubState, type TimelinePoint, type AuthorKind,
 } from "./noteTimeline";
+// Who a history row says wrote it (one rule for every history reader).
+export { historyAuthor, type HistoryAuthor, type HistoryAuthorTone } from "./historyAuthor";
 // One paragraph's history (「這段的歷史」).
 export { blockHistory, headingAbove, paragraphIndexAt, RAW_VERSION_LIMIT, type BlockSourceVersion, type BlockTarget, type BlockVersion } from "./blockHistory";
 export { describeChange, type TextChange } from "./charDiff";

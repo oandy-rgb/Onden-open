@@ -4,6 +4,7 @@ import { StatusError } from "../../statusError.js";
 import { readJsonBody, uuidParam } from "../../routes/params.js";
 import { getWorkspaceId } from "../../db.js";
 import { mutatePersonal, requireActor } from "../../spine/mutate.js";
+import { assertMayReachOut } from "../../spine/authority.js";
 import { resolveCurrentActor } from "../../spine/currentActor.js";
 import { drainOutbox } from "../../services/outbox.js";
 import type { ActorCtx } from "../../types.js";
@@ -320,6 +321,7 @@ router.post("/items/:id/fulltext", async (c) => {
   const workspaceId = await getWorkspaceId();
   const id = uuidParam(c, "id");
   const actor = requireActor(c.get("actor"));
+  assertMayReachOut(actor); // the article's page is fetched below
   const gated = await gateItem(actor, workspaceId, id);
   if (!gated.ok) return c.json({ error: gated.error }, gated.status);
   if (gated.row.saved_node_id) return c.json({ error: "already saved as a note — load full text there" }, 409);

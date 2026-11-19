@@ -1,6 +1,6 @@
 # 整個工作區的「歷史」API
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/services/history/**, packages/backend/src/routes/history.ts
 
 何時讀：改 `routes/history.ts`、`services/history/*`，或前端「歷史」畫面（`components/history/`）時。
@@ -47,6 +47,12 @@ AI 執行只列該空間的筆記，一篇都不在該空間的執行不出現�
 - **日**：以工作區的時區與「一天從幾點開始」（設定 › 時間；沒設過時為 `ONDEN_TIMEZONE`，再沒有就 UTC；`localDay.ts`）切日，`end_at` 是下一天開始的前 1 毫秒。`date` 缺省為今天；格式錯誤回 400。
 - **修改次數**：與版本清單同口徑——同一篇、同一作者、相鄰兩次保存不超過 5 分鐘合成一次；建立與還原各自算一次。
   一次修改歸在它最後一次保存的那天。`you` 是人類（含其他成員），`agents` 是 agent。
+- **作者名稱**：版本清單、手寫變更、當天的「誰改了」、還原卡與備份的歷史都從事件的 `actor_id` 接 `actors` 那一列（`services/authorName.ts`）。
+  **只有這台自己的 `actors` 列、`type = 'session'` 才算臨時工作階段**：讀取面送種類 `session`、名稱 `null`，畫面寫「臨時工作階段」（`lib/history/historyAuthor.ts`，版本清單與段落歷史共用）。
+  這台沒有列的作者（被移除的成員或 AI；別台的工作階段的列不會來到這台）**不是**證據：名稱 `null`、種類照事件自己記的（畫面「某位成員」／「AI」），當天活動不列。
+  畫面只在作者名稱等於目前登入的人時寫「你」；沒有名稱的作者不會是「你」。
+  從備份帶進來的版本只用它帶來的名稱（`tx_meta.history_import.actor_name`）；那個名稱是 `null` 時就是沒有名字，**不再**落到做還原的人（`versionAuthor`）。
+  事件清單（`/api/events`）只回 `actor_id`、沒有名稱與種類；畫面怎麼顯示一個查不到的 id 見[工作階段讀開啟者的個人資料](proposals/sessions-reads-own-2026-11-17.md) 第 3 節。
 - **`summary`**：session 的提示文字（空白壓成一格、超過 80 字截短加「…」）；沒有 session 的舊紀錄為空字串。
 - **`added/changed/removed`**：該次執行前後內文的行數差（一行被改成另一行算 `changed`，其餘為新增或刪除）。
 - **`undone`**：這次執行裡「可以回去的筆記」（非本次建立、有執行前內文）全都已撤銷且之後沒有取消。

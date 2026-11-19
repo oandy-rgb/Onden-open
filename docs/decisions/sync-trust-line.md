@@ -1,6 +1,6 @@
 # 同步的信任界線：收到的一律檢查；不被信任的電腦只當工作階段；不防「已接納的節點說謊」
 
-> 狀態：現行（最後確認 2026-11-17）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/spine/stampedImport.ts
 
 | 項目 | 內容 |
@@ -41,6 +41,19 @@
 ## 相關檔案與狀態備註
 
 - 第一層：`packages/backend/src/spine/stampedImport.ts`（快照與修改包的入口）。PR #1801（2026-11-17）起：節點編號只收產生時的形式（`isNodeId`；快照的來源與舊編號、修改包的 `sender` 與 `upTo`／`base` 的來源），還原過的來源報的舊編號最多 32 個、每一頁都要和開頭報的相同，舊編號的標記不得超過它報的號碼（`join_stamp_beyond_former`）；每一種拒絕在 `nodeRenewal.integration.test.ts` 有測試。
-- 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）；「工作階段的任何東西不離開這一台」還在做。
+- 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）。「工作階段的任何東西不離開這一台」（PR #1856）現在檢查的：
+  工作階段的 `actors` 與 `space_members` 列、它們的標記與墓碑不進快照、修改包與摘要（`snapshotTables.ts` `stampMayLeaveSql`；兩節點測試 `sessionsStayOnTheirNode.integration.test.ts`）；
+  判斷所靠的工作階段 `actors` 列，在它的工作區還在時，**資料庫**拒絕刪除與改 id、工作區、種類（migration 217 的觸發器；`sessionActorKept.integration.test.ts`），`removeActor` 也拒絕；
+  會被帶走的「誰做的」欄位對工作階段記 null（`spine/authority.ts` `carriedActorId`；欄位清單從資料庫目錄讀、每個寫入點從程式碼找，`carriedActorColumns.integration.test.ts`）；
+  工作階段寫入時自稱的裝置（`X-Onden-Device-Id`、存檔的 `body_change.device`）不記下（`recordedDeviceId`）；
+  走訪（`sessionsStayOnTheirNodeWrites.integration.test.ts`）：工作階段拿自己的憑證、帶著另一台的裝置 id 把寫入掃描的每一條路由打一次；
+  它沒被拒絕（401／403／404）的每一類寫入（路由的前兩段）至少一條成功，否則測試紅，只有那一類全都是掃描已知「測試裡不可能成功」（`NO_POSITIVE`，各有理由）的例外；
+  然後快照（頁與摘要）與修改包裡找不到它的 actor id（標記的 `author` 除外，照標記的形狀拿掉）、`participant_sessions` 的 id、憑證、憑證雜湊與它自稱的裝置 id。
+  工作階段**不得做不可復原的事**（PR #1856 第 3 輪）：永久刪除、清空垃圾桶、刪掉沒有反向操作的東西（檢視、連結、指標）、清除 AI 對話，一律 403，其他人照舊；
+  機制是授權種類 `{ kind: "irreversible", of }`／`assertUndoableBy`，「有沒有反向操作」照 `restoreContract.ts` `restoreBlockedReason`；走訪另外從它成功的寫入導出「沒有一個是不可復原的刪除」。
+  逐類的表在[第二批提案](../architecture/proposals/sessions-reads-own-2026-11-17.md)第 2d 節。它也不能領取邀請，改成員、空間成員、擁有者、token、另一個工作階段的路由都是 403。
+  它**不讓這台伺服器對外抓任何東西**（書籤、訂閱源、文章全文：`assertMayReachOut`，在抓之前；會抓的每一條路由也先檢查自己的權限再抓，所有人都一樣；`sessionNoOutboundFetch.integration.test.ts`）。
+  這不是「每一種寫入都證明過」：走訪只走一個世界、一次，每條路由一個請求；寫入的內容不在掃描清單的不會被走到。
+  **還沒檢查的**：標記的 `author` 照原樣帶真的 id（是內容雜湊的一部分）；`distributedSync/bridge/*` 這條線；值是一個變數物件的查詢產生器寫入（例如 `.set(columns)`），寫入點掃描讀不到。
 - 接納名單的移除畫面：還沒做。
 - 相關決定：[身分只有擁有者與成員](identity-owner-member.md)、[不做點對點同步](no-p2p-intermittent-server.md)。

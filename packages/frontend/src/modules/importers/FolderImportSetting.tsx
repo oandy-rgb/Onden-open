@@ -166,6 +166,7 @@ export default function FolderImportSetting({ ctx }: { ctx: SettingContext }) {
     database_unavailable:"A tag with this name already exists or is not allowed, so the database was not created",
     too_large:"Over the {max}-character note limit; not imported",
     invalid_text:"Contains a character that can't be saved (an empty or broken character); not imported",
+    site_mark:"Asks to take an existing note off the website, which only you can do on your own device; nothing replaced",
   }[reason], { max: NODE_MARKDOWN_MAX.toLocaleString("en-US") });
   const imageSkipMessage = (reason: "too_large" | "unreadable") => tr({
     too_large:"Image too large",

@@ -99,7 +99,7 @@ describe.skipIf(!isTestDatabase())("backups and the derived ids", () => {
       [newHolder, newCapture, target, `h-${tag}`, `c-${tag}`]);
     const ids = new Map([[sourceHolder, newHolder], [sourceCapture, newCapture]]);
     for (let round = 0; round < 2; round++) {
-      await importExtras(target, owner.id, extras, ids, new Map([[spaceA, newSpace]]), false);
+      await importExtras(target, owner, extras, ids, new Map([[spaceA, newSpace]]), false);
     }
     const written = (await q<{ function_id: string; holder_node_id: string | null; holder_space_id: string | null; config: Record<string, unknown> }>(
       `SELECT function_id, holder_node_id::text, holder_space_id::text, config FROM function_refs WHERE workspace_id = $1 ORDER BY function_id`, [target])).rows;
@@ -113,7 +113,7 @@ describe.skipIf(!isTestDatabase())("backups and the derived ids", () => {
     expect(old.functionRefs).toEqual([]);
     const target = (await q<{ id: string }>(`INSERT INTO workspaces (name, slug) VALUES ('Derived old', $1) RETURNING id::text`, [`derived-old-${tag}`])).rows[0]!.id;
     const owner = await persistActor(target, { id: "", name: `Old ${tag}`, type: "human", role: "admin" });
-    await importExtras(target, owner.id, old, new Map(), new Map(), false);
+    await importExtras(target, owner, old, new Map(), new Map(), false);
     expect((await q(`SELECT 1 FROM function_refs WHERE workspace_id = $1`, [target])).rows).toHaveLength(0);
   });
 });

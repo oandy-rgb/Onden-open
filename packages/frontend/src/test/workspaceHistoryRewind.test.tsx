@@ -67,7 +67,7 @@ const FEED_DAY = {
     notes: [{ id: "n1", title: "演算法", space_id: null, added: 1, changed: 0, removed: 0 }],
   }],
   rewinds: [{
-    rewind_id: "rw-1", to: at("09:00"), at: at("12:00"), actor_name: "你", undone: false,
+    rewind_id: "rw-1", to: at("09:00"), at: at("12:00"), actor_name: "你", actor_kind: "human" as const, undone: false,
     notes: [
       { id: "n3", title: "舊筆記", space_id: null, kind: "undelete" as const },
       { id: "n4", title: "新筆記", space_id: null, kind: "delete" as const },

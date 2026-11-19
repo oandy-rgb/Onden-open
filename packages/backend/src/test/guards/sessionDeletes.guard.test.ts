@@ -143,8 +143,7 @@ const LISTED: Record<string, string> = {
   "server.ts#pruneIdempotencyKeys": "the timer that drops expired idempotency keys",
   "spine/stampedImport.ts#beginJoin": "joining this node to another: only importSnapshotStream, which asks requireSnapshotOwner (the workspace owner) first",
   "spine/stampedImport.ts#clearWhatInsertTriggersMade": "the same join",
-  "spine/stampedMerge/dbRows.ts#keepEarlierReference": "taking a change bundle from another node (applyChangeBundle): no product route calls it yet; when one does, the sender is a node, not a request",
-  "spine/stampedMerge/dbRows.ts#storeTable": "the same (applyChangeBundle)",
+  "spine/stampedMerge/dbRows.ts#storeTable": "taking a change bundle from another node (applyChangeBundle): no product route calls it yet; when one does, the sender is a node, not a request. Every removal of a merge is here (the rows that go with their note, a row that lost its natural key)",
   "spine/stampedMerge/dbUnits.ts#storeUnit": "the same, and the snapshot join (the owner's)",
 };
 

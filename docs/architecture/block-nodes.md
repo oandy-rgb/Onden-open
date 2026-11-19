@@ -7,6 +7,7 @@
 > `block_nodes.block_ref` 就是該錨點的 id；`{…}` 仍留在正文，是段落標籤唯一的依據。伺服器先搬錨點（`applyBodyChange`），再同步區塊列。
 > 文字裡的 `^abc` 現在只是普通文字；舊讀法（`parseLegacyBlocks`、`stripLegacyIds`）只給遷移、匯入與還原舊備份用。
 > 既有筆記由系統工作 `block-marker-repair`（`services/blockIdMigration.ts`）逐篇轉換，進度在 `content_nodes.anchor_form`（遷移 180）；
+> **2026-11-17（錨點提案第 2、3 步，migration 215）**：在節點之間（分散式同步的修改包與快照），錨點與段落列是**複製的**：寫入的那台鑄 id（錨點、段落列、任務行的任務），連同錨點的位置與狀態和內文同一筆寫入、同一個標記，收的一方原樣採用，不為收到的文字再鑄自己的；新的段落列 id 由（工作區、錨點 id）推導，新的錨點 id 是 12 個十六進位字元（舊的 6 個字元照舊）。單一伺服器上的行為不變。細節：[`stampedMerge/README.md`](../../packages/backend/src/spine/stampedMerge/README.md)「錨點與段落列跟著內文那筆寫入走」。
 > 反向：`packages/backend/scripts/revertBlockIds.ts`（同時把有綁定的段落連結寫回 `[[筆記#^id]]`）。細節與未完成項目：[批 3 盤點與切換設計](proposals/block-anchors-batch3-inventory-2026-11-07.md)。
 >
 > **批 3 收尾（2026-11-08）**：

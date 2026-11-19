@@ -102,16 +102,18 @@ export async function readCarriedRows(table: string, workspaceId: string, rows: 
 }
 
 /** Write a row a bundle carries that this database does not hold, with the values a snapshot carries, the deferred columns (a parent) empty (the units' write-back sets them once every row is in) and the placeholders of columns a snapshot never carries. A row that is there is left as it is. */
-export async function insertCarriedRow(table: string, workspaceId: string, values: Record<string, unknown>): Promise<void> {
+/** Returns how many rows it made: 0 when a unique key of the table already holds the row (ON CONFLICT DO NOTHING; a bundle decides what that means, dbRows.ts). */
+export async function insertCarriedRow(table: string, workspaceId: string, values: Record<string, unknown>): Promise<number> {
   const spec = snapshotSpecOf(table);
   const cols = await carriedColumns(spec);
   const deferred = new Set(spec.deferred ?? []);
   const placeholders = Object.entries(spec.placeholders ?? {});
   const ws = cols.includes("workspace_id") ? `WHERE r.workspace_id = $2` : "";
-  await snapshotRows(
+  const r = await snapshotRows(
     `INSERT INTO ${quote(table)} (${[...cols, ...placeholders.map(([c]) => c)].map(quote).join(", ")})
      SELECT ${[...cols.map((c) => (deferred.has(c) ? "NULL" : `r.${quote(c)}`)), ...placeholders.map(([, e]) => e)].join(", ")} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) r
-     ${ws} ON CONFLICT DO NOTHING`, ws ? [JSON.stringify([values]), workspaceId] : [JSON.stringify([values])]);
+     ${ws} ON CONFLICT DO NOTHING RETURNING 1`, ws ? [JSON.stringify([values]), workspaceId] : [JSON.stringify([values])]);
+  return r.rows.length;
 }
 
 /**
@@ -154,11 +156,16 @@ function snapshotSpecOf(table: string): SnapshotSpec {
 type WireHead = {
   origin: string; seq: number; contentHash: string; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean;
   saw: Record<string, number>; meta: unknown | null; value: string | null;
+  /** This copy of the write does not say its value (stampedMerge/unit.ts `valueless`; then `value` is null). Absent: false. */
+  valueless?: boolean;
 };
 /** A stamp as it travels: who wrote, when, what the writer had seen of the unit (`saw`) and knew beyond it (`meta`), and the unit's other heads (`heads`, usually none). */
 export type WireStamp = {
   label: string; rowKey: string; field: string; origin: string; seq: number; wall: number; counter: number; author: string | null; device: string | null; deleted: boolean;
   saw: Record<string, number>; meta: unknown | null; heads: WireHead[];
+  /** What the stamp says it wrote, over the row's text (stampedMerge/dbUnits.ts KeptValue): `{ text }` a value no column holds (a row that goes with its note and is
+   *  not here; a column a foreign key emptied), `{ none: true }` this copy has no value; null or absent: the row's text (a row item's `texts`), or none for a row not held. */
+  kept?: { text: string | null } | { none: true } | null;
 };
 
 export type SnapshotItem =
@@ -212,9 +219,9 @@ export type ChangeBundlePage = ChangeBundleHeader & { page: number; items: Bundl
 export type ChangeBundle = ChangeBundleHeader & { items: BundleItem[] };
 
 const STAMP_COLUMNS = `s.table_name AS label, s.row_key AS "rowKey", s.field, s.origin, s.seq::float8 AS seq, s.hlc_wall::float8 AS wall,
-  s.hlc_counter AS counter, s.author, s.device::text AS device, s.deleted, s.saw, s.meta,
+  s.hlc_counter AS counter, s.author, s.device::text AS device, s.deleted, s.saw, s.meta, s.kept_value AS kept,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('origin', h.origin, 'seq', h.seq, 'contentHash', h.content_hash, 'wall', h.hlc_wall, 'counter', h.hlc_counter, 'author', h.author,
-                                               'device', h.device::text, 'deleted', h.deleted, 'saw', h.saw, 'meta', h.meta, 'value', h.value) ORDER BY h.origin COLLATE "C", h.seq, h.content_hash)
+                                               'device', h.device::text, 'deleted', h.deleted, 'saw', h.saw, 'meta', h.meta, 'value', h.value, 'valueless', h.valueless) ORDER BY h.origin COLLATE "C", h.seq, h.content_hash)
               FROM sync_stamp_heads h WHERE h.workspace_id = s.workspace_id AND h.table_name = s.table_name AND h.row_key = s.row_key AND h.field = s.field), '[]'::jsonb) AS heads`;
 
 /** The stamps of the given rows: `pairs` are (label, row key). */

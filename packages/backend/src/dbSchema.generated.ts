@@ -673,6 +673,12 @@ export interface NodeTagStates {
   tag_id: string;
 }
 
+export interface NoteAnchorPlaces {
+  note_id: string;
+  places: Json;
+  workspace_id: string;
+}
+
 export interface NoteBlockRefs {
   block_ref: string;
   note_id: string;
@@ -947,6 +953,7 @@ export interface SyncStampHeads {
   seq: Int8;
   table_name: string;
   value: string | null;
+  valueless: Generated<boolean>;
   workspace_id: string;
 }
 
@@ -957,6 +964,7 @@ export interface SyncStamps {
   field: string;
   hlc_counter: number;
   hlc_wall: Int8;
+  kept_value: Json | null;
   meta: Json | null;
   origin: string;
   row_key: string;
@@ -1041,6 +1049,7 @@ export interface DB {
   node_positions: NodePositions;
   node_tag_states: NodeTagStates;
   node_tags: NodeTags;
+  note_anchor_places: NoteAnchorPlaces;
   note_block_refs: NoteBlockRefs;
   note_link_index: NoteLinkIndex;
   note_pointers: NotePointers;

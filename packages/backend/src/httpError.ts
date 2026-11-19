@@ -122,6 +122,10 @@ export function apiOnError(err: Error, c: Context): Response {
   if (err instanceof SyntaxError) {
     return c.json({ error: "bad_request", detail: "malformed JSON body" }, 400);
   }
+  // A write that leaves a note's anchor rows and its anchors unit apart, or writes an anchor with another body's hash (migration 215, SQLSTATE OD215): a fault of the
+  // writer, so it stays a failure; one line names the note (the error's DETAIL) and the route, so it can be found (review of PR #1853, round 5, point 2).
+  const pg = err as { code?: unknown; hint?: unknown; detail?: unknown };
+  if (pg.code === "OD215") log.error("anchors", String(pg.hint ?? "anchors"), { note: String(pg.detail ?? ""), route: `${c.req.method} ${c.req.routePath}` });
   log.error("unhandled", "unhandled route error", { err });
   return c.json({ error: "internal" }, 500);
 }

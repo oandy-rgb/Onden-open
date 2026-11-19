@@ -17,10 +17,14 @@ export const BLOCK_ID_PATTERN = `[${BLOCK_ID_CHARS}]{1,${BLOCK_ID_MAX}}`;
 /** A whole string that is an id. */
 export const BLOCK_ID = new RegExp(`^${BLOCK_ID_PATTERN}$`);
 
-/** A fresh id for a block that has none: 6 hex characters, random (the app and
- *  the server both write ids this way, so neither invents its own length). */
+/** A fresh id for a block that has none: 12 hex characters (48 random bits), random (the app and
+ *  the server both write ids this way, so neither invents its own length). Ids made before 2026-11-17
+ *  have 6 (24 bits) and keep them: an id is never rewritten. 48 bits because two nodes now mint ids
+ *  offline and an anchor id is a row key across nodes (anchors proposal 2026-11-16 step 3): with 24
+ *  bits two nodes that each mint a thousand would share one about 6% of the time, with 48 about 1 in
+ *  280 million. Two that still share one: spine/stampedMerge/README.md. */
 export function newBlockId(): string {
-  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(3)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(6)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 const ID_CHAR = new RegExp(`[${BLOCK_ID_CHARS}]`);

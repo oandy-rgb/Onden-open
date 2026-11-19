@@ -3,7 +3,7 @@
 // One fixture is built the way an older server left it (random ids, references of every kind), the migration's own preview
 // is run on it, the migration is run, and each test reads the result. `rerunMigration` is the repo's helper for that.
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -209,8 +209,11 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
         WHERE c.contype = 'f' AND c.confrelid IN ('content_nodes'::regclass, 'spaces'::regclass)`)).rows;
     expect(fks.length).toBeGreaterThan(30);
     const header = previewQuery();
-    // Tables made by a migration after 201: the id rewrite ran before they existed, so it has nothing of theirs to move.
-    const AFTER_201 = new Set(["ink_chunks", "ink_manifests"]);
+    // Tables made by a migration after 201 (read from the migrations, not listed by hand): the id rewrite ran before they existed, so it has nothing of theirs to move.
+    const migrations = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "db", "migrations");
+    const AFTER_201 = new Set(readdirSync(migrations).filter((f) => /^\d+_.*\.sql$/.test(f) && Number.parseInt(f, 10) > 201)
+      .flatMap((f) => [...readFileSync(join(migrations, f), "utf8").matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(\w+)/g)].map((m) => m[1]!)));
+    expect([...AFTER_201]).toEqual(expect.arrayContaining(["ink_chunks", "ink_manifests"]));
     for (const { t, c } of fks) if (!AFTER_201.has(t)) expect(header, `${t}.${c}`).toContain(`'${t}.${c}'`);
   });
 

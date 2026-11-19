@@ -70,7 +70,7 @@ describe.skipIf(!isTestDb)("[[A#^id]] fallback (DB)", () => {
     const id = await note(`索引-${tag()}`, "一段 {x}\n\n```\nnot ^in-code\n```\n\n- 項目 {y}\n\n文字 ^typed\n");
     const first = await refs(id);
     expect(first).toHaveLength(2);
-    expect(first.every((r) => /^[0-9a-f]{6}$/.test(r))).toBe(true);
+    expect(first.every((r) => /^[0-9a-f]{12}$/.test(r))).toBe(true);
     expect(first).not.toContain("typed"); // `^typed` is plain text: no anchor, no index row
     await updateNode(workspaceId, id, { markdown: "- 項目 {y}\n\n新的 {z}\n" }, { actor: owner });
     const second = await refs(id);

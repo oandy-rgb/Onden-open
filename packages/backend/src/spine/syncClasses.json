@@ -56,8 +56,15 @@
  },
  "block_anchors": {
   "class": "stamped",
-  "note": "the anchor's identity; the position is derived",
-  "snapshot": "genesis"
+  "note": "the anchor's identity (minted once by the node that wrote the body) and `note` (which note holds it); its place (position, status, candidate, quote, the body hash it was measured on) is the expansion of its note's unit in note_anchor_places (migration 215)",
+  "wired": true,
+  "snapshot": "rows"
+ },
+ "note_anchor_places": {
+  "class": "stamped",
+  "note": "ONE unit per note: the places of all its anchors and the body hash they were measured on, written by the same transaction as the body (anchors proposal 2026-11-16 design A; review of PR #1853 round 2); the anchor rows follow it on a node that takes it",
+  "wired": true,
+  "snapshot": "rows"
  },
  "block_link_bindings": {
   "class": "stamped",
@@ -151,10 +158,10 @@
   "note": "trigger-kept side table"
  },
  "block_nodes": {
-  "class": "derived",
-  "note": "worked out from note text (tasks and split-out blocks are decided separately)",
-  "snapshot": "dependency",
-  "snapshotNote": "carried because carried rows name its ids (block_node_tags, function_refs.holder_block_id, review_states.block_id); not stamped, not recomputed from text on the receiver (its ids are random per database)"
+  "class": "stamped",
+  "note": "a paragraph row: its id is minted once by the node that wrote the body and travels (migration 215); units: note, anchor, ref, task (the task note a task line is), detached; label, text_cache, kind, parent and hidden are worked out from the body and its anchors by every write (carried with the row's creation, re-derived after a merge in batch 2b-2b)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "rss_staging": {
   "class": "derived",

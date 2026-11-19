@@ -72,7 +72,7 @@
   `test/guards/backgroundWriters.guard.test.ts` 的 `EXCEPTIONS` 並寫為什麼它不會寫資料庫（守門會擋，清單只減不增）。
   測試輪裡 `pool.end()` 真的等到工作時會記一行「哪個檔、哪個登記者、幾個工作」，一輪結束時由 `scripts/lib/skipGateReporter.mjs` 彙整成一份清單（只記不紅），該檔應自己 `awaitAllDispatchers()`。
   結束後的連線池不可再用：PGlite 的 `PglitePool` 與真 Postgres 一樣拒絕之後的 `query`／`connect`（不會悄悄開一個空資料庫）；要重新開始必須是新的連線池，不是一次查詢的副作用。
-- 沒人觸發、到時間自己跑的背景工作（目前是任務排程器與段落標記修復，見 `SYSTEM_JOBS`）用系統身分走 `mutate`（`spine/systemJobs.ts`）：
+- 沒人觸發、到時間自己跑的背景工作（目前是任務排程器、段落標記修復與段落位置找回，見 `SYSTEM_JOBS`）用系統身分走 `mutate`（`spine/systemJobs.ts`）；段落位置找回（`services/blockAnchors/recover.ts`）只改錨點的位置、不寫事件，不走 `mutate`，但以它的系統身分蓋標記（`stampTransaction(..., { system: true })`），所以碰到有衝突的單位會被拒、不會替人解決衝突：
   事件 `actor_type` 為 `system`，`actor_id` 由工作推導；它只有 `{ kind: "system" }`／`cascade` 權限，
   允許的事件種類、對象種類與所需模組寫在 `SYSTEM_JOBS`，每個事件（含連帶）都核對，越界丟 `AuthorityError`。
   系統身分沒有個人空間（資料庫拒絕沒指定父節點或空間的建立）、不是擁有者，也不是原生 app 的 `system` 帳號。

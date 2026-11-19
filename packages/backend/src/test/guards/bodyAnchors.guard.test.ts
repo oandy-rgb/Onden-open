@@ -23,6 +23,9 @@ function sources(dir: string): string[] {
   });
 }
 
+/** Files outside services/blockAnchors that may name the anchor table, as data only. Additions need the owner's word. */
+const ANCHOR_TABLE_AS_DATA = ["spine/stampedMerge/dbUnits.ts"];
+
 /** Whether the file has an UPDATE of content_nodes that assigns markdown (SQL literal or a dynamic `set("markdown"`). */
 function writesBody(text: string): boolean {
   for (const m of text.matchAll(/UPDATE\s+content_nodes(?:\s+AS\s+\w+)?\s+SET([\s\S]*?)(?:WHERE|RETURNING|`|")/g)) {
@@ -108,8 +111,21 @@ describe("block anchors move in one place", () => {
 
   it("only services/blockAnchors touches the block_anchors table", () => {
     const offenders = sources(SRC).map((f) => relative(SRC, f))
-      .filter((f) => !f.startsWith("services/blockAnchors/") && /\bblock_anchors\b/.test(readFileSync(join(SRC, f), "utf8")));
+      .filter((f) => !f.startsWith("services/blockAnchors/") && !ANCHOR_TABLE_AS_DATA.includes(f) && /\bblock_anchors\b/.test(readFileSync(join(SRC, f), "utf8")));
     expect(offenders).toEqual([]);
+  });
+
+  // The one file outside services/blockAnchors that names the table (owner's consent 2026-11-17, PR #1853): the merge core's table list. A change
+  // bundle's anchor rows are stored as their writer wrote them (ids minted once, the note's anchors unit under the body's stamp), by the same code that stores every
+  // other listed table; the list entry is data, and no statement of its own is written there.
+  it("the merge core names the anchor table only as an entry of its table list", () => {
+    expect(ANCHOR_TABLE_AS_DATA).toEqual(["spine/stampedMerge/dbUnits.ts"]);
+    const text = readFileSync(join(SRC, "spine/stampedMerge/dbUnits.ts"), "utf8");
+    const mentions = text.split("\n").filter((line) => /\bblock_anchors\b/.test(line));
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0]).toMatch(/^\s*\{ label: "block_anchors", table: "block_anchors", key: \[/);
+    expect(text).toMatch(/export const UNIT_SOURCES\b/);
+    expect(writesBody(text)).toBe(false);
   });
 });
 

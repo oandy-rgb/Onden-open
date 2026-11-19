@@ -82,7 +82,7 @@ describe.skipIf(!isTestDb)("block nodes follow the note's text (DB)", () => {
 
   it("a new note's {tags} blocks get anchors, rows, parents and tags (the text stays as written)", async () => {
     const [s1, a1, a2] = [await refOf(noteId, "搜尋"), await refOf(noteId, "二分搜尋"), await refOf(noteId, "邊界 lo <= hi")];
-    expect([s1, a1, a2].every((r) => /^[0-9a-f]{6}$/.test(r))).toBe(true);
+    expect([s1, a1, a2].every((r) => /^[0-9a-f]{12}$/.test(r))).toBe(true);
     expect(first).toBe("## 搜尋 {Exam}\n- 二分搜尋 {重要, Exam}\n  - plain\n    - 邊界 lo <= hi {易錯}\n\nplain text {}"); // no ^id written; empty braces: not a block
     // The row's ref is its anchor's id.
     expect((await q<{ n: string }>(`SELECT count(*) AS n FROM block_nodes b JOIN block_anchors a ON a.note_id = b.note_id AND a.anchor_id = b.block_ref
@@ -193,7 +193,7 @@ describe.skipIf(!isTestDb)("block nodes follow the note's text (DB)", () => {
     expect(await bodyOf(id)).toBe("- typed {重要}");
     const [row] = await blocksOf(id);
     expect(row).toMatchObject({ label: "typed", tags: ["重要"] });
-    expect(row!.block_ref).toMatch(/^[0-9a-f]{6}$/);
+    expect(row!.block_ref).toMatch(/^[0-9a-f]{12}$/);
     // A later edit of the same block keeps its row and ref.
     expect((await send(`/nodes/${id}`, "PATCH", { markdown: "- typed more {重要}", base_markdown: "- typed {重要}" })).status).toBe(200);
     expect((await blocksOf(id)).map((b) => b.block_ref)).toEqual([row!.block_ref]);

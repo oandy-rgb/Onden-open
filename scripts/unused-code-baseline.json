@@ -245,7 +245,7 @@
       "packages/backend/src/spine/reservedTagKeys.ts": ["ReservedTagLifecycle"],
       "packages/backend/src/spine/spaceAccess.ts": ["AgentAccessFacts", "SpaceAccess", "isSpacePermission"],
       "packages/backend/src/spine/stamps.ts": ["ForeignStamp", "StampSetting", "adoptForeignStamp", "countWritesWithoutStamp"],
-      "packages/backend/src/spine/systemJobs.ts": ["SYSTEM_JOBS", "SystemActorCtx", "SystemJobId"],
+      "packages/backend/src/spine/systemJobs.ts": ["SystemActorCtx", "SystemJobId"],
       "packages/backend/src/statusError.ts": ["RefusalStatus"],
       "packages/backend/src/types.ts": ["TokenScope"],
       "packages/backend/src/utils.ts": ["escapeLike"],

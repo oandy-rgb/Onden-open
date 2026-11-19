@@ -34,7 +34,7 @@ import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { CARRIED_LABELS, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { CARRIED_LABELS, UNIT_SOURCES, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
 import { BUNDLE_SCOPE, bundleRefused, haveOfAll, heldOfAll, normalizeHave } from "./stampedBundle.js";
 import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
@@ -212,10 +212,41 @@ function stampsOf(item: SnapshotItem): WireStamp[] {
   return item.kind === "row" ? item.stamps : item.kind === "tombstone" ? [item.stamp] : [];
 }
 
-/** What a write says it had seen: origin → whole number ≥ 0 (a genesis value is named `genesis:<hash>` with 0). */
+/** What a write says it had seen: origin → whole number ≥ 0 (a genesis value is named `genesis:<hash>` with 0). Absent: a source that does not send it (every unit is
+ *  taken to have been written over nothing). The one test of the form, for a snapshot and a change bundle alike: stored as it is, any other form breaks the next local
+ *  write of that unit (migration 205 sync_saw_merge reads it with jsonb_each and a bigint cast). */
+const isSaw = (saw: unknown): boolean => saw === undefined
+  || (saw !== null && typeof saw === "object" && !Array.isArray(saw) && Object.entries(saw).every(([o, n]) => o.length > 0 && Number.isSafeInteger(n) && (n as number) >= 0));
 function checkSaw(saw: unknown): void {
-  if (saw === undefined) return; // a source that does not send it: every unit is taken to have been written over nothing
-  if (saw === null || typeof saw !== "object" || Array.isArray(saw) || !Object.values(saw).every((n) => Number.isSafeInteger(n) && (n as number) >= 0)) throw refuse("join_stamp_saw", "what a write had seen is not an object of whole numbers");
+  if (!isSaw(saw)) throw refuse("join_stamp_saw", "what a write had seen is not an object of whole numbers");
+}
+const isObject = (o: unknown): o is Record<string, unknown> => typeof o === "object" && o !== null && !Array.isArray(o);
+const isText = (v: unknown) => v === null || typeof v === "string";
+/** What a copy of a write says of its value, the ONE test of its form for a snapshot and a change bundle alike (review of PR #1853, round 9, point 3): a head's value is a
+ *  text or null, or it says it has none (`valueless`, then no value); a stamp's `kept` is absent or null, `{ text }` with a text or null, or `{ none: true }`. */
+const isWireHead = (h: unknown): boolean => isObject(h) && (h.value === undefined || isText(h.value))
+  && (h.valueless === undefined || h.valueless === false || (h.valueless === true && (h.value ?? null) === null)) && isSaw(h.saw);
+const isKept = (k: unknown): boolean => k === undefined || k === null || (isObject(k) && Object.keys(k).length === 1 && ((Object.hasOwn(k, "text") && isText(k.text)) || k.none === true));
+const isWireStamp = (st: unknown): boolean => isObject(st) && typeof st.rowKey === "string" && st.rowKey.length > 0 && typeof st.field === "string" && st.field.length > 0
+  && isSaw(st.saw) && isKept(st.kept) && Array.isArray(st.heads) && st.heads.every(isWireHead);
+/**
+ * A value a stamp says it kept, at the door (a snapshot and a change bundle alike; review of PR #1853, rounds 9 and 10): kept only where a value may be kept (a table
+ * whose rows go with their note, a unit a foreign key empties: what migration 215's CHECK says, refused here with a code), an emptied id an id of the key it names
+ * (every such key is a uuid: stampedBundleSources.integration.test.ts), and a value like any other: the check of its table's unit (dbUnits.ts RowSource.check).
+ */
+function keptProblem(st: WireStamp): string | null {
+  const kept = st.kept;
+  if (!kept || !("text" in kept)) return null;
+  const src = UNIT_SOURCES.find((x) => x.label === st.label);
+  const cleared = src?.clearedOnDelete?.[st.field];
+  if (!src || (!src.goesWithNote && !cleared)) return "a value kept where no value is kept";
+  if (cleared && kept.text !== null) {
+    const id = (v: unknown) => v === null || v === undefined || (typeof v === "string" && isUuid(v));
+    let ok = false;
+    if ((src.fields[st.field] ?? "").includes("+")) { try { const o = JSON.parse(kept.text) as Record<string, unknown>; ok = typeof o === "object" && o !== null && cleared.every((c) => id(o[c])); } catch { ok = false; } } else ok = id(kept.text);
+    if (!ok) return "a kept id that is not an id";
+  }
+  return src.check?.row({ texts: { [st.field]: kept.text }, values: undefined, bodyLength: () => undefined }) ?? null;
 }
 
 /** Everything about the page that can be checked without writing: shape, tables, columns, workspace, stamps. Returns the readings. */
@@ -265,6 +296,9 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
       seen.set(id, content);
       readings.push({ wall: stamp.wall, counter: stamp.counter });
       checkSaw(stamp.saw);
+      if (!isWireStamp(stamp)) throw refuse("join_stamp_shape", "a stamp that does not say its row, its unit, what it kept and its heads in the format");
+      const kept = keptProblem(stamp);
+      if (kept) throw refuse("join_stamp_shape", `a value a stamp kept is not one its table holds (${kept})`);
       for (const head of stamp.heads ?? []) {
         if (head.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
         if (!vouched.has(head.origin)) throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
@@ -306,20 +340,20 @@ async function setRefs(spec: SnapshotSpec, refs: { key: Record<string, unknown>;
 async function insertStamps(workspaceId: string, stamps: WireStamp[]): Promise<void> {
   if (stamps.length === 0) return;
   await snapshotRows(
-    `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
-     SELECT $1::uuid, s."label", s."rowKey", s.field, s.origin, s.seq, s.wall, s.counter, s.author, s.device, s.deleted, COALESCE(s.saw, '{}'::jsonb), s.meta
-       FROM jsonb_to_recordset($2::jsonb) AS s("label" text, "rowKey" text, field text, origin text, seq bigint, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb)
+    `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta, kept_value)
+     SELECT $1::uuid, s."label", s."rowKey", s.field, s.origin, s.seq, s.wall, s.counter, s.author, s.device, s.deleted, COALESCE(s.saw, '{}'::jsonb), s.meta, s.kept
+       FROM jsonb_to_recordset($2::jsonb) AS s("label" text, "rowKey" text, field text, origin text, seq bigint, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb, kept jsonb)
      ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
        origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter,
-       author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta`,
+       author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta, kept_value = EXCLUDED.kept_value`,
     [workspaceId, JSON.stringify(stamps)]);
   const withHeads = stamps.filter((s) => s.heads.length > 0);
   if (withHeads.length === 0) return;
   await snapshotRows(
-    `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, author, device, deleted, saw, meta, value)
-     SELECT $1::uuid, w."label", w."rowKey", w.field, h.origin, h.seq, h."contentHash", h.wall, h.counter, h.author, h.device, h.deleted, COALESCE(h.saw, '{}'::jsonb), h.meta, h.value
+    `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, author, device, deleted, saw, meta, value, valueless)
+     SELECT $1::uuid, w."label", w."rowKey", w.field, h.origin, h.seq, h."contentHash", h.wall, h.counter, h.author, h.device, h.deleted, COALESCE(h.saw, '{}'::jsonb), h.meta, h.value, COALESCE(h.valueless, false)
        FROM jsonb_to_recordset($2::jsonb) AS w("label" text, "rowKey" text, field text, heads jsonb)
-      CROSS JOIN LATERAL jsonb_to_recordset(w.heads) AS h(origin text, seq bigint, "contentHash" text, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb, value text)
+      CROSS JOIN LATERAL jsonb_to_recordset(w.heads) AS h(origin text, seq bigint, "contentHash" text, wall bigint, counter int, author text, device uuid, deleted boolean, saw jsonb, meta jsonb, value text, valueless boolean)
      ON CONFLICT DO NOTHING`,
     [workspaceId, JSON.stringify(withHeads.map((s) => ({ label: s.label, rowKey: s.rowKey, field: s.field, heads: s.heads })))]);
 }
@@ -525,11 +559,27 @@ function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
   if (!isNodeId(bundle.sender) || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender by its node id, and its cut", 422);
   // every origin it speaks of is a node id (or genesis); a stamp of any other origin is refused below as beyond the cut (upTo has no number for it)
   if (![...Object.keys(bundle.upTo), ...Object.keys(bundle.base)].every((o) => o === GENESIS_ORIGIN || isNodeId(o))) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
+  if (!Array.isArray(bundle.items)) throw bundleRefused("bundle_malformed", "a bundle's items are a list", 422);
   for (const item of bundle.items) {
+    // the form of an item, before anything reads it (review of PR #1853, round 7, point 2: a wrong form was a TypeError, never a coded refusal): a row with its list of
+    // stamps, or a tombstone with one stamp; each stamp an object with a list of heads; each head's value a text or null
+    const it = item as unknown as Record<string, unknown>;
+    const wire = isObject(it) && it.kind === "row" ? it.stamps : isObject(it) && it.kind === "tombstone" ? [it.stamp] : undefined;
+    if (!Array.isArray(wire) || !wire.every(isWireStamp)) {
+      throw bundleRefused("bundle_malformed", "an item of the bundle is a row with its stamps or a tombstone with its stamp: each stamp names its row and unit by text, says what it had seen as an object of whole numbers, and has its list of heads, each head's value a text or null", 422);
+    }
     // only the labels this node carries (stampedMerge/dbUnits.ts CARRIED_LABELS): anything else is not a bundle of this shape
     if (!CARRIED_LABELS.includes(item.table)) throw bundleRefused("bundle_scope", "a bundle item of a table a bundle does not carry", 422);
+    // A row item is a row the sender holds: it carries the row's values and each unit's text, both objects. A row the sender does not hold travels as its stamps
+    // (`kind: "tombstone"` items, spine/stampedBundle.ts), each with the value it kept when it has one; its values are checked as any other (dbRows.ts checkReceived),
+    // and a row item without values or texts is not a bundle of this shape (review of PR #1853, round 6, point 1).
+    const objects = item.kind !== "row" || [item.values, item.texts].every((o) => typeof o === "object" && o !== null && !Array.isArray(o));
+    if (item.kind === "row" && !(objects && Object.values(item.texts).every((t) => t === null || typeof t === "string"))) {
+      throw bundleRefused("bundle_malformed", "a row of the bundle carries its values and the text of its units (a row the sender does not hold travels as its stamps)", 422);
+    }
     const stamps = item.kind === "row" ? item.stamps : [item.stamp];
     if (stamps.some((s) => !CARRIED_LABELS.includes(s.label))) throw bundleRefused("bundle_scope", "a stamp of a table a bundle does not carry", 422);
+    for (const st of stamps) { const why = keptProblem(st); if (why) throw bundleRefused("bundle_malformed", `a value a stamp kept is not one it may keep (${st.label}.${st.field}: ${why})`, 422); }
     for (const s of stamps) for (const w of [s, ...s.heads]) {
       if (![w.seq, w.wall, w.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw bundleRefused("bundle_malformed", "a stamp number that is not a whole number", 422);
       if (w.origin === GENESIS_ORIGIN) continue;
@@ -588,7 +638,7 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     if (report.rejected.length) {
       const clash = report.rejected.some((r) => r.reason === "same-stamp-different-content");
       const first = report.rejected[0]!;
-      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", "a write of the bundle is not in the format", 422);
+      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", `a write of the bundle is not in the format${first.reason === "malformed" && first.unit ? ` (${first.table ?? "?"}: ${first.unit})` : ""}`, 422);
     }
     const advanced: Record<string, number> = {};
     for (const [origin, upTo] of Object.entries(bundle.upTo)) {

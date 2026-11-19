@@ -21,7 +21,6 @@
 // The structure log never leaves a device and is not read here (stampedBundle.guard.test.ts).
 
 import { inTransaction } from "../db.js";
-import { CodedStatusError } from "../statusError.js";
 import { FOREIGN_CLOCK_BOUND_MS } from "./stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
 import { readCarriedRows, readStampsOf, snapshotRows, type BundleItem, type ChangeBundle, type ChangeBundlePage, type ScopeFactory } from "./snapshotSql.js";
@@ -34,8 +33,8 @@ const PAGE_BYTES = 4 * 1024 * 1024;
  *  keys one by one), so the number of chunks must not grow with a bundle: 200 made reading quadratic (stampedBundleScale.integration.test.ts counts the rows read). */
 const CHUNK_ROWS = 10_000;
 
-class BundleRefused extends CodedStatusError {}
-export const bundleRefused = (code: string, message: string, status: 400 | 409 | 422 = 409) => new BundleRefused(status, code, message);
+import { bundleRefused } from "./bundleRefusal.js";
+export { bundleRefused };
 
 /** What a receiver says it holds: origin → highest sequence number (a whole number ≥ 0). The genesis origin is nobody's and is dropped. */
 export type Have = Readonly<Record<string, number>>;

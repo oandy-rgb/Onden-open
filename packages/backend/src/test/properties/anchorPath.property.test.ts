@@ -13,6 +13,8 @@ import { FIND_BUDGET, moveAnchors, type AnchorState } from "../../services/block
 import { anchorOn, csOf, diffStates, recoveryPass, save, walk, type Stored } from "../helpers/anchorPath.js";
 import { lineAlign, quoteAt } from "../../services/blockAnchors/similarity.js";
 import { check } from "../helpers/propsConfig.js";
+import { factsOf } from "../helpers/anchorFacts.js";
+import { canonical } from "../../spine/stampedMerge/unit.js";
 
 const CHARS = Array.from("甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏閏餘成歲");
 // Sentence 0 is long (30–40 characters), 1–3 short (4–8): rewriting sentence 0 alone already drops a paragraph below
@@ -136,6 +138,14 @@ describe("anchor path: properties", () => {
       return BUDGETS.map((b) => recoveryPass(save(start, d0, dT, null, b), dT, b));
     }
     const settledSame = (s: Parameters<typeof endStates>[0]) => { const [one, five, all] = endStates(s); agree(one!, all!); agree(five!, all!); };
+    // Find again is an ordinary stamped write any node may run (owner's answer 6): two nodes that hold the same body and anchors and settle them, one a pass of one lookup at a
+    // time, the other FIND_BUDGET at a time, store the same rows, byte for byte (every column a row of block_anchors replicates, the quote and its context included).
+    it("anchor path: two nodes settle the same body with different budgets and store the same anchor rows, byte for byte", () => {
+      check(fc.property(jumbled, (s) => {
+        const [one, five] = endStates(s);
+        expect(canonical(factsOf(five!))).toBe(canonical(factsOf(one!)));
+      }), 100);
+    });
 
     // Every paragraph survives and no two look alike: each lookup ends `valid`, so nothing can be starved.
     it("anchor path: paragraphs only reordered (all distinct, all kept) settle to the same states with a budget of 1, FIND_BUDGET or no limit", () => {
@@ -164,7 +174,10 @@ describe("anchor path: properties", () => {
       check(fc.property(jumbled, (s) => { for (const [a, b] of maybeOnBothPaths(s)) { compared++; expect(a.span).toEqual(b.span); } }), 100);
       expect(compared, "the property saw no anchor that is maybe on both paths").toBeGreaterThan(0);
     });
-    // The guess itself still differs by path: the intermediate save refreshes the quote, the one save looks for the older one (same cause as (a): KEEP_MOVED / quote refresh). Flips in step 3.
+    // The guess itself still differs by path: the intermediate save refreshes the quote, the one save looks for the older one (same cause as (a): KEEP_MOVED / quote refresh).
+    // Steps 2-3 (migration 215) do not flip it, and by design: the quote and the position are part of the note's anchors unit (note_anchor_places) written by the writer, so every NODE holds the same guess
+    // (anchorsReplicated.integration.test.ts), but two WRITERS that save the same edit in one save and in two still write different guesses. Design A keeps the writer's path
+    // because it is the precision of today (proposal §3.5); making the guess independent of the writer's saves is design B (place is a function of the text), not chosen.
     it.fails("anchor path: an anchor that ends maybe by one save and by two saves holds the same candidate — the intermediate save refreshes the quote the guess is made from", () => {
       check(fc.property(jumbled, (s) => { for (const [a, b] of maybeOnBothPaths(s)) expect(a.candidate).toEqual(b.candidate); }), 100);
     });

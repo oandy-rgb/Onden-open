@@ -1,6 +1,6 @@
 # stampedMerge：帶標記的資料怎麼合成同一個結果
 
-> 狀態：現行（最後確認 2026-11-15）。核心與證明。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
+> 狀態：現行（最後確認 2026-11-17）。核心與證明。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
 > 涵蓋：packages/backend/src/spine/stampedMerge/**
 規則來源：[分散式準備 §4](../../../../../docs/architecture/proposals/distributed-ready-2026-11-12.md)、
 [來源標記](../../../../../docs/architecture/proposals/causal-stamps-2026-11-12.md)、
@@ -15,6 +15,7 @@
 | `unit.ts` | 一個單位（欄位、JSON 鍵、整列、墓碑）兩邊怎麼合：`mergeUnit`、`writeUnit`、閘門 `rejectReason` |
 | `store.ts` | 一組單位（`(表, 列, 欄位)`）的合併；整列 `*` 與欄位標記的關係；JSON 逐鍵 |
 | `body.ts` | 內文兩邊都改過：呼叫既有的 `mergeBody`（注入），找不到基底就兩份都留 |
+| `anchorUnit.ts` | 一則筆記的錨點單位怎麼讀、怎麼檢查：`parseAnchorUnit`（存下來的文字）、`usableFact`（呼叫者給的值），外來的值只經過這一處 |
 | `rules/names.ts` | 同層同名標籤（4.2）、同名檢視（4.8）、網址代稱（4.3） |
 | `rules/focus.ts` | 兩個進行中的專注（4.4） |
 | `rules/trash.ts` | 刪除對修改（4.9 前半）、在已刪除父層底下建立、永久刪除對晚到的修改 |
@@ -167,11 +168,11 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - 看板的區段（`node_attributes._canvas_sections`）**跟著走**，一個單位：屬性的 `value`（照一般單位合併：較晚的寫入勝，另一邊留成頭，每台相同；不逐個區段合併）。一份資料只有一種單位：migration 209 之後觸發器與起始標記都不再逐區段蓋章；
   之前留下的逐區段標記不刪、不改寫，摘要、快照與修改包都不讀它（`snapshotTables.ts` 的 `RETIRED_STAMP_LABELS`，守門 `stampedBundleSources.integration.test.ts`）。沒有任何讀者用過逐區段的標記。`content_nodes.collection_views` 是凍結欄位（沒有寫入者），不需要。
 - 集合（`workspaces.modules_off`／`modules_confirmed`）**跟著走**：一個元素一個單位（在／不在），和 JSON 鍵同一個機制；寫回時排序存放，本機寫入也由 migration 209 的觸發器排序存放，所以相同的單位就是相同的位元組。
-- `block_node_tags`：掛在段落（`block_nodes`）上，段落由內文衍生，合併進來的內文還不會重建段落（2b-2b）。
+- `block_node_tags`：2b-2a 時掛在還不跟著走的段落（`block_nodes`）上；migration 215 起段落列跟著走，它也跟著走（下面「錨點與段落列跟著內文那筆寫入走」），`NOT_CARRIED_YET` 現在是空的。
 
 列層的新規則：
 
-- **掛在被永久刪除的筆記上的列**（屬性、標籤、指標、卡片位置、功能引用）：資料庫拒絕（外鍵），不建列；它的標記照存，**而且照樣跟著包走**（沒有列的標記也送），所以每台握有相同的寫入。規則 4.9 的檢視 `hanging`（`rules/trash.ts` `rowsOnDeletedNotes`）列出它們並通知建立的人（刪的人沒看過的才算）。不寫入、不在各台各蓋一筆刪除。
+- **掛在被永久刪除的筆記上的列**（屬性、標籤、指標、卡片位置、功能引用；錨點、段落列、錨點單位另有自己的規則，見下面「跟著筆記走的列」）：資料庫拒絕（外鍵），不建列；它的標記照存，**而且照樣跟著包走**（沒有列的標記也送），所以每台握有相同的寫入。規則 4.9 的檢視 `hanging`（`rules/trash.ts` `rowsOnDeletedNotes`）列出它們並通知建立的人（刪的人沒看過的才算）。不寫入、不在各台各蓋一筆刪除。
 - **同一個衍生 id 在兩台各建**（指標、Onden 自己建的功能引用）：一列，輸的建立值留成頭。**人加的功能引用** id 不是衍生的，兩台各加同一個功能會撞唯一索引：留建立較早的那一列（`mergeDuplicateRefs`，每台相同），另一列不在表裡、標記照存，config 逐鍵併入是檢視（`duplicateRefs`），不寫入。
 - **沒有列的標記也送**（列不在表裡就送它的標記；在表裡但不在讀者範圍內的不送）。這只對握有整個工作區的讀者成立；**分空間的包（#1769）不能照這條送**：不在讀者範圍內、而且已刪的列的標記會洩漏它存在過，那一批要自己決定。
 - **JSON 的鍵**：一鍵一個單位，第一次寫入的 `saw` 是空的（不是「跟著建立」）。列不在時鍵的標記照存（刪除觸發器在刪的那台留下鍵的墓碑）。標籤 schema 的鍵也算筆記的 `updated_at`（migration 209 重新定義 `sync_touch_updated_at`）。
@@ -186,9 +187,23 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 ### 接上傳輸前必須完成
 
+- **範圍同步的包不能沿用「筆記不在就是刪了」**（`rowsThatGo`、migration 215 第 2c 節）：收件那台沒有那則筆記可能只是不在範圍內；那一批要決定跟著筆記走的列怎麼辦（上面「跟著筆記走的列」）。
 - **送的一方的統計要是新的。** 呼叫 `readChangeBundle` 的一方要保證它的資料庫有新的統計：伺服器由 autovacuum 做；瀏覽器版（PGlite，沒有 autovacuum）由它自己的維護工作定期 `ANALYZE`。這是只屬於這一台的維護，不是複製的狀態（統計不跟著包走、也不進摘要）。
   統計在節點還小時取過一次就夠（`stampedBundleScale.integration.test.ts`「a sender whose statistics were taken once…」，3.7 倍）。**完全沒有統計**時計畫看運氣：同一個設定跑 5 次，3 次組合鍵的查詢走錯索引（`node_tags` 每個鍵讀同一個標籤的所有列，4 倍的標記讀 14.4 倍的列）、2 次是 0.5 倍；時過時不過的結果不能釘成 `it.fails`，所以沒有釘。傳輸那一批要讓節點在讀包之前至少有過一次統計。
-- **同一個任務行在兩台是兩個任務**（錨點提案第 3 步：id 由寫入者鑄一次、跟著帶）。2b-2a 起任務筆記連同它的任務引用與 `_task_status` 跟著包走，所以收的一方的任務清單會列出兩個（對方的、和自己由同一行再做出的一個）；2b-2a 之前重複也在，只是收的一方看不到。`anchorIdsTwoNodes.integration.test.ts` 釘住現在的樣子，`it.fails`「the same ONE task on both nodes」等第 3 步翻過來。沒解掉之前接上傳輸，人會看到重複的任務。
+- **只有錨點、段落列、段落標籤有收件檢查**（下面「錨點與段落列」那節的 `check`）：其他表收到的值只有資料表自己的 CHECK 擋，同一個機制（`RowSource.check`）要補上。
+- **錨點單位有兩個頭時，那則筆記「不是人」的寫入被拒**：單位在寫錨點的語句結束時寫，系統或 AI 的寫入（`stampTransaction` `notAPerson`）對有其他頭的單位丟 `sync_unit_in_conflict`（409），是那個語句失敗（`anchorsReplicated`「round 3, 7」；第四輪前是 COMMIT 才失敗）。人看不到這個衝突（沒有畫面讀 `sync_stamp_heads`）；人的下一次存檔會把那些頭解決掉。給 2b-2b：衝突要有畫面。
+- **收件檢查對每一列新建的列各跑一個查詢**（`checkReceived` 比對帶來的欄位值與單位文字，`sync_logged_value`）：一包新建很多列時是線性但每列一個來回，傳輸那一批要合成一個語句。
+- **大量刪除仍比 main 慢**（後續，第五輪第 6 點與第六輪第 6 點）：跟著筆記消失的錨點、段落列、單位不寫墓碑，連同它們的標記一起清掉（下面「跟著筆記走的列」），每一列不再各呼叫一次觸發器（語句層級）。刪一個 2,000 則筆記、每則 20 個錨點與 20 個段落列的空間（`anchorBulkCost`），寫的列＝main 的＋那些列原本的標記（82,500，刪掉）＋每則筆記的單位一列（斷言），時間見 PR 說明「測試結果」（和 main 比的倍數在那裡，只有一個數）。產品的寫入有 15 s 的 `statement_timeout`（`PG_STATEMENT_TIMEOUT_MS`），`purgeSpaceDeleted` 是一個語句：大到碰得到的空間要分批刪，這是後續（沒做）。
+- **快照的來源不能有別台的標記**（`snapshotSourceNode`，409 `snapshot_foreign_origin`）：處在兩個頭狀態的節點今天不能被快照加入（`anchorsReplicated`「round 3, 11: a node in the 8b state…」釘住）。這一關打開時，加入後再收一包的情形要重新驗。
+- **一則筆記的錨點數沒有上限**：找不到的錨點永遠不刪，寫入端也沒有上限，所以收件端無從定一個（審查第 6 點；沒做）。
+- **兩台同時替同一個新段落各鑄錨點**：兩個錨點、兩列、兩個任務；下一次存檔依錨點的建立時間（鑄造那台的牆上時鐘）留一個、藏另一列、把它的任務丟進垃圾桶（`anchorsReplicated`「9」釘住）。規則（提議）：兩個有效錨點落在同一段時合成一個，任務與卡跟著留下的那個。
+- **任務筆記在收的一方已永久刪除，之後才收到指著它的段落列**：收的一方不建那一列，永久刪除的那一台照外鍵 SET NULL 留著列：兩台不同（`anchorsReplicated`「10」，`it.fails`）。
+- **外鍵清空的欄位，被指的那一列之後以同一個 id 再建**（第十輪第 4 點）：B 離線在筆記 P 下建 K；A 永久刪除 P，送到 B（K 的父層清空，標記留著 P 的 id）；A 以同一個 id 再建 P（日記的 id 由日期算出）；K 這時才到 A，A 把 K 建在 P 下。兩台標記相同，K 在 A 在 P 下、在 B 在最上層，永遠如此（`anchorsReplicated`「round 10, 4」，`it.fails`）。方向：欄位跟著這台握有的頭與列走，之後建出的列把標記留著 id 的欄位補上。`task`／`detached` 是同一類（方向相反）；`spaces.owner` 指的 `actors` 不跟著包走，「不在」可能只是「還沒到」，也是這一類。
+- **起始（genesis）標記的列，任務跟著建立走，筆記與任務都永久刪除**（第十輪第 5 點）：資料庫先清空任務再刪列的那一台，`sync_keep_emptied_id` 加一列任務的標記（起始建立的複本，留著任務 id）；先刪列的那一台沒有。起始標記不會在任何 `have` 之上，交換不送；整份重送才送，收的一方存下來，兩台不同（`anchorsReplicated`「round 10, 5」，`it.fails`）。今天正式伺服器上每一列都是起始標記；傳輸那一批要定：起始的列不加這一列，或整份重送不帶起始標記。
+- **別的表：收件那台的連鎖清掉欄位標記，刪除的那台留著**（第十輪第 7 點）：B 設了筆記 N 的屬性又改，A 永久刪除 N，B 的寫入之後才到 A。A 不握有那一列，留著那些標記（沒有值，上面「別的表不留值」）；B 收到 A 的刪除時列被連鎖刪掉，刪除觸發器清掉那一列的欄位標記（合併不寫自己的墓碑，`sync_stamp_put_over`），建立的標記留著。所以 A 有 B 的值的標記、B 沒有；交換不再送（在 B 的 `have` 之下），整份重送才送，B 存下（沒有值）。沒有拒收、沒有留下字，兩台的標記不同（`anchorsReplicated`「round 10, 7」，`it.fails`）。第五到十輪的測試裡，整份重送會再存的別張表單位只有這一個（對所有表的標記在 `resendAll` 前後比對）。
+- **`saw` 由清空的欄位算出**（第十輪第 6 點）：審查提出的疑慮；這一批沒找到兩台因此不同的情形，所以沒有釘 `it.fails`。傳輸那一批再看一次。
+- **215 之前各台各自衍生的錨點與段落列**：起始標記假設每台握有相同的列；今天只有快照加入（兩台的列來自同一份），沒有影響。已經各自衍生過的兩台要對齊，傳輸那一批要先定做法。
+- **包的大小**：一次內文寫入帶一則筆記的一個錨點單位：50 個錨點 16.0 KB（gzip 2.7 KB）、200 個 61.9 KB（gzip 9.1 KB），未壓縮時一個錨點約 0.3 KB；快照與包都不壓縮。壓縮或不重複帶文字，傳輸那一批決定。
 - **觸發器不知道誰在寫**：一個普通寫入碰到有衝突的單位會把它解決（上面「系統與背景工作的寫入」）；要在寫入路徑上擋。
 - **`scripts/upgrade.sh rollback` 改成先切版本再還原**，`scripts/restore.sh` 才能在備份缺 `sync_renew_node_id()`（migration 213 之前的版本做的備份）時先補上函式再換號。
   在那之前，213 之前的備份還原到全新的資料庫後**節點編號不變**（`restore.sh` 印 WARNING、結束碼 0；釘住在 `restoreRenewsNodeId.guard.test.ts`「a backup older than migration 213」）。今天沒有任何交換，所以沒有人握有會撞號的號碼；有了傳輸就有。
@@ -211,9 +226,67 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 ### 沒做到的（在測試裡釘住，見 `stampedBundle.integration.test.ts`）
 
-- 衍生資料：由內文衍生的（連結、搜尋文字、錨點、任務行、複習卡、標籤記號、段落）與領域事件，合併進來時都不會更新（2b-2b，一個機制）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
+- 衍生資料：由內文衍生的（連結、搜尋文字、段落列的顯示欄位）與領域事件，合併進來時都不會更新（2b-2b，一個機制）。錨點、段落列的 id 與任務行的連結、段落標籤自 migration 215 起是複製的，跟著寫入走（見下面那一節）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
 - slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；兩個活著的筆記在同一空間要同一個 slug 時，id 較大的加上 `-<id 前八碼>`。這只保證資料庫的唯一索引不破，不保證所有歷史下各節點相同（需要決定）。
 - 同一個 id 在兩個節點各自建立（算出來的 id）：輸的創建值以頭的形式留下，列的建立欄位（slug、建立時間）跟著勝出的建立。
+
+## 錨點與段落列跟著內文那筆寫入走（錨點提案第 2、3 步，migration 215）
+
+業主 2026-11-17 選設計甲：錨點的位置與狀態是**複製的**（[錨點提案 §3.1](../../../../../docs/architecture/proposals/anchors-deterministic-2026-11-16.md)）。一次內文寫入鑄的 id 由動手的那台鑄一次、跟著寫入走，收的一方原樣採用、不為收到的文字再鑄自己的。
+
+| 一次內文寫入鑄的 id | 今天在哪裡鑄 | 放在哪裡跟著走 | 為什麼放那裡 |
+| --- | --- | --- | --- |
+| 錨點 id | `services/blockAnchors/store.ts` `insertAnchor`（`newBlockId`，2026-11-17 起 48 bit；由 `syncBlockNodes`、`anchorExcerpts`、`ensureBlockAnchor`、`adoptAnchorsInto` 呼叫） | 錨點表的列（`*`，鍵＝`anchor_id`） | 業主已定正文不放記號；錨點本來就是列 |
+| 段落列 id | `services/blockNodes.ts` `syncBlockNodes`：新的列由（工作區、錨點 id）推導（`derivedIdName.blockNode`），已有的列不改 | `block_nodes` 的列（`*`，鍵＝`id`） | 兩台替同一個錨點建的是同一列；段落標籤、複習卡、複習進度用這個 id 指它 |
+| 任務筆記 id 與「這一行是哪個任務」 | `modules/tasks/blockTasks.ts` `syncBlockTasks`（`randomUUID`） | 任務筆記本身＋段落列的 `task` 單位（`task_id`） | 任務筆記是普通筆記；行與任務的連結是段落列的欄位 |
+| 複習卡 | `reviewSeam.markCards` → `function_refs` | `function_refs`（2b-2a 起） | 已經是複製的；它指的段落列現在也跟著走 |
+| 段落標籤 | `setTags` → `block_node_tags` | `block_node_tags`（`NOT_CARRIED_YET` 現在是空的） | 掛在段落列上 |
+| 由 `{名稱}` 新建的標籤 | `tagHierarchy.tagIdForWrittenName` | 標籤筆記本身 | 已經是複製的；旁邊的 `_block_autotag` 屬性 `source = 'derived'`，不跟著走（表 2.3 的權限衍生寫入，不在本批） |
+
+- **一則筆記所有錨點的位置是一個單位**（`note_anchor_places`，鍵＝筆記 id，審查第二輪第 2 點）：`places` ＝ 量的那份內文的雜湊 `h`，加每個錨點的位置、狀態、備選、quote 與前後文、待補找；
+  錨點自己的 `at_body_hash` 不是 `h` 時（215 之前留下、之後沒被讀過的列）帶第十個元素。有錨點的筆記，每一次內文寫入都寫它（至少 `h` 換新），所以這個單位的標記就是那筆內文寫入的標記，兩個單位同贏同輸（PR #1759 note-cf 第 2 題）；一次存檔寫一列、一個標記，與錨點數無關。沒有錨點的筆記沒有單位，它的內文寫入也不寫。
+  寫的一台：寫錨點的每個語句結束時（語句層級的觸發器，帶轉換表），替那個語句碰到的每一則筆記寫一次單位（`note_anchor_places_follow`；第四輪第 2 點：延後的列觸發器在幾則筆記的列交錯時每一列都重寫一次）。一次存檔的錨點只有一個語句（`store.ts` `moveAnchorsForBodyChange`），所以只寫一次。
+  大小：單位的文字（UTF-8 位元組，兩邊都量同一個東西）不超過 16,000,000（`anchor_unit_bytes_max()` ＝ `anchorUnit.ts` `ANCHOR_UNIT_BYTES_MAX`，測試比對兩者）。寫入端不會寫出更大的：每個錨點的前後文最多 400 個 UTF-16 單位（`similarity.ts` `quoteAt` 用 `cutToUnits` 取開頭，比對時也照這樣截），還是超過時依序放棄最舊的 `lost`、`maybe`、`valid` 錨點的字（列也一起改，單位仍等於列）；放棄了字的 `lost` 錨點再也找不回來（段落列一直藏著、任務留在垃圾桶、連結說那段不見了）。
+  舊的列：215 之前的程式可能留下量在現在內文上、卻不是寫入端現在會寫的樣子的列（`valid` 帶備選或待補找；非 `valid` 卻有位置；正式站有個位數）。寫單位的那一刻把它們正規化（`note_anchor_places_write`），所以不論是存內文、還是只寫某一個錨點的位置，寫出的單位收的一方都收得下（`anchorUnitIsRows`「an old row …」六則）。
+  文字是資料庫自己的 jsonb 寫法（鍵依長度再依位元組、`, ` 與 `: `）；收到的單位文字不是這樣寫的就拒收（`anchorUnit.ts` `parseAnchorUnit`，審查第三輪第 3 點）。
+  錨點列（`block_anchors`）留著，由 `services/blockAnchors` 讀寫，只有 `*` 與 `note`（在哪一則筆記）兩個單位；位置欄位是單位的展開。`moved_how`／`moved_at` 是這台自己的紀錄（沒有讀者），不跟著走。
+- **單位與列，兩個方向各一條路**：寫的一台，單位跟著列（語句層級的觸發器 `note_anchor_places_follow`，每個語句每則筆記一次，`note_anchor_places_of`）；收的一台，列跟著單位。
+  **一包裡內文、錨點單位或錨點列（`note`）有變的每一則筆記都展開**（`RowSource.bearsOn`：筆記的內文、錨點所在的筆記指向那則筆記的單位；第三輪第 1 點），整包一個語句（`dbUnits.ts` `expandAnchorUnits`，`note_anchor_places_expand_all`）。
+  選頭（`anchorUnit.ts` `chooseAnchorHead`，只看複製的狀態）：`h` 等於存下來的內文雜湊、而且位置都在那份內文之內的頭（多個時取標記大的）。
+  單位有、這台沒有列的錨點（這台已永久刪除）：略過，不建列。有列、選出的頭沒有的錨點（輸的那筆寫入新鑄的）：`lost`，位置 0..0，量在選出的頭的內文上；它的 quote 與前後文取**指名它的頭裡最新的那個**，不是這台那一列的（第三輪第 2 點）；沒有一個頭指名它就沒有字（這台那一列原本的字是歷史：上一次展開寫的、或寄件那一台當時的列，不是複製的狀態；第四輪第 6 點），它就是再也找不回來的錨點。
+  沒有一個頭量在存下來的內文上：每一列都 `lost`，雜湊是最新的可用頭的內文（不是存下來的那份，所以下一次存檔會重新找）。測試：`anchorsReplicated`「8a」「8b」「round 3, 1」（只帶內文的包，三台相同；只帶內文的包換了對得上的頭）「round 3, 2」（三台不同到達順序，字相同）。
+  展開時資料庫不收的值（或兩個方向的檢查不合）→ 整包 `bundle_malformed`。
+- **跟著筆記走的列**（第五、六輪；`dbUnits.ts` `goesWithNote`，守門 `stampedBundleSources`：欄是 NOT NULL、對 `content_nodes` 是連帶刪除的外鍵）：錨點、段落列、錨點單位的標記觸發器把列歸在它的筆記之下（`via:note_id`，和其他掛在筆記上的表同一條規則），所以連鎖途中對它的修改（任務連結設成空）不寫標記。
+  **一條規則，兩邊同一條**：筆記不在這台的列跟著那則筆記走了。寫的一台是 migration 215 第 2c 節的語句層級觸發器（`sync_rows_go_with_note`），收的一台是 `dbRows.ts` `rowsThatGo`（包裡的筆記先寫，所以到這一步還不在就是沒有：包帶著收件這台 `have` 以上的每一筆寫入，寄件那台有、這台沒有的筆記一定跟著來；寄件那台也沒有，就是刪了）。
+  - 在那則筆記裡**建的**列（它的 `note` 沒有自己的標記）：什麼都不留，標記與頭一起清掉。每一台握有它的都握在那則筆記裡，所以筆記自己的墓碑就說了它走了；錨點單位以筆記為鍵，永遠是這一種，所以永久刪除的筆記的文字不會留在任何一台的頭裡。
+  - **搬進**那則筆記的列（`note` 有自己的標記）：標記留著，**每個標記帶著它寫的值**（`sync_stamps.kept_value`，觸發器從要刪的那一列取；頭本來就帶值；第八輪），因為它是「這一列走了」的唯一紀錄：還把它握在原處的那台收到時移除它。值只有 id 與 `detached`（子筆記 id 與標籤名），沒有筆記的文字。全部清掉的話，「搬走、再刪掉目的地、然後才同步」時，另一台會永遠留著那一列（第六輪的回覆有例子）。
+  - 收的一台，贏的 `note` 指向這台沒有的筆記：移除本機的那一列，絕不寫 NULL；這台原本握有的那一列的標記與頭先清掉，再照上面兩種分（搬進來的寫回合併後的單位、每個值都留在標記上：`storeUnit` 的 `kept`；不是 `fresh`：第七輪第 1 點，`fresh` 會把這台已有的頭再插一次，那一包與之後的每一包都被拒）。
+  - **一筆寫入在每一台說的都一樣**（第八輪 P1–P3）：沒有列可以放贏家的值時，值留在它的標記上（`kept_value`），包裡以標記的 `kept` 送（寄件那台不握有那一列：墓碑項目）；所以這三張表沒有「沒有值的格子」，合併就是平常的合併，只有「贏的 `note` 指向這台沒有的筆記 → 列走了」這一條規則。一筆寫入在列走了之後才同步，它的值照樣跟著走（第七輪那條「它跟著列走了、等於沒發生」不再成立）。跟著建立的欄位（沒有自己的標記）沒有留：建立的值在列裡，不在任何標記上；握有那一列的一台帶著它來，沒握有的兩台之間沒有人顯示它。
+  - **留值只在這三張表**（第九輪第 2 點）：別的表的列，因為它的筆記或空間在這台被永久刪除而不在（4.9 那種掛著的列、合併時連鎖刪掉的列、已刪列的 JSON 鍵），只留標記、**不留值**，別台送來的值也不收（`dbRows.ts` `storeTable` 的 `withoutValues`；送來的 `kept` 對別的表不算數）。永久刪除就是刪掉：屬性值、JSON 鍵的值都不留在刪除的那一台（筆記的標題與內文也一樣，不過產品不會讓一則筆記失去它的空間：`deleteSpace` 只設 `deleted_at`）。資料庫擋：`sync_stamps` 的 CHECK（`sync_stamp_may_keep_value`：這三張表與下面那幾個欄位，守門比對宣告），測試另外搜那些字。
+  - **沒有值的副本是副本的記號**（`unit.ts` `valueless`，存著也送著：頭的 `valueless`；標記的 `kept_value` 是 `{"none": true}`，或不握有的列的標記沒有 `kept`）：上一條那種列的標記，以及蓋在握有的列上、沒有值的贏家（第九輪第 4 點：之前下一次載入就把欄位現在的值當成它的值）。它不被當值檢查、不算一個可顯示的衝突、不寫進欄位、不出事件；同一筆寫入一邊有值一邊沒有不算衝突，留有值的那份（`maximalHeads`）。第七輪那個整個一側的旗標只在一次合併的當下成立，存下來就變成 NULL（第八輪第 1、2 點），已拿掉。
+  - **外鍵會清空的欄位**（第九輪第 1 點；`dbUnits.ts` `clearedOnDelete`，守門從目錄讀出每一個 `ON DELETE SET NULL` 的單位欄位：筆記的 `parent`、空間的 `owner`、段落列的 `task` 與 `detached`、訂閱的 `auto_tag` 與 `default_parent`）：資料庫在被指的那一列刪掉時把欄位設成 NULL，這不是一次寫入、沒有自己的標記。所以**同一個標記下，一份是 id、一份是 NULL 不是衝突，留 id 的那一份**（`rows.ts` `mergeRow` 的 `cleared`，取代原本只給 `parent` 的特例）；一個說 NULL 的寫入（取消任務）有它自己的標記，照平常的規則。
+    留下的 id 存在標記上（`kept_value`，握有那一列也一樣；欄位照舊是 NULL，因為它指的那一列不在了）：寫回時欄位指向不在的列就存（`storeUnit`），資料庫清空欄位而沒有寫標記時由觸發器存（`sync_keep_emptied_id`：合併時觸發器站在一旁；段落列的標記歸在筆記之下，同一個語句先刪了筆記也沒有標記——產品的永久刪除一個語句刪掉筆記與底下的任務，列被刪時是否還指著任務取決於順序）。載入時標記的值優先於欄位；本機下一次寫那個單位時清掉（`sync_stamps_kept_value_cleared`）。從帶來的值建列時，指向不在的列的欄位是 NULL（`clearMissingRefs`，資料庫在那一列刪掉時也是這樣留下的）：之前那一列根本建不起來（4.9 的 `missing-ref`，`it.fails`「10」）。查「那一列在不在」都是被指的鍵上的一次查找，用那個鍵自己的型別（觸發器的參數帶著被指的表與欄，`dbUnits.ts` `namedRowHere` 讀外鍵的型別；第十輪第 1 點，之前是 `::text` 比對，讀整張表）；觸發器在沒有匯入、筆記也還在時一開始就返回。`anchorSaveCost`「keeping an emptied id costs a look-up」量一般存檔與一包有父層的筆記的讀取量。
+  - **4.9 的 `hanging` 回報對這三張表不會發生**：一列到了、它的筆記這台已經永久刪除，走的是這條規則（列跟著筆記走了），不是 `makeCarriedRow` 的 `missing-ref`，所以不通知建立的人——筆記自己的墓碑就是訊息。這條規則的前提是「收件那台沒有一則筆記，只可能是它刪了」：握有整個工作區的節點才成立。**範圍同步（#1769，分空間的包）會打破這個前提**（收件那台沒有那則筆記，可能只是它不在範圍內），那一批要有自己的規則（見「接上傳輸前必須完成」）。
+  - 筆記還在時刪的列照舊寫墓碑（`sync_stamp_row_deleted`，和 `sync_stamp_trigger` 刪除那一段相同）；同一個鍵再被插入時，舊的欄位標記清掉，欄位跟著新的建立走（`sync_rows_made_afresh`），而且新的建立在 `meta.seen` 說它蓋過了哪些舊的寫入（和刪除後再建立同一個機制，`store.ts` `droppedBySeen`），所以別台也丟掉同樣那些，不會留成頭（第九輪第 5 點 c）。
+  - 跟著筆記走的列、這台不建的列，不出事件（第九輪第 5 點 b）。
+  - 列的工作區必須是它筆記的（`sync_rows_in_their_notes_workspace`，每次新增與更新；`content_nodes` 沒有 `(workspace_id, id)` 的唯一鍵可以讓外鍵指，所以由寫入端擋，合併時是 `bundle_malformed`）。
+  測試：`anchorsReplicated`「round 5, 1 / round 6, 3」（三種：刪除前已送、刪除前有沒送的錨點寫入、單位有衝突；兩種到達順序；兩台的標記集合相同，那則筆記的列的鍵與它的字都不在）、「round 5, 1: … moves one of its paragraphs into a child note」、「round 6, 2 (a)／(b)／(c)」（產品的搬移：單一段落的「獨立出去」與選取的範圍兩種，後者走 `carryBlockRow`；兩種到達順序）、「round 8, 1 (a)／(b)」與「round 8, 2」（三台的星狀，兩種：兩筆並行的任務寫入；握有者的欄位不同而路上沒有有值的寫入）。每一則交換到穩定之後**再交換一輪**，再用空的 `have` **整份重送一次**（第九輪第 5 點 d：送的是每台存下來的狀態，不是空包），斷言什麼都沒變、沒有拒收，標記與頭（連同留著的值與記號）每台相同。「round 9, 1」（產品的永久刪除，任務與子筆記兩種欄位、兩種鍵的順序、第三台晚到）、「round 9, 2」（屬性值、JSON 鍵：刪除的那台搜不到那些字）、「round 9, 5 c」。
+- **單位與列不會悄悄不一致**：兩個方向各查一次（列→單位 `note_anchor_entry`、單位→列 `note_anchor_place`，各只有一處），所以兩個函式任一個錯了，另一個會抓到。寫的一台在提交時查「單位的每個條目都正好做出它的列、每一列都有條目」（`note_anchor_places_is_rows`，對該筆記的列一趟 FULL JOIN）；收的一台展開後查「列換回單位，等於它展開的頭」。不合就 `anchor_unit_not_rows`（OD215）。`anchorUnitIsRows.integration.test.ts`。
+- **段落列**：`label`／`text_cache`／`kind`／父層／隱藏是內文與錨點的純函式，**不是**單位。列由快照或修改包建立時帶著寫入者的 `label`／`text_cache`／`kind`，但**父層是空的**（`snapshotTables.json` `deferred: ["parent_block_id"]`）：收的一方到自己下一次存檔才算出父層，那次存檔替每個巢狀段落記一筆 `BLOCK_NODE_UPDATED`（`anchorsReplicated`「nested paragraphs」釘住）。收的一方重算這些欄位是 2b-2b。
+- **雜湊守門**：`block_anchors_hash_is_body`（語句層級）：寫入 `at_body_hash` 的錨點列（新增，或改了雜湊或筆記；改名 `anchor_id` 不算），雜湊必須是那則筆記此刻的內文；每個交易每個版本的內文只算一次雜湊（以列的 ctid 為鍵）。合併與快照匯入不檢查。`anchorHashGuard.integration.test.ts`。
+- **一列以外的唯一鍵是宣告出來的規則**（`RowSource.naturalKeys`，審查第 1 點）：兩台用兩個 id 建了同一個自然鍵的兩列，每台都留建立標記較早的那一列（再比鍵），另一列不建、它的標記留著，回報 `duplicateRows`；掛在輸的那列上的（段落標籤、複習卡、任務連結）跟著它走（資料庫自己的串聯），也在回報裡。
+  宣告的：`block_nodes` 的 `anchor_uq`、`note_ref_uq`、`task_uq`、`detached_uq`，`function_refs` 的 `holder_unique`、`view_instance_unique`（原本 function_refs 專用的 `keepEarlierReference` 換成這條規則）。沒宣告的唯一鍵撞到 → 整包 `bundle_unique_clash`；已在的列寫入時撞到唯一鍵也是。`bundleNaturalKeys.integration.test.ts`。
+- **收件檢查**（`RowSource.check`，審查第 6 點與第三輪第 3、4 點、第七輪第 2 點）：**一個欄位的檢查對它每一個可能的值都跑**——贏家，以及每個單位的每一個其他的頭（頭贏了就會寫進欄位），由跑檢查的那一層（`dbRows.ts` `checkReceived`）逐一放進那個單位的位置再跑一次，所以每張表的檢查只讀 `texts`，新的表不會漏掉頭。包的形狀先查（`stampedImport.ts` `checkBundleShape`）：項目只有帶標記清單的列與帶一個標記的墓碑，每個標記以文字指名它的列與單位、`saw` 是整數的物件（和快照同一個檢查 `isSaw`；第八輪第 4 點：不是物件的 `saw` 存下來，下一次本機寫那個單位時 migration 205 的 `sync_saw_merge` 會失敗）、有頭的清單，頭的值是文字或 null、標了沒有值的頭沒有值，留著的值是文字或 null；列項目的值與文字是物件。列的鍵這張表放不下（uuid 的鍵不是 uuid、兩欄的鍵不是兩段）、欄位的寫入是墓碑，也是 `bundle_malformed`（第八輪第 4 點、第九輪第 5 點 a；之前分別以資料庫的 22P02、一般的 Error 冒出來）。快照的標記與頭用同一個判斷（`stampedImport.ts` `isWireStamp`），留著的值也過那張表的檢查（`join_stamp_shape`，第九輪第 3 點）；快照與包都在門口查（`stampedImport.ts` `keptProblem`，第十輪第 2 點）：只有跟著筆記走的表與外鍵清空的六個單位能留值（其他的是編碼的拒收，不是資料庫 CHECK 的 23514），清空的 id 要是 uuid（被指的鍵都是 uuid，`stampedBundleSources` 守門）。
+  錨點單位（已在這台的單位列也一樣）要能被 `parseAnchorUnit` 讀：文字是資料庫自己的寫法、頂層只有 `h` 與 `a`、沒有 NUL 或落單的代理字元、
+  量在單位內文上的條目狀態與位置一致（`valid` 沒有備選、不待補找；其他狀態位置 0..0；帶自己雜湊的舊列不查這條）、不是空的（寫入端沒有錨點時會刪掉單位）、整個單位不超過 16,000,000 位元組（寫入端同一個上限，見上）、位置不超過最長的筆記（帶自己雜湊的條目也一樣）；quote 不長於一則筆記、位置不超過它指名的內文（這台或這包有那份內文時；沒有時，選頭時再查一次）；段落列的 id、錨點 id、`label`／`text_cache` 長度、`detached`（子筆記的 id 與標籤名：每個 1 到 `TAG_NAME_MAX` 字、最多 `NODE_MARKDOWN_MAX / 3` 個，沒有別的鍵）；新建的列，帶來的欄位值要等於包裡的單位文字。不合 → 整包 `bundle_malformed`，什麼都不寫；資料庫不收的值（CHECK、型別、NOT NULL）也是 `bundle_malformed`，不以原始錯誤冒出來。`bundleReceivedChecks.integration.test.ts`。
+- **一個頭的文字整個勝出**：它的錨點原樣採用，收的一方不重算（`resolveBodyAnchors` 的 `single`／`needs-decision`）。留下的另一個版本帶著它自己的錨點（`anchorsOfVersion`：錨點單位的頭裡，`h` 等於那個版本的那一個）。
+- **兩個頭合成一份沒有人寫過的文字**：`mergeAnchors`，一個（基底與它的錨點、每個頭與它的錨點、合成的文字）的純函式，和 `resolveBody` 放在同一個檔，只由 `resolveBodyAnchors` 呼叫。外來的值一律先經 `parseAnchorUnit`／`usableFact`（一處），不合的不算任何版本的錨點、不拋例外。
+  改過文字的頭說了算；它們說的位置相同就是那個位置（文字以合成文字在那裡的為準）；說的不同時成為「可能」，備選是最小的那個位置。證明與固定輸出：`properties/anchorMerge.property.test.ts`。**它今天沒有產品呼叫者**。
+- **「重新找」（補找）**：任何節點都可以跑，同一份內文與錨點得到同一列；它是系統工作的寫入（`anchor-recovery`，`spine/systemJobs.ts`），所以不會把別台的頭清掉（有衝突的位置等人寫，`sync_unit_in_conflict`）。`FIND_BUDGET` 不改存下來的結果。
+- **錨點 id 撞號**：新鑄的 48 bit；兩台仍鑄到同一個 id 時，兩個錨點對合併是同一列：`*`、`note` 各兩個頭，標記大的顯示，另一個留成衝突；兩則筆記的單位都指名它，沒有那一列的那則略過它（`anchorsReplicated`「two nodes mint the same anchor id」釘住）。
+- **成本**：一次存檔多寫兩列（單位與它的標記），與錨點數無關（斷言）；讀的列多 1.3 倍上下（真 Postgres；其中一部分是提交時單位與列的檢查，對該筆記的列一趟，一部分是寫單位時找舊形狀的列）。量的時候先等派送工作做完（`awaitAllDispatchers`），再送出每一條連線的統計（`stats()`）。一個交易寫 500 則筆記的錨點：讀 1.8 倍（`anchorBulkCost`）。
+  **每次存檔寫的位元組**：單位帶著每個錨點的整段字（quote 與前後文），一次內文寫入就整個重寫一次單位（加上它在 `sync_stamps` 的那一列），與改了幾個字無關：200 個錨點、單位約 62 KB 的筆記，每存一次多寫約 62 KB；字很長的筆記更多（前後文每個最多 400 個 UTF-16 單位，所以每個錨點最多約 2.4 KB 加上它的 quote）。沒改（第五輪第 5 點）；要減少得讓單位不重複帶沒變的字，和包的大小一起由傳輸那一批決定。時間印出、不斷言（PR 說明有數字）。`anchorSaveCost.integration.test.ts` 量讀寫列數（有 215 與沒有 215 的觸發器兩台比）。包的大小：`anchorBundleSize.integration.test.ts`。
+- **2b-2b 可以沿用的**：收到的內文單位贏了，就以那個版本自己的錨點（`anchorsOfVersion`）重算段落列的顯示欄位與 `note_block_refs`，不必再鑄任何 id；合成的文字要存時，錨點由 `resolveBodyAnchors` 一起給。連結綁定（`block_link_bindings`）仍是 `genesis`（5.3 第 4 題未定）。
 
 ## 看見的限制
 

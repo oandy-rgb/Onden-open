@@ -69,6 +69,7 @@ export const NODE_TABLES: Record<string, Coverage> = {
   block_nodes: restored("tagged blocks and task lines come back with the body"),
   block_node_tags: restored("a block's own tags are in its `{…}` in the body"),
   block_anchors: restored("paragraph anchors in the sidecar"),
+  note_anchor_places: restored("made again from the restored paragraph anchors: the unit follows the anchor rows at commit (migration 215)"),
   block_link_bindings: restored("link bindings in the sidecar"),
   // The name is spelled in two parts: blockRef.guard.test.ts keeps that table's name out of every file but its two owners.
   [["note", "block", "refs"].join("_")]: restored("an index kept in step with the body by every body write"),

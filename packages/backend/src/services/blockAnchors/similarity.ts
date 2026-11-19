@@ -3,7 +3,7 @@
 // Thresholds come from the mapping experiment (docs/research/block-anchor-mapping-2026-11-01.md §5):
 // a wrong link is worse than a missing one, so "valid" needs a high, unique match.
 
-import { bigrams, splitAnchorSpan } from "@onden/markdown";
+import { bigrams, cutToUnits, splitAnchorSpan } from "@onden/markdown";
 
 /** At or above this and unique: the anchor is put back automatically. */
 export const FIND_VALID = 0.9;
@@ -48,13 +48,19 @@ function lineOf(starts: number[], pos: number): number {
   return lo;
 }
 
-/** The quote of [from, to): its text and the line before and after. Pass `table` when quoting many spans of one text
- *  (a save moves every anchor of the note; rebuilding the table per anchor is what made it slow on long notes). */
+/** How much of the line before and after an anchor its quote keeps: its first CONTEXT_MAX UTF-16 units, cut between characters (@onden/markdown cutToUnits). A note's
+ *  anchors unit carries every anchor's context (migration 215), and a unit has a size a receiver takes (spine/stampedMerge/anchorUnit.ts); a whole line had no bound
+ *  (review of PR #1853, round 4, point 3). Written and compared the same way, so a context stored before the bound still matches its line. */
+const CONTEXT_MAX = 400;
+const contextOf = (line: string) => cutToUnits(line, CONTEXT_MAX);
+
+/** The quote of [from, to): its text and the line before and after (at most CONTEXT_MAX of each). Pass `table` when quoting many spans of
+ *  one text (a save moves every anchor of the note; rebuilding the table per anchor is what made it slow on long notes). */
 export function quoteAt(text: string, span: Span, table: LineTable = lineTable(text)): Quote {
   const { lines, starts } = table;
   const a = lineOf(starts, span.from);
   const b = lineOf(starts, Math.max(span.from, span.to - 1));
-  return { text: text.slice(span.from, span.to), prefix: lines[a - 1] ?? "", suffix: lines[b + 1] ?? "" };
+  return { text: text.slice(span.from, span.to), prefix: contextOf(lines[a - 1] ?? ""), suffix: contextOf(lines[b + 1] ?? "") };
 }
 
 /** Widen to whole lines (a block is always whole lines). */
@@ -91,8 +97,9 @@ export function findQuote(quote: Quote, text: string, claimed: readonly Span[] =
       if (ratio < FIND_GUESS * 0.5) continue; // cannot reach the guess threshold
       const score = dice(quote.text, w);
       if (score < 0.3) continue;
-      const ctx = (quote.prefix.trim() && lines[i - 1] === quote.prefix ? 1 : 0)
-        + (quote.suffix.trim() && lines[i + kk] === quote.suffix ? 1 : 0);
+      // compared as quoteAt keeps them: a context written before the bound (a whole long line) still matches its line
+      const ctx = (quote.prefix.trim() && lines[i - 1] !== undefined && contextOf(lines[i - 1]!) === contextOf(quote.prefix) ? 1 : 0)
+        + (quote.suffix.trim() && lines[i + kk] !== undefined && contextOf(lines[i + kk]!) === contextOf(quote.suffix) ? 1 : 0);
       // Equal scores: the window that is the quoted text itself, then one that starts on a line with words (a blank
       // line in front scores the same and is not where a block starts).
       scored.push({ i, kk, score, ctx, exact: w === quote.text ? 1 : 0, lead: lines[i]!.trim() ? 1 : 0 });

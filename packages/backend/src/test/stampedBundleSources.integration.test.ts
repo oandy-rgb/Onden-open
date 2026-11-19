@@ -10,22 +10,19 @@ import { SYNC_CLASSES } from "../spine/syncClasses.js";
 /**
  * Stamped and wired (a trigger stamps them) but not carried by a bundle yet, each with why. A guard fails for any other stamped table without a source.
  * (A note's frozen views column is not here: nothing writes it any more, test/guards/viewRefs.guard.test.ts. A board's per-section stamps are not here either: no trigger
- * makes them since migration 209, snapshotTables.ts RETIRED_STAMP_LABELS.) block_node_tags hang on paragraphs (block_nodes), which are derived from a note's body and are
- * rebuilt by batch 2b-2b.
+ * makes them since migration 209, snapshotTables.ts RETIRED_STAMP_LABELS.) Since migration 215 the paragraph rows (block_nodes) and their tags travel too.
  */
 // ratchet:list not-carried-yet
-const NOT_CARRIED_YET: Readonly<Record<string, string>> = {
-  "block_node_tags": "a paragraph tag hangs on a block_nodes row, which is derived from the note's body; a merged body does not rebuild its paragraphs yet (batch 2b-2b)",
-};
+const NOT_CARRIED_YET: Readonly<Record<string, string>> = {};
 const FROZEN_VIEWS = "content_nodes.collection_views";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 
-type Trigger = { rel: string; fn: string; args: string[] };
+type Trigger = { rel: string; name: string; fn: string; args: string[] };
 async function stampTriggers(): Promise<Trigger[]> {
-  const r = await q<{ rel: string; fn: string; args: string }>(
-    `SELECT t.tgrelid::regclass::text AS rel, p.proname AS fn, encode(t.tgargs, 'escape') AS args FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+  const r = await q<{ rel: string; name: string; fn: string; args: string }>(
+    `SELECT t.tgrelid::regclass::text AS rel, t.tgname AS name, p.proname AS fn, encode(t.tgargs, 'escape') AS args FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
       WHERE p.proname IN ('sync_stamp_trigger', 'sync_stamp_json_trigger', 'sync_stamp_attribute_trigger') AND NOT t.tgisinternal`);
-  return r.rows.map((x) => ({ rel: x.rel, fn: x.fn, args: x.args.split("\\000") }));
+  return r.rows.map((x) => ({ rel: x.rel, name: x.name, fn: x.fn, args: x.args.split("\\000") }));
 }
 
 describe.skipIf(!isTestDb)("what a change bundle carries is the stamp triggers' own list", () => {
@@ -35,6 +32,67 @@ describe.skipIf(!isTestDb)("what a change bundle carries is the stamp triggers' 
     expect(missing).toEqual([]);
     // and nothing is listed that is not a stamped table
     for (const s of UNIT_SOURCES) expect(SYNC_CLASSES[s.table]?.class, s.table).toBe("stamped");
+  });
+
+  // round 6, point 5: a source whose rows go with their note names a column the database holds to that: NOT NULL, a foreign key to content_nodes that cascades on
+  // delete (so a row is never left on a note that is gone, and the rule of migration 215 section 2c sees every row that goes), and the row's workspace is its note's.
+  it("a source whose rows go with their note: its column is NOT NULL and cascades from content_nodes, and a row's workspace is its note's", async () => {
+    const sources = UNIT_SOURCES.filter((x) => x.goesWithNote);
+    expect(sources.map((x) => x.table).sort()).toEqual(["block_anchors", "block_nodes", "note_anchor_places"]);
+    for (const src of sources) {
+      const col = (await q<{ nullable: string }>(`SELECT is_nullable AS nullable FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`, [src.table, src.goesWithNote])).rows;
+      expect(col, src.table).toEqual([{ nullable: "NO" }]);
+      const fk = (await q<{ del: string }>(
+        `SELECT c.confdeltype::text AS del FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+          WHERE c.contype = 'f' AND c.conrelid = $1::regclass AND c.confrelid = 'content_nodes'::regclass AND a.attname = $2 AND array_length(c.conkey, 1) = 1`, [src.table, src.goesWithNote])).rows;
+      expect(fk, src.table).toEqual([{ del: "c" }]);
+      // the workspace check runs on every insert and every update
+      const checks = (await q<{ t: string }>(`SELECT t.tgname AS t FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = $1::regclass AND p.proname = 'sync_rows_in_their_notes_workspace' ORDER BY 1`, [src.table])).rows.map((r) => r.t);
+      expect(checks, src.table).toEqual([`${src.table}_in_notes_workspace_insert`, `${src.table}_in_notes_workspace_update`]);
+      // round 8: the delete trigger keeps a moved row's values on its stamps by the columns its argument names: the source's own fields, so none is kept from another column
+      const goes = (await q<{ args: string }>(`SELECT encode(t.tgargs, 'escape') AS args FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = $1::regclass AND p.proname = 'sync_rows_go_with_note'`, [src.table])).rows;
+      expect(goes.length, src.table).toBe(1);
+      expect(Object.fromEntries(goes[0]!.args.split("\\000")[0]!.split(",").map((x) => x.split("=") as [string, string])), src.table).toEqual(src.fields);
+    }
+  });
+
+  // round 9, points 1 and 2: every unit column a foreign key empties (ON DELETE SET NULL) is declared `clearedOnDelete`, read from the catalog; and where a stamp
+  // may keep a value (migration 215 sync_stamp_may_keep_value, the CHECK on sync_stamps) is exactly the sources that go with their note and those declared units
+  it("every unit column an ON DELETE SET NULL foreign key empties is declared, and a stamp may keep a value exactly there and in the tables that go with their note", async () => {
+    const setNull = new Set((await q<{ t: string; c: string }>(
+      `SELECT c.conrelid::regclass::text AS t, a.attname AS c FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+        WHERE c.contype = 'f' AND c.confdeltype = 'n'`)).rows.map((r) => `${r.t}.${r.c}`));
+    for (const src of UNIT_SOURCES) {
+      const want: Record<string, string[]> = {};
+      for (const [f, cols] of Object.entries(src.fields)) { const emptied = cols.split("+").filter((col) => setNull.has(`${src.table}.${col}`)); if (emptied.length) want[f] = emptied; }
+      expect(src.clearedOnDelete ?? {}, src.label).toEqual(want);
+      for (const f of [...Object.keys(src.fields), "*"]) {
+        const may = (await q<{ ok: boolean }>(`SELECT sync_stamp_may_keep_value($1, $2) AS ok`, [src.label, f])).rows[0]!.ok;
+        expect(may, `${src.label}.${f}`).toBe(!!src.goesWithNote || !!src.clearedOnDelete?.[f]);
+      }
+    }
+    // the trigger that keeps an emptied id on its stamp (migration 215 sync_keep_emptied_id) names exactly the declared units, with the unit's columns
+    for (const src of UNIT_SOURCES.filter((x) => x.clearedOnDelete)) {
+      const keep = (await q<{ args: string }>(`SELECT encode(t.tgargs, 'escape') AS args FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid WHERE t.tgrelid = $1::regclass AND p.proname = 'sync_keep_emptied_id'`, [src.table])).rows;
+      expect(keep.length, src.table).toBe(1);
+      const args = keep[0]!.args.split("\\000");
+      expect(args[0], src.table).toBe(src.label);
+      const said = Object.fromEntries(args[4]!.split(",").map((e) => e.split(":")).map(([f, col, spec, reft, refc]) => [f!, { col: col!, spec: spec!, named: `${reft}.${refc}` }]));
+      expect(Object.keys(said).sort(), src.table).toEqual(Object.keys(src.clearedOnDelete!).sort());
+      for (const [f, cols] of Object.entries(src.clearedOnDelete!)) {
+        const named = (await q<{ n: string }>(
+          `SELECT cf.relname || '.' || af.attname AS n FROM pg_constraint k JOIN pg_class cf ON cf.oid = k.confrelid JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1]
+             JOIN pg_attribute af ON af.attrelid = k.confrelid AND af.attnum = k.confkey[1] WHERE k.contype = 'f' AND k.conrelid = $1::regclass AND a.attname = $2`, [src.table, cols[0]])).rows[0]!.n;
+        expect(said[f], `${src.table}.${f}`).toEqual({ col: cols[0], spec: src.fields[f], named });
+        // the door checks a kept emptied id as a uuid (stampedImport.ts keptProblem): every key it names is one
+        const [t, c] = named.split(".");
+        expect((await q<{ ty: string }>(`SELECT format_type(atttypid, atttypmod) AS ty FROM pg_attribute WHERE attrelid = $1::regclass AND attname = $2`, [t, c])).rows[0]!.ty, named).toBe("uuid");
+      }
+    }
+    // and the database refuses a kept text anywhere else
+    const refused = await q(`INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, kept_value)
+      VALUES (gen_random_uuid(), 'node_attributes', 'x', 'value', 'o', 1, 1, 0, '{"text": "words"}')`).then(() => null, (e: { code?: string }) => e.code);
+    expect(refused).toBe("23514");
   });
 
   it("every label a trigger stamps is carried or named in NOT_CARRIED_YET, and each source is the trigger's arguments", async () => {
@@ -64,7 +122,9 @@ describe.skipIf(!isTestDb)("what a change bundle carries is the stamp triggers' 
       expect(src.table, label).toBe(t.rel);
       expect(src.key.map((k) => k.column).join(","), label).toBe(t.args[1]);
       const ws = src.workspace;
-      expect("column" in ws ? ws.column : "viaNode" in ws ? `via:${ws.viaNode}` : `space:${ws.viaSpace}`, label).toBe(t.args[2]!.startsWith("via:") ? `via:${t.args[2]!.slice(4).split(",")[0]}` : t.args[2]);
+      // a source whose rows go with their note files their stamps under the note (dbUnits.ts goesWithNote); its reads use the workspace column
+      const declared = src.goesWithNote ? `via:${src.goesWithNote}` : "column" in ws ? ws.column : "viaNode" in ws ? `via:${ws.viaNode}` : `space:${ws.viaSpace}`;
+      expect(declared, `${label} (${t.name})`).toBe(t.args[2]!.startsWith("via:") ? `via:${t.args[2]!.slice(4).split(",")[0]}` : t.args[2]);
       const fields = t.args[3] ? Object.fromEntries(t.args[3].split(",").map((x) => x.split("=") as [string, string])) : {};
       expect(src.fields, label).toEqual(fields);
     }

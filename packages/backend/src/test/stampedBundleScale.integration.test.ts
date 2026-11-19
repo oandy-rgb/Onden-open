@@ -33,8 +33,11 @@ type Cost = { stamps: number; readMs: number; readRows: number; applyMs: number;
 
 /** A bundle of about `stamps` creation stamps, a third each of notes, attributes on them and tags applied to them (the tables of batch 2b-2a), read from A and taken by B. */
 /** `senderAnalyzed`: the sender's statistics are current when it reads (ANALYZE just before, as autovacuum keeps a server); false: taken once, right after its world was made, never again. */
-async function cost(stamps: number, senderAnalyzed = true): Promise<Cost> {
-  const notes = Math.ceil(stamps / 3);
+/** `withAnchors`: each note also has an anchor on its body, its anchors unit (note_anchor_places, made at commit) and a paragraph row (migration 215: they travel), so a sixth
+ *  each of notes, attributes, tags, anchors, anchors units and paragraph rows. */
+async function cost(stamps: number, senderAnalyzed = true, withAnchors = false): Promise<Cost> {
+  const per = withAnchors ? 6 : 3;
+  const notes = Math.ceil(stamps / per);
   const na = await openNode("a"), nb = await openNode("b");
   open.push(na, nb);
   const world = await buildSourceWorld(na);
@@ -57,6 +60,13 @@ async function cost(stamps: number, senderAnalyzed = true): Promise<Cost> {
         [world.ws, world.spaceA, done, Math.min(200, notes - done)])).rows.map((r) => r.id);
         await q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) SELECT $1, x::uuid, 'scale', 'v', 'ui' FROM unnest($2::text[]) x`, [world.ws, ids]);
         await q(`INSERT INTO node_tags (node_id, tag_id) SELECT x::uuid, $2 FROM unnest($1::text[]) x`, [ids, tag]);
+        if (withAnchors) {
+          // an anchor on the whole body, measured on it (the hash guard of migration 215 checks it), and the paragraph row it names
+          await q(`INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote)
+                   SELECT $1, 'sc' || replace(c.id::text, '-', ''), c.id, 0, length(c.markdown), encode(sha256(convert_to(c.markdown, 'UTF8')), 'hex'), c.markdown FROM content_nodes c WHERE c.id = ANY($2::uuid[])`, [world.ws, ids]);
+          await q(`INSERT INTO block_nodes (workspace_id, note_id, block_ref, anchor_id, kind, label, text_cache)
+                   SELECT $1, c.id, 'sc' || replace(c.id::text, '-', ''), 'sc' || replace(c.id::text, '-', ''), 'paragraph', c.markdown, c.markdown FROM content_nodes c WHERE c.id = ANY($2::uuid[])`, [world.ws, ids]);
+        }
       })));
     }
   });
@@ -78,8 +88,8 @@ async function cost(stamps: number, senderAnalyzed = true): Promise<Cost> {
   const applyMs = performance.now() - t;
   clearInterval(sampler);
   const applyRows = (await rowsRead(nb)) - applyStart;
-  expect(report.created).toBe(notes * 3 + 1);
-  return { stamps: notes * 3 + 1, readMs, readRows, applyMs, applyCpuMs, applyRows, peakMb: Math.round((peak - base) / 1e6) };
+  expect(report.created).toBe(notes * per + 1);
+  return { stamps: notes * per + 1, readMs, readRows, applyMs, applyCpuMs, applyRows, peakMb: Math.round((peak - base) / 1e6) };
 }
 
 // The bound: four times the stamps read at most 4 × 1.15 times the rows (linear, with room for the fixed part of a run). Time is printed, never asserted: on a shared
@@ -98,6 +108,16 @@ describe.skipIf(!isTestDb)("the cost of reading and taking a bundle grows in pro
       const big = await cost(10_000);
       console.log(`[bundle cost] ${show(big)}; per stamp ${(big.applyCpuMs / big.stamps).toFixed(2)} ms CPU`);
     }
+  }, 900_000);
+
+  // Notes with anchors and paragraph rows (migration 215): the same bound, the two new tables mixed in.
+  it("four times the stamps, with anchors and paragraph rows mixed in, read at most 4.6 times the rows to read the bundle and to take it", async () => {
+    const small = await cost(1000, true, true);
+    const large = await cost(4000, true, true);
+    const show = (c: Cost) => `${c.stamps} stamps: read ${c.readRows} rows, apply ${c.applyRows} rows / ${Math.round(c.applyCpuMs)} ms CPU`;
+    console.log(`[bundle cost, with anchors] ${show(small)}; ${show(large)}`);
+    expect(large.readRows / small.readRows, `reading: ${show(small)}; ${show(large)}`).toBeLessThanOrEqual(MAX_ROWS_RATIO);
+    expect(large.applyRows / small.applyRows, `taking: ${show(small)}; ${show(large)}`).toBeLessThanOrEqual(MAX_ROWS_RATIO);
   }, 900_000);
 
   // The sender that READS a bundle needs statistics (README, 接上傳輸前必須完成): a browser node (PGlite, no autovacuum) has them only when its own maintenance runs ANALYZE.

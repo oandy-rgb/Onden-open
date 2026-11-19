@@ -74,7 +74,7 @@ describe.skipIf(!isTestDatabase())("a member removed from a space (read sweep)",
     await seedQ(`INSERT INTO node_positions(workspace_id, node_id, surface, x, y) VALUES($1,$2,'graph',1,2)`, [ownWorkspace, h2]);
     await seedQ(`INSERT INTO ai_suggestions(workspace_id, target_type, target_id, suggestion_type, status, payload) VALUES($1,'node',$2,'summary','pending','{"summary":"zzh3-suggested"}')`, [ownWorkspace, h3]);
     await seedQ(`INSERT INTO focus_sessions(id, workspace_id, actor_id, task_id, started_at) VALUES($1,$2,$3,$4,now())`, [randomUUID(), ownWorkspace, memberId, h3]);
-    await seedQ(`INSERT INTO block_anchors(workspace_id, note_id, anchor_id, at_body_hash, from_utf16, to_utf16, quote) VALUES($1,$2,'zzanchor1','h',0,5,'zzh1 quoted')`, [ownWorkspace, h1]);
+    await seedQ(`INSERT INTO block_anchors(workspace_id, note_id, anchor_id, at_body_hash, from_utf16, to_utf16, quote) VALUES($1,$2,'zzanchor1',(SELECT encode(sha256(convert_to(COALESCE(markdown, ''), 'UTF8')), 'hex') FROM content_nodes WHERE id = $2),0,5,'zzh1 quoted')`, [ownWorkspace, h1]);
     await seedQ(`INSERT INTO block_link_bindings(workspace_id, note_id, anchor_id, link_text) VALUES($1,$2,'zzanchor1','zzh1 link')`, [ownWorkspace, h1]);
     await seedQ(`INSERT INTO ai_edit_suggestions(workspace_id, node_id, space_id, agent_actor_id, base_markdown, base_title, proposal_hash) VALUES($1,$2,$3,$4,'zzh2 base','zzh2 title','ph')`, [ownWorkspace, h2, hiddenSpace, memberId]);
     for (const [type, target, payload] of [

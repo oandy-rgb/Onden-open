@@ -28,7 +28,13 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
  * seen of the row (rules/). It travels with the write, is part of its identity, and is never compared when deciding
  * whether two writes say the same thing.
  */
-export type Cell<V extends Json = Json> = { stamp: Stamp; saw: Saw; deleted: boolean; value: V | null; meta?: Json };
+export type Cell<V extends Json = Json> = { stamp: Stamp; saw: Saw; deleted: boolean; value: V | null; meta?: Json; valueless?: true };
+/**
+ * `valueless`: this copy of the write does not say what it wrote (a node kept the stamp of a row it no longer holds, and nothing told it the value). A mark of the
+ * COPY, stored and sent as such (dbUnits.ts storeUnit, the wire's `kept` and a head's `valueless`), never a value: `value` is null, it is not checked, shown or counted
+ * as a conflict, and where two copies of one write meet, the one with the value is kept (review of PR #1853, round 8: as a flag of a whole side it held only during one
+ * merge, and once stored it became a NULL). A write is valueless only where its value was never kept: the tables whose rows go with their note keep it (README).
+ */
 /** The heads, largest stamp first. Never empty. Two nodes holding the same writes hold the same array, element for element. */
 export type Unit<V extends Json = Json> = readonly Cell<V>[];
 
@@ -44,10 +50,16 @@ export function canonical(v: unknown): string {
   const o = v as Record<string, unknown>;
   return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(",")}}`;
 }
-const content = (c: Cell): string => (c.deleted ? "\u0000tombstone" : canonical(c.value));
+const content = (c: Cell): string => (c.deleted ? "\u0000tombstone" : c.valueless ? "\u0000valueless" : canonical(c.value));
 /** Same content: both tombstones, or equal values. The stamps do not matter (rule 4.11 + add-device-snapshot §5). */
 export const sameContent = (a: Cell, b: Cell): boolean => content(a) === content(b);
 const cellText = (c: Cell): string => canonical(c);
+/** Two copies of one write say the same thing: equal, or equal but for the value where one of them has none (it does not contradict what the other says). */
+const sameWrite = (a: Cell, b: Cell): boolean => {
+  if (!a.valueless && !b.valueless) return cellText(a) === cellText(b);
+  const bare = ({ value: _v, valueless: _n, ...rest }: Cell) => canonical(rest);
+  return bare(a) === bare(b);
+};
 /** What names a write: its (origin, seq). Genesis has no author and every node makes the same stamp, so its content names it. */
 const cellKey = (c: Cell): string => (isGenesis(c) ? genesisName(c) : stampKey(c.stamp));
 
@@ -97,6 +109,7 @@ export function rejectReason(c: Cell): Rejection | null {
   const ints = [s.seq, s.wall, s.counter, ...Object.values(c.saw)];
   if (!ints.every((n) => Number.isSafeInteger(n) && n >= 0) || !s.origin) return "malformed";
   if (c.deleted && c.value !== null) return "malformed";
+  if (c.valueless && (c.deleted || c.value !== null || isGenesis(c))) return "malformed"; // a tombstone and a genesis value say what they are
   if (c.saw[s.origin] !== undefined && c.saw[s.origin]! >= s.seq && !isGenesis(c)) return "malformed"; // a write cannot have seen itself or a later write of its own node
   return null;
 }
@@ -107,7 +120,8 @@ const byWinner = (a: Cell, b: Cell): number => compareStamps(b.stamp, a.stamp) |
 /** The heads of a set of writes: duplicates removed, everything a later write had seen dropped. Throws nothing; the caller checked `rejectReason`. */
 export function maximalHeads(cells: readonly Cell[]): Cell[] {
   const byDot = new Map<string, Cell>();
-  for (const c of cells) byDot.set(cellKey(c), c);
+  // the same write twice: the later copy, unless it has no value and the earlier one has (callers put the copy they prefer last)
+  for (const c of cells) { const k = cellKey(c), was = byDot.get(k); if (!was || !c.valueless || was.valueless) byDot.set(k, c); }
   const all = [...byDot.values()];
   return all.filter((c) => !all.some((o) => o !== c && covers(o, c))).sort(byWinner);
 }
@@ -131,10 +145,10 @@ export type MergeResult = {
   deferred: Cell[];
 };
 
-/** Content of the heads that differ from the winner's: what a person sees as "the other values". */
+/** Content of the heads that differ from the winner's: what a person sees as "the other values". A copy without a value is no value to see. */
 export function conflictsOf(unit: Unit): Cell[] {
   const win = unit[0]!;
-  return unit.filter((c) => !sameContent(c, win));
+  return unit.filter((c) => c !== win && !c.valueless && (win.valueless || !sameContent(c, win)));
 }
 export const winnerOf = (unit: Unit): Cell => unit[0]!;
 
@@ -154,7 +168,7 @@ export function mergeUnit(local: Unit | undefined, incoming: Unit, gate?: SkewGa
   const keep = (reason: Rejection): MergeResult => ({ unit: local ?? incoming, outcome: "rejected", write: false, losers: [], reason, deferred: [] });
   for (const c of incoming) { const r = rejectReason(c); if (r) return keep(r); }
   const here = new Map((local ?? []).map((c) => [cellKey(c), c]));
-  for (const c of incoming) { const h = here.get(cellKey(c)); if (h && cellText(h) !== cellText(c)) return keep("same-stamp-different-content"); }
+  for (const c of incoming) { const h = here.get(cellKey(c)); if (h && !sameWrite(h, c)) return keep("same-stamp-different-content"); }
   // Only the writes that are too far ahead wait; the others of the same unit are taken now.
   const deferred = incoming.filter((c) => deferReason(c, gate) !== null);
   const now = incoming.filter((c) => !deferred.includes(c));

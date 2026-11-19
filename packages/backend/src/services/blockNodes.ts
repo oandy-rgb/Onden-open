@@ -15,7 +15,8 @@
 // stays for when the text brings it back (doc: 已決定 1), which is also what
 // makes undo exact. Rows go only with their note (FK cascade on purge).
 
-import { trailingBlockId, blocksParsable, parseBlocks, type ParsedBlock, cutToUnits } from "@onden/markdown";
+import { randomUUID } from "node:crypto";
+import { trailingBlockId, blocksParsable, parseBlocks, type ParsedBlock, cutToUnits, derivedIdName } from "@onden/markdown";
 import { event, q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { readableScopeSql } from "./readPolicy.js";
@@ -34,6 +35,7 @@ import { taskSeam, type TaskLine } from "./taskSeam.js";
 import { reviewSeam } from "./reviewSeam.js";
 import { insertAnchor, listNoteAnchors, takeBackStrandedAnchors } from "./blockAnchors/index.js";
 import { liveNodeSql } from "../spine/nodeSql.js";
+import { derivedId } from "./derivedIds.js";
 
 /** What the text cache keeps of a block (a display index, not the source). */
 const TEXT_CACHE_MAX = 4000;
@@ -130,10 +132,11 @@ export async function syncBlockNodes(change: {
     const taskLine = b.checkbox && linesAreTasks && b.tags.some(isTaskWord)
       ? (blockId: string) => taskLines.push({ blockId, ref: b.ref!, title: taskLineTitle(markdown, b), checked: b.checkbox!.checked }) : null;
     if (!existing) {
+      // The row's id is derived from its anchor's (services/derivedIds.ts): two nodes that each make the row for the same anchor make the same row, so a merge sees one.
       const id = (await q<{ id: string }>(
-        `INSERT INTO block_nodes (workspace_id, note_id, block_ref, anchor_id, parent_block_id, kind, label, text_cache)
-         VALUES ($1, $2, $3, $3, $4, $5, $6, $7) RETURNING id::text`,
-        [workspaceId, noteId, b.ref, parentId, b.kind, b.label, text],
+        `INSERT INTO block_nodes (id, workspace_id, note_id, block_ref, anchor_id, parent_block_id, kind, label, text_cache)
+         VALUES ($8, $1, $2, $3, $3, $4, $5, $6, $7) RETURNING id::text`,
+        [workspaceId, noteId, b.ref, parentId, b.kind, b.label, text, await blockRowIdFor(workspaceId, b.ref!)],
       )).rows[0]!.id;
       await setTags(workspaceId, id, wantTags);
       await record("BLOCK_NODE_CREATED", id, { block_ref: b.ref, kind: b.kind, label: b.label, parent_block_id: parentId, tag_ids: wantTags });
@@ -187,6 +190,13 @@ export async function syncBlockNodes(change: {
   // Creating or removing this reference is part of saving the text: it writes no event of its own.
   if (review && cardBlockIds.length > 0) await review.markCards({ workspaceId, holders: cardBlockIds.map((id) => ({ kind: "block" as const, id })), actor, via: "word" });
   if (review && wordlessBlockIds.length > 0) await review.unmarkCardsWord({ holders: wordlessBlockIds.map((id) => ({ kind: "block" as const, id })) });
+}
+
+/** The id a new paragraph row of anchor `anchorId` gets: derived from the anchor's (derivedIdName.blockNode), so two nodes that each make the row for one anchor make the same
+ *  row; a random one when a row already has that id (a row whose anchor was renamed keeps the id it was made with), so making the row never fails on the derivation. */
+async function blockRowIdFor(workspaceId: string, anchorId: string): Promise<string> {
+  const id = derivedId(derivedIdName.blockNode(workspaceId, anchorId));
+  return (await db.selectFrom("block_nodes").select("id").where("id", "=", id).executeTakeFirst()) ? randomUUID() : id;
 }
 
 /** The first character of the line a span starts on, past its indentation: where the parser says its block starts. */

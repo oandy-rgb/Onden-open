@@ -244,6 +244,12 @@
   "where": "t.workspace_id = $1 AND {node:t.note_id}",
   "deferred": [
    "parent_block_id"
+  ],
+  "stamps": [
+   {
+    "label": "block_nodes",
+    "rowKey": "t.id::text"
+   }
   ]
  },
  "block_node_tags": {
@@ -413,6 +419,21 @@
   ],
   "where": "t.workspace_id = $1 AND {person:t.actor_id}"
  },
+ "note_anchor_places": {
+  "pk": [
+   "note_id"
+  ],
+  "order": [
+   "t.note_id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {node:t.note_id}",
+  "stamps": [
+   {
+    "label": "note_anchor_places",
+    "rowKey": "t.note_id::text"
+   }
+  ]
+ },
  "block_anchors": {
   "pk": [
    "workspace_id",
@@ -421,7 +442,13 @@
   "order": [
    "t.anchor_id"
   ],
-  "where": "t.workspace_id = $1 AND {node:t.note_id}"
+  "where": "t.workspace_id = $1 AND {node:t.note_id}",
+  "stamps": [
+   {
+    "label": "block_anchors",
+    "rowKey": "t.anchor_id"
+   }
+  ]
  },
  "block_link_bindings": {
   "pk": [

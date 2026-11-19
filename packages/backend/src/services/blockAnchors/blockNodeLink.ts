@@ -13,7 +13,9 @@ import type { ActorCtx } from "../../types.js";
 import { StatusError } from "../../statusError.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../../spine/currentActor.js";
-import { assertAuthority } from "../../spine/authority.js";
+import { assertAuthority, writesAsPerson } from "../../spine/authority.js";
+import { stampTransaction } from "../../spine/stamps.js";
+import { systemJobOf } from "../../spine/systemJobs.js";
 import { ANCHOR_EVENTS, blockSpanAt, recordAnchorEvent, rehomeAnchor } from "./store.js";
 import { sha256Hex } from "../../utils.js";
 
@@ -43,6 +45,8 @@ export async function reassignBlockNodeAnchor(input: {
     // Re-pointing an anchor moves where the paragraph's task, schedule and links point, and BLOCK_ANCHOR_CONFIRMED has no inverse
     // (restoreContract.ts): never a temporary session's (PR #1856 round 5).
     await assertAuthority(actor, { kind: "irreversible", of: { kind: "node", nodeId: noteId, op: "write_node" } });
+    // the person's write: stamped with them as its author (as `mutate` does), not left to the trigger's anonymous stamp
+    await stampTransaction(workspaceId, actor.id, { system: !!systemJobOf(actor), notAPerson: !writesAsPerson(actor) });
     const note = await db.selectFrom("content_nodes").select("markdown")
       .where("workspace_id", "=", workspaceId).where("id", "=", noteId).where("deleted_at", "is", null).where("node_type", "=", "content")
       .forShare().executeTakeFirst();

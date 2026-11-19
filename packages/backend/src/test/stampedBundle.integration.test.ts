@@ -595,11 +595,11 @@ describe.skipIf(!isTestDb)("what a body written on one node derives there, and a
   it("review cards: none on either node (a card is made by a person's grade, not by a body write; the cascade when an edit removes a block follows the blocks row below)", same("reviewCards"), 300_000);
   it("tag marks on the note: none on either node (`{#tag}` marks a block, see block tag marks)", same("tagMarks"), 300_000);
   it.fails("[[links]] (note_link_index): the receiver holds the row empty and stale=true (it is rebuilt when read, so a read self-heals; the stored row differs)", same("links"), 300_000);
-  it.fails("block nodes: the receiver has no block rows for the text", same("blocks"), 300_000);
+  it("block nodes: the receiver holds the writer's block rows for the text (they travel since migration 215; label and text as the writer derived them)", same("blocks"), 300_000);
   it.fails("block refs of the note: not made on the receiver", same("blockRefs"), 300_000);
-  it.fails("anchors: not made on the receiver", same("anchors"), 300_000);
-  it.fails("task lines: the block that links a line to its task is not made on the receiver (the task note itself is, above)", same("taskLines"), 300_000);
-  it.fails("tag marks of blocks (`{#tag}`): not made on the receiver", same("blockTagMarks"), 300_000);
+  it("anchors: the receiver holds the writer's anchors, ids and places (they travel since migration 215)", same("anchors"), 300_000);
+  it("task lines: the block that links a line to its task arrives with the task note (its `task` unit, migration 215)", same("taskLines"), 300_000);
+  it("tag marks of blocks (`{#tag}`): arrive with their block rows", same("blockTagMarks"), 300_000);
   it.fails("domain events (note-96 B3): the receiver records none for a change that came from another device (NODE_UPDATED, block and anchor events)", same("domainEvents"), 300_000);
 });
 

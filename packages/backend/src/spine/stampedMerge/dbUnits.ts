@@ -21,6 +21,9 @@ import { deferredColumnsOf, snapshotRows, type RowMatch } from "../snapshotSql.j
 import { RETIRED_STAMP_LABELS } from "../snapshotTables.js";
 import { type Cell, type Json, type MergeResult, type SkewGate, type Stamp, type Unit, DEFAULT_MAX_SKEW_MS, GENESIS_STAMP_ORIGIN, canonical, genesisName, isGenesis, maximalHeads, mergeUnit } from "./unit.js";
 import { type StoreMerge, type UnitAddress, STAR } from "./store.js";
+import { chooseAnchorHead, parseAnchorUnit } from "./anchorUnit.js";
+import { BLOCK_ID, NODE_MARKDOWN_MAX, TAG_NAME_MAX, isUuid } from "@onden/markdown";
+import { sha256Hex } from "../../utils.js";
 
 /** One column of a row key, in the order `sync_key` (migration 194) joins them with '/'. Every part but the last is a uuid (36 characters), so a key is split without guessing. */
 type KeyPart = { column: string; type: "uuid" | "text" };
@@ -41,11 +44,114 @@ export type RowSource = {
   where?: string;
   /** A bundle makes and removes rows of this table. False for `workspaces`: the row is the workspace itself, made by its install or its snapshot. */
   rows: boolean;
+  /** The table's unique keys other than its row key, each by its index's name and columns (SQL over `{t}`, as the index is written) and the index's WHERE. Two nodes can make two rows
+   *  with one natural key under two ids: the row made first (creation stamp, then key) stays on every node, the other is not made, and the bundle's report names both (`duplicateRows`,
+   *  dbRows.ts). A unique key a source does not declare refuses the bundle (`bundle_unique_clash`): a clash nothing was told how to settle never leaves a row out quietly. */
+  naturalKeys?: readonly NaturalKey[];
+  /** What a received row of this table must satisfy before anything of the bundle is written (dbRows.ts `checkReceived`): the reason it does not, or null. Given the row's unit texts,
+   *  its carried values when it travels whole, and the bodies the bundle and this node know by their sha-256 (to bound positions). Every value a unit may take is checked: the
+   *  check runs once for the row as its winners say and once more for each other head of each unit, that head's value in its unit's place (review of PR #1853, round 7,
+   *  point 2: a head reaches the column when it wins), so a check reads `texts` alone and cannot forget the heads. Declared per
+   *  source so that every table can use the one mechanism; tables without one are checked only by the database (README, 接上傳輸前必須完成). A row that fails refuses the
+   *  whole bundle (`bundle_malformed`). `bodiesOf: "row"`: the row's key is a note, whose body (as this node holds it) bounds the positions too. `values: true` also requires a new row's carried values to give the same unit texts as the bundle says (sync_logged_value). */
+  check?: { row: (r: ReceivedRow) => string | null; values?: boolean; bodiesOf?: "row" };
+  /** What a row of this source is written into once every table of the bundle is in (dbRows.ts storeMergedRows), for every row of it the bundle bears on: its own rows and
+   *  those other sources name (`bearsOn`). The source's key is a note: each row comes with its unit (every head) and the note's stored body. A function of replicated state
+   *  only, so every node writes the same thing whatever bundle came first. The anchors unit of a note writes the note's anchor rows (`expandAnchorUnits`). */
+  expand?: (workspaceId: string, rows: readonly ExpandRow[]) => Promise<void>;
+  /** The rows of another source (`on`, which has `expand`) a row of this one bears on: the one keyed by this row's key, or by the value of this row's unit `field`. A note's
+   *  body and its anchor rows bear on the note's anchors unit (review of PR #1853, round 3, point 1: a bundle that brings only a body still writes the rows). */
+  bearsOn?: { on: string; field?: string };
+  /** The column naming the note a row of this source goes with when that note is permanently deleted (the foreign key's cascade). Its stamp triggers file the row under
+   *  that note (`via:<column>`, as for every source filed under a note by `viaNode`), so a row gone with its note, and what the cascade does to it on the way, writes no
+   *  stamp of its own: the note's tombstone says so. `workspace` (a column) is what every read uses: the same workspace whenever the note is there (guard:
+   *  stampedBundleSources.integration.test.ts). Review of PR #1853, round 5, point 1. */
+  goesWithNote?: string;
+  /**
+   * The units whose column (or a column of a composite) is a foreign key that the database empties when the row it names is deleted (`ON DELETE SET NULL`), and
+   * which columns. Emptying is no write and has no stamp of its own, so under ONE stamp a copy with the id and a copy with NULL there are the same write: the merge
+   * keeps the copy with the id (rows.ts mergeRow `cleared`), a row made from carried values has NULL where the row it names is not here (as the database would have
+   * left it), and a node that holds the row with the column empty keeps the id on the stamp (storeUnit, `kept_value`). Review of PR #1853, round 9, point 1. Every
+   * such column of every source is declared (guard: stampedBundleSources.integration.test.ts reads the foreign keys from the catalog).
+   */
+  clearedOnDelete?: Readonly<Record<string, readonly string[]>>;
 };
+/** How a merge compares two copies of one write of each unit a source declares `clearedOnDelete` (rows.ts mergeRow). */
+export const clearedOf = (src: RowSource): ReadonlyMap<string, { composite: boolean; columns: readonly string[] }> =>
+  new Map(Object.entries(src.clearedOnDelete ?? {}).map(([f, columns]) => [f, { composite: (src.fields[f] ?? "").includes("+"), columns }] as const));
+/** A row of a source with `expand`, as the merge core hands it over: its units (undefined when this node holds none) and its note's body (null: no such note here). */
+type ExpandRow = { row: string; units: ReadonlyMap<string, Unit> | undefined; body: string | null };
+/** A received row as `RowSource.check` sees it. */
+type ReceivedRow = { texts: Readonly<Record<string, string | null>>; values: Readonly<Record<string, unknown>> | undefined; bodyLength: (hash: string) => number | undefined };
+/** One unique index of a table besides its row key (see RowSource.naturalKeys). */
+type NaturalKey = { name: string; columns: readonly string[]; where?: string };
 /** A JSON column whose keys are units of their own (`key:…` fields, `sync_stamp_json_diff`, migration 199), carried with the row of `of` that holds the column. */
 type JsonSource = { label: string; of: string; column: string; shape: "object" | "set"; prefix: string };
 
 const ws = (column = "workspace_id"): WorkspaceOf => ({ column });
+
+/** The longest paragraph text a writer stores in a paragraph row (services/blockNodes.ts TEXT_CACHE_MAX); a label is shorter (60 characters, @onden/markdown blocks.ts), bounded here by the same number. */
+const PARAGRAPH_TEXT_MAX = 4000;
+/** The anchor rows of every note a bundle bears on, from each note's anchors unit (anchorUnit.ts chooseAnchorHead: the head measured on the stored body, the words of the
+ *  anchors it does not name, the body the rows are measured on), in one statement for the whole bundle (note_anchor_places_expand_all, migration 215). A note this node
+ *  does not hold, or that has no unit: nothing (its rows, if any, are the same on every node: made before 215, or by a write that wrote no unit). */
+async function expandAnchorUnits(workspaceId: string, rows: readonly ExpandRow[]): Promise<void> {
+  const items: Array<{ n: string; p: Json | null; h: string; w: Record<string, [string, string, string]> }> = [];
+  for (const r of rows) {
+    const unit = r.units?.get("places");
+    if (!unit || r.body === null) continue;
+    const head = chooseAnchorHead(unit, sha256Hex(r.body), r.body.length);
+    if (head.hash === null) continue;
+    items.push({ n: r.row, p: head.text === null ? null : (JSON.parse(head.text) as Json), h: head.hash, w: head.words });
+  }
+  if (items.length) await snapshotRows(`SELECT note_anchor_places_expand_all($1::uuid, $2::jsonb)`, [workspaceId, JSON.stringify(items)]);
+}
+/** An anchor row: its note is a note id (its place is not the row's unit: it is the expansion of the note's unit, checked below). */
+function checkAnchor(r: ReceivedRow): string | null {
+  const note = r.texts.note;
+  if (note !== undefined && (note === null || !isUuid(note))) return "an anchor's note is not a note id";
+  return null;
+}
+/** A note's anchors unit (each head of it in turn, checkReceived): usable (parseAnchorUnit), no text longer than a note may be, and inside the body it names when that body is known here. */
+function checkAnchorUnit(r: ReceivedRow): string | null {
+  for (const text of [r.texts.places]) {
+    if (text === undefined) continue;
+    const p = parseAnchorUnit(text);
+    if (!p.ok) return `a note's anchors are not usable (${p.reason})`;
+    for (const f of p.unit.anchors) {
+      if (Math.max(f.quote.length, f.prefix.length, f.suffix.length) > NODE_MARKDOWN_MAX) return "an anchor's quote is longer than a note may be";
+      const length = r.bodyLength(f.ownHash ?? p.unit.hash);
+      if (length !== undefined && (f.to > length || (f.candidate !== null && f.candidate.to > length))) return "an anchor stands past the end of the body it names";
+    }
+  }
+  return null;
+}
+/** A paragraph row standing for the child note it was turned into (blockChildNote.ts markDetached): the child's id and the tags the paragraph had, as the composite unit's
+ *  text (sync_logged_value: a JSON object of the two columns). A tag is a tag's name; a paragraph holds at most one per three characters of a note (`{x}`). */
+const DETACHED_TAGS_MAX = Math.floor(NODE_MARKDOWN_MAX / 3);
+function detachedProblem(text: string): string | null {
+  let v: unknown;
+  try { v = JSON.parse(text); } catch { return "not JSON"; }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return "not an object";
+  const o = v as Record<string, unknown>;
+  if (Object.keys(o).some((k) => k !== "detached_note_id" && k !== "detached_tags")) return "a key it does not have";
+  if (o.detached_note_id !== undefined && o.detached_note_id !== null && !(typeof o.detached_note_id === "string" && isUuid(o.detached_note_id))) return "a child that is not a note id";
+  const tags = o.detached_tags;
+  if (tags !== undefined && tags !== null) {
+    if (!Array.isArray(tags) || tags.length > DETACHED_TAGS_MAX) return "tags that are not a list a paragraph can hold";
+    if (tags.some((t) => typeof t !== "string" || t.length === 0 || t.length > TAG_NAME_MAX)) return `a tag that is not a name of 1 to ${TAG_NAME_MAX} characters`;
+  }
+  return null;
+}
+function checkParagraph(r: ReceivedRow): string | null {
+  for (const f of ["note", "task"] as const) { const v = r.texts[f]; if (v !== undefined && v !== null && !isUuid(v)) return `a paragraph row's ${f} is not an id`; }
+  if (r.texts.detached !== undefined && r.texts.detached !== null) { const why = detachedProblem(r.texts.detached); if (why) return `a paragraph row's detached state is ${why}`; }
+  if (r.texts.note === null) return "a paragraph row has no note";
+  for (const f of ["anchor", "ref"] as const) { const v = r.texts[f]; if (v !== undefined && v !== null && !BLOCK_ID.test(v)) return `a paragraph row's ${f} is not an anchor id`; }
+  const v = r.values;
+  if (v) for (const c of ["label", "text_cache"]) if (v[c] !== undefined && (typeof v[c] !== "string" || (v[c] as string).length > PARAGRAPH_TEXT_MAX)) return `a paragraph row's ${c} is not a text of at most ${PARAGRAPH_TEXT_MAX} characters`;
+  return null;
+}
 const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
 /**
  * The tables whose units this file reads and writes, in the order a bundle writes them (a row's parents first: a space before its members, a note before what hangs on it).
@@ -54,10 +160,12 @@ const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
  */
 export const UNIT_SOURCES: readonly RowSource[] = [
   { label: "workspaces", table: "workspaces", key: uuidKey(), workspace: ws("id"), fields: { time_zone: "time_zone", day_start: "day_start_hour" }, rows: false },
-  { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "deleted_at" }, rows: true },
+  { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "deleted_at" }, rows: true,
+    clearedOnDelete: { owner: ["owner_actor_id"] } },
   { label: "space_members", table: "space_members", key: [{ column: "space_id", type: "uuid" }, { column: "actor_id", type: "uuid" }], workspace: { viaSpace: "space_id" }, fields: { permission: "permission" }, rows: true },
   { label: "content_nodes", table: "content_nodes", key: uuidKey(), workspace: ws(),
-    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "space_id", deleted: "deleted_at" }, rows: true },
+    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "space_id", deleted: "deleted_at" }, rows: true,
+    bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] } },
   { label: "node_attributes", table: "node_attributes", key: [{ column: "node_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(),
     fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: "t.source IN ('ui', 'explicit', 'dispatcher')", rows: true },
   { label: "node_tags", table: "node_tags", key: [{ column: "node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "node_id" }, fields: {}, rows: true },
@@ -66,11 +174,35 @@ export const UNIT_SOURCES: readonly RowSource[] = [
   { label: "note_pointers", table: "note_pointers", key: uuidKey(), workspace: ws(), fields: { sort: "order_key", prefix: "display_prefix" }, rows: true },
   { label: "node_positions", table: "node_positions", key: [{ column: "node_id", type: "uuid" }, { column: "surface", type: "text" }], workspace: ws(),
     fields: { position: "x+y", look: "width+height+color+folded", sub_canvas: "sub_canvas_id" }, rows: true },
+  // A body write's anchors and paragraph rows (migration 215): ids minted once by the writer, carried, adopted by the receiver. The places of a note's anchors are ONE
+  // unit (note_anchor_places), written by the same transaction as the body, so a head of it is the whole set of anchors of one body; an anchor row's place is its
+  // expansion (expandAnchorUnits below, for every note a bundle bears on: `bearsOn`). Before function_refs (a card names its paragraph row) and the paragraph tags.
+  { label: "note_anchor_places", table: "note_anchor_places", key: uuidKey("note_id"), workspace: ws(), goesWithNote: "note_id", fields: { places: "places" }, rows: true,
+    check: { row: checkAnchorUnit, values: true, bodiesOf: "row" }, expand: expandAnchorUnits },
+  { label: "block_anchors", table: "block_anchors", key: [{ column: "anchor_id", type: "text" }], workspace: ws(), goesWithNote: "note_id", fields: { note: "note_id" }, rows: true,
+    check: { row: checkAnchor, values: true }, bearsOn: { on: "note_anchor_places", field: "note" } },
+  { label: "block_nodes", table: "block_nodes", key: uuidKey(), workspace: ws(), goesWithNote: "note_id",
+    fields: { note: "note_id", anchor: "anchor_id", ref: "block_ref", task: "task_id", detached: "detached_note_id+detached_tags" }, rows: true,
+    clearedOnDelete: { task: ["task_id"], detached: ["detached_note_id"] },
+    // a row made for the same anchor on two nodes has the same id (derivedIdName.blockNode), so these clash only after a rename or for rows made before that rule
+    naturalKeys: [
+      { name: "block_nodes_anchor_uq", columns: ["{t}.workspace_id", "{t}.anchor_id"], where: "{t}.anchor_id IS NOT NULL" },
+      { name: "block_nodes_note_ref_uq", columns: ["{t}.note_id", "{t}.block_ref"] },
+      { name: "block_nodes_task_uq", columns: ["{t}.task_id"], where: "{t}.task_id IS NOT NULL" },
+      { name: "block_nodes_detached_uq", columns: ["{t}.detached_note_id"], where: "{t}.detached_note_id IS NOT NULL" },
+    ], check: { row: checkParagraph, values: true } },
+  { label: "block_node_tags", table: "block_node_tags", key: [{ column: "block_node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: ws(), fields: {}, rows: true,
+    check: { row: () => null, values: true } },
   { label: "function_refs", table: "function_refs", key: uuidKey(), workspace: ws(),
-    fields: { function: "function_id", instance: "instance", holder: "holder_node_id", space: "holder_space_id" }, rows: true },
+    fields: { function: "function_id", instance: "instance", holder: "holder_node_id", space: "holder_space_id" }, rows: true,
+    naturalKeys: [
+      { name: "function_refs_holder_unique", columns: ["COALESCE({t}.holder_node_id, {t}.holder_space_id, {t}.holder_block_id)", "{t}.function_id", "{t}.instance"] },
+      { name: "function_refs_view_instance_unique", columns: ["{t}.holder_node_id", "{t}.instance"], where: "{t}.instance <> '' AND {t}.holder_node_id IS NOT NULL" },
+    ] },
   { label: "rss_subscriptions", table: "rss_subscriptions", key: uuidKey(), workspace: ws(),
     fields: { title: "title", url: "url", space: "space_id", interval: "fetch_interval_minutes", auto_tag: "auto_tag_id", embed: "embed", dismiss: "auto_dismiss_days", default_tags: "default_tag_ids",
-      default_parent: "default_parent_id", fulltext: "always_fulltext", voice: "voice", display: "display_mode" }, rows: true },
+      default_parent: "default_parent_id", fulltext: "always_fulltext", voice: "voice", display: "display_mode" }, rows: true,
+    clearedOnDelete: { auto_tag: ["auto_tag_id"], default_parent: ["default_parent_id"] } },
   { label: "rss_mutes", table: "rss_mutes", key: uuidKey(), workspace: ws(), fields: { keyword: "keyword", source: "subscription_id", expires: "expires_at" }, rows: true },
   { label: "external_calendars", table: "external_calendars", key: uuidKey(), workspace: ws(), fields: { name: "name", color: "color", enabled: "enabled" }, rows: true },
   { label: "actor_module_settings", table: "actor_module_settings", key: [{ column: "actor_id", type: "text" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "tag_id" },
@@ -108,7 +240,8 @@ function splitRowKey(src: RowSource, row: string): string[] {
   let rest = row;
   for (let i = 0; i < src.key.length - 1; i++) {
     const m = /^([^/]{36})\/([\s\S]*)$/.exec(rest);
-    if (!m) throw new Error(`${row} is not a row key of ${src.label}`);
+    // a key the table cannot hold: as a value the database refuses (22P02), so a bundle that brings one is refused with its code (round 9, point 5 a)
+    if (!m) throw Object.assign(new Error(`${row} is not a row key of ${src.label}`), { code: "22P02" });
     parts.push(m[1]!); rest = m[2]!;
   }
   parts.push(rest);
@@ -174,7 +307,18 @@ export type StampRow = {
   origin: string; seq: string; hlc_wall: string; hlc_counter: number; author: string | null; device: string | null; deleted: boolean;
   saw: Record<string, number>; meta: Json | null;
 };
-export type HeadRow = StampRow & { content_hash: string; value: string | null };
+export type HeadRow = StampRow & { content_hash: string; value: string | null; valueless: boolean };
+/** A head as a cell: its value, or the mark that this copy has none (unit.ts `valueless`). */
+export const headValue = (h: Pick<HeadRow, "deleted" | "value" | "valueless">): { value: string | null; valueless?: true } => (h.valueless && !h.deleted ? { value: null, valueless: true } : { value: h.deleted ? null : h.value });
+/**
+ * What `sync_stamps.kept_value` holds, over what the row's column holds: `{"text": …}` the stamp's value (a row that went with its note; a column a foreign key
+ * emptied, `clearedOnDelete`), `{"none": true}` this copy of the write has no value (unit.ts `valueless`: never read from the column), NULL the value is the row's
+ * column, or none when no row holds it. A local write of the unit clears it (migration 215 sync_stamps_kept_value_cleared).
+ */
+export type KeptValue = { text: string | null } | { none: true } | null;
+/** The cell value a stamp row says: its kept value, else the row's column (`column`: undefined when no row holds it), else none. */
+export const stampValue = (kept: KeptValue, column: string | null | undefined): { value: string | null; valueless?: true } =>
+  kept && "text" in kept ? { value: kept.text } : kept && "none" in kept ? { value: null, valueless: true } : column !== undefined ? { value: column } : { value: null, valueless: true };
 
 export const stampOf = (r: StampRow): Stamp => ({ origin: r.origin, seq: Number(r.seq), wall: Number(r.hlc_wall), counter: r.hlc_counter, author: r.author, device: r.device });
 export const cellMetaOf = (r: StampRow): { meta?: Json } => (r.meta === null || r.meta === undefined ? {} : { meta: r.meta });
@@ -182,10 +326,10 @@ export const STAMP_COLS = `origin, seq::text, hlc_wall::text, hlc_counter, autho
 
 /** The unit as the database holds it, or undefined when it holds nothing of it (no stamp of its own and no creation stamp it follows). */
 export async function readUnit(workspaceId: string, a: UnitAddress): Promise<Unit | undefined> {
-  const own = (await snapshotRows<StampRow>(
-    `SELECT ${STAMP_COLS} FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4`, [workspaceId, a.table, a.row, a.field])).rows[0];
+  const own = (await snapshotRows<StampRow & { kept: KeptValue }>(
+    `SELECT ${STAMP_COLS}, kept_value AS kept FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4`, [workspaceId, a.table, a.row, a.field])).rows[0];
   const heads = (await snapshotRows<HeadRow>(
-    `SELECT ${STAMP_COLS}, content_hash, value FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4 ORDER BY origin, seq, content_hash`,
+    `SELECT ${STAMP_COLS}, content_hash, value, valueless FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4 ORDER BY origin, seq, content_hash`,
     [workspaceId, a.table, a.row, a.field])).rows;
   const cells: Cell[] = [];
   if (a.field === STAR) {
@@ -207,7 +351,7 @@ export async function readUnit(workspaceId: string, a: UnitAddress): Promise<Uni
     const value = (await snapshotRows<{ v: string | null }>(
       `SELECT sync_logged_value(t, $1, $2) AS v FROM ${quote(src.table)} t WHERE ${rowWhere(src, "t", a.row, params)} AND ${workspaceWhere(src, "t", "$3")}`, params)).rows[0];
     if (value) {
-      if (own) cells.push({ stamp: stampOf(own), saw: own.saw, deleted: own.deleted, value: own.deleted ? null : value.v, ...cellMetaOf(own) });
+      if (own) cells.push({ stamp: stampOf(own), saw: own.saw, deleted: own.deleted, ...(own.deleted ? { value: null } : stampValue(own.kept, value.v)), ...cellMetaOf(own) });
       else {
         const star = (await snapshotRows<StampRow>(`SELECT ${STAMP_COLS} FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = '*'`, [workspaceId, a.table, a.row])).rows[0];
         if (star) cells.push({ stamp: stampOf(star), saw: {}, deleted: false, value: value.v });
@@ -217,7 +361,7 @@ export async function readUnit(workspaceId: string, a: UnitAddress): Promise<Uni
         if (!own) cells.push({ stamp: stampOf(h), saw: {}, deleted: false, value: value.v });
       }
     }
-    for (const h of heads) cells.push({ stamp: stampOf(h), saw: h.saw, deleted: h.deleted, value: h.deleted ? null : h.value, ...cellMetaOf(h) });
+    for (const h of heads) cells.push({ stamp: stampOf(h), saw: h.saw, deleted: h.deleted, ...headValue(h), ...cellMetaOf(h) });
   }
   return cells.length ? maximalHeads(cells) : undefined;
 }
@@ -229,18 +373,18 @@ const genesisHashOf = (c: Cell): string => genesisName(c).slice(GENESIS_STAMP_OR
 /** The tables with an `order_stamp` column (migration 200): it is the stamp of the order key's winning write. */
 const ORDER_STAMPED: readonly string[] = ["content_nodes", "note_pointers"];
 
-const fkCache = new Map<string, Map<string, { table: string; column: string }>>();
+const fkCache = new Map<string, Map<string, { table: string; column: string; type: string }>>();
 /** The columns of `table` that point at one column of another table (a single-column foreign key): a value whose row this node does not hold is written as NULL, which is what
  *  the database itself does on the node that removed it (ON DELETE SET NULL); the unit keeps saying where it pointed. */
-async function foreignKeys(table: string): Promise<Map<string, { table: string; column: string }>> {
+async function foreignKeys(table: string): Promise<Map<string, { table: string; column: string; type: string }>> {
   const hit = fkCache.get(table);
   if (hit) return hit;
-  const r = await snapshotRows<{ col: string; ftable: string; fcol: string }>(
-    `SELECT a.attname::text AS col, c.confrelid::regclass::text AS ftable, fa.attname::text AS fcol
+  const r = await snapshotRows<{ col: string; ftable: string; fcol: string; ftype: string }>(
+    `SELECT a.attname::text AS col, c.confrelid::regclass::text AS ftable, fa.attname::text AS fcol, format_type(fa.atttypid, fa.atttypmod) AS ftype
        FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
        JOIN pg_attribute fa ON fa.attrelid = c.confrelid AND fa.attnum = c.confkey[1]
       WHERE c.contype = 'f' AND c.conrelid = $1::regclass AND array_length(c.conkey, 1) = 1`, [quote(table)]);
-  const map = new Map(r.rows.map((x) => [x.col, { table: x.ftable.replaceAll('"', ""), column: x.fcol }] as const));
+  const map = new Map(r.rows.map((x) => [x.col, { table: x.ftable.replaceAll('"', ""), column: x.fcol, type: x.ftype }] as const));
   fkCache.set(table, map);
   return map;
 }
@@ -256,7 +400,46 @@ async function jsonColumns(table: string): Promise<Set<string>> {
   return set;
 }
 
-/** Write a field's winning value (its text, or null) into its column(s). */
+/** The row a foreign key names is here: one look-up on its key, compared as the key's own type (review of PR #1853, round 10, point 1: a text comparison read the
+ *  whole table, once per unit of a bundle). A value that is not of that type names no row (the door refuses a kept one before: stampedImport.ts keptProblem). */
+async function namedRowHere(fk: { table: string; column: string; type: string }, id: unknown): Promise<boolean> {
+  if (fk.type === "uuid" && !(typeof id === "string" && isUuid(id))) return false;
+  return (await snapshotRows(`SELECT 1 FROM ${quote(fk.table)} WHERE ${quote(fk.column)} = $1::${fk.type}`, [String(id)])).rows.length > 0;
+}
+
+/** Carried values with each `clearedOnDelete` column that names a row this node does not hold set to NULL (what the database leaves when that row goes). */
+export async function clearMissingRefs(src: RowSource, values: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const columns = Object.values(src.clearedOnDelete ?? {}).flat();
+  if (!columns.length) return values;
+  const fks = await foreignKeys(src.table);
+  const out = { ...values };
+  for (const c of columns) {
+    const fk = fks.get(c), id = out[c];
+    if (!fk || id === null || id === undefined) continue;
+    if (!(await namedRowHere(fk, id))) out[c] = null;
+  }
+  return out;
+}
+
+/** The value of a unit that `clearedOnDelete` declares names a row this node does not hold in one of those columns: the column cannot hold it (it is NULL). */
+async function namesMissingRow(src: RowSource, field: string, text: string | null): Promise<boolean> {
+  const columns = src.clearedOnDelete?.[field];
+  if (!columns || text === null) return false;
+  const fks = await foreignKeys(src.table);
+  let ids: Array<[string, unknown]>;
+  if ((src.fields[field] ?? "").includes("+")) {
+    let o: Record<string, unknown>;
+    try { o = JSON.parse(text) as Record<string, unknown>; } catch { return false; }
+    ids = columns.map((c) => [c, o[c]]);
+  } else ids = [[columns[0]!, text]];
+  for (const [c, id] of ids) {
+    const fk = fks.get(c);
+    if (!fk || id === null || id === undefined) continue;
+    if (!(await namedRowHere(fk, id))) return true;
+  }
+  return false;
+}
+
 async function writeColumn(workspaceId: string, src: RowSource, a: UnitAddress, text: string | null): Promise<void> {
   const column = src.fields[a.field]!;
   const params: unknown[] = [workspaceId];
@@ -272,9 +455,12 @@ async function writeColumn(workspaceId: string, src: RowSource, a: UnitAddress, 
     // a composite: the JSON object of its columns (sync_composite)
     const cols = column.split("+");
     const v = `$${params.push(text)}::jsonb`;
+    // a column of it that names a row this node does not hold is NULL, as the database leaves it when that row goes (clearedOnDelete)
+    const fks = await foreignKeys(src.table);
+    const pick = (c: string) => { const fk = fks.get(c); return fk ? `(SELECT p.${quote(fk.column)} FROM ${quote(fk.table)} p WHERE p.${quote(fk.column)} = r.${quote(c)})` : `r.${quote(c)}`; };
     await snapshotRows(
-      `UPDATE ${quote(src.table)} t SET ${cols.map((c) => `${quote(c)} = r.${quote(c)}`).join(", ")} FROM jsonb_populate_record(NULL::${quote(src.table)}, ${v}) r
-        WHERE ${where(`(${cols.map((c) => `t.${quote(c)}::text`).join(", ")}) IS DISTINCT FROM (${cols.map((c) => `r.${quote(c)}::text`).join(", ")})`)}`, params);
+      `UPDATE ${quote(src.table)} t SET ${cols.map((c) => `${quote(c)} = ${pick(c)}`).join(", ")} FROM jsonb_populate_record(NULL::${quote(src.table)}, ${v}) r
+        WHERE ${where(`(${cols.map((c) => `t.${quote(c)}::text`).join(", ")}) IS DISTINCT FROM (${cols.map((c) => `${pick(c)}::text`).join(", ")})`)}`, params);
     return;
   }
   const fk = (await foreignKeys(src.table)).get(column);
@@ -311,49 +497,63 @@ async function writeJsonKey(workspaceId: string, j: JsonSource, a: UnitAddress, 
  * `fresh`: the row was just made here from the values the bundle carried, and this node held nothing of it (no stamp, no head): its columns already hold the winners
  * (they are the sender's columns, which hold the sender's winners), so only the stamps are written, and the columns a snapshot leaves empty (a parent) are set.
  */
-export async function storeUnit(workspaceId: string, a: UnitAddress, unit: Unit, creation?: ReadonlySet<string>, fresh = false): Promise<void> {
+/**
+ * `kept`: this node does not hold the row (it went with its note, or hangs on one deleted for good): there is no column, so the winner's value is kept on its stamp row
+ * (`sync_stamps.kept_value`), as the other heads' values are on theirs. A copy without a value (unit.ts `valueless`) is stored as such: no kept value, a head marked
+ * `valueless`, and no column is ever written from it (review of PR #1853, round 8, points 1 and 2).
+ */
+export async function storeUnit(workspaceId: string, a: UnitAddress, unit: Unit, creation?: ReadonlySet<string>, fresh = false, kept = false): Promise<void> {
   const win = unit[0]!;
   let others = unit.slice(1);
   let winnerFollows = false;
   if (jsonSourceOf(a.table)) {
-    if (!fresh) await writeJsonKey(workspaceId, jsonSourceOf(a.table)!, a, win);
+    if (!fresh && !kept && !win.valueless) await writeJsonKey(workspaceId, jsonSourceOf(a.table)!, a, win);
   } else if (a.field !== STAR) {
     const keys = creation ?? new Set((await snapshotRows<StampRow>(
       `SELECT origin, seq::text FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = '*'
        UNION ALL SELECT origin, seq::text FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = '*'`, [workspaceId, a.table, a.row])).rows.map((r) => `${r.origin}:${r.seq}`));
     const derived = (c: Cell) => !isGenesis(c) && Object.keys(c.saw).length === 0 && c.meta === undefined && keys.has(`${c.stamp.origin}:${c.stamp.seq}`);
     winnerFollows = derived(win);
-    others = others.filter((c) => !(derived(c) && c.deleted === win.deleted && canonical(c.value) === canonical(win.value)));
+    others = others.filter((c) => !(derived(c) && !c.valueless && !win.valueless && c.deleted === win.deleted && canonical(c.value) === canonical(win.value)));
     if (win.deleted) throw new Error("a field of a row is never a tombstone here");
     const src = sourceOf(a.table);
-    if (!fresh || deferredColumnsOf(src.table).includes(src.fields[a.field]!)) await writeColumn(workspaceId, src, a, win.value as string | null);
+    if (!kept && !win.valueless && (!fresh || deferredColumnsOf(src.table).includes(src.fields[a.field]!))) await writeColumn(workspaceId, src, a, win.value as string | null);
   }
   // The order key travels with the stamp of the write that set it (migration 200 order_stamp): the tie rule of the sibling order reads it. (A fresh row carried it.)
-  if (!fresh && ORDER_STAMPED.includes(a.table) && a.field === "sort" && !isGenesis(win)) {
+  if (!fresh && !kept && ORDER_STAMPED.includes(a.table) && a.field === "sort" && !isGenesis(win)) {
     const params: unknown[] = [String(win.stamp.wall).padStart(15, "0") + String(win.stamp.counter).padStart(6, "0"), workspaceId];
     const src = sourceOf(a.table);
     await snapshotRows(`UPDATE ${quote(src.table)} t SET order_stamp = $1 WHERE ${rowWhere(src, "t", a.row, params)} AND ${workspaceWhere(src, "t", "$2")}`, params);
   }
   const key = [workspaceId, a.table, a.row, a.field];
   // with a head beside it the winner keeps a stamp row (a head is sent with the stamp row it belongs to), a copy of the creation's stamp with an empty saw
-  if (winnerFollows && others.length === 0) {
+  // a stamp row says its value itself where no column holds it: a row that is not here (`kept`; a field that follows its creation then has none: the creation's
+  // values are the row's), a column a foreign key emptied (the id stays on the stamp, round 9, point 1), and a copy with no value (round 9, point 4: never the
+  // column's). A key of a JSON column keeps nothing (its row's values are not kept, round 9, point 2).
+  const own = a.field !== STAR && !win.deleted && !jsonSourceOf(a.table);
+  const keptValue = !own ? null
+    : win.valueless ? JSON.stringify({ none: true })
+    : kept || await namesMissingRow(sourceOf(a.table), a.field, win.value as string | null) ? JSON.stringify({ text: win.value }) : null;
+  // (an id a foreign key emptied from the column of a row that is here keeps its stamp row, even for a field that follows its creation; a row that is not here, or a
+  // copy without its value, keeps none for such a field: the node that removed the row had none, and the creation's values are the row's)
+  if (winnerFollows && others.length === 0 && (kept || win.valueless || keptValue === null)) {
     if (!fresh) await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4`, key);
   } else {
     await snapshotRows(
-      `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid, $11, $12::jsonb, $13::jsonb)
+      `INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta, kept_value)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid, $11, $12::jsonb, $13::jsonb, $14::jsonb)
        ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
          origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter, author = EXCLUDED.author,
-         device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta`,
-      [...key, isGenesis(win) ? GENESIS_STAMP_ORIGIN : win.stamp.origin, win.stamp.seq, win.stamp.wall, win.stamp.counter, win.stamp.author, win.stamp.device, win.deleted, JSON.stringify(win.saw), win.meta === undefined ? null : JSON.stringify(win.meta)]);
+         device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta, kept_value = EXCLUDED.kept_value`,
+      [...key, isGenesis(win) ? GENESIS_STAMP_ORIGIN : win.stamp.origin, win.stamp.seq, win.stamp.wall, win.stamp.counter, win.stamp.author, win.stamp.device, win.deleted, JSON.stringify(win.saw), win.meta === undefined ? null : JSON.stringify(win.meta), keptValue]);
   }
   if (!fresh) await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = $4`, key);
   for (const h of others) {
     await snapshotRows(
-      `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, author, device, deleted, saw, meta, value)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid, $12, $13::jsonb, $14::jsonb, $15)`,
+      `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, author, device, deleted, saw, meta, value, valueless)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid, $12, $13::jsonb, $14::jsonb, $15, $16)`,
       [...key, h.stamp.origin, h.stamp.seq, isGenesis(h) ? genesisHashOf(h) : "", h.stamp.wall, h.stamp.counter, h.stamp.author, h.stamp.device, h.deleted, JSON.stringify(h.saw),
-        h.meta === undefined ? null : JSON.stringify(h.meta), h.deleted || a.field === STAR ? null : (h.value as string | null)]);
+        h.meta === undefined ? null : JSON.stringify(h.meta), h.deleted || a.field === STAR || h.valueless ? null : (h.value as string | null), !!h.valueless && !h.deleted && a.field !== STAR]);
   }
 }
 

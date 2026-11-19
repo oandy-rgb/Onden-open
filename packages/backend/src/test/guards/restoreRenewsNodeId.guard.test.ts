@@ -74,13 +74,57 @@ describe("a backend start never renews the node id", () => {
     for (const path of naming) expect(CODE(read(`packages/backend/${path}`)), path).not.toMatch(/SELECT[^;]*\bsync_renew_node_id\(\)|PERFORM\s+sync_renew_node_id/i);
   });
 
-  it("only sync_take_node_id() changes sync_node.node_id (the browser copy's first id takes it by the same rule)", () => {
-    const changing = backendSources().filter(([, text]) => /UPDATE\s+sync_node\b|INSERT\s+INTO\s+sync_node\b[^;]*DO\s+UPDATE/i.test(CODE(text))).map(([path]) => path);
-    expect(changing).toEqual(["db/migrations/213_renew_node_id.sql"]);
-    const takers = backendSources().filter(([, text]) => /\bsync_take_node_id\(\)/.test(CODE(text))).map(([path]) => path).sort();
-    expect(takers).toEqual(["db/migrations/213_renew_node_id.sql", "src/browser/nodeIdentity.ts"]);
+  // By meaning, not by a list of files (review of PR #1853, round 2): only the BODY of a definition of sync_take_node_id() writes sync_node; only the body of a
+  // definition of sync_renew_node_id() calls sync_take_node_id(); outside definitions no migration and no product code writes sync_node or calls either, except the
+  // two entries that exist (src/browser/nodeIdentity.ts takes the browser copy's first id; scripts/lib/renewNodeId.sh renews, tested above), found from the code.
+  it("only the body of sync_take_node_id() writes sync_node, only sync_renew_node_id() and the browser copy call it, and no migration calls either", () => {
+    const v = nodeIdViolations(backendSources());
+    expect(v.writes).toEqual([]);
+    expect(v.migrationCalls).toEqual([]);
+    expect(v.productCallers).toEqual(["src/browser/nodeIdentity.ts"]);
+    expect(backendSources().some(([path, text]) => path.startsWith("db/migrations/") && definitionsOf("sync_take_node_id", text).length > 0)).toBe(true);
+  });
+  it("the rule above, on made-up files: a third migration that writes sync_node is caught; one that redefines sync_carried_labels() is not", () => {
+    const take = "CREATE OR REPLACE FUNCTION sync_take_node_id() RETURNS void AS $$\nBEGIN\n  UPDATE sync_node SET node_id = 'x';\nEND;\n$$ LANGUAGE plpgsql;";
+    const renew = "CREATE OR REPLACE FUNCTION sync_renew_node_id() RETURNS void AS $$\nBEGIN\n  PERFORM 1 FROM sync_take_node_id();\nEND;\n$$ LANGUAGE plpgsql;";
+    const base: [string, string][] = [["db/migrations/213_x.sql", `${take}\n${renew}`], ["src/browser/nodeIdentity.ts", "await q(`SELECT * FROM sync_take_node_id()`);"]];
+    expect(nodeIdViolations(base)).toEqual({ writes: [], migrationCalls: [], productCallers: ["src/browser/nodeIdentity.ts"] });
+    expect(nodeIdViolations([...base, ["db/migrations/300_y.sql", "UPDATE sync_node SET node_id = 'mine';"]]).writes).toEqual(["db/migrations/300_y.sql"]);
+    expect(nodeIdViolations([...base, ["db/migrations/301_z.sql", "SELECT * FROM sync_take_node_id();"]]).migrationCalls).toEqual(["db/migrations/301_z.sql"]);
+    expect(nodeIdViolations([...base, ["src/services/x.ts", "q(`SELECT sync_renew_node_id()`)"]]).productCallers).toEqual(["src/browser/nodeIdentity.ts", "src/services/x.ts"]);
+    expect(nodeIdViolations([...base, ["db/migrations/302_labels.sql", "CREATE OR REPLACE FUNCTION sync_carried_labels() RETURNS text[] AS $$ SELECT ARRAY['a']::text[]; $$ LANGUAGE sql;"],
+      ["db/migrations/303_renew_again.sql", renew]])).toEqual({ writes: [], migrationCalls: [], productCallers: ["src/browser/nodeIdentity.ts"] });
   });
 });
+
+/** The bodies (between the `$$` after the header and the closing `$$`) of every `CREATE OR REPLACE FUNCTION fn(` in `text`. */
+function definitionsOf(fn: string, text: string): string[] {
+  const out: string[] = [];
+  const head = new RegExp(`CREATE OR REPLACE FUNCTION ${fn}\\(`, "g");
+  for (let m = head.exec(text); m; m = head.exec(text)) {
+    const open = text.indexOf("$$", m.index);
+    const close = open < 0 ? -1 : text.indexOf("$$", open + 2);
+    if (close > 0) out.push(text.slice(m.index, close + 2));
+  }
+  return out;
+}
+/** `text` without the definitions of `fns` (what is left is what runs outside them). */
+const outside = (text: string, fns: readonly string[]) => fns.reduce((t, fn) => definitionsOf(fn, t).reduce((u, d) => u.replace(d, ""), t), text);
+const WRITES_NODE = /UPDATE\s+sync_node\b|INSERT\s+INTO\s+sync_node\b[^;]*DO\s+UPDATE/i;
+const CALLS = /\bsync_take_node_id\(\)|\bsync_renew_node_id\(\)/;
+function nodeIdViolations(sources: readonly (readonly [string, string])[]): { writes: string[]; migrationCalls: string[]; productCallers: string[] } {
+  const writes: string[] = [], migrationCalls: string[] = [], productCallers: string[] = [];
+  for (const [path, raw] of sources) {
+    const text = CODE(raw);
+    // a write outside the body of sync_take_node_id()
+    if (WRITES_NODE.test(outside(text, ["sync_take_node_id"]))) writes.push(path);
+    // sync_take_node_id() inside any definition but sync_renew_node_id()'s, or a call of either outside a definition
+    const rest = outside(text, ["sync_renew_node_id", "sync_take_node_id"]);
+    if (path.startsWith("db/migrations/")) { if (CALLS.test(rest)) migrationCalls.push(path); }
+    else if (CALLS.test(rest)) productCallers.push(path);
+  }
+  return { writes: writes.sort(), migrationCalls: migrationCalls.sort(), productCallers: productCallers.sort() };
+}
 
 describe("the browser copy takes its id only after its migrations ran (sync_take_node_id is migration 213's)", () => {
   it("src/browser/worker.ts calls migrate() before ensureOwnNodeId()", () => {
@@ -130,18 +174,24 @@ function lastDefinitionOf(fn: string, migrations: readonly (readonly [name: stri
   return [...migrations].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).filter(([, text]) => defines.test(text)).at(-1);
 }
 const MIGRATIONS = readdirSync(join(BACKEND, "db", "migrations")).filter((f) => f.endsWith(".sql")).map((f) => [f, readFileSync(join(BACKEND, "db", "migrations", f), "utf8")] as const);
+/** The labels of the last `CREATE OR REPLACE FUNCTION sync_carried_labels()` in `text`. */
+const carriedListOf = (text: string): string[] | undefined => {
+  const body = text.slice(text.lastIndexOf("CREATE OR REPLACE FUNCTION sync_carried_labels("));
+  return /ARRAY\[([^\]]*)\]/.exec(body)?.[1]?.split(",").map((l) => l.trim().replace(/^'|'$/g, ""));
+};
 const labelListOf = (text: string): string[] | undefined =>
   /jsonb_object_agg\(l, c\.next_seq - 1\) FROM unnest\(ARRAY\[([^\]]*)\]\)/.exec(text)?.[1]?.split(",").map((l) => l.trim().replace(/^'|'$/g, ""));
 
 describe("the old id is held for every label a bundle carries (the migration that defines sync_renew_node_id() has its own copy of the list)", () => {
-  it("the labels the last definition of sync_renew_node_id() writes into sync_origins.have are spine/stampedMerge/dbUnits.ts CARRIED_LABELS, in order", async () => {
+  it("the labels the last definition of sync_carried_labels() names are spine/stampedMerge/dbUnits.ts CARRIED_LABELS, in order, and the last sync_renew_node_id() reads it", async () => {
     const { CARRIED_LABELS } = await import("../../spine/stampedMerge/index.js");
-    const last = lastDefinitionOf("sync_renew_node_id", MIGRATIONS);
-    expect(last, "no migration defines sync_renew_node_id()").toBeDefined();
-    // a label added to CARRIED_LABELS needs a NEW migration that redefines sync_renew_node_id() with it (213 is applied and never edited): until then a restored
-    // server would hold its old id from 0 for that label
-    expect(labelListOf(last![1]), `${last![0]} no longer writes have from a label list`).toEqual([...CARRIED_LABELS]);
-  });
+    const labels = lastDefinitionOf("sync_carried_labels", MIGRATIONS);
+    expect(labels, "no migration defines sync_carried_labels()").toBeDefined();
+    // a label added to CARRIED_LABELS needs a NEW migration that redefines sync_carried_labels() with it (an applied migration is never edited)
+    expect(carriedListOf(labels![1]), `${labels![0]} no longer names the labels`).toEqual([...CARRIED_LABELS]);
+    const renew = lastDefinitionOf("sync_renew_node_id", MIGRATIONS);
+    expect(renew![1]).toMatch(/jsonb_object_agg\(l, c\.next_seq - 1\) FROM unnest\(sync_carried_labels\(\)\) AS l/);
+  }, 60_000);
 
   it("lastDefinitionOf takes the latest migration that defines the function, whatever order the files are listed in, and ignores ones that only call it", () => {
     const def = (labels: string) => `CREATE OR REPLACE FUNCTION sync_renew_node_id() … jsonb_object_agg(l, c.next_seq - 1) FROM unnest(ARRAY[${labels}]) AS l`;

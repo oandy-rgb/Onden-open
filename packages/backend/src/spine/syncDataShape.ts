@@ -11,4 +11,7 @@
 // a JSON column as `<label>:<field>` texts, and a stamp of a row that is not in the table travel), so a node of version 1 would misread one. A snapshot page is unchanged, but carries the number too.
 // 3 (restore renews the node id, migration 214): a snapshot page and the hello of a snapshot stream carry `former`, the ids the source had before it was
 // restored, and the stamps of those ids travel as the source's own. A node of version 2 would refuse them one by one (`join_stamp_origin`) instead of saying why.
-export const SYNC_DATA_SHAPE_VERSION = 3;
+// 4 (anchors replicated, migration 215): the paragraph anchor table, each note's one anchors unit (note_anchor_places) and block_nodes are stamped tables of UNIT_SOURCES
+// (block_node_tags travels with them), and a snapshot carries their stamps
+// (spine/snapshotTables.json): a node of version 3 would refuse a bundle's anchor rows as an unknown table and read a snapshot's anchors as rows without stamps.
+export const SYNC_DATA_SHAPE_VERSION = 4;

@@ -153,7 +153,7 @@ export function buildSourceWorld(node: RealNode | null): Promise<SourceWorld> {
     const block = randomUUID();
     await seedQ(`INSERT INTO block_nodes (id, workspace_id, note_id, block_ref, kind, text_cache) VALUES ($1, $2, $3, 'blk1', 'paragraph', 'a paragraph')`, [block, ws, child]);
     await seedQ(`INSERT INTO block_node_tags (block_node_id, tag_id, workspace_id) VALUES ($1, $2, $3)`, [block, tag, ws]);
-    await seedQ(`INSERT INTO block_anchors (workspace_id, anchor_id, note_id, kind, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1, 'anc1', $2, 'range', 2, 6, 'hash', 'wo')`, [ws, child]);
+    await seedQ(`INSERT INTO block_anchors (workspace_id, anchor_id, note_id, kind, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1, 'anc1', $2, 'range', 2, 6, (SELECT encode(sha256(convert_to(COALESCE(markdown, ''), 'UTF8')), 'hex') FROM content_nodes WHERE id = $2), 'wo')`, [ws, child]);
     await seedQ(`INSERT INTO block_link_bindings (workspace_id, note_id, link_text, anchor_id) VALUES ($1, $2, 'link text', 'anc1')`, [ws, child]);
     const agent = (await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'agent' LIMIT 1`, [ws])).rows[0]!.id;
     const sug = randomUUID();

@@ -60,6 +60,15 @@ export const SYSTEM_JOBS = {
     targets: ["node"],
     module: null,
   },
+  // 2026-11-17 (review of PR #1853, point 11): the background pass that looks up the anchors a save had no budget for (services/blockAnchors/recover.ts). It writes
+  // the anchors' places and no event. Its stamp is a system one, so it never resolves a conflict on a place (migration 206: a system write to a unit with other heads is refused).
+  "anchor-recovery": {
+    actorId: "system-anchor-recovery",
+    name: "段落位置找回",
+    events: [],
+    targets: [],
+    module: null,
+  },
 } as const satisfies Record<string, SystemJobDeclaration>;
 
 export type SystemJobId = keyof typeof SYSTEM_JOBS;

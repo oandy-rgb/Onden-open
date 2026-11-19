@@ -40,6 +40,8 @@ export const derivedIdName = {
   taskSuccessor: (previousOccurrenceId: string): string => `task-successor/${previousOccurrenceId}`,
   /** An article of a feed, by the feed's subscription and the article's own identity (its guid). */
   rssArticle: (subscriptionId: string, guid: string): string => `rss-article/${subscriptionId}/${guid}`,
+  /** The paragraph row (block_nodes) of an anchor: two nodes that each make the row for the same anchor make the same row (anchors proposal 2026-11-16, step 3). */
+  blockNode: (workspaceId: string, anchorId: string): string => `block-node/${workspaceId}/${anchorId}`,
 };
 /** The title of the note a space's tasks with no day are written into. */
 export const TASKS_NOTE_TITLE = "任務";

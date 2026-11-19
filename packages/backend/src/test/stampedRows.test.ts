@@ -3,7 +3,7 @@
 // No database.
 import { describe, expect, it } from "vitest";
 import { type Store, createRow, deleteRow, effectiveUnit, fieldsOf, mergeStore, rowOf, seenOfRow, writeField, STAR, addressKey } from "../spine/stampedMerge/store.js";
-import { type Cell, type Stamp, type Unit, canonical } from "../spine/stampedMerge/unit.js";
+import { type Cell, type Stamp, type Unit, canonical, conflictsOf, rejectReason } from "../spine/stampedMerge/unit.js";
 import { mergeRow, type RowState } from "../spine/stampedMerge/rows.js";
 import { makeRng } from "./helpers/distSim/rng.js";
 
@@ -88,3 +88,74 @@ describe("a row's merge on a database equals the pure store's", () => {
     }
   });
 });
+
+// Review of PR #1853, rounds 6 and 7: a side that does not hold the row (only its stamps: a row that went with its note) has no values. The same write seen with a value on
+// one side and without on the other is not "the same stamp with other content", and the copy with the value is kept (round 7, point 4). A cell without a value is a stamp,
+// never a value (round 7, point 3): the stamps merge as always (so both nodes end with the same), and what the column shows is the winner among the cells with a value.
+describe("a copy of a write without its value (unit.ts `valueless`: a mark of the cell, kept and sent as such; review of PR #1853, round 8)", () => {
+  const c = st("A", 1, T0 - 10), s0 = st("B", 2, T0 - 5), s = st("A", 3, T0);
+  const star: Cell[] = [{ stamp: c, saw: {}, deleted: false, value: {} }];
+  type X = { stamp: Stamp; value: string | null; bare?: true };
+  const side = (cells: X[], field = "anchor"): RowState =>
+    ({ star, own: new Map([[field, cells.map((x): Cell => ({ stamp: x.stamp, saw: { A: 1 }, deleted: false, value: x.value, ...(x.bare ? { valueless: true as const } : {}) }))]]), creation: new Map() });
+  const merged = (m: ReturnType<typeof mergeRow>, field = "anchor") => ("rejected" in m ? m : {
+    stamps: m.fields.get(field)!.map((x) => `${x.stamp.origin}:${x.stamp.seq}:${x.valueless ? "(no value)" : String(x.value)}`),
+    conflicts: conflictsOf(m.fields.get(field)!).map((x) => String(x.value)),
+    events: m.events.filter((e) => e.field === field).map((e) => String(e.result.unit[0]!.value)),
+  });
+  it("the same write with and without its value merges, either way round, into the copy with the value", () => {
+    const held = side([{ stamp: s, value: "x1" }]), bare = side([{ stamp: s, value: null, bare: true }]);
+    expect(merged(mergeRow(held, bare))).toEqual({ stamps: ["A:3:x1"], conflicts: [], events: [] });
+    expect(merged(mergeRow(bare, held))).toEqual({ stamps: ["A:3:x1"], conflicts: [], events: ["x1"] });
+  });
+  it("a write without its value stays marked through the merge, either way round: never a NULL, never a conflict to show, and no event says it was taken", () => {
+    const held = side([{ stamp: s0, value: "x0" }]), bare = side([{ stamp: s, value: null, bare: true }]);
+    // concurrent (neither saw the other): both stay as heads; the winner says no value, so nothing new is shown
+    const want = { stamps: ["A:3:(no value)", "B:2:x0"], conflicts: ["x0"], events: [] };
+    expect(merged(mergeRow(held, bare))).toEqual(want);
+    expect(merged(mergeRow(bare, held))).toEqual(want);
+  });
+  it("only copies without values: the stamps stay, each marked, and nothing is shown", () => {
+    const one = side([{ stamp: s0, value: null, bare: true }]), other = side([{ stamp: s, value: null, bare: true }]);
+    expect(merged(mergeRow(one, other))).toEqual({ stamps: ["A:3:(no value)", "B:2:(no value)"], conflicts: [], events: [] });
+    expect(merged(mergeRow(other, one))).toEqual({ stamps: ["A:3:(no value)", "B:2:(no value)"], conflicts: [], events: [] });
+  });
+  it("the same write with two different values is still refused, and a NULL is a value", () => {
+    expect(mergeRow(side([{ stamp: s, value: "x1" }]), side([{ stamp: s, value: "x2" }]))).toEqual({ rejected: "same-stamp-different-content", unit: "anchor" });
+    expect(mergeRow(side([{ stamp: s, value: "x1" }]), side([{ stamp: s, value: null }]))).toEqual({ rejected: "same-stamp-different-content", unit: "anchor" });
+  });
+  it("a mark on a tombstone, on a value or on a field's tombstone is not the format", () => {
+    expect(rejectReason({ stamp: s, saw: { A: 1 }, deleted: true, value: null, valueless: true })).toBe("malformed");
+    expect(rejectReason({ stamp: s, saw: { A: 1 }, deleted: false, value: "x", valueless: true })).toBe("malformed");
+    expect(mergeRow(undefined, { star, own: new Map([["anchor", [{ stamp: s, saw: { A: 1 }, deleted: true, value: null }]]]), creation: new Map() })).toEqual({ rejected: "malformed", unit: "anchor" });
+  });
+});
+
+describe("a unit a foreign key empties (dbUnits.ts clearedOnDelete; review of PR #1853, round 9, point 1)", () => {
+  const c = st("A", 1, T0 - 10), s = st("A", 3, T0), t = st("B", 4, T0 + 5);
+  const star: Cell[] = [{ stamp: c, saw: {}, deleted: false, value: {} }];
+  const side = (field: string, cells: Array<{ stamp: Stamp; value: string | null }>): RowState =>
+    ({ star, own: new Map([[field, cells.map((x): Cell => ({ stamp: x.stamp, saw: { A: 1 }, deleted: false, value: x.value }))]]), creation: new Map() });
+  const task = new Map([["task", { composite: false, columns: ["task_id"] }]]);
+  const detached = new Map([["detached", { composite: true, columns: ["detached_note_id"] }]]);
+  const shown = (m: ReturnType<typeof mergeRow>, field: string) => ("rejected" in m ? m : m.fields.get(field)!.map((x) => `${x.stamp.origin}:${x.stamp.seq}:${String(x.value)}`));
+  it("one write held with its id and with NULL (the database emptied it): no clash, either way round, the copy with the id is kept", () => {
+    const named = side("task", [{ stamp: s, value: "T" }]), emptied = side("task", [{ stamp: s, value: null }]);
+    expect(shown(mergeRow(named, emptied, task), "task")).toEqual(["A:3:T"]);
+    expect(shown(mergeRow(emptied, named, task), "task")).toEqual(["A:3:T"]);
+    // the same in a composite: only the declared column may differ
+    const a = side("detached", [{ stamp: s, value: `{"detached_tags": ["x"], "detached_note_id": "D"}` }]), b = side("detached", [{ stamp: s, value: `{"detached_tags": ["x"], "detached_note_id": null}` }]);
+    expect(shown(mergeRow(a, b, detached), "detached")).toEqual([`A:3:{"detached_tags": ["x"], "detached_note_id": "D"}`]);
+    expect(shown(mergeRow(b, a, detached), "detached")).toEqual([`A:3:{"detached_tags": ["x"], "detached_note_id": "D"}`]);
+  });
+  it("without the declaration, or two different ids, or another column that differs: still refused", () => {
+    expect(mergeRow(side("task", [{ stamp: s, value: "T" }]), side("task", [{ stamp: s, value: null }]))).toEqual({ rejected: "same-stamp-different-content", unit: "task" });
+    expect(mergeRow(side("task", [{ stamp: s, value: "T" }]), side("task", [{ stamp: s, value: "U" }]), task)).toEqual({ rejected: "same-stamp-different-content", unit: "task" });
+    expect(mergeRow(side("detached", [{ stamp: s, value: `{"detached_tags": ["x"], "detached_note_id": "D"}` }]), side("detached", [{ stamp: s, value: `{"detached_tags": ["y"], "detached_note_id": null}` }]), detached))
+      .toEqual({ rejected: "same-stamp-different-content", unit: "detached" });
+  });
+  it("a NULL that is a write of its own (another stamp) is a write like any other: the later wins", () => {
+    expect((shown(mergeRow(side("task", [{ stamp: s, value: "T" }]), side("task", [{ stamp: t, value: null }]), task), "task") as string[])[0]).toBe("B:4:null");
+  });
+});
+

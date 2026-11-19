@@ -94,7 +94,7 @@ async function seedWorld(ws: string, actor: ActorCtx, count: number): Promise<{ 
     await seedQ(`INSERT INTO node_edges (workspace_id, source_node_id, target_node_id, edge_type, status, origin) VALUES ($1,$2,$3,'knowledge_link','active','wikilink')`, [ws, id, ids[(i + 2) % ids.length]]);
     await seedQ(`INSERT INTO node_positions (workspace_id, node_id, surface, x, y, width, height, folded) VALUES ($1,$2,'graph',$3,$4,NULL,NULL,false)`, [ws, id, i, i * 2]);
     await seedQ(
-      `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1,$2,$3,0,10,'h',$4)`,
+      `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1,$2,$3,0,10,(SELECT encode(sha256(convert_to(COALESCE(markdown, ''), 'UTF8')), 'hex') FROM content_nodes WHERE id = $3),$4)`,
       [ws, `a${i}x${randomUUID().slice(0, 5)}`, id, "Paragraph"],
     );
     const anchor = (await q<{ anchor_id: string }>(`SELECT anchor_id FROM block_anchors WHERE note_id = $1`, [id])).rows[0]!.anchor_id;
@@ -189,7 +189,7 @@ describe.skipIf(!enabled)("the full backup reads one snapshot, in few statements
       const longer = `${before.markdown}A paragraph written during the backup.\n`;
       await pool.query(`UPDATE content_nodes SET markdown = $2 WHERE id = $1`, [edited, longer]);
       await pool.query(
-        `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1,$2,$3,$4,$5,'h','A paragraph')`,
+        `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1,$2,$3,$4,$5,(SELECT encode(sha256(convert_to(COALESCE(markdown, ''), 'UTF8')), 'hex') FROM content_nodes WHERE id = $3),'A paragraph')`,
         [world.ws, `late${randomUUID().slice(0, 6)}`, edited, before.markdown.length, longer.length]);
       await pool.query(`DELETE FROM content_nodes WHERE id = $1`, [linkedTo]);
     };

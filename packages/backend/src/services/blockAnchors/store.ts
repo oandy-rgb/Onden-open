@@ -477,27 +477,27 @@ export async function moveAnchorsForBodyChange(move: BodyMove): Promise<BodyMove
     if (m.recoveryPending) summary.pending++;
     if (m.changed) summary.moved++;
   }
-  // One statement for all anchors that moved or changed state (a typed character before them moves every one),
-  // one for the rest, which only learn the new body hash: a save costs two queries however many anchors the note has.
-  if (changed.length > 0) {
+  // One statement for every anchor of the note: the ones that moved or changed state take their new place, the rest only learn the new body hash. A save costs one
+  // query however many anchors the note has, and the note's anchors unit (migration 215, written after each statement that writes anchors) is written once.
+  if (moved.length > 0) {
     await q(
-      `UPDATE block_anchors a SET from_utf16 = v.from_utf16, to_utf16 = v.to_utf16, at_body_hash = $3, quote = v.quote,
-              quote_prefix = v.quote_prefix, quote_suffix = v.quote_suffix, status = v.status,
-              candidate_from_utf16 = v.candidate_from, candidate_to_utf16 = v.candidate_to, recovery_pending = v.recovery_pending,
-              moved_how = v.moved_how, moved_at = now()
-         FROM unnest($4::text[], $5::int[], $6::int[], $7::text[], $8::text[], $9::text[], $10::text[], $11::int[], $12::int[], $13::boolean[], $14::text[])
-              AS v(anchor_id, from_utf16, to_utf16, quote, quote_prefix, quote_suffix, status, candidate_from, candidate_to, recovery_pending, moved_how)
+      `UPDATE block_anchors a SET at_body_hash = $3,
+              from_utf16 = CASE WHEN v.changed THEN v.from_utf16 ELSE a.from_utf16 END, to_utf16 = CASE WHEN v.changed THEN v.to_utf16 ELSE a.to_utf16 END,
+              quote = CASE WHEN v.changed THEN v.quote ELSE a.quote END, quote_prefix = CASE WHEN v.changed THEN v.quote_prefix ELSE a.quote_prefix END,
+              quote_suffix = CASE WHEN v.changed THEN v.quote_suffix ELSE a.quote_suffix END, status = CASE WHEN v.changed THEN v.status ELSE a.status END,
+              candidate_from_utf16 = CASE WHEN v.changed THEN v.candidate_from ELSE a.candidate_from_utf16 END,
+              candidate_to_utf16 = CASE WHEN v.changed THEN v.candidate_to ELSE a.candidate_to_utf16 END,
+              recovery_pending = CASE WHEN v.changed THEN v.recovery_pending ELSE a.recovery_pending END,
+              moved_how = CASE WHEN v.changed THEN v.moved_how ELSE a.moved_how END, moved_at = CASE WHEN v.changed THEN now() ELSE a.moved_at END
+         FROM unnest($4::text[], $5::int[], $6::int[], $7::text[], $8::text[], $9::text[], $10::text[], $11::int[], $12::int[], $13::boolean[], $14::text[], $15::boolean[])
+              AS v(anchor_id, from_utf16, to_utf16, quote, quote_prefix, quote_suffix, status, candidate_from, candidate_to, recovery_pending, moved_how, changed)
         WHERE a.workspace_id = $1 AND a.note_id = $2 AND a.anchor_id = v.anchor_id`,
       [workspaceId, noteId, afterHash,
-        changed.map((m) => m.anchorId), changed.map((m) => m.span.from), changed.map((m) => m.span.to),
-        changed.map((m) => m.quote.text), changed.map((m) => m.quote.prefix), changed.map((m) => m.quote.suffix),
-        changed.map((m) => m.status), changed.map((m) => m.candidate?.from ?? null), changed.map((m) => m.candidate?.to ?? null),
-        changed.map((m) => m.recoveryPending), changed.map((m) => m.how)],
+        moved.map((m) => m.anchorId), moved.map((m) => m.span.from), moved.map((m) => m.span.to),
+        moved.map((m) => m.quote.text), moved.map((m) => m.quote.prefix), moved.map((m) => m.quote.suffix),
+        moved.map((m) => m.status), moved.map((m) => m.candidate?.from ?? null), moved.map((m) => m.candidate?.to ?? null),
+        moved.map((m) => m.recoveryPending), moved.map((m) => m.how), moved.map((m) => m.changed)],
     );
-  }
-  const same = moved.filter((m) => !m.changed).map((m) => m.anchorId);
-  if (same.length > 0) {
-    await q(`UPDATE block_anchors SET at_body_hash = $3 WHERE workspace_id = $1 AND note_id = $2 AND anchor_id = ANY($4::text[])`, [workspaceId, noteId, afterHash, same]);
   }
   if (move.cause) {
     for (const m of moved) {

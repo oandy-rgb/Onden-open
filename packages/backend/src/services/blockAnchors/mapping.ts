@@ -126,14 +126,15 @@ function moveByPositionThenQuote(anchors: AnchorState[], ctx: MoveContext): Move
           const unchanged = sameSpan(span, a.span) && ctx.after.slice(span.from, span.to) === a.quote.text;
           out[index] = {
             ...a, span, quote: unchanged ? a.quote : quoteInAfter(span),
-            candidate: null, recoveryPending: false, how: unchanged ? "unchanged" : how, changed: !unchanged || a.recoveryPending,
+            // a row that still holds a candidate (left by code before 215) is written once without it: a valid anchor has none (spine/stampedMerge/anchorUnit.ts)
+            candidate: null, recoveryPending: false, how: unchanged ? "unchanged" : how, changed: !unchanged || a.recoveryPending || a.candidate !== null,
           };
           return;
         }
       }
     } else if (a.status === "valid" && a.span.to <= ctx.after.length && ctx.after.slice(a.span.from, a.span.to) === a.quote.text) {
       // Measured on another version of the note, but the text is exactly there: still right.
-      out[index] = { ...a, candidate: null, recoveryPending: false, how: "unchanged", changed: a.recoveryPending };
+      out[index] = { ...a, candidate: null, recoveryPending: false, how: "unchanged", changed: a.recoveryPending || a.candidate !== null };
       return;
     }
     lookups.push(index);

@@ -9,6 +9,8 @@
 
 import { db } from "../../dbKysely.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
+import { stampTransaction } from "../../spine/stamps.js";
+import { SYSTEM_JOBS } from "../../spine/systemJobs.js";
 import { registerOutboxEffect, requireString } from "../outbox.js";
 import { ANCHOR_RECOVER_EFFECT } from "./recoverIntent.js";
 import { moveAnchorsForBodyChange } from "./store.js";
@@ -19,6 +21,9 @@ const MAX_PASSES = 40;
 /** One pass over `noteId`: how many anchors are still pending after it (0 for a note that is gone). */
 export async function recoverAnchorsOnce(workspaceId: string, noteId: string): Promise<number> {
   return withEventTransaction(workspaceId, async () => {
+    // the pass is a system job's write: stamped as one (author system-anchor-recovery, `system`), so it does not count as a write without `mutate` and never replaces
+    // the other heads of a place it did not look at (an anchor in conflict waits for a person's write: sync_unit_in_conflict, retried by the outbox)
+    await stampTransaction(workspaceId, SYSTEM_JOBS["anchor-recovery"].actorId, { system: true });
     const note = await db.selectFrom("content_nodes").select("markdown").where("workspace_id", "=", workspaceId).where("id", "=", noteId).executeTakeFirst();
     if (!note) return 0;
     // before: null — nothing is trusted by position; each pending anchor is found by its quoted text.

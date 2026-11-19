@@ -393,7 +393,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（110）
+## 共用邏輯（111）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 

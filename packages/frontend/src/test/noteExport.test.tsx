@@ -158,6 +158,7 @@ it("keeps the export snapshot even if typing continues while rendering", async (
   const { result } = renderHook(() => useNoteExport(true));
   let operation!: Promise<boolean>;
   act(() => { operation = result.current.exportNote("html"); });
+  await vi.waitFor(() => expect(request).toHaveBeenCalled()); // the export library loads on the first export
   expect(JSON.parse(request.mock.calls[0][1].body).markdown).toBe("first draft");
   typeIntoDraft("a", { markdown: "next draft" });
   await act(async () => { html.resolve({ html: "<!doctype html><html><body>first draft</body></html>" }); expect(await operation).toBe(true); });

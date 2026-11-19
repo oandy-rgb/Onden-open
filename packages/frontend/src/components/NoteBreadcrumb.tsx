@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import type { ContentNode } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { collapseAncestors } from "../lib/noteLocation";
 import { Menu, MenuItem, Popover, usePopover, Pressable, keepFocus } from "./ui";
-import ParentPicker from "./ParentPicker";
+import { lazyWithReload } from "../lib/lazyWithReload";
+import { loadParentPicker } from "./lateShell";
 import { displayTitle } from "../lib/noteLabel";
 import "./NoteBreadcrumb.css";
+
+const ParentPicker = lazyWithReload(loadParentPicker);
 
 // Where the open note sits, at the left of the note's top row: the ancestors
 // only (each opens that note; the note itself is the title right below), then
@@ -101,9 +104,11 @@ export default function NoteBreadcrumb({ node, ancestors, nodes, canEdit, onOpen
       </nav>
       {canMove && picking && (
         <Popover popover={picker} label={ancestors.length > 0 ? t("Move…") : t("Set parent")} className="breadcrumb-picker">
-          <ParentPicker node={node} nodes={nodes}
-            onPick={(parentId) => { if (parentId !== (node.parent_id ?? null)) onAssignGroup(node.id, parentId); }}
-            onClose={() => setPickingFor(null)} />
+          <Suspense fallback={null}>
+            <ParentPicker node={node} nodes={nodes}
+              onPick={(parentId) => { if (parentId !== (node.parent_id ?? null)) onAssignGroup(node.id, parentId); }}
+              onClose={() => setPickingFor(null)} />
+          </Suspense>
         </Popover>
       )}
     </div>

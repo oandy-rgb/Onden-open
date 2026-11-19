@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { addToast, getAppState, subscribeApp, getNode } from "../lib/appStore";
 import { WriteActionError, drafts, writeErrors } from "../lib/data";
-import { downloadNoteText, markdownNoteExport, noteExportFilename, renderNoteExport, snapshotNoteForExport, withExcerptsExpanded, type NoteExportFormat, type NoteExportOptions } from "../lib/noteExport";
+import type { NoteExportFormat, NoteExportOptions } from "../lib/noteExport";
 import { t } from "../lib/i18n";
 import { downloadBlob } from "../lib/download";
 import { ClipboardRefused, writeClipboardLater } from "../lib/clipboard";
+
+// The export library (HTML/Markdown writers, excerpt expansion) is fetched on the first export,
+// not at boot. The fetch starts inside the click, before the first await, so the print window
+// and the clipboard write still happen in the user's gesture.
+const loadNoteExport = () => import("../lib/noteExport");
 
 /** Export failures surface as themselves; only the clipboard's own refusal
  * reads as "could not copy". */
@@ -48,33 +53,37 @@ export function useNoteExport(editorVisible: boolean) {
         popup.opener = null;
         popup.document.title = t("Preparing export…");
       }
-      const captured = snapshotNoteForExport(node, editorVisible ? drafts.read(node.id) : null);
+      // The draft is read now, at the click: typing during the fetch below is not part of this export.
+      const draft = editorVisible ? drafts.read(node.id) : null;
+      const exportLib = loadNoteExport();
       // Quotes embedded from other notes are written out; with none, nothing waits.
-      const prepared = captured instanceof Promise ? captured.then(withExcerptsExpanded) : withExcerptsExpanded(captured);
+      const prepared = exportLib.then(async (lib) => lib.withExcerptsExpanded(await lib.snapshotNoteForExport(node, draft)));
       if (format === "copy" || format === "markdown") {
         // Copy and download write the same file: the zip's, by the server (D52).
         const live = <T>(value: T): T => { if (!current()) throw new Error("export cancelled"); return value; };
         const snapshot = Promise.resolve(prepared);
-        const file = snapshot.then(live).then((shot) => markdownNoteExport(shot, options.partLinks)).then(live);
+        const file = Promise.all([exportLib, snapshot]).then(live).then(([lib, shot]) => lib.markdownNoteExport(shot, options.partLinks)).then(live);
         if (format === "copy") {
           await copyExport(file);
           if (current()) addToast(t("Copied"), "success");
         } else {
           const text = await file;
-          downloadNoteText(text, noteExportFilename((await snapshot).title, "md"), "text/markdown;charset=utf-8");
+          const lib = await exportLib;
+          lib.downloadNoteText(text, lib.noteExportFilename((await snapshot).title, "md"), "text/markdown;charset=utf-8");
         }
         return true;
       }
-      const snapshot = prepared instanceof Promise ? await prepared : prepared;
+      const lib = await exportLib;
+      const snapshot = await prepared;
       if (!current()) return false;
       if (format === "docx") {
         const { noteExportDocx } = await import("../lib/noteExportDocx"); // Word's writer loads only when asked for
         const file = await noteExportDocx(snapshot, { font: options.font });
         if (!current()) return false;
-        downloadBlob(file, noteExportFilename(snapshot.title, "docx"));
+        downloadBlob(file, lib.noteExportFilename(snapshot.title, "docx"));
         return true;
       }
-      const html = await renderNoteExport(snapshot);
+      const html = await lib.renderNoteExport(snapshot);
       // The print window gets the print page style; the downloaded HTML does not.
       const printable = popup ? (await import("../lib/noteExportPrint")).withPrintStyle(html) : html;
       if (!current() || popup?.closed) return false;
@@ -86,7 +95,7 @@ export function useNoteExport(editorVisible: boolean) {
           if (!printWindow.closed) { printWindow.focus(); printWindow.print(); }
         }, { once: true });
         printWindow.document.close();
-      } else downloadNoteText(html, noteExportFilename(snapshot.title, "html"), "text/html;charset=utf-8");
+      } else lib.downloadNoteText(html, lib.noteExportFilename(snapshot.title, "html"), "text/html;charset=utf-8");
       return true;
     } catch (error) {
       popup?.close();

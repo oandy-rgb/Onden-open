@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { Suspense, useState, type CSSProperties } from "react";
 import { ChevronDown, FolderInput } from "lucide-react";
 import type { ContentNode } from "../lib/api";
 import { useOnline } from "../lib/appStore";
@@ -6,9 +6,12 @@ import { useT } from "../lib/i18n";
 import { collapseAncestors, noteAncestors, pathSpace } from "../lib/noteLocation";
 import { spaceLabel, useSpaces } from "../lib/spaces";
 import { Menu, MenuItem, Popover, usePopover, Pressable } from "./ui";
-import ParentPicker from "./ParentPicker";
+import { lazyWithReload } from "../lib/lazyWithReload";
+import { loadParentPicker } from "./lateShell";
 import { displayTitle } from "../lib/noteLabel";
 import "./PhoneNoteLocation.css";
+
+const ParentPicker = lazyWithReload(loadParentPicker);
 
 // The phone's answer to "where is this note?", in the middle of the note's top
 // bar (it replaces the line NoteBreadcrumb draws above the title on a wide
@@ -61,9 +64,11 @@ export default function PhoneNoteLocation({ node, nodes, canEdit, onOpenNote, on
 
   const picker_ = canMove && picking && (
     <Popover popover={picker} sheet label={t("Move…")} className="pnl-picker">
-      <ParentPicker node={node} nodes={nodes}
-        onPick={(parentId) => { if (parentId !== (node.parent_id ?? null)) onAssignGroup(node.id, parentId); }}
-        onClose={() => setPickingFor(null)} />
+      <Suspense fallback={null}>
+        <ParentPicker node={node} nodes={nodes}
+          onPick={(parentId) => { if (parentId !== (node.parent_id ?? null)) onAssignGroup(node.id, parentId); }}
+          onClose={() => setPickingFor(null)} />
+      </Suspense>
     </Popover>
   );
 

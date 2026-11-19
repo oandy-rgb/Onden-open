@@ -69,13 +69,13 @@ describe("NoteBreadcrumb", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("Move… opens the picker, filters, and picking calls onAssignGroup", () => {
+  it("Move… opens the picker, filters, and picking calls onAssignGroup", async () => {
     const { ancestors, self, all } = chain(1);
     seed(all);
     const onAssignGroup = vi.fn();
     render(<NoteBreadcrumb {...baseProps} node={self} ancestors={ancestors} nodes={all} onAssignGroup={onAssignGroup} />);
     fireEvent.click(screen.getByRole("button", { name: "Move…" }));
-    const input = screen.getByRole("combobox", { name: "Search parent notes…" });
+    const input = await screen.findByRole("combobox", { name: "Search parent notes…" }); // the picker loads on first use
     fireEvent.change(input, { target: { value: "else" } });
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["No parent (top level)", "Elsewhere"]);
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -84,18 +84,18 @@ describe("NoteBreadcrumb", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("the picker can move a note to the top level and never offers the note itself", () => {
+  it("the picker can move a note to the top level and never offers the note itself", async () => {
     const { ancestors, self, all } = chain(1);
     seed(all);
     const onAssignGroup = vi.fn();
     render(<NoteBreadcrumb {...baseProps} node={self} ancestors={ancestors} nodes={all} onAssignGroup={onAssignGroup} />);
     fireEvent.click(screen.getByRole("button", { name: "Move…" }));
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).not.toContain("Open note");
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).not.toContain("Open note");
     fireEvent.click(screen.getByRole("option", { name: "No parent (top level)" }));
     expect(onAssignGroup).toHaveBeenCalledWith("self", null);
   });
 
-  it("the picker floats outside the top row (not inline), and Esc, an outside press or the same word closes it", () => {
+  it("the picker floats outside the top row (not inline), and Esc, an outside press or the same word closes it", async () => {
     const { ancestors, self, all } = chain(1);
     seed(all);
     const { container } = render(<NoteBreadcrumb {...baseProps} node={self} ancestors={ancestors} nodes={all} onAssignGroup={vi.fn()} />);
@@ -104,7 +104,7 @@ describe("NoteBreadcrumb", () => {
     const picker = screen.getByRole("dialog", { name: "Move…" });
     expect(container.contains(picker)).toBe(false);
     expect(move).toHaveAttribute("aria-expanded", "true");
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+    fireEvent.keyDown(await screen.findByRole("combobox"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(move);
     fireEvent.pointerDown(document.body);
@@ -114,25 +114,25 @@ describe("NoteBreadcrumb", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("pressing Move… with a mouse while the picker is open closes it (the press must not blur the field first)", () => {
+  it("pressing Move… with a mouse while the picker is open closes it (the press must not blur the field first)", async () => {
     const { ancestors, self, all } = chain(1);
     seed(all);
     render(<NoteBreadcrumb {...baseProps} node={self} ancestors={ancestors} nodes={all} onAssignGroup={vi.fn()} />);
     const move = screen.getByRole("button", { name: "Move…" });
     fireEvent.click(move);
-    const input = screen.getByRole("combobox");
+    const input = await screen.findByRole("combobox");
     // A real press blurs the focused field unless mousedown is default-prevented.
     if (fireEvent.mouseDown(move)) fireEvent.blur(input);
     fireEvent.click(move);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("Esc that only cancels an IME candidate keeps the picker open", () => {
+  it("Esc that only cancels an IME candidate keeps the picker open", async () => {
     const { ancestors, self, all } = chain(1);
     seed(all);
     render(<NoteBreadcrumb {...baseProps} node={self} ancestors={ancestors} nodes={all} onAssignGroup={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Move…" }));
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape", isComposing: true });
+    fireEvent.keyDown(await screen.findByRole("combobox"), { key: "Escape", isComposing: true });
     expect(screen.getByRole("dialog", { name: "Move…" })).toBeInTheDocument();
   });
 

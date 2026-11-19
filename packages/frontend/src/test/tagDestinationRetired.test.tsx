@@ -97,7 +97,7 @@ describe("整理: the unused tags and similar names close the tag list, not Sett
     const rename = { nodeId: null, draft: "", setNodeId: vi.fn(), setDraft: vi.fn() } as never;
     seed([plain("a", "idea"), plain("c", "other")]);
     const owner = render(<SidebarTagTree nav={nav} rename={rename} />);
-    const region = screen.getByRole("region", { name: "Tidy up" });
+    const region = await screen.findByRole("region", { name: "Tidy up" }); // the tidy line loads on use
     expect(region).toHaveTextContent("2 unused tags");
     expect(screen.queryByRole("group", { name: "Unused tags" })).toBeNull();
     fireEvent.click(within(region).getByRole("button", { name: "Show the list" }));
@@ -106,6 +106,7 @@ describe("整理: the unused tags and similar names close the tag list, not Sett
     owner.unmount();
     seed([plain("a", "idea")], false);
     render(<SidebarTagTree nav={nav} rename={rename} />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); // let the lazy tidy line settle
     expect(screen.queryByRole("region", { name: "Tidy up" })).toBeNull();
   });
 });

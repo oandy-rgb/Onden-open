@@ -65,10 +65,16 @@ const kb = (n) => `${(n / 1024).toFixed(1)} KiB`;
 // (the build now fails if the boot half holds one: bootReportPlugin bootKeysUnused), and the 200 rarer server error
 // codes with their zh-TW wording (backup restore, AI helpers and keys, spaces, invites…) load on first use with
 // serverSentences.ts, which readErrorBody already fetched before an ApiError is built (-11.3 KiB together).
+//
+// Slimming round 2026-11-20 (perf/boot-js-slim-2026-11-20): measured 306_265 B, 310_018 B before (-3.7 KiB). Note export
+// (lib/noteExport) is fetched on the first export, the 「移動…」 list (ParentPicker) and the tag list's tidy line (TagTidy)
+// load when shown (components/lateShell.ts), and the 21 zh-TW strings only they use went to the late half. The owner's
+// rule would set the budget to measured + 5 KiB (311_385); that is higher than today's, and this round fell short of
+// its 8 KiB goal, so the budget stays at 310_204 (3.8 KiB of room) instead of being raised.
 export const BOOT_BUDGET_GZIP = 310_204;
 // The boot JS of main when the budget was last set. Update it with the budget, or when
 // a merge moves the boot JS by more than 1 KiB, so the delta below stays meaningful.
-export const BOOT_MEASURED_GZIP = 305_084;
+export const BOOT_MEASURED_GZIP = 306_265;
 /** Growth over this much (bytes, gzip) needs a reason in the PR description. */
 export const BOOT_GROWTH_NOTE = 1_024;
 // Libraries only a screen needs, which must never be in the boot JS: a value

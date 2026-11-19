@@ -7,6 +7,10 @@ export const loadTagMoveConfirm = () => import("./TagMoveConfirm");
 export const loadMoveToSpaceConfirm = () => import("./MoveToSpaceConfirm");
 export const loadShortcutsCheatsheet = () => import("./ShortcutsCheatsheet");
 export const loadTimeZoneAsk = () => import("./TimeZoneAsk");
+// The 「移動…」 list under the note's breadcrumb and the phone's location bar: only after a tap.
+// The quiet 「n 個沒用的標籤」 line at the foot of the tag list: absent when nothing needs tidying.
+export const loadTagTidy = () => import("./TagTidy");
+export const loadParentPicker = () => import("./ParentPicker");
 
 const LATE_SHELL_SCREENS: ReadonlyArray<() => Promise<unknown>> = [
   loadTagDeleteConfirm,
@@ -14,6 +18,8 @@ const LATE_SHELL_SCREENS: ReadonlyArray<() => Promise<unknown>> = [
   loadMoveToSpaceConfirm,
   loadShortcutsCheatsheet,
   loadTimeZoneAsk,
+  loadParentPicker,
+  loadTagTidy,
 ];
 
 /** Fetches every screen above (lib/offlineWarmup), one at a time like the rest of the warm-up. */

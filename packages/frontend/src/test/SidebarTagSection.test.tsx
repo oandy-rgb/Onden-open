@@ -103,11 +103,12 @@ describe("desktop layout", () => {
 });
 
 describe("the unused-tags line", () => {
-  it("sits below the scrolling tag list, so opening its list never moves the used tags out of the scroll box", () => {
+  it("sits below the scrolling tag list, so opening its list never moves the used tags out of the scroll box", async () => {
     render(<OverviewSidebar {...sidebarGroups()} />);
     const scroller = section().querySelector(".sb-tagtree-scroll")!;
     // The used tags are in the scroll box; the line and its list are outside it.
     expect(scroller.querySelector(".sb-tagtree-list")).not.toBeNull();
+    await screen.findByRole("region", { name: "Tidy up" }); // the tidy line loads on use
     const line = section().querySelector(".tag-tidy")!;
     expect(scroller.contains(line)).toBe(false);
     fireEvent.click(within(line as HTMLElement).getByRole("button", { name: "Show the list" }));
@@ -199,7 +200,7 @@ describe("the row menu", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("hiding leaves a tag out of the list only; the quiet last line brings hidden ones back and 在側欄顯示 restores", () => {
+  it("hiding leaves a tag out of the list only; the quiet last line brings hidden ones back and 在側欄顯示 restores", async () => {
     const props = sidebarGroups();
     render(<OverviewSidebar {...props} />);
     expect(screen.queryByRole("button", { name: /hidden tag/ })).toBeNull();
@@ -210,7 +211,7 @@ describe("the row menu", () => {
     expect(getAppState().data.tags?.some((row) => row.id === "t-solo" && !row.hidden)).toBe(true);
     const line = within(section()).getByRole("button", { name: "1 more hidden tag" });
     // The collapsed 整理 line closes the section, below the scrolling list that ends with the hidden-tags line.
-    const tidy = within(section()).getByRole("region", { name: "Tidy up" });
+    const tidy = await within(section()).findByRole("region", { name: "Tidy up" }); // loads on use
     expect(line.parentElement!.nextElementSibling).toBe(tidy);
     expect(section().lastElementChild).toBe(tidy);
     fireEvent.click(line);

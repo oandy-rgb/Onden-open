@@ -18,9 +18,8 @@ import { holdSurface, beginTouchHold, type TouchHoldHandlers, createEdgeAutoScro
 import { NewTagField, useNewTag } from "./NewTagField";
 import RenameInput from "./RenameInput";
 import { lazyWithReload } from "../lib/lazyWithReload";
-import { loadTagDeleteConfirm, loadTagMoveConfirm } from "./lateShell";
+import { loadTagDeleteConfirm, loadTagMoveConfirm, loadTagTidy } from "./lateShell";
 import ShellDialog from "./ShellDialog";
-import TagTidy from "./TagTidy";
 import type { SidebarNav, SidebarRename } from "./sidebarGroups";
 import { isImeComposing } from "../lib/keys";
 import { TAG_NAME_MAX } from "@onden/markdown";
@@ -28,6 +27,7 @@ import { elementAtPoint } from "../lib/documentAccess";
 
 const TagDeleteConfirm = lazyWithReload(loadTagDeleteConfirm);
 const TagMoveConfirm = lazyWithReload(loadTagMoveConfirm);
+const TagTidy = lazyWithReload(loadTagTidy);
 
 // The tag tree of the sidebar — ONE component on both layouts (tags and notes
 // are both nodes: one entry, two sides):
@@ -289,7 +289,7 @@ export default function SidebarTagTree({ nav, rename, onCreateTag, onCreateInsid
   // The owner's quiet 整理 line: unused tags and similar names; collapsed. In the
   // desktop section it sits below the scrolling tag list, not inside it: opening
   // it used to push the used tags out of the section's small scroll box.
-  const tidy = !searching && <TagTidy openTag={nav.openTag} />;
+  const tidy = !searching && <Suspense fallback={null}><TagTidy openTag={nav.openTag} /></Suspense>;
 
   return (
     <div className={classNames("sb-tagtree", section && "sb-tagtree--section")} ref={rootEl} data-placement={placement}>

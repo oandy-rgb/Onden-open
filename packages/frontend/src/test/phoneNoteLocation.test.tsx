@@ -86,12 +86,12 @@ describe("phone note top bar: location", () => {
     expect(trail.querySelector(".pnl-far")).toBeNull();
   });
 
-  it("‘Move elsewhere…’ opens the parent picker and moves the note", () => {
+  it("‘Move elsewhere…’ opens the parent picker and moves the note", async () => {
     const onAssignGroup = vi.fn();
     const { container } = renderBar(weekly, { onAssignGroup });
     fireEvent.click(bar(container).getByRole("button", { name: /Where this note sits/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Move elsewhere…" }));
-    const input = screen.getByRole("combobox", { name: "Search parent notes…" });
+    const input = await screen.findByRole("combobox", { name: "Search parent notes…" }); // the picker loads on first use
     expect(input).toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: "Projects" }));
     expect(onAssignGroup).toHaveBeenCalledWith("wk", "top");
@@ -103,10 +103,10 @@ describe("phone note top bar: location", () => {
     expect(screen.queryByRole("menuitem", { name: "Move elsewhere…" })).toBeNull();
   });
 
-  it("top level: ‘Put under…’ opens the picker; a viewer sees nothing", () => {
+  it("top level: ‘Put under…’ opens the picker; a viewer sees nothing", async () => {
     const { container, unmount } = renderBar(lone, { onAssignGroup: vi.fn() });
     fireEvent.click(bar(container).getByRole("button", { name: "Put under…" }));
-    expect(screen.getByRole("combobox", { name: "Search parent notes…" })).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Search parent notes…" })).toBeInTheDocument();
     unmount();
     const viewer = renderBar(lone);
     expect(bar(viewer.container).queryByRole("button", { name: "Put under…" })).toBeNull();

@@ -6,7 +6,7 @@
 // a #word written in a note's body or title is text, not a tag: inline-only
 // notes are never members, and quick capture leaves its #word as text.
 import { test, expect, type Page } from "@playwright/test";
-import { ready, ensureInbox, openQuickCapture, saveQuickCapture, titleTags, titleTagAdd, titleTagOption, applyTagFromTitle, H } from "./helpers";
+import { ready, ensureInbox, openQuickCapture, saveQuickCapture, titleTags, titleTagAdd, titleTagOption, applyTagFromTitle, expectOfflineReady, H } from "./helpers";
 
 
 // 2026-11-18 (owner: 「都改成檢查」): every value this probe used to record is now a check. Each `expect` names the written
@@ -91,6 +91,10 @@ test("TAG-02: projections agree, duplicate names, offline entries, renamed task 
   //    (AGENTS.md 「保存確認」; docs/decisions/no-p2p-intermittent-server.md: usable offline, synced on reconnect).
   const tOff = await rp(`off${stamp}`);
   await ready(page, `/?view=notes&node=${pick}`);
+  // The harness has no cache of the lazily loaded screens until the idle warm-up has run (lib/offlineWarmup.ts). Offline
+  // before that, the first screen the page needs is a failed chunk load: the whole app becomes "Not available offline yet",
+  // its reconnect handler is gone and the queued removal below is never sent (a device that has used Onden online has them).
+  await expectOfflineReady(page);
   await context.setOffline(true);
   await applyTagFromTitle(page, `off${stamp}`);
   await expect(sources.getByRole("button", { name: `#off${stamp}`, exact: true })).toBeVisible();

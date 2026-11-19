@@ -72,6 +72,10 @@ site 套件測試、後端與前端的 `src/test/guards/`、`ratchet:check`、`c
 2026-11-10 的 main 同時帶著過期的資料庫型別檔、五個紅的 markdown 守門和一個紅的 site 測試，每個都是「自己的套件全綠」的 PR 合進來的。
 合併的人在 PR 分支（已併入最新 main）上跑，紅的不合併；雲端任務的驗證清單也要列這一條。它不取代完整套件。
 
+**離線的端對端 spec 先等「離線就緒」（2026-11-18）**：`setOffline(true)` 之前呼叫 `expectOfflineReady(page)`（`e2e/fullstack/helpers.ts`）。harness 要等閒置時的離線預熱
+（`lib/offlineWarmup.ts`）才有延後載入的畫面；之前離線，第一個還沒載入的畫面會讓 `AppErrorBoundary` 取代整個 app，排隊的寫入沒人送，看起來像「離線的修改沒有到伺服器」。
+守門：`src/test/guards/e2eOfflineReady.guard.test.ts`（既有未等待的檔案列在 `NOT_YET_WAITING`，只准減少）。
+
 **e2e 的選擇器必須指向現在還畫得出來的東西**：`packages/frontend/src/test/guards/e2eSelectors.guard.test.ts` 檢查非 `zz*` 的 e2e 腳本用到的 class 與 `data-testid` 都在 `src/`（或 `packages/site/src`）找得到
 （函式庫自己的 class 如 `cm-*`、`react-flow*` 除外）。對已不存在的 class 寫 `toHaveCount(0)`／`toBeHidden()` 永遠是綠的，點擊再加 `.catch(() => {})` 就是沒點。
 沒修好的記在 `e2e-selectors-baseline.json`（今天的數字，只准減；修好的項目一定要從清單刪掉，測試會擋殘留）。要斷言「不存在」，用 role／標籤，不是舊 class。

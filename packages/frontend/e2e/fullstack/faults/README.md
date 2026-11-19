@@ -31,6 +31,7 @@ for a quick pass. Without Docker, `npx playwright test --list` (in
 | `storageQuota.spec.ts` | 6 snapshot saves fail on quota | expected to pass — `fix/storage-quota-notice` (not yet run on a real browser) |
 | `workerDeath.spec.ts` | 7 local-DB worker dies | fails (`test.fail`) at 30 s — known open: noticed only by the 60 s call timeout (#617) |
 | `staleDeploy.spec.ts` | 8a stale chunk → one reload keeps draft; 8b guard spent → error screen + Reload | pass (behavior already exists) |
+| `lateAnswer.spec.ts` | 10 a sync answer read before a save, delivered after its acknowledgement (answers out of order); the note reopened in the page must keep the saved text; 10b phone variant | pass with the watermark rule; fails with it switched off (checked on both) |
 
 A test marked `test.fail()` is reported as *passed* while the bug exists and as
 **failed ("expected to fail, but passed")** once the fix lands. That is the

@@ -16,6 +16,7 @@ const meta = { ...cached, nodes: [], nodes_omitted: true, features: { block_node
 const emptyDelta = { last_event_id: 7, nodes: { upsert: [], delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null };
 
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: vi.fn(async () => null),
   loadBootstrapList: vi.fn(async () => structuredClone(cached)),
   loadBootstrapRelations: vi.fn(async () => ({ edges: [], pointers: [], tasks: [], suggestions: [], graph_positions: [] })),

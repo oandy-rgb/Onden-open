@@ -150,23 +150,33 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **待送文字蓋過的筆記，由本機副本記著，送完再讀一次（2026-11-18）。** 每次保存現在都先是佇列的一列（[送出前先記下](../architecture/note-writes.md#送出前先記下2026-11-18)），
   所以 bootstrap、delta、單筆讀取常常遇到「這則筆記還有待送的文字」：照第十七批的規則把待送文字蓋在伺服器較新的那一列上，
   游標同時越過伺服器那一版。送出那筆寫入的常常是**另一個**分頁（或重開之前的那一頁），只靠這一頁記憶體裡的
-  `heldBehindQueue` 不夠：這一頁、它的快照、從快照打開的頁面，都會一直顯示舊字。所以副本自己記
+  頁面記憶體裡的集合不夠：這一頁、它的快照、從快照打開的頁面，都會一直顯示舊字。所以副本自己記
   （`localDbWorker` 的 `noteHeldText`，`sync_state.held_text`，跟著快照走）：投影蓋過伺服器的筆記加進去，
   伺服器那一列真的存進來就拿掉；`syncEngine.releaseHeldNotes` 每輪把「已經沒有待送寫入」的那些（`heldNotesNowSent`）
-  併進同一個集合，`hydrateNode` 一次。delta 的 `applied.heldText` 仍餵頁面的集合（與副本的清單重複但無害；
-  那一段在 #1794 改動的範圍內，等它合併後再收成一條）。
+  併進同一個集合（`serverTruthLoad.readAgain`），`hydrateNode` 一次。單筆讀取被副本拒收時，副本也把那則筆記記進同一份清單
+  （#1794 併入 main 之後收成一條：頁面一個集合、副本一份清單）。delta 的 `applied.heldText` 仍餵頁面的集合（沒有本機副本的裝置靠它）。
 
 - **伺服器副本不蓋掉還沒有回應的欄位（2026-11-19，擁有者回報：剛打的字消失又回來、游標跑到它們前面）。**
-  一份同步回應或 `GET /api/nodes/:id` 可能是在這台的存檔送到伺服器之前讀的；存檔還在路上時，列的 `updated_at`
-  還是上一次存檔的時間，所以時間規則（`lib/rowAge.ts`）分不出來。規則只有一條，放在 `storeOps.serverCopyOver`，
-  同步回應（`applySyncDelta`）與 `hydrateNode` 都走它：比手上舊的副本不收；這台有一筆還沒有回應的編輯的欄位
+  一份同步回應或 `GET /api/nodes/:id` 可能是在這台的存檔送到伺服器之前讀的。在確認過的存檔之前讀的回應，頁面的入口
+  依位置整份不收（`writePositions.takeAnswer`，見下方「晚到的回應」；#1794 併入後取代原本的時間規則 `lib/rowAge.ts`）；
+  還沒有回應的存檔沒有位置可比，所以剩下的一條放在 `storeOps.serverCopyOver`，
+  同步回應（`applySyncDelta`）、整份 bootstrap（`syncEngine.setWholeBootstrap`；沒有本機副本的裝置每一回合都是它，沒有佇列的投影）
+  與單筆讀取（`serverTruth.readNoteFromServer`）都走它：這台有一筆還沒有回應的編輯的欄位
   （`optimisticFields`）保留手上的值，列也保留手上的時間；被保留過的筆記等那筆編輯有了回應（`whenAnswered`）
   再讀一次（`syncEngine.readAgainWhenAnswered`，與排在佇列後面的筆記同一條 `releaseHeldNotes`），所以別人的較新文字仍會到。
-  編輯器的邊界另有一條（`draftActions.applyRemoteNode`）：比這個編輯器已被接受的最新存檔還舊的列，不會進入草稿；
+  編輯器的邊界（`draftActions.applyRemoteNode`）：已被接受的存檔，它的回應標頭一到，頁面就不再收在它之前讀的回應（位置，不是伺服器時間），
+  所以比它舊的列到不了草稿（`typedTextNeverReplacedByOlder` 的「編輯器自己的防線」那一則經頁面的入口送進來）；
   輸入法正在組字時，外來文字不進草稿，組字結束（`setEditorComposing`）時再交給同一條路。`MarkdownEditor` 的外來文字同步在組字中不動文件，
   組字結束（compositionend）時用同一個區段替換套用，不用計時器。測試：`test/typedTextNeverReplacedByOlder.test.tsx`（真編輯器、隨機順序）、
   `saveTiming.property.test.ts` 的 2026-11-19 案例、`offlineBodyHydrate.test.ts`。
-  限制：時間規則的限制照舊（伺服器時鐘倒退時，較新的他人修改要等下一次修改才會到）。
+  時間規則已刪，伺服器時鐘倒退不再影響（`saveTiming` 的時鐘案例照舊通過）。
+  已知限制（之後的小 PR 收進門）：區塊的復原與建立（`blockChildWriter`）用沒有經過門的 GET／POST 回答直接換掉 `markdown`，
+  而且和筆記的存檔不在同一條寫入通道，那一趟來回裡打字存檔，舊字可能進 store 再進草稿，直到之後的 `refresh()`；
+  還原版本（`noteHistoryWriter`）也是沒有經過門的 GET（有值的對照、握著同一條通道，較安全）。守門 `answerDoor.guard`
+  只認四個函式名，看不到直接的 `setData`。
+  `saveTiming` 的 seed 222、3333 與 #1866（改名後立刻重新整理又遇到 503）在 #1794 之後通過，但只證明模擬的重新整理：
+  它（`saveTiming` 的 `reload()`）只清草稿，記憶體裡的 store、還沒有回應的欄位、頁面的水位與日誌都留著，所以擋住的是
+  `serverCopyOver`。真的重新整理時這些都不在了，靠的是佇列的列蓋在回答上（佇列的投影；`saveSurvivesKill` 測關掉頁面後的存檔）。
 
 實測與入口限制見 [待同步文字驗證](../archive/pending-note-text-fixes-2026-09-13.md)。API 完全不可達
 時的 LoginGate 冷啟動仍阻擋編輯器，登錄 GAP-20；不能以快取存在取代登入／換帳號隔離的契約。
@@ -295,3 +305,21 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **不放鬆**：沒有本機副本（`getLocalCopyState() === "none"`）的裝置連不到時仍停在遮罩後；`accessRevoked` 先判斷、不當離線；伺服器有回答時的檢查一字未動。
 - **現況**：重新核對的路徑——`reconnect()`（瀏覽器 `online`、伺服器更新後的 `protocolGate`、連不到後的重試）改用這條規則。SSE 成員資格通知（`membershipChanged`／`sync()` 的 `syncDirty` 重跑）是伺服器剛說過成員資格變了，連不到時維持遮罩（明確訊號，不是「連不到」）。
 - 測試：`src/test/properties/connectionLiveness.property.test.ts`（隨機序列含「恢復網路但伺服器不通」、開機與恢復連線參數化對照）、`src/test/serverUnreachable.test.ts`。
+
+## 晚到的回應不蓋掉已確認的保存：事件位置與水位（2026-11-16，取代 #1753 的 `updated_at` 規則；#1794 審查後定案）
+
+- **原因**：一個在保存之前送出的同步請求，回應在保存確認之後才到，帶的是保存之前的資料，整份套用就把剛存好的蓋回去（記憶體與本機副本都是）。時間不是可靠的先後（伺服器時鐘會往回調）。
+- **伺服器**：`db.ts insertEvent` 在事件鎖下記下這筆 `domain_events.id`，提交之後才算數（`spine/eventPosition.ts`，`afterCommit`）；`eventPositionHeader.ts` 一個中介層把「這個請求最後提交的事件」放進 `X-Onden-Event-Position`。拒絕、沒有事件的寫入、回滾都沒有這個標頭；重送（同一個冪等鍵）回**原本的**位置（migration 212：`idempotency_keys.event_position`，與 claim 同一個交易寫入）。同步回應與 bootstrap 帶 `server_id`：由這台的節點 id 導出的值（`spine/stamps.ts serverIdentityField`，加固定用途字串取 SHA-256），不是節點 id 本身（節點 id 與標記不出現在任何給用戶端的回答裡，`syncStamps.integration`）；還原或 rebase 換了節點 id，它就跟著換，用戶端丟掉所有位置。單筆讀取 `GET /api/nodes/:id` 帶 `X-Onden-Read-Head`（讀列之前的 `MAX(id)`）。修剪事件（`pruneEvents`）不刪工作區最大的那一筆，`MAX(id)` 不會往下掉。`CLIENT_PROTOCOL` 升到 5：不說位置的伺服器與新頁面互相擋住，不會無聲沒有保護。
+- **為什麼可比**：事件鎖涵蓋配號與提交，同一工作區 id 的順序＝提交順序；回應在一個 REPEATABLE READ 快照裡讀 `MAX(id)` 與所有列，所以 head ≥ P ⇔ 回應包含寫入 P 動到的每一列（衍生的也算）。一份回應不是在寫入之後、就是不是：**不需要推算寫入動到哪些列**。
+- **規則**（`lib/answerPositions.ts isCurrentAnswer`）：每個伺服器身分一個**水位**＝這台裝置知道的最高位置（確認過的寫入、套用過的回應的 head）。任何帶列的回應（delta、成員資格頁、整份／slim／`?nodes=none` 的 bootstrap、單筆讀取）head 低於水位就**整份不套用**，再問一次。
+- **兩個地方、一個函式**：本機副本（`localDbWorker` 的 `judgeAnswer`：applySync、persistBootstrap；水位在 `sync_state`，寫進日誌，其他分頁套用回應前先讀進來）與頁面（`lib/data/writePositions.ts takeAnswer`：標頭一到就提高頁面的水位，副本忙的那個空窗由它擋；副本收了而頁面不收時，副本的游標退回去）。守門 `src/test/guards/answerDoor.guard.test.ts`：把伺服器的列交給副本或 store 的呼叫只出現在 takeAnswer 的回呼裡。
+- **活性**：連續 3 次不收後，下一筆寫入等到有一份回應被收下（或這輪同步結束）才送；keepalive 不等。`writePositions.test.ts` 用模型時鐘量上限。
+- **伺服器退回去**（#1794 第 4 輪定案，取代之前的「連續 3 次」「安靜」「游標在 head 後面」各條）：一份回答的 head **低於它的請求送出那一刻這台已知的位置**，而且是同一個身分（或回答沒說身分、或這台還不知道身分）⇒ 伺服器退回去了，一次就判（`writePositions.ts serverWentBack`）。送出那一刻已知的每一個位置都在伺服器讀這份回答之前就提交了（各種回答的 head 都是同一工作區的 `MAX(id)`，讀在請求到達之後），健康的伺服器不可能回一個比它小的 head。「已知」＝頁面的水位、副本的水位（頁面最近一次得知的：載入時、每一回合開頭 `getWatermark`、副本拒收時回傳的 `answer_watermark`；其他分頁的確認頁面看不到，學到的值是當時副本已知的下限，判斷只會少、不會錯）、同步請求自己的游標（它來自一份收下的回答）——所以「游標在 head 後面」是這條規則的一種情形。送出之後水位重新開始過（`era`）的請求不再判。只是晚到的回答（`送出時已知 ≤ head < 現在的水位`）只拒收、再問，永遠不會被當成退回去。判出來之後只有一條路（`serverTruth.ts serverLostItsWrites`，同步迴圈與 `takeBootstrap` 呼叫）：副本忘掉水位並記下「還欠一次重建」（`sync_state.rebuild_owed`，`critical` 寫入，失敗就丟出，頁面這時也不忘自己的）→ 頁面忘掉水位 → 提示一次（「伺服器上的資料比這台裝置最後存的還舊，請看一下最近改過的筆記。」；副本說之前已欠就不再提示；沒有副本的裝置每一回合都是整份 bootstrap，每次退回去只會判到一次）→ 整份 bootstrap（游標在 `persistBootstrap` 裡退回）→ 成員檢查從頭做完才放下閘門。bootstrap 失敗或重新整理：每一回合開頭讀副本的 `rebuildOwed`，欠著就先重建；整份 bootstrap 存進副本才清（`?nodes=none` 不算）。bootstrap 也照同一條規則（開機第一份 bootstrap 判出來就照這條路收下，不走離線）；單筆讀取判出來就交給同步（加進「再讀一次」並立刻要一次同步）。成員頁與 `?nodes=none` 不判（沒有 `asked`，只拒收；不判的路不會誤判），它們前後的 delta 會判到。
+- **不是退回去的情形**（每一條都有測試）：另一個身分（`sameServer` 為假，空的 delta 也算）走「換了伺服器」：忘掉水位、整份重建、不提示。第一次重建失敗也不會變成退回去：副本自己看到另一個身分時（`applySync`、`?nodes=none` 的 `persistBootstrap`）記下欠重建；頁面先看到時，下一回合開頭發現副本還算在另一份紀錄裡（`startWatermarkFrom` 回 false，不收它的位置），先重建，再拿副本的游標判斷。`?nodes=none` 不是整份狀態（`wholeState` 只給整份）；沒有 head 的回答不判；讀副本（read replica）延遲在這個部署不存在（單一 Postgres、每個回答都讀主庫）——將來若加讀副本，回答的 head 必須讀自主庫，否則這條規則會誤判；修剪不刪工作區最大的事件；一台伺服器只有一個工作區（`services/workspaceId.ts`），預設工作區被換掉等於伺服器的狀態換了，照退回去處理是對的。
+- **規則靠的前提**（`writePositions.ts` 檔頭）：一台伺服器一個工作區（水位只以身分為鍵；後端守門 `singleWorkspaceHead.guard`）；帶 head 的回答一律 `Cache-Control: no-store`（`app.ts`，`eventPositionHeader.integration` 釘住），被快取重放的舊回答會被當成退回去；單筆讀取也帶身分（`X-Onden-Read-Server`），換了身分之後的讀取走「換了伺服器」，不會拿舊紀錄的位置來判；副本拒收時附上它的水位與身分，頁面只在同一份紀錄裡學（`startWatermarkFrom`）。
+- **在同步迴圈外發現**：bootstrap 判出退回去時同樣把成員檢查設成從頭做（`reconciledRejectionRevision = null`）；單筆讀取判出來時先把證據留下（欠重建、提示）。判出來之後立刻要一回合（`serverLostItsWrites` → `later.again`）：沒有同步在跑就跑一回合，正在跑的（已經過了開頭的檢查）結束後再跑一回合（`markSyncDirty`，它也先把閘門升起來）。
+- **被拒之後**：bootstrap 在擋住新寫入的期間重新下載同一種，最多 3 次（`ASK_AGAIN_AT_MOST`，只是重問的上限，不是退回去的判斷）；單筆讀取（`serverTruth.ts readServerNode`）同樣再問，仍被拒就把筆記放進「再讀一次」的清單（`serverTruthLoad.ts readAgain`），2 秒後的同步讀它。閘門**只因成員檢查完成**而放下：被拒的回答（`RefusedAnswer`）不放它，成員頁被拒更不放。退回去之後進得去，靠的是恢復本身成功（清水位 → bootstrap 被收下 → 成員檢查照常跑完）。單筆讀取的重問有讀取期限（`readWithDeadline`，它握著新寫入）；重問逾時也把筆記放進「再讀一次」；一則一直被拒的筆記每一輪間隔加倍（2、4、8、16 秒），四輪後停，等它下一次改變或被打開；伺服器回「不在了／讀不到」（403／404／410）就清掉它的輪數。
+- **已知、不擋的（第 4 輪起）**：(1) 兩個分頁可能各提示一次（甲判出、重建、記號清掉之後，乙還握著自己的水位，自己再判出一次）。(2) 這條規則只在 head 仍低於這台已知的位置時發現得了：快照把事件序號也還原，之後別台又寫到超過這台的游標，閒著的這台就分不出來，直到每日的整份更新（要關掉需要紀錄的指紋，另排）；走還原腳本的還原會換身分，不受影響。(3) 真的退回去時，這台的本機副本是遺失存檔唯一的持有者，重建會蓋掉它（main 上本來如此，另排：重建前把不同的本機內文留成救回的副本）。
+- **已知、不擋的**：水位寫進日誌是 `critical: false`、頁面不等它。確認之後幾毫秒內重新載入可能少了那一次提升，但同一個 worker 先寫提升、後寫「移除待送」，所以不是提升還在，就是那筆寫入還在佇列裡，重送會回原本的位置。
+- **分頁與帳號**：每個分頁一個 worker、一份記憶體副本，共用同一份 IndexedDB 快照與日誌（`localDb.ts` 每頁 `new Worker`；`localDbWorker.ts` `adoptStoredSnapshot`／`catchUpWithOtherTabs`）；水位經日誌在分頁間傳遞。副本依帳號分開（`accountStorage`），頁面一次只綁一個帳號。
+- **測試**：`lateAnswerKinds.property.test.ts`（每一種資料、副本忙、勾選任務改寫筆記、隨機序列、MR-Y1）、`saveTiming.property.test.ts`、`answerPositions.test.ts`、`writePositions.test.ts`、`serverRolledBack.test.tsx`（退回去的每一條路與健康伺服器不誤判）、`serverRolledBackRealCopy.test.tsx`（同一條恢復接真的 worker，含重新整理後仍欠重建）、`readAgain.test.tsx`、`localDbSharedStorage.test.ts`（兩個分頁、兩個帳號）、後端 `eventPositionHeader.integration.test.ts`、e2e `faults/lateAnswer.spec.ts`（規則關掉會紅）。

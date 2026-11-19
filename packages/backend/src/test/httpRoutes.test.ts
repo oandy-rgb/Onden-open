@@ -74,7 +74,8 @@ const poolQuery = vi.fn<(sql: string, params?: unknown[]) => Promise<QueryResult
 const withTransactionImpl = vi.fn(async <T>(fn: () => Promise<T>) => fn());
 
 // Write stamps (spine/stamps.ts) need the real node table; this file stands in for the database.
-vi.mock("../spine/stamps.js", () => ({ stampTransaction: async () => {}, countWritesWithoutStamp: async () => 0, currentStampWall: async () => null }));
+// serverIdentityField: every sync answer and bootstrap says whose event log it counts in (spine/stamps.ts).
+vi.mock("../spine/stamps.js", () => ({ stampTransaction: async () => {}, countWritesWithoutStamp: async () => 0, currentStampWall: async () => null, serverIdentityField: async () => ({ server_id: "test-identity" }) }));
 vi.mock("../db.js", () => ({
   pool: { query: poolQuery, connect: async () => ({ query: poolQuery, release: () => {} }) },
   q: poolQuery,

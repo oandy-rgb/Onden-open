@@ -5,7 +5,8 @@
 // real note writer, write queue and store, the way OverviewEditorHost and useOverviewMode wire them. The server, the
 // transport and the local database are the save-timing world (helpers/saveWorld.ts): every request waits until the
 // test delivers it. A sync answer is captured when it is asked and delivered later, through the same road as
-// syncEngine.applyAndShow (queued writes laid over it, then storeOps.applySyncDelta).
+// syncEngine.applyAndShow (the page's door, takeAnswer, judging it by the head it was read at; queued writes laid over
+// it; then storeOps.applySyncDelta).
 //
 // Property (only this device writes): after every step the editor's document is exactly what the person typed, in
 // order, and the caret is where their last keystroke left it. Fresh seed every run, printed; PROPS_SEED replays.
@@ -16,8 +17,12 @@ import { act, render } from "@testing-library/react";
 import { useEffect, useSyncExternalStore } from "react";
 import { EditorView } from "@codemirror/view";
 
+const responses = vi.hoisted(() => ({ listener: null as null | ((path: string, init: RequestInit | undefined, response: Response) => void) }));
 vi.mock("../lib/api", async (original) => ({
   ...await original<typeof import("../lib/api")>(),
+  // lib/data/writePositions installs its recorder here; the world's responses are handed to it (world.onResponse), as
+  // saveTiming does: a save's position reaches the page the moment its headers arrive.
+  setWriteResponseListener: (listener: typeof responses.listener) => { responses.listener = listener; },
   api: vi.fn(async (path: string, init?: unknown) => {
     const { world } = await import("./helpers/saveWorld");
     return world.transport(path, init as never);
@@ -35,14 +40,15 @@ import { getAppState, getNode, resetAppState, selectOverviewSelectedNode, setDat
 import {
   __resetDraftStateForTests, applyRemoteNode, resetDraftForNode, setEditorComposing, typeIntoDraft,
 } from "../lib/data/draftActions";
-import { applySyncDelta } from "../lib/data/storeOps";
-import { projectPendingNoteText } from "../lib/pendingNoteProjection";
+import { applySyncDelta, wholeBootstrapOver } from "../lib/data/storeOps";
+import { forgetWatermark, takeAnswer } from "../lib/data/writePositions";
 import type { AppliedSyncDelta } from "../lib/localDb";
 import { stopWriteRetry } from "../lib/data/writeQueue";
 import { refreshRecoveryWrites } from "../lib/data/writeRecovery";
 import { setPending } from "../lib/data/syncStatus";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { world } from "./helpers/saveWorld";
+world.onResponse = (path, init, response) => responses.listener?.(path, init, response as unknown as Response);
 import { dataSync } from "../lib/data";
 
 bindAccountStorage("u", "");
@@ -87,17 +93,18 @@ class Phone {
   /** What the person typed, in order, and where their caret is. */
   typed = START;
   caret = START.length;
-  private answers: ContentNode[][] = [];
+  private answers: Array<{ rows: ContentNode[]; head: number }> = [];
   private chars = [..."歷史記錄筆記日曆時間軸串起來"];
 
   /** `slim`: the note's text is still on the server when it opens (a slim start, or a note made elsewhere): the
    *  editor appears once hydrateNode's read is answered (`bodyArrives`). */
-  async open(options: { slim?: boolean } = {}): Promise<void> {
+  async open(options: { slim?: boolean; copyless?: boolean } = {}): Promise<void> {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     stopWriteRetry();
     __resetDraftStateForTests();
     world.reset();
     world.server.get("a")!.markdown = START;
+    world.copyless = options.copyless === true;
     localStorage.clear();
     await refreshRecoveryWrites();
     setPending(0);
@@ -170,22 +177,47 @@ class Phone {
   }
 
   /** The device asks /api/sync now: the answer is the server's rows at this moment. */
-  ask(): void { this.answers.push(world.rows()); }
+  ask(): void { this.answers.push({ rows: world.rows(), head: world.head }); }
 
   /** A captured answer arrives (late, possibly after newer ones, possibly twice). */
   async answer(index: number, keep = false): Promise<void> {
     if (!this.answers.length) return;
     const at = index % this.answers.length;
-    const rows = this.answers[at]!;
+    const { rows, head } = this.answers[at]!;
     if (!keep) this.answers.splice(at, 1);
-    const upsert = projectPendingNoteText(rows, world.pending as never);
-    // The worker's applySync writes the answer, with the queued writes laid over it, into the local copy first.
-    for (const row of upsert) world.localText.set(row.id, row.markdown ?? "");
+    await this.arrive(rows, head);
+  }
+
+  /** An answer read at `head` with `rows` reaches the page now. */
+  async arrive(rows: ContentNode[], head: number): Promise<void> {
     const delta = {
-      last_event_id: 0, nodes: { upsert, delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] },
+      last_event_id: 0, head_event_id: String(head), nodes: { upsert: rows, delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] },
       attributes: { upsert: [], delete: [] }, workspace: null,
     } as unknown as AppliedSyncDelta;
-    act(() => { setData((data) => applySyncDelta(data, delta)); });
+    await act(async () => {
+      await takeAnswer({
+        head: delta.head_event_id, serverId: undefined,
+        // The local copy judges and stores it as the worker does (helpers/saveWorld.ts localDb.applySync).
+        toCopy: async () => {
+          const stored = await world.localDb.applySync(delta);
+          return { value: stored as unknown as AppliedSyncDelta, stale: "stale" in stored, copy: stored as never };
+        },
+        toStore: (taken) => setData((data) => applySyncDelta(data, taken)),
+      });
+    });
+    await settle();
+  }
+
+  /** A whole bootstrap read at `head` reaches the page now, as syncEngine.takeBootstrap → setWholeBootstrap takes one
+   *  (the store replaced, every note row through storeOps.serverCopyOver). */
+  async arriveWhole(rows: ContentNode[], head: number): Promise<void> {
+    await act(async () => {
+      await takeAnswer({
+        head: String(head), serverId: undefined, wholeState: true,
+        toCopy: async () => ({ value: rows }),
+        toStore: (taken) => setData((data) => wholeBootstrapOver(data, { ...data, nodes: taken }).state),
+      });
+    });
     await settle();
   }
 
@@ -201,10 +233,30 @@ class Phone {
 }
 
 const phone = new Phone();
-beforeEach(async () => { await phone.open(); });
+beforeEach(async () => { forgetWatermark(); await phone.open(); }); // the page's watermark is module state (writePositions)
 afterEach(async () => { await phone.close(); });
 
 describe("typed text is never replaced by an older text (report 2026-11-19)", { timeout: 60_000 }, () => {
+  it("no local copy: the report's sync answer, read after save 1 and delivered while save 2 is on its way", async () => {
+    await phone.close();
+    await phone.open({ copyless: true });
+    const seen: string[] = [];
+    const step = async (name: string, run: () => Promise<void> | void) => { await run(); seen.push(...phone.problems(name)); };
+    await step("type 歷", () => phone.type());
+    await step("autosave", () => phone.autosave());
+    await step("save 1 answered", () => phone.deliver(0));
+    await step("sync asked", () => phone.ask());
+    await step("type 史", () => phone.type());
+    await step("autosave", () => phone.autosave());
+    await step("the answer arrives", () => phone.answer(0));
+    expect(getNode("a")?.markdown).toBe(phone.typed);
+    await step("save 2 answered", () => phone.deliver(0));
+    phone.ask();
+    await step("the next answer arrives", () => phone.answer(0));
+    expect(seen).toEqual([]);
+    expect(world.server.get("a")!.markdown).toBe(`${START}歷史`);
+  });
+
   it("the report: an answer asked after save 1 was answered, delivered while save 2 is on its way", async () => {
     const seen: string[] = [];
     const step = async (name: string, run: () => Promise<void> | void) => { await run(); seen.push(...phone.problems(name)); };
@@ -225,6 +277,27 @@ describe("typed text is never replaced by an older text (report 2026-11-19)", { 
     expect(world.localText.get("a")).toBe(phone.typed);
     phone.ask();
     await step("the next answer arrives", () => phone.answer(0));
+    expect(seen).toEqual([]);
+    expect(world.server.get("a")!.markdown).toBe(`${START}歷史`);
+  });
+
+  it("no local copy: the report, with a whole bootstrap read after save 1 and before save 2 (every pass is one there)", async () => {
+    // Review of #1794 (second half, point 4): a device with no local copy takes a whole bootstrap every pass and has
+    // no queued text laid over it, so only the store's rule keeps save 2's character.
+    await phone.close();
+    await phone.open({ copyless: true });
+    const seen: string[] = [];
+    const step = async (name: string, run: () => Promise<void> | void) => { await run(); seen.push(...phone.problems(name)); };
+    await step("type 歷", () => phone.type());
+    await step("autosave", () => phone.autosave());
+    await step("save 1 answered", () => phone.deliver(0));
+    const read = { rows: world.rows(), head: world.head }; // the bootstrap is read now: save 1's text, at save 1's position
+    await step("type 史", () => phone.type());
+    await step("autosave", () => phone.autosave());
+    await step("the bootstrap lands while save 2 is on its way", () => phone.arriveWhole(read.rows, read.head));
+    expect(getNode("a")?.markdown).toBe(phone.typed);
+    await step("save 2 answered", () => phone.deliver(0));
+    await step("the next bootstrap", () => phone.arriveWhole(world.rows(), world.head));
     expect(seen).toEqual([]);
     expect(world.server.get("a")!.markdown).toBe(`${START}歷史`);
   });
@@ -267,9 +340,11 @@ describe("typed text is never replaced by an older text (report 2026-11-19)", { 
     type Event = "type" | "deliver" | "ask" | "answer" | "answerTwice" | "body" | "readAgain";
     const events: Event[] = ["type", "type", "type", "deliver", "deliver", "deliver", "ask", "ask", "answer", "answer", "answerTwice", "body", "readAgain", "body"];
     const order = fc.shuffledSubarray(events, { minLength: events.length, maxLength: events.length });
-    await fc.assert(fc.asyncProperty(order, fc.array(fc.nat(3), { minLength: events.length, maxLength: events.length }), fc.boolean(), async (steps, picks, slim) => {
+    // Every run once with a local copy (the worker lays queued text over each answer) and once without one (IndexedDB
+    // blocked, a private window): then only the store's own rule (storeOps.serverCopyOver) keeps the typing.
+    await fc.assert(fc.asyncProperty(order, fc.array(fc.nat(3), { minLength: events.length, maxLength: events.length }), fc.boolean(), fc.boolean(), async (steps, picks, slim, copyless) => {
       await phone.close();
-      await phone.open({ slim });
+      await phone.open({ slim, copyless });
       const seen: string[] = [];
       const run = async (event: Event, n: number) => {
         if (event === "type") { await phone.type(); await phone.autosave(); }
@@ -284,25 +359,22 @@ describe("typed text is never replaced by an older text (report 2026-11-19)", { 
       for (let guard = 0; !seen.length && world.reads.length && guard < 10; guard++) await run("body", 0);
       for (let guard = 0; !seen.length && world.inflight.length && guard < 10; guard++) await run("deliver", 0);
       if (!seen.length) { phone.ask(); await run("answer", 99); }
-      expect(seen, `${slim ? "slim open; " : ""}${steps.join(", ")}`).toEqual([]);
+      expect(seen, `${slim ? "slim open; " : ""}${copyless ? "no local copy; " : ""}${steps.join(", ")}`).toEqual([]);
       expect(world.server.get("a")!.markdown).toBe(phone.typed);
     }), { seed: SEED, numRuns: RUNS, endOnFailure: true });
   });
 
-  it("the editor's own guard: a row older than this editor's accepted save never reaches the draft, a newer one does", async () => {
+  it("an answer read before this editor's accepted save is refused at the page's door (by position) and never reaches the draft; a newer one does", async () => {
     await phone.type(); await phone.autosave(); await phone.deliver(0);
     const accepted = phone.typed;
     const acceptedRow = getNode("a")!;
-    const older = new Date(Date.parse(acceptedRow.updated_at!) - 1000).toISOString();
-    // Whatever path put it there: the store row goes back to the text from before the save, with an earlier time.
-    act(() => { setData((data) => ({ ...data, nodes: data.nodes.map((n) => n.id === "a" ? { ...n, markdown: START, updated_at: older } : n) })); });
-    await settle();
+    const acceptedAt = world.head; // the save's position
+    // An answer read before the save: the text from before it (the page's door refuses it by position, not by time).
+    await phone.arrive([{ ...acceptedRow, markdown: START }], acceptedAt - 1);
     expect(getAppState().overviewDraft).toBe(accepted);
     expect(phone.problems("an older row")).toEqual([]);
     // Another writer's newer text still reaches a clean editor (GAP-186).
-    const newer = new Date(Date.parse(acceptedRow.updated_at!) + 1000).toISOString();
-    act(() => { setData((data) => ({ ...data, nodes: data.nodes.map((n) => n.id === "a" ? { ...n, markdown: `${accepted}\n別台`, updated_at: newer } : n) })); });
-    await settle();
+    await phone.arrive([{ ...acceptedRow, markdown: `${accepted}\n別台` }], acceptedAt + 1);
     expect(getAppState().overviewDraft).toBe(`${accepted}\n別台`);
     expect(phone.view.state.doc.toString()).toBe(`${accepted}\n別台`);
   });

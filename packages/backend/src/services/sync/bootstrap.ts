@@ -30,6 +30,7 @@ import { encodeBootstrapNodes } from "./bootstrapWire.js";
 import { config } from "../../config.js";
 import { INK_PAGE_ATTRS } from "@onden/markdown";
 import { liveNodeSql } from "../../spine/nodeSql.js";
+import { serverIdentityField } from "../../spine/stamps.js";
 
 // Scale plane: the cap conflates two distinct concerns that we now separate.
 //   • "don't ship all BODIES" — CORRECT. The full markdown of every node is what
@@ -277,6 +278,8 @@ async function readBootstrap(actor: ActorCtx, workspaceId: string, slimBodies: b
     // Lean: nodes carry no attrs map, and these keys' values are not here.
     ...(lean ? { attrs_omitted: true, deferred_attribute_keys: [...BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS] } : {}),
     last_event_id: lastEventId,
+    // Which server's event log the positions count in (the sync delta carries the same; frontend lib/answerPositions.ts).
+    ...(await serverIdentityField()),
     membership_epoch: membershipEpoch,
     server_time: serverTime,
     workspace: ws.rows[0] ? workspaceWireRow(ws.rows[0]) : ws.rows[0],

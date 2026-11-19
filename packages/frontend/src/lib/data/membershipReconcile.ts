@@ -48,7 +48,8 @@ export type ReconcileDeps = {
   /** Complete held node ∪ task ids, captured before each pagination attempt. */
   getLocalKnown: () => Promise<string[]>;
   /** Remove access before applying grants. Caller keeps the display gated. */
-  isolateRevoked: (revoked: string[]) => Promise<void>;
+  /** `version`: the readable set these ids were left out of, as read (its event_cursor is where it was read). */
+  isolateRevoked: (revoked: string[], version: { epoch: number; event_cursor: string | undefined }) => Promise<void>;
   /** Fetch a bounded batch, valid only while the epoch is `expectedEpoch`. */
   fetchProjection: (ids: string[], expectedEpoch: number) => Promise<MembershipProjection>;
   /** Apply every channel, preserving the existing event cursor. */
@@ -148,7 +149,7 @@ export async function reconcileMembership(deps: ReconcileDeps): Promise<Reconcil
     // Scoped: a bucket outside the scope has equal digests, so equal ids.
     const revoked = [...localKnown].filter(id => (!inScope || inScope.has(bucketOf(id))) && !readable.has(id));
     const granted = [...readable].filter(id => !localKnown.has(id));
-    await deps.isolateRevoked(revoked);
+    await deps.isolateRevoked(revoked, version);
     for (let offset = 0; offset < granted.length; offset += HYDRATION_BATCH_SIZE) {
       const ids = granted.slice(offset, offset + HYDRATION_BATCH_SIZE);
       const projection = await deps.fetchProjection(ids, expected);

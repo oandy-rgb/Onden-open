@@ -52,8 +52,8 @@ describe("a saved local copy that holds ids the server has since rewritten", () 
     expect(await ok("getAllMembershipIds")).toEqual(expect.arrayContaining([OLD_TAG, "note"]));
 
     // the epoch moved: the reconcile finds the old tag is not readable any more (revoked) and the new one is (granted)
-    await ok("applySync", { nodes: { upsert: [], delete: [OLD_TAG] }, ...empty, last_event_id: 10 });
-    await ok("applySync", { nodes: { upsert: [tagNode(NEW_TAG), node("note", { space_id: NEW_SPACE, class_tag_ids: [NEW_TAG] })], delete: [] }, ...empty, last_event_id: 10 });
+    await ok("applySync", { nodes: { upsert: [], delete: [OLD_TAG] }, ...empty, last_event_id: 10, head_event_id: "10" });
+    await ok("applySync", { nodes: { upsert: [tagNode(NEW_TAG), node("note", { space_id: NEW_SPACE, class_tag_ids: [NEW_TAG] })], delete: [] }, ...empty, last_event_id: 10, head_event_id: "10" });
 
     const ids = (await ok("getAllMembershipIds")) as string[];
     expect(ids).toContain(NEW_TAG);

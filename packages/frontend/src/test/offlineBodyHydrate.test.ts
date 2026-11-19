@@ -27,6 +27,8 @@ import { dataSync } from "../lib/data";
 import { ApiError, noWorkspaceData } from "../lib/api";
 import { getAppState, resetAppState, setData } from "../lib/appStore";
 import { optimisticFields } from "../lib/data/optimisticFields";
+import { forgetWatermark, startWatermarkFrom } from "../lib/data/writePositions";
+import { READ_HEAD_HEADER } from "@onden/markdown/contract";
 
 const { hydrateNode, downloadBodiesForOffline } = dataSync;
 
@@ -34,6 +36,7 @@ const slim = { id: "a", title: "A", slug: "a", markdown: "", body_len: 4, source
 const row = () => getAppState().data.nodes.find((n) => n.id === "a")!;
 
 beforeEach(() => {
+  forgetWatermark(); // the page's watermark is module state (lib/data/writePositions.ts)
   local.stored.clear(); local.missing = []; local.saved = [];
   apiMock.mockReset();
   resetAppState({ data: { ...noWorkspaceData, bodies: "none", nodes: [{ ...slim }] }, online: true });
@@ -140,13 +143,20 @@ describe("background download for offline use", () => {
 describe("a read that crosses this device's own save", () => {
   const at = (s: number) => new Date(Date.UTC(2026, 10, 19, 0, 0, s)).toISOString();
   const full = (markdown: string, updated_at: string) => ({ ...slim, markdown, body_len: undefined, updated_at });
+  /** The server's answer to the next GET, read at event `head` (READ_HEAD_HEADER): the save is the second event. */
+  const readAt = (row: unknown, head: number) => (_path: string, init?: { onHeaders?: (headers: Headers) => void }) => {
+    init?.onHeaders?.(new Headers({ [READ_HEAD_HEADER]: String(head) }));
+    return Promise.resolve(row);
+  };
   /** A save of "AB" on its way, the way noteWriter.change starts one: the optimistic row and its journal entry. */
   function saveOnItsWay() {
     const before = row();
     const settle = optimisticFields("node:a", before, { markdown: "AB" });
     setData((prev) => ({ ...prev, nodes: prev.nodes.map((n) => n.id === "a" ? { ...n, markdown: "AB" } : n) }));
-    /** The save's answer, the way noteWriter.commit takes it: the field settles, the row gets the server's time. */
+    /** The save's answer, the way noteWriter.commit takes it: the field settles, the row gets the server's time, and
+     *  its position (the second event) reaches the page with its headers (lib/data/writePositions.ts). */
     return (updated_at: string) => {
+      startWatermarkFrom({ position: "2", server: null });
       settle(true, { markdown: "AB" });
       setData((prev) => ({ ...prev, nodes: prev.nodes.map((n) => n.id === "a" ? { ...n, markdown: "AB", updated_at } : n) }));
     };
@@ -157,10 +167,10 @@ describe("a read that crosses this device's own save", () => {
 
   it("read before the save reached the server, answered while it is on its way: the save's text stays", async () => {
     const answered = saveOnItsWay();
-    apiMock.mockResolvedValueOnce(full("A", at(1)));
+    apiMock.mockImplementationOnce(readAt(full("A", at(1)), 1));
     await hydrateNode("a");
     expect(row().markdown).toBe("AB");
-    apiMock.mockResolvedValue(full("AB", at(2)));
+    apiMock.mockImplementation(readAt(full("AB", at(2)), 2));
     answered(at(2));
     await vi.waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
     expect(row()).toMatchObject({ markdown: "AB", updated_at: at(2) });
@@ -169,9 +179,13 @@ describe("a read that crosses this device's own save", () => {
   it("read before the save reached the server, answered after the save's answer: older, not taken", async () => {
     const answered = saveOnItsWay();
     let answer!: (row: unknown) => void;
-    apiMock.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    let onHeaders: ((headers: Headers) => void) | undefined;
+    apiMock.mockImplementationOnce((_path: string, init?: { onHeaders?: (headers: Headers) => void }) => { onHeaders = init?.onHeaders; return new Promise((resolve) => { answer = resolve; }); });
+    apiMock.mockImplementation(readAt(full("AB", at(2)), 2)); // asked again: read after the save
     const reading = hydrateNode("a");
+    await vi.waitFor(() => expect(onHeaders).toBeDefined()); // the GET has left
     answered(at(2));
+    onHeaders?.(new Headers({ [READ_HEAD_HEADER]: "1" })); // read at the first event, before the save's
     answer(full("A", at(1)));
     await reading;
     expect(row()).toMatchObject({ markdown: "AB", updated_at: at(2) });
@@ -179,10 +193,10 @@ describe("a read that crosses this device's own save", () => {
 
   it("another writer's newer text in a read kept under the save still arrives: the note is read again", async () => {
     const answered = saveOnItsWay();
-    apiMock.mockResolvedValueOnce(full("C\nAB", at(3)));
+    apiMock.mockImplementationOnce(readAt(full("C\nAB", at(3)), 3));
     await hydrateNode("a");
     expect(row().markdown).toBe("AB");
-    apiMock.mockResolvedValue(full("C\nAB", at(3)));
+    apiMock.mockImplementation(readAt(full("C\nAB", at(3)), 3));
     answered(at(2));
     await vi.waitFor(() => expect(row()).toMatchObject({ markdown: "C\nAB", updated_at: at(3) }));
   });

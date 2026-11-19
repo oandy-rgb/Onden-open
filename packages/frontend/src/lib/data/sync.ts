@@ -61,7 +61,6 @@ export const dataSync = {
   /** The window event a queued write that finally failed is announced on. */
   get QUEUE_FAILED_EVENT() { return queue.OFFLINE_QUEUE_FAILED_EVENT; },
   get refreshPendingCount() { return status.refreshPendingCount; },
-  get applyDelta() { return store.applySyncDelta; },
   get isEmptyDelta() { return store.isEmptyDelta; },
   get reconcileMembership() { return membership.reconcileMembership; },
 };

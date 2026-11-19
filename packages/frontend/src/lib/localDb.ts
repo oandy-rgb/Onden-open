@@ -166,10 +166,11 @@ export async function loadAttributePage(after: number, limit: number): Promise<{
  * cached metadata/relations are removed. Returns the projection the UI must use.
  * Cache persistence is scheduled;
  * this is not a new durable-write acknowledgement. */
-export async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
-  // No copy: nothing is queued locally, so the server's data is the projection.
+/** `answer_stale`: the bootstrap was read before what the copy knows (lib/answerPositions.ts) and was not stored. */
+export async function persistBootstrap(data: Bootstrap): Promise<Bootstrap & AnswerRefusal> {
+  // No copy: nothing is queued locally, so the server's data is the projection (the page alone judges it).
   if (getLocalCopyState() === "none") return data;
-  return call<Bootstrap>("persistBootstrap", [data]);
+  return call<Bootstrap & AnswerRefusal>("persistBootstrap", [data]);
 }
 
 /** Offline copy for large workspaces (bodies stay out of the in-memory store).
@@ -197,15 +198,41 @@ export async function forgetBody(id: string): Promise<boolean> {
 }
 
 /** Same pending-text contract as persistBootstrap, including remote deletes. */
+/** Apply one sync answer to the local copy, unless it was read before what the copy knows (lib/answerPositions.ts):
+ *  then nothing is applied and the result says `stale` (or `serverChanged`, another server identity). */
 export async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
   return call<AppliedSyncDelta>("applySync", [delta]);
 }
 
+/** A write was acknowledged at `position`: the copy's watermark rises (lib/answerPositions.ts). */
+export async function raiseWatermark(position: string): Promise<void> {
+  await call<void>("raiseWatermark", [position]);
+}
+
+/** The page refused an answer the copy had applied: take the cursor back to `to`. */
+export async function rewindCursor(to: string): Promise<void> {
+  await call<void>("rewindCursor", [to]);
+}
+
+/** The server went back: the copy's watermark starts over and a rebuild is owed until a whole bootstrap is stored.
+ *  `alreadyOwed`: it was owed before (the person was told then). Throws when the copy could not record it. */
+export async function forgetCopyWatermark(): Promise<{ alreadyOwed: boolean }> {
+  return call<{ alreadyOwed: boolean }>("forgetCopyWatermark", []);
+}
+
+/** An answer the copy refused as read before its watermark (lib/answerPositions.ts), with that watermark. */
+export type AnswerRefusal = { answer_stale?: true; answer_watermark?: string | null; answer_server?: string | null };
+
+/** The watermark and server identity the copy holds (the page starts from them), and whether a rebuild is owed. */
+export async function getWatermark(): Promise<{ position: string | null; server: string | null; rebuildOwed?: boolean }> {
+  return call<{ position: string | null; server: string | null; rebuildOwed?: boolean }>("getWatermark", []);
+}
+
 /** Receive a freshly authorized single-node read, using the same pending-text
  * projection as bootstrap and sync. Local optimistic writes use upsertNode. */
-export async function persistRemoteNode(node: ContentNode): Promise<ContentNode> {
+export async function persistRemoteNode(node: ContentNode, head?: string, serverId?: string): Promise<ContentNode & AnswerRefusal> {
   if (getLocalCopyState() === "none") return node; // nothing to persist: the server's row is the projection (as persistBootstrap)
-  return call<ContentNode>("persistRemoteNode", [node]);
+  return call<ContentNode & AnswerRefusal>("persistRemoteNode", [node, head, serverId]);
 }
 
 // ── Attribute mutation helpers (used by useAppData's offline write-through) ─
@@ -505,4 +532,12 @@ export type AppliedSyncDelta = SyncDelta & {
   /** Notes whose server text the delta carried but a queued write of this device kept on top: once that write is
    *  gone, the server's row (the merge of both) is what to show (syncEngine.releaseHeldNotes). */
   heldText?: string[];
+  /** The answer was read before what this copy knows (lib/answerPositions.ts): nothing was applied, the cursor did not
+   *  move; ask again. `answer_watermark`: the copy's watermark then, counted in `answer_server`. */
+  stale?: true;
+  answer_watermark?: string | null;
+  answer_server?: string | null;
+  /** The answer comes from another server identity (another event log): nothing was applied; rebuild from a whole
+   *  bootstrap. */
+  serverChanged?: true;
 };

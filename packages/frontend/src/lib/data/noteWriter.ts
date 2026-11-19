@@ -12,8 +12,8 @@ import type { DataCtx } from "./types";
 import { clampNoteTitle, NODE_TITLE_MAX, KEPT_OFF_BY_PARENT_ATTR_KEY, newNoteSiteDefault, noteSizeProblem, PUBLISHED_ATTR_KEY, slugify } from "@onden/markdown";
 import { SERVER_ERROR_MESSAGES } from "../serverErrors";
 import { nodeOf } from "../nodeIndex";
-import { settleNodeToServer } from "./serverTruth";
 import { isNote } from "@onden/markdown/contract";
+import { serverTruth } from "./serverTruthLoad";
 
 export type NotePatch = Partial<Pick<ContentNode, "title" | "markdown" | "parent_id" | "hidden" | "slug" | "presentation" | "order_key">>;
 type CursorState = { anchor: number; head: number };
@@ -134,7 +134,7 @@ export function makeNoteWriter(ctx: DataCtx) {
           reconcile(id, expected as ContentNode, replacement);
         } else rollback();
         // A refused move or delete: what I remember may not be what the server has (it may be gone already).
-        if (deleted || changedFields.some((key) => key === "parent_id")) await settleNodeToServer(id, ctx.setData);
+        if (deleted || changedFields.some((key) => key === "parent_id")) await (await serverTruth()).settleNodeToServer(id, ctx.setData);
       },
       unconfirmed: () => { settle?.(true); },
     });

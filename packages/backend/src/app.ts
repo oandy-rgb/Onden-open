@@ -1,10 +1,13 @@
 import { clientProtocolGate, serverProtocolHeader } from "./clientGate.js";
 import { DEVICE_ID_HEADER, isUuid, SERVER_PROTOCOL_HEADER } from "@onden/markdown";
+import { EVENT_POSITION_HEADER, READ_HEAD_HEADER, READ_SERVER_HEADER } from "@onden/markdown/contract";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { buildHeader } from "./buildHeader.js";
+import { eventPositionHeader } from "./eventPositionHeader.js";
+import { noteReplayedPosition } from "./spine/eventPosition.js";
 import { getWorkspaceId, pool } from "./db.js";
-import { mutate, requireActor, withIdempotencyKey, isCommittedIdempotencyKey, UnauthorizedError } from "./spine/mutate.js";
+import { mutate, requireActor, withIdempotencyKey, committedIdempotencyKey, UnauthorizedError } from "./spine/mutate.js";
 import { apiOnError } from "./httpError.js";
 import { readJsonBody } from "./routes/params.js";
 import { log } from "./logger.js";
@@ -123,7 +126,7 @@ app.use(
       return corsAllowedSet.has(origin) ? origin : "";
     },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    exposeHeaders: ["X-Onden-Build", SERVER_PROTOCOL_HEADER],
+    exposeHeaders: ["X-Onden-Build", SERVER_PROTOCOL_HEADER, EVENT_POSITION_HEADER, READ_HEAD_HEADER, READ_SERVER_HEADER],
     credentials: true,
   }),
 );
@@ -152,6 +155,15 @@ app.use("*", async (c, next) => {
 const withBuildHeader = buildHeader(config.str("ONDEN_BUILD_ID"));
 if (withBuildHeader) app.use("*", withBuildHeader);
 app.use("*", serverProtocolHeader());
+// A write's place in the event order (EVENT_POSITION_HEADER), outside every middleware that can answer a write itself
+// (the idempotency replay below answers with no event, so with no header).
+app.use("*", eventPositionHeader());
+// Answers that say where they were read (a sync delta, a bootstrap, a membership page, a single note read): never kept by
+// any cache in between. The app judges an answer read below what it already knew as the server having gone back
+// (frontend lib/data/writePositions.ts serverWentBack); an old copy replayed by a cache would read as that.
+for (const path of ["/api/bootstrap", "/api/bootstrap/*", "/api/sync", "/api/sync/*", "/api/nodes/:id"]) {
+  app.use(path, async (c, next) => { await next(); c.res.headers.set("Cache-Control", "no-store"); });
+}
 
 // ── Request log ──────────────────────────────────────────────────────────
 // One line per completed request — method, path, status, duration — with the
@@ -296,7 +308,10 @@ app.use("*", async (c, next) => {
   // A retry of an already committed key is acknowledged here, before any route state check can refuse it
   // (404 note gone, 409 already live): the device applied this write and only lost the reply. Same answer as
   // IdempotentReplay at the error boundary. Needs the authenticated actor; the key is scoped to its workspace.
-  if (c.get("actor") && await isCommittedIdempotencyKey(await getWorkspaceId(), key)) {
+  const committed = c.get("actor") ? await committedIdempotencyKey(await getWorkspaceId(), key) : null;
+  if (committed) {
+    // With the position the first write committed at (EVENT_POSITION_HEADER), never the head the server has moved on to.
+    noteReplayedPosition(committed.position);
     return c.json({ deduped: true }, 200);
   }
   return withIdempotencyKey(key, next);

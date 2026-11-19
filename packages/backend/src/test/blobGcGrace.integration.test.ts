@@ -46,9 +46,10 @@ describe.skipIf(!isTestDb)("blob GC grace (DB)", () => {
     const inkSet = await add("ATTRIBUTE_SET", { key: "ink_data", value_ref: "abc" });
     const inkUndo = await add("ATTRIBUTE_SET", { key: "ink_data" }, { prev_field_values: { value_ref: "def" } });
     const plain = await add("NODE_MOVED", { parent_id: null });
+    const latest = await add("NODE_MOVED", { parent_id: null }); // the workspace's head: answers are read there
     await pruneEvents({ graceDays: 7 });
     const left = new Set((await q<{ id: string }>(`SELECT id::text FROM domain_events WHERE workspace_id = $1`, [ws])).rows.map((r) => r.id));
-    expect([...left].sort()).toEqual([deleted, inkSet, inkUndo].sort());
+    expect([...left].sort()).toEqual([deleted, inkSet, inkUndo, latest].sort());
     expect(left.has(plain)).toBe(false);
   });
 

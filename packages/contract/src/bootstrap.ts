@@ -145,6 +145,8 @@ export type Bootstrap = {
    *  cursor yet starts its event sync here instead of replaying since=0.
    *  Missing on older servers and on locally constructed data. */
   last_event_id?: string;
+  /** The server's identity, as SyncDelta.server_id: which event log `last_event_id` counts in. Absent from an older server. */
+  server_id?: string;
   /** The membership epoch of the readable set this payload lists (same
    *  snapshot as its rows); absent from an older server. */
   membership_epoch?: number;
@@ -223,6 +225,11 @@ export type SyncDelta = {
   /** Where the workspace's event log ends (a decimal string). A client whose cursor is beyond it was restored from a
    *  newer database than the server's and must start over from a bootstrap. */
   head_event_id: string;
+  /** Which server's event log `head_event_id` and every write's position (EVENT_POSITION_HEADER) count in: the
+   *  installation's node id (backend `sync_node`). A different value means another log — the database was replaced or
+   *  given a new node id (a restore) — so positions recorded against the old one say nothing about this answer. Absent
+   *  from an older server. */
+  server_id?: string;
   /** The workspace membership epoch at the time of this delta; the client reconciles read-membership only when it
    *  advances past its last-reconciled value. */
   membership_epoch?: number;

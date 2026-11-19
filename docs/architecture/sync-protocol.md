@@ -1,6 +1,6 @@
 # Sync protocol (offline-first, event-sourced)
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/routes/sync.ts, packages/backend/src/services/sync/**
 
 Status: **draft / target** — spec first, incremental migration. Authored 2026-06-14.
@@ -346,3 +346,32 @@ backup run it first, forced (also hidden or on Save-Data; a forced call that
 finds a background pass waits for it, then runs its own). When it cannot finish
 (offline, a failed request) the backup says how many drawings are missing,
 counted from the last list read, instead of writing silently.
+
+## Where an answer was read: event positions (2026-11-18)
+
+Every answer that carries rows says where in the workspace's event order it was read, and whose log that is:
+a delta's `head_event_id`, a bootstrap's `last_event_id`, a membership page's `event_cursor`, and `server_id` on deltas
+and bootstraps. A single note read (`GET /api/nodes/:id`) carries `X-Onden-Read-Head`, the head read *before* the row
+(`workspaceHead` in `services/sync/delta.ts`), and `X-Onden-Read-Server`, the same derived identity as `server_id`.
+Answers that carry a head are `Cache-Control: no-store`. Every successful write that committed an event answers with
+`X-Onden-Event-Position` (a replay answers with its first position, migration 212). Ids are assigned and committed
+under the workspace's event lock, so head ≥ P means the answer contains write P. The client refuses any answer read
+below the highest position it knows and asks again. The rule, its liveness gate and the lost-server case are in
+[decisions-core-sync.md](../agents/decisions-core-sync.md#晚到的回應不蓋掉已確認的保存事件位置與水位2026-11-16取代-1753-的-updated_at-規則1794-審查後定案).
+Event pruning (`pruneEvents`, off by default) never deletes a workspace's highest event, so the head never goes
+down. `CLIENT_PROTOCOL` is 5.
+
+### Writes without a position (known limits, 2026-11-18)
+
+A write that commits no event has no position, so nothing stops an older answer with the same head from putting its old
+rows back. Two such writes change rows an answer carries:
+
+- `PUT /api/nodes/:id/position` within 5 s of the last move of the same note (`services/boardWrites.ts`: only the first
+  move of a burst writes an event). A bootstrap's `graph_positions` read in between can put the graph back where it was
+  a few seconds earlier.
+- `POST /api/nodes/:id/suggested-links` (`services/embeddings.ts`, no event). A delta's `edges` replace the note's
+  suggested links whole (`replace_for`), so an older answer can bring back the previous set.
+
+Every other write without an event (account prefs, review progress, RSS, external calendars, uploads, push
+subscriptions, MCP sessions) writes tables no answer carries. To be done in a later batch: give these two an event, or
+leave their rows out of the answers.

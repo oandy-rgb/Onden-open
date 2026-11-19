@@ -13,9 +13,9 @@
 import { announceDrawingChangesOf } from "../drawingChanges";
 import { applyAnchorsOfDelta, replaceAllAnchors, replaceAllBindings, applyServerFeatures, restoreBlockAnchorsEnabled } from "../blockAnchorStore";
 import { applyPatch, isUuid, type TextPatch } from "@onden/markdown";
-import { api, ApiError, nodeNeedsBody, readWithDeadline, noWorkspaceData, type Bootstrap, type ContentNode } from "../api";
+import { api, nodeNeedsBody, readWithDeadline, noWorkspaceData, type Bootstrap, type ContentNode } from "../api";
 import { SLIM_MODE_NODE_THRESHOLD } from "../slimMode";
-import { initLocalDb, getNodeAttribute, useMemoryOnlyLocalCopy, wipeWorkspaceMirror, loadBootstrapList, loadBootstrapRelations, loadAttributePage, persistBootstrap, persistRemoteNode, getStoredBody, forgetBody, missingBodyIds, storeDownloadedBodies, applySync, getLastEventId, setLastEventId, getMembershipEpoch, setMembershipEpoch, getAllMembershipIds, getLastFullRefresh, fillAttributeRows, planDrawings, replaceStaleAttributeRows, exportDatabase, importDatabase, getPendingWrites, type SyncDelta } from "../localDb";
+import { initLocalDb, getNodeAttribute, useMemoryOnlyLocalCopy, wipeWorkspaceMirror, loadBootstrapList, loadBootstrapRelations, loadAttributePage, persistBootstrap, getStoredBody, missingBodyIds, storeDownloadedBodies, applySync, getLastEventId, setLastEventId, getMembershipEpoch, setMembershipEpoch, getAllMembershipIds, getLastFullRefresh, fillAttributeRows, planDrawings, replaceStaleAttributeRows, exportDatabase, importDatabase, getPendingWrites, getWatermark, type AppliedSyncDelta, type SyncDelta } from "../localDb";
 import { getStoragePref, getStoredDirHandle, requestDirPermission, readDbFromDir, writeDbToDir } from "../fileSystemStorage";
 import {
   getAppState, setAppState,
@@ -30,8 +30,10 @@ import { sendWrite } from "./onlineWrite";
 import { flushPendingWrites, getReplayRejectionRevision, hasPendingWrite } from "./writeQueue";
 import { refreshPendingCount } from "./syncStatus";
 import { setIncomingProblem } from "./incomingStatus";
-import { applySyncDelta, isEmptyDelta, serverCopyOver } from "./storeOps";
+import { applySyncDelta, isEmptyDelta, serverCopyOver, wholeBootstrapOver } from "./storeOps";
 import { pendingFields, whenAnswered } from "./optimisticFields";
+import { ASK_AGAIN_AT_MOST } from "../answerPositions";
+import { askedNow, forgetWatermark, holdWrites, pageWouldTake, sameServer, serverWentBack, startWatermarkFrom, syncLoopStarted, syncPassEnded, takeAnswer, type AnswerOutcome, type Asked } from "./writePositions";
 import { reconcileMembership, type MembershipDigest, type MembershipPage, type MembershipProjection } from "./membershipReconcile";
 import { webCryptoSha256 } from "./membershipDigest";
 import { mergeAttributeRows, mergeBootstrapRelations } from "./bootRest";
@@ -42,6 +44,7 @@ import { isBrowserOnline, prefersSavedData } from "../browserNetwork";
 import { getLocalCopyState } from "../localCopyState";
 import { BOOTSTRAP_HEADER_VALUE, decodeBootstrapWire } from "./bootstrapWire";
 import { assertBootstrapShape, assertSyncDeltaShape } from "./wireShape";
+import { later, readAgain, serverTruth, serverTruthOrTell } from "./serverTruthLoad";
 import { heldNotesNowSent } from "../localDb";
 
 // ── User-folder export (fs-access) ───────────────────────────────────────────
@@ -88,18 +91,19 @@ function pruneCanvasMirror({ queued }: { queued: readonly TargetedWrite[] | null
  *  bootstrapWire), with each node's attrs map rebuilt from the typed
  *  `attributes` rows. An older server answers in the old shape, used
  *  as it is. */
-async function fetchBootstrap(path: string): Promise<Bootstrap> {
+async function fetchBootstrap(path: string, signal?: AbortSignal): Promise<Bootstrap> {
   const epochAtRequest = await getMembershipEpoch().catch(() => undefined);
-  const data = decodeBootstrapWire(await api<Bootstrap>(path, { headers: { "X-Onden-Bootstrap": BOOTSTRAP_HEADER_VALUE } }));
+  // Its rows reach memory only once it is taken (takeBootstrap); one read before a write this device was told about is
+  // downloaded again there.
+  const asked = askedNow();
+  const data = decodeBootstrapWire(await api<Bootstrap>(path, { headers: { "X-Onden-Bootstrap": BOOTSTRAP_HEADER_VALUE }, signal }));
   assertBootstrapShape(data); // before anything below touches memory or the local copy
-  const carried = data.nodes?.map((n) => n.id);
-  replaceAllAnchors(data.note_anchors, carried);
-  replaceAllBindings(data.note_link_bindings, carried);
   applyServerFeatures(data.features);
   // New notes may have come with it, without their drawings.
   drawingsComplete = false;
   const bootstrap = data.attrs_omitted === true ? withAttrsFromRows(data) : data;
   if (epochAtRequest !== undefined) membershipEpochAtRequest.set(bootstrap, epochAtRequest);
+  bootstrapAsked.set(bootstrap, { path, asked });
   return bootstrap;
 }
 
@@ -139,7 +143,16 @@ function withAttrsFromRows(data: Bootstrap): Bootstrap {
 let wholeBootstrapGeneration = 0;
 function setWholeBootstrap(data: Bootstrap): void {
   wholeBootstrapGeneration++;
-  setData(data);
+  // A field with an edit still waiting for its answer keeps the value held, as over a sync answer or a single read (storeOps.serverCopyOver),
+  // and the note is read again once it has its answer. With a local copy the queued text is laid over the rows already;
+  // a device with none (IndexedDB blocked, a private window) takes a whole bootstrap every pass and has only this.
+  const held = new Set<string>();
+  setData((prev) => {
+    const taken = wholeBootstrapOver(prev, data);
+    for (const id of taken.held) held.add(id);
+    return taken.state;
+  });
+  for (const id of held) readAgainWhenAnswered(id);
 }
 
 const ATTRIBUTE_PAGE_ROWS = 10_000;
@@ -171,6 +184,59 @@ async function loadLocalRest(generation: number): Promise<void> {
   }
 }
 
+/** Where a downloaded bootstrap came from (so a refused one can be downloaded again), and what this device knew when it
+ *  was asked for (lib/data/writePositions.ts askedNow). */
+const bootstrapAsked = new WeakMap<Bootstrap, { path: string; asked: Asked }>();
+
+/** What a taken bootstrap carries besides the store's rows: the paragraph anchors and link bindings held in memory. */
+function showBootstrapExtras(data: Bootstrap): void {
+  const carried = data.nodes?.map((n) => n.id);
+  replaceAllAnchors(data.note_anchors, carried);
+  replaceAllBindings(data.note_link_bindings, carried);
+}
+
+/** An answer (a bootstrap, a membership page) could not be taken (lib/data/writePositions.ts takeAnswer). It never lowers
+ *  the membership gate: only a finished membership check does. A server that went back is let in by its recovery
+ *  (serverTruth.ts serverLostItsWrites, then a bootstrap that is taken and a check that finishes), not by going round the gate. */
+class RefusedAnswer extends Error {}
+
+/** The one door for a bootstrap of any kind (whole, slim, ?nodes=none): the local copy stores it and the store takes
+ *  it (`toStore`) only if it was read after everything this device knows. One read below what this device knew when it
+ *  was asked for means the server went back (lib/data/writePositions.ts serverWentBack): serverLostItsWrites, and this same
+ *  bootstrap is that server's state now, taken. One read before an acknowledgement that arrived while it downloaded or
+ *  was stored is downloaded again from where it came (fetchBootstrap; not a ?nodes=none refresh, which its next turn
+ *  asks again) while new writes wait (holdWrites), so the next is read after them, ASK_AGAIN_AT_MOST times at most. The
+ *  callers hold the landing turn or are the cold boot: no queue is sent meanwhile. */
+async function takeBootstrap(next: Bootstrap, toStore: (applied: Bootstrap) => void): Promise<Bootstrap> {
+  let release: (() => void) | undefined;
+  try {
+    for (let attempt = 0; ; attempt++) {
+      let applied: Bootstrap | undefined;
+      const answer = next;
+      const from = bootstrapAsked.get(answer);
+      const outcome = await takeAnswer({
+        // A ?nodes=none refresh is not a whole state: from another identity it is "changed" (the rebuild is owed).
+        head: answer.last_event_id, serverId: answer.server_id, wholeState: answer.nodes_omitted !== true,
+        asked: from?.asked,
+        toCopy: async () => {
+          const stored = await persistBootstrap(answer);
+          return { value: stored as Bootstrap, stale: stored.answer_stale === true, copy: stored };
+        },
+        toStore: (stored) => { applied = stored; if (answer.nodes_omitted !== true) showBootstrapExtras(answer); toStore(stored); },
+      });
+      if (outcome === "taken" && applied) return applied;
+      // The one path after the server went back (serverTruth.ts serverLostItsWrites): the watermark starts over (taken
+      // next turn), the copy owes a rebuild, the person is told once.
+      // Membership is checked again from the start after it, behind the gate (reconciledRejectionRevision).
+      if (outcome === "lost") { await (await serverTruth()).serverLostItsWrites(); reconciledRejectionRevision = null; continue; }
+      if (outcome !== "stale" || !from || attempt >= ASK_AGAIN_AT_MOST) throw new RefusedAnswer(outcome);
+      release ??= holdWrites();
+      // Under a read deadline (as serverTruth.readServerNode's ask again): new writes wait for it.
+      next = await readWithDeadline((signal) => fetchBootstrap(from.path, signal));
+    }
+  } finally { release?.(); }
+}
+
 /** Cold boot: show `next` now, with the queued note text applied from one read
  *  of the queue, then have the worker write the mirror. Resolves with the
  *  worker's projection once it is persisted (a failure rejects, as
@@ -185,13 +251,14 @@ async function paintThenPersist(next: Bootstrap, onPaint: () => void): Promise<B
   const pending = next.nodes_omitted === true ? [] : await getPendingWrites().catch(() => null);
   // Unreadable queue: wait for the worker's own projection rather than show
   // text without the user's pending edits.
-  if (!pending) { const applied = await persistBootstrap(next); setWholeBootstrap(applied); onPaint(); return applied; }
+  // One the page would not take is not painted: it is downloaded again first.
+  if (!pending || !pageWouldTake(next.last_event_id, next.server_id)) { const applied = await takeBootstrap(next, setWholeBootstrap); onPaint(); return applied; }
+  // Painted before the copy has it (seconds at 20k notes on a phone).
   const painted = projectBootstrapForPaint(next, pending);
   setWholeBootstrap(painted);
   onPaint();
-  const applied = await persistBootstrap(next);
-  setData((prev) => reconcilePersistedBootstrap(prev, painted, applied));
-  return applied;
+  // A save acknowledged while this was being stored (seconds at 20k notes): download again rather than fail the boot.
+  return takeBootstrap(next, (applied) => setData((prev) => reconcilePersistedBootstrap(prev, painted, applied)));
 }
 
 // A bootstrap is downloaded without any lock and can take seconds on a phone,
@@ -212,8 +279,7 @@ let landingTail: Promise<unknown> = Promise.resolve();
 async function landBootstrap(next: Bootstrap, { insideSync = false } = {}): Promise<Bootstrap> {
   const land = async () => {
     const before = await getLastEventId();
-    const applied = await persistBootstrap(next);
-    setWholeBootstrap(applied);
+    const applied = await takeBootstrap(next, setWholeBootstrap);
     return { applied, rewound: await getLastEventId() < before, outdatedMembership: await membershipMovedSince(next) };
   };
   if (insideSync) return (await land()).applied; // sync() checks membership itself afterwards
@@ -262,10 +328,8 @@ async function refreshWhole(landing: { insideSync: boolean } = { insideSync: fal
     // slim bootstrap itself confirms.
     const big = (getAppState().data?.nodes.length ?? 0) >= SLIM_MODE_NODE_THRESHOLD;
     const mark = await canvasListMark();
-    const next = big
-      ? await fetchBootstrap("/api/bootstrap?bodies=none")
-      : await fetchBootstrap("/api/bootstrap");
-    await landBootstrap(next, landing);
+    // Read before a write this device was told about: landBootstrap downloads it again (takeBootstrap).
+    const next = await landBootstrap(await fetchBootstrap(big ? "/api/bootstrap?bodies=none" : "/api/bootstrap"), landing);
     answeredOnline(since);
     pruneCanvasMirror(mark, next.server_time);
     await canvasWriter.refreshOpenCanvas();
@@ -328,15 +392,15 @@ function mergeBootstrapMeta(prev: Bootstrap, meta: Bootstrap): Bootstrap {
 /** Refresh what the sync delta does not carry (?nodes=none). An older server
  *  answers with the whole bootstrap instead (no nodes_omitted): left unused,
  *  as its capped full payload would replace a large mirror. Throws when the
- *  server cannot be reached. */
+ *  server cannot be reached, or with RefusedAnswer when it was read before a write this device knows. */
 export async function refreshMeta(): Promise<void> {
   const mark = await canvasListMark();
   const meta = await api<Bootstrap>("/api/bootstrap?nodes=none");
   assertBootstrapShape(meta);
   if (meta.nodes_omitted !== true) return;
   applyServerFeatures(meta.features);
-  await persistBootstrap(meta);
-  setData((prev) => mergeBootstrapMeta(prev, meta));
+  // Read before a write this device knows: takeBootstrap refuses it (RefusedAnswer, which the callers drop); the next one.
+  await takeBootstrap(meta, () => setData((prev) => mergeBootstrapMeta(prev, meta)));
   pruneCanvasMirror(mark, meta.server_time);
 }
 
@@ -400,26 +464,28 @@ function onIdle(fn: () => void): void {
 // emptied body would read as the real one — the wipe hazard.
 const hydratedLru = new Map<string, number>();
 let hydrateSeq = 0;
-// Notes whose delta text was kept behind a queued write of this device (AppliedSyncDelta.heldText). Once nothing
-// is queued for the note any more, the server's row, which merged both edits, is read again: no later delta carries it.
-const heldBehindQueue = new Set<string>();
+// Notes to read from the server again: serverTruthLoad.ts readAgain.
+
+later.sync = () => void sync();
+later.again = () => { markSyncDirty(); void sync(); };
+later.readWhenAnswered = (id) => readAgainWhenAnswered(id);
 
 // The store kept a field of the note over a server copy because this device's edit of it had no answer yet
 // (storeOps.serverCopyOver): read the note again once it has one, the way a note held behind the queue is.
 function readAgainWhenAnswered(id: string): void {
-  heldBehindQueue.add(id);
+  readAgain.add(id);
   void whenAnswered(`node:${id}`).then(releaseHeldNotes).catch(() => {});
 }
 
 async function releaseHeldNotes(): Promise<void> {
-  // The copy's own list too (any answer the queued text was kept over, here or in another tab, before a reload).
-  // A copy that cannot answer releases nothing this round (the list stays in the copy).
+  // The copy's own list too (sync_state.held_text: any answer the queued text was kept over, or a single read the copy
+  // refused, here or in another tab, before a reload). A copy that cannot answer releases nothing this round.
   const held = await Promise.resolve().then(() => heldNotesNowSent()).catch(() => [] as string[]);
-  for (const id of held) heldBehindQueue.add(id);
-  for (const id of [...heldBehindQueue]) {
+  for (const id of held) readAgain.add(id);
+  for (const id of [...readAgain]) {
     if (pendingFields(`node:${id}`).size) continue;
     if (await hasPendingWrite((write) => targetsEntity(write, "node", id))) continue;
-    heldBehindQueue.delete(id);
+    readAgain.delete(id);
     await hydrateNode(id);
   }
 }
@@ -433,35 +499,17 @@ export async function hydrateNode(id: string): Promise<void> {
   const before = getNode(id)?.markdown;
   const stored = await getStoredBody(id).catch(() => null);
   if (stored !== null) adoptBody(id, (row) => nodeNeedsBody(row), { markdown: stored });
-  let full: ContentNode;
-  try {
-    full = await persistRemoteNode(await api<ContentNode>(`/api/nodes/${id}`));
-  } catch (error) {
-    // A refusal (no access, gone) is the server's answer: take back a local copy
-    // shown from this device, in memory and in the offline mirror, rather than
-    // keep displaying a note the server no longer serves. A 401 is the session,
-    // not the note: the sign-in gate handles it and the copy stays.
-    if (stored !== null && error instanceof ApiError && [403, 404, 410].includes(error.status)) {
-      adoptBody(id, (row) => row.markdown === stored, { markdown: "" }, (stored.length || 1));
-      void forgetBody(id).catch(() => null);
-    }
-    return; // offline / unreachable: keep the stored body (or the slim row)
-  }
-  // Only replace a row nothing else changed since this read began (its text is
-  // still what it was, or the stored body shown above): a save made meanwhile
-  // is newer than a response that may have been read before it. Nor a row the
-  // read is older than, or a field with an edit still waiting for its answer
-  // (serverCopyOver): a save sent and answered while this read was on its way
-  // leaves the text as it was when the read began.
-  const copy = serverCopyOver(full, getNode(id));
-  if (copy.held) readAgainWhenAnswered(id);
-  if (copy.row) adoptBody(id, (row) => row.markdown === before || (stored !== null && row.markdown === stored), copy.row);
+  // The server's row, through the one door (serverTruth.ts readNoteFromServer, which also keeps a field with an edit
+  // still waiting for its answer: storeOps.serverCopyOver). Not loaded (offline): the stored body stays.
+  await (await serverTruthOrTell())?.readNoteFromServer(id, before, stored, adoptBody);
 }
 
 /** Put a body (or a full server row) into the store for one note, keeping the
  *  LRU of in-memory bodies (④). `when` is checked against the CURRENT row inside
  *  the update, so a row that changed since the read is left alone. `slimLength`
  *  turns the row back into a slim one (markdown "" + that body_len). */
+export type AdoptBody = (id: string, when: (row: ContentNode) => boolean, fields: Partial<ContentNode>, slimLength?: number) => void;
+
 function adoptBody(id: string, when: (row: ContentNode) => boolean, fields: Partial<ContentNode>, slimLength?: number): void {
   hydratedLru.set(id, ++hydrateSeq);
   // Eviction set computed OUTSIDE the updater — state updaters must stay
@@ -725,14 +773,26 @@ async function takeDigestPrefetch(expected: number): Promise<MembershipDigest | 
 // Reconcile on a changed epoch or the first sync of this session. Return the
 // event position sync must still scan; sync owns the final display-gate release.
 /** One delta, three places it lands: the local copy (worker), the screen's data, and the paragraph anchors held in
- *  memory (a deleted or revoked note's anchors go with it). */
-async function applyAndShow(delta: SyncDelta): Promise<Awaited<ReturnType<typeof applySync>>> {
-  const applied = await applySync(delta);
-  applyAnchorsOfDelta(delta);
-  for (const node of applied.nodes.upsert) if (serverCopyOver(node, getNode(node.id)).held) readAgainWhenAnswered(node.id);
-  setData((prev) => applySyncDelta(prev, applied));
-  announceDrawingChangesOf(delta);
-  return applied;
+ *  memory (a deleted or revoked note's anchors go with it) — only if takeAnswer (lib/data/writePositions.ts) takes it:
+ *  an answer read before what this device knows is not applied anywhere. `since`: the cursor its request started at. */
+async function applyAndShow(delta: SyncDelta, request: { asked?: Asked; since?: number | string }): Promise<{ outcome: AnswerOutcome; applied?: AppliedSyncDelta }> {
+  let applied: AppliedSyncDelta | undefined;
+  const outcome = await takeAnswer({
+    head: delta.head_event_id, serverId: delta.server_id, asked: request.asked, rewindTo: request.since,
+    toCopy: async () => {
+      const fromCopy = await applySync(delta);
+      return { value: fromCopy, stale: fromCopy.stale === true, changed: fromCopy.serverChanged === true, copy: fromCopy };
+    },
+    toStore: (fromCopy) => {
+      applied = fromCopy;
+      applyAnchorsOfDelta(delta);
+      setData((prev) => applySyncDelta(prev, fromCopy));
+      // A field kept over this copy (its edit has no answer yet: serverCopyOver): read again once it has one.
+      for (const node of fromCopy.nodes.upsert) if (serverCopyOver(node, getNode(node.id)).held) readAgainWhenAnswered(node.id);
+      announceDrawingChangesOf(delta);
+    },
+  });
+  return { outcome, applied };
 }
 
 async function maybeReconcileMembership(serverEpoch: number | undefined): Promise<string | undefined> {
@@ -772,13 +832,20 @@ async function maybeReconcileMembership(serverEpoch: number | undefined): Promis
   const gateFirst = !filledThisSession && (reconciledRejectionRevision === null || reconciledRejectionRevision !== rejectionRevision);
   if (gateFirst) setMembershipGated(true);
   const lastId = await getLastEventId(); // pin the event cursor across the apply
-  const applyNodes = async (nodes: SyncDelta["nodes"]) => {
-    const d = membershipDelta(lastId, nodes);
-    await applyAndShow(d);
+  // A membership page is an answer too: its rows (and the ids it no longer lists) were read at its event_cursor.
+  const takeMembership = async (d: SyncDelta) => {
+    // Never judged as the server going back (no `asked`): the deltas around the check are.
+    const { outcome } = await applyAndShow(d, {});
+    if (outcome !== "taken") throw new RefusedAnswer(outcome);
+  };
+  const applyNodes = async (nodes: SyncDelta["nodes"], head: string | undefined) => {
+    await takeMembership({ ...membershipDelta(lastId, nodes), ...(head !== undefined ? { head_event_id: head } : {}) });
   };
   const sha256 = webCryptoSha256();
-  let result: Awaited<ReturnType<typeof reconcileMembership>>;
-  try {
+  let result!: Awaited<ReturnType<typeof reconcileMembership>>;
+  // A page read before a write this device was told about is asked for again: the check starts over, a few times
+  // (each request leaves after the acknowledgement, so the next one is read after it).
+  for (let attempt = 0; ; attempt++) try {
     result = await reconcileMembership({
     startEpoch: serverEpoch,
     onSetDiffers: () => setMembershipGated(true),
@@ -807,9 +874,9 @@ async function maybeReconcileMembership(serverEpoch: number | undefined): Promis
     // Revoke = node deletes; applySync's node-delete cascades the node's edges /
     // attrs / tasks locally (the audit-#4 cascade), so deletes need only the ids.
     // A create still in the queue is unknown to the server, not revoked: keep its local rows until the POST lands.
-    isolateRevoked: async (revoked) => {
+    isolateRevoked: async (revoked, version) => {
       const doomed = withoutPendingCreates(revoked, await getPendingWrites());
-      if (doomed.length) await applyNodes({ upsert: [], delete: doomed });
+      if (doomed.length) await applyNodes({ upsert: [], delete: doomed }, version.event_cursor);
     },
     // Grant = the FULL projection (review #3): nodes + attributes + edges + tasks,
     // each in its proper delta channel so applySync persists every one (a node
@@ -820,6 +887,7 @@ async function maybeReconcileMembership(serverEpoch: number | undefined): Promis
     applyProjection: async (res) => {
       const d: SyncDelta = {
         last_event_id: lastId, // pin the event cursor — membership rows don't advance it
+        ...(typeof res.event_cursor === "string" ? { head_event_id: res.event_cursor } : {}),
         nodes: { upsert: res.nodes, delete: [] },
         edges: { upsert: res.edges, delete: [] },
         tasks: { upsert: res.tasks, delete: [] },
@@ -831,11 +899,14 @@ async function maybeReconcileMembership(serverEpoch: number | undefined): Promis
         workspace: null,
       };
       assertSyncDeltaShape(d);
-      await applyAndShow(d);
+      await takeMembership(d);
     },
     saveEpoch: (epoch) => setMembershipEpoch(epoch),
     });
+    break;
   } catch (error) {
+    // Late (or another identity, which the next pass rebuilds for): asked again a few times, then the check fails.
+    if (error instanceof RefusedAnswer && attempt < ASK_AGAIN_AT_MOST) continue;
     // The browser went offline mid-check: wentOffline() lowered the gate for offline work and the failure is the
     // network's, not a membership change; raising it again would strand it up (the start-of-check guard above is not enough).
     if (isBrowserOnline()) setMembershipGated(true);
@@ -931,8 +1002,11 @@ export function sync(): Promise<SyncResult> {
       const refusalRevision = getReplayRejectionRevision();
       // Layouts never arrive in /sync. Check after replay/membership, before
       // releasing the view, and do not acknowledge a refusal arriving mid-read.
+      // The read waits for the open board's write lane: a board save held for liveness (writePositions.ts) goes first,
+      // or the two would wait for each other until the send deadline. The loop's answers are over unless it goes on.
+      syncPassEnded();
       await canvasWriter.refreshOpenCanvas();
-      if (refusalRevision !== getReplayRejectionRevision()) return false;
+      if (refusalRevision !== getReplayRejectionRevision()) { syncLoopStarted(); return false; }
       // Another permission change is waiting (a settling burst, or a tick that
       // arrived during this pass): keep the workspace locked for that pass
       // instead of releasing it for a moment and locking it again.
@@ -959,6 +1033,15 @@ export function sync(): Promise<SyncResult> {
       // PG bigint ids are decimal strings in the real JSON response. Compare
       // their numeric value: lexical "1000" > "500" is false and used to trap
       // sync on one page until a manual retry advanced the persisted cursor.
+      // What the copy knows now (other tabs raise it too), and whether a rebuild is still owed since the server went
+      // back (a failed bootstrap, a reload, another tab): owed, it comes first.
+      // A copy that cannot say fails the pass. One that counts in another log than this page (the page saw another
+      // identity, and the rebuild that followed failed) owes the rebuild too, before its cursor is judged.
+      const copy = await getWatermark();
+      if (!startWatermarkFrom(copy) || copy.rebuildOwed) {
+        reconciledRejectionRevision = null;
+        if (!await refreshWhole({ insideSync: true })) return { ok: false, unreachable: !getAppState().online };
+      }
       let since: number | string = await getLastEventId({ startingSync: true });
       // Step C: the routine sync no longer sends `known[]`. Revocation/grant is
       // the membership pipeline's job now — the epoch-gated reconcile
@@ -978,7 +1061,10 @@ export function sync(): Promise<SyncResult> {
       // same 500 forever and never saw anything newer. Empty deltas now
       // advance the cursor and fast-forward (bounded) to the next batch
       // that actually carries projections.
+      syncLoopStarted(); // refusals from here hold the next write (lib/data/writePositions.ts); the queue was sent above
       for (let hop = 0; hop < 20; hop++) {
+        // Writes held for liveness wait for this request's answer (lib/data/writePositions.ts).
+        const asked = askedNow(since);
         const delta: SyncDelta = await readWithDeadline(signal => api<SyncDelta>(`/api/sync`, {
           method: "POST",
           body: JSON.stringify({ since }), // Step C: no known[] — membership pipeline owns revocation
@@ -1005,15 +1091,17 @@ export function sync(): Promise<SyncResult> {
           }
           return { ok };
         }
-        if (delta.head_event_id !== undefined && BigInt(since) > BigInt(delta.head_event_id)) {
-          // Our cursor is past where the server's event log ends: the server
-          // went back (a restored backup), and this copy may hold what the
-          // restore dropped. Start over from the server's position with a whole
-          // bootstrap, and re-check membership as on a cold start.
-          await setLastEventId(delta.head_event_id);
-          since = delta.head_event_id;
+        // The server went back (lib/data/writePositions.ts serverWentBack: read below what this device knew when the
+        // request left, our cursor included), or the answer is another server's (another event log, said by an empty
+        // delta as well): start over from a whole bootstrap (its cursor goes back in persistBootstrap) and re-check
+        // membership from the start. A failed rebuild is still owed on the next pass (the copy's mark).
+        const wentBack = serverWentBack(delta.head_event_id, delta.server_id, asked);
+        if (wentBack || !sameServer(delta.server_id)) {
+          // Another identity: the whole bootstrap's takeAnswer starts the watermark over (a failed one is found again).
+          if (wentBack) await (await serverTruth()).serverLostItsWrites(false);
           reconciledRejectionRevision = null;
           if (!await refreshWhole({ insideSync: true })) return { ok: false, unreachable: !getAppState().online };
+          since = await getLastEventId();
           continue;
         }
         serverMembershipEpoch = delta.membership_epoch ?? serverMembershipEpoch;
@@ -1031,8 +1119,19 @@ export function sync(): Promise<SyncResult> {
           if (!await finishWorkspaceCheck()) continue;
           return { ok: true }; // truly caught up (+ membership reconciled if it advanced)
         }
-        const applied = await applyAndShow(delta);
-        for (const id of applied.heldText ?? []) heldBehindQueue.add(id);
+        const taken = await applyAndShow(delta, { asked, since });
+        if (taken.outcome === "changed") {
+          // The copy holds another server identity (another event log): start over from a whole bootstrap.
+          reconciledRejectionRevision = null;
+          if (!await refreshWhole({ insideSync: true })) return { ok: false, unreachable: !getAppState().online };
+          since = await getLastEventId();
+          continue;
+        }
+        // Read before something this device knows: nothing applied, the cursor stays; ask again (a request sent now
+        // is read after it). After a few in a row the next write waits for one answer (lib/data/writePositions.ts).
+        if (taken.outcome === "stale") continue;
+        const applied = taken.applied!;
+        for (const id of applied.heldText ?? []) readAgain.add(id);
         // HIGH gap: a NON-empty batch used to RETURN here — so a long offline
         // gap or >500 events spanning multiple 500-event batches left the client
         // half-synced until the next sync trigger. Advance the cursor and keep
@@ -1074,6 +1173,7 @@ export function sync(): Promise<SyncResult> {
     return result;
   }).finally(() => {
     syncInFlight = null;
+    syncPassEnded(); // writes held for liveness go (lib/data/writePositions.ts)
     if (syncDirty) {
       // A membership signal arrived mid-flight. Re-raise the gate (the in-flight
       // pass may have lowered it against the stale epoch) and re-run sync() to
@@ -1123,6 +1223,8 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
   // is still shown and saved to; only the offline copy is missing, and the
   // page says so (useMemoryOnlyLocalCopy).
   await initLocalDb().catch(() => useMemoryOnlyLocalCopy());
+  // The watermark survives a reload with the copy (lib/answerPositions.ts); the page starts from it.
+  startWatermarkFrom(await getWatermark().catch(() => ({})));
   // Only a device without a cursor needs the bootstrap's. One that already
   // synced keeps syncing in parallel with the boot (a warm reload's
   // membership check then overlaps the slim bootstrap, as before).
@@ -1241,7 +1343,8 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
       // A small workspace too: a first load that was left before its full download landed stored titles only, and the
       // daily gate (refreshOnReopen) would not fetch the bodies for a day. With nothing missing this is one query.
       void downloadBodiesForOffline();
-      onIdle(() => { void refreshOnReopen(localBig).catch(() => null).then(() => downloadDrawingsForOffline()); });
+      const reset = engineResets;
+      onIdle(() => { if (reset === engineResets) void refreshOnReopen(localBig).catch(() => null).then(() => downloadDrawingsForOffline()); });
     } else if (stayslim) {
       // ⑤ scale: big workspace — SKIP the full-body fetch entirely. Pulling
       // every body into the heap (and the LRU self-disabling once
@@ -1274,7 +1377,8 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
       // cache AND slim failed) we still hydrate inline — there's no usable
       // shell to keep slim, so fetch the bodies now.
       // The offline drawing download follows, in the same idle slot.
-      if (slimLanded) onIdle(() => { void hydrateFullBootstrap().catch(() => null).then(() => downloadDrawingsForOffline()); });
+      const reset = engineResets;
+      if (slimLanded) onIdle(() => { if (reset === engineResets) void hydrateFullBootstrap().catch(() => null).then(() => downloadDrawingsForOffline()); });
       else { bootServerTime = await hydrateFullBootstrap(); mirrorFilledThisSession = !local; }
       pruneCanvasMirror(mark, bootServerTime);
       // AWAIT: complete the cold-start full reconcile during boot (see above).
@@ -1320,8 +1424,16 @@ export async function __idleSyncEngineForTests(): Promise<void> {
 /** Tests: end what a finished test left running, then forget every timer,
  *  latch and memo this module keeps between calls — a boot started by one
  *  test would otherwise reach the next test's mocks. */
+/** Tests: a boot's background downloads (onIdle: the full bootstrap after a slim paint, a reopen's refresh) wait for the
+ *  next idle slice; one left from an earlier test would run inside the next one (a whole bootstrap with that test's
+ *  mocks; #1794, public CI run 44562260993). Counted here so it does not. */
+let engineResets = 0;
+
 export async function __resetSyncEngineForTests(): Promise<void> {
   await __idleSyncEngineForTests();
+  engineResets++;
+  forgetWatermark(); // the page's watermark is module state too (lib/data/writePositions.ts)
+  syncPassEnded();
   if (membershipSettle) clearTimeout(membershipSettle);
   membershipSettle = null;
   if (syncTimer) clearTimeout(syncTimer);
@@ -1339,7 +1451,8 @@ export async function __resetSyncEngineForTests(): Promise<void> {
   hydrateSeq = 0;
   releaseBootCursor();
   bootCursorReady = Promise.resolve();
-  heldBehindQueue.clear();
+  readAgain.clear();
+  later.forgetRounds?.(); // and the syncs a refused read asked for later (serverTruth.ts)
 }
 
 /** The browser is back online. Drain the queue while still marked offline,

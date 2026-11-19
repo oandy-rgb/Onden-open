@@ -222,9 +222,10 @@ describe("serverCopyOver", () => {
       expect(copy.row?.body_len).toBeUndefined();
     } finally { settle(true); }
   });
-  it("a copy older than the row held is not taken; nothing waiting: a newer copy is taken whole", () => {
+  it("nothing waiting: a copy is taken whole, whatever its time (an older answer never gets here: takeAnswer refuses it by position)", () => {
     const held = node("q", { markdown: "AB", updated_at: at(2) });
-    expect(serverCopyOver(node("q", { markdown: "A", updated_at: at(1) }), held)).toEqual({ row: null, held: false });
+    const earlierTime = node("q", { markdown: "C\nAB", updated_at: at(1) }); // the server's clock stepped back
+    expect(serverCopyOver(earlierTime, held)).toEqual({ row: earlierTime, held: false });
     const newer = node("q", { markdown: "C\nAB", updated_at: at(3) });
     expect(serverCopyOver(newer, held)).toEqual({ row: newer, held: false });
   });

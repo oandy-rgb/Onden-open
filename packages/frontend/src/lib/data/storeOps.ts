@@ -2,7 +2,6 @@
 // the merge logic (especially the sync-delta application) is unit-testable
 // without React. No I/O, no hooks — every function returns a new tree.
 
-import { isOlderCopy } from "../rowAge";
 import { nodeNeedsBody, type Bootstrap, type ContentNode } from "../api";
 import type { SyncDelta, AppliedSyncDelta } from "../localDb";
 import { applyTagCatalog } from "../tagProjection";
@@ -141,18 +140,27 @@ function upsertRows<T extends { id: string }>(rows: T[], upserts: readonly T[]):
   return kept;
 }
 
-/** What the store takes of a server copy of a note (a /api/sync answer, a GET /api/nodes/:id read) over the row it
- *  holds. One rule, in two parts:
- *  - a copy from before the one held is not taken at all (lib/rowAge.ts);
- *  - a field this device has an edit of still waiting for its answer (optimisticFields) keeps the value held, and the
- *    row keeps its time: the copy may have been read before that edit reached the server, and an unanswered save does
- *    not move the row's time, so the age rule cannot tell (owner report 2026-11-19: a copy of save 1 replaced the text
- *    of save 2 while save 2 was on its way, and the editor showed save 1's text until the next answer).
+/** What the store takes of a server copy of a note over the row it holds: a /api/sync answer (applySyncDelta, and the
+ *  local copy's answer), a whole bootstrap (syncEngine.setWholeBootstrap), a GET /api/nodes/:id read
+ *  (serverTruth.readNoteFromServer). Not a block or version restore's row (blockChildWriter, noteHistoryWriter). A copy read before a write this device was told about never gets here: takeAnswer refuses the whole answer
+ *  by its position (lib/data/writePositions.ts). What is left is the edit with no answer yet, which has no position:
+ *  a field this device has an edit of still waiting for its answer (optimisticFields) keeps the value held, and the
+ *  row keeps its time: the copy may have been read before that edit reached the server (owner report 2026-11-19: a
+ *  copy of save 1 replaced the text of save 2 while save 2 was on its way, and the editor showed save 1's text until
+ *  the next answer).
  *  `held` says the copy was kept from a field: the note is read again once that edit has its answer
  *  (syncEngine.readAgainWhenAnswered), so another writer's newer text in the copy still arrives. */
-export function serverCopyOver(incoming: ContentNode, current: ContentNode | undefined): { row: ContentNode | null; held: boolean } {
+/** A whole bootstrap in place of the store (syncEngine.setWholeBootstrap): every note row through serverCopyOver over
+ *  the row held. `held`: the notes a field was kept from, to read again once that edit has its answer. */
+export function wholeBootstrapOver(prev: Bootstrap, data: Bootstrap): { state: Bootstrap; held: string[] } {
+  const before = new Map(prev.nodes.map((n) => [n.id, n]));
+  const held: string[] = [];
+  const nodes = data.nodes.map((n) => { const copy = serverCopyOver(n, before.get(n.id)); if (copy.held) held.push(n.id); return copy.row; });
+  return { state: { ...data, nodes }, held };
+}
+
+export function serverCopyOver(incoming: ContentNode, current: ContentNode | undefined): { row: ContentNode; held: boolean } {
   if (!current) return { row: incoming, held: false };
-  if (isOlderCopy(incoming, current)) return { row: null, held: false };
   const kept: Partial<Record<keyof ContentNode, unknown>> = {};
   let held = false;
   // A slim row's empty text is "not loaded here", not a value this device holds: it is never kept over a copy.
@@ -177,9 +185,11 @@ export function serverCopyOver(incoming: ContentNode, current: ContentNode | und
  *  deltas patch each node's `attrs` map in place — deletes remove the key,
  *  upserts overwrite. */
 export function applySyncDelta(prev: Bootstrap, delta: AppliedSyncDelta): Bootstrap {
-  // The answer was on its way while this device's save, or a later answer, got here first (serverCopyOver).
+  // `delta` is what the worker's applySync applied, and only an answer read after every write this device had
+  // acknowledged gets here (lib/data/writePositions.ts takeAnswer). What an edit still waiting for its answer holds is
+  // kept over it (serverCopyOver).
   const held = new Map(prev.nodes.map((n) => [n.id, n]));
-  let nodes = upsertRows(prev.nodes, delta.nodes.upsert.flatMap((n) => serverCopyOver(n, held.get(n.id)).row ?? []));
+  let nodes = upsertRows(prev.nodes, delta.nodes.upsert.map((n) => serverCopyOver(n, held.get(n.id)).row));
   // Node deletes include revocation deletes (a node that left the read set via a
   // permission change — HIGH gap #2). Prune the node's dependent tasks/edges too,
   // so a revoked node leaves no dangling task row or half-edge in memory (mirrors

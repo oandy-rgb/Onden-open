@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mirror = vi.hoisted(() => ({ cursor: 100 }));
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: vi.fn(async () => null),
   loadBootstrapList: vi.fn(async () => null),
   persistBootstrap: vi.fn(async (data: { last_event_id?: string }) => {
@@ -32,6 +33,7 @@ vi.mock("../lib/api", async (orig) => ({ ...await orig<typeof import("../lib/api
 
 import { persistBootstrap, applySync } from "../lib/localDb";
 import { refresh, sync } from "../lib/data/syncEngine";
+import { forgetWatermark } from "../lib/data/writePositions";
 
 const note = (id: string, title: string) => ({ id, source_type: "manual", node_type: "content", title, slug: id, markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const bootstrapAt = (cursor: string) => ({
@@ -39,7 +41,7 @@ const bootstrapAt = (cursor: string) => ({
   nodes: [note("n1", "old")], edges: [], tasks: [], suggestions: [], events: [], tags: [],
 });
 const deltaTo = (id: number) => ({
-  last_event_id: id, membership_epoch: 0, nodes: { upsert: id > 100 ? [note("n1", "NEW")] : [], delete: [] },
+  last_event_id: id, head_event_id: String(id), membership_epoch: 0, nodes: { upsert: id > 100 ? [note("n1", "NEW")] : [], delete: [] },
   edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null,
 });
 function deferred<T>() {
@@ -50,6 +52,7 @@ function deferred<T>() {
 const syncSinces = () => apiMock.mock.calls.filter(([path]) => path === "/api/sync").map(([, init]) => JSON.parse((init as { body: string }).body).since);
 
 beforeEach(() => {
+  forgetWatermark(); // the page's watermark outlives a test: the other test leaves it at 105, above this one's bootstrap
   mirror.cursor = 100;
   apiMock.mockReset();
   vi.mocked(persistBootstrap).mockClear();
@@ -58,10 +61,13 @@ beforeEach(() => {
 });
 
 describe("landing a downloaded bootstrap", () => {
-  it("a slow download that lands after newer deltas rewinds the cursor and a sync replays them", async () => {
+  // Before the watermark (lib/answerPositions.ts) a slow download landed over the newer deltas and rewound the cursor
+  // to replay them. Now the page will not take a bootstrap read before what it already applied: it downloads again.
+  it("a slow download that lands after newer deltas is downloaded again, not landed over them", async () => {
     const download = deferred<unknown>();
+    let downloads = 0;
     apiMock.mockImplementation(async (path: string, init?: { body?: string }) => {
-      if (path === "/api/bootstrap") return download.promise;
+      if (path === "/api/bootstrap") return ++downloads === 1 ? download.promise : bootstrapAt("105");
       if (path === "/api/sync") {
         const since = JSON.parse(init!.body!).since;
         return deltaTo(since >= 105 ? since : 105);
@@ -73,8 +79,9 @@ describe("landing a downloaded bootstrap", () => {
     expect(mirror.cursor).toBe(105);
     download.resolve(bootstrapAt("100"));
     await refreshing;
-    await vi.waitFor(() => expect(syncSinces().filter((since) => since === 100)).toHaveLength(2)); // the replay starts at the bootstrap's own position
-    await vi.waitFor(() => expect(mirror.cursor).toBe(105));
+    expect(downloads).toBe(2);
+    expect(vi.mocked(persistBootstrap).mock.calls.map(([data]) => (data as { last_event_id: string }).last_event_id)).toEqual(["105"]);
+    expect(mirror.cursor).toBe(105);
   });
 
   it("does not land beside a sync that is applying deltas, and a sync waits for a landing", async () => {

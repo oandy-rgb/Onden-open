@@ -24,6 +24,7 @@ const bootstrap = (nodes: ReturnType<typeof note>[], bodies = "full") => ({
 });
 
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: vi.fn(async () => null),
   loadBootstrapList: vi.fn(async () => null),
   loadBootstrapRelations: vi.fn(async () => ({ edges: [], pointers: [], tasks: [], suggestions: [], graph_positions: [] })),

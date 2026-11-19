@@ -21,6 +21,7 @@ import { sql } from "kysely";
 import { CodedStatusError } from "../statusError.js";
 import { currentDeviceId } from "../requestContext.js";
 import { db } from "../dbKysely.js";
+import { sha256Hex } from "../utils.js";
 import { markTransactionStamped } from "../db.js";
 import { receive, tick } from "../hlc.js";
 import { lockEventAppend } from "./eventTransaction.js";
@@ -178,9 +179,24 @@ export const FOREIGN_CLOCK_BOUND_MS = MAX_FOREIGN_CLOCK_AHEAD_MS;
 
 /** This node's id (the origin of every stamp it makes). */
 export async function localNodeId(): Promise<string> {
-  const row = (await sql<{ node_id: string }>`SELECT node_id FROM sync_node WHERE singleton`.execute(db)).rows[0];
+  const row = await nodeIdRow();
   if (!row) throw new Error("this database has no node id yet");
   return row.node_id;
+}
+
+function nodeIdRow(): Promise<{ node_id: string } | undefined> {
+  return sql<{ node_id: string }>`SELECT node_id FROM sync_node WHERE singleton`.execute(db).then((r) => r.rows[0]);
+}
+
+/** `server_id` for a sync answer or bootstrap (contract SyncDelta.server_id): names the event log `head_event_id` and every
+ *  write's position count in. DERIVED from this node's id, never the id itself — node ids and stamps appear in no answer
+ *  (syncStamps.integration). A restore or a rebase gives the node a new id, so the identity changes with it and the app
+ *  starts its positions over; the same id always gives the same value. Empty (a database not yet given its id) sends no
+ *  field rather than failing the answer: the client then keeps what it recorded, as with an older server. */
+export async function serverIdentityField(): Promise<{ server_id?: string }> {
+  const row = await nodeIdRow();
+  // The one derivation: a fixed purpose string, so the value is useless as a node id anywhere else.
+  return row ? { server_id: sha256Hex(`onden answer log identity\u0000${row.node_id}`) } : {};
 }
 
 /** Give every row that holds no stamp the genesis stamp (migration 202's sync_genesis_pass; every node computes the same one, so

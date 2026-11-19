@@ -1,4 +1,6 @@
 import { BLOCK_ID, isUuid, PART_LINK_EXPORT_MODES, type PartLinkExportMode } from "@onden/markdown";
+import { READ_HEAD_HEADER, READ_SERVER_HEADER } from "@onden/markdown/contract";
+import { readStandpoint } from "../services/sync/index.js";
 import { StatusError } from "../statusError.js";
 import { readJsonBody, uuidParam } from "./params.js";
 import { Hono } from "hono";
@@ -408,10 +410,15 @@ router.get("/:id", async (c) => {
   if (!isUuid(id)) {
     throw new StatusError(404, "not found");
   }
+  // Where this read stands in the event order, read BEFORE the row (services/sync/delta.ts workspaceHead): the app does not let a read
+  // taken before one of its acknowledged writes replace what that write saved.
+  const standpoint = await readStandpoint(workspaceId);
   // Absent, trashed and unreadable answer alike: a 403 for a live node the
   // actor may not read would confirm that the id exists.
   const row = await getLiveNodeRow(requireActor(c.get("actor")), workspaceId, id);
   if (!row) throw new StatusError(404, "not found");
+  c.header(READ_HEAD_HEADER, standpoint.head);
+  if (standpoint.server_id) c.header(READ_SERVER_HEADER, standpoint.server_id);
   return c.json(row);
 });
 

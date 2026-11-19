@@ -77,19 +77,3 @@ describe("saved views in the local mirror", () => {
     expect(byId(await reload(), "board").collection_views).toEqual([]);
   });
 });
-
-// lib/rowAge.ts: a sync answer that was on its way while a newer copy of the row arrived is not written over it.
-describe("an older copy of a row in a sync answer", () => {
-  const answer = (markdown: string, updated_at: string, last_event_id: number) => ({
-    last_event_id, nodes: { upsert: [note("plain", { markdown, updated_at })], delete: [] }, tasks: { upsert: [], delete: [] },
-    edges: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null,
-  });
-
-  it("does not replace the newer one in the local copy; a later one does", async () => {
-    await ok("applySync", answer("saved at :58", "2026-11-16T05:50:58.000Z", 10));
-    await ok("applySync", answer("from :56", "2026-11-16T05:50:56.000Z", 11));
-    expect(byId(await reload(), "plain").markdown).toBe("saved at :58");
-    await ok("applySync", answer("from :59", "2026-11-16T05:50:59.000Z", 12));
-    expect(byId(await reload(), "plain").markdown).toBe("from :59");
-  });
-});

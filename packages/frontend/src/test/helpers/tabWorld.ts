@@ -17,6 +17,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { vi } from "vitest";
+import { READ_HEAD_HEADER } from "@onden/markdown/contract";
 import { FakeIdb, FakeKeyRange } from "./fakeIndexedDb";
 import type { DataCtx } from "../../lib/data/types";
 
@@ -89,6 +90,8 @@ export type Outcome = "deliver" | "arrive" | "503" | "net" | "refuse" | "lose";
 type Req = {
   id: number; tab: Tab; method: string; path: string; body: string | null; key: string | null; keepalive: boolean;
   state: "inflight" | "done"; abandoned: boolean; arrived: boolean; refused: boolean; payload?: unknown;
+  /** A single note read: where the server read it (READ_HEAD_HEADER), told through the caller's onHeaders. */
+  readHead?: number; onHeaders?: (headers: Headers) => void;
   resolve(value: unknown): void; reject(error: unknown): void;
 };
 
@@ -144,19 +147,22 @@ export class Server {
   }
   private delta(since: number) {
     return {
-      last_event_id: this.head, membership_epoch: 0,
+      // Where it was read, as every protocol-5 answer says (lib/answerPositions.ts): without it the page refuses every
+      // delta once it knows a position (the old "three refusals mean the server went back" rebuilt in its place).
+      last_event_id: this.head, head_event_id: String(this.head), membership_epoch: 0,
       nodes: { upsert: NOTES.filter((id) => this.notes.get(id)!.lastEvent > since).map((id) => this.row(id)), delete: [] },
       edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null,
     };
   }
 
-  request(tab: Tab, path: string, init: { method?: string; body?: unknown; headers?: unknown; signal?: AbortSignal; keepalive?: boolean } = {}): Promise<unknown> {
+  request(tab: Tab, path: string, init: { method?: string; body?: unknown; headers?: unknown; signal?: AbortSignal; keepalive?: boolean; onHeaders?: (headers: Headers) => void } = {}): Promise<unknown> {
     if (tab.dead) return new Promise(() => {}); // a closed page sends nothing
     const headers = new Headers(init.headers as HeadersInit | undefined);
     return new Promise((resolve, reject) => {
       const req: Req = {
         id: ++this.seq, tab, method: init.method ?? "GET", path, body: typeof init.body === "string" ? init.body : null,
         key: headers.get("Idempotency-Key"), keepalive: init.keepalive === true, state: "inflight", abandoned: false, arrived: false, refused: false, resolve, reject,
+        ...(init.onHeaders ? { onHeaders: init.onHeaders } : {}),
       };
       // A second attempt of one key while the first is still on the wire, from another tab.
       if (req.key && this.requests.some((r) => r.key === req.key && r.state === "inflight" && !r.abandoned && r.tab !== tab)) {
@@ -200,7 +206,7 @@ export class Server {
       return;
     }
     if (req.method === "POST" && req.path === "/api/sync") req.payload = this.delta(Number((JSON.parse(req.body ?? "{}") as { since: number | string }).since));
-    else if (req.method === "GET" && /^\/api\/nodes\/[^/]+$/.test(req.path) && this.notes.has(req.path.split("/").pop()!)) req.payload = this.row(req.path.split("/").pop()!);
+    else if (req.method === "GET" && /^\/api\/nodes\/[^/]+$/.test(req.path) && this.notes.has(req.path.split("/").pop()!)) { req.payload = this.row(req.path.split("/").pop()!); req.readHead = this.head; }
     else if (req.path.startsWith("/api/bootstrap")) req.payload = this.bootstrap();
     else req.payload = {};
   }
@@ -233,6 +239,7 @@ export class Server {
         if (req.refused) { if (!tab.dead) req.reject(new tab.mods.api.ApiError(422, JSON.stringify({ error: "x" }))); return; }
         // An answer to an attempt the page already gave up on (the 25 s deadline) tells nobody anything.
         if (req.key && req.method === "PATCH" && !req.abandoned && !tab.dead) this.ackedKeys.add(req.key);
+        if (!tab.dead && req.readHead !== undefined) req.onHeaders?.(new Headers({ [READ_HEAD_HEADER]: String(req.readHead) }));
         if (!tab.dead) req.resolve(structuredClone(req.payload));
       }
     }

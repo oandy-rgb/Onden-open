@@ -3920,6 +3920,7 @@ INSERT INTO schema_migrations (version) VALUES ('206_sync_change_bundles') ON CO
 INSERT INTO schema_migrations (version) VALUES ('207_fresh_proofs') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('209_place_is_one_write') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('210_participant_sessions') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('212_idempotency_event_position') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('213_renew_node_id') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('215_block_anchors_replicated') ON CONFLICT (version) DO NOTHING;
@@ -5960,6 +5961,9 @@ END;
 $$ LANGUAGE plpgsql;
 -- 214: a snapshot of a restored, renewed server names its former node ids; the join remembers them (db/migrations/214_sync_join_source_former.sql)
 ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_former jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- 212: a write's event position kept with its idempotency key (db/migrations/212_idempotency_event_position.sql)
+ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS event_position bigint;
+
 
 -- 215: a body write's anchors and paragraph rows are replicated: stamp triggers on block_anchors and block_nodes, the notes' anchors units, and the anchor hash guard (db/migrations/215_block_anchors_replicated.sql)
 -- 1. block_anchors: the row (its id) and `note` ------------------------------------------------------------------------------------------------------------

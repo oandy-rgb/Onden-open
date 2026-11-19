@@ -73,7 +73,7 @@ describe("reconcileMembership — happy path", () => {
     });
     const res = await reconcileMembership(d);
     expect(res).toMatchObject({ status: "done", epoch: 7, revoked: 2, granted: 4 });
-    expect(isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(["x", "y"]));
+    expect(isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(["x", "y"]), expect.objectContaining({ event_cursor: expect.anything() }));
     expect(applyProjection).toHaveBeenCalledWith(expect.objectContaining({ nodes: ["a", "c", "d", "e"].map(id => ({ id })) }));
     // Ordering is load-bearing: revoke → grant → save (save is LAST).
     expect(order).toEqual(["revoke", "grant", "save"]);
@@ -119,7 +119,7 @@ describe("membership snapshot across pages and hydration", () => {
     // The deletion is an event after the first read, not a permission change
     // (that would move the epoch): sync scans events from this position on.
     expect(result).toMatchObject({ status: "done", eventCursor: "100" });
-    expect(isolateRevoked).toHaveBeenCalledWith([]);
+    expect(isolateRevoked).toHaveBeenCalledWith([], expect.objectContaining({ event_cursor: expect.anything() }));
   });
 });
 
@@ -187,7 +187,7 @@ describe("reconcileMembership — failure recovery (the three classes)", () => {
     // Crucially: the epoch was NEVER persisted → the next run re-reconciles.
     expect(saveEpoch).not.toHaveBeenCalled();
     // And revoked was isolated FIRST (so even a mid-failure under-shows, never over-shows).
-    expect(isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(["z"]));
+    expect(isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(["z"]), expect.objectContaining({ event_cursor: expect.anything() }));
   });
 
   it("CRITICAL (#1): a torn read (retry_required, SAME epoch) is NOT treated as an empty set — no wipe-all", async () => {
@@ -211,7 +211,7 @@ describe("reconcileMembership — failure recovery (the three classes)", () => {
     expect(res).toMatchObject({ status: "done" });
     // revoked = {a,b,x} − {a,b} = {x} ONLY. (Would be all three if the torn empty
     // page had been accepted — the wipe-all bug.)
-    expect(isolateRevoked).toHaveBeenCalledWith(["x"]);
+    expect(isolateRevoked).toHaveBeenCalledWith(["x"], expect.objectContaining({ event_cursor: expect.anything() }));
   });
 
   it("restart is bounded: a perpetually-moving epoch gives up (caller stays gated) rather than spin forever", async () => {
@@ -307,7 +307,7 @@ describe("bounded hydration and version ownership", () => {
       fetchPage: async () => { local.add("local-draft"); return { ids: ["a"], epoch: 7, event_cursor: "100", next_cursor: null }; },
     }));
     expect(result.status).toBe("done");
-    expect(isolateRevoked).toHaveBeenCalledExactlyOnceWith([]);
+    expect(isolateRevoked).toHaveBeenCalledExactlyOnceWith([], expect.objectContaining({ event_cursor: expect.anything() }));
   });
 
   it.each([undefined, "", "1e2", "-1"])("refuses missing or malformed event cursor %s without deleting local data", async event_cursor => {
@@ -408,7 +408,7 @@ describe("reconcileMembership — digest first", () => {
       getLocalKnown: async () => [...ids, revokedId] });
     const res = await reconcileMembership(d);
     expect(res).toMatchObject({ status: "done", epoch: 9, revoked: 1, granted: 0 });
-    expect(d.isolateRevoked).toHaveBeenCalledWith([revokedId]);
+    expect(d.isolateRevoked).toHaveBeenCalledWith([revokedId], expect.objectContaining({ event_cursor: expect.anything() }));
     expect(srv.fetchPage.mock.calls.length).toBeGreaterThan(0);
     for (const call of srv.fetchPage.mock.calls) expect(call[2]).toEqual(["a7"]);
     expect(d.saveEpoch).toHaveBeenCalledWith(9);
@@ -429,7 +429,7 @@ describe("reconcileMembership — digest first", () => {
     const d = deps({ startEpoch: 5, fetchPage: srv.fetchPage, fetchDigest: srv.fetchDigest, sha256,
       getLocalKnown: async () => [...ids, ...revoked] });
     expect(await reconcileMembership(d)).toMatchObject({ status: "done", revoked: 100 });
-    expect(d.isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(revoked));
+    expect(d.isolateRevoked).toHaveBeenCalledWith(expect.arrayContaining(revoked), expect.objectContaining({ event_cursor: expect.anything() }));
     for (const call of srv.fetchPage.mock.calls) expect(call[2]).toBeUndefined();
   });
 
@@ -449,7 +449,7 @@ describe("reconcileMembership — digest first", () => {
     const fetchDigest = vi.fn(async (): Promise<MembershipDigest> => ({ epoch: 1, event_cursor: "200" }));
     const d = deps({ startEpoch: 1, fetchPage: srv.fetchPage, fetchDigest, sha256, getLocalKnown: async () => [...ids, "ff-gone"] });
     expect(await reconcileMembership(d)).toMatchObject({ status: "done", revoked: 1 });
-    expect(d.isolateRevoked).toHaveBeenCalledWith(["ff-gone"]);
+    expect(d.isolateRevoked).toHaveBeenCalledWith(["ff-gone"], expect.objectContaining({ event_cursor: expect.anything() }));
     for (const call of srv.fetchPage.mock.calls) expect(call[2]).toBeUndefined();
   });
 
@@ -463,7 +463,7 @@ describe("reconcileMembership — digest first", () => {
     });
     const d = deps({ startEpoch: 3, fetchPage: srv.fetchPage, fetchDigest: forged, sha256, getLocalKnown: async () => local });
     expect(await reconcileMembership(d)).toMatchObject({ status: "done", revoked: 1 });
-    expect(d.isolateRevoked).toHaveBeenCalledWith(["a1-revoked"]);
+    expect(d.isolateRevoked).toHaveBeenCalledWith(["a1-revoked"], expect.objectContaining({ event_cursor: expect.anything() }));
     for (const call of srv.fetchPage.mock.calls) expect(call[2]).toBeUndefined(); // never an empty scope
   });
 });

@@ -176,8 +176,13 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   // the queue keeps what it has and nothing retries against the server. Other reads go out.
   const block = currentProtocolBlock();
   if (block && heldWhileBlocked(path, init?.method)) return Promise.reject(protocolBlockError(block));
-  return fetch(apiUrl(path), { credentials: "include", ...init, headers }).then((response) => {
+  // A write may first wait for the sync answer on its way (lib/data/writePositions.ts, liveness); otherwise it leaves at
+  // once (the gate answers synchronously), as every read does.
+  const send = (release: () => void) => fetch(apiUrl(path), { credentials: "include", ...init, headers }).then((response) => {
+    release();
     serverBuildListener?.(response.headers?.get?.("X-Onden-Build") ?? null);
+    // Before any caller reads the answer: a write's acknowledged position is recorded first (lib/data/writePositions.ts).
+    writeResponseListener?.(path, init, response);
     if (response.status < 500 || response.status === 426) {
       noteServerProtocol(response.headers?.get?.(SERVER_PROTOCOL_HEADER) ?? null);
       // Refused as too old by a server that does not say which protocol it speaks (one before the header): the page is old.
@@ -188,7 +193,9 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
       if (nowBlocked && isSyncPath(path)) throw protocolBlockError(nowBlocked);
     }
     return response;
-  });
+  }, (error: unknown) => { release(); throw error; });
+  const gate = writeGate?.(path, init) ?? (() => {});
+  return typeof gate === "function" ? send(gate) : gate.then(send);
 }
 
 const heldWhileBlocked = (path: string, method: string | undefined) => isSyncPath(path) || !/^(GET|HEAD)$/i.test(method ?? "GET");
@@ -211,6 +218,19 @@ export function setClientTooOldListener(listener: (() => void) | null): void {
 let serverBuildListener: ((serverBuild: string | null) => void) | null = null;
 export function setServerBuildListener(listener: ((serverBuild: string | null) => void) | null): void {
   serverBuildListener = listener;
+}
+
+/** What a request waits for before it leaves, and the release it calls once answered (lib/data/writePositions.ts). */
+let writeGate: ((path: string, init: RequestInit | undefined) => (() => void) | Promise<() => void>) | null = null;
+export function setWriteGate(gate: typeof writeGate): void {
+  writeGate = gate;
+}
+
+/** Who hears every response, to record a write's event position (lib/data/writePositions.ts installs it; api.ts must
+ *  not import the local copy). Called synchronously when the response's headers arrive, before its caller sees it. */
+let writeResponseListener: ((path: string, init: RequestInit | undefined, response: Response) => void) | null = null;
+export function setWriteResponseListener(listener: typeof writeResponseListener): void {
+  writeResponseListener = listener;
 }
 
 /** What the page holds when it has NO data at all (before the first load, or
@@ -357,7 +377,9 @@ export async function readErrorBody(response: Response): Promise<string> {
   return body;
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+/** `onHeaders`: hears the response's headers before the body is read (a read that says where it was taken:
+ *  READ_HEAD_HEADER). fetch ignores it. */
+export async function api<T>(path: string, init?: RequestInit & { onHeaders?: (headers: Headers) => void }): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await apiFetch(path, { ...init, headers });
@@ -366,6 +388,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (isAccessRevokedCode(error.status, error.code)) notifyAccessRevoked();
     throw error;
   }
+  init?.onHeaders?.(response.headers);
   if (headers.get("Accept") === "text/plain") return response.text() as Promise<T>;
   return response.json() as Promise<T>;
 }

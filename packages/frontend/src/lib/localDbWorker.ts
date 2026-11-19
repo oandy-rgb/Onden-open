@@ -33,7 +33,7 @@ import { projectPendingNoteText, missingPendingNoteCreations } from "./pendingNo
 import { writeTargets, targetIds, parseStoredTargets, type WriteTarget } from "./pendingWriteTargets";
 import type { AppliedSyncDelta, LocalDbEvent, SyncDelta } from "./localDb";
 import { upsertNodeInto, upsertEdgeInto, upsertPointerInto, upsertAttributeInto, reindexNodeText } from "./localMirror";
-import { isOlderCopy } from "./rowAge";
+import { higherPosition, isCurrentAnswer } from "./answerPositions";
 import { LocalDbError, type LocalDbErrorCode } from "./localDbErrors";
 // The subpath, not the package root: the root pulls in the markdown pipeline,
 // which needs a DOM a worker lacks (test/workerImports.test.ts).
@@ -575,10 +575,18 @@ async function loadAttributePage(after: number, limit: number): Promise<{ rows: 
 // The sync cursor only moves forward: a late or repeated write cannot lower it.
 const CURSOR_MAX_SQL = "INSERT INTO sync_state (key, value) VALUES ('last_event_id', ?) ON CONFLICT(key) DO UPDATE SET value=CAST(MAX(CAST(value AS INTEGER), CAST(excluded.value AS INTEGER)) AS TEXT)";
 
-async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
+async function persistBootstrap(data: Bootstrap): Promise<Bootstrap & { answer_stale?: true; answer_watermark?: string | null; answer_server?: string | null }> {
   // ?nodes=none: the workspace parts only; every node row stays as it is.
+  // The same rule as a delta (lib/answerPositions.ts): a bootstrap's head is the event cursor it was read at. A bootstrap
+  // from another server identity is that server's whole state: it is taken, and the watermark starts over.
+  const verdict = await judgeAnswer(data.last_event_id, data.server_id);
+  if (!verdict.changed && !verdict.current) return { ...data, answer_stale: true, answer_watermark: watermark(), answer_server: knownServerId() };
+  // Another identity's ?nodes=none is not its whole state: the rows here are the old log's, so a rebuild is owed.
+  if (verdict.changed && data.nodes_omitted === true) await forgetCopyWatermark();
+  await adoptServerIdentity(data.server_id);
   if (data.nodes_omitted === true) {
     persistBootstrapMetaInto(getDb(), data);
+    if (data.last_event_id != null) await raiseWatermark(String(data.last_event_id));
     scheduleSave();
     return data;
   }
@@ -592,6 +600,8 @@ async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
   // The remote readable set decides which old mirrors to clear. Only durable
   // creation input supplies missing local notes; never retain the old metadata.
   persistBootstrapInto(getDb(), data, drops);
+  // The rebuild owed since the server went back (forgetCopyWatermark) is this whole snapshot.
+  getDb().run("DELETE FROM sync_state WHERE key='rebuild_owed'");
   // When the mirror last took a whole snapshot (syncEngine: the daily refresh).
   getDb().run(
     "INSERT INTO sync_state (key, value) VALUES ('full_refresh_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -611,14 +621,43 @@ async function persistBootstrap(data: Bootstrap): Promise<Bootstrap> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       [data.last_event_id] as any,
     );
+    await raiseWatermark(String(data.last_event_id));
   }
   scheduleSave();
   return data;
 }
 
-async function persistRemoteNode(node: ContentNode): Promise<ContentNode> {
+/** The page refused an answer this copy had already applied (its own watermark rose while the copy worked): the cursor
+ *  goes back to where that request started, so the next request carries everything again for the page as well. */
+async function rewindCursor(to: string): Promise<void> {
+  if (!/^\d+$/.test(to)) return;
+  run("UPDATE sync_state SET value=? WHERE key='last_event_id' AND CAST(value AS INTEGER) > CAST(? AS INTEGER)", [to, to]);
+  scheduleSave();
+}
+
+/** What the page starts from on load, and learns at each sync pass's start: the watermark and identity this copy holds,
+ *  and whether a rebuild is owed (the server went back and no whole bootstrap was stored since). */
+async function getWatermark(): Promise<{ position: string | null; server: string | null; rebuildOwed: boolean }> {
+  // Another tab's raises and owed rebuild first (best effort, as judgeAnswer).
+  await catchUpWithOtherTabs().catch((error: unknown) => console.warn("[onden] could not read other tabs' changes before the watermark", error));
+  return { position: watermark(), server: knownServerId(), rebuildOwed: qry("SELECT 1 FROM sync_state WHERE key='rebuild_owed'").length > 0 };
+}
+
+/** A single note read from the server. `head`: where it was read (READ_HEAD_HEADER): judged like any answer
+ *  (lib/answerPositions.ts); a read from before what this copy knows is not stored (`answer_stale`). */
+async function persistRemoteNode(node: ContentNode, head?: string, serverId?: string): Promise<ContentNode & { answer_stale?: true; answer_watermark?: string | null; answer_server?: string | null }> {
+  const verdict = head === undefined ? null : await judgeAnswer(head, serverId);
+  if (verdict?.changed) await forgetCopyWatermark(); // another identity: a rebuild is owed, as applySync
+  if (verdict && !verdict.current) {
+    // Read again later, from this copy's own list (held_text: it goes with the snapshot to a reload and to other tabs);
+    // the next read that is taken takes it off (noteHeldText).
+    const held = heldNoteIds();
+    if (!held.has(node.id)) { held.add(node.id); writeHeldText(held); }
+    return { ...node, answer_stale: true, answer_watermark: watermark(), answer_server: knownServerId() };
+  }
   const [projected] = projectPendingNoteText([node], await getPendingWrites());
   await upsertNode(projected);
+  if (head !== undefined) await raiseWatermark(head);
   noteHeldText([node], [projected]);
   return projected;
 }
@@ -725,7 +764,73 @@ function replaceTouchingMemberships(memberships: NonNullable<SyncDelta["canvas_m
   return { upsert, delete: [...explicit, ...stale] };
 }
 
+/** The server identity this copy's cursor and watermark count in (lib/answerPositions.ts), null before any answer said. */
+function knownServerId(): string | null {
+  return qry<{ value: string }>("SELECT value FROM sync_state WHERE key='server_id'")[0]?.value ?? null;
+}
+
+/** The highest position this copy knows of for its server (lib/answerPositions.ts), null for none. */
+function watermark(): string | null {
+  return qry<{ value: string }>("SELECT value FROM sync_state WHERE key='answer_watermark'")[0]?.value ?? null;
+}
+
+const RAISE_WATERMARK_SQL = `INSERT INTO sync_state (key, value) VALUES ('answer_watermark', ?) ON CONFLICT(key) DO UPDATE SET
+  value = CASE WHEN CAST(excluded.value AS INTEGER) > CAST(value AS INTEGER) THEN excluded.value ELSE value END`;
+
+/** Raise the watermark to `position` (never lower it). Journaled, so another tab on this copy takes it in before it
+ *  applies an answer (catchUpWithOtherTabs), and a reload keeps it. */
+async function raiseWatermark(position: string): Promise<void> {
+  if (!/^\d+$/.test(position) || higherPosition(watermark(), position) === watermark()) return;
+  run(RAISE_WATERMARK_SQL, [position]);
+  await makeDurable({ t: "sql", stmts: [[RAISE_WATERMARK_SQL, [position]]] }, { critical: false });
+}
+
+/** The server went back (lib/data/writePositions.ts serverWentBack), or answers under another identity (applySync,
+ *  a ?nodes=none persistBootstrap): the watermark starts over, and a rebuild is owed until a whole bootstrap is stored
+ *  (persistBootstrap), across reloads. Returns whether it was owed already (the person
+ *  is told once per going back). Durable before it returns: a failure throws. */
+async function forgetCopyWatermark(): Promise<{ alreadyOwed: boolean }> {
+  const alreadyOwed = qry("SELECT 1 FROM sync_state WHERE key='rebuild_owed'").length > 0;
+  const stmts: Array<[string, unknown[]]> = [
+    ["DELETE FROM sync_state WHERE key='answer_watermark'", []],
+    ["INSERT INTO sync_state (key, value) VALUES ('rebuild_owed', '1') ON CONFLICT(key) DO NOTHING", []],
+  ];
+  for (const [sql, params] of stmts) run(sql, params);
+  await makeDurable({ t: "sql", stmts }, { critical: true });
+  return { alreadyOwed };
+}
+
+/** Another server identity: another event log. Its positions say nothing about what this copy knew, so the watermark
+ *  starts over; returns whether it changed. Journaled like a raise. */
+async function adoptServerIdentity(id: string | undefined): Promise<boolean> {
+  if (id === undefined) return false;
+  const known = knownServerId();
+  if (known === id) return false;
+  const stmts: Array<[string, unknown[]]> = [
+    ["INSERT INTO sync_state (key, value) VALUES ('server_id', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [id]],
+    ...(known === null ? [] : [["DELETE FROM sync_state WHERE key='answer_watermark'", []] as [string, unknown[]]]),
+  ];
+  for (const [sql, params] of stmts) run(sql, params);
+  await makeDurable({ t: "sql", stmts }, { critical: false });
+  return known !== null;
+}
+
+/** One answer that carries rows, before it is applied: another tab's raises are taken in first. `changed`: another
+ *  server identity (the engine rebuilds from a whole bootstrap); `current`: it may be applied. */
+async function judgeAnswer(head: string | number | undefined, serverId: string | undefined): Promise<{ changed: boolean; current: boolean }> {
+  // Best effort: storage that cannot be read now leaves this tab judging by what it knows itself (its own raises are
+  // always in), which is what it did before any other tab wrote.
+  await catchUpWithOtherTabs().catch((error: unknown) => console.warn("[onden] could not read other tabs' changes before an answer", error));
+  if (serverId !== undefined && knownServerId() !== null && knownServerId() !== serverId) return { changed: true, current: false };
+  return { changed: false, current: isCurrentAnswer(head, watermark()) };
+}
+
 async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
+  // The one rule (lib/answerPositions.ts): an answer read before what this copy knows is not applied at all.
+  const verdict = await judgeAnswer(delta.head_event_id, delta.server_id);
+  if (verdict.changed) { await forgetCopyWatermark(); return { ...emptyDeltaOf(delta), serverChanged: true }; } // a rebuild is owed
+  if (!verdict.current) return { ...emptyDeltaOf(delta), stale: true, answer_watermark: watermark(), answer_server: knownServerId() };
+  await adoptServerIdentity(delta.server_id);
   const pending = await getPendingWrites();
   const catalogTouched = delta.tags !== undefined || delta.nodes.delete.length > 0
     || delta.nodes.upsert.some(node => isTag(node));
@@ -755,11 +860,7 @@ async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
   d.run("BEGIN");
   try {
     if (catalogTouched) persistTagCatalogInto(d, applyTagCatalog(previousTags, delta) ?? []);
-    // A copy from before the one held is not written (lib/rowAge.ts), the same rule the store applies to this answer.
-    const heldAt = new Map(qry<{ id: string; updated_at: string | null }>(
-      "SELECT id, updated_at FROM nodes WHERE id IN (SELECT value FROM json_each(?))", [JSON.stringify(delta.nodes.upsert.map((n) => n.id))],
-    ).map((row) => [row.id, row]));
-    for (const n of delta.nodes.upsert) if (!isOlderCopy(n, heldAt.get(n.id))) upsertNodeInto(d, n, { from: "server" });
+    for (const n of delta.nodes.upsert) upsertNodeInto(d, n, { from: "server" });
     for (const e of delta.edges.upsert) upsertEdgeInto(d, e);
     for (const id of delta.edges.delete) {
       d.run("DELETE FROM edges WHERE id = ?", [id] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -808,7 +909,18 @@ async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
   }
   scheduleSave();
   // Always derive this field locally; ignore any same-named wire property.
+  // Applied: what it carried is known at its head, so an answer read earlier and arriving later is refused too.
+  if (delta.head_event_id !== undefined) await raiseWatermark(delta.head_event_id);
   return { ...delta, pendingCreations, ...(heldText.length ? { heldText } : {}) };
+}
+
+/** An answer with every channel empty and its cursor fields kept: what applySync returns when it applies nothing. */
+function emptyDeltaOf(delta: SyncDelta): SyncDelta {
+  return {
+    last_event_id: delta.last_event_id, ...(delta.head_event_id !== undefined ? { head_event_id: delta.head_event_id } : {}),
+    nodes: { upsert: [], delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] },
+    attributes: { upsert: [], delete: [] }, workspace: null,
+  };
 }
 
 async function upsertAttribute(
@@ -1522,6 +1634,10 @@ const ops = {
   forgetBody,
   heldNotesNowSent,
   applySync,
+  raiseWatermark,
+  rewindCursor,
+  getWatermark,
+  forgetCopyWatermark,
   upsertAttribute,
   removeAttribute,
   getNodeAttribute,

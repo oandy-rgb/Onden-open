@@ -4,6 +4,7 @@
 // 開機 JS 用到的字串不可放這裡：建置時 scripts/bootReportPlugin.mjs 會檢查並指出是哪一條。
 
 export const ZH_TW_LATE: Record<string, string> = {
+  "The server's copy is older than this device's last save: check your recent notes.": "伺服器上的資料比這台裝置最後存的還舊，請看一下最近改過的筆記。",
   "Connect to see how many notes are ready.": "連上網路才看得到有多少筆記準備好了。",
   "You have no notes to prepare yet.": "你還沒有需要準備的筆記。",
   "Preparing your notes… {ready} of {total} are ready.": "正在準備你的筆記… {total} 則裡已有 {ready} 則好了。",

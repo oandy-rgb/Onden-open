@@ -33,7 +33,7 @@ describe("a device that held ids the server has since rewritten", () => {
       saveEpoch: async () => {},
     };
     expect(await reconcileMembership(deps)).toMatchObject({ status: "done", revoked: 1, granted: 1 });
-    expect(isolateRevoked).toHaveBeenCalledWith([OLD_TAG]);
+    expect(isolateRevoked).toHaveBeenCalledWith([OLD_TAG], expect.objectContaining({ event_cursor: "100" }));
     expect(applied.flatMap((p) => p.nodes.map((n) => n.id))).toEqual([NEW_TAG]);
   });
 

@@ -83,7 +83,7 @@ const replies = new Map<number, (reply: Reply) => void>();
 let events: Array<{ event: string; ok: boolean }> = [];
 
 /** A new worker on whatever is on disk: another tab, or a restart. */
-async function openTab({ expectOpen = true } = {}): Promise<Tab> {
+async function openTab({ expectOpen = true, account = "acct" } = {}): Promise<Tab> {
   vi.resetModules();
   const worker = { onmessage: null as null | ((event: { data: unknown }) => void), postMessage: (message: Reply & { event?: string; ok: boolean }) => {
     if (message.event) { events.push(message as { event: string; ok: boolean }); return; }
@@ -94,7 +94,7 @@ async function openTab({ expectOpen = true } = {}): Promise<Tab> {
   const receive = worker.onmessage!;
   const attempt: Tab["attempt"] = async (op, ...args) => {
     const id = ++sequence;
-    return new Promise<Reply & { code?: string }>(resolve => { replies.set(id, resolve); receive({ data: { id, op, args, storageScope: "acct" } }); });
+    return new Promise<Reply & { code?: string }>(resolve => { replies.set(id, resolve); receive({ data: { id, op, args, storageScope: account } }); });
   };
   const tab: Tab = {
     attempt,
@@ -213,6 +213,56 @@ describe("one snapshot key shared by several tabs", () => {
     await a.send("flushLocalDbSync");
     await b.send("catchUpWithOtherTabs");
     expect(await queued(b)).toEqual(["older-in-a"]);
+  });
+});
+
+describe("the answer watermark is shared by the tabs (lib/answerPositions.ts)", () => {
+  const answer = (head: number) => ({
+    last_event_id: head, head_event_id: String(head), server_id: "s1",
+    nodes: { upsert: [{ id: "n1", source_type: "manual", node_type: "content", title: "n1", slug: "n1", markdown: `at ${head}`, parent_id: null, hidden: false, order_key: "a0" }], delete: [] },
+    tasks: { upsert: [], delete: [] }, edges: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null,
+  });
+  it("an answer tab B asked before tab A's write was acknowledged is not written into B's copy", async () => {
+    const a = await openTab();
+    const b = await openTab();
+    await a.send("applySync", answer(10));
+    await b.send("applySync", answer(10));
+    await a.send("raiseWatermark", "12"); // A's save acknowledged at 12: journaled, not yet in any snapshot
+    const late = await b.send("applySync", answer(11)) as { stale?: boolean };
+    expect(late.stale).toBe(true);
+    expect((await b.send("getWatermark")) as { position: string }).toMatchObject({ position: "12" });
+  });
+
+  it("the server went back: tab A owes the rebuild and pays it; tab B, which still knew 9000, finds it itself once and pays it once", async () => {
+    const boot = (head: string) => ({ workspace: { id: "w", name: "W", slug: "w", home_node_id: null }, actor_role: "editor",
+      nodes: answer(Number(head)).nodes.upsert, edges: [], tasks: [], suggestions: [], events: [], pointers: [], server_id: "s1", last_event_id: head });
+    const a = await openTab();
+    const b = await openTab();
+    await a.send("applySync", answer(9000));
+    await b.send("applySync", answer(9000));
+    expect(await a.send("forgetCopyWatermark")).toEqual({ alreadyOwed: false }); // A finds it, tells the person
+    expect(await b.send("getWatermark")).toMatchObject({ rebuildOwed: true }); // B sees A's mark (journaled)
+    await a.send("persistBootstrap", boot("120"));
+    expect(await a.send("getWatermark")).toMatchObject({ position: "120", rebuildOwed: false });
+    // B, holding 9000 in its own page, finds it again: one mark, one rebuild. The mark is shared (every tab's in-memory
+    // copy must be rebuilt) and paying it is each tab's own, so A pays once more — then nothing is owed anywhere.
+    await b.send("forgetCopyWatermark");
+    await b.send("persistBootstrap", boot("120"));
+    expect(await b.send("getWatermark")).toMatchObject({ position: "120", rebuildOwed: false });
+    expect(await a.send("getWatermark")).toMatchObject({ rebuildOwed: true });
+    await a.send("persistBootstrap", boot("120"));
+    expect(await a.send("getWatermark")).toMatchObject({ rebuildOwed: false });
+    expect(await b.send("getWatermark")).toMatchObject({ rebuildOwed: false });
+  });
+
+  it("another account's copy has its own watermark: what account A was told never refuses account B's answers", async () => {
+    const a = await openTab();
+    await a.send("raiseWatermark", "5000");
+    await a.send("flushLocalDbSync");
+    const other = await openTab({ account: "acct-b" });
+    const taken = await other.send("applySync", answer(10)) as { stale?: boolean };
+    expect(taken.stale).toBeUndefined();
+    expect(await other.send("getWatermark")).toMatchObject({ position: "10" });
   });
 });
 

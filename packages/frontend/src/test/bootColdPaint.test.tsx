@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: vi.fn(async () => null),
   loadBootstrapList: vi.fn(async () => null),
   loadBootstrapRelations: vi.fn(async () => ({ edges: [], pointers: [], tasks: [], suggestions: [], graph_positions: [] })),
@@ -44,6 +45,7 @@ vi.mock("../lib/api", async (orig) => {
 import { getAppState, resetAppState } from "../lib/appStore";
 import { persistBootstrap, getPendingWrites } from "../lib/localDb";
 import { useAppData } from "../lib/useAppData";
+import { forgetWatermark } from "../lib/data/writePositions";
 
 
 const slim = {
@@ -60,6 +62,7 @@ const pendingEdit = { id: 1, method: "PATCH", path: "/api/nodes/n1", body: JSON.
 
 beforeEach(() => {
   resetAppState();
+  forgetWatermark(); // the page's watermark outlives a test: a later test reads at an older position
   apiMock.mockReset();
   vi.mocked(persistBootstrap).mockReset();
   vi.mocked(getPendingWrites).mockReset();
@@ -119,5 +122,29 @@ describe("cold boot paints before the mirror is written", () => {
     await waitFor(() => expect(result.current.bootstrapped).toBe(true));
     await new Promise((r) => setTimeout(r, 20));
     expect(result.current.data.nodes.length).toBeGreaterThan(0);
+  });
+  it("a save acknowledged while the copy stores the boot download: downloaded again, the device stays online", async () => {
+    vi.mocked(getPendingWrites).mockResolvedValue([]);
+    // The copy was told of an acknowledgement at 7 while it stored the bootstrap read at 5: it refuses that one.
+    vi.mocked(persistBootstrap).mockImplementation(async (data) => (data.last_event_id === "5" ? { ...data, answer_stale: true } : data));
+    let downloads = 0; // the first is read at 5, every later one at 7
+    apiMock.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.startsWith("/api/bootstrap")) {
+        downloads++;
+        return downloads === 1 ? structuredClone(slim) : { ...structuredClone(slim), last_event_id: "7", nodes: [{ ...slim.nodes[0]!, title: "Saved meanwhile" }, slim.nodes[1]] };
+      }
+      if (p.startsWith("/api/canvases")) return [];
+      if (p.startsWith("/api/sync")) return { last_event_id: 7, nodes: { upsert: [], delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null };
+      throw new Error("unexpected " + p);
+    });
+    const { result } = renderHook(() => useAppData());
+    await waitFor(() => expect(getAppState().online).toBe(true));
+    expect(result.current.bootstrapped).toBe(true);
+    // Downloaded again where it was refused (the slim paint), not abandoned for the whole one: a cached big workspace
+    // has no whole download to fall back on and was left offline.
+    const bootstraps = apiMock.mock.calls.map((c) => String(c[0])).filter((p) => p.startsWith("/api/bootstrap"));
+    expect(bootstraps.slice(0, 2)).toEqual(["/api/bootstrap?bodies=none", "/api/bootstrap?bodies=none"]);
+    await waitFor(() => expect(getAppState().data.nodes[0]!.title).toBe("Saved meanwhile"));
   });
 });

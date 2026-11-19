@@ -211,12 +211,15 @@ export function isEditorStorageAttr(key: string): boolean {
  *  one (426 `server_too_old`: the server needs updating); a client holds back from a server on either side the same way.
  *  Raise CLIENT_PROTOCOL when the shape of what sync carries changes (bootstrap, delta, membership) or a write means
  *  something else than before (3: paragraph identity lives in block_anchors, the text carries no `^id`; 4: a note's
- *  place among its siblings is the key `order_key`, not the integer `sort_order`). A new
+ *  place among its siblings is the key `order_key`, not the integer `sort_order`; 5: a write's response says where it
+ *  landed (EVENT_POSITION_HEADER) and every answer that carries rows says where it was read (`head_event_id`): the app
+ *  refuses an answer read before a write it was told about, so a server that says neither would leave it unprotected —
+ *  the gate makes that explicit instead of silent). A new
  *  optional field, a new route or a bug fix does not need it: raising it locks everyone out until both sides update.
  *  A request with no header (MCP, tokens, health checks, the public site) is not asked. */
 export const CLIENT_PROTOCOL_HEADER = "X-Onden-Client-Protocol";
 export const SERVER_PROTOCOL_HEADER = "X-Onden-Server-Protocol";
-export const CLIENT_PROTOCOL = 4;
+export const CLIENT_PROTOCOL = 5;
 
 /** The requests that carry what sync builds a copy from (bootstrap, delta, bodies, drawings, membership, grants), by
  *  path. Some are POSTs that only read, so "is it a write" is not the question: the server refuses a client
@@ -235,6 +238,19 @@ export function protocolMismatch(headerValue: string): "older" | "newer" | null 
   if (!Number.isInteger(version) || version < CLIENT_PROTOCOL) return "older";
   return version > CLIENT_PROTOCOL ? "newer" : null;
 }
+
+/** Where a write landed in its workspace's order: the id of the last `domain_events` row the write's transaction committed,
+ *  a decimal string, on the response to that write (backend eventPositionHeader.ts). Ids are given out and committed under
+ *  the workspace's event lock, so for one workspace a larger id is a later commit, and a sync answer whose
+ *  `head_event_id` is at least this position was read after the write. A replay of a key already used carries the
+ *  original write's position (kept with the key). A refusal and a write that committed no event carry no header (nor
+ *  their replays): absent means "no position", never 0. Clients that do not read it lose
+ *  nothing (the app's lib/answerPositions.ts is the reader). */
+export const EVENT_POSITION_HEADER = "X-Onden-Event-Position";
+
+// The single note read's two headers live in their own module: only the app's lazily loaded read (frontend
+// lib/data/serverTruth.ts) reads them, so they stay out of its boot JS.
+export { READ_HEAD_HEADER, READ_SERVER_HEADER } from "./readHeaders.js";
 
 /** Names the browser or install a write came from: one UUID per device, made once and never synced between devices
  *  or changed by signing in as someone else. The server records it on the write's event (`domain_events.device_id`)

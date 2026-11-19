@@ -32,6 +32,11 @@ vi.mock("../lib/localDb", () => ({
 
 import { ApiError } from "../lib/api";
 import { submitWrite, stopWriteRetry } from "../lib/data/writeQueue";
+import { serverTruth } from "../lib/data/serverTruthLoad";
+
+// The read-back after a refused write (serverTruth.ts) loads after boot; loaded here first, so it is a request inside the
+// test that made it and not one that lands in the next test while vitest is still transforming the file.
+await serverTruth();
 
 const unavailable = () => new ApiError(503, "unavailable");
 const sent = () => apiMock.mock.calls.length;

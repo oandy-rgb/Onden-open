@@ -21,6 +21,8 @@
 //   4 the open note's editor text equals the server (unless its save was refused)
 //   5 pagehide / background never leaves the newest typing unprotected
 //   6 a refused save is in recovery once and is not sent again
+//   S5 an answer that is the server's current state is taken for every note this device has nothing of its own waiting on,
+//      whatever the server's clock did (command `serverClockStepsBack` / `serverClockFreezes`: updated_at earlier than or equal to the held row's)
 //   S1–S4 (a late sync answer, the owner report 2026-11-16; commands `syncStarts` / `syncAnswer`):
 //   S1 once a save of this device is acknowledged, the editor's base is never older than that save
 //      (the base is private to draftActions, so it is read where it is used: S3)
@@ -45,8 +47,11 @@ import fc from "fast-check";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+const responses = vi.hoisted(() => ({ listener: null as null | ((path: string, init: RequestInit | undefined, response: Response) => void) }));
 vi.mock("../../lib/api", async (original) => ({
   ...await original<typeof import("../../lib/api")>(),
+  // lib/data/writePositions installs its recorder here; the world's responses are handed to it (see world.onResponse).
+  setWriteResponseListener: (listener: typeof responses.listener) => { responses.listener = listener; },
   api: vi.fn(async (path: string, init?: unknown) => {
     const { world } = await import("../helpers/saveWorld");
     return world.transport(path, init as never);
@@ -65,16 +70,17 @@ import {
 } from "../../lib/data/draftActions";
 import { pendingFields } from "../../lib/data/optimisticFields";
 import { applySyncDelta } from "../../lib/data/storeOps";
-import { projectPendingNoteText } from "../../lib/pendingNoteProjection";
 import type { ContentNode } from "../../lib/api";
 import type { AppliedSyncDelta } from "../../lib/localDb";
 import { flushPendingWrites, stopWriteRetry } from "../../lib/data/writeQueue";
 import { getRecoveryWrites, refreshRecoveryWrites, removeRecoveryWrite } from "../../lib/data/writeRecovery";
 import { setPending } from "../../lib/data/syncStatus";
 import { bindAccountStorage } from "../../lib/accountStorage";
-import { bodyKey, mergeGuard, tokensIn, world, type WorldRequest } from "../helpers/saveWorld";
+import { bodyKey, mergeGuard, tokensIn, world, SERVER_ID, type WorldRequest } from "../helpers/saveWorld";
+import { askedNow, forgetWatermark, takeAnswer } from "../../lib/data/writePositions";
 
 bindAccountStorage("u", "");
+world.onResponse = (path, init, response) => responses.listener?.(path, init, response as unknown as Response);
 world.makeApiError = (status) => new ApiError(status, JSON.stringify({ error: "x" }));
 
 /** PROPS_SKIP=3,6 ignores those invariants: once one bug is known, the shrinker
@@ -125,7 +131,7 @@ class Editor {
   vanished = new Set<string>();
   exitProblems: string[] = [];
   /** Answers the device asked the server for (`syncStarts`) and has not been given yet, as the server held them then. */
-  asked: Array<{ rows: ContentNode[]; delivered: boolean }> = [];
+  asked: Array<{ rows: ContentNode[]; head: number; request: ReturnType<typeof askedNow>; delivered: boolean }> = [];
   /** Step-back problems (S2) seen after a command; they are gone from the state by the end of the run. */
   stepProblems = new Set<string>();
   /** Per note: the text the person last typed (the editor showing it is typing, not a step back). */
@@ -142,6 +148,7 @@ class Editor {
     stopWriteRetry();
     __resetDraftStateForTests();
     world.reset();
+    forgetWatermark();
     localStorage.clear();
     await refreshRecoveryWrites();
     setPending(0);
@@ -264,29 +271,16 @@ class Editor {
   }
   remoteRename(noteId: string): void { world.remoteRename(noteId, `Remote${++this.titleSeq}-${noteId}`); }
 
-  /** A sync delta: the server's rows reach the store, except fields an optimistic edit of this device still owns
-   *  (lib/data/optimisticFields), and with the device's queued writes laid over them as the worker does
-   *  (projectPendingNoteText: without it a delta taken while a save sits in the offline queue shows the older text). */
+  /** A sync delta asked and delivered now: the same road as every answer (syncAnswer: the page's door, then this
+   *  world's copy as the worker does, then the store, where a field an edit of this device still owns is kept). */
   sync(): void {
-    const rows = projectPendingNoteText(world.rows(), world.pending as never);
-    setData((data) => ({
-      ...data,
-      nodes: data.nodes.map((n) => {
-        const s = rows.find((row) => row.id === n.id);
-        if (!s) return n;
-        const pending = pendingFields(`node:${n.id}`);
-        return {
-          ...n,
-          ...(pending.has("markdown") ? {} : { markdown: s.markdown, ...(n.body_len === undefined ? {} : { body_len: s.markdown!.length }) }),
-          ...(pending.has("title") ? {} : { title: s.title }),
-        };
-      }),
-    }));
+    this.syncStarts();
+    this.syncAnswer(this.unanswered - 1);
   }
 
   /** The device asks the server now: the answer is the rows as the server holds them at this moment, and it
    *  reaches the device only with `syncAnswer`. */
-  syncStarts(): void { this.asked.push({ rows: world.rows(), delivered: false }); }
+  syncStarts(): void { this.asked.push({ rows: world.rows(), head: world.head, request: askedNow(), delivered: false }); }
 
   get unanswered(): number { return this.asked.filter((a) => !a.delivered).length; }
 
@@ -299,12 +293,42 @@ class Editor {
     const answer = open.length ? open[index % open.length] : undefined;
     if (!answer) return;
     answer.delivered = true;
-    const upsert = projectPendingNoteText(answer.rows, world.pending as never);
-    const delta = {
-      last_event_id: 0, nodes: { upsert, delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] },
-      attributes: { upsert: [], delete: [] }, workspace: null,
-    } as unknown as AppliedSyncDelta;
-    setData((data) => applySyncDelta(data, delta));
+    const wire = {
+      last_event_id: 0, head_event_id: String(answer.head), server_id: SERVER_ID, nodes: { upsert: answer.rows, delete: [] }, edges: { upsert: [], delete: [] },
+      tasks: { upsert: [], delete: [] }, attributes: { upsert: [], delete: [] }, workspace: null,
+    };
+    // The app's one door (lib/data/writePositions.ts takeAnswer): the page's watermark decides, then this world's local
+    // copy judges and stores it as the worker does (helpers/saveWorld.ts localDb.applySync: the same isCurrentAnswer and
+    // the queued text laid over it), the model localDbSharedStorage and answerPositions run on the real worker.
+    void takeAnswer({
+      head: wire.head_event_id, serverId: wire.server_id, asked: answer.request,
+      toCopy: async () => {
+        const stored = await world.localDb.applySync(wire);
+        return { value: stored as unknown as AppliedSyncDelta, stale: "stale" in stored, copy: stored as never };
+      },
+      toStore: (delta) => setData((data) => applySyncDelta(data, delta)),
+    }).then(() => this.checkCurrentAnswerTaken(answer.rows));
+  }
+
+  /** S5: an answer that is the server's CURRENT state (nothing changed after it was captured) is taken by the store
+   *  for every note the device has nothing of its own waiting on. Time is the wrong yardstick for "older": when the
+   *  server's clock steps back, or two changes get the same millisecond, a real newer change can carry an equal or
+   *  earlier updated_at than the row held, and it must still arrive. */
+  private checkCurrentAnswerTaken(rows: ContentNode[]): void {
+    if (world.inflight.length || world.pending.length) return;
+    const current = world.rows();
+    for (const row of current) {
+      const asked = rows.find((r) => r.id === row.id);
+      if (!asked || asked.markdown !== row.markdown || asked.title !== row.title) return; // not a current answer
+    }
+    for (const row of current) {
+      if (this.vanished.has(row.id) || world.rejectedNotes.has(row.id)) continue;
+      if (pendingFields(`node:${row.id}`).size) continue;
+      if (this.lastTyped.has(row.id) && this.lastTyped.get(row.id) !== world.lastAcked.get(row.id)) continue; // typed, not saved yet
+      const held = getAppState().data.nodes.find((n) => n.id === row.id);
+      if (!held || nodeNeedsBody(held)) continue;
+      if (held.markdown !== row.markdown || held.title !== row.title) this.stepProblems.add(`#S5 a current answer left note ${row.id} showing ${JSON.stringify(held.markdown)}/${JSON.stringify(held.title)} while the server holds ${JSON.stringify(row.markdown)}/${JSON.stringify(row.title)}`);
+    }
   }
 
   /** S2, read after every command: the editor never shows a text this device had already replaced by an
@@ -430,6 +454,11 @@ const C = {
   /** The device asks the server now; the answer is captured as of this moment and not delivered. */
   syncStarts: () => cmd("sync starts (answer captured, not delivered)", (e) => e.syncStarts()),
   syncAnswer: (i = 0) => cmd(`captured sync answer #${i} delivered`, (e) => e.syncAnswer(i), () => editor.unanswered > 0),
+  /** The server's clock is set back by `ms` (a time correction, a restore from an older backup). */
+  serverClockStepsBack: (ms: number) => cmd(`the server's clock steps back ${ms / 1000} s`, () => world.serverClockStepsBack(ms)),
+  /** Changes made while the clock holds carry the same updated_at (the same millisecond). */
+  serverClockFreezes: () => cmd("the server's clock stops (changes get the same millisecond)", () => world.serverClockFreezes()),
+  serverClockRuns: () => cmd("the server's clock runs again", () => world.serverClockRuns()),
   evict: () => cmd("open note's body evicted from memory", (e) => e.evictOpenBody()),
   deliver: (i = 0) => cmd(`request #${i} delivered`, (e) => { const r = e.request(i); if (r) world.deliver(r); }, hasRequest),
   failRetry: (kind: "503" | "network", i = 0) => cmd(`request #${i} fails (${kind}, not applied)`, (e) => { const r = e.request(i); if (r) world.failRetryably(r, kind); }, hasRequest),
@@ -460,6 +489,9 @@ const commandKinds: Array<[kind: string, weight: number, arb: fc.Arbitrary<Cmd>]
   ["sync", 2, fc.constant(C.sync())],
   ["syncStarts", 2, fc.constant(C.syncStarts())],
   ["syncAnswer", 3, index.map(C.syncAnswer)],
+  ["serverClockStepsBack", 1, fc.constantFrom(1, 1000, 60_000, 3_600_000).map(C.serverClockStepsBack)],
+  ["serverClockFreezes", 1, fc.constant(C.serverClockFreezes())],
+  ["serverClockRuns", 1, fc.constant(C.serverClockRuns())],
   ["evict", 1, fc.constant(C.evict())],
   ["deliver", 4, index.map(C.deliver)],
   ["failRetry", 1, fc.tuple(fc.constantFrom<"503" | "network">("503", "network"), index).map(([k, i]) => C.failRetry(k, i))],
@@ -681,6 +713,22 @@ describe("save path under random timing", () => {
     C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
   ], /#S[234]/);
 
+  // Time is the wrong yardstick (S5). The fixed rule for a late answer must not decide "older" by the server's clock: a REAL change
+  // made after the clock stepped back (a correction, a restore from an older backup) has an earlier updated_at than the row held.
+  // On main these pass (no rule yet); a rule that compares updated_at (PR #1753's isOlderCopy) fails the first one:
+  // the other device's text is dropped on the answer and shows only after the note changes again.
+  regression("clock steps back: this device saves (acknowledged), the clock steps back 60 s, another device edits the note, the next answer must bring its text (S5)", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
+    C.serverClockStepsBack(60_000), C.remoteBody("a", { kind: "append", k: 0 }), C.syncStarts(), C.syncAnswer(0),
+  ], /#S5|#4/);
+  regression("same millisecond: this device's save and another device's edit of the note carry the same updated_at; the next answer must bring its text (S5)", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.serverClockFreezes(), C.deliver(),
+    C.remoteBody("a", { kind: "append", k: 0 }), C.syncStarts(), C.syncAnswer(0),
+  ], /#S5|#4/);
+  regression("clock steps back: another device renames the note after the step back; the next answer must bring the title (S5)", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.deliver(),
+    C.serverClockStepsBack(60_000), C.remoteRename("a"), C.syncStarts(), C.syncAnswer(0),
+  ], /#S5|#4/);
   // Owner report 2026-11-19 (phone, typing alone): the newest characters went away and came back, the caret before
   // them. A sync answer asked AFTER save 1 was acknowledged carries save 1's text with save 1's time, the same time the
   // store row still had while save 2 was on its way (an unanswered save does not move the row's time), so the age rule
@@ -732,6 +780,12 @@ describe("save path under random timing", () => {
   regression("late sync answer (seed 2): rename, answer asked before the save and delivered after it started, reload: the editor shows the old title", [
     C.rename(), C.syncStarts(), C.tick(), C.syncAnswer(0), C.reload(),
   ], /#4/);
+  // Nightly 2026-11-17 on main (PR #1866, PROPS_SEED=20261117 PROPS_RUNS=5000, run 1950): the same family. The answer is read
+  // before the keepalive rename is applied, and no acknowledgement has arrived when it is delivered, so no watermark can
+  // refuse it: the position rule (lib/answerPositions.ts) covers answers read before an ACKNOWLEDGED write only.
+  regression("nightly 2026-11-17 (#1866): rename, reload, an answer asked, delivered, request #0 fails (503): the editor shows the old title", [
+    C.rename(), C.reload(), C.syncStarts(), C.syncAnswer(0), C.failRetry("503", 0),
+  ], /#4/); // fixed with the 2026-11-19 report: the answer no longer replaces a title whose rename has no answer yet
   regression("late sync answer (seed 21): typing, reload, answer, switch away and back: the editor shows the text from before", [
     C.type({ kind: "append", k: 0 }), C.reload(), C.syncStarts(), C.syncAnswer(0), C.switchNote(), C.switchNote(),
   ], /#4/);
@@ -743,6 +797,18 @@ describe("save path under random timing", () => {
     C.rename(), C.reload(), C.syncStarts(), C.syncAnswer(0), C.type({ kind: "append", k: 0 }),
     C.failRetry("503", 0), C.background(), C.type({ kind: "append", k: 0 }),
   ], /#3/);
+
+  // PROPS_RUNS=5000 on main, three seeds (2026-11-16, with the clock commands in the generator). None of the three involves
+  // the clock; they are the same open families as above (the simulated reload keeps the store; a refused save left as a base).
+  regression("5000 runs, seed 222: an answer asked before typing, reload, the answer delivered, pagehide: the editor shows the text from before (#4)", [
+    C.syncStarts(), C.type({ kind: "append", k: 0 }), C.reload(), C.syncAnswer(0), C.pagehide(),
+  ], /#4/); // fixed with the 2026-11-19 report (storeOps.serverCopyOver keeps a field whose edit has no answer yet)
+  regression("5000 runs, seed 3333: typing, reload, an answer, rename, body evicted: a save carries a base already replaced (S3)", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.syncStarts(), C.syncAnswer(0), C.rename(), C.evict(),
+  ], /#S3/); // fixed with the 2026-11-19 report (the same)
+  regression("5000 runs, seed 11 (no sync, no clock): rename, a NUL typed, reload, rename again: the next save carries a base already replaced (S3)", [
+    C.rename(), C.tick(), C.typeRefused({ kind: "delete", k: 0 }, "\u0000"), C.reload(), C.rename(), C.deliver(0), C.switchNote(),
+  ], /#S3/, true);
 
   // Seed 3: no sync involved. The keepalive save of the first typing is refused after the person typed something
   // the client itself refuses (NUL); the next save still carries the refused text as its base, the server has moved

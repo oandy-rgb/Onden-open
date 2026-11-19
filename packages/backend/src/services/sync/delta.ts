@@ -11,6 +11,7 @@ import { bindingRowsForNotes } from "../blockLinks.js";
 import { isUuid } from "@onden/markdown";
 import { q } from "../../db.js";
 import { db } from "../../dbKysely.js";
+import { sql } from "kysely";
 import type { ActorCtx } from "../../types.js";
 import { readableNodeIdSet, readableTrashedNodeIds, restrictRowsToScope } from "../readPolicy.js";
 import { taskNodeIdsAmong, taskRowReadable, taskRowsByIds, notATaskNodeSql } from "../tasksStore.js";
@@ -26,6 +27,7 @@ import { isWorkspaceOwner } from "../../spine/authority.js";
 import { readSiteSettings } from "./bootstrap.js";
 import type { AttributeDelta, NodeEdge, SyncDelta, Workspace } from "@onden/contract";
 import { liveNodeSql, tagNodeSql } from "../../spine/nodeSql.js";
+import { serverIdentityField } from "../../spine/stamps.js";
 import type { RespacedGroup } from "../orderKeys.js";
 
 // Bound the POST payload so a client can't ask the server to diff an unbounded
@@ -62,6 +64,7 @@ export async function buildSyncDelta(
         resync_required: true,
         last_event_id: maxIdRes.rows[0].max_id as number,
         head_event_id: String(maxIdRes.rows[0].max_id),
+        ...(await serverIdentityField()),
         nodes: { upsert: [], delete: [] },
         edges: { upsert: [], delete: [] },
         tasks: { upsert: [], delete: [] },
@@ -469,6 +472,8 @@ export async function buildSyncDelta(
     const delta: SyncDelta = {
       last_event_id: lastEventId,
       head_event_id: headEventId,
+      // Read in this snapshot, like head_event_id: which log the head (and every write's position) counts in.
+      ...(await serverIdentityField()),
       membership_epoch: membershipEpoch,
       nodes: { upsert: nodesUpsert, delete: [...nodeDelete].filter(couldHold) },
       edges: { upsert: edgesUpsert, delete: [...edgeDelete], replace_for: edgeReplaceFor },
@@ -509,4 +514,19 @@ async function purgesReadableBy<P extends { spaceId: string }>(
   );
   const readable = new Set(r.rows.map((row) => row.id));
   return purges.filter((p) => readable.has(p.spaceId));
+}
+
+// Where a workspace's event log ends now (`MAX(id)` of domain_events, "0" when empty), for a read that is not taken in
+// a sync snapshot: read it BEFORE the row, and the row holds at least every write up to it (ids are committed in order
+// under the workspace's event lock, spine/eventLock.ts). The app compares it with what it knows (lib/answerPositions.ts).
+async function workspaceHead(workspaceId: string): Promise<string> {
+  const row = await db.selectFrom("domain_events").select(sql<string>`COALESCE(MAX(id), 0)::text`.as("head"))
+    .where("workspace_id", "=", workspaceId).executeTakeFirst();
+  return row?.head ?? "0";
+}
+
+/** Where a single read stands (routes/nodes.ts GET /api/nodes/:id): the head read before the row, and the server identity
+ *  it counts in (the same derived value as every sync answer's `server_id`), so the app judges it like any answer. */
+export async function readStandpoint(workspaceId: string): Promise<{ head: string; server_id?: string }> {
+  return { head: await workspaceHead(workspaceId), ...(await serverIdentityField()) };
 }

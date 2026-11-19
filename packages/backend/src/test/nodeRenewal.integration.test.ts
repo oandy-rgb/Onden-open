@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { migrate, q } from "../db.js";
 import { readChangeBundle } from "../services/stampedBundle.js";
 import { bundleOf, haveOfAll } from "../spine/stampedBundle.js";
-import { localNodeId } from "../spine/stamps.js";
+import { localNodeId, serverIdentityField } from "../spine/stamps.js";
 import { ensureOwnNodeId, forgetNodeId } from "../browser/nodeIdentity.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, exportAs, fillFrom, openNode, snapshotApp, type SourceWorld } from "./helpers/stampedWorld.js";
@@ -335,6 +335,18 @@ describe.skipIf(!isTestDb)("the server's identity as another node or a client se
     const { new_node_id } = await renew(node);
     expect(await onNode(node, () => localNodeId())).toBe(new_node_id);
     expect(new_node_id).not.toBe(before);
+  }, 120_000);
+
+  it("after the renewal (a restore, a rebase) the answers' server_id is another one, so the app starts its positions over (#1794)", async () => {
+    const node = track(await openNode("identity"));
+    const before = await onNode(node, () => serverIdentityField());
+    await renew(node);
+    const after = await onNode(node, () => serverIdentityField());
+    expect(before.server_id).toBeTruthy();
+    expect(after.server_id).toBeTruthy();
+    expect(after.server_id).not.toBe(before.server_id);
+    // The same id always gives the same value.
+    expect(await onNode(node, () => serverIdentityField())).toEqual(after);
   }, 120_000);
 
   it("a browser copy made before migration 213: its boot's migrate() brings sync_take_node_id() first, and only then does the copy take its own id", async () => {

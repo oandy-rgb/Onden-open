@@ -38,9 +38,10 @@ beforeEach(() => {
   _resetLocalDbForTests();
   setLocalCopy("none");
   apiMock.mockReset();
-  apiMock.mockImplementation(async (path: string) => {
+  apiMock.mockImplementation(async (path: string, init?: { onHeaders?: (headers: Headers) => void }) => {
     if (path.startsWith("/api/bootstrap")) return remote();
-    if (path === "/api/nodes/n1") return fullNote;
+    // Where the server read it (READ_HEAD_HEADER), as the real GET /api/nodes/:id says.
+    if (path === "/api/nodes/n1") { init?.onHeaders?.(new Headers({ "X-Onden-Read-Head": "120" })); return fullNote; }
     if (path.startsWith("/api/canvases")) return [];
     throw new Error("unexpected " + path);
   });

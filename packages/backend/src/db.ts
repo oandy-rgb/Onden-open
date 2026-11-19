@@ -9,6 +9,7 @@ import { log } from "./logger.js";
 import { closeDatabase } from "./dbClose.js";
 import { translateUnitInConflict } from "./spine/unitInConflict.js";
 import { EVENT_APPEND_LOCK_SQL, acquireEventAppendLock } from "./spine/eventLock.js";
+import { noteInsertedEvent } from "./spine/eventPosition.js";
 import { notifyChanged, notifyMembershipChanged } from "./services/realtime.js";
 import { nativeBypassEnabled } from "./nativeBypass.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./spine/systemActor.js";
@@ -579,14 +580,18 @@ export async function pruneEvents(opts: { graceDays?: number } = {}) {
     const { rowCount } = await client.query(
       // Keep what a restore still needs: NODE_DELETED roots (undeleting a
       // subtree walks them) and events whose before/after value is a blob
-      // reference (ink and large attribute undo).
+      // reference (ink and large attribute undo). And the workspace's highest
+      // event: MAX(id) is where every answer says it was read (services/sync/delta.ts workspaceHead,
+      // frontend lib/answerPositions.ts); deleting it would put new answers below
+      // what devices already know, and they would refuse them.
       `DELETE FROM domain_events e
         WHERE e.target_type = 'node'
           AND e.created_at < now() - ($1 || ' days')::interval
           AND NOT (e.payload ? 'body_hash')
           AND e.event_type <> 'NODE_DELETED'
           AND NOT (e.payload ? 'value_ref')
-          AND (e.tx_meta->'prev_field_values'->>'value_ref') IS NULL`,
+          AND (e.tx_meta->'prev_field_values'->>'value_ref') IS NULL
+          AND e.id < (SELECT MAX(id) FROM domain_events m WHERE m.workspace_id = e.workspace_id)`,
       [graceDays],
     );
     await client.query("COMMIT");
@@ -768,5 +773,8 @@ async function insertEvent(
   // mutations flow through (spine mutate(), cascades, system events), which
   // makes this the one seam that can't be forgotten by a new route.
   if (id) afterCommit(() => notifyChanged(id));
+  // The write's position for its response (spine/eventPosition.ts), noted after commit like the tick above.
+  const noted = id ? await noteInsertedEvent(id) : null;
+  if (noted) afterCommit(noted);
   return id;
 }

@@ -46,7 +46,7 @@ import { UnauthorizedError } from "./actor.js";
 import { assertSystemActorGenuine, assertSystemEvent, systemJobOf } from "./systemJobs.js";
 export { requireActor, UnauthorizedError } from "./actor.js";
 
-export { IdempotentReplay, withIdempotencyKey, isCommittedIdempotencyKey } from "./idempotency.js";
+export { IdempotentReplay, withIdempotencyKey, committedIdempotencyKey } from "./idempotency.js";
 
 export { AuthorityError };
 export type { Authority };

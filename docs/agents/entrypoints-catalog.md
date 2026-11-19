@@ -393,7 +393,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（109）
+## 共用邏輯（110）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -873,6 +873,14 @@ const refresh = (calendarId: string) => calendarWriter.refresh(calendarId);`
 - 入口：`frontend/src/lib/data/writeLifecycle.ts`（`makeWriteLifecycle`、`inWriteOrder`）　項目 `write-lifecycle`
 - 寫法：`import { makeWriteLifecycle } from "./lib/data/writeLifecycle";`
 - 為什麼：樂觀更新、確認、失敗回復的流程用它，畫面先變、失敗時退回的行為才一致。
+
+### 一個帶著資料的回應（同步、成員資格頁、任何一種 bootstrap）要放進本機副本或畫面時，判斷它是不是在這台裝置已確認的寫入之前讀的
+
+- 入口：`frontend/src/lib/answerPositions.ts`（`isCurrentAnswer`、`higherPosition`）；`frontend/src/lib/data/writePositions.ts`（`takeAnswer`、`askedNow`、`serverWentBack`、`syncPassEnded`）；`backend/src/spine/eventPosition.ts`（`collectEventPosition`、`noteInsertedEvent`）　項目 `late-answer-positions`
+- 寫法：`import { isCurrentAnswer } from "./lib/answerPositions";
+export const current = isCurrentAnswer("12", "11");`
+- 取代：用伺服器時間（updated_at）比較哪一份較新、由客戶端推算一個寫入動到哪些列，或在各個回應各寫一條「晚到就不套用」的規則
+- 為什麼：伺服器的順序是事件位置（同一把事件鎖下的 domain_events id），不是時鐘：寫入的回應帶它提交的位置，每個帶資料的回應帶讀取時的 head。head 低於這台裝置知道的最高位置（水位），整份不套用、再問一次；本機副本與頁面用同一個 isCurrentAnswer，頁面的入口只有 takeAnswer（守門 answerDoor.guard.test.ts）。
 
 ### 要取得或建立某一天的日記
 

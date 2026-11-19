@@ -223,3 +223,15 @@ UI 使用回傳投影，因此今日啟動不必各自查 queue，也不因重�
 建立仍遵循原本 synced／queued／rejected 契約；自己輸入可見不代表伺服器已接受或授權。
 新筆記 503、手機重開及續寫、桌面重開、恢復後單筆提交已驗證；其他領域相依建立、
 跨裝置唯一、完全離線登入與同帳號多分頁仍有限制，見 [完整證據](../archive/startup-pending-create-fixes-2026-09-15.md)。
+
+## 保存確認之後的晚到回答（2026-11-18）
+
+保存被伺服器確認時，回應帶著它的事件位置（`X-Onden-Event-Position`）。這台裝置記下確認過的最高位置（水位）。
+之後任何帶著資料列的回答（同步、bootstrap、成員資格頁、單筆讀取 `GET /api/nodes/:id`），只要讀的位置低於水位，
+就整份不套用、再問一次，所以剛保存的文字不會被保存之前讀的回答蓋回去。單筆讀取由 `serverTruth.ts` 的
+`readServerNode` 經同一個判斷。不收的讀取會在擋住新寫入的期間再問，最多 3 次；仍不收就放進「再讀一次」的清單（`serverTruthLoad.ts readAgain`），2 秒後的同步讀它。`settleNodeToServer` 這時回傳 false，呼叫者保留現況。
+`serverTruth.ts` 不在開機 JS：`serverTruthLoad.ts` 在頁面的模組載入時就開始載它。
+
+還沒被確認的寫入不在這條規則裡：那段期間仍靠上面的待同步投影。改名送出後立刻重新整理又遇到 503，
+編輯器可能顯示改名前的標題（`saveTiming` 的 #1866 案例，仍開著）。規則與證明見
+[decisions-core-sync.md](../agents/decisions-core-sync.md#晚到的回應不蓋掉已確認的保存事件位置與水位2026-11-16取代-1753-的-updated_at-規則1794-審查後定案)。

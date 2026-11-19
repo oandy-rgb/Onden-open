@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mirror = vi.hoisted(() => ({ cursor: 100 }));
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: vi.fn(async () => null),
   loadBootstrapList: vi.fn(async () => null),
   persistBootstrap: vi.fn(async (data: unknown) => data),
@@ -29,6 +30,7 @@ vi.mock("../lib/api", async (orig) => ({ ...await orig<typeof import("../lib/api
 
 import { persistBootstrap, applySync, setLastEventId } from "../lib/localDb";
 import { refresh, sync, refreshMeta } from "../lib/data/syncEngine";
+import { forgetWatermark } from "../lib/data/writePositions";
 
 const note = (id: unknown) => ({ id, source_type: "manual", node_type: "content", title: "t", slug: "t", markdown: "", parent_id: null, hidden: false, order_key: "a0" });
 const goodBootstrap = (over: Record<string, unknown> = {}) => ({
@@ -59,6 +61,7 @@ const badDeltas: Array<[string, unknown]> = [
 ];
 
 beforeEach(() => {
+  forgetWatermark(); // each test is another page (lib/data/writePositions.ts)
   mirror.cursor = 100;
   apiMock.mockReset();
   vi.mocked(persistBootstrap).mockClear();

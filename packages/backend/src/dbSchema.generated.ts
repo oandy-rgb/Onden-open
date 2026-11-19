@@ -555,6 +555,7 @@ export interface FunctionRefs {
 
 export interface IdempotencyKeys {
   created_at: Generated<Timestamp>;
+  event_position: Int8 | null;
   key: string;
   workspace_id: string;
 }

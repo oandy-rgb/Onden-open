@@ -15,7 +15,7 @@ import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./
 import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable } from "./writeRecovery";
 import { PREFS, prefsAvailable } from "../prefs";
 import { onAppResume } from "../appResume";
-import { settleNodeToServer } from "./serverTruth";
+import { serverTruth } from "./serverTruthLoad";
 import { accountStorageKey } from "../accountStorage";
 import { readSession, removeSession, SESSION_KEYS } from "../sessionPrefs";
 
@@ -521,7 +521,7 @@ async function settleReplayedPlaces(ids: Set<string>): Promise<void> {
   const queued = await getPendingWrites().catch(() => []);
   for (const id of ids) {
     if (queued.some((write) => targetIds(write, "node").includes(id))) continue;
-    await settleNodeToServer(id, setData).catch(() => false);
+    await serverTruth().then(({ settleNodeToServer }) => settleNodeToServer(id, setData)).catch(() => false);
   }
 }
 

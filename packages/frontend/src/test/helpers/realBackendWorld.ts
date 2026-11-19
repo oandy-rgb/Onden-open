@@ -34,7 +34,8 @@ import { World, tabContext, type Tab } from "./tabWorld";
 
 type App = { request: (path: string, init: RequestInit) => Response | Promise<Response> };
 export type Fate = "deliver" | "net" | "lose" | "503" | "dup" | "arrive";
-type Captured = { status: number; text: string; contentType: string };
+/** `headers`: the server's response headers, passed on as they are (a write's event position, where a read was taken). */
+type Captured = { status: number; text: string; contentType: string; headers: Headers };
 export type WireRequest = {
   id: number; tab: Tab; method: string; path: string; body: string | null; key: string | null; keepalive: boolean;
   /** The headers the device's own code put on the request (lib/api.ts apiFetch). */
@@ -101,7 +102,7 @@ export class RealBackend {
       }
       if (req.body !== null && !headers.has("content-type")) headers.set("content-type", "application/json");
       const res = await this.app.request(req.path, { method: req.method, headers, body: req.body ?? undefined });
-      const captured = { status: res.status, text: await res.text(), contentType: res.headers.get("content-type") ?? "application/json" };
+      const captured = { status: res.status, text: await res.text(), contentType: res.headers.get("content-type") ?? "application/json", headers: new Headers(res.headers) };
       this.log.push(`#${req.id} handled${again ? " again (duplicate)" : ""}: ${captured.status}${captured.status >= 400 ? ` ${captured.text.slice(0, 80)}` : ""}`);
       this.handled.push({ seq: this.handled.length, device: req.tab.account, method: req.method, path: req.path, body: req.body, key: req.key, status: captured.status, reply: captured.text, duplicate: again });
       return captured;
@@ -135,7 +136,7 @@ export class RealBackend {
   private answer(req: WireRequest, captured: Captured): void {
     if (req.state !== "inflight") return; // the client gave up while the server was working
     req.state = "done";
-    if (!req.tab.dead) req.resolve(new Response(captured.status === 204 ? null : captured.text, { status: captured.status, headers: { "content-type": captured.contentType } }));
+    if (!req.tab.dead) req.resolve(new Response(captured.status === 204 ? null : captured.text, { status: captured.status, headers: captured.headers }));
   }
 }
 

@@ -24,7 +24,6 @@ import { getReplayRejectionRevision } from "./writeQueue";
 import { getRecoveryWrites, recoveryHolding, settleRefusedNoteText } from "./writeRecovery";
 import { getPendingCount } from "./syncStatus";
 import { targetsEntity } from "../pendingWriteTargets";
-import { isOlderCopy } from "../rowAge";
 import {
   getAppState, setAppState, setData, addToast,
   selectOverviewSelectedNode, getNode } from "../appStore";
@@ -64,9 +63,6 @@ const lastAcceptedBody = new Map<string, string>();
 export function ownAcceptedBody(nodeId: string): string | undefined {
   return lastAcceptedBody.get(nodeId);
 }
-// Per note: the server's time (updated_at) on the answer to the newest save this tab had accepted. A row older than
-// that never reaches the draft (applyRemoteNode): it is a copy of the note from before this editor's own save.
-const acceptedAt = new Map<string, string>();
 // The note whose editor has an IME composition open (setEditorComposing). Outside text waits for its end.
 let composingIn: string | null = null;
 // The unsent snapshot whose save was refused. Autosave, a node switch and
@@ -306,7 +302,6 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
     bases.set(nodeId, { markdown: pending.draft, title: pending.title });
     if (!queued) {
       lastAcceptedBody.set(nodeId, pending.draft);
-      if (saved?.updated_at && !isOlderCopy(saved, { updated_at: acceptedAt.get(nodeId) })) acceptedAt.set(nodeId, saved.updated_at);
     }
     // A three-way merge may return a body that includes ANOTHER writer's
     // changes — reflect it so the editor doesn't silently diverge. Only if
@@ -665,13 +660,15 @@ export function setEditorComposing(nodeId: string, composing: boolean): void {
  *
  *  The one rule for outside text at the editor (owner report 2026-11-19): text older than what this editor has
  *  sent or had accepted for the note never reaches the draft. Sent: while a save is unanswered nothing outside is
- *  taken. Accepted: a row whose server time is earlier than the answer to this editor's newest accepted save is a
- *  copy from before that save and is dropped (lib/rowAge.ts, the same rule the store applies). The store keeps such
- *  rows out at the source (storeOps.serverCopyOver); this is the editor's own guard, whatever path a row took. */
+ *  taken. Accepted: the save's answer carries its event position, and from the moment its headers arrive no answer read
+ *  before it reaches the store (lib/data/writePositions.ts takeAnswer, by position, not by the server's clock); on the
+ *  ways in that go through that door (a sync answer, a whole or slim bootstrap, a single read), a field with an edit
+ *  still waiting for its answer is kept over the copy (storeOps.serverCopyOver). A block restore and a version restore
+ *  (blockChildWriter, noteHistoryWriter) put the server's row in the store without the door: a known limit, listed in
+ *  docs/agents/decisions-core-sync.md. */
 export function applyRemoteNode(node: ContentNode | null): void {
   const base = node ? bases.get(node.id) : undefined;
   if (!node || node.id !== editorNodeId || !base) return;
-  if (isOlderCopy(node, { updated_at: acceptedAt.get(node.id) })) return;
   const markdown = node.markdown ?? "";
   const title = node.title ?? "";
   if (isDirty || composingIn === node.id || activeSaves.has(node.id) || nodeNeedsBody(node)) {
@@ -706,7 +703,6 @@ export function __resetDraftStateForTests(): void {
   bases.clear();
   sentText.clear();
   lastAcceptedBody.clear();
-  acceptedAt.clear();
   composingIn = null;
   refusedText.clear();
   failedTexts.clear();

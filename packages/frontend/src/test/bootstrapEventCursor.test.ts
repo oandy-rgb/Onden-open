@@ -60,14 +60,14 @@ describe("bootstrap event cursor (GAP-249)", () => {
     expect(await ok("getLastEventId")).toBe(0);
   });
 
-  it("an older bootstrap that lands after newer deltas rewinds the cursor to its own position", async () => {
+  it("an older bootstrap that lands after newer deltas is not stored: the rows and the cursor stay", async () => {
     await ok("persistBootstrap", boot("100"));
-    await ok("applySync", { nodes: { upsert: [{ ...note("a"), title: "NEW" }, note("b")], delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, last_event_id: 105 });
+    await ok("applySync", { nodes: { upsert: [{ ...note("a"), title: "NEW" }, note("b")], delete: [] }, edges: { upsert: [], delete: [] }, tasks: { upsert: [], delete: [] }, last_event_id: 105, head_event_id: "105" });
     expect(await ok("getLastEventId")).toBe(105);
-    // The slow download, taken at event 100, lands now: it replaced the rows
-    // with their older state, so the deltas must be replayed from 100.
-    await ok("persistBootstrap", boot("100"));
-    expect(await ok("getLastEventId")).toBe(100);
+    // The slow download, taken at event 100, lands now. It used to replace the rows with their older state and rewind
+    // the cursor to replay the deltas; it is read before what the copy knows (lib/answerPositions.ts), so it is refused.
+    expect(await ok("persistBootstrap", boot("100"))).toMatchObject({ answer_stale: true });
+    expect(await ok("getLastEventId")).toBe(105);
   });
 
   it("a newer bootstrap never moves the cursor forward", async () => {

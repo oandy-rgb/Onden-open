@@ -10,6 +10,7 @@ const getPendingWrites = vi.fn(async () => [] as unknown[]);
 const initLocalDb = vi.fn(async (): Promise<unknown> => null);
 
 vi.mock("../lib/localDb", () => ({
+  getWatermark: async () => ({ position: null, server: null }), raiseWatermark: async () => {}, rewindCursor: async () => {}, forgetCopyWatermark: async () => ({ alreadyOwed: false }),
   initLocalDb: () => initLocalDb(),
   useMemoryOnlyLocalCopy: vi.fn(() => { void import("../lib/localCopyState").then((m) => m.setLocalCopy("none")); }),
   loadBootstrapList: vi.fn(async () => null),
@@ -60,6 +61,7 @@ import { createHash } from "node:crypto";
 import { applySync, getAllMembershipIds, getMembershipEpoch, setMembershipEpoch, useMemoryOnlyLocalCopy } from "../lib/localDb";
 import { _resetLocalCopyForTests, setLocalCopy } from "../lib/localCopyState";
 import { bindAccountStorage } from "../lib/accountStorage";
+import { forgetWatermark, syncPassEnded } from "../lib/data/writePositions";
 import type { Bootstrap, ContentNode } from "../lib/api";
 
 const EMPTY = (last: number, head?: string) => ({
@@ -76,6 +78,8 @@ const remote = (extra: Partial<Bootstrap> = {}): Bootstrap => ({
 
 beforeEach(async () => {
   bindAccountStorage("u", "");
+  forgetWatermark(); // each test is another page: the page's watermark (lib/data/writePositions.ts) starts empty
+  syncPassEnded();
   await canvasWriter.select(null);
   resetAppState();
   _resetLocalCopyForTests();
@@ -89,7 +93,7 @@ beforeEach(async () => {
 });
 
 describe("a server that went back in time (#10)", () => {
-  it("a cursor past the server's head resets to the head and starts over from a whole bootstrap", async () => {
+  it("a cursor past the server's head: the server went back; a whole bootstrap takes the cursor back to its head", async () => {
     getLastEventId.mockResolvedValue(9000);
     const asked: unknown[] = [];
     apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
@@ -98,13 +102,12 @@ describe("a server that went back in time (#10)", () => {
         asked.push(since);
         return since === 9000 ? EMPTY(9000, "120") : EMPTY(120, "120");
       }
-      if (path.startsWith("/api/bootstrap")) return remote();
+      if (path.startsWith("/api/bootstrap")) { getLastEventId.mockResolvedValue(120); return remote(); } // persistBootstrap rewinds the cursor
       if (path.startsWith("/api/canvases")) return [];
       throw new Error("unexpected " + path);
     });
     expect(await dataSync.sync()).toEqual({ ok: true });
-    expect(setLastEventId).toHaveBeenCalledWith("120");
-    expect(asked).toEqual([9000, "120"]); // the second pull starts at the server's position
+    expect(asked).toEqual([9000, 120]); // the second pull starts at the server's position
     expect(apiMock.mock.calls.some(([path]) => String(path).startsWith("/api/bootstrap"))).toBe(true);
     expect(getAppState().data.nodes.map((n) => n.id)).toEqual(["n1"]);
   });

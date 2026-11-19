@@ -1,7 +1,9 @@
 import { createContextSlot } from "../requestContext.js";
 import { inTransaction, q, withTransaction } from "../db.js";
+import { sql } from "kysely";
 import { db } from "../dbKysely.js";
 import { afterRollback } from "./txHooks.js";
+import { noteReplayedPosition, setClaimPositionRecorder } from "./eventPosition.js";
 
 /** The key belongs to a committed operation. The HTTP boundary preserves the
  *  existing 200 {deduped:true} acknowledgement; this is not a second result. */
@@ -60,7 +62,11 @@ export async function withIdempotencyClaim<T>(
        ON CONFLICT (key) DO NOTHING RETURNING key`,
       [key, workspaceId],
     );
-    if (result.rowCount === 0) throw new IdempotentReplay(key);
+    if (result.rowCount === 0) {
+      // The first write committed (this INSERT waited for it): answer with ITS position, read now that it is visible.
+      noteReplayedPosition((await committedIdempotencyKey(workspaceId, key))?.position ?? null);
+      throw new IdempotentReplay(key);
+    }
     if (requestStore) {
       requestStore.claimed = true;
       afterRollback(() => { requestStore.claimed = false; });
@@ -78,13 +84,24 @@ export function spendIdempotencyKey(workspaceId: string): Promise<void> {
   return withIdempotencyClaim(workspaceId, (claim) => (inTransaction() ? claim() : withTransaction(claim)));
 }
 
+/** The request's claimed key keeps the last event its write inserted, in the same transaction (migration 212). A claim
+ *  made with an explicit key (not the request's) is not the request's answer, so it keeps none. */
+setClaimPositionRecorder(async (eventId) => {
+  const store = idempotency.getStore();
+  if (!store?.claimed || !inTransaction()) return;
+  await db.updateTable("idempotency_keys")
+    .set({ event_position: sql<string>`GREATEST(COALESCE(event_position, 0), ${eventId}::bigint)` })
+    .where("key", "=", store.key).execute();
+});
+
 /** Has this workspace already COMMITTED a write under `key`? Read-only, for the HTTP boundary: a retry
  *  after a lost reply is acknowledged before any route state check (note still exists? already live?)
  *  can refuse it. A first request still in flight has not committed its claim, so it is not visible here
  *  and falls through to the in-transaction claim above, which stays the source of truth. A key that
- *  belongs to another workspace is indistinguishable from an unknown one. */
-export async function isCommittedIdempotencyKey(workspaceId: string, key: string): Promise<boolean> {
-  const row = await db.selectFrom("idempotency_keys").select("key")
+ *  belongs to another workspace is indistinguishable from an unknown one. `position` is the event its write committed
+ *  at (null: none, or a key from before migration 212); the replay answers with it. */
+export async function committedIdempotencyKey(workspaceId: string, key: string): Promise<{ position: string | null } | null> {
+  const row = await db.selectFrom("idempotency_keys").select("event_position")
     .where("key", "=", key).where("workspace_id", "=", workspaceId).executeTakeFirst();
-  return row !== undefined;
+  return row === undefined ? null : { position: row.event_position === null ? null : String(row.event_position) };
 }

@@ -14,6 +14,9 @@
 // test in the property file).
 
 import type { ContentNode } from "../../lib/api";
+import { EVENT_POSITION_HEADER, READ_HEAD_HEADER, READ_SERVER_HEADER } from "@onden/markdown/contract";
+import { higherPosition, isCurrentAnswer } from "../../lib/answerPositions";
+import { projectPendingNoteText } from "../../lib/pendingNoteProjection";
 import { threeWayMergeBody } from "../../../../backend/src/services/eventLog/bodyMerge";
 
 type PatchBody = { title?: string; markdown?: string; base_markdown?: string };
@@ -55,7 +58,11 @@ export class SaveWorld {
   retired = new Map<string, Set<string>>();
   /** Per note: the text of this device's newest acknowledged save (what the server answered with). */
   lastAcked = new Map<string, string>();
-  private idem = new Map<string, ServerNote>();
+  /** lib/data/writePositions noteWriteResponse (the test supplies it: this file cannot import the app). */
+  onResponse: (path: string, init: RequestInit, response: { ok: boolean; headers: Headers }) => void = () => {};
+  /** The server's event log head: one event per change (this device's saves and the other device's writes). */
+  head = 0;
+  private idem = new Map<string, ServerNote & { position: number | null }>();
   private counter = 0;
   private requestSeq = 0;
 
@@ -75,17 +82,21 @@ export class SaveWorld {
   /** Per note: the text the local copy holds (upsertNode; a test that models the worker's applySync writes it too). */
   localText = new Map<string, string>();
   private rowSeq = 0;
+  /** A device with no local copy (IndexedDB blocked, a private window): answers pass through untouched, no queued text
+   *  is laid over them, nothing is judged there (the page's door, takeAnswer, still is). Off at every reset. */
+  copyless = false;
 
   reset(): void {
     this.server.clear(); this.requests = []; this.conflicts = []; this.violations = [];
     this.merges = []; this.remoteWrites = 0; this.retired.clear(); this.lastAcked.clear();
-    this.idem.clear(); this.counter = 0; this.requestSeq = 0;
+    this.idem.clear(); this.counter = 0; this.requestSeq = 0; this.head = 0;
     this.typed.clear(); this.deleted.clear(); this.userTitles.clear(); this.appliedTitles.clear();
     this.rejectedBodies.clear(); this.rejectedNotes.clear();
-    this.pending = []; this.rejected = []; this.rowSeq = 0; this.localText.clear(); this.reads = [];
+    this.serverClock = 0; this.clockFrozen = false;
+    this.pending = []; this.rejected = []; this.rowSeq = 0; this.localText.clear(); this.reads = []; this.copyWatermark = null; this.copyless = false;
     for (const id of ["a", "b"]) {
       const lines = [this.nextToken(id), this.nextToken(id)];
-      this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n"), at: ++this.serverClock });
+      this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n"), at: this.tickClock() });
     }
   }
 
@@ -102,6 +113,14 @@ export class SaveWorld {
   }
 
   private serverClock = 0;
+  /** While frozen the server's clock does not move: changes made meanwhile carry the SAME updated_at (the same millisecond). */
+  private clockFrozen = false;
+  private tickClock(): number { return this.clockFrozen ? this.serverClock : ++this.serverClock; }
+  /** The server's clock is set back (a time correction, a restore from an older backup): changes from now on carry an
+   *  EARLIER updated_at than rows this device already holds. */
+  serverClockStepsBack(ms: number): void { this.serverClock -= ms / 1000; }
+  serverClockFreezes(): void { this.clockFrozen = true; }
+  serverClockRuns(): void { this.clockFrozen = false; }
   rows(): ContentNode[] {
     return [...this.server.values()].map((n) => this.row(n));
   }
@@ -112,19 +131,21 @@ export class SaveWorld {
   // ── transport (lib/api `api`) ──
   get inflight(): WorldRequest[] { return this.requests.filter((r) => r.state === "inflight"); }
 
-  /** GET /api/nodes/:id reads (syncEngine.hydrateNode): the row is read when the request arrives, the answer waits
-   *  until the test delivers it (`answerRead`). */
-  reads: Array<{ row: ContentNode; resolve: (row: ContentNode) => void }> = [];
+  /** GET /api/nodes/:id reads (syncEngine.hydrateNode): the row is read when the request arrives, at the server's head
+   *  then (READ_HEAD_HEADER, told through the caller's onHeaders as the real server does); the answer waits until the
+   *  test delivers it (`answerRead`). */
+  reads: Array<{ row: ContentNode; head: number; onHeaders?: (headers: Headers) => void; resolve: (row: ContentNode) => void }> = [];
   answerRead(index = 0): void {
     const [read] = this.reads.splice(index % Math.max(this.reads.length, 1), 1);
+    read?.onHeaders?.(new Headers({ [READ_HEAD_HEADER]: String(read.head), [READ_SERVER_HEADER]: SERVER_ID }));
     read?.resolve(read.row);
   }
 
-  transport(path: string, init: { method?: string; body?: unknown; headers?: unknown; keepalive?: boolean } = {}): Promise<unknown> {
+  transport(path: string, init: { method?: string; body?: unknown; headers?: unknown; keepalive?: boolean; onHeaders?: (headers: Headers) => void } = {}): Promise<unknown> {
     const match = /^\/api\/nodes\/([^/?]+)$/.exec(path);
     if (match && (init.method ?? "GET") === "GET") {
       const row = this.row(this.server.get(match[1]!)!);
-      return new Promise((resolve) => { this.reads.push({ row, resolve }); });
+      return new Promise((resolve) => { this.reads.push({ row, head: this.head, ...(init.onHeaders ? { onHeaders: init.onHeaders } : {}), resolve }); });
     }
     if (!match || init.method !== "PATCH") throw new Error(`saveWorld: unexpected request ${init.method} ${path}`);
     const headers = (init.headers ?? {}) as Record<string, string>;
@@ -144,10 +165,14 @@ export class SaveWorld {
     return new Promise((resolve, reject) => { this.requests.push({ ...request, resolve, reject }); });
   }
 
+  /** The position of the last change `apply` made (null: it changed nothing, so the server committed no event). */
+  private applied: number | null = null;
   private apply(request: WorldRequest): ContentNode {
     const cached = request.idemKey ? this.idem.get(request.idemKey) : undefined;
-    if (cached) return this.row(cached);
+    // A replay answers with the ORIGINAL position, not the head the server has moved on to.
+    if (cached) { this.applied = cached.position; return this.row(cached); }
     const note = this.server.get(request.nodeId)!;
+    const before = { title: note.title, markdown: note.markdown };
     const { body } = request;
     if (body.markdown !== undefined) {
       let next = body.markdown;
@@ -157,7 +182,7 @@ export class SaveWorld {
         next = merged;
         for (const c of conflicts) this.conflicts.push({ nodeId: note.id, base: c.base, incoming: c.incoming, current: c.current });
       }
-      if (next !== note.markdown) note.at = ++this.serverClock;
+      if (next !== note.markdown) note.at = this.tickClock();
       note.markdown = next;
     }
     if (body.title !== undefined) {
@@ -167,10 +192,12 @@ export class SaveWorld {
         this.violations.push({ invariant: 3, text: `a save carried an old title "${title}" over the newer "${note.title}" (note ${note.id}, request ${request.id})` });
       }
       if (this.userTitles.has(title)) this.appliedTitles.add(title);
-      if (title !== note.title) note.at = ++this.serverClock;
+      if (title !== note.title) note.at = this.tickClock();
       note.title = title;
     }
-    if (request.idemKey) this.idem.set(request.idemKey, { ...note });
+    // One event per save that changed the note; a save that changed nothing commits none (no position).
+    this.applied = before.title !== note.title || before.markdown !== note.markdown ? ++this.head : null;
+    if (request.idemKey) this.idem.set(request.idemKey, { ...note, position: this.applied });
     return this.row(note);
   }
 
@@ -178,6 +205,9 @@ export class SaveWorld {
     request.state = "applied";
     const row = this.apply(request);
     this.acknowledge(request.nodeId, request.body.markdown, row.markdown ?? "");
+    // The response's headers arrive before its body: lib/api.ts hands them to the position recorder first.
+    const headers = new Headers(this.applied === null ? {} : { [EVENT_POSITION_HEADER]: String(this.applied) });
+    this.onResponse(`/api/nodes/${request.nodeId}`, { method: "PATCH", body: JSON.stringify(request.body) }, { ok: true, headers });
     request.resolve(row);
   }
 
@@ -217,12 +247,14 @@ export class SaveWorld {
     const note = this.server.get(noteId)!;
     const next = edit(note.markdown);
     this.recordEdit(note.markdown, next);
-    note.markdown = next; note.at = ++this.serverClock;
+    note.markdown = next; note.at = this.tickClock(); this.head++;
     this.remoteWrites++; this.wrote(noteId, next);
   }
-  remoteRename(noteId: string, title: string): void { const note = this.server.get(noteId)!; note.title = title; note.at = ++this.serverClock; this.remoteWrites++; }
+  remoteRename(noteId: string, title: string): void { const note = this.server.get(noteId)!; note.title = title; note.at = this.tickClock(); this.head++; this.remoteWrites++; }
 
   // ── lib/localDb fake ──
+  /** The local copy's watermark (lib/answerPositions.ts), as the worker keeps it. */
+  copyWatermark: string | null = null;
   readonly localDb = {
     addPendingWrite: async (method: string, path: string, body: string | null, idemKey?: string | null) => {
       this.pending.push({ id: ++this.rowSeq, method, path, body, idem_key: idemKey ?? null, attempts: 0 });
@@ -250,15 +282,42 @@ export class SaveWorld {
     upsertNode: async (node: { id: string; markdown?: string | null }) => { this.localText.set(node.id, node.markdown ?? ""); },
     // syncEngine.hydrateNode: no body stored on this device; the server's row is kept as it came.
     getStoredBody: async () => null,
-    persistRemoteNode: async <T,>(node: T) => node,
+    // A single read, judged by where it was read as the worker does (localDbWorker persistRemoteNode).
+    persistRemoteNode: async <T extends { id: string; markdown?: string | null }>(node: T, head?: string) => {
+      if (this.copyless) return node;
+      if (head !== undefined && !isCurrentAnswer(head, this.copyWatermark)) return { ...node, answer_stale: true as const, answer_watermark: this.copyWatermark, answer_server: SERVER_ID };
+      // The queued text laid over it, as the worker does (pendingNoteProjection).
+      const [projected] = projectPendingNoteText([node] as never, this.pending as never) as unknown as T[];
+      this.localText.set(node.id, projected!.markdown ?? "");
+      if (head !== undefined) this.copyWatermark = higherPosition(this.copyWatermark, head);
+      return projected!;
+    },
+    /** A sync answer, judged and stored as the worker does (localDbWorker applySync: the same isCurrentAnswer, the
+     *  queued text laid over it), so this world and the real-worker tests (answerPositions, localDbSharedStorage) are
+     *  one model of the copy. */
+    applySync: async <D extends { head_event_id?: string; nodes: { upsert: Array<{ id: string; markdown?: string | null }> } }>(delta: D) => {
+      if (this.copyless) return delta;
+      if (!isCurrentAnswer(delta.head_event_id, this.copyWatermark)) return { ...delta, nodes: { ...delta.nodes, upsert: [] }, stale: true as const, answer_watermark: this.copyWatermark, answer_server: SERVER_ID };
+      const upsert = projectPendingNoteText(delta.nodes.upsert as never, this.pending as never) as typeof delta.nodes.upsert;
+      for (const row of upsert) this.localText.set(row.id, row.markdown ?? "");
+      if (delta.head_event_id !== undefined) this.copyWatermark = higherPosition(this.copyWatermark, delta.head_event_id);
+      return { ...delta, nodes: { ...delta.nodes, upsert } };
+    },
     removeNode: async () => {},
     upsertAttribute: async () => {},
     flushLocalDbSync: async () => {},
+    // The local copy's watermark (localDbWorker raiseWatermark / getWatermark).
+    raiseWatermark: async (position: string) => { this.copyWatermark = higherPosition(this.copyWatermark, position); },
+    getWatermark: async () => ({ position: this.copyWatermark, server: SERVER_ID, rebuildOwed: false }),
+    rewindCursor: async () => {},
   };
 }
 
 export function bodyKey(nodeId: string, body: PatchBody): string {
   return JSON.stringify([nodeId, body.title ?? null, body.markdown ?? null]);
 }
+
+/** The one server identity this world's answers come from. */
+export const SERVER_ID = "server-1";
 
 export const world = new SaveWorld();

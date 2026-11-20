@@ -79,6 +79,19 @@ describe.skipIf(!isTestDatabase())("saved views on every row a client stores (DB
     expect((delta.nodes.upsert as unknown as Row[]).find((r) => r.id === note)?.collection_views?.map((v) => v.id) ?? []).not.toContain(made!.id);
   });
 
+  it("the 「內容」 flag the server clears when the last other tab goes is in the same delta as that removal: another device does not keep the old flag", async () => {
+    const own = (await seedQ<{ id: string }>(
+      `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown) VALUES ($1, 'manual', 'content', $2, $3, '') RETURNING id::text`,
+      [WS, `VR content ${stamp}`, `vr-content-${stamp}`])).rows[0]!.id;
+    const table = await createNoteView(admin, WS, own, make({ name: "Shelf", layout: "table" }));
+    const record = await createNoteView(admin, WS, own, make({ name: "Content", layout: "content", layout_config: { hidden: true } }));
+    const since = await cursor();
+    expect(await deleteNoteView(admin, WS, own, table!.id)).toBe(true); // the server clears the flag in this same transaction
+    const delta = await buildSyncDelta(admin, WS, { since, known: [] });
+    const shipped = (delta.nodes.upsert as unknown as Row[]).find((r) => r.id === own);
+    expect(shipped?.collection_views?.find((v) => v.id === record!.id)?.layout_config?.hidden ?? null).toBeNull();
+  });
+
   it("GET /api/nodes/:id reads the same array", async () => {
     const own = (await seedQ<{ id: string }>(
       `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown) VALUES ($1, 'manual', 'content', $2, $3, '') RETURNING id::text`,

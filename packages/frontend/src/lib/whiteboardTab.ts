@@ -6,7 +6,7 @@
 import { viewWriter } from "./data";
 import { t } from "./i18n";
 import { peekOwnerViews, reloadOwnerViews } from "./ownerViews";
-import { freeViewName, isWhiteboardHidden } from "./viewTabs";
+import { freeViewName, isTabHidden } from "./viewTabs";
 import { whiteboardTabIn } from "./whiteboardNote";
 
 /** The note has a visible whiteboard tab when this resolves: added when it had
@@ -21,7 +21,7 @@ export async function ensureWhiteboardTab(nodeId: string): Promise<void> {
     await viewWriter.create(owner, {
       name: freeViewName(t("Canvas"), views.map((view) => view.name)), layout: "canvas", visible_fields: [], pin_order: views.length,
     });
-  } else if (isWhiteboardHidden(tab)) {
+  } else if (isTabHidden(tab)) {
     await viewWriter.update(owner, tab.id, { layout_config_patch: { hidden: null } });
   } else {
     return;

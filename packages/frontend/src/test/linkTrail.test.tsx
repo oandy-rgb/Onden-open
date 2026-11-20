@@ -30,7 +30,7 @@ function useFocus() {
   return useWorkspaceFocus({
     ui: ui as never, initialLocation: { nodeId: "a", lens: "editor" },
     boards: { selectCanvas: vi.fn(async () => {}) as never, createCanvas: vi.fn() as never },
-    canvasImported: false, setCanvasNavStack: vi.fn(),
+    canvasImported: false, setCanvasNavStack: vi.fn(), confirm: async () => false,
   });
 }
 const selected = () => getAppState().selectedId;
@@ -95,7 +95,7 @@ describe("the trail follows the browser history off a bottom tab's page", () => 
     const focus = useWorkspaceFocus({
       ui: ui as never, initialLocation: { nodeId: "a", lens: "editor" },
       boards: { selectCanvas: vi.fn(async () => {}) as never, createCanvas: vi.fn() as never },
-      canvasImported: false, setCanvasNavStack: vi.fn(),
+      canvasImported: false, setCanvasNavStack: vi.fn(), confirm: async () => false,
     });
     const selectedId = useAppSelector((s) => s.selectedId);
     useUrlSync(mode, selectedId, notesView, setMode, setSelectedId, setNotesView, viewTab, setViewTab, focus.followBrowserStep, null, true);
@@ -212,7 +212,7 @@ describe("the link trail in the browser history", () => {
     const focus = useWorkspaceFocus({
       ui: ui as never, initialLocation: { nodeId: "a", lens: "editor" },
       boards: { selectCanvas: vi.fn(async () => {}) as never, createCanvas: vi.fn() as never },
-      canvasImported: false, setCanvasNavStack: vi.fn(),
+      canvasImported: false, setCanvasNavStack: vi.fn(), confirm: async () => false,
     });
     useUrlSync(mode, selectedId, notesView, setMode, setSelectedId, setNotesView, viewTab, setViewTab, focus.followBrowserStep);
     return focus;

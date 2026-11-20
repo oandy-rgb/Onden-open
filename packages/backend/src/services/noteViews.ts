@@ -11,6 +11,8 @@
 // Routes (routes/nodes.ts) only parse the request and shape the response.
 
 import { attributeValues, encodeValues, isListValue, isUuid } from "@onden/markdown";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
+import { CodedStatusError } from "../statusError.js";
 import { randomUUID } from "node:crypto";
 import { pool, q } from "../db.js";
 import type { ActorCtx } from "../types.js";
@@ -21,7 +23,7 @@ import { canReadNode, readableNodeIdSet } from "./readPolicy.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { effectiveTagFields, loadTagFieldRows } from "./tagFields.js";
 import { assertLayoutImported, byPinThenName, TagViewNameConflictError, viewCreateSchema, type ViewCreate, type ViewPatch } from "./tagViews.js";
-import { insertView, patchView, removeView, viewNameTaken, viewRecordById, viewRecordsOf } from "./functionRefs.js";
+import { contentTabRemovable, insertView, patchView, removeView, viewNameTaken, viewRecordById, viewRecordsOf } from "./functionRefs.js";
 import { liveNodeSql, notTagNodeSql } from "../spine/nodeSql.js";
 
 /** A note that can own views: live and not a tag (a tag's views are its
@@ -31,13 +33,15 @@ import { liveNodeSql, notTagNodeSql } from "../spine/nodeSql.js";
 const OWNER_SQL = `id = $2 AND ${notTagNodeSql()} AND ${liveNodeSql()}`;
 
 /** The note's views by pin_order then name; null when the actor can't read
- *  the note (or it is a tag). */
+ *  the note (or it is a tag). The route sends `contentTabRemovable` beside it. */
 export async function listNoteViews(actor: ActorCtx, workspaceId: string, nodeId: string): Promise<unknown[] | null> {
   if (!(await canReadNode(actor, nodeId))) return null;
   const owner = await pool.query(`SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND ${OWNER_SQL}`, [workspaceId, nodeId]);
   if (!owner.rows[0]) return null;
   return (await viewRecordsOf("note", workspaceId, nodeId)).sort(byPinThenName);
 }
+
+export { contentTabRemovable };
 
 /** Under the event lock: the CURRENT actor still reads this live note, and
  *  its row is locked for the write. A note it cannot read answers 404. */
@@ -82,7 +86,7 @@ export async function restoreNoteViews(workspaceId: string, nodeId: string, stor
   const result = { written: 0, leftOut: 0 };
   for (const element of stored) {
     const view = backedUpView(element, ids);
-    if (!view || await viewNameTaken(workspaceId, nodeId, view.name)) { result.leftOut++; continue; }
+    if (!view || (view.layout !== CONTENT_LAYOUT && await viewNameTaken(workspaceId, nodeId, view.name))) { result.leftOut++; continue; }
     await insertView({ workspaceId, holderId: nodeId, viewId: randomUUID(), layout: view.layout, element: view });
     result.written++;
   }
@@ -100,6 +104,15 @@ export async function createNoteView(actor: ActorCtx, workspaceId: string, nodeI
   return withEventTransaction(workspaceId, async () => {
     if (!(await readableNoteUnderLock(actor, workspaceId, nodeId))) return null;
     await assertLayoutImported(workspaceId, v.layout);
+    // A note has one 「內容」 record: two devices removing the tab at once, or a retry, get the one already there.
+    if (v.layout === CONTENT_LAYOUT) {
+      const existing = (await viewRecordsOf("note", workspaceId, nodeId)).find((record) => record.layout === CONTENT_LAYOUT);
+      if (existing) {
+        // Asked again (a retry, or another device at once): what it asks for is applied, not dropped.
+        if (typeof v.layout_config.hidden === "boolean") await patchView(workspaceId, nodeId, existing.id, { layout_config_patch: { hidden: v.layout_config.hidden || null } });
+        return { id: existing.id };
+      }
+    }
     const viewId = randomUUID();
     await mutate({
       actor,
@@ -114,7 +127,7 @@ export async function createNoteView(actor: ActorCtx, workspaceId: string, nodeI
       },
       apply: async () => {
         // The note's row is locked (readableNoteUnderLock), so this name check and the insert see the same names.
-        if (await viewNameTaken(workspaceId, nodeId, v.name)) throw new TagViewNameConflictError(v.name);
+        if (v.layout !== CONTENT_LAYOUT && await viewNameTaken(workspaceId, nodeId, v.name)) throw new TagViewNameConflictError(v.name);
         const now = new Date().toISOString();
         await insertView({
           workspaceId, holderId: nodeId, viewId, layout: v.layout, by: actor,
@@ -138,6 +151,10 @@ export async function updateNoteView(actor: ActorCtx, workspaceId: string, nodeI
     if (!(await readableNoteUnderLock(actor, workspaceId, nodeId))) return false;
     const prev = await viewRecordById("note", workspaceId, nodeId, viewId);
     if (!prev) return false;
+    // The 「內容」 record is made as one (createNoteView keeps it single); no other view turns into a second one.
+    if (updates.layout === CONTENT_LAYOUT && prev.layout !== CONTENT_LAYOUT) {
+      throw new CodedStatusError(422, "view_layout_not_changeable", `a view cannot become the "${CONTENT_LAYOUT}" tab`);
+    }
     await assertLayoutImported(workspaceId, updates.layout);
     await mutate({
       actor,

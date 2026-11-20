@@ -11,6 +11,7 @@
 ## 誰能引用功能
 
 - `function_refs`（`services/functionRefs.ts`）的引用者有三種，一列只有一個：筆記或標籤（`holder_node_id`）、空間（`holder_space_id`，還沒開放寫入）、段落（`holder_block_id`，migration 195）。
+- 筆記的檢視紀錄（有 `instance` 的列）只經 `insertView`／`patchView`／`removeView` 寫；這三個在同一筆交易最後都過 `keepContentTabShowing`（`layout: "content"` 那一列是「內容」分頁的位置與隱藏旗標，沒有別的分頁可顯示時不許是收起來的，見 [decisions-ui.md](../../agents/decisions-ui.md)）。
 - 標籤只因為**檢視**出現在引用表（有 `instance` 的列，migration 188）；沒有任何使用者標籤持有功能。標籤頁沒有「＋加功能」；標籤層的 `addFunction`／`removeFunction` 只還有 `services/legacyTagFunctionWrites.ts` 這個舊入口在呼叫。
 - 功能型的引用者只有筆記與段落：`tasks`（任務節點）、`review`（卡片筆記、卡片段落）；技能（`skills`）還是標籤成員，見未完成文件。
 - 「這個東西有什麼功能」只問 `functionRefs.ts`（`functionsOf`、`functionIndex`）。

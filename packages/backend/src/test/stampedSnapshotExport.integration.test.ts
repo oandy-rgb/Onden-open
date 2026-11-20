@@ -54,6 +54,9 @@ describe.skipIf(!isTestDb)("the export half of a stamped snapshot, on one databa
     await seedQ(`INSERT INTO node_edges (workspace_id, source_node_id, target_node_id, edge_type, status, origin) VALUES ($1, $2, $3, 'related', 'active', 'manual')`, [ws, root, child]);
     await seedQ(`INSERT INTO node_positions (node_id, surface, x, y, workspace_id) VALUES ($1, 'graph', 1.5, 2, $2)`, [root, ws]);
     await seedQ(`INSERT INTO function_refs (workspace_id, function_id, holder_space_id, config) VALUES ($1, 'tasks', $2, '{"a": 1}'::jsonb)`, [ws, space]);
+    // A note whose 「內容」 tab was removed: its record says hidden (a view of layout "content"), its text is the note's own.
+    await seedQ(`INSERT INTO function_refs (workspace_id, function_id, holder_node_id, instance, config) VALUES ($1, 'content', $2, $3, $4::jsonb)`,
+      [ws, root, randomUUID(), JSON.stringify({ name: "Content", filters: [], sorts: [], group_by: null, visible_fields: [], layout_config: { hidden: true }, pin_order: 1 })]);
     await seedQ(`UPDATE content_nodes SET title = 'Root (renamed)' WHERE id = $1`, [root]); // a field with a stamp of its own
     await seedQ(`DELETE FROM content_nodes WHERE id = $1`, [gone]); // a hard delete leaves a tombstone, not a row
     await seedQ(`INSERT INTO actor_prefs (actor_id, key, value) VALUES ($1, 'theme', '"dark"'::jsonb), ($2, 'theme', '"light"'::jsonb)`, [owner.id, friend.id]);
@@ -89,6 +92,16 @@ describe.skipIf(!isTestDb)("the export half of a stamped snapshot, on one databa
     expect(text).not.toContain("Friend only");
     expect(text).not.toContain(secretNote);
     expect(items.filter((i) => i.kind === "row" && i.table === "actor_prefs").map((i) => String((i as { values: Record<string, unknown> }).values.actor_id))).toEqual([owner.id]);
+  });
+
+  it("a note's hidden 「內容」 tab travels in the snapshot with the stamps of its record, and the text is still the note's", async () => {
+    const items = (await read(owner)).pages.flatMap((p) => p.items);
+    const record = items.find((i) => i.kind === "row" && i.table === "function_refs" && i.values.function_id === "content");
+    expect(record).toBeDefined();
+    expect(JSON.stringify((record as { values: Record<string, unknown> }).values)).toContain('"hidden":true');
+    expect((record as { stamps: Array<{ label: string }> }).stamps.some((stamp) => stamp.label === "function_refs.config")).toBe(true);
+    const rootRow = items.find((i) => i.kind === "row" && i.table === "content_nodes" && i.values.id === root) as { values: Record<string, unknown> };
+    expect(rootRow.values.markdown).toBe("text of Root");
   });
 
   it("its digest is the digest of what is in the database, table by table, and the tables of the test all have rows", async () => {

@@ -40,6 +40,7 @@
 
 - 「有白板」＝筆記有一筆 canvas 檢視（白板分頁），卡片位置以這篇筆記自己的 id 為鍵；`node_type = 'canvas'` 已退役，讀取端把它與白板視為同一回事
   （後端 `boardStore.whiteboardNoteSql`、前端 `lib/whiteboardNote.ts`），不要各處判斷節點類型。契約見 [canvas-as-view.md](../architecture/canvas-as-view.md)。
+- 白板分頁的 `hidden` 鍵與「內容」分頁的移除是同一個機制（`lib/viewTabs.ts` 的 `isTabHidden`，原名 `isWhiteboardHidden`；「內容」見 [decisions-ui.md](decisions-ui.md)）。
 - **給筆記一個白板只有一條路**：`lib/whiteboardTab.ts` 的 `ensureWhiteboardTab`（加分頁或取消隱藏）。不再建同名複本白板；
   建立白板筆記只剩全新的（空白、建立選單、匯入 JSON Canvas）。守門 `guards/board-copies.guard.test.ts`、驗證 `noBoardCopies.test.ts`。
 - 白板筆跡存在筆記的 `board_ink`，不是 `ink_data`（`ink_data` 只屬於手寫頁與 PDF）；各屬性的歸屬見 [ink-attributes.md](../architecture/ink-attributes.md)。

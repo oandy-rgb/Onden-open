@@ -113,7 +113,7 @@ export default function NotesWorkspace({ sidebar, center, inspector, mobileTab, 
       <div className="board-note-sheet__body">
         <div className="board-note-sheet__tabs">
           <ViewTabs owner={viewOwner.owner} activeKey={activeKey}
-            earnsWhiteboard={viewOwner.hasBoard} canManage={viewOwner.canManage}
+            earnsWhiteboard={viewOwner.hasBoard} retiredBoard={viewOwner.retiredBoard} canManage={viewOwner.canManage}
             fields={viewOwner.fields} onSelect={(key) => { close(); nav.selectTab(key); }} />
         </div>
         {boardNote && (
@@ -143,7 +143,7 @@ export default function NotesWorkspace({ sidebar, center, inspector, mobileTab, 
           <ViewStripBar toolsRef={strip.toolsRef} moreRef={strip.moreRef}>
             {viewOwner && (
               <ViewTabs owner={viewOwner.owner} activeKey={activeKey}
-                earnsWhiteboard={viewOwner.hasBoard} canManage={viewOwner.canManage}
+                earnsWhiteboard={viewOwner.hasBoard} retiredBoard={viewOwner.retiredBoard} canManage={viewOwner.canManage}
                 fields={viewOwner.fields} onSelect={nav.selectTab}
                 onEditFields={nav.pageTag && viewOwner.canManage ? () => requestTagFields(nav.pageTag!.id) : undefined} />
             )}
@@ -153,7 +153,7 @@ export default function NotesWorkspace({ sidebar, center, inspector, mobileTab, 
         {phoneTabsShown && viewOwner && (
           <div className="phone-view-tabs">
             <ViewTabs owner={viewOwner.owner} activeKey={activeKey}
-              earnsWhiteboard={viewOwner.hasBoard} canManage={viewOwner.canManage}
+              earnsWhiteboard={viewOwner.hasBoard} retiredBoard={viewOwner.retiredBoard} canManage={viewOwner.canManage}
               fields={viewOwner.fields} onSelect={nav.selectTab}
               onEditFields={nav.pageTag && viewOwner.canManage ? () => requestTagFields(nav.pageTag!.id) : undefined} />
           </div>

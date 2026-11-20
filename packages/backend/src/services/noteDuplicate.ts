@@ -12,6 +12,7 @@ import { withEventTransaction } from "../spine/eventTransaction.js";
 import { withIdempotencyClaim } from "../spine/idempotency.js";
 import type { ActorCtx } from "../types.js";
 import { clampNoteTitle, HANDWRITING_LAYOUT, NODE_TITLE_MAX, slugify } from "@onden/markdown";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
 import { putBlob } from "./blobs.js";
 import type { AttributeState } from "./eventLog/index.js";
 import { recordedTagMembership } from "./tagMembership.js";
@@ -154,9 +155,14 @@ export async function duplicateNote(options: DuplicateNoteOptions) {
         // A scoped actor must not create an invisible copy with no allowed tag.
         await assertAuthority(actor, { kind: "node", nodeId: newNodeId, op: "read" });
         for (const attr of attrs) await recordCopiedAttribute(workspaceId, actor, newNodeId, attr, newNote);
-        // The 「手寫」 tab goes with its strokes (the attribute `note_ink` copied above); other views are the source's own.
-        const handwriting = (await viewRecordsOf("note", workspaceId, sourceId)).find((v) => v.layout === HANDWRITING_LAYOUT);
-        if (handwriting) await addNoteLayoutTab(newNodeId, HANDWRITING_LAYOUT, { name: String(handwriting.name), layoutConfig: handwriting.layout_config && typeof handwriting.layout_config === "object" ? handwriting.layout_config as Record<string, unknown> : {} });
+        // The 「手寫」 tab goes with its strokes (the attribute `note_ink` copied above), and the 「內容」 tab's record goes with the
+        // text (a hidden 「內容」 stays hidden in the copy; none means the built-in tab, which needs no record). Each keeps its
+        // place among the tabs; other views are the source's own.
+        const sourceViews = await viewRecordsOf("note", workspaceId, sourceId);
+        for (const layout of [HANDWRITING_LAYOUT, CONTENT_LAYOUT]) {
+          const tab = sourceViews.find((v) => v.layout === layout);
+          if (tab) await addNoteLayoutTab(newNodeId, layout, { name: String(tab.name), layoutConfig: tab.layout_config && typeof tab.layout_config === "object" ? tab.layout_config as Record<string, unknown> : {}, pinOrder: Number(tab.pin_order) || 0 });
+        }
         // Rebuild only state derived from the copied body (createNote's own
         // step); never carry the source's explicit graph edges, versions or
         // task children across.

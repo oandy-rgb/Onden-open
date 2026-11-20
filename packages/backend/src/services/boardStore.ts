@@ -193,14 +193,14 @@ export async function addWhiteboardTab(
 /** Give note `nodeId` a tab of a layout a module draws from the note itself (the handwriting module's 「手寫」), stored
  *  as a saved view like the whiteboard's. Like addWhiteboardTab, for a note being created or restored in the caller's
  *  transaction. The tab holds no data: the strokes are the note's own attribute and come back with its attributes. */
-export async function addNoteLayoutTab(nodeId: string, layout: string, { name, layoutConfig }: { name: string; layoutConfig?: Record<string, unknown> }): Promise<void> {
+export async function addNoteLayoutTab(nodeId: string, layout: string, { name, layoutConfig, pinOrder = 0 }: { name: string; layoutConfig?: Record<string, unknown>; pinOrder?: number }): Promise<void> {
   requireTransaction("addNoteLayoutTab");
   const at = new Date().toISOString();
   const owner = (await q<{ workspace_id: string }>(`SELECT workspace_id FROM content_nodes WHERE id = $1`, [nodeId])).rows[0];
   if (!owner) return;
   await insertView({
     workspaceId: owner.workspace_id, holderId: nodeId, viewId: randomUUID(), layout,
-    element: { name, filters: [], sorts: [], group_by: null, visible_fields: [], layout_config: layoutConfig ?? {}, pin_order: 0, created_at: at, updated_at: at },
+    element: { name, filters: [], sorts: [], group_by: null, visible_fields: [], layout_config: layoutConfig ?? {}, pin_order: pinOrder, created_at: at, updated_at: at },
   });
 }
 

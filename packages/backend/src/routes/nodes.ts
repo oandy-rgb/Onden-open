@@ -37,7 +37,7 @@ import { expandChildNote, moveBlockToChildNote, moveSelectionToChildNote, type B
 import { recordAttributeChange } from "../services/attributeChange.js";
 import { createNote, isNoteIdTaken, NoteCreateError } from "../services/noteCreate.js";
 import { exportedSingleNoteFile } from "../services/exportZip.js";
-import { createNoteView, deleteNoteView, executeNoteView, listNoteViews, updateNoteView } from "../services/noteViews.js";
+import { contentTabRemovable, createNoteView, deleteNoteView, executeNoteView, listNoteViews, updateNoteView } from "../services/noteViews.js";
 import { viewCreateSchema, viewPatchSchema } from "../services/tagViews.js";
 import { pageQueryOf, parsePage } from "../services/paging.js";
 import { VIEW_PAGE } from "../services/collectionViewQuery.js";
@@ -451,9 +451,10 @@ const viewIds = (c: { req: { param: (name: string) => string | undefined } }) =>
 
 router.get("/:id/views", async (c) => {
   const ids = viewIds(c);
-  const views = ids && await listNoteViews(requireActor(c.get("actor")), await getWorkspaceId(), ids.id);
+  const workspaceId = await getWorkspaceId();
+  const views = ids && await listNoteViews(requireActor(c.get("actor")), workspaceId, ids.id);
   if (!views) throw new StatusError(404, "not found");
-  return c.json({ views });
+  return c.json({ views, content_tab_removable: await contentTabRemovable(workspaceId, ids.id) });
 });
 
 router.post("/:id/views", async (c) => {

@@ -8,7 +8,7 @@ import { tagFields } from "../../lib/tagFields";
 import { useT } from "../../lib/i18n";
 import { isViewModuleTag } from "../../modules";
 import type { ViewOwner } from "../../lib/data";
-import { ownsBoard } from "../../lib/whiteboardNote";
+import { isRetiredBoardKind, ownsBoard } from "../../lib/whiteboardNote";
 import { TAG_NODE_TYPE } from "@onden/markdown/contract";
 
 /** What the tab row and the pane of a page need to know about it: whose views
@@ -21,6 +21,8 @@ export type ViewOwnerInfo = {
   /** Cards sit on this page's own board (or it is still of the retired kind
    *  'canvas'): its whiteboard tab shows by itself. */
   hasBoard: boolean;
+  /** The note is still of the retired board kind: it opens on its whiteboard. */
+  retiredBoard: boolean;
 };
 
 /** The page's view owner: a tag (its notes), else a note (its sub-notes). Null
@@ -50,5 +52,6 @@ export function useViewOwner(node: ContentNode | null, tag: Tag | null): ViewOwn
     fields,
     canManage: tag ? canEdit({ node_type: TAG_NODE_TYPE, space_id: null }) : canEdit(node!),
     hasBoard: !tag && !!node && ownsBoard(node, memberships),
+    retiredBoard: !tag && !!node && isRetiredBoardKind(node),
   };
 }

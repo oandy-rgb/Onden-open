@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 import { canvasWriter, viewWriter, type ViewInput, type ViewOwner } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { reloadOwnerViews, type SavedView } from "../../lib/ownerViews";
-import { freeViewName, reorderTabs, type ViewTab } from "../../lib/viewTabs";
+import { useOnline } from "../../lib/appStore";
+import { freeViewName, isFixedFirstTab, reorderTabs, type ViewTab } from "../../lib/viewTabs";
 import { confirmDialog } from "../ConfirmDialog";
 import { whiteboardTabIn } from "../../lib/whiteboardNote";
 
@@ -18,6 +19,7 @@ import { whiteboardTabIn } from "../../lib/whiteboardNote";
 
 export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], views: readonly SavedView[]) {
   const t = useT();
+  const online = useOnline();
   const [busy, setBusy] = useState(false);
   const takenNames = views.filter((view) => !view.inherited_from).map((view) => view.name);
   const whiteboard = whiteboardTabIn(views);
@@ -55,6 +57,12 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
     }));
   }, [owner, run, t, takenNames, tabs.length, whiteboard]);
 
+  /** 「內容」 shows again, last among the tabs (its text was never touched). */
+  const addContent = useCallback(
+    async () => (await run(() => import("../../lib/contentTab").then((mod) => mod.showContentTab(owner.id)))) === true,
+    [owner.id, run],
+  );
+
   /** Store a whiteboard that so far only showed because it has cards. */
   const storeWhiteboard = (extra: Partial<ViewInput> = {}) =>
     viewWriter.create(owner, { name: freeViewName(t("Canvas"), takenNames), layout: "canvas", visible_fields: [], ...extra });
@@ -72,10 +80,17 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
    *  showing as a tab (its board and cards stay). `afterConfirm` runs once the
    *  person confirmed, before the write. False when the person declined. */
   const remove = useCallback(async (tab: ViewTab, afterConfirm?: () => void): Promise<boolean> => {
+    // 「內容」: the question, the hidden record and the offline check live in lib/contentTab, which loads only here.
+    if (tab.kind === "content") {
+      const hid = await run(() => import("../../lib/contentTab").then((mod) => mod.hideContentTab({
+        owner, record: tab.view, takenNames, pinOrder: tabs.length, online, confirm: confirmDialog, afterConfirm,
+      })));
+      return hid === true;
+    }
     const message = tab.kind === "canvas"
       ? t("Remove the “{name}” tab? The board and its cards stay; only the tab goes.", { name: tab.name })
       : t("Delete the view “{name}”? The notes stay; only this way of showing them goes.", { name: tab.name });
-    const ok = await confirmDialog(message, { confirmLabel: tab.kind === "canvas" ? t("Remove") : t("Delete"), danger: true });
+    const ok = await confirmDialog(message, { confirmLabel: tab.kind === "view" ? t("Delete") : t("Remove"), danger: true });
     if (!ok) return false;
     afterConfirm?.();
     await run(async () => {
@@ -90,9 +105,9 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
     });
     return true;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storeWhiteboard only reads values already listed
-  }, [owner, run, t, takenNames]);
+  }, [owner, run, t, takenNames, tabs, online]);
 
-  /** Drop `tab` at `index` among the tabs after 「內容」. */
+  /** Drop `tab` at `index` among the tabs after the built-in 「內容」. */
   const move = useCallback(async (tab: ViewTab, index: number) => {
     const changes = reorderTabs(tabs, tab.key, index);
     if (changes.length === 0) return;
@@ -111,7 +126,7 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
   const duplicate = useCallback(async (tab: ViewTab): Promise<string | null> => {
     const source = tab.view;
     if (!source || tab.kind !== "view") return null;
-    const movable = tabs.filter((candidate) => candidate.kind !== "content");
+    const movable = tabs.filter((candidate) => !isFixedFirstTab(candidate));
     const at = movable.findIndex((candidate) => candidate.key === tab.key) + 1;
     return run(async () => {
       const id = await viewWriter.create(owner, {
@@ -128,5 +143,5 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storeWhiteboard only reads values already listed
   }, [owner, run, tabs, takenNames]);
 
-  return { busy, takenNames, create, addWhiteboard, rename, remove, move, duplicate };
+  return { busy, takenNames, create, addWhiteboard, addContent, rename, remove, move, duplicate };
 }

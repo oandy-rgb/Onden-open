@@ -5,7 +5,7 @@
 
 // The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
 import "./helpers/offlineNetwork";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -13,6 +13,7 @@ import { ApiError, type ContentNode } from "../lib/api";
 
 const { reads } = await import("../lib/data");
 const { embedExcerpt, resolveEmbed, flattenEmbeds, NOTE_EXCERPT_LINES } = await import("../lib/embeds");
+const { loadPartLinks } = await import("../lib/partLinkModule");
 const { resetDrawingCache } = await import("../lib/embedSources");
 const { editorEmbeds, embedLineRanges, refreshEmbeds, embedEditorFocus } = await import("../lib/editorEmbeds");
 const { holdLegacyNote, holdAnchored } = await import("./helpers/anchoredText");
@@ -26,6 +27,9 @@ const source = note({ id: "s1", title: "Source", markdown: "Intro\n\nThe key ide
 const BLOCK = "![[Source#^key]]";
 
 afterEach(() => resetDrawingCache());
+// The screens fetch two modules on first use (the embed's drawing, the part-link reading). Waiting for the clock on a cold fetch is
+// what made this file red on a slow runner; wait for the fetches themselves instead. (The redraw-on-arrival is pinned in partLinkRace.test.tsx.)
+beforeAll(async () => { await Promise.all([import("../lib/embedDom"), loadPartLinks()]); });
 
 describe("embedExcerpt (pure)", () => {
   const embed = (body: string) => resolveEmbed(body, null, [source]) as Exclude<ReturnType<typeof resolveEmbed>, { kind: "missing" | "task" }>;

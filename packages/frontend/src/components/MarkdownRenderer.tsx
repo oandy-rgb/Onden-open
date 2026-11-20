@@ -31,7 +31,7 @@ const StepsFigure = lazyWithReload(() => import("./StepsFigure"));
 import FrozenQueryResult from "./FrozenQueryResult";
 import { classNames } from "../lib/utils";
 import { resolveWikilink, type WikilinkNode, type WikilinkSource } from "../lib/wikilinks";
-import { loadedPartLinks, usePartLinks } from "../lib/partLinkModule";
+import { useLoadedPartLinks, usePartLinks } from "../lib/partLinkModule";
 import { setPendingCursor } from "../lib/cursorHandoff";
 import { embedSourceVersion, resolveEmbed, taskVersion } from "../lib/embeds";
 import { resolveTaskRef, taskRefById, useTaskRefs } from "../lib/taskRefs";
@@ -221,9 +221,9 @@ function EmbedBlock({ body, from, nodes, onNavigate }: {
   const fromSpace = from?.space_id;
   // The tasks the reader holds are part of what an embed can name (lib/taskRefs).
   const tasks = useTaskRefs();
-  // `![[筆記/段落]]` reads through the part-link module once it is loaded (the renderer around it loads it, lib/partLinkModule, and draws again).
-  const partLinks = loadedPartLinks();
-  const embed = useMemo(() => resolveEmbed(body, { id: fromId, space_id: fromSpace }, nodes, tasks), [body, fromId, fromSpace, nodes, tasks, partLinks]); // eslint-disable-line react-hooks/exhaustive-deps -- resolveEmbed reads the module through loadedPartLinks()
+  // `![[筆記/段落]]` reads through the part-link module once it is loaded (the renderer around it loads it, lib/partLinkModule; this redraws when it arrives).
+  const partLinks = useLoadedPartLinks();
+  const embed = useMemo(() => resolveEmbed(body, { id: fromId, space_id: fromSpace }, nodes, tasks), [body, fromId, fromSpace, nodes, tasks, partLinks]); // eslint-disable-line react-hooks/exhaustive-deps -- resolveEmbed reads the module through loadedPartLinks(); partLinks is the redraw signal
   // Re-render only when what is shown changes, not on every new nodes array.
   // The source's text is part of it: a changed source (sync, local edit) redraws.
   const key = embed.kind === "missing" ? `missing:${body}`

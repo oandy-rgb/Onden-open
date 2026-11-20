@@ -71,11 +71,26 @@ describe("a tap that is not on text", () => {
   const press = (target: Element, y = 330) =>
     Object.defineProperty(new MouseEvent("mousedown", { cancelable: true, clientY: y, button: 0 }), "target", { value: target }) as MouseEvent;
 
-  it("a tap on text keeps the native path", () => {
+  it("a single tap on text is placed by the editor too, in ONE selection change", () => {
     const { v, changes } = setup();
-    const e = press(v.contentDOM.querySelector(".cm-line")!, 124);
-    expect(placeCaretForTap(v, e, 10)).toBe(false);
-    expect(e.defaultPrevented).toBe(false);
+    const e = press(v.contentDOM.querySelectorAll(".cm-line")[1]!, 150);
+    expect(placeCaretForTap(v, e, 10)).toBe(true);
+    expect(e.defaultPrevented).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(v.state.doc.lineAt(v.state.selection.main.head).number).toBe(2);
+  });
+
+  it("a double tap and a tap on a link or control stay native", () => {
+    const { v, changes } = setup();
+    const line = v.contentDOM.querySelector(".cm-line")!;
+    const double = new MouseEvent("mousedown", { cancelable: true, clientY: 124, button: 0, detail: 2 });
+    Object.defineProperty(double, "target", { value: line });
+    expect(placeCaretForTap(v, double, 10)).toBe(false);
+    const link = line.appendChild(document.createElement("a"));
+    expect(placeCaretForTap(v, press(link, 124), 10)).toBe(false);
+    const widget = line.appendChild(document.createElement("span"));
+    widget.setAttribute("contenteditable", "false");
+    expect(placeCaretForTap(v, press(widget, 124), 10)).toBe(false);
     expect(changes).toEqual([]);
   });
 

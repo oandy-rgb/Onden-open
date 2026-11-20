@@ -77,7 +77,7 @@
 - **停住修形**（`lib/ink/recognize.ts`，純函式）：只認直線、箭頭、矩形、橢圓／圓、三角形、菱形，只對筆；寧可不修。0.5 秒（`HOLD_MS`）由引擎計時，動過 4px 重算；
   放開時 `InkModel.snapStrokeToShape` 一次提交，一步復原回原筆畫。開關是帳號偏好 `inkAutoShapePref`（預設開）。
 - **顏色與預設**：帳號偏好都在 `lib/inkPrefs.ts`（`inkPalettePref`、`inkShapeKindPref`、`inkAutoShapePref`、`inkShapeFillPref`、`inkPresetsPref`），後端 `PREF_SCHEMAS` 同形狀，
-  `backend/src/test/prefKeysContract.test.ts` 對 key。顏色存十六進位值，深色模式在渲染時反轉亮度。筆預設最多 `MAX_PRESETS`（6）個，名稱至多 `INK_PRESET_NAME_MAX`。
+  `backend/src/test/prefKeysContract.test.ts` 對 key。顏色存十六進位值；白板畫布（吃主題的面）在深色模式渲染時反轉亮度，**紙不反轉**：手寫頁、PDF 頁、嵌入的手繪圖、引用的手寫區域在兩種主題都是白底（`--ac-paper`）、筆跡用存下來的顏色（2026-11-20，見 decisions-ui.md「紙在兩種主題都是白的」）。筆預設最多 `MAX_PRESETS`（6）個，名稱至多 `INK_PRESET_NAME_MAX`。
 - **取色器**（`hooks/useEyedropper.ts`、`lib/ink/colorPick.ts`）從資料取色、不讀畫面像素：引擎登記成取色來源，文字框根元素帶 `data-ink-color`。
   取色時下一次按壓以 capture 階段攔下 pointer／mouse／touch／click，且這次按壓的後續事件也不讓頁面看到（`keepFromPage`），否則筆的 `buttons≠0` 會被當成側鍵切成橡皮擦。
 - **形狀**：幾何只有一份，`@onden/markdown` 的 `inkShapes.ts`，引擎、頁面 SVG、靜態 SVG 共用；形狀是引擎的工具（`InkActiveTool` 的 `"shape"`），不在宿主另寫一個指標面。

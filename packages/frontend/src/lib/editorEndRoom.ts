@@ -99,15 +99,18 @@ class RoomWatcher {
 
 const watcher = ViewPlugin.fromClass(RoomWatcher);
 
-/** The scroll margin the room asks for: `px` while the caret is within `px` of the end of the text, else 0.
- *  lib/editorKeyboard folds it into the editor's one scrollMargins. */
+/** The scroll margin the room asks for: while the caret is within `px` of the end of the text, `px` but never more than the comfort
+ *  room of a third of what can be seen (64 to 220 px, as baseRoomPx): the room is grown to cover keyboard and bar so the end CAN be
+ *  scrolled above them, and that size must not become the distance the caret is pushed from the bottom (it ended at the top of the
+ *  screen, under the top row: randomized combination test, 2026-11-20). lib/editorKeyboard folds it into the editor's one scrollMargins. */
 export function endRoomMargin(view: EditorView): number {
   const cfg = view.state.facet(roomConfig);
   if (!cfg) return 0;
   const block = view.lineBlockAt(view.state.selection.main.head);
   // contentHeight counts the room block only while it is there.
   const textEnd = view.contentHeight - (view.state.field(roomOn, false) ? cfg.px : 0);
-  return textEnd - block.bottom <= cfg.px ? cfg.px : 0;
+  const comfort = Math.min(220, Math.max(64, Math.round(cfg.bottomEdge() * 0.3)));
+  return textEnd - block.bottom <= cfg.px ? Math.min(cfg.px, comfort) : 0;
 }
 
 export function endRoom(px: number, bottomEdge: () => number): Extension {

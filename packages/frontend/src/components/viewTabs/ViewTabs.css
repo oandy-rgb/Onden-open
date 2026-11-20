@@ -91,7 +91,9 @@
 }
 /* A pane that fills the note area (the 「手寫」 tab): the note column is a flex column under the tab strip, so the section
    takes what is left and the pane inside takes the section — no guessed subtraction from the viewport. */
-.view-pane-fill { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 480px; padding-bottom: var(--ac-space-3); }
+/* Its sides are the page gutter on both: the page and the pen toolbar are centred in the note column. (They used to start at
+   --view-start like a table does, which put the handwriting page ~110 px further from the left edge than from the right: owner's Tab S9, 2026-11-20.) */
+.view-pane-fill { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 480px; padding-inline: var(--ac-page-gutter); padding-bottom: var(--ac-space-3); }
 .view-pane-fill > * { flex: 1 1 auto; min-height: 0; }
 @media (max-width: 900px) { .view-pane { padding: 8px 16px 32px; } .view-pane-title { font-size: var(--ac-fs-title-sm); } }
 /* On a phone the note column is not a viewport-high flex column (the page scrolls under a fixed bottom bar), so a fill

@@ -64,7 +64,7 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 // 內容), timelineDrag.mjs (the timeline page was reworked with Today). measure.mjs, profileWorker.mjs and
 // saveUnderWrites.mjs measure and take no pass/fail; touchHold.mjs and the slide scripts have their own npm scripts.
 const FEATURES = [
-  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
+  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["caretClearOfBar.mjs", "tablet"], ["caretKeyboardMatrix.mjs"], ["shortTypingLayout.mjs", "tablet"], ["shortTypingLayout.mjs", "mobile-chrome"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["todayPage.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
@@ -74,7 +74,7 @@ for (const [script, ...args] of chromiumRan ? FEATURES : []) {
   // --dir is passed only to the scripts that read it (the others take an engine as their first argument)
   const takesDir = readFileSync(join(dirname(smoke), script), "utf8").includes('"--dir"');
   const run = spawnSync(process.execPath, [join(dirname(smoke), script), ...args, ...(takesDir ? dirArgs : [])], { stdio: "inherit" });
-  summary.push([script.replace(/\.mjs$/, ""), run.status === 0 ? "passed" : "FAILED"]);
+  summary.push([[script.replace(/\.mjs$/, ""), ...args].join(" "), run.status === 0 ? "passed" : "FAILED"]);
 }
 console.log("\n" + summary.map(([engine, result]) => `${engine.padEnd(14)} ${result}`).join("\n"));
 process.exit(summary.some(([, result]) => result === "FAILED") ? 1 : 0);

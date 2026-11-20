@@ -47,7 +47,7 @@
   box-sizing: border-box;
   width: var(--pagebook-w);
   height: var(--pagebook-h);
-  background: var(--ac-surface);
+  background: var(--ac-paper);
   /* A page's own stacking context: its layers (z-index 5, 6) never reach another page, and a
      multiply-blended highlight sees the page's picture under it, not the whole book. */
   isolation: isolate;

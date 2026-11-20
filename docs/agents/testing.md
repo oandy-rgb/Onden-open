@@ -120,7 +120,7 @@ PGlite 跳過清單是「檔案：個數」且要**剛好相等**：跳過比清
 | 改到這些路徑的 PR | 要跑（本機，或在 CI 手動觸發 `parity` 工作） |
 | --- | --- |
 | `packages/backend`、`packages/markdown`、`packages/contract`、`packages/site`、`packages/desktop`、根目錄 `package.json`／`package-lock.json` | `npm run desktop:check`、`npm run parity` |
-| `packages/frontend`（只動 UI、不動 API） | 既有的 `e2e/browser-app/smoke.mjs` 就夠（動到側欄／標籤列／檢視分頁或週看板的「按住後拖」（`lib/touchHold`）時加 `npm run e2e:touch-hold`：用 CDP 送真觸控序列，需先 `npm run build:browser`；動到簡報 `modules/slides/` 的版面、表格或匯出時加 `npm run e2e:slides`：真瀏覽器量表格有沒有超出投影片、PPTX 位置是否一致，需先 `npm run build:browser`）；改到 `src/browserApp`、`dist-browser` 的建置時加 `npm run parity -- --hosts browser`；改手寫頁的「引用」、區域嵌入或 `inkRegion` 時加 `npm run e2e:quote-region`（packages/frontend，先 `npm run build:browser`；`run-all.mjs` 也會跑）|
+| `packages/frontend`（只動 UI、不動 API） | 既有的 `e2e/browser-app/smoke.mjs` 就夠（動到側欄／標籤列／檢視分頁或週看板的「按住後拖」（`lib/touchHold`）時加 `npm run e2e:touch-hold`：用 CDP 送真觸控序列，需先 `npm run build:browser`；動到簡報 `modules/slides/` 的版面、表格或匯出時加 `npm run e2e:slides`：真瀏覽器量表格有沒有超出投影片、PPTX 位置是否一致，需先 `npm run build:browser`）；改到 `src/browserApp`、`dist-browser` 的建置時加 `npm run parity -- --hosts browser`；改鍵盤與游標（`useEditorKeyboard`）時，`run-all.mjs` 跑 `caretClearOfBar.mjs`（Pixel 5 與 1204×714 平板各一輪，瞬間與分段升起）與 `shortTypingLayout.mjs`；改手寫頁的「引用」、區域嵌入或 `inkRegion` 時加 `npm run e2e:quote-region`（packages/frontend，先 `npm run build:browser`；`run-all.mjs` 也會跑）|
 
 **`npm run desktop:check`**（`scripts/desktopCheck.mjs`，一個指令、一個結果；前提是根目錄已 `npm ci`、Linux x64）：
 裝桌面依賴 → 打包（`stage.mjs` 建 markdown／site／contract／backend／frontend，`electron-builder` 只產 `release/linux-unpacked`，不做 AppImage）→ `desktop:test` →

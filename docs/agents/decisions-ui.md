@@ -1,6 +1,6 @@
 # 邊界決定：介面（側欄與頂欄、指令面板、匯出、選位置、視角分頁、設定、編輯器）
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts
 
 何時讀：改側欄與頂欄、寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置、筆記與標籤頁的視角分頁、並排、設定頁、編輯器的輸入與鍵盤行為之前。
@@ -159,6 +159,21 @@
   鍵盤高度變化、visual viewport 平移永不捲動；擁有者是 `lib/editorKeyboard.ts`（編輯器端）與 `hooks/useEditorKeyboard.ts`（React 端）。iOS 的 visualViewport 只用來擺工具列。
 - **焦點、游標落點、捲動都歸編輯器**（`lib/editorTouch.ts` 管落點）：附在編輯器旁的浮層按下去不拿走焦點，共用層做一次（`usePopover` 的 `keepFocus`，表面外的按鈕用 `components/ui` 的 `keepFocus`）。
   守門規則 `fe-keyboard-state`、`fe-focus-steal-guard`、`fe-editor-scroll-margin`（`test/guards/allowlist/fileRules.ts`）。需要真機：Android Brave 按 `/` 選單邊緣不收鍵盤、點最後一行下方游標只落一次。
+- **鍵盤分段升起（2026-11-20，Tab S9 的三星鍵盤多一排工具列、升得慢）**：「鍵盤開好了」是鍵盤**大小**（`useVirtualKeyboard` 的 `size`，resizes-content 下 `height` 恆為 0）靜止 250 ms 之後，每次大小變化都重新計時，平移不重算也不捲動；
+  之後才做一次「nearest」。檢查 `e2e/browser-app/caretClearOfBar.mjs` 在 Pixel 5 與 1204×714 平板各跑瞬間升起與分段升起（150、+120、+80 px，各隔 300 ms）。
+- **統一做法（2026-11-20，業主在 #1931 同意）**：①resizes-content 的瀏覽器上，筆記欄在工具列處結束（`html[data-kb-bar]` 加 `--ac-kb-bar-height`，`global.css` 讓 `.obsidian-main` 的 `margin-bottom` 等於工具列高），
+  瀏覽器原生與 CodeMirror 的游標捲動都停在工具列上方；`barClearance` 改成「工具列蓋住捲動區底部多少」＋間隙（`barClearancePx`），捲動區本來就止於工具列時只剩間隙；沒有 resizes-content（iOS）仍用 visualViewport 與 inset。
+  ②任何單擊（文字、空白行、最後一行下面）由編輯器放游標並做一次「最近」捲動（`lib/editorTouch`）；長按、雙擊、連結與控制項、輸入法、S Pen 維持原生。
+  ③鍵盤打開後的那一次捲動等「捲動區與鍵盤大小連續 6 個影格都沒變」（ResizeObserver＋`size`），不用固定毫秒。
+  ④`@codemirror/view` 6.43.1 → 6.43.15（它要 `@codemirror/state` ≥ 6.7.0，所以 state 也到 6.7.6，鎖定檔只動這兩個套件；測試環境 happy-dom 要在編輯器更新中把 `selectionchange` 事後送達，見 `test/setup.ts`）。
+  ⑤「鍵盤曾開」只屬於它被看到的那次寫字：上一次寫字結束時關掉的鍵盤，不會讓下一次點擊在鍵盤升起前就被當成「鍵盤關了」而離開編輯器（隨機組合測試抓到）。
+  檢查 `e2e/browser-app/caretKeyboardMatrix.mjs`：點的位置 × 鍵盤升法 × 尺寸（Pixel 5／1204×714）隨機組合，種子每次隨機並印出，`--seed` 重播；在 main 上紅（種子 424242 九項、種子 7 八項）。
+- **短高度打字版面（2026-11-20）**：寫字、鍵盤開著、可見高度低於 520 px（`SHORT_VISIBLE_PX`；平板橫向鍵盤開著約 364）時，頂欄與筆記的分頁列讓路（`html[data-typing-short]`，`global.css`），
+  文字多拿到它們的高度；狀態來自同一個鍵盤擁有者（`useEditorKeyboard`），殼只讀這個屬性，沒有第二個偵測器；游標那行在筆記往下捲過時不動（`keepCaretLineStill`），
+  在筆記最上面時文字跟著欄位上移那兩列的高度（頂端之上無處可捲）。返回鍵、編輯器自己的工具列不變。檢查 `e2e/browser-app/shortTypingLayout.mjs`。
+- **紙在兩種主題都是白的（2026-11-20，擁有者：「紙應該要白色的吧」）**：手寫頁、PDF 頁、嵌在筆記裡的手繪圖（`styles/embeds.css` 的 `.md-drawing-picture`）、引用的手寫區域，底色是 `--ac-paper`（`#ffffff`），
+  筆跡用存下來的（淺色主題）顏色畫，**不**反轉；周圍的介面仍跟主題。`lib/ink/color.ts` 的明度反轉只給吃主題的面（白板畫布）。筆預設近黑。守門 `inkPaper.guard.test.ts`；`handwritingTab.mjs` 在深色主題量畫布像素。
+- **手寫／PDF 頁與筆工具列在筆記欄置中**：`.view-pane-fill` 左右都是頁面留白（`--ac-page-gutter`）；原本跟表格一樣從 `--view-start` 起算，1204 寬時左邊離螢幕邊 134 px、右邊 24 px。檢查 `handwritingFillsHeight.mjs` 的置中斷言（含 1204×714 側欄開／關）。
 
 ## 編輯器的畫法與輸入清單
 

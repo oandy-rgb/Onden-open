@@ -534,7 +534,12 @@ h3 {
     height: auto;
     min-height: 0;
   }
-  body.onden-zen .overview-workspace { height: 100dvh; }
+  /* The editor's bar sits at the foot of the layout (the browser shrank it for the keyboard): the note column ends where the bar
+     starts, so nothing the browser or the editor scrolls into view can end up behind it (hooks/useEditorKeyboard sets the
+     attribute and the height only on such browsers). */
+  html[data-kb-bar] .overview-workspace .obsidian-main { margin-bottom: var(--ac-kb-bar-height, 0px); }
+  body.onden-zen .overview-workspace,
+  html[data-typing-short] .overview-workspace { height: 100dvh; }
 }
 
 .inbox-promote-btn {
@@ -812,6 +817,12 @@ body.onden-zen .obsidian-breadcrumb,
 body.onden-zen .tiptap-slash-hint {
   display: none !important;
 }
+/* Short typing layout (lib/editorKeyboard, set by hooks/useEditorKeyboard): while writing with the keyboard up and little height
+   left, only the top bar and the page's tab strip step aside (zen's other retractions are not wanted: the sidebar and
+   the editor's own bar stay). Their rows give the height back to the text; Back and the bar's own buttons are unchanged. */
+html[data-typing-short] .app-topbar,
+html[data-typing-short] .center-lens-bar { display: none; }
+html[data-typing-short] .workspace-grid { padding-top: 0; }
 /* The notes workspace itself owns the columns; hiding the left rail must
    also release its column. The app shell reserves room for desktop/mobile nav. */
 body.onden-zen .app-shell,

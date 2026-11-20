@@ -2,6 +2,10 @@
 // preserving hue and saturation, so oxblood stays oxblood-ish and near-black
 // ink becomes near-white ink. Stored stroke colors stay canonical
 // (light-theme values); inversion is render-time only.
+//
+// Only for surfaces that take the app theme, i.e. the whiteboard canvas (CanvasInkLayer). PAPER is white in both themes
+// and shows stored colours as they are, so nothing on paper calls this: handwriting pages, PDF pages, drawings embedded in
+// notes (styles/embeds.css) and quoted ink regions (owner 2026-11-20).
 
 export function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));

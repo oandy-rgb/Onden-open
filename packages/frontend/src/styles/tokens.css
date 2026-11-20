@@ -46,6 +46,10 @@
   --ac-font-display: var(--ac-font-serif);
   --ac-font-prose:   var(--ac-font-serif);
   --ac-font-ui:      var(--onden-ui-font-family-ui, var(--ac-font-sans));
+  /* Paper: white in BOTH themes, like a PDF page (owner 2026-11-20). Handwriting pages, PDF pages, drawings embedded in notes and
+     quoted ink regions sit on it with their strokes in the stored colours; app chrome around it stays themed.
+     The whiteboard canvas is not paper: it follows the theme (lib/ink/color.ts). */
+  --ac-paper: #ffffff;
   --ac-font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Code",
     ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 

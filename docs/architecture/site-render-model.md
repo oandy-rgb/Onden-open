@@ -95,3 +95,22 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 - **下架即時**：圖是媒體檔，能不能讀走 `canReadMedia` → 擁有筆記是否仍在網站上（`snapshot_media`），所以下架後頁面與圖片網址同時消失；靜態主機打包時用同一個檢查（`mediaBundle.ts`）。私人筆記不在已發布集合裡，筆畫不會進快照。
 - **畫法**：每頁是整張紙（寬 1000、從 x=0 起，高度到最後一筆再留邊，最多到頁高），底色固定淺色紙（`INK_PAPER_COLOR`）。筆跡顏色是照淺色頁存的（深色模式在畫面上才反相），所以紙一律淺色；紙畫在 SVG 裡，不靠 CSS，RSS 閱讀器、zip 與靜態主機看到的一樣。
 - **頁面**：`MarkdownRenderer` 只在收到 `handwritingAlt`（網站的 `makeSiteMarkdown` 才傳）時認得位址上的記號，加上 `md-image--ink-page`（`MarkdownRenderer.css` 讓它滿寬、頁間留距）並給網站語言的 alt；App 的 renderer 與使用者自己寫的圖不受影響。網站上所有圖片本來就是 `loading="lazy"`，所以第二頁起是 lazy。RSS 內文只放第一頁（`withoutHandwritingPages`），alt 同樣依網站語言；文章封面與分享圖不取手寫頁（SVG 不是分享圖，也避免跟內文重複）。搜尋索引只讀標題與文字，圖片沒有文字，不受影響。
+
+## 中文網站、搜尋、資料夾頁（feat/site-zh-search-folders，業主 2026-11-20「功能與體驗能追上 Quartz」）
+
+業主量到的網站（60 則繁中筆記、課程資料夾）是英文介面、搜不到中文內文、約 20 則空頁。原因與處理：
+
+- **語言與簡介的根因在寫入端**：「建立第一個網站」（`modules/website/introSite.ts`）把 Onden 自己的 `INTRO_SITE_CONFIG`（品牌、副標、`locale: "en"`、產品簡介）整包寫進使用者的網站設定，而且蓋掉原有的值。現在只寫名稱、副標、主色，且只在使用者沒設時寫（`introSiteConfig`）；**語言與簡介一律不寫**。沒有語言的網站是 zh-TW（`siteLang`／`makeT` 同一預設）。
+  已經被寫成英文的網站不會自動改回，要在設定 › 網站改語言（沒有 migration：無法分辨「選了英文」與「被寫成英文」）。
+- **搜尋索引的語言就是頁面的 `<html lang>`**：Pagefind 只在頁面語言是 zh／ja 時用 CJK 斷詞，所以網站語言錯了，內文就搜不到（`siteSearchIndex.test` 釘住 zh-TW 的兩字詞可搜到內文、單字查詢不報錯）。
+  搜尋改成頁首的按鈕＋全螢幕面板（`<dialog>`，Ctrl／⌘+K，手機點擊目標 44px），腳本一執行按鈕就顯示；索引還沒建好時面板明說「搜尋還沒準備好」，不再整個藏起來。索引在發布後由 `site_bundle` 背景工作建，失敗會重試並出現在系統狀態。
+- **簡介**：網站自己的 `description`，沒有就用首頁筆記的第一段，再沒有就不寫（`siteDescription`）。
+- **日期**：`formatSiteDay`（`siteLocale.ts`）依網站語言寫（zh／ja「2026年11月20日」，en 仍是 ISO）。「更新於」的來源改為內容最後一次編輯（`services/history/bodyEvents.ts lastContentEditSql`：寫字或手寫的儲存事件，沒有就用建立時間）；
+  快照的 `updated_at` 是這個值，所以網站頁面、sitemap `lastmod`、RSS `pubDate` 一起改。移動、加標籤、匯入或修復造成的 `content_nodes.updated_at` 變動不算。
+- **資料夾頁**：沒有正文、底下有筆記的筆記，頁面列出底下的筆記（標題、日期、第一行）；有正文又有底下的筆記時，正文之後接「這篇底下的筆記」。沒有正文也沒有底下的筆記（例如內容只是 PDF）顯示「這一頁沒有文字內容」，不再是空文章。首頁「最新一篇」跳過沒有正文的筆記。
+- **分辨同名**：每個筆記頁有路徑列（麵包屑），搜尋結果帶 `path` 欄；清單中標題重複的筆記旁邊顯示所在資料夾（`pathIfAmbiguous`）。沒命名的筆記以正文第一行當標題（`lib/noteLabel.ts firstLine`，同 App），位址不變。首頁「最近 10 篇」其餘的收在「顯示全部 N 篇」（`<details>`，不用腳本）。
+- **舊的訂閱筆記**（標了 `_rss_kind = source`，migration 145 之前每個訂閱是一則筆記）與存下的文章同樣預設不上網站（`publishedSet.ts FEED_SOURCE_SQL`），預覽的 `left_out` 以 `saved_article` 說明。
+- **封面要自己選**：筆記屬性 `cover: true`（第一張圖）或 `cover: <圖片位址>`；第一張圖不再自動變封面（`coverOf`）。分享圖仍用第一張圖。
+- **圖示**：沒設圖示的網站用名稱第一個字加主色的內嵌 SVG（`letterFavicon`），不再讓瀏覽器要 `/favicon.ico` 得到 404。
+
+未做：漏掉 `]]` 的內嵌（`![[Pasted image …jpg`）照原樣當文字顯示；匯入與編輯器沒有標記它的地方，只回報。「(private)」佔位字仍是英文（`redaction.ts` 由另一個 PR 處理，那邊接上網站語言後再接）。

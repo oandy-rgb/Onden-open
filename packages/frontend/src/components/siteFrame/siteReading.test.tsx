@@ -89,7 +89,7 @@ describe("link previews", () => {
     const long = note("b", "乙", `${"字".repeat(100)}`, { tags: ["草"] });
     const d = site([a, long, c], [edge("a", "b")]);
     const { notes, labels } = previewsOf(html(d, "a"));
-    expect(notes.b).toEqual({ title: "乙", meta: "更新於 2026-03-04 · 約 1 分鐘讀完", summary: `${"字".repeat(60)}…`, tags: ["草"] });
+    expect(notes.b).toEqual({ title: "乙", meta: "更新於 2026年3月4日 · 約 1 分鐘讀完", summary: `${"字".repeat(60)}…`, tags: ["草"] });
     expect(labels.open).toBe("打開這篇");
   });
 

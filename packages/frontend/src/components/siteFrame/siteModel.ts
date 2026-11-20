@@ -4,13 +4,16 @@
 // rule) are what the article frame switches use. No React here.
 import { validateDesign, type FrozenDesign, type SiteDesign, type SiteRow, type SiteTagPage } from "@onden/site";
 import {
-  compareChildren, diagramsBySource, mermaidSources, usesSteps, fenceInfoWord, fenceScanner, openingFenceInfo, extractBlock, extractSection, firstImage, linkPlaces, noteSummary, plainExcerpt, plainText, readingMinutes, drawnWikilinks,
+  bodyAfterTitle, compareChildren, diagramsBySource, mermaidSources, usesSteps, fenceInfoWord, fenceScanner, openingFenceInfo, extractBlock, extractSection, firstImage, linkPlaces, parseFrontmatter, noteSummary, plainExcerpt, plainText, readingMinutes, drawnWikilinks,
   servedBlockPage, servedLinkTarget, sitePathFor, type ContextPiece, type DiagramLayout,
 } from "@onden/markdown";
 import { dateIdAt } from "../../lib/localDate";
+import { ancestorsOf, indexById } from "../../lib/treeWalk";
+import { nodeOf } from "../../lib/nodeIndex";
+import { firstLine, isPlaceholderTitle, placeholderName } from "../../lib/noteLabel";
 import { siteRedirectsOf } from "../../lib/siteRedirects";
 import { withBlockIds } from "../../lib/publishedNode";
-import { makeT, type PublishedEdge, type PublishedNode, type SiteChrome } from "../templates";
+import { formatSiteDay, makeT, type PublishedEdge, type PublishedNode, type SiteChrome } from "../templates";
 
 /** The v3 design as `/api/site` serves it: the saved design plus what was
  *  fixed at publish time (rows by Puck component of the old home page, rows by tag, tag names). */
@@ -42,13 +45,21 @@ export type SiteSnapshot = {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** A note nobody titled is listed under its first line, as the app lists it (lib/noteLabel), not as 「未命名」 six times
+ *  over; with no text either, under the site's own word for it. Only the displayed title: the slug, and so the address, stay. */
+function labelled(node: PublishedNode, locale: string | undefined): PublishedNode {
+  if (!isPlaceholderTitle(node.title)) return node;
+  return { ...node, title: firstLine(bodyAfterTitle(node.markdown ?? "", node.title)) || placeholderName(locale) };
+}
+
 /** `/api/site` → page data. A snapshot without a v3 (or v2) design (a workspace that
  *  never made one) gets the default design: publishing never needs a layout. */
 export function readSiteData(snapshot: SiteSnapshot): SiteData {
   const payload = snapshot.payload ?? {};
   const presentation = payload.presentation ?? {};
   const site = (isObj(presentation.site) ? presentation.site : {}) as SiteData["site"];
-  const nodes = payload.nodes ?? [];
+  const locale = typeof site.locale === "string" ? site.locale : undefined;
+  const nodes = (payload.nodes ?? []).map((n) => labelled(n, locale));
   const homeNodeId = snapshot.home_node_id ?? null;
   const raw = isObj(presentation.design) ? presentation.design : {};
   const { design } = validateDesign(raw);
@@ -73,6 +84,46 @@ export function readSiteData(snapshot: SiteSnapshot): SiteData {
     redirects: siteRedirectsOf(payload.site_redirects),
   };
 }
+
+/** What the pages say the site is about: the owner's description, else the first words of the home note, else nothing. */
+export function siteDescription(data: SiteData): string | undefined {
+  const own = typeof data.site.description === "string" ? data.site.description.trim() : "";
+  if (own) return own;
+  const home = nodeOf(data, data.homeNodeId);
+  const summary = home ? noteSummary(home.markdown, { title: home.title, maxLen: 200 }) : "";
+  return summary || undefined;
+}
+
+const indexes = new WeakMap<readonly PublishedNode[], Map<string, PublishedNode>>();
+/** A note's folders, outermost first (the notes above it by `parent_id`; the walk and its rule for a looping chain are lib/treeWalk's). */
+export function folderTrail(node: PublishedNode, nodes: readonly PublishedNode[]): PublishedNode[] {
+  let byId = indexes.get(nodes);
+  if (!byId) indexes.set(nodes, (byId = indexById(nodes)));
+  return ancestorsOf(byId, node);
+}
+
+/** The notes directly under a note, in the workspace's order. */
+export const notesUnder = (node: PublishedNode, nodes: readonly PublishedNode[]): PublishedNode[] =>
+  nodes.filter((n) => n.parent_id === node.id && n.id !== node.id).sort(compareChildren);
+
+/** `線性代數 › 四大子空間`: where a note sits, for a list that has two notes of one title; "" for a top-level note. */
+export const PATH_SEPARATOR = " › ";
+export const pathOf = (node: PublishedNode, nodes: readonly PublishedNode[]): string => folderTrail(node, nodes).map((a) => a.title).join(PATH_SEPARATOR);
+
+const sharedTitles = new WeakMap<readonly PublishedNode[], ReadonlySet<string>>();
+/** The path to show next to a note in a list — only when another note has the same title, which the title alone cannot tell apart. */
+export function pathIfAmbiguous(node: PublishedNode, nodes: readonly PublishedNode[]): string {
+  let shared = sharedTitles.get(nodes);
+  if (!shared) {
+    const seen = new Set<string>();
+    shared = new Set(nodes.flatMap((n) => (seen.has(n.title) ? [n.title] : (seen.add(n.title), []))));
+    sharedTitles.set(nodes, shared);
+  }
+  return shared.has(node.title) ? pathOf(node, nodes) : "";
+}
+
+/** Whether the note says anything itself (a folder may only hold other notes). */
+export const hasBody = (node: PublishedNode): boolean => bodyAfterTitle(node.markdown ?? "", node.title).trim() !== "";
 
 /** The address of a published note, read off the served pages (sitePathFor). */
 export function notePath(nodes: readonly PublishedNode[], slug: string): string {
@@ -213,7 +264,7 @@ export function pagePreviews(targets: readonly PublishedNode[], locale: string |
   const notes: PagePreviews["notes"] = {};
   for (const n of targets) {
     const meta = [
-      n.updated_at ? t("updated").replace("{date}", isoDay(n.updated_at, timeZone, dayStartHour)) : "",
+      n.updated_at ? t("updated").replace("{date}", formatSiteDay(isoDay(n.updated_at, timeZone, dayStartHour), locale)) : "",
       t("readingTime").replace("{n}", String(readingMinutes(n.markdown))),
     ].filter(Boolean).join(" · ");
     notes[n.id] = {
@@ -242,9 +293,18 @@ export function noteTree(nodes: readonly PublishedNode[]): TreeItem[] {
   return build(null, 0);
 }
 
-/** The first image of a note's Markdown, as written (the article cover). */
+/** The first image of a note's Markdown, as written (what a shared link shows). */
 export function coverImage(markdown: string): string | undefined {
   return firstImage(markdown);
+}
+
+/** The picture a note chose as its cover, or none. The cover is opt-in, by the note's own property (its frontmatter):
+ *  `cover: true` takes its first picture, `cover: <image address>` that picture. A first picture is not a cover by default:
+ *  a slide or a diagram cut to a banner above the title is worse than no cover. */
+export function coverOf(markdown: string): string | undefined {
+  const value = (parseFrontmatter(markdown).cover ?? "").trim();
+  if (!value || /^(false|no|0)$/i.test(value)) return undefined;
+  return /^(true|yes|1)$/i.test(value) ? firstImage(markdown) : value;
 }
 
 /** Whether any published note still has a diagram the reader's browser must draw: a

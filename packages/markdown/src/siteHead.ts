@@ -12,6 +12,7 @@
 // host (the Pages deploy's meta-CSP, which needs node:crypto for the ga4 hash;
 // the SSR pages' response headers).
 
+import { isHexColor } from "./color.js";
 import { escapeHtml } from "./html.js";
 
 /** The manifest.site settings the head reads (Design tab → workspace config). */
@@ -20,6 +21,8 @@ export type SiteHeadSite = {
   tagline?: string;
   description?: string;
   favicon?: string;
+  /** The site's accent colour (`#rrggbb`): the generated icon's background. */
+  accent?: string;
   /** false → noindex, nofollow. Absent counts as allowed. */
   allow_indexing?: boolean;
   analytics_provider?: string;
@@ -109,6 +112,17 @@ function analyticsTags(site: SiteHeadSite): HeadTag[] {
   return [];
 }
 
+/** An icon for a site that set none: the first letter of its name on its accent colour, as an inline SVG, so no
+ *  file has to exist (a browser asks for `/favicon.ico` of any page without an icon, and a site with none answers 404). */
+function letterFavicon(brand: string | undefined, accent?: string): string | null {
+  const letter = [...(brand ?? "").trim()][0];
+  if (!letter) return null;
+  const fill = accent && isHexColor(accent) ? accent : "#317563";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${fill}"/>` +
+    `<text x="16" y="23" font-size="20" font-family="system-ui,sans-serif" font-weight="700" text-anchor="middle" fill="#fff">${escapeHtml(letter.toUpperCase())}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /** The published site's head tags for one page, in document order. */
 export function siteHead(site: SiteHeadSite, opts: SiteHeadOptions): HeadTag[] {
   const { pageTitle, variant, feed, sitemap } = opts;
@@ -126,7 +140,8 @@ export function siteHead(site: SiteHeadSite, opts: SiteHeadOptions): HeadTag[] {
   if (canonical) tags.push(link({ rel: "canonical", href: canonical }));
   if (feed) tags.push(link({ rel: "alternate", type: "application/rss+xml", title: brand || "RSS", href: feed }));
   if (sitemap) tags.push(link({ rel: "sitemap", href: sitemap }));
-  if (site.favicon) tags.push(link({ rel: "icon", href: site.favicon }));
+  const icon = site.favicon || letterFavicon(site.brand, site.accent);
+  if (icon) tags.push(link({ rel: "icon", href: icon }));
   if (site.allow_indexing === false) tags.push(meta({ name: "robots", content: "noindex, nofollow" }));
   tags.push(meta({ property: "og:title", content: pageTitle }));
   if (desc) tags.push(meta({ property: "og:description", content: desc }));

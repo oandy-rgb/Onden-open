@@ -58,6 +58,20 @@ function alsoPublishesOthers(preview: PublishPreview, own: ReadonlySet<string>):
     || (preview.new_media ?? []).some((m) => m.node_ids.some((id) => !own.has(id)));
 }
 
+/** What the first-site flow writes into the site settings: the name, tagline and accent, each only where the site has
+ *  none yet, and never the language or the description. Those say who the site is for and what it is about, and the
+ *  intro's are Onden's own (an English site whose description was the product blurb was what a Chinese-writing owner
+ *  published). Language falls to the account's (siteSettings), the description to the home note's first line (the site). */
+function introSiteConfig(existing: Record<string, unknown> | undefined | null): Pick<typeof INTRO_SITE_CONFIG, "brand" | "tagline" | "accent"> {
+  const unset = (key: string) => typeof existing?.[key] !== "string" || existing[key] === "";
+  const { brand, tagline, accent } = INTRO_SITE_CONFIG;
+  return {
+    brand: unset("brand") ? brand : String(existing!.brand),
+    tagline: unset("tagline") ? tagline : String(existing!.tagline),
+    accent: unset("accent") ? accent : String(existing!.accent),
+  };
+}
+
 /** Builds and publishes the intro site. Resolves the published Home's link
  *  and id; `needsReview` when the publish would carry other notes too (the
  *  pages are ready and the Website screen's preview asks first); null when
@@ -98,12 +112,13 @@ export async function buildIntroSite(): Promise<{ url: string; homeId: string } 
     //    saves them. No home design is written: the site publishes the server's
     //    default design until the owner makes one in the Studio.
     const nav = INTRO_PAGES.filter((p) => p.nav && idByTitle[p.title]).map((p) => ({ label: p.title, nodeId: idByTitle[p.title]! }));
-    const design = await workspaceWriter.saveDesign({ config: { ...INTRO_SITE_CONFIG, nav } });
+    const before = getAppState().data;
+    const design = await workspaceWriter.saveDesign({ config: { ...introSiteConfig(before.site_config), nav } });
     if (design.status !== "synced") throw refuse(t("Publishing needs a connection."));
     // The workspace's home is Home unless the user already chose one, so a
     // later Publish from the Studio keeps it. Not needed for this publish
     // (it names its home): a failure is reported by the writer and ignored.
-    if (!getAppState().data.workspace.home_node_id) await workspaceWriter.setHome(homeId).catch(() => {});
+    if (!before.workspace.home_node_id) await workspaceWriter.setHome(homeId).catch(() => {});
 
     // 3. Publish, the Studio's way: preview the candidate, then publish
     //    exactly that candidate by its hash.

@@ -231,3 +231,5 @@ frames 的對應（frames 不是預設時）：
 - **Steph Ango（stephango.com）**：安靜的筆記站、以標籤與時間組織、簡單的導覽。
 - **Gwern（gwern.net）**：側欄目錄、側註（sidenotes）、依成熟度標示文章（"epistemic status"／"importance"），也是成熟度標籤的由來。
 - **Maggie Appleton（maggieappleton.com）**：數位花園的成熟度標示（seedling／budding／evergreen）、主題先於時間的首頁。
+
+> 2026-11-20 補記（feat/site-zh-search-folders）：清單類小工具（最近、全部、年份）在標題重複時於旁邊顯示所在資料夾（`PathHint`）；「最近 10 篇」其餘收進 `<details>`；「最新一篇」略過沒有正文的筆記；日期依網站語言寫（`formatSiteDay`）。細節見 [網站的呈現模型](../site-render-model.md)。

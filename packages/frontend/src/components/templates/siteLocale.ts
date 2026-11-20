@@ -10,7 +10,8 @@ type SiteStringKey =
   | "noResults" | "onThisPage" | "openNote" | "pageNotFound" | "preview" | "previous" | "readingTime" | "search" | "updated"
   | "topics" | "recentlyUpdated" | "allArticles" | "latestArticle" | "featured" | "subscribe" | "subscribeLead" | "tagFeed" | "theme"
   | "handwritingPage" | "notesCount" | "maturity1" | "maturity2" | "maturity3" | "footnotes" | "footnoteBack" | "sideNotes" | "articlesInTag"
-  | "stepPrev" | "stepNext" | "stepsAll" | "stepsOne" | "stepCount" | "siteUnavailable" | "siteUnavailableLead";
+  | "stepPrev" | "stepNext" | "stepsAll" | "stepsOne" | "stepCount" | "siteUnavailable" | "siteUnavailableLead"
+  | "searchOpen" | "searchClose" | "searchBuilding" | "searchMore" | "breadcrumb" | "childNotes" | "noText" | "showAllNotes";
 
 const EN: Record<SiteStringKey, string> = {
   search: "Search…",
@@ -56,6 +57,14 @@ const EN: Record<SiteStringKey, string> = {
   stepCount: "Step {n} of {m}",
   siteUnavailable: "Site unavailable",
   siteUnavailableLead: "The site can't be shown right now. Please try again in a moment.",
+  searchOpen: "Search",
+  searchClose: "Close search",
+  searchBuilding: "Search isn't ready yet. Please try again in a moment.",
+  searchMore: "Try two or more characters.",
+  breadcrumb: "Where this page is",
+  childNotes: "In this note",
+  noText: "This page has no text.",
+  showAllNotes: "Show all {n} notes",
 };
 
 const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
@@ -104,6 +113,14 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     stepCount: "第 {n} 步／共 {m} 步",
     siteUnavailable: "網站暫時無法顯示",
     siteUnavailableLead: "目前讀不到網站內容，請稍後再試。",
+    searchOpen: "搜尋",
+    searchClose: "關閉搜尋",
+    searchBuilding: "搜尋還沒準備好，請稍後再試。",
+    searchMore: "再多打一個字試試。",
+    breadcrumb: "這一頁的位置",
+    childNotes: "這篇底下的筆記",
+    noText: "這一頁沒有文字內容。",
+    showAllNotes: "顯示全部 {n} 篇",
   },
   ja: {
     search: "検索…",
@@ -149,8 +166,26 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     stepCount: "{m} 中 {n} ステップ目",
     siteUnavailable: "サイトを表示できません",
     siteUnavailableLead: "現在サイトを読み込めません。しばらくしてからもう一度お試しください。",
+    searchOpen: "検索",
+    searchClose: "検索を閉じる",
+    searchBuilding: "検索の準備ができていません。しばらくしてからもう一度お試しください。",
+    searchMore: "2 文字以上で試してください。",
+    breadcrumb: "このページの場所",
+    childNotes: "このノートの下",
+    noText: "このページには本文がありません。",
+    showAllNotes: "{n} 件すべてを表示",
   },
 };
+
+/** A `YYYY-MM-DD` day as the site's language writes a date: 2026年11月20日 in Chinese and Japanese, the ISO form
+ *  elsewhere. `monthDay` leaves the year off (the group heading above a list has it). */
+export function formatSiteDay(day: string, locale?: string, monthDay = false): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return day;
+  const [, y, mo, d] = m;
+  if ((locale ?? DEFAULT_SITE_LOCALE) === "en") return monthDay ? `${mo}-${d}` : day;
+  return `${monthDay ? "" : `${y}年`}${Number(mo)}月${Number(d)}日`;
+}
 
 const DEFAULT_SITE_LOCALE: SiteLocale = "zh-TW";
 

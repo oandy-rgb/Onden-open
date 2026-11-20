@@ -11,12 +11,12 @@ import {
 } from "@onden/site";
 import { RowsView, firstParagraph, type SiteRenderMeta } from "@onden/site/react";
 import { Link, Pressable } from "../ui";
-import { extractTOC, makeT, type PublishedNode } from "../templates";
+import { extractTOC, formatSiteDay, makeT, type PublishedNode } from "../templates";
 import {
   articlesOf, byUpdated, featuredOf, firstOf, firstSentence, footnotesOf, groupByYear, introNoteOf, maturityOf, metaPieces, recentOf, topicsOf, WIDGET_LIST_MAX, yearOfDay,
 } from "./siteWidgetData";
 import {
-  adjacentNotes, backlinksOf, noteTree, notePath, tagPageByName, tagPath, isoDay, type Backlink, type SiteData, type TreeItem,
+  adjacentNotes, backlinksOf, hasBody, noteTree, notePath, pathIfAmbiguous, tagPageByName, tagPath, isoDay, type Backlink, type SiteData, type TreeItem,
 } from "./siteModel";
 import { nodeOf } from "../../lib/nodeIndex";
 
@@ -44,16 +44,24 @@ export type WidgetRenderer = (variant: string, ctx: BoxContext) => ReactNode;
 
 const cx = (...names: (string | false | undefined | null)[]) => names.filter(Boolean).join(" ");
 const href = (ctx: BoxContext, note: PublishedNode) => notePath(ctx.data.nodes, note.slug);
+const localeOf = (ctx: BoxContext): string | undefined => (typeof ctx.data.site.locale === "string" ? ctx.data.site.locale : undefined);
+const dayText = (ctx: BoxContext, day: string, monthDay = false) => formatSiteDay(day, localeOf(ctx), monthDay);
 const updatedText = (ctx: BoxContext, note: PublishedNode) =>
-  note.updated_at ? ctx.t("updated").replace("{date}", isoDay(note.updated_at, ctx.data.timeZone, ctx.data.dayStartHour)) : "";
+  note.updated_at ? ctx.t("updated").replace("{date}", dayText(ctx, isoDay(note.updated_at, ctx.data.timeZone, ctx.data.dayStartHour))) : "";
 const Title = ({ children }: { children: ReactNode }) => <h2 className="s-w__title">{children}</h2>;
+
+/** The folders a note sits in, next to its title, when another note has the same title: six 「講義」 are told apart by their course. */
+function PathHint({ note, ctx }: { note: PublishedNode; ctx: BoxContext }) {
+  const path = pathIfAmbiguous(note, ctx.data.nodes);
+  return path ? <span className="s-path">{path}</span> : null;
+}
 
 function NoteRows({ notes, ctx, summary }: { notes: readonly PublishedNode[]; ctx: BoxContext; summary?: boolean }) {
   return (
     <ul className="s-list s-list--notes">
       {notes.map((n) => (
         <li key={n.id}>
-          <Link href={href(ctx, n)}>{n.title}</Link>
+          <Link href={href(ctx, n)}>{n.title}</Link><PathHint note={n} ctx={ctx} />
           <time className="s-date">{updatedText(ctx, n)}</time>
           {summary ? <p className="s-row__summary">{noteSummary(n.markdown, { title: n.title, maxLen: 80 })}</p> : null}
         </li>
@@ -105,7 +113,7 @@ function MetaLine({ variant, ctx }: { variant: string; ctx: BoxContext }) {
   const node = ctx.node;
   if (!node) return null;
   const p = metaPieces(ctx.data, node);
-  const when = p.date ?? (p.updated ? ctx.t("updated").replace("{date}", p.updated) : null);
+  const when = p.date ? dayText(ctx, p.date) : p.updated ? ctx.t("updated").replace("{date}", dayText(ctx, p.updated)) : null;
   const date = when ? <time className="s-date" dateTime={p.date ?? p.updated ?? undefined}>{when}</time> : null;
   const reading = <span className="s-date s-reading" data-pagefind-ignore="">{ctx.t("readingTime").replace("{n}", String(p.minutes))}</span>;
   const tags = p.tags.length > 0 ? (
@@ -124,14 +132,11 @@ function MetaLine({ variant, ctx }: { variant: string; ctx: BoxContext }) {
     : [date, reading];
   return (
     <>
-      <p className="s-article__meta">{inline.map((x, i) => (x ? <span key={i} className="s-meta__piece">{x}</span> : null))}</p>
+      <p className="s-article__meta" data-pagefind-ignore="">{inline.map((x, i) => (x ? <span key={i} className="s-meta__piece">{x}</span> : null))}</p>
       {["date-tags", "all", "tags", "reading-tags"].includes(variant) ? tags : null}
     </>
   );
 }
-
-/** `MM-DD` of a `YYYY-MM-DD` day (the year is the group's heading). */
-const monthDay = (day: string): string => day.replace(/^\d{4}-/, "");
 
 function YearGroups({ notes, ctx }: { notes: readonly PublishedNode[]; ctx: BoxContext }) {
   return (
@@ -141,7 +146,7 @@ function YearGroups({ notes, ctx }: { notes: readonly PublishedNode[]; ctx: BoxC
           {year ? <h3 className="s-year__label">{year}</h3> : null}
           <ul className="s-list s-list--notes">
             {inYear.map(({ node, day }) => (
-              <li key={node.id}><Link href={href(ctx, node)}>{node.title}</Link><time className="s-date" dateTime={day}>{monthDay(day)}</time></li>
+              <li key={node.id}><Link href={href(ctx, node)}>{node.title}</Link><PathHint note={node} ctx={ctx} /><time className="s-date" dateTime={day}>{dayText(ctx, day, true)}</time></li>
             ))}
           </ul>
         </div>
@@ -159,7 +164,8 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
     return <div className="s-prose s-intro" data-note={note.id}>{ctx.meta.renderMarkdown(variant === "sentence" ? firstSentence(paragraph) : paragraph)}</div>;
   },
   latest(variant, ctx) {
-    const note = [...articlesOf(ctx.data)].sort((a, b) => Date.parse(b.created_at ?? "") - Date.parse(a.created_at ?? "") || byUpdated(a, b))[0];
+    // A folder with no text of its own is a page of links, not the newest thing written.
+    const note = articlesOf(ctx.data).filter(hasBody).sort((a, b) => Date.parse(b.created_at ?? "") - Date.parse(a.created_at ?? "") || byUpdated(a, b))[0];
     if (!note) return null;
     return (
       <>
@@ -182,7 +188,20 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
   all(variant, ctx) {
     const notes = [...articlesOf(ctx.data)].sort(byUpdated);
     if (variant === "recent10") {
-      return <><Title>{ctx.t("allArticles")}</Title><NoteRows notes={firstOf(notes, 10)} ctx={ctx} /></>;
+      // Ten in view; the rest one tap away, so nothing on the site is reachable only by knowing its address.
+      const rest = firstOf(notes, WIDGET_LIST_MAX).slice(10);
+      return (
+        <>
+          <Title>{ctx.t("allArticles")}</Title>
+          <NoteRows notes={firstOf(notes, 10)} ctx={ctx} />
+          {rest.length > 0 ? (
+            <details className="s-more">
+              <summary>{ctx.t("showAllNotes").replace("{n}", String(notes.length))}</summary>
+              <NoteRows notes={rest} ctx={ctx} />
+            </details>
+          ) : null}
+        </>
+      );
     }
     if (variant === "maturity") {
       return (
@@ -190,7 +209,7 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
           <Title>{ctx.t("allArticles")}</Title>
           <ul className="s-list s-list--notes">
             {firstOf(notes, WIDGET_LIST_MAX).map((n) => (
-              <li key={n.id}><Link href={href(ctx, n)}>{n.title}</Link><Maturity node={n} t={ctx.t} /><time className="s-date">{updatedText(ctx, n)}</time></li>
+              <li key={n.id}><Link href={href(ctx, n)}>{n.title}</Link><PathHint note={n} ctx={ctx} /><Maturity node={n} t={ctx.t} /><time className="s-date">{updatedText(ctx, n)}</time></li>
             ))}
           </ul>
         </>
@@ -300,7 +319,7 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
               {[...rows].sort((a, b) => compareText(b.date, a.date)).map((r) => (
                 <li key={r.id}>
                   <Link href={ctx.meta.hrefFor(r.slug)}>{r.title}</Link>
-                  {r.date ? <time className="s-date" dateTime={r.date}>{r.date}</time> : null}
+                  {r.date ? <time className="s-date" dateTime={r.date}>{dayText(ctx, r.date)}</time> : null}
                   {variant === "summary" && r.excerpt ? <p className="s-row__summary">{r.excerpt}</p> : null}
                 </li>
               ))}

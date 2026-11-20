@@ -11,7 +11,9 @@
 // edits count all of them (editEventSql, startsNewEditSql) and inkChanges.ts compares them.
 
 import { INK_KIND_ATTR, INK_PAGE_ATTRS, type InkKind } from "@onden/markdown/ink";
+import { sql } from "kysely";
 import { q } from "../../db.js";
+import { db } from "../../dbKysely.js";
 import { sqlDayStart } from "../../localDay.js";
 
 /** The ui_context of the saves that are a system tidy (systemTidies.ts): History lists them once per pass, not as edits. */
@@ -62,6 +64,16 @@ export function inkEventSql(alias: string, kind?: InkKind): string {
  *  tidy (systemTidies.ts) is not an edit of the person's: History lists it once per pass, not once per note. */
 export const editEventSql = (alias: string): string =>
   `((${bodyEventSql(alias)} AND coalesce(${alias}.tx_meta->>'ui_context', '') NOT IN (${SYSTEM_TIDY_CONTEXTS.map((c) => `'${c}'`).join(",")})) OR (${inkEventSql(alias)}))`;
+
+/** When each of these notes' content was last edited (written or drawn, editEventSql), by note id; a note History holds no edit
+ *  of is absent. What a page may call "updated": `content_nodes.updated_at` also moves for a move, a tag, an import or a
+ *  repair, none of which changed what the page says. */
+export async function lastContentEdits(workspaceId: string, nodeIds: readonly string[]): Promise<Map<string, Date>> {
+  const rows = await sql<{ id: string; at: Date }>`SELECT ed.target_id AS id, max(ed.created_at) AS at FROM domain_events ed
+      WHERE ed.workspace_id = ${workspaceId} AND ed.target_id = ANY(${nodeIds as string[]}::text[]) AND ${sql.raw(editEventSql("ed"))}
+      GROUP BY ed.target_id`.execute(db);
+  return new Map(rows.rows.map((r) => [r.id, new Date(r.at)]));
+}
 
 /** A boolean over window `w` (the note's saves, oldest first): this save starts a new edit. A run of saves
  *  to one note by one actor, none more than 5 minutes after the one before, is one edit; creating, restoring

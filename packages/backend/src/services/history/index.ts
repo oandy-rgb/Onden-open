@@ -8,7 +8,7 @@
 //   pointInTime    the notes as they were at an instant (GET /api/history/at)
 //   rewind         put them back to that instant, and undo that (POST /api/history/rewind)
 
-export { bodyEventSql, editEventSql, inkEventSql, lastBodyHashBeforeSql, saveOnDaySql, versionActorTypeSql } from "./bodyEvents.js";
+export { bodyEventSql, editEventSql, inkEventSql, lastBodyHashBeforeSql, lastContentEdits, saveOnDaySql, versionActorTypeSql } from "./bodyEvents.js";
 export { actorKindOf, listNoteVersions } from "./noteVersions.js";
 export { recentVersions } from "./recentVersions.js";
 export { inkChangeValues, listInkEdits, restoreInkVersion } from "./inkChanges.js";

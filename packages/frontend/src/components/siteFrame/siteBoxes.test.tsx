@@ -73,7 +73,7 @@ describe("the default site reads like a notes garden", () => {
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(out).toContain("最近更新");
-    expect(out).toContain("更新於 2026-03-05"); // 「更新於…」, newest first
+    expect(out).toContain("更新於 2026年3月5日"); // 「更新於…」, newest first
     expect(out.indexOf("堆肥")).toBeLessThan(out.indexOf("園藝入門"));
     expect(out).toContain('class="s-year__label">2025</h3>'); // by year
     expect(out).toContain('href="/site/tag/garden/"'); // topics link to the tag page
@@ -187,7 +187,7 @@ describe("widgets", () => {
     expect(meta("all")).toContain("s-article__tags");
     expect(meta("all")).toContain("s-reading");
     expect(meta("maturity-date")).toContain('data-level="3"');
-    expect(meta("date-reading", "compost")).toContain("更新於 2026-03-05");
+    expect(meta("date-reading", "compost")).toContain("更新於 2026年3月5日");
   });
 
   it("all articles: by year, the last 10, with the growth stage", () => {
@@ -195,7 +195,9 @@ describe("widgets", () => {
     expect(list("byYear")).toContain("s-year__label");
     const many = Array.from({ length: 14 }, (_, i) => node(`n${i}`, `筆記${i}`, `# 筆記${i}\n\n字`, { updated_at: `2026-03-${String(10 + i).padStart(2, "0")}T00:00:00Z` }));
     const ten = home(data({ nodes: [...nodes, ...many], boxes: { "home.hero": null, "home.list": [{ widget: "all", variant: "recent10" }] } }));
-    expect((ten.match(/href="\/site\/n\d+"/g) ?? [])).toHaveLength(10);
+    const [shown, rest = ""] = ten.split("<details");
+    expect((shown.match(/href="\/site\/n\d+"/g) ?? [])).toHaveLength(10);
+    expect((rest.match(/href="\/site\/n\d+"/g) ?? [])).toHaveLength(4); // the other four are one tap away, not missing
     const stage = list("maturity");
     expect(stage).toContain('data-level="3"'); // 常青
     expect(stage).toContain('data-level="1"'); // 幼苗

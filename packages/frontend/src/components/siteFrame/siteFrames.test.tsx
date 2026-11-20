@@ -27,7 +27,7 @@ const node = (id: string, title: string, markdown: string, extra: Partial<Publis
 
 const nodes: PublishedNode[] = [
   node("home", "首頁", "# 首頁\n\n歡迎來到我的花園。\n\n第二段。\n\n![封面](/api/media/cover.png)"),
-  node("guide", "園藝入門", "# 園藝入門\n\n![封面](/api/media/cover.png)\n\n## 土壤\n\n看 [[堆肥]] 與 [[不存在]]。\n\n### 酸鹼\n\n內文\n\n## 澆水\n\n結尾", {
+  node("guide", "園藝入門", "---\ncover: true\n---\n\n# 園藝入門\n\n![封面](/api/media/cover.png)\n\n## 土壤\n\n看 [[堆肥]] 與 [[不存在]]。\n\n### 酸鹼\n\n內文\n\n## 澆水\n\n結尾", {
     tags: ["文章", "花園"], parent_id: "series", order_key: "a2",
   }),
   node("compost", "堆肥", "# 堆肥\n\n落葉與廚餘。", { tags: ["花園"], parent_id: "series", order_key: "a3" }),
@@ -119,7 +119,7 @@ describe("article frame", () => {
     const out = article(data());
     expect(out).toContain('<h1 class="s-article__title">園藝入門</h1>');
     expect(out).toContain("s-article__cover");
-    expect(out).toContain('<time class="s-date" dateTime="2026-02-03">2026-02-03</time>'); // the 文章 tag shows a date
+    expect(out).toContain('<time class="s-date" dateTime="2026-02-03">2026年2月3日</time>'); // the 文章 tag shows a date
     expect(out).toContain('href="/site/tag/garden/"'); // 花園 has a tag page
     expect(out).toContain("<span>文章</span>"); // 文章 has none: plain text
     expect(out).toContain('class="s-backlinks"');

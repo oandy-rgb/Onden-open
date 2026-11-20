@@ -220,3 +220,4 @@ Migration `136` 只加兩個 partial index（`tx_meta ? 'rewind_id'`／`'undoes_
 （回到該次儲存後的樣子：只寫該 `kind` 自己的屬性，成為一筆新的儲存）。沒帶 `kind` ＝ `handwriting`，其他值 400。
 哪個事件算哪一種、migration 172 搬過的白板舊事件怎麼接，見 [ink-attributes.md](ink-attributes.md) 的「歷史」。
 `/day`、`/feed`、`/activity` 的「編輯」與「這天編輯過的筆記」把兩種筆跡的儲存都算進去（`editEventSql`）。
+發布的網站用同一條規則回答「這一頁何時更新」：`lastContentEdits(workspaceId, nodeIds)`（`bodyEvents.ts`）取每則筆記最後一次 `editEventSql` 的時間，沒有就用建立時間；快照的 `updated_at` 是這個值（見 [網站的呈現模型](site-render-model.md)）。

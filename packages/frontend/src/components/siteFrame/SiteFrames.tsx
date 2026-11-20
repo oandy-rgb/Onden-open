@@ -6,17 +6,17 @@
 // Astro renders it to HTML.
 import type { ReactNode } from "react";
 import { Render } from "@puckeditor/core/rsc";
-import { bodyAfterTitle, fencedLines } from "@onden/markdown";
+import { bodyAfterTitle, fencedLines, noteSummary } from "@onden/markdown";
 import { createPuckConfig, type SiteNote, type SiteRenderMeta } from "@onden/site/react";
 import { picksOf, usesLegacyHome, withImplicitStacks, type SiteTagPage } from "@onden/site";
-import { makeT, resolveMediaSrc, resolveNavItem, type PublishedNode } from "../templates";
+import { formatSiteDay, makeT, resolveMediaSrc, resolveNavItem, type PublishedNode } from "../templates";
 import { sitePathFor } from "@onden/markdown";
 import { makeSiteMarkdown } from "./siteMarkdown";
-import { Img, Link, TextField } from "../ui";
+import { Img, Link, Pressable, TextField } from "../ui";
 import "./siteFrame.css";
 import "./siteReading.css";
 import {
-  coverImage, notePath, pagePreviews, previewsScriptText, previewTargetsOf, backlinksOf, type SiteData,
+  coverOf, folderTrail, hasBody, isoDay, notesUnder, notePath, PATH_SEPARATOR, pagePreviews, previewsScriptText, previewTargetsOf, backlinksOf, type SiteData,
 } from "./siteModel";
 import { articleFacts, siteFacts, tagFacts } from "./siteWidgetData";
 import { Box, type BoxContext } from "./SiteWidgets";
@@ -98,9 +98,19 @@ export function SiteHeader({ data, editing }: { data: SiteData; editing?: BoxCon
             {links.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
           </nav>
         ) : null}
-        <div className="s-search" role="search" data-s-search data-no-results={t("noResults")} hidden>
-          <TextField className="s-search__input" type="search" aria-label={t("search").replace(/…$/, "")} placeholder={t("search")} autoComplete="off" />
-          <div className="s-search__results" hidden />
+        {/* Hidden until SiteSearch.astro's script runs: without script the button would do nothing. */}
+        <Pressable className="s-search__open" data-s-search-open hidden>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          <span className="s-search__open-label">{t("searchOpen")}</span>
+          <kbd className="s-search__key" aria-hidden="true">Ctrl K</kbd>
+        </Pressable>
+        <div className="s-search" role="search" popover="auto" data-s-search aria-label={t("searchOpen")}
+          data-no-results={t("noResults")} data-building={t("searchBuilding")} data-more={t("searchMore")}>
+          <div className="s-search__bar">
+            <TextField className="s-search__input" type="search" aria-label={t("searchOpen")} placeholder={t("search")} autoComplete="off" />
+            <Pressable className="s-search__close" data-s-search-close aria-label={t("searchClose")}>×</Pressable>
+          </div>
+          <div className="s-search__results" />
         </div>
       </div>
     </header>
@@ -125,12 +135,37 @@ function splitCover(body: string, image: string | undefined): string {
   return [...lines.slice(0, at), ...lines.slice(at + 1)].join("\n").replace(/^\s*\n/, "");
 }
 
+/** The notes under a folder-like note: its page when it has no text, the list after its text when it has. A note made to
+ *  hold others (a course, a folder) is a page of its own on the site, not an empty article. */
+function ChildNotes({ data, node, notes, titled }: { data: SiteData; node: PublishedNode; notes: PublishedNode[]; titled: boolean }): ReactNode {
+  const t = makeT(localeOf(data));
+  const locale = localeOf(data);
+  return (
+    <section className="s-children" aria-label={t("childNotes")} data-pagefind-ignore="" data-folder={node.id}>
+      {titled ? <h2 className="s-frame-label">{t("childNotes")}</h2> : null}
+      <ul className="s-list s-list--notes s-children__list">
+        {notes.map((child) => (
+          <li key={child.id}>
+            <Link href={notePath(data.nodes, child.slug)}>{child.title}</Link>
+            {child.updated_at ? <time className="s-date">{formatSiteDay(isoDay(child.updated_at, data.timeZone, data.dayStartHour), locale)}</time> : null}
+            {hasBody(child) ? <p className="s-row__summary">{noteSummary(child.markdown, { title: child.title, maxLen: 80 })}</p> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function ArticleFrame({ data, node, editing }: { data: SiteData; node: PublishedNode; editing?: BoxContext["editing"] }) {
   const { design, nodes } = data;
   const ctx = boxContext(data, { node }, editing);
   const renderMarkdown = makeSiteMarkdown(nodes, { locale: localeOf(data), diagrams: data.diagrams });
-  const image = design.reading.cover ? coverImage(node.markdown) : undefined;
+  const image = design.reading.cover ? coverOf(node.markdown) : undefined;
   const body = splitCover(bodyAfterTitle(node.markdown, node.title), image);
+  const t = makeT(localeOf(data));
+  const trail = folderTrail(node, nodes);
+  const children = notesUnder(node, nodes);
+  const hasText = hasBody(node);
   // The cards of the notes this page links to, and only those (no site-wide index).
   const previews = design.reading.preview
     ? pagePreviews(previewTargetsOf(node, nodes, backlinksOf(node, nodes, data.edges)), localeOf(data), data.timeZone, data.dayStartHour)
@@ -139,13 +174,20 @@ export function ArticleFrame({ data, node, editing }: { data: SiteData; node: Pu
   return (
     <div className="s-article-layout" data-frame="article">
       <Box id="note.left" ctx={ctx} as="aside" />
-      <article className="s-article" data-pagefind-body="">
+      <article className="s-article" data-pagefind-body="" data-pagefind-meta={trail.length > 0 ? `path:${trail.map((a) => a.title).join(PATH_SEPARATOR)}` : undefined}>
+        {trail.length > 0 ? (
+          <nav className="s-breadcrumb" aria-label={t("breadcrumb")} data-pagefind-ignore="">
+            <ol>{trail.map((a) => <li key={a.id}><Link href={notePath(nodes, a.slug)}>{a.title}</Link></li>)}</ol>
+          </nav>
+        ) : null}
         {image ? <Img loading="eager" decoding="auto" className="s-article__cover" src={resolveMediaSrc(image)} alt="" /> : null}
         <header className="s-article__head">
           <h1 className="s-article__title">{node.title}</h1>
           <Box id="note.meta" ctx={ctx} className="s-article__meta-box" />
         </header>
-        <div className="s-article__body">{renderMarkdown(body, node.id)}</div>
+        {hasText ? <div className="s-article__body">{renderMarkdown(body, node.id)}</div> : null}
+        {children.length > 0 ? <ChildNotes data={data} node={node} notes={children} titled={hasText} /> : null}
+        {!hasText && children.length === 0 ? <p className="s-article__empty">{t("noText")}</p> : null}
         <Box id="note.end" ctx={ctx} className="s-article__end" />
       </article>
       {previews && Object.keys(previews.notes).length > 0 ? (

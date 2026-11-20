@@ -4,4 +4,4 @@ export { articleFacts, siteFacts, tagFacts } from "./siteWidgetData";
 export { Box, WIDGET_RENDERERS, type BoxContext, type WidgetRenderer } from "./SiteWidgets";
 export { makeSiteMarkdown } from "./siteMarkdown";
 export { movedTo } from "../../lib/siteRedirects";
-export { coverImage, readSiteData, tagPageByName, tagPageBySlug, usesDiagrams, usesStepsBlocks, type SiteData, type SiteDesignData, type SiteSnapshot } from "./siteModel";
+export { coverImage, readSiteData, siteDescription, tagPageByName, tagPageBySlug, usesDiagrams, usesStepsBlocks, type SiteData, type SiteDesignData, type SiteSnapshot } from "./siteModel";

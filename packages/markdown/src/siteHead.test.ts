@@ -155,3 +155,21 @@ describe("renderHeadTags", () => {
     expect(renderHeadTags(tags, "\n    ")).toBe('<meta charset="UTF-8" />\n    <title>T</title>');
   });
 });
+
+describe("a site with no icon of its own", () => {
+  it("gets its name's first letter on its accent colour, so the browser has no 404 to ask for", () => {
+    const tags = siteHead({ brand: "我的筆記", accent: "#7b2d26" }, { pageTitle: "t", variant: "index" });
+    const href = tags.find((t) => t.tag === "link" && t.attrs.rel === "icon")!.attrs.href as string;
+    const svg = decodeURIComponent(href.replace("data:image/svg+xml,", ""));
+    expect(svg).toContain('fill="#7b2d26"');
+    expect(svg).toContain(">我<");
+  });
+
+  it("keeps a chosen icon, falls back to the default accent for a bad colour, and has none without a name", () => {
+    expect(renderHeadTags(siteHead(SITE, { pageTitle: "t", variant: "index" }))).toContain('<link rel="icon" href="/favicon.png" />');
+    const icon = (site: Parameters<typeof siteHead>[0]) => siteHead(site, { pageTitle: "t", variant: "index" }).find((t) => t.tag === "link" && t.attrs.rel === "icon")?.attrs.href as string | undefined;
+    expect(decodeURIComponent(icon({ brand: "a", accent: 'red" onload="x' })!)).toContain('fill="#317563"');
+    expect(icon({ brand: "  " })).toBeUndefined();
+    expect(decodeURIComponent(icon({ brand: "<b", accent: "#000000" })!)).toContain("&lt;");
+  });
+});

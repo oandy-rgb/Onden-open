@@ -10,6 +10,7 @@ import { event, q, withTransaction } from "../../../db.js";
 import { eventActorType, type ActorCtx } from "../../../types.js";
 import { CodedStatusError } from "../../../statusError.js";
 import { enqueueSiteOutput } from "../../../services/outbox.js";
+import { lastContentEdits } from "../../../services/history/index.js";
 import { expectedPagesUrl } from "./githubPages.js";
 import { overlaySiteConfig, publishedNodeIds, uniquePublishedSlugs } from "./publishedSet.js";
 import { scrubUnpublishedParents, attachPublishedTags, linkAliasesBySlug, publishedAliases, publishedNames, redactPayloadNodes } from "./redaction.js";
@@ -132,6 +133,11 @@ async function frozenPublishedNodes(
      ORDER BY created_at ASC, id ASC`,
     [workspaceId, publishedIds, onlyNoteId ?? null],
   );
+  // The page's "updated" is its last content edit, else its creation (history/bodyEvents.ts), not the row's own updated_at.
+  const edited = await lastContentEdits(workspaceId, publishedIds);
+  for (const row of nodes.rows as Array<{ id: string; updated_at?: unknown; created_at?: unknown }>) {
+    row.updated_at = edited.get(row.id) ?? row.created_at;
+  }
   scrubUnpublishedParents(nodes.rows);
   await uniquePublishedSlugs(nodes.rows);
   // Aliases decide which links stay links; they are never added to the payload.

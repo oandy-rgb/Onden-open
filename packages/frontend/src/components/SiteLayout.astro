@@ -39,7 +39,7 @@ const hasHeader = data.design.boxes.header !== null;
 
 <html class="onden-site" lang={siteLang(typeof site.locale === "string" ? site.locale : undefined)}>
   <head>
-    <SiteHead site={site as SiteHeadSite} pageTitle={pageTitle} description={description} canonical={canonical} variant={variant} image={image} />
+    <SiteHead site={{ ...site, accent: data.design.style.accent } as SiteHeadSite} pageTitle={pageTitle} description={description} canonical={canonical} variant={variant} image={image} />
     {hasHeader && <link rel="x-site-search" href="/site/search.idx/" />}
     <style is:inline set:html={styleCss(data.design.style, "html.onden-site, .site-scope")} />
   </head>

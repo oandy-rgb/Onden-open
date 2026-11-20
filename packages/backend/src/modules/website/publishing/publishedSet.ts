@@ -71,8 +71,9 @@ export async function overlaySiteConfig(workspaceId: string, presentation: Recor
 //   • it is blank: no text, no note under it and nothing kept beside the text
 //     (ink, a sketch: any attribute that is not `_` bookkeeping), so an empty
 //     page never goes out;
-//   • it is an article saved from a feed (source_type 'rss'): someone else's
-//     writing does not go public because of where it was saved.
+//   • it is an article saved from a feed (source_type 'rss'), or an old
+//     subscription note (`_rss_kind` = 'source'): someone else's writing does
+//     not go public because of where it was saved, and a feed address is a setting.
 // `_published` 'true' brings a blank note or a saved article on anyway; in a
 // space that does not publish it does nothing (leftOutNotes says so). Hidden
 // notes, tag definitions and system machinery are never pages.
@@ -92,8 +93,12 @@ const BLANK_SQL = (alias: string) => `(COALESCE(${alias}.markdown, '') !~ '\\S'
   AND NOT EXISTS (SELECT 1 FROM content_nodes child WHERE child.parent_id = ${alias}.id AND ${liveNodeSql("child")})
   AND NOT EXISTS (SELECT 1 FROM node_attributes kept WHERE kept.node_id = ${alias}.id AND kept.key NOT LIKE '\\_%'))`;
 
+/** A subscription from before migration 145, when a feed was a note (`Subscribed feed: <url>`) marked
+ *  `_rss_kind = 'source'` (modules/rss/sources.ts): configuration, not writing, so it goes with the saved articles. */
+const FEED_SOURCE_SQL = (alias: string) => `EXISTS (SELECT 1 FROM node_attributes feed WHERE feed.node_id = ${alias}.id AND feed.key = '_rss_kind' AND feed.value = 'source')`;
+
 /** Why a note the space would publish stays off by default, or NULL. */
-const KEPT_OFF_SQL = (alias: string) => `CASE WHEN ${alias}.source_type = 'rss' THEN 'saved_article'
+const KEPT_OFF_SQL = (alias: string) => `CASE WHEN ${alias}.source_type = 'rss' OR ${FEED_SOURCE_SQL(alias)} THEN 'saved_article'
   WHEN ${BLANK_SQL(alias)} THEN 'blank' END`;
 
 /** A page the site can have at all: live, shown, a note or board (not a tag

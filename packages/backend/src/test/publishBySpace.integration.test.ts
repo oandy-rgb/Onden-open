@@ -74,6 +74,28 @@ describe.skipIf(!isTestDb)("publishing by space (DB)", () => {
     expect(reasons).not.toHaveProperty(inClosed); // a space that does not publish is not the site's business
   });
 
+  it("a subscription note from before feeds became settings (`_rss_kind` = source) is left out like a saved article, and the preview says so", async () => {
+    const feed = await note("Reader feed", { markdown: "Subscribed feed: https://example.test/feed.xml\n", attr: "_rss_kind" });
+    await seedQ(`UPDATE node_attributes SET value = 'source' WHERE node_id = $1 AND key = '_rss_kind'`, [feed]);
+    const plain = await note("Plain");
+    const p = await preview();
+    expect(onSite(p)).toEqual([plain]);
+    expect(p.left_out).toEqual([expect.objectContaining({ node_id: feed, reason: "saved_article" })]);
+  });
+
+  it("a page is dated by the last edit of its content, else its creation — not by a move, a tag or an import that touched the row", async () => {
+    const edited = await note("Edited");
+    const untouched = await note("Untouched");
+    await seedQ(`UPDATE content_nodes SET created_at = '2026-01-05T00:00:00Z', updated_at = '2026-11-07T00:00:00Z' WHERE id = ANY($1::uuid[])`, [[edited, untouched]]);
+    await seedQ(
+      `INSERT INTO domain_events (workspace_id, actor_type, actor_id, event_type, target_type, target_id, payload, created_at)
+       VALUES ($1, 'user', $2, 'NODE_UPDATED', 'node', $3, '{"body_hash":"h"}'::jsonb, '2026-03-02T09:00:00Z')`,
+      [WS, owner.id, edited]);
+    const dated = Object.fromEntries(((await preview()).site.payload.nodes as Array<{ id: string; updated_at: string }>).map((n) => [n.id, n.updated_at.slice(0, 10)]));
+    expect(dated[edited]).toBe("2026-03-02");
+    expect(dated[untouched]).toBe("2026-01-05");
+  });
+
   it("「發布」 brings a blank note or a saved article on; in a space that does not publish it does nothing", async () => {
     const blank = await note("Blank", { markdown: "", flag: "true" });
     const article = await note("Saved article", { source: "rss", flag: "true" });

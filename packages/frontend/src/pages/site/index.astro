@@ -3,7 +3,7 @@ export const prerender = false;
 
 import SiteLayout from "../../components/SiteLayout.astro";
 import SiteHead from "../../components/SiteHead.astro";
-import { HomeBody } from "../../components/siteFrame";
+import { HomeBody, siteDescription } from "../../components/siteFrame";
 import { loadAllEnhancers, type SiteHeadSite } from "@onden/markdown";
 import { loadSite } from "./_siteLoad";
 import { siteName } from "../../lib/siteName";
@@ -24,6 +24,7 @@ const t = makeT();
   <SiteLayout
     data={loaded.data}
     pageTitle={siteName(loaded.data.site.brand, loaded.data.title)}
+    description={siteDescription(loaded.data)}
     canonical={publicUrl(Astro.url, "/site/")}
     variant="index"
   >

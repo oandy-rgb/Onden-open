@@ -7,11 +7,18 @@ import { t } from "./i18n";
 
 import { ellipsize, plainInline, stripLineMarker } from "@onden/markdown";
 const MAX_LABEL = 60;
+const PLACEHOLDER_TITLES = ["Untitled", "未命名"];
+const PLACEHOLDER_NAMES: Record<string, string> = { "zh-TW": "未命名", ja: "無題" };
+
+/** What a published site calls a note with no title and no text, in the site's language (the app uses `untitledTitle`). */
+export function placeholderName(siteLocale: string | undefined): string {
+  return PLACEHOLDER_NAMES[siteLocale ?? "zh-TW"] ?? "Untitled";
+}
 
 type Labelled = { title: string; markdown?: string };
 
 /** The first line with some text, minus the markup in front of it. */
-function firstLine(markdown: string): string {
+export function firstLine(markdown: string): string {
   for (const raw of markdown.split("\n")) {
     const line = plainInline(stripLineMarker(raw)).trim();
     if (line) return ellipsize(line, MAX_LABEL);
@@ -36,7 +43,8 @@ export function displayTitle(title: string | null | undefined): string {
  *  not as text the writer would have to delete first. */
 export function isPlaceholderTitle(title: string | null | undefined): boolean {
   const trimmed = (title ?? "").trim();
-  return !trimmed || trimmed === "Untitled" || trimmed === t("Untitled");
+  // The stored placeholder is the creating device's language, so both are placeholders whatever language this page reads in.
+  return !trimmed || PLACEHOLDER_TITLES.includes(trimmed) || trimmed === t("Untitled");
 }
 
 export function noteLabel(node: Labelled): string {

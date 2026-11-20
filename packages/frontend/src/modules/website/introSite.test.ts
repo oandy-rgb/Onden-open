@@ -105,6 +105,16 @@ describe("buildIntroSite", () => {
     expect(nav.map((n) => n.nodeId)).not.toContain("mine-home");
   });
 
+  it("keeps the owner's own name, language and description: the intro writes only what is unset, never Onden's language or blurb", async () => {
+    setAppState({ data: { ...getAppState().data, site_config: { brand: "我的筆記", locale: "zh-TW", description: "資工系的課程筆記" } } });
+    await buildIntroSite();
+    const config = (writers.saveDesign.mock.calls[0]![0] as { config: Record<string, unknown> }).config;
+    expect(config).not.toHaveProperty("locale");
+    expect(config).not.toHaveProperty("description");
+    expect(config.brand).toBe("我的筆記");
+    expect(getAppState().data.site_config).toMatchObject({ locale: "zh-TW", description: "資工系的課程筆記", brand: "我的筆記" });
+  });
+
   it("never publishes the user's own notes of the same title", async () => {
     await buildIntroSite();
     expect(writers.setProperty).not.toHaveBeenCalled();

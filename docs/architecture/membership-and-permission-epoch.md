@@ -376,7 +376,10 @@ complete merging for active pending writes; see [verification and limits](../arc
   (`q()`-based) + `mutate({ affectsMembership })`; wired for reparent / tag
   apply-remove / actor role+scope / tag policy / token re-scope+revoke+delete /
   tag merge / membership-reverting restores; epoch exposed on the sync response.
-  Two-sided bump tests (`membershipEpoch.integration`).
+  Two-sided bump tests (`membershipEpoch.integration`). Taking a change bundle
+  from another node (`applyChangeBundle`) bumps it too, on that node only, when a
+  note's derived space or a space's shown deletion changed (migration 218;
+  `mergeSpaceParent.integration` "a note under the moved one…").
 - ✅ **Step B implemented**: `GET /sync/membership` (keyset, one read snapshot per
   page as of 2026-09-13 — see §4 and GAP-04 limits) + by-ids content fetch
   (`POST /sync/nodes`) + the pure client orchestrator (`membershipReconcile.ts`:

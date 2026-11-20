@@ -12,9 +12,7 @@ import { derivedId } from "../services/derivedIds.js";
 import { derivedIdName } from "@onden/markdown";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
-import { admit, exchange, makeRng, markWorld, peerOf, take, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
-import { readChangeBundle } from "../services/stampedBundle.js";
-import { bundleOf } from "../spine/stampedBundle.js";
+import { admit, exchange, makeRng, markWorld, peerOf, resendAll, take, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { readUnit } from "../spine/stampedMerge/dbUnits.js";
@@ -454,7 +452,6 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
       WHERE workspace_id = $1 AND table_name = ANY($2)
      UNION ALL SELECT 'h ' || table_name || ' ' || row_key || ' ' || field || ' ' || deleted || ' ' || origin || ':' || seq || ' ' || COALESCE(value, '-') || ' ' || valueless FROM sync_stamp_heads
       WHERE workspace_id = $1 AND table_name = ANY($2) ORDER BY 1`, [p.ws, THREE])).rows.map((x) => x.r));
-  const resendAll = async (from: Peer, to: Peer) => take(to, bundleOf(JSON.parse(JSON.stringify(await onNode(from.node, () => readChangeBundle(from.owner, from.ws, {}))))));
   /** The product's delete for good (round 9, point 1): the note to the trash, then 「永久刪除」 with the plan its preview gave (services/nodeTrash.ts purgeDeleted: the note
    *  and everything under it, task notes included, in ONE statement). Returns what went. */
   const purge = (p: Peer, id: string) => onNode(p.node, async () => {

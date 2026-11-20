@@ -116,3 +116,24 @@ export async function snapshotScopeFor(actor: ActorCtx): Promise<(params: unknow
   return (params) => snapshotScope(actor, params, ownerSeesSystem);
 }
 
+/**
+ * The read rule of a change bundle (services/stampedBundle.ts): the snapshot's (snapshotScopeFor), and also the spaces `actor` is a member of that are deleted, with
+ * their members and their notes. A snapshot leaves a deleted space out (a new node need not hold it), but a bundle goes to a node that may hold that space: its
+ * deletion must reach it (PR "fix/merge-space-follows-parent"; before, a deleted space was outside the reader's scope and the bundle sent nothing of it).
+ */
+export async function bundleScopeFor(actor: ActorCtx): Promise<(params: unknown[]) => Scope> {
+  const base = await snapshotScopeFor(actor);
+  return (params) => {
+    const s = base(params);
+    const deleted = () => `SELECT ds.id FROM spaces ds JOIN space_members dm ON dm.space_id = ds.id AND dm.actor_id::text = $${params.push(actor.id)}
+                            WHERE ds.workspace_id = $1 AND ds.deleted_at IS NOT NULL`;
+    const nodeRow = (alias: string) => `(${s.nodeRow(alias)} OR ${alias}.space_id IN (${deleted()}))`;
+    return {
+      ...s,
+      nodeRow,
+      node: (col) => `${col} IN (SELECT x.id FROM content_nodes x WHERE x.workspace_id = $1 AND ${nodeRow("x")})`,
+      space: (col) => `(${s.space(col)} OR ${col} IN (${deleted()}))`,
+    };
+  };
+}
+

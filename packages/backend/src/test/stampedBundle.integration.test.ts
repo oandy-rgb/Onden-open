@@ -163,6 +163,13 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
     const row = beyond.items.find((i) => i.kind === "row")!;
     if (row.kind === "row") row.stamps[0]!.seq = 10_000_000;
     expect(await refusal(take(a, beyond))).toMatchObject({ code: "bundle_stamp_beyond_cut" });
+    // review of PR #1907, round 1, point 12: an origin that is a name every object has (`holds.constructor` is Object's function, and no number is "beyond" it)
+    for (const word of ["constructor", "__proto__", "toString"]) {
+      const named = JSON.parse(JSON.stringify(fine)) as ChangeBundle;
+      const r = named.items.find((i) => i.kind === "row")!;
+      if (r.kind === "row") r.stamps[0]!.origin = word;
+      expect(await refusal(take(a, named)), word).toMatchObject({ code: "bundle_malformed", status: 422 });
+    }
     expect(await refusal(take(a, { ...fine, workspaceId: "00000000-0000-4000-8000-000000000001" }))).toMatchObject({ code: "bundle_wrong_workspace" });
     expect(await refusal(take(a, { ...fine, scope: "node_tags" as never }))).toMatchObject({ code: "bundle_scope" });
     expect(await snapshot(a)).toBe(before);
@@ -824,9 +831,11 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     const before = JSON.stringify(await peerStateOf(b));
     expect(await refusal(take(b, { ...bundle, dataShape: SYNC_DATA_SHAPE_VERSION + 1 }))).toMatchObject({ code: "bundle_data_shape" });
     const nobody = "4b1d0000-0000-4000-8000-00000000b0b0"; // a node id nobody admitted (a word is not a node id: bundle_malformed)
-    expect(await refusal(take(b, { ...bundle, sender: nobody, upTo: { ...bundle.upTo, [nobody]: 0 } }))).toMatchObject({ code: "bundle_unknown_sender" });
+    expect(await refusal(take(b, { ...bundle, sender: nobody, upTo: { ...bundle.upTo, [nobody]: 0 }, holds: { ...bundle.holds, [nobody]: 0 } }))).toMatchObject({ code: "bundle_unknown_sender" });
     const origin = await nodeIdOf(a);
-    expect(await refusal(take(b, { ...bundle, base: { ...bundle.base, [origin]: bundle.upTo[origin]! - 1 } }))).toMatchObject({ code: "bundle_gap" });
+    expect(await refusal(take(b, { ...bundle, base: { ...bundle.base, [origin]: bundle.holds[origin]! - 1 } }))).toMatchObject({ code: "bundle_gap" });
+    // a bundle that says its receiver will hold more of an origin than its sender holds is not what it says (`upTo` never passes `holds`)
+    expect(await refusal(take(b, { ...bundle, upTo: { ...bundle.upTo, [origin]: bundle.holds[origin]! + 1 } }))).toMatchObject({ code: "bundle_malformed", status: 422 });
     // the same (origin, seq) with other content, in an attribute's value
     const attr = bundle.items.find((i) => i.kind === "row" && i.table === "node_attributes" && i.stamps.some((x) => x.field === "value"));
     if (attr && attr.kind === "row") {

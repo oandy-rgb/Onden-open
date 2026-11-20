@@ -215,6 +215,10 @@ ALTER TABLE outbox ADD COLUMN space_id uuid;  -- 核准清單與執行時檢查�
   （`routes/nodes.ts`、`import.ts`、`canvases.ts`、`bookmark.ts`、`agentTools/createNode.ts`、rss、citations、`siteConfig`、`obsidianFolders`）需要指定空間。
 - `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED`，於 INSERT 與 `UPDATE OF parent_id, space_id, deleted_at` 觸發：
   子節點 `space_id` 必須等於 parent；全域標籤的子標籤只能是全域標籤。
+- migration 218（2026-11-19，節點之間的同步）：`space_id` 是筆記**所在**的空間，由樹決定（頂層祖先的）；人寫下的空間另存在 `written_space_id`，
+  只對頂層筆記有意義，同步的 `space` 標記說的是它。搬整棵子樹（`moveToSpace`）只寫根，子孫的 `updated_at` 不動。空間的刪除同樣拆成
+  `written_deleted_at`（人寫下的）與 `deleted_at`（顯示的：寫下了刪除、而且裡面沒有活著的筆記）。說明在
+  [stampedMerge README](../../packages/backend/src/spine/stampedMerge/README.md)「筆記的空間跟著它的樹」「空間的刪除」。
 
 **唯一性改為以空間為範圍**（否則唯一性衝突本身就洩漏存在）：
 

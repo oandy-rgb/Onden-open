@@ -550,15 +550,23 @@ export async function admitSyncNode(workspaceId: string, node: string, vouchedBy
 }
 const GENESIS_ORIGIN = "genesis";
 
+const isOrigin = (o: string): boolean => o === GENESIS_ORIGIN || isNodeId(o);
+/** What a header says of an origin, -1 when it says nothing: its own keys only (review of PR #1907, round 1, point 12: `holds["constructor"]` is Object's function,
+ *  and a comparison with it is false, so a stamp of that origin passed the beyond-cut check). */
+const heldOf = (have: Record<string, number>, origin: string): number => Object.hasOwn(have, origin) ? have[origin]! : -1;
+
 function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
   if (bundle.layer !== "changes" || bundle.scope !== BUNDLE_SCOPE) throw bundleRefused("bundle_scope", "this is not a change bundle of this node's stamped tables", 422);
   if (bundle.dataShape !== SYNC_DATA_SHAPE_VERSION) throw bundleRefused("bundle_data_shape", `the bundle has data shape ${String(bundle.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: the older node has to be upgraded first`);
   if (bundle.workspaceId !== workspaceId) throw bundleRefused("bundle_wrong_workspace", "the bundle is of another workspace", 422);
   normalizeHave(bundle.base);
   normalizeHave(bundle.upTo);
+  normalizeHave(bundle.holds);
   if (!isNodeId(bundle.sender) || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender by its node id, and its cut", 422);
-  // every origin it speaks of is a node id (or genesis); a stamp of any other origin is refused below as beyond the cut (upTo has no number for it)
-  if (![...Object.keys(bundle.upTo), ...Object.keys(bundle.base)].every((o) => o === GENESIS_ORIGIN || isNodeId(o))) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
+  // every origin it speaks of is a node id (or genesis), in its header and in its stamps
+  if (![...Object.keys(bundle.upTo), ...Object.keys(bundle.holds), ...Object.keys(bundle.base)].every(isOrigin)) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
+  // the receiver holds after the bundle at most what the sender holds
+  if (Object.entries(bundle.upTo).some(([o, n]) => n > heldOf(bundle.holds, o))) throw bundleRefused("bundle_malformed", "a bundle says its receiver will hold more than its sender holds", 422);
   if (!Array.isArray(bundle.items)) throw bundleRefused("bundle_malformed", "a bundle's items are a list", 422);
   for (const item of bundle.items) {
     // the form of an item, before anything reads it (review of PR #1853, round 7, point 2: a wrong form was a TypeError, never a coded refusal): a row with its list of
@@ -582,9 +590,10 @@ function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
     for (const st of stamps) { const why = keptProblem(st); if (why) throw bundleRefused("bundle_malformed", `a value a stamp kept is not one it may keep (${st.label}.${st.field}: ${why})`, 422); }
     for (const s of stamps) for (const w of [s, ...s.heads]) {
       if (![w.seq, w.wall, w.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw bundleRefused("bundle_malformed", "a stamp number that is not a whole number", 422);
+      if (!isOrigin(w.origin)) throw bundleRefused("bundle_malformed", "a stamp of the bundle names an origin that is not a node id", 422);
       if (w.origin === GENESIS_ORIGIN) continue;
       // nothing of an origin beyond what the sender says it holds: a stamp past the cut is a read that was not one snapshot, or a lie
-      if (w.seq > (bundle.upTo[w.origin] ?? -1)) throw bundleRefused("bundle_stamp_beyond_cut", "a stamp of the bundle is beyond what its sender says it holds", 422);
+      if (w.seq > heldOf(bundle.holds, w.origin)) throw bundleRefused("bundle_stamp_beyond_cut", "a stamp of the bundle is beyond what its sender says it holds", 422);
     }
   }
 }
@@ -627,12 +636,13 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
     if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
     const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
-    if ((bundle.upTo[local] ?? 0) > ownMax) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
+    if ((bundle.holds[local] ?? 0) > ownMax) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
     if ((bundle.base[bundle.sender] ?? 0) > (bundle.upTo[bundle.sender] ?? 0)) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
-    for (const [origin, upTo] of Object.entries(bundle.upTo)) {
+    // (`holds`: what the sender has of the origin; its `upTo` can stop lower, below a write it withheld from this reader, and still bring writes past it)
+    for (const [origin, holds] of Object.entries(bundle.holds)) {
       if (origin === local) continue;
       const base = bundle.base[origin] ?? 0;
-      if (base > (held.get(origin)?.have ?? 0) && upTo > (held.get(origin)?.have ?? 0)) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin}: take a snapshot instead`);
+      if (base > (held.get(origin)?.have ?? 0) && holds > (held.get(origin)?.have ?? 0)) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin}: take a snapshot instead`);
     }
     const report = await storeMergedRows(workspaceId, bundle.items);
     if (report.rejected.length) {

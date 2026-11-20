@@ -22,7 +22,7 @@ import { withEventTransaction } from "../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { spaceAudienceCommitted } from "../spine/nodeHooks.js";
 import type { ActorCtx } from "../types.js";
-import { subtreeIds } from "./nodeTree.js";
+import { notesMovedWith } from "../spine/stampedMerge/index.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "../spine/systemActor.js";
 import { purgeSpaceDeleted } from "./nodeTrash.js";
 import { CodedStatusError } from "../statusError.js";
@@ -177,9 +177,12 @@ async function membershipEpoch(workspaceId: string): Promise<string> {
 
 /** The note's live+trashed subtree, root first: a trashed descendant moves
  *  too, so it comes back in the note's space. Tag definitions are global and
- *  never move. */
+ *  never move. "Under" is as the space follows the tree (the merged parent
+ *  after the cut of a loop two devices' moves made): the same definition the
+ *  merge derives spaces with (spine/stampedMerge notesMovedWith), so the move
+ *  and every device that takes it put the same notes in the target space. */
 function movingIds(workspaceId: string, nodeId: string): Promise<string[]> {
-  return subtreeIds(workspaceId, nodeId, { lifecycle: "all", includeRoot: true, skipTagDefinitions: true });
+  return notesMovedWith(workspaceId, nodeId);
 }
 
 async function sourceAuthority(actor: ActorCtx, from: SpaceMeta): Promise<void> {
@@ -302,12 +305,14 @@ export async function moveToSpace(
           assigned.add(free);
           slugs.set(row.id, free);
         }
+        // Only the root is written (its space; migration 218): the notes under it are in the target space because of where they are, so their
+        // `updated_at`, a function of their own writes (migration 206 sync_touch_updated_at), stays as it was, on this node as on every node that takes the move.
         await q(
-          `UPDATE content_nodes c SET space_id = $2, updated_at = now(), slug = COALESCE(v.slug, c.slug)
+          `UPDATE content_nodes c SET space_id = $2, updated_at = CASE WHEN c.id = $5::uuid THEN now() ELSE c.updated_at END, slug = COALESCE(v.slug, c.slug)
              FROM unnest($1::uuid[]) AS i(id)
              LEFT JOIN unnest($3::uuid[], $4::text[]) AS v(id, slug) ON v.id = i.id
             WHERE c.id = i.id`,
-          [ids, toSpaceId, [...slugs.keys()], [...slugs.values()]]);
+          [ids, toSpaceId, [...slugs.keys()], [...slugs.values()], nodeId]);
         await relinkAfterMove(workspaceId, ids);
         // One observation per moved descendant, chained to this move: the sync
         // re-ships every node an event targets, so other devices learn each

@@ -37,8 +37,8 @@ export function nodeEventMetaJoinSql(alias: string): string {
 /** Every content_nodes column except markdown, in table order. A slim
  *  bootstrap names them so Postgres never reads the bodies (`n.*` then
  *  blanking markdown in JS sorted 20 MB of text on disk at 20k notes). A new
- *  column must be added here; bootstrapSlim.integration.test.ts compares this
- *  list with the table. */
+ *  column must be added here, or to the test's list of columns never sent;
+ *  bootstrapSlim.integration.test.ts compares this list with the table. */
 export const NODE_COLUMNS_WITHOUT_MARKDOWN = [
   "id", "workspace_id", "source_type", "node_type", "title", "slug", "created_at", "updated_at",
   "parent_id", "hidden", "order_key", "order_stamp", "presentation", "deleted_at", "deleted_by_event_id",

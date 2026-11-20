@@ -364,6 +364,7 @@ export interface ContentNodes {
   title: string;
   updated_at: Generated<Timestamp>;
   workspace_id: string;
+  written_space_id: string | null;
 }
 
 export interface DispatcherPending {
@@ -881,6 +882,7 @@ export interface Spaces {
   name: string;
   owner_actor_id: string | null;
   workspace_id: string;
+  written_deleted_at: Timestamp | null;
 }
 
 export interface StructureLog {

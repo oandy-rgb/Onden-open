@@ -14,14 +14,16 @@
 //   - writes to a row that is gone are not stored (there is nothing to hold them): they are returned in `lateEdits`, for the caller to give back to their authors (rules/trash.ts).
 // What it does not do (named in the PR and pinned in stampedBundle.integration.test.ts): what is derived from a row's text (links, anchors, search index, events: batch 2b-2b).
 
-import { withSavepoint } from "../../db.js";
+import { bumpMembershipEpoch, withSavepoint } from "../../db.js";
 import { sha256Hex } from "../../utils.js";
 import { isUuid } from "@onden/markdown";
 import { bundleRefused } from "../bundleRefusal.js";
-import { liveNodeSql } from "../nodeSql.js";
+import { liveNodeSql, tagNodeSql } from "../nodeSql.js";
 import { followCarriedColumns, insertCarriedRow, overwriteCarriedColumns, snapshotRows, type BundleItem, type WireStamp } from "../snapshotSql.js";
 import { type Deletion, type FieldWrite, type Hanging, type HangingRow, type Notice, type RecoveryCopy, type TrashFix, type TreeNote, noticesForEditedDeletes, recoverLateEdits, rowsOnDeletedNotes, trashOrphanedChildren } from "./rules/trash.js";
 import { type RowState, mergeRow } from "./rows.js";
+import type { ParentLink } from "./rules/moveCycle.js";
+import { type SpaceTreeRow, cutParents, notesOnLoops, spacesOfTree } from "./rules/space.js";
 import { type MergedRef, mergeDuplicateRefs } from "./rules/functionRefs.js";
 import { type Cell, type Json, type Rejection, type Stamp, type Unit, GENESIS_STAMP_ORIGIN, canonical, compareStamps, stampKey } from "./unit.js";
 import {
@@ -34,10 +36,12 @@ const NOTES = "content_nodes";
 /** The space a note without one counts as in the unique slug index (migration 099 content_nodes_space_slug_uq). */
 const NO_SPACE = "00000000-0000-0000-0000-000000000000";
 /** Columns the write path sets from a unit (a note's slug from its title) follow that unit's winner. `updated_at` of a note is a function of the counting stamps (migration 206), or the carried value of a creation. */
-const DERIVED_WITH: Readonly<Record<string, Readonly<Record<string, string[]>>>> = { content_nodes: { title: ["slug"], deleted: ["deleted_at"] }, spaces: { deleted: ["deleted_at"] } };
+const DERIVED_WITH: Readonly<Record<string, Readonly<Record<string, string[]>>>> = { content_nodes: { title: ["slug"], deleted: ["deleted_at"] }, spaces: { deleted: ["written_deleted_at"] } };
 /** How many rows a bundle makes in one table before the table's statistics are brought up to date (`ANALYZE`, storeTable). */
 const ANALYZE_AFTER_ROWS = 100;
-const STRUCTURE_FIELDS = ["parent", "space", "deleted"]; // the fields the stamp trigger of content_nodes logs (migration 190)
+// the fields the stamp trigger of content_nodes logs (migration 190), from their units; `space` is logged as the space the note is in, which the merge derives
+// last (deriveNoteSpaces, below), not as the space written for it
+const STRUCTURE_FIELDS = ["parent", "deleted"];
 
 export type RowsReport = {
   events: StoreEvent[];
@@ -55,6 +59,12 @@ export type RowsReport = {
   duplicateRows: DuplicateRow[];
   /** Who is to be told: the creators of those notes and rows, and the editors of a trashed note whose edit its deleter had not seen. */
   notices: Notice[];
+  /** Notes whose space changed because their tree did (an ancestor moved to another space, or the note was put under a note of another space): nobody wrote a
+   *  space for them. Derived on every node alike (deriveNoteSpaces), REPORTED; whom to tell is for the transport batch. */
+  followedSpaces: FollowedSpace[];
+  /** Spaces whose deletion is written and that are shown all the same, because a live note is in them that came by a write the deleter had not seen (4.9 for a
+   *  space): the deletion stays written, a head its author can see, and takes effect once the space is empty. A view, REPORTED. */
+  keptSpaces: string[];
   created: number;
   removed: number;
   /** How many units were written. */
@@ -183,7 +193,9 @@ function carriedFrom(src: RowSource, { i, l, m }: Merged): { overwrite: boolean;
 const textOf = (u: Unit | undefined): string | null => (u ? (u[0]!.value as string | null) : null);
 /** The unit's writes as copies without their values (a tombstone stays a tombstone): what a node keeps of a row it does not hold, outside the tables that go with a note. */
 const withoutValues = (u: Unit): Unit => u.map((c) => (c.deleted ? c : { ...c, value: null, valueless: true as const }));
-const emptyReport = (): RowsReport => ({ events: [], rejected: [], lateEdits: [], orphaned: [], hanging: [], duplicateRefs: [], duplicateRows: [], notices: [], created: 0, removed: 0, stored: 0, structureLines: 0 });
+const emptyReport = (): RowsReport => ({ events: [], rejected: [], lateEdits: [], orphaned: [], hanging: [], duplicateRefs: [], duplicateRows: [], notices: [], followedSpaces: [], keptSpaces: [], created: 0, removed: 0, stored: 0, structureLines: 0 });
+/** What the notes' table hands to the step after every table is in: the notes whose space is derived again, those made here, and the slug each must end with. */
+type TreeWork = { seeds: string[]; made: Set<string>; slugs: Map<string, string> };
 
 /**
  * Merge the rows of a change bundle into this workspace, table by table in the order of UNIT_SOURCES (a row's parents first), row by row, and write back what changed.
@@ -220,9 +232,10 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
   }
   if (!report.rejected.length) report.rejected.push(...await checkReceived(workspaceId, items, plans));
   if (report.rejected.length) return report;
+  const tree: TreeWork = { seeds: [], made: new Set(), slugs: new Map() };
   for (const { src, merged } of plans) {
     // a unit written into an existing row can still clash on a unique key (a task line's task, a paragraph's anchor): the bundle is refused with a code, not a database error
-    const r = await storeTable(workspaceId, src, merged).catch((e: unknown) => {
+    const r = await storeTable(workspaceId, src, merged, tree).catch((e: unknown) => {
       const code = (e as { code?: string })?.code;
       if (code === "23505") throw bundleRefused("bundle_unique_clash", `a write of ${src.label} clashes with a row this node holds on a unique key (${String((e as { constraint?: string }).constraint ?? "?")})`);
       // a value the database will not hold (a CHECK, a NOT NULL, a text that is not of the column's type, a number out of range, a column it does not have): the bundle is malformed
@@ -232,6 +245,18 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
     for (const k of ["events", "lateEdits", "orphaned", "hanging", "duplicateRefs", "duplicateRows", "notices"] as const) (report[k] as unknown[]).push(...r[k]);
     for (const k of ["created", "removed", "stored", "structureLines"] as const) report[k] += r[k];
   }
+  // LAST: the space each note is in follows its tree (rules/space.ts), for every note the bundle bears on and every note under them, so the deferred
+  // content_nodes_check_space holds; then every note of the bundle, and every note whose space changed, takes its slug (unique among a space's live notes)
+  const derived = await deriveNoteSpaces(workspaceId, tree.seeds, tree.made, tree.slugs).catch((e: unknown) => {
+    if ((e as { code?: string })?.code === "23505") throw bundleRefused("bundle_unique_clash", `a note's space follows its tree and clashes with a row this node holds on a unique key (${String((e as { constraint?: string }).constraint ?? "?")})`);
+    throw e;
+  });
+  await writeStructureLines(workspaceId, derived.lines);
+  report.structureLines += derived.lines.length;
+  report.followedSpaces = derived.followed;
+  await assignSlugs(workspaceId, [...tree.slugs].map(([id, slug]) => ({ id, slug })));
+  // and then whether each space whose deletion is written is shown deleted (no live note in it) or kept (migration 218 spaces_show_deleted: one definition)
+  report.keptSpaces = await showSpaceDeletions(workspaceId, plans.some((p) => p.src.label === NOTES || p.src.label === "spaces"));
   // what a source's rows are written into, after every table is in: for every row the bundle bears on (a note's anchors unit writes its anchor rows, for every note whose
   // body, unit or anchor rows came in), from replicated state only. A value it cannot write refuses the bundle with a code, as a table's write does.
   await expandTouched(workspaceId, plans).catch((e: unknown) => {
@@ -240,8 +265,27 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
     throw e;
   });
   report.notices.sort((a, b) => (a.note + a.to + a.kind < b.note + b.to + b.kind ? -1 : 1));
+  await checkDeferredNow();
   return report;
 }
+/**
+ * The checks the database runs at COMMIT (DEFERRED constraint triggers: a note in its parent's space, an anchors unit that is its rows), run NOW, so that a
+ * bundle they refuse is refused with a code and a plain reason like every other refusal, and nothing of it is written (the caller's transaction rolls back).
+ * Before this, such a bundle failed at COMMIT with the database's own error (23514 and its raw text), and every later bundle carried the same stamps: two nodes
+ * stalled for good (mergeSpaceParent.integration.test.ts, PR "fix/merge-space-follows-parent"). The refusal reuses the codes the receiving screen already words
+ * (lib/serverSentences.ts): a unique key is `bundle_unique_clash`, any other check `bundle_malformed`.
+ */
+async function checkDeferredNow(): Promise<void> {
+  await snapshotRows(`SET CONSTRAINTS ALL IMMEDIATE`).catch((e: unknown) => {
+    const code = (e as { code?: string })?.code, constraint = (e as { constraint?: string })?.constraint;
+    if (code === "23505") throw bundleRefused("bundle_unique_clash", `taking the bundle would give two rows one unique key${constraint ? ` (${constraint})` : ""}: nothing was taken`);
+    if (code && (MALFORMED_CODES.has(code) || code === "23503" || code === "OD215")) {
+      throw bundleRefused("bundle_malformed", `taking the bundle would leave rows that do not hold together${constraint ? ` (${constraint})` : ""}: nothing was taken`, 422);
+    }
+    throw e;
+  });
+}
+
 
 /** The database errors that say a received value is not one the table can hold: check_violation, not_null_violation, invalid_text_representation, numeric_value_out_of_range,
  *  invalid_datetime_format, datatype_mismatch, undefined_column, invalid_parameter_value, string_data_right_truncation, untranslatable_character (a \u0000 in JSON). */
@@ -360,7 +404,7 @@ async function rowsThatGo(workspaceId: string, src: RowSource, merged: readonly 
 /** A failure of the database that says a row names a row this node does not hold (a foreign key). */
 const isMissingReference = (e: unknown): boolean => (e as { code?: string })?.code === "23503";
 
-async function storeTable(workspaceId: string, src: RowSource, merged: readonly Merged[]): Promise<RowsReport> {
+async function storeTable(workspaceId: string, src: RowSource, merged: readonly Merged[], tree: TreeWork): Promise<RowsReport> {
   const report = emptyReport();
   const notes = src.label === NOTES;
   const address = (row: string, name: string) => addressOfUnit(src, row, name);
@@ -379,6 +423,8 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field <> '*'`, [workspaceId, src.label, i.row]);
     await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field <> '*'`, [workspaceId, src.label, i.row]);
     const params: unknown[] = [workspaceId];
+    // a note that goes leaves the notes under it at the top here (the foreign key empties their parent): their space is derived again
+    if (notes) tree.seeds.push(...(await snapshotRows<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND parent_id = $2::uuid`, [workspaceId, i.row])).rows.map((r) => r.id));
     await snapshotRows(`DELETE FROM ${quote(src.table)} t WHERE ${match(i.row).match("t", params)} AND ${match(i.row).workspace("t", "$1")}`, params);
     if (notes) { lines.push({ row: i.row, field: "deleted", from: gone, to: null, stamp: win.stamp }); report.structureLines++; }
     report.removed++;
@@ -499,10 +545,13 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
   if (notes) {
     const views = await orphansOf(workspaceId, merged);
     report.orphaned = views.fixes; report.notices = views.notices;
-    await assignSlugs(workspaceId, slugRows.map((x) => {
+    // the slugs are given after the notes' spaces are derived (storeMergedRows): a slug is unique among the live notes of a space
+    for (const x of slugRows) {
       const c = carriedFrom(src, x);
-      return { id: x.i.row, slug: !x.l.exists || c.overwrite || c.copy.includes("slug") ? String(x.i.values?.slug) : originalSlug.get(x.i.row)! };
-    }));
+      tree.slugs.set(x.i.row, !x.l.exists || c.overwrite || c.copy.includes("slug") ? String(x.i.values?.slug) : originalSlug.get(x.i.row)!);
+    }
+    for (const x of merged) if (x.m.exists && !went.has(x.i.row) && (x.l.exists || madeHere.has(x.i.row))) tree.seeds.push(x.i.row);
+    for (const id of madeHere) tree.made.add(id);
   } else if (hangingCandidates.length) {
     const views = rowsOnDeletedNotes(hangingCandidates, await deletionsOf(workspaceId, [...new Set(hangingCandidates.map((h) => h.on))]));
     report.hanging = views.hanging; report.notices = views.notices;
@@ -619,7 +668,8 @@ async function orphansOf(workspaceId: string, merged: readonly Merged[]): Promis
   const notes: TreeNote[] = [];
   for (const x of alive) {
     const parent = textOf(x.m.fields.get("parent"));
-    notes.push({ id: x.i.row, parent: parent && dead.has(parent) ? parent : null, created: x.m.fields.get("parent")![0]!.stamp, deleted: null }); // the write that put the note under that parent (its creation, or the move)
+    // its creation, and the write that put it under that parent (the creation, or a move)
+    notes.push({ id: x.i.row, parent: parent && dead.has(parent) ? parent : null, created: x.m.star.find((c) => !c.deleted)?.stamp ?? x.m.fields.get("parent")![0]!.stamp, placed: x.m.fields.get("parent")![0]!.stamp, deleted: null });
   }
   for (const [id, deleted] of dead) if (deleted) notes.push({ id, parent: null, created: deleted.stamp, deleted });
   const fixes = trashOrphanedChildren(notes);
@@ -629,4 +679,186 @@ async function orphansOf(workspaceId: string, merged: readonly Merged[]): Promis
   });
   const edited = noticesForEditedDeletes(trashed);
   return { fixes: fixes.fixes, notices: [...fixes.notices, ...edited].sort((a, b) => (a.note + a.to + a.kind < b.note + b.to + b.kind ? -1 : 1)) };
+}
+
+// ── the space a note is in, after a merge ─────────────────────────────────────────────────────────────────────────────
+// The database half of ./rules/space.ts (migration 218). The `space` unit is the space a person WROTE for a note
+// (content_nodes.written_space_id); the space a note IS in (content_nodes.space_id) is derived: the written space of its top ancestor, over the merged parents with
+// the 4.10 cut of loops (./rules/moveCycle.ts). Called by `storeMergedRows` LAST, after every table of the bundle is in, for every note the bundle bears
+// on and every note under them (rows that are not in the bundle included), so the deferred content_nodes_check_space holds on the stored columns at COMMIT.
+//
+// What is written, and what is not:
+//   space_id      the derived space, for every note whose derived space differs from what is stored. Never a unit, never stamped: a merge makes no stamp.
+//   slug          a note whose space changes holds a name no note has (~ and its id) until the caller gives every note of the bundle its slug (assignSlugs):
+//                 a slug is unique among the live notes of a space.
+//   structure_log a line per note whose space changed (for a note made here: the space it is made in), with the stamp of the write that decided it (the top
+//                 note's `space` write, else its creation). This node's own history: the log never leaves a device.
+//   the epoch     bumped once when a note this node held changed space (who can read it changed): this node's own; workspaces.membership_epoch is no unit.
+//   the cut       nowhere: parent_id keeps the parent as merged (a loop included). README "合併從不重新編號": a merge never writes a repair back as data.
+
+type Loaded = SpaceTreeRow & { space: string | null; slug: string };
+type SpaceLine = { row: string; field: string; from: string | null; to: string | null; stamp: Stamp };
+/** A note whose space a merge changed because of where its tree is (it was not written for it). */
+type FollowedSpace = { note: string; from: string | null; to: string | null };
+
+const GENESIS: Stamp = { origin: GENESIS_STAMP_ORIGIN, seq: 0, wall: 0, counter: 0, author: null, device: null };
+
+async function loadRows(workspaceId: string, ids: readonly string[], into: Map<string, Loaded>, absent: Set<string>): Promise<string[]> {
+  const want = [...new Set(ids)].filter((id) => !into.has(id) && !absent.has(id));
+  if (!want.length) return [];
+  const r = await snapshotRows<{ id: string; parent: string | null; written: string | null; tag: boolean; space: string | null; slug: string }>(
+    `SELECT id::text, parent_id::text AS parent, written_space_id::text AS written, ${tagNodeSql()} AS tag, space_id::text AS space, slug
+       FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, want]);
+  for (const x of r.rows) into.set(x.id, x);
+  for (const id of want) if (!into.has(id)) absent.add(id);
+  return r.rows.map((x) => x.id);
+}
+
+/** Every ancestor of the rows loaded so far, one level per statement (a tree is shallow; a loop ends because a loaded row is not loaded again). */
+async function loadAncestors(workspaceId: string, rows: Map<string, Loaded>, absent: Set<string>): Promise<void> {
+  for (let next = [...rows.values()].map((r) => r.parent).filter((p): p is string => p !== null); next.length;) {
+    const got = await loadRows(workspaceId, next, rows, absent);
+    next = got.map((id) => rows.get(id)!.parent).filter((p): p is string => p !== null);
+  }
+}
+
+/** The winning parent write of each note: its stamp and where the note was before (`meta.from`); a parent that follows the creation is the creation's (no `from`). */
+async function parentLinks(workspaceId: string, ids: readonly string[]): Promise<Map<string, ParentLink>> {
+  const out = new Map<string, ParentLink>();
+  if (!ids.length) return out;
+  const r = (await snapshotRows<StampRow & { row_key: string; field: string }>(
+    `SELECT row_key, field, ${STAMP_COLS} FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND field IN ('parent', '*') AND row_key = ANY($2::text[])`,
+    [workspaceId, [...ids]])).rows;
+  const byKey = new Map(r.map((x) => [`${x.row_key} ${x.field}`, x] as const));
+  for (const id of ids) {
+    const own = byKey.get(`${id} parent`), star = byKey.get(`${id} *`);
+    const from = (own?.meta as { from?: string | null } | null | undefined)?.from;
+    out.set(id, { note: id, parent: null, ...(own && from !== undefined ? { from } : {}), stamp: own ? stampOf(own) : star ? stampOf(star) : GENESIS });
+  }
+  return out;
+}
+
+/**
+ * Notes as the tree sees them, loaded with every ancestor; when a loop is among them, every loaded note's winning parent write (a cut can close another loop), and
+ * every former parent a cut puts a note back under, with ITS ancestors, until nothing a cut names is missing (rules/space.ts cutParents `missing`). `parents` is then
+ * a function of the replicated rows alone, whatever was loaded first (review of PR #1907, round 1, point 2).
+ */
+class NoteTree {
+  readonly rows = new Map<string, Loaded>();
+  private readonly absent = new Set<string>();
+  private readonly links = new Map<string, ParentLink>();
+  parents = new Map<string, string | null>();
+  constructor(readonly workspaceId: string) {}
+  async add(ids: readonly string[]): Promise<void> {
+    await loadRows(this.workspaceId, ids, this.rows, this.absent);
+    await loadAncestors(this.workspaceId, this.rows, this.absent);
+    for (let round = 0; ; round++) {
+      if (!notesOnLoops(this.rows).length) { this.parents = cutParents(this.rows, () => { throw new Error("no loop: no parent write is asked for"); }).parents; return; }
+      const lacking = [...this.rows.keys()].filter((id) => !this.links.has(id));
+      for (const [id, l] of await parentLinks(this.workspaceId, lacking)) this.links.set(id, l);
+      const cut = cutParents(this.rows, (id) => this.links.get(id)!);
+      const more = cut.missing.filter((id) => !this.rows.has(id) && !this.absent.has(id));
+      if (!more.length || round > this.rows.size) { this.parents = cut.parents; return; }
+      await loadRows(this.workspaceId, more, this.rows, this.absent);
+      await loadAncestors(this.workspaceId, this.rows, this.absent);
+    }
+  }
+  loopMembers(): string[] { return notesOnLoops(this.rows); }
+}
+
+/**
+ * `roots` and every note whose parent, as the space follows it (the merged parent after the 4.10 cut), leads to one of them: the ONE definition of "the notes under
+ * a note", used by the merge's derivation and by a move to another space (services/spaces.ts moveToSpace; review of PR #1907, round 1, point 1: both followed the
+ * stored parent_id, so a note a cut puts back under a moved note stayed behind, and the next bundle that touched it was refused at COMMIT for good). A note can have
+ * a root as that parent by its stored parent, or because a cut puts it back under its former parent (its winning parent write's `meta.from`). `withLoops`: every note
+ * on a loop among the notes looked at counts as a root too (a bundle that closes or opens a loop changes the parent of a note it did not write).
+ */
+async function effectiveSubtree(tree: NoteTree, roots: readonly string[], withLoops: boolean): Promise<Set<string>> {
+  await tree.add(roots);
+  const inSet = new Set(roots.filter((id) => tree.rows.has(id)));
+  const grow = (): string[] => {
+    const added: string[] = [];
+    if (withLoops) for (const id of tree.loopMembers()) if (!inSet.has(id)) { inSet.add(id); added.push(id); }
+    for (let more = true; more;) {
+      more = false;
+      for (const id of tree.rows.keys()) if (!inSet.has(id) && inSet.has(tree.parents.get(id) ?? "")) { inSet.add(id); added.push(id); more = true; }
+    }
+    return added;
+  };
+  for (let frontier = [...inSet, ...grow()]; frontier.length;) {
+    const candidates = (await snapshotRows<{ id: string }>(
+      `SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND parent_id = ANY($2::uuid[])
+       UNION SELECT row_key FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND field = 'parent' AND meta ? 'from' AND meta->>'from' = ANY($3::text[])`,
+      [tree.workspaceId, frontier, frontier])).rows.map((r) => r.id).filter((id) => !inSet.has(id));
+    if (!candidates.length) break;
+    await tree.add(candidates);
+    frontier = grow();
+  }
+  return inSet;
+}
+
+/**
+ * The notes a move of `rootId` to another space takes with it: the note and every note under it as its space follows it (`effectiveSubtree`), root first, tags left
+ * out (a tag definition has no space). services/spaces.ts moveToSpace and its preview call this, so the move and every node that takes it agree (I2).
+ */
+export async function notesMovedWith(workspaceId: string, rootId: string): Promise<string[]> {
+  const tree = new NoteTree(workspaceId);
+  const set = await effectiveSubtree(tree, [rootId], false);
+  if (!set.has(rootId)) return [];
+  return [rootId, ...[...set].filter((id) => id !== rootId && !tree.rows.get(id)!.tag).sort()];
+}
+
+/**
+ * Derive content_nodes.space_id for `seeds` (the notes of the bundle that are here after it, and the notes that lost their parent row to it), the notes of any loop
+ * among them, and every note under them (`effectiveSubtree`). `made`: the notes this bundle made here (their line says the space they are made in). `slugs`: the slug
+ * each note must end with, by id; a note whose space changes here and has no entry gets its own slug back (the caller assigns them all). PRECONDITION: inside
+ * `storeMergedRows`, triggers standing aside.
+ */
+async function deriveNoteSpaces(workspaceId: string, seeds: readonly string[], made: ReadonlySet<string>, slugs: Map<string, string>): Promise<{ lines: SpaceLine[]; followed: FollowedSpace[] }> {
+  if (!seeds.length) return { lines: [], followed: [] };
+  const nodeTree = new NoteTree(workspaceId);
+  const affected = await effectiveSubtree(nodeTree, [...new Set(seeds)], true);
+  const rows = nodeTree.rows;
+  const fallback = (await snapshotRows<{ id: string }>(`SELECT id::text FROM spaces WHERE workspace_id = $1 AND is_default LIMIT 1`, [workspaceId])).rows[0]?.id ?? null;
+  // a written space this node does not hold counts as none written (the default space): the same answer on every node that holds the same rows
+  const named = [...new Set([...rows.values()].map((r) => r.written).filter((w): w is string => w !== null))];
+  const held = new Set((await snapshotRows<{ id: string }>(`SELECT id::text FROM spaces WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, named])).rows.map((r) => r.id));
+  const tree = new Map([...rows].map(([id, r]) => [id, { ...r, written: r.written !== null && held.has(r.written) ? r.written : null }] as const));
+  const parents = nodeTree.parents;
+  const spaces = spacesOfTree(tree, parents, fallback);
+  const changed = [...affected].filter((id) => (spaces.get(id) ?? null) !== rows.get(id)!.space).sort();
+  if (changed.length) {
+    for (const id of changed) if (!slugs.has(id)) slugs.set(id, rows.get(id)!.slug);
+    await snapshotRows(
+      `UPDATE content_nodes c SET space_id = v.space, slug = '~' || c.id::text FROM unnest($2::uuid[], $3::uuid[]) AS v(id, space) WHERE c.workspace_id = $1 AND c.id = v.id`,
+      [workspaceId, changed, changed.map((id) => spaces.get(id) ?? null)]);
+  }
+  // the line of each note whose space changed or that was made here, with the stamp of the write that decided it: the top note's `space` write, else its creation
+  const logged = [...new Set([...changed, ...[...made].filter((id) => affected.has(id) && !rows.get(id)!.tag)])].sort();
+  const topOf = (id: string): string => { let n = id; for (let i = 0; i <= rows.size; i++) { const p = parents.get(n) ?? null; if (p === null || rows.get(p)?.tag) return n; n = p; } return n; };
+  const tops = [...new Set(logged.map(topOf))];
+  const deciding = new Map<string, Stamp>();
+  if (tops.length) {
+    const r = (await snapshotRows<StampRow & { row_key: string; field: string }>(
+      `SELECT row_key, field, ${STAMP_COLS} FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND field IN ('space', '*') AND row_key = ANY($2::text[])`, [workspaceId, tops])).rows;
+    const byKey = new Map(r.map((x) => [`${x.row_key} ${x.field}`, x] as const));
+    for (const t of tops) { const s = byKey.get(`${t} space`) ?? byKey.get(`${t} *`); deciding.set(t, s ? stampOf(s) : GENESIS); }
+  }
+  const lines = logged.map((id) => ({ row: id, field: "space", from: made.has(id) ? null : rows.get(id)!.space, to: spaces.get(id) ?? null, stamp: deciding.get(topOf(id))! }));
+  // (a top note's space is the one written for it: a note "followed" its tree when its top is another note)
+  const followed = changed.filter((id) => !made.has(id) && topOf(id) !== id).map((id) => ({ note: id, from: rows.get(id)!.space, to: spaces.get(id) ?? null }));
+  // who can read those notes changed: clients check their readable set again (this node's own counter)
+  if (changed.some((id) => !made.has(id))) await bumpMembershipEpoch(workspaceId);
+  return { lines, followed };
+}
+
+/** The view of a space's deletion after a merge, for every space of the workspace whose deletion is written or shown (spaces_show_deleted, migration 218). A deleted
+ *  space is rare, so all of them, not only the bundle's: a note the bundle moved in or out decides too. Who can read what changed when a space's shown state did: the
+ *  epoch moves (this node's own). Returns the spaces kept: deletion written, shown otherwise (the view gives `deleted_at` the written time or nothing). */
+async function showSpaceDeletions(workspaceId: string, touched: boolean): Promise<string[]> {
+  if (!touched) return [];
+  const changed = (await snapshotRows<{ n: number }>(
+    `SELECT spaces_show_deleted($1::uuid, ARRAY(SELECT id FROM spaces WHERE workspace_id = $1 AND (written_deleted_at IS NOT NULL OR deleted_at IS NOT NULL))) AS n`, [workspaceId])).rows[0]?.n ?? 0;
+  if (changed > 0) await bumpMembershipEpoch(workspaceId);
+  return (await snapshotRows<{ id: string }>(`SELECT id::text FROM spaces WHERE workspace_id = $1 AND written_deleted_at IS NOT NULL AND deleted_at IS DISTINCT FROM written_deleted_at ORDER BY id`, [workspaceId])).rows.map((r) => r.id);
 }

@@ -14,4 +14,7 @@
 // 4 (anchors replicated, migration 215): the paragraph anchor table, each note's one anchors unit (note_anchor_places) and block_nodes are stamped tables of UNIT_SOURCES
 // (block_node_tags travels with them), and a snapshot carries their stamps
 // (spine/snapshotTables.json): a node of version 3 would refuse a bundle's anchor rows as an unknown table and read a snapshot's anchors as rows without stamps.
-export const SYNC_DATA_SHAPE_VERSION = 4;
+// 5 (a note's space follows its tree, migration 218): the `space` unit of content_nodes is the space a person WROTE (written_space_id), and space_id is derived
+// from the tree after a merge; a snapshot carries both columns. A node of version 4 would merge space_id as the unit and read the `space` stamps of notes under
+// a parent as the space they are in: the two would derive different spaces from the same stamps.
+export const SYNC_DATA_SHAPE_VERSION = 5;

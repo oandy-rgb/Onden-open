@@ -4,8 +4,8 @@ import { type Stamp, compareStamps } from "../unit.js";
 
 /** A note's parent as it stands, and (for a move) where the note was before it: `from` is undefined for a note that was made there and never moved. */
 export type ParentLink = { note: string; parent: string | null; from?: string | null; stamp: Stamp };
-export type CycleFix = { note: string; parent: string | null; notify: string | null };
-export type CycleResolution = { fixes: CycleFix[]; parents: Map<string, string | null>; needsDecision: string[] };
+type CycleFix = { note: string; parent: string | null; notify: string | null };
+type CycleResolution = { fixes: CycleFix[]; parents: Map<string, string | null>; needsDecision: string[] };
 
 function findCycle(parents: Map<string, string | null>): string[] | null {
   for (const start of [...parents.keys()].sort()) {

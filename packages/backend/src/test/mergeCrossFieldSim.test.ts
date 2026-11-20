@@ -5,13 +5,16 @@
 // The notes here have the units the database has for this (content_nodes.parent, .space, .sort, the trash) and spaces have .deleted; every local change is made
 // the way the product's write paths make it, each checked against what that node holds when it writes (the product refuses the rest):
 //   new      under a live note (taking its space, content_nodes_derive_space) or at the top of a live space
-//   reparent within the note's own space, never under itself or its descendants (services/nodeTree.ts assertReparent), parent + sort in ONE write (migration 209)
-//   to space the note detached at the top of another live space, the whole subtree it knows stamped with the new space in ONE write (services/spaces.ts moveToSpace)
+//   reparent within the note's own space, never under itself or its descendants (services/nodeTree.ts assertReparent), parent + sort in ONE write (migration 209);
+//            a detach to the top also stamps the space the note is in (migration 218 sync_stamp_space_with_root)
+//   to space the note detached at the top of another live space: ONE write of its parent (also when it was at the top) and of the space written for it (services/spaces.ts moveToSpace;
+//            since migration 218 the notes under it are not written: they are in its space because of where they are)
+// A note's space is DERIVED, as the database derives it (rules/space.ts, the function the merge uses: the written space of the top ancestor, after the 4.10 cut).
 //   trash    the note and its live subtree (services/nodeTrash.ts)
 //   delete space   only a space that holds no note at all (services/spaces.ts deleteSpace)
 // Relations checked after every merge step, on the node that merged (the "view" relations after the view rule that exists for them is applied):
 //   R1 parent × space      a note is in its parent's space (db/schema.sql content_nodes_check_space: at COMMIT, so a red here is a stalled bundle on a database)
-//   R2 space × spaces.deleted   no live note in a deleted space (services/spaces.ts deleteSpace refuses it locally; nothing at merge)
+//   R2 space × spaces.deleted   no live note in a deleted space after the view of a space's deletion (services/spaces.ts deleteSpace refuses it locally)
 //   R3 parent (cycles)     no loop after the 4.10 view (rules/moveCycle.ts resolveMoveCycles)
 //   R4 trash × parent      no live note under a trashed one after the 4.9 view (rules/trash.ts trashOrphanedChildren)
 //
@@ -26,11 +29,12 @@ import { type Store, createRow, effectiveUnit, rowKeys, rowOf, seenOfRow, writeF
 import { type Json, type Stamp, type Unit, compareStamps } from "../spine/stampedMerge/unit.js";
 import { resolveMoveCycles, type ParentLink } from "../spine/stampedMerge/rules/moveCycle.js";
 import { trashOrphanedChildren, type Deletion, type TreeNote } from "../spine/stampedMerge/rules/trash.js";
+import { cutParents, spacesOfTree, type SpaceTreeRow } from "../spine/stampedMerge/rules/space.js";
 
 const NOTE = "note", SPACE = "space";
 type Relation = "R1 parent × space" | "R2 live note in a deleted space" | "R3 a loop after the 4.10 view" | "R4 live note under a trashed one after the 4.9 view";
 /** Red today; each has a pinned seed below. // ratchet:list merge-cross-field-known-open */
-const KNOWN_OPEN: readonly Relation[] = ["R1 parent × space", "R2 live note in a deleted space", "R4 live note under a trashed one after the 4.9 view"];
+const KNOWN_OPEN: readonly Relation[] = [];
 
 // ── the model ───────────────────────────────────────────────────────────────────────────────────────────
 const winner = (s: Store, table: string, row: string, field: string): Json | undefined => {
@@ -40,9 +44,25 @@ const winner = (s: Store, table: string, row: string, field: string): Json | und
 const notes = (s: Store) => rowKeys(s, NOTE).map((r) => r.row).filter((id) => rowOf(s, NOTE, id).exists);
 const spaces = (s: Store) => rowKeys(s, SPACE).map((r) => r.row).filter((id) => rowOf(s, SPACE, id).exists);
 const parentOf = (s: Store, id: string) => (winner(s, NOTE, id, "parent") ?? null) as string | null;
-const spaceOf = (s: Store, id: string) => (winner(s, NOTE, id, "space") ?? null) as string | null;
+/** The winning parent write of a note, as rules/moveCycle.ts takes it. */
+const linkOf = (s: Store, id: string): ParentLink => {
+  const win = effectiveUnit(s, { table: NOTE, row: id, field: "parent" })![0]!;
+  const from = (win.meta as { from?: string | null } | undefined)?.from;
+  return { note: id, parent: (win.value ?? null) as string | null, ...(from === undefined ? {} : { from }), stamp: win.stamp };
+};
+/** The space each note is in: derived from the tree, as the database does after a merge (rules/space.ts). */
+const spacesOf = (s: Store): Map<string, string | null> => {
+  const rows = new Map<string, SpaceTreeRow>(notes(s).map((id) => [id, { parent: parentOf(s, id), written: (winner(s, NOTE, id, "space") ?? null) as string | null, tag: false }]));
+  return spacesOfTree(rows, cutParents(rows, (id) => linkOf(s, id)).parents, null); // the store holds every note: nothing is missing
+};
+const spaceOf = (s: Store, id: string) => spacesOf(s).get(id) ?? null;
 const isTrashed = (s: Store, id: string) => !!effectiveUnit(s, { table: NOTE, row: id, field: "trashed" })?.[0]?.deleted;
-const spaceDeleted = (s: Store, id: string) => winner(s, SPACE, id, "deleted") === true;
+/** A deletion a person wrote for the space. */
+const deletionWritten = (s: Store, id: string) => winner(s, SPACE, id, "deleted") === true;
+/** The space is shown deleted: its deletion is written and no live note is in it (migration 218 spaces_show_deleted: a live note there came by a write the deleter
+ *  had not seen, so the space is kept and the deletion stays written until the space is empty). The local writes below see the space as this view shows it. */
+const spaceDeleted = (s: Store, id: string, inSpace: ReadonlyMap<string, string | null> = spacesOf(s)) =>
+  deletionWritten(s, id) && !notes(s).some((n) => !isTrashed(s, n) && inSpace.get(n) === id);
 /** `id` and every note whose parent chain reaches it, as this store has them. */
 function subtree(s: Store, id: string): string[] {
   const all = notes(s), out = [id];
@@ -76,19 +96,20 @@ function apply(w: StampedWorld, n: SimNode, kind: Kind, [p, q, r]: [number, numb
       const to = r < 0.2 ? null : at(liveNotes.filter((x) => spaceOf(s, x) === sp0 && !subtree(s, id).includes(x)), q) ?? null;
       const from = parentOf(s, id);
       if (to === from) return;
-      L((st, sp) => writeField(writeField(st, { table: NOTE, row: id, field: "parent" }, sp, { value: to, meta: { from } }), { table: NOTE, row: id, field: "sort" }, sp, { value: `k${++uniq}` }));
+      L((st, sp) => {
+        const placed = writeField(writeField(st, { table: NOTE, row: id, field: "parent" }, sp, { value: to, meta: { from } }), { table: NOTE, row: id, field: "sort" }, sp, { value: `k${++uniq}` });
+        // a note that comes to the top writes the space it is in, with the same write (migration 218)
+        return to === null ? writeField(placed, { table: NOTE, row: id, field: "space" }, sp, { value: sp0 }) : placed;
+      });
       return;
     }
     case "toSpace": {
       if (!liveNotes.length) return;
       const id = at(liveNotes, p), targets = liveSpaces.filter((x) => x !== spaceOf(s, id));
       if (!targets.length) return;
-      const to = at(targets, q), from = parentOf(s, id), moving = subtree(s, id);
-      L((st, sp) => {
-        let out = from === null ? st : writeField(st, { table: NOTE, row: id, field: "parent" }, sp, { value: null, meta: { from } });
-        for (const m of moving) out = writeField(out, { table: NOTE, row: m, field: "space" }, sp, { value: to });
-        return out;
-      });
+      const to = at(targets, q), from = parentOf(s, id);
+      // its parent is written too, also when it was already at the top (migration 218 sync_stamp_parent_with_space: a top note's space and parent are one place)
+      L((st, sp) => writeField(writeField(st, { table: NOTE, row: id, field: "parent" }, sp, { value: null, meta: { from } }), { table: NOTE, row: id, field: "space" }, sp, { value: to }));
       return;
     }
     case "trash": {
@@ -98,7 +119,8 @@ function apply(w: StampedWorld, n: SimNode, kind: Kind, [p, q, r]: [number, numb
       return;
     }
     case "deleteSpace": {
-      const empty = liveSpaces.filter((x) => !notes(s).some((id) => spaceOf(s, id) === x));
+      const inSpace = spacesOf(s);
+      const empty = liveSpaces.filter((x) => !notes(s).some((id) => inSpace.get(id) === x));
       if (liveSpaces.length < 2 || !empty.length) return;
       const id = at(empty, p);
       L((st, sp) => writeField(st, { table: SPACE, row: id, field: "deleted" }, sp, { value: true }));
@@ -123,20 +145,16 @@ function hasLoop(parents: ReadonlyMap<string, string | null>): boolean {
 /** Every relation broken in `s`, each as "<relation>: <what>". */
 function brokenRelations(s: Store): { relation: Relation; what: string }[] {
   const out: { relation: Relation; what: string }[] = [];
-  const all = notes(s);
+  const all = notes(s), inSpace = spacesOf(s);
   for (const id of all) {
     const p = parentOf(s, id);
-    if (p !== null && all.includes(p) && spaceOf(s, p) !== spaceOf(s, id)) out.push({ relation: "R1 parent × space", what: `${id} in ${spaceOf(s, id)} under ${p} in ${spaceOf(s, p)}` });
-    const sp = spaceOf(s, id);
-    if (!isTrashed(s, id) && sp && spaceDeleted(s, sp)) out.push({ relation: "R2 live note in a deleted space", what: `${id} in ${sp}` });
+    if (p !== null && all.includes(p) && inSpace.get(p) !== inSpace.get(id)) out.push({ relation: "R1 parent × space", what: `${id} in ${inSpace.get(id)} under ${p} in ${inSpace.get(p)}` });
+    const sp = inSpace.get(id) ?? null;
+    if (!isTrashed(s, id) && sp && spaceDeleted(s, sp, inSpace)) out.push({ relation: "R2 live note in a deleted space", what: `${id} in ${sp}` });
   }
-  const links: ParentLink[] = all.map((id) => {
-    const win = effectiveUnit(s, { table: NOTE, row: id, field: "parent" })![0]!;
-    const from = (win.meta as { from?: string | null } | undefined)?.from;
-    return { note: id, parent: (win.value ?? null) as string | null, ...(from === undefined ? {} : { from }), stamp: win.stamp };
-  });
+  const links: ParentLink[] = all.map((id) => linkOf(s, id));
   if (hasLoop(resolveMoveCycles(links).parents)) out.push({ relation: "R3 a loop after the 4.10 view", what: "" });
-  const tree: TreeNote[] = all.map((id) => ({ id, parent: parentOf(s, id), created: createdOf(s, id), deleted: deletionOf(effectiveUnit(s, { table: NOTE, row: id, field: "trashed" })) }));
+  const tree: TreeNote[] = all.map((id) => ({ id, parent: parentOf(s, id), created: createdOf(s, id), placed: linkOf(s, id).stamp, deleted: deletionOf(effectiveUnit(s, { table: NOTE, row: id, field: "trashed" })) }));
   const fixed = new Set(trashOrphanedChildren(tree).fixes.map((f) => f.note));
   const trashed = new Set(tree.filter((t) => t.deleted || fixed.has(t.id)).map((t) => t.id));
   for (const t of tree) if (!trashed.has(t.id) && t.parent && trashed.has(t.parent)) out.push({ relation: "R4 live note under a trashed one after the 4.9 view", what: `${t.id} under ${t.parent}` });
@@ -204,11 +222,18 @@ describe("relations between units hold after every merge step (pure simulator)",
   }, 120_000);
 
   // Pinned from the random run above (seed and step printed by it). Each pair: what breaks with that seed today, exactly; and the relation holding, `it.fails`.
-  const PINNED: readonly { relation: Relation; seed: number; why: string }[] = [
-    { relation: "R1 parent × space", seed: 1, why: "parent and space are separate units: a reparent on one node and a space move of the same subtree on another give a note under a parent in another space (on a database: the bundle fails at COMMIT, 23514)" },
-    { relation: "R2 live note in a deleted space", seed: 2, why: "spaces.deleted and content_nodes.space are units of two rows: a space emptied and deleted on one node while another moved a note into it" },
-    { relation: "R4 live note under a trashed one after the 4.9 view", seed: 2, why: "the 4.9 view (trashOrphanedChildren) asks whether the deleter had seen the note's CREATION; a note made earlier and MOVED under the parent the other node trashed stays live under it" },
+  // Fixed since: the seed that broke it stays, as a test that it holds (R1: migration 218, a note's space follows its tree).
+  const FIXED: readonly { relation: Relation; seed: number; how: string }[] = [
+    { relation: "R1 parent × space", seed: 1, how: "the space a note is in is derived from its tree (rules/space.ts); only a note at the top has a written space that counts" },
+    { relation: "R2 live note in a deleted space", seed: 2, how: "a space's deletion is shown only while no live note is in it; the deletion stays written (migration 218 spaces_show_deleted)" },
+    { relation: "R4 live note under a trashed one after the 4.9 view", seed: 2, how: "the 4.9 view asks whether the deleter had seen the write that put the note under its parent (a move too), and a note under one it trashes goes with it" },
   ];
+  for (const f of FIXED) {
+    it(`seed ${f.seed}: ${f.relation} holds after every merge step (${f.how})`, () => {
+      expect(firstOf(runSeed(f.seed, 160), f.relation)).toBeUndefined();
+    });
+  }
+  const PINNED: readonly { relation: Relation; seed: number; why: string }[] = [];
   for (const pin of PINNED) {
     it(`seed ${pin.seed}, today: ${pin.relation} breaks`, () => {
       const hit = firstOf(runSeed(pin.seed, 160), pin.relation);
@@ -218,17 +243,20 @@ describe("relations between units hold after every merge step (pure simulator)",
       expect(firstOf(runSeed(pin.seed, 160), pin.relation)).toBeUndefined();
     });
   }
-  it("the relation not on KNOWN_OPEN (R3) is reached at all (the model makes trash under moves and loops to resolve)", () => {
-    // not vacuous: across fixed seeds the model closes loops that the 4.10 view has to cut, and makes notes the 4.9 view has to put in the trash
-    let loops = 0, orphans = 0;
+  it("the views the relations are checked after are reached at all (the model makes loops to cut, notes to put in the trash, spaces whose deletion is kept)", () => {
+    // not vacuous: across fixed seeds the model closes loops that the 4.10 view has to cut, makes notes the 4.9 view has to put in the trash, and deletes spaces another
+    // node moved a note into
+    let loops = 0, orphans = 0, kept = 0;
     for (let seed = 1; seed <= 40; seed++) {
       const w = runSeed(seed, 160), s = w.nodes[0]!.store, all = notes(s);
       const links: ParentLink[] = all.map((id) => { const win = effectiveUnit(s, { table: NOTE, row: id, field: "parent" })![0]!; const from = (win.meta as { from?: string | null } | undefined)?.from; return { note: id, parent: (win.value ?? null) as string | null, ...(from === undefined ? {} : { from }), stamp: win.stamp }; });
       loops += resolveMoveCycles(links).fixes.length;
-      orphans += trashOrphanedChildren(all.map((id) => ({ id, parent: parentOf(s, id), created: createdOf(s, id), deleted: deletionOf(effectiveUnit(s, { table: NOTE, row: id, field: "trashed" })) }))).fixes.length;
+      kept += spaces(s).filter((id) => deletionWritten(s, id) && !spaceDeleted(s, id)).length;
+      orphans += trashOrphanedChildren(all.map((id) => ({ id, parent: parentOf(s, id), created: createdOf(s, id), placed: linkOf(s, id).stamp, deleted: deletionOf(effectiveUnit(s, { table: NOTE, row: id, field: "trashed" })) }))).fixes.length;
     }
-    console.info(`[mergeCrossFieldSim] seeds 1..40: ${loops} loops the 4.10 view cut, ${orphans} notes the 4.9 view put in the trash`);
+    console.info(`[mergeCrossFieldSim] seeds 1..40: ${loops} loops the 4.10 view cut, ${orphans} notes the 4.9 view put in the trash, ${kept} spaces whose deletion the view kept`);
     expect(loops, "R3 is only evidence if the 4.10 view had loops to cut").toBeGreaterThan(0);
     expect(orphans).toBeGreaterThan(0);
+    expect(kept, "R2 is only evidence if the view of a space's deletion had a space to keep").toBeGreaterThan(0);
   }, 120_000);
 });

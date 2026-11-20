@@ -398,8 +398,19 @@ describe("4.9 a deletion meeting a change it had not seen", () => {
       { id: "grandkid", parent: "kid", created: st("b", 2, T0, "u1"), deleted: null },
       { id: "seen", parent: "parent", created: st("s", 1, T0, "u1"), deleted: null },
     ]);
-    expect(r.fixes).toEqual([{ note: "grandkid", trashedWith: "parent" }, { note: "kid", trashedWith: "parent" }]);
+    // "seen": the deleter's `seen` says it held this note's creation, and still it is live under the deleted note (its cascade would have taken it, so `seen`
+    // claimed more than the deleter held, or a later write brought it there): it goes to the trash with the parent, and nobody is told (the simulator's R4)
+    expect(r.fixes).toEqual([{ note: "grandkid", trashedWith: "parent" }, { note: "kid", trashedWith: "parent" }, { note: "seen", trashedWith: "parent" }]);
     expect(r.notices).toEqual([{ to: "u1", note: "grandkid", kind: "created-under-deleted-parent" }, { to: "u1", note: "kid", kind: "created-under-deleted-parent" }]);
+  });
+  it("a note made long before and MOVED under a parent the deleter had trashed without seeing the move goes to the trash with it; the mover is told, and the notes under it go too", () => {
+    const r = trashOrphanedChildren([
+      { id: "parent", parent: null, created: st("s", 1), deleted: del("u0", { s: 1, b: 1 }) },
+      { id: "moved", parent: "parent", created: st("b", 1, T0, "u1"), placed: st("b", 3, T0 + 3, "u2"), deleted: null },
+      { id: "under", parent: "moved", created: st("b", 1, T0, "u1"), deleted: null },
+    ]);
+    expect(r.fixes).toEqual([{ note: "moved", trashedWith: "parent" }, { note: "under", trashedWith: "parent" }]);
+    expect(r.notices).toEqual([{ to: "u2", note: "moved", kind: "created-under-deleted-parent" }]); // the mover; the note under it was made where the deleter saw it
   });
   it("the one who deleted is not told about their own device's child", () => {
     const r = trashOrphanedChildren([{ id: "p", parent: null, created: st("s", 1), deleted: del("u0", {}) }, { id: "k", parent: "p", created: st("b", 1, T0, "u0"), deleted: null }]);

@@ -160,11 +160,13 @@ const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
  */
 export const UNIT_SOURCES: readonly RowSource[] = [
   { label: "workspaces", table: "workspaces", key: uuidKey(), workspace: ws("id"), fields: { time_zone: "time_zone", day_start: "day_start_hour" }, rows: false },
-  { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "deleted_at" }, rows: true,
+  // `deleted` is the deletion a person WROTE (migration 218); deleted_at, what every read uses, is derived after the write-back (spaces_show_deleted) and is no unit
+  { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "written_deleted_at" }, rows: true,
     clearedOnDelete: { owner: ["owner_actor_id"] } },
   { label: "space_members", table: "space_members", key: [{ column: "space_id", type: "uuid" }, { column: "actor_id", type: "uuid" }], workspace: { viaSpace: "space_id" }, fields: { permission: "permission" }, rows: true },
   { label: "content_nodes", table: "content_nodes", key: uuidKey(), workspace: ws(),
-    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "space_id", deleted: "deleted_at" }, rows: true,
+    // `space` is the space a person WROTE (migration 218); space_id, the space the note is in, is derived after the write-back (dbRows.ts deriveNoteSpaces) and is no unit
+    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "written_space_id", deleted: "deleted_at" }, rows: true,
     bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] } },
   { label: "node_attributes", table: "node_attributes", key: [{ column: "node_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(),
     fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: "t.source IN ('ui', 'explicit', 'dispatcher')", rows: true },

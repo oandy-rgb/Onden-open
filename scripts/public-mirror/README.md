@@ -1,6 +1,6 @@
 # 公開庫（Onden-open）跟著私人庫
 
-> 狀態：現行（最後確認 2026-11-17）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：scripts/public-mirror/*.sh, scripts/public-mirror/removed-paths.json, scripts/public-mirror/removedPaths.mjs, .github/workflows/public-mirror.yml
 
 業主 2026-11-15／16 的決定：分散式做完之前，私人庫開發、公開庫跑完整檢查；兩邊的程式必須一模一樣。
@@ -8,7 +8,7 @@
 
 - 鏡像拿掉哪些路徑只有一份資料：`removed-paths.json`（單一檔案、整個資料夾、`docs/` 底下的圖片副檔名）。`public-push.sh`、`verify.sh` 與文件檢查器（`scripts/check-md-links.mjs`：文件提到的路徑在鏡像裡不存在，且符合這份清單，不算過時）都讀它，用 `removedPaths.mjs`；要多拿掉什麼，只改那個檔。
 - `public-push.sh <私人庫的 ref> <公開庫的分支>`：把那個 ref 的內容去掉 `docs/` 底下的圖片與
-  `docs/research/scan-2026-11-14/` 與 `docs/deploy-log.md`（部署紀錄留在私人庫，業主 2026-11-16），指向它們的連結改成文字，檢查確實去乾淨，做成**一個**提交推到公開庫
+  `docs/research/scan-2026-11-14/`、`docs/deploy-log.md`（部署紀錄留在私人庫，業主 2026-11-16）與 `.github/dependabot.yml`（Dependabot 只在私人庫開 PR，2026-11-20），指向它們的連結改成文字，檢查確實去乾淨，做成**一個**提交推到公開庫
   （疊在公開庫那個分支上；新分支疊在公開庫的 main 上）。私人庫的提交歷史永遠不會被推過去。
   推之前會比對「這次比公開庫多了什麼」：新增的圖片、影片、壓縮檔、資料庫檔、金鑰檔、超過 1 MiB 的檔案、
   看起來像金鑰或權杖的文字，任何一種都停下來不推（看過清單確定要公開，才用 `PUBLIC_PUSH_ALLOW=1`）。

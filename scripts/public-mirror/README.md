@@ -1,6 +1,6 @@
 # 公開庫（Onden-open）跟著私人庫
 
-> 狀態：現行（最後確認 2026-11-17）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：scripts/public-mirror/*.sh, scripts/public-mirror/removed-paths.json, scripts/public-mirror/removedPaths.mjs, .github/workflows/public-mirror.yml
 
 業主 2026-11-15／16 的決定：分散式做完之前，私人庫開發、公開庫跑完整檢查；兩邊的程式必須一模一樣。
@@ -12,10 +12,15 @@
   （疊在公開庫那個分支上；新分支疊在公開庫的 main 上）。私人庫的提交歷史永遠不會被推過去。
   推之前會比對「這次比公開庫多了什麼」：新增的圖片、影片、壓縮檔、資料庫檔、金鑰檔、超過 1 MiB 的檔案、
   看起來像金鑰或權杖的文字，任何一種都停下來不推（看過清單確定要公開，才用 `PUBLIC_PUSH_ALLOW=1`）。
+  那一個提交的訊息會帶上守門要讀的書面聲明：私人提交裡的 `ratchet-override:` 與「文件不需要更新：<原因>」行，
+  以及私人提交或這個分支的 PR 說明裡出現「不需要更新說明」時，單獨一行「不需要更新說明」（這些行同樣經過金鑰／位址檢查）。
+- 公開庫收到推送就自己跑 CI（`.github/workflows/ci.yml`，業主 2026-11-20）：守門與全部完整檢查，只有完整 E2E 仍要手動
+  （`gh workflow run ci.yml --repo oandy-rgb/Onden-open --ref <分支> -f fullstack=true`）。push 沒有 PR 說明，守門從上面那個提交訊息讀聲明。
+  分支必須含有 main 這版的 `ci.yml`（先併 main），否則推上去不會自己開始。
 - `verify.sh`：只讀。證明公開庫的 main 等於它提交訊息裡寫的那個私人庫提交，差別只有被排除的檔案與指向它們的連結。
 - `.github/workflows/public-mirror.yml`：私人庫的 main 每次有新提交，自動跑上面兩個（密鑰 `PUBLIC_MIRROR_KEY`
   是公開庫的一把只能寫公開庫的 deploy key）。**2026-11-17 起先關掉**：私人庫的 Actions 額度用完，業主不提高上限
-  （每月重置）；同一天私人庫的 `CI` 也關掉，守門檢查改在公開庫手動執行時一起跑。
+  （每月重置）；同一天私人庫的 `CI` 也關掉，守門檢查改在公開庫跑（2026-11-20 起每次推送自動跑）。
 - 沒有自動同步的期間：**誰合併到 main，誰接著跑** `bash scripts/public-mirror/public-push.sh origin/main main`
   （它推完會印出公開庫的提交；再跑 `verify.sh` 確認）。
 - 擋住不一致的兩道關卡（都問 `verify.sh`，測試在 `packages/markdown/src/test/guards/publicMirror.guard.test.ts`）：

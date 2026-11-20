@@ -62,6 +62,24 @@
 
 ## 紀錄
 
+### 2026-11-20　「密文貼到別列解不開」只在一張表裡成立：同一把伺服器金鑰後來也加密行事曆網址（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`aiCredentials.ts` 寫「The row id is the cipher's associated data, so a ciphertext copied onto another row does not decrypt」。後來外部行事曆用同一個函式（`sealText`）以同一把 `ONDEN_SECRET_KEY` 加密網址，附加資料仍只有列 id：API 金鑰的密文搬到 `external_calendars` 同一個 id 的列（或反過來）解得開。另外截斷的密文丟 `TypeError`（500），不是「讀不到」。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`src/test/serverSecret.test.ts`「a value sealed for one purpose does not open for the other…」與「…or a cut value does not open」修前紅、修後綠；`externalCalendars.integration.test.ts`「a secret sealed as an API key under the same id does not open as a calendar address」修前紅。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的斷言只對「一種秘密、一張表」測過（`aiRuntimeApi` 的「moved to another row id」）；第二個用途加進來時沒有人回頭看那句話還成不成立，也沒有測試把一種秘密放進另一種的表。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕`services/serverSecret.ts` 是唯一加解密的地方，附加資料是 `<用途>:<列 id>`；`serverSecret.guard.test.ts` 擋第二個呼叫 `createCipheriv`／讀金鑰的檔、擋用途由別的檔或執行時決定；跨用途、跨列、竄改、截斷各有測試。
+- **還沒擋住的**：舊格式（只綁列 id）的值在第一次被讀到之前仍只綁列 id；沒被讀到的（關掉的行事曆）會一直是舊格式，直到再打開。
+
+### 2026-11-20　「瀏覽器頁面設不了 bearer 標頭」所以看到 bearer 就跳過來源檢查，認不得的 bearer 又退回 cookie（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`app.ts` 的來源檢查（CSRF）只要看到 `Authorization: Bearer` 就跳過，理由寫「a page in a victim's browser can set neither a bearer header nor a forged Origin」；之後的身分解析在 bearer 解析不到時，照樣用同一個請求的登入 cookie。結果別的網站帶著亂寫的 bearer 與那個人的 cookie 送寫入，伺服器會以那個人的身分接受（修前實測：外來 Origin 的 `PUT /api/me/prefs/nav` 回 200 並寫入）。真正擋住的只剩瀏覽器的 CORS 預檢。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`bearerNeverFallsBackToCookie.integration.test.ts` 的「an unknown bearer with a valid cookie is refused…」「a bearer header that does not parse is refused too…」修前紅（200）、修後綠。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的理由是「頁面設不了標頭」，但頁面可以設（只是要過預檢）；跳過檢查依據的是「有沒有標頭」，不是「標頭有沒有驗證通過」。`originGuard.test.ts` 只用一個假的 bearer 檢查「沒被來源檢查擋」，沒有檢查那個請求之後被當成誰。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕bearer 在來源檢查之前解析一次；帶 bearer 的請求只能由那個 bearer 認證，解析不到（含格式錯）一律 401，不看 cookie；來源檢查只對真的解析成功的 bearer 讓開。上面的測試加上「bearer＋cookie 時是 bearer 的身分」「沒有 bearer 的外來寫入照舊 403」。
+- **還沒擋住的**：無。
+
 ### 2026-11-19　「內容」能不能收，畫面與伺服器各算一次，兩個答案在「算出來的白板分頁」上不同（零件對、組裝錯）
 - **發生了什麼**：#1767 的再審（note-ed，讀程式）發現：只有「畫面依卡片算出來的白板分頁」（沒有白板檢視紀錄）時，畫面認為「內容」可以收（分頁多於一個），伺服器的 `keepContentTabShowing` 只數檢視紀錄、看不到白板，確認後立刻把 `hidden` 清掉：人按了確認、「內容」還在。第二輪審查已要求「由伺服器保證」，我把保證放在伺服器，卻沒有把「能不能收」這個**答案**也只放一處，畫面仍自己用分頁數量算。
 - **證據**：#1767 留言（再審）；`noteViews.integration` 的「a board with cards but no whiteboard record is another tab…」等三個案例與 `ViewTabs.test`。

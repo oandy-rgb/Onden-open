@@ -1718,10 +1718,10 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 
 ### 要在伺服器上加密保存使用者的秘密（行事曆網址這類帶金鑰的網址）
 
-- 入口：`backend/src/services/aiCredentials.ts`（`sealText`、`openText`、`secretKeyConfigured`）　項目 `be-seal-text`
-- 寫法：`import { sealText } from "./services/aiCredentials.js"; const seal = (secret: string, rowId: string) => sealText(secret, rowId);`
+- 入口：`backend/src/services/serverSecret.ts`（`sealSecret`、`openStoredSecret`、`secretKeyConfigured`）　項目 `be-seal-text`
+- 寫法：`import { sealSecret } from "./services/serverSecret.js"; const seal = (secret: string, rowId: string) => sealSecret("external-calendar", rowId, secret);`
 - 取代：自己用 crypto 加密、或把秘密明文放進資料表／事件
-- 為什麼：用部署時的 ONDEN_SECRET_KEY 加密（AES-256-GCM，列 id 當附加資料，密文貼到別列解不開）。沒設金鑰時 secretKeyConfigured 為 false，功能要明說不提供。讀回介面只給遮罩後的資訊（網域、末四碼），不回明文、不寫進事件或日誌。
+- 為什麼：用部署時的 ONDEN_SECRET_KEY 加密（AES-256-GCM），用途與列 id 一起當附加資料（`<用途>:<列 id>`）：密文貼到別列、或貼到另一種秘密的表（API 金鑰與行事曆網址）都解不開。新用途要在 SecretPurpose 加一個名字。讀回存著的值一律走 openStoredSecret，舊格式（只綁列 id）在第一次讀到時改寫成新格式。沒設金鑰時 secretKeyConfigured 為 false，功能要明說不提供。讀回介面只給遮罩後的資訊（網域、末四碼），不回明文、不寫進事件或日誌。
 
 ### 要用操作者、權限範圍這類共用型別（route 與 service 之間傳的 ActorCtx 等）
 

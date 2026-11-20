@@ -86,7 +86,7 @@ AI 工作階段的整組復原，或在 `mutate` 附近加「某種操作者只�
   - **只能提建議**：`agent_sessions.write_mode` 由資料庫約束——`runtime = 'api'` 的列一定是 `suggest`（遷移 150）；`resolveCurrentActor` 重讀時 session 列是 `suggest` 就蓋過 agent 自己的 `actors.write_mode`（設成 `apply` 的角色，它的 API session 仍是 `suggest`），`mutate()` 對 `suggest` 身分只放行 `AI_SUGGESTION_CREATED`（`assertWriteModeAllows`，含巢狀事件）。請求內容不能改它。
   - 交付（`deliver.ts`）：@ai 提及的最終文字存在 session 的 `reply_markdown`，由人按「插入筆記」才成為一則建議；小動作（`kind='selection_action'`）的結果在串流結束後以一則 `replace` 建議交付（`selectionDelivery.ts`；選取文字已變或出現多次 ⇒ `selection_changed`，不建議）。
   - 讀取：送給模型的內容只經 `renderSessionPrompt`／`harness.prompt()`（讀取政策 ∩ 空間 `external_ai`）。
-  - 金鑰：`ai_credentials`，AES-256-GCM（`ONDEN_SECRET_KEY`，row id 當 AAD），只回傳標籤與後四碼；明文只能由 `loadApiKey()`（經 `loadService`）取得，且只有 `agentRuntime/api/` 能讀（`aiRuntime.guard.test.ts`）。沒有 `ONDEN_SECRET_KEY` 或沒有金鑰 ⇒ `runtimeAvailability` 不列 `api`，前端不出現 API 選項（不是灰掉）。
+  - 金鑰：`ai_credentials`，AES-256-GCM（`ONDEN_SECRET_KEY`，經 `services/serverSecret.ts`；AAD＝`ai-credential:<row id>`，所以同一把伺服器金鑰下的行事曆網址密文搬過來也解不開；2026-11-20 以前的舊格式只綁 row id，第一次讀到時改寫，開機時把撤銷的也改寫），只回傳標籤與後四碼；明文只能由 `loadApiKey()`（經 `loadService`）取得，且只有 `agentRuntime/api/` 能讀（`aiRuntime.guard.test.ts`）。沒有 `ONDEN_SECRET_KEY` 或沒有金鑰 ⇒ `runtimeAvailability` 不列 `api`，前端不出現 API 選項（不是灰掉）。
   - 模型：**沒有預設**；清單用金鑰向服務即時取得；設定角色時驗證該模型對這把金鑰存在且未停用（`aiRoles.ts`）；run 時服務回模型不存在 ⇒ `markModelRetired` 寫 `api_model_retired_at`，API 暫停、角色顯示要重選，不自動換。
   - 上限：第一次啟用 API 要答「每月上限」或「不限」（`api_cap_choice`，沒答不能跑，`cap_unanswered`）；上限以 token 為準（`monthly_cap_tokens`，`monthTokensUsed` 算本月 UTC 的輸入＋輸出）；每回合 `recordUsage` 把用量寫進 session 與紀錄。
     金額只是估計：價格是使用者在金鑰上自己填的每百萬 token 價格，沒填就只有 token（`cost_estimate_micro_usd` 為 NULL）。

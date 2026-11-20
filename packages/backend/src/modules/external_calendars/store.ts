@@ -6,10 +6,11 @@
 // settings (spine/eventTransaction); the address is stored only as ciphertext.
 
 import { q, allowUnstampedWrite } from "../../db.js";
+import { db } from "../../dbKysely.js";
 import { mutatePersonal } from "../../spine/mutate.js";
 import { isTemporarySessionActor, personalDataOwnerId } from "../../spine/authority.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
-import { sealText, openText } from "../../services/aiCredentials.js";
+import { openStoredSecret, sealSecret } from "../../services/serverSecret.js";
 import { dayClock, localDayId, sqlDayStart, addDays } from "../../localDay.js";
 import { StatusError } from "../../statusError.js";
 import type { ActorCtx } from "../../types.js";
@@ -62,7 +63,7 @@ export async function addCalendar(
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (id) DO UPDATE SET id = external_calendars.id WHERE external_calendars.actor_id = EXCLUDED.actor_id
        RETURNING ${COLS}`,
-      [input.id, workspaceId, current.id, input.name, input.color, sealText(input.href, input.id), input.host])).rows[0];
+      [input.id, workspaceId, current.id, input.name, input.color, sealSecret("external-calendar", input.id, input.href), input.host])).rows[0];
     // The id belongs to someone else's calendar: say nothing about it.
     if (!saved) throw new StatusError(404, "not_found");
     return saved;
@@ -87,10 +88,15 @@ export async function removeCalendar(workspaceId: string, actor: ActorCtx, id: s
   } });
 }
 
-/** The saved address, for the fetch only. Never put its result in a response, a log or an event. */
+/** The saved address, for the fetch only. Never put its result in a response, a log or an event. An address saved before
+ *  its purpose was authenticated is rewritten in the current form here (services/serverSecret.ts); every switched-on calendar
+ *  is read by the fetch pass within its first 15 minutes, a switched-off one when it is switched on again. */
 export async function loadCalendarUrl(id: string): Promise<string | null> {
   const row = (await q<{ url_ciphertext: Buffer }>(`SELECT url_ciphertext FROM external_calendars WHERE id = $1`, [id])).rows[0];
-  return row ? openText(row.url_ciphertext, id) : null;
+  // The sealed address never leaves this node (spine/snapshotTables.json excludes it) and no stamp trigger watches it (migration 198).
+  return row ? openStoredSecret("external-calendar", id, row.url_ciphertext, (from, to) => allowUnstampedWrite("a calendar's sealed address belongs to this node", async () => {
+    await db.updateTable("external_calendars").set({ url_ciphertext: to }).where("id", "=", id).where("url_ciphertext", "=", from).execute();
+  })) : null;
 }
 
 /** Calendars the 15-minute pass should fetch: switched on, not tried in the last `minAgeMs`. */
@@ -116,11 +122,10 @@ const FETCH_STATE_REASON = "calendar fetch state belongs to the node that fetche
 /** Record what a fetch found. A good fetch replaces the calendar's events whole; a failed one keeps the last good events and only notes the reason. */
 export async function saveFetchResult(workspaceId: string, id: string, outcome: FetchOutcome): Promise<void> {
   await withEventTransaction(workspaceId, async () => {
-    if (!outcome.ok) {
-      await allowUnstampedWrite(FETCH_STATE_REASON, () => q(`UPDATE external_calendars SET last_attempt_at = now(), last_error = $2 WHERE id = $1`, [id, outcome.reason]));
-      return;
-    }
-    const alive = await allowUnstampedWrite(FETCH_STATE_REASON, () => q(`UPDATE external_calendars SET last_attempt_at = now(), last_fetched_at = now(), last_error = NULL WHERE id = $1 RETURNING id`, [id]));
+    const alive = await allowUnstampedWrite(FETCH_STATE_REASON, () => outcome.ok
+      ? q(`UPDATE external_calendars SET last_attempt_at = now(), last_fetched_at = now(), last_error = NULL WHERE id = $1 RETURNING id`, [id])
+      : q(`UPDATE external_calendars SET last_attempt_at = now(), last_error = $2 WHERE id = $1 RETURNING id`, [id, outcome.reason]));
+    if (!outcome.ok) return;
     if (!alive.rows.length) return; // deleted while the fetch ran
     await q(`DELETE FROM external_calendar_events WHERE calendar_id = $1`, [id]);
     const rows = outcome.instances;

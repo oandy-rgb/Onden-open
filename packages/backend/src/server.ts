@@ -15,6 +15,7 @@ import { backfillModuleImports, startModuleBackground } from "./modules/index.js
 import { failInterruptedRestoreJobs } from "./services/backupRestoreJobs.js";
 import { expireOverdue } from "./services/agentSessions.js";
 import { failInterruptedApiSessions } from "./services/agentRuntime/index.js";
+import { resealLegacyApiKeys } from "./services/aiCredentials.js";
 import { app } from "./app.js";
 
 // Node boot (the `npm start` / `npm run dev` entry). The assembled app is in
@@ -52,6 +53,8 @@ if (!isTest()) {
   await backfillModuleImports();
   // Not awaited: until a note is indexed, relinking reads its text instead.
   void indexMissingNoteLinks().catch((err) => log.warn("wikilink", `note link index backfill failed: ${err instanceof Error ? err.message : String(err)}`));
+  // Not awaited: an API key saved before its purpose was authenticated still opens until it is resealed (services/serverSecret.ts).
+  void resealLegacyApiKeys().catch((err) => log.warn("secrets", `API key reseal failed: ${err instanceof Error ? err.message : String(err)}`));
   await initGit();
   // Restore jobs live in this process only: a running one is from a process
   // that is gone (services/backupRestoreJobs.ts). Before serving.

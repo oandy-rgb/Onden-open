@@ -3572,18 +3572,18 @@
       "area": "後端",
       "entry": [
         {
-          "file": "packages/backend/src/services/aiCredentials.ts",
+          "file": "packages/backend/src/services/serverSecret.ts",
           "exports": [
-            "sealText",
-            "openText",
+            "sealSecret",
+            "openStoredSecret",
             "secretKeyConfigured"
           ]
         }
       ],
-      "use": "import { sealText } from \"./services/aiCredentials.js\"; const seal = (secret: string, rowId: string) => sealText(secret, rowId);",
+      "use": "import { sealSecret } from \"./services/serverSecret.js\"; const seal = (secret: string, rowId: string) => sealSecret(\"external-calendar\", rowId, secret);",
       "replaces": "自己用 crypto 加密、或把秘密明文放進資料表／事件",
       "rules": [],
-      "why": "用部署時的 ONDEN_SECRET_KEY 加密（AES-256-GCM，列 id 當附加資料，密文貼到別列解不開）。沒設金鑰時 secretKeyConfigured 為 false，功能要明說不提供。讀回介面只給遮罩後的資訊（網域、末四碼），不回明文、不寫進事件或日誌。"
+      "why": "用部署時的 ONDEN_SECRET_KEY 加密（AES-256-GCM），用途與列 id 一起當附加資料（`<用途>:<列 id>`）：密文貼到別列、或貼到另一種秘密的表（API 金鑰與行事曆網址）都解不開。新用途要在 SecretPurpose 加一個名字。讀回存著的值一律走 openStoredSecret，舊格式（只綁列 id）在第一次讀到時改寫成新格式。沒設金鑰時 secretKeyConfigured 為 false，功能要明說不提供。讀回介面只給遮罩後的資訊（網域、末四碼），不回明文、不寫進事件或日誌。"
     },
     {
       "id": "fe-external-events",

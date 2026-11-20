@@ -27,7 +27,7 @@ describe("api runtime guards", () => {
   });
 
   it("the plaintext API key is read only inside the api runtime", () => {
-    const readers = matching(/\bloadApiKey\b|\bloadService\b|\bdecryptSecret\b/).filter((f) => f !== "services/aiCredentials.ts");
+    const readers = matching(/\bloadApiKey\b|\bloadService\b|\bopen(?:Stored)?Secret\(\s*"ai-credential"/).filter((f) => f !== "services/aiCredentials.ts");
     expect(readers.every((f) => f.startsWith("services/agentRuntime/api/"))).toBe(true);
     expect(readers.length).toBeGreaterThan(0);
   });

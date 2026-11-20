@@ -10,7 +10,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { pool, q } from "../db.js";
 import { addCredentialDetectingFormat } from "../services/aiCredentialSetup.js";
-import { addCredential, listCredentials, revokeCredential, loadApiKey, decryptSecret, encryptSecret } from "../services/aiCredentials.js";
+import { addCredential, listCredentials, revokeCredential, loadApiKey, resealLegacyApiKeys } from "../services/aiCredentials.js";
+import { openStoredSecret, sealSecret } from "../services/serverSecret.js";
+import { legacySealed } from "./helpers/legacySealed.js";
 import { createToken } from "../services/agentTokens.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { AgentSessionError, claimSession, endSession, loadRunner, pendingSessions, loadSession, startSession, type AgentSession } from "../services/agentSessions.js";
@@ -38,6 +40,10 @@ import type { AddressInfo } from "node:net";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789WXYZ";
 const SECRET = "ab".repeat(32);
+/** Open a stored value; a test that reads a current value expects no rewrite. */
+const open = (purpose: Parameters<typeof openStoredSecret>[0], rowId: string, sealed: Buffer) =>
+  openStoredSecret(purpose, rowId, sealed, async () => { throw new Error("rewrote a value that was already current"); });
+
 
 type World = Awaited<ReturnType<typeof agentWorld>>;
 let fake: Awaited<ReturnType<typeof startFakeMessagesService>>;
@@ -107,7 +113,9 @@ describe.skipIf(!isTestDb)("API keys", () => {
     expect(JSON.stringify(ev.payload)).not.toContain(KEY);
     expect(JSON.stringify(await listCredentials(w.ws, { actor: w.owner }))).not.toContain(KEY);
     // a ciphertext moved to another row id does not decrypt
-    expect(() => decryptSecret(row.secret_ciphertext, randomUUID())).toThrow(AgentSessionError);
+    await expect(open("ai-credential", randomUUID(), row.secret_ciphertext)).rejects.toThrow(AgentSessionError);
+    // nor does it open as another kind of secret kept under the same id (an external calendar's address)
+    await expect(open("external-calendar", credential.id, row.secret_ciphertext)).rejects.toThrow(AgentSessionError);
   });
 
   it("refuses without ONDEN_SECRET_KEY, for a non-owner, and for a malformed key", async () => {
@@ -115,7 +123,7 @@ describe.skipIf(!isTestDb)("API keys", () => {
     delete process.env.ONDEN_SECRET_KEY;
     try {
       expect(await addCredential(w.ws, { label: "x", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner }).then(() => null, (e) => e.code)).toBe("secret_key_missing");
-      expect(() => encryptSecret("x", randomUUID())).toThrow();
+      expect(() => sealSecret("ai-credential", randomUUID(), "x")).toThrow();
     } finally { process.env.ONDEN_SECRET_KEY = SECRET; }
     expect(await addCredential(w.ws, { label: "x", apiKey: "bad key", baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner }).then(() => null, (e) => e.code)).toBe("invalid_credential");
     expect(await addCredential(w.ws, { label: "x", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.agent }).then(() => "ok", (e) => e instanceof AuthorityError ? "denied" : "other")).toBe("denied");
@@ -126,6 +134,45 @@ describe.skipIf(!isTestDb)("API keys", () => {
     const c = await addCredential(w.ws, { label: "k", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
     await revokeCredential(w.ws, c.id, { actor: w.owner });
     expect(await loadApiKey(w.ws, c.id).then(() => null, (e) => e.code)).toBe("credential_revoked");
+  });
+
+  it("a key saved in the old form still opens; its first read rewrites it bound to its purpose, and boot does the revoked ones", async () => {
+    const w = await agentWorld("cred-legacy");
+    const live = await addCredential(w.ws, { label: "old", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    const revoked = await addCredential(w.ws, { label: "old-revoked", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    await revokeCredential(w.ws, revoked.id, { actor: w.owner });
+    for (const id of [live.id, revoked.id]) {
+      await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [id, legacySealed(SECRET, id, KEY)]);
+    }
+    const sealedOf = async (id: string) => (await q<{ s: Buffer }>(`SELECT secret_ciphertext AS s FROM ai_credentials WHERE id = $1`, [id])).rows[0]!.s;
+    const bound = async (id: string) => {
+      const now = await sealedOf(id);
+      expect(now[0]).toBe(2);
+      expect(await open("ai-credential", id, now)).toBe(KEY);
+      await expect(open("external-calendar", id, now)).rejects.toThrow(AgentSessionError);
+    };
+    expect(await loadApiKey(w.ws, live.id)).toBe(KEY);
+    await bound(live.id);
+    expect((await sealedOf(revoked.id))[0]).toBe(1); // a revoked key is never read by the runtime
+    expect((await resealLegacyApiKeys()).resealed).toBeGreaterThanOrEqual(1);
+    await bound(revoked.id);
+    expect(await loadApiKey(w.ws, revoked.id).then(() => null, (e) => e.code)).toBe("credential_revoked"); // still revoked
+    expect((await q(`SELECT 1 FROM ai_credentials WHERE id = ANY($1::uuid[])`, [[live.id, revoked.id]])).rows).toHaveLength(2);
+    // Nothing is rewritten twice.
+    const before = await sealedOf(live.id);
+    await resealLegacyApiKeys();
+    expect(await loadApiKey(w.ws, live.id)).toBe(KEY);
+    expect(Buffer.from(await sealedOf(live.id)).equals(Buffer.from(before))).toBe(true);
+  });
+
+  it("a row that does not open under this server's key is left exactly as it is", async () => {
+    const w = await agentWorld("cred-legacy-foreign");
+    const c = await addCredential(w.ws, { label: "foreign", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    const foreign = legacySealed("cd".repeat(32), c.id, KEY);
+    await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [c.id, foreign]);
+    await resealLegacyApiKeys();
+    expect(Buffer.from((await q<{ s: Buffer }>(`SELECT secret_ciphertext AS s FROM ai_credentials WHERE id = $1`, [c.id])).rows[0]!.s).equals(foreign)).toBe(true);
+    expect(await loadApiKey(w.ws, c.id).then(() => null, (e) => e.code)).toBe("credential_unreadable");
   });
 });
 

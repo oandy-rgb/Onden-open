@@ -13,13 +13,14 @@ import { aliasLinksBySlug, diagramsBySource, mediaUrl, sitePathFor, type ServedP
 import { pool, q } from "../../../db.js";
 import { dayClock } from "../../../localDay.js";
 import { overlaySiteConfig, publishedNodeIds } from "./publishedSet.js";
-import { servedNodeIds } from "./takenDown.js";
+import { servedNodeIds, servedPictureSources } from "./takenDown.js";
+import { presentationWords } from "./siteWords.js";
 import { findConfigNodeId } from "../../../services/siteConfig.js";
 import { anonymousMediaOwners } from "../../../services/mediaOwners.js";
 import { keepServedQueryRows, keepShownTags, publishedAliases, publishedNames, inertUnpublishedWikilinks, siteShowsTagSql, redactPayloadNodes, scrubUnpublishedParents } from "./redaction.js";
 import { buildSingleNoteHtml } from "./singleNoteHtml.js";
 import type { Manifest } from "./types.js";
-import { serveDrawingEmbeds } from "./drawingEmbeds.js";
+import { pictureSourcesOf, serveDrawingEmbeds } from "./drawingEmbeds.js";
 import { serveHandwritingPages } from "./handwritingPages.js";
 import { siteHomeFor } from "./siteHome.js";
 import { freezeQueryBlocks } from "./queryBlocks.js";
@@ -44,6 +45,8 @@ async function applyTakedown<T extends { home_node_id?: string | null; payload?:
   // `row` was read for this request (loadServedSite), so its payload is ours to edit.
   const payload: Record<string, unknown> = { ...(row.payload ?? {}) };
   delete payload.taken_down; // bookkeeping (takenDown.ts): `allowed` already excludes those notes
+  const picturesTakenDown = payload.pictures_taken_down;
+  delete payload.pictures_taken_down; // the same for embedded drawings' pictures (servedPictureSources below)
   // Snapshots built before W38a stored the Studio's presentation without the
   // site settings; they keep reading the live settings, on every request as
   // before W38a, until the next publish freezes them.
@@ -54,11 +57,14 @@ async function applyTakedown<T extends { home_node_id?: string | null; payload?:
     .filter((n) => n.id != null && allowed.has(n.id));
   scrubUnpublishedParents(nodes);
   const aliases = await publishedAliases(nodes.map((n) => n.id));
-  redactPayloadNodes(nodes, undefined, aliases);
-  serveDrawingEmbeds(nodes); // ![[drawing]] → its frozen picture, if still on the site
+  const words = presentationWords(payload.presentation);
+  redactPayloadNodes(nodes, words.privateText, undefined, aliases);
+  // ![[drawing]] → the picture its note carries, while the drawing may still lend it (「不發布」 takes it down now)
+  const pictures = await servedPictureSources(workspaceId, pictureSourcesOf(nodes), picturesTakenDown);
+  serveDrawingEmbeds(nodes, (id) => pictures.has(id), words);
   serveHandwritingPages(nodes); // a handwriting note's own pages, after its text
   await keepShownTags(nodes); // a tag hidden or removed since leaves its chips
-  keepServedQueryRows(nodes, aliases); // a frozen query list names served pages only (D113)
+  keepServedQueryRows(nodes, words.privateText, aliases); // a frozen query list names served pages only (D113)
   payload.nodes = nodes;
   // A diagram holds its block's text: it goes with the page that showed it.
   if ("diagrams" in payload) payload.diagrams = keepServedDiagrams(payload.diagrams, nodes);
@@ -77,7 +83,7 @@ async function applyTakedown<T extends { home_node_id?: string | null; payload?:
       const names = publishedNames(nodes, aliases);
       const pages = new Map(nodes.map((n) => [n.id as string, { title: String(n.title ?? ""), markdown: String(n.markdown ?? "") }]));
       presentation.design = takeDownDesign(presentation.design, servedIds, shownTags, {
-        pages, redact: (text) => inertUnpublishedWikilinks(text, names),
+        pages, redact: (text) => inertUnpublishedWikilinks(text, names, words.privateText),
       });
     }
   }
@@ -181,7 +187,7 @@ export async function singleNoteExport(
   const aliases = await publishedAliases(pages.map((p) => p.id));
   const markdown = aliasLinksBySlug(pages.map((p) => ({ ...p, aliases: aliases.get(p.id) })))(note.markdown, note.id);
   const queryBlocks = (await freezeQueryBlocks(workspaceId, [{ ...note, markdown }], {
-    actor: exporter, listed: pages,
+    actor: exporter, listed: pages, privateText: presentationWords(overlaid).privateText,
   })).get(note.id) ?? [];
   const diagrams = diagramsBySource(site.payload.diagrams);
   return buildSingleNoteHtml({ ...note, markdown, query_blocks: queryBlocks }, manifest, pages, diagrams);

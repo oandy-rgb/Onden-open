@@ -8,8 +8,9 @@ import { scrubStoredSnapshot, siteShowsMedia, singleNoteExport } from "./publish
 import { liveNodeSql, tagNodeSql } from "../../spine/nodeSql.js";
 
 /** Whether any of these nodes may be something the site serves: a note in a
- *  space that publishes or one marked 「發布」 (publishing/publishedSet.ts), or
- *  a tag (it has a page of its own when shown). A note its own 「不發布」 or its
+ *  space that publishes or one marked 「發布」 (publishing/publishedSet.ts), a
+ *  tag (it has a page of its own when shown), or a drawing whose picture the
+ *  latest snapshot carries (trashing it takes the picture down). A note its own 「不發布」 or its
  *  source keeps off (a feed's saved article, unless marked 「發布」) is not: hiding
  *  or trashing it changes nothing the site shows. A blank note is NOT told apart
  *  here: its notes underneath may be trashed with it, and a missed takedown costs
@@ -21,7 +22,12 @@ async function touchesSite(nodeIds: string[]): Promise<boolean> {
       WHERE n.id = ANY($1::uuid[])
         AND (flag.value = 'true'
              OR (s.capabilities->>'publish' = 'true' AND flag.value IS DISTINCT FROM 'false' AND n.source_type <> 'rss')
-             OR ${tagNodeSql("n")})
+             OR ${tagNodeSql("n")}
+             -- a drawing whose picture the latest snapshot carries where a published note embeds it (publishing/drawingEmbeds.ts)
+             OR EXISTS (SELECT 1 FROM (SELECT p.payload FROM publish_snapshots p WHERE p.workspace_id = n.workspace_id
+                                        ORDER BY p.created_at DESC LIMIT 1) latest
+                         WHERE jsonb_path_exists(latest.payload, '$.nodes[*].pictures[*] ? (@.source_node_id == $id)',
+                                                 jsonb_build_object('id', n.id::text))))
       LIMIT 1`,
     [nodeIds, PUBLISHED_KEY],
   );

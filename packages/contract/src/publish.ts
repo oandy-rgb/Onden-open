@@ -35,7 +35,7 @@ export type ServedSite = {
 };
 
 /** POST /api/publish/preview's answer: the candidate a publish would store, what changes against the last publish,
- *  the links that will read "(private)", the media readers won't get, and the hash a publish sends back so only the
+ *  the links that will read as private, the pictures that go out with the notes that embed them, the media readers won't get, and the hash a publish sends back so only the
  *  previewed candidate goes out. */
 export type PublishPreview = {
   hash: string;
@@ -60,7 +60,14 @@ export type PublishPreview = {
     removed: Array<PreviewNote & { taken_down: boolean }>;
     settings_changed: boolean;
   };
+  /** Links (and embeds that are not pictures) to notes not on the site: `shown_as` is what readers see instead, in
+   *  the site's language. */
   private_links: Array<{ node_id: string; node_title: string; target: string; shown_as: string }>;
+  /** The pictures of the drawings the published notes embed, once each (backend publishing/drawingEmbeds.ts): what this
+   *  publish puts on the site with those notes even when the drawing's own note is not published. `source_id` is the
+   *  drawing (its 「不發布」 keeps the picture off), `node_ids` the published notes that show it, `picture` the image as
+   *  readers get it (a data: address). An older server sends none. */
+  embedded_pictures?: Array<{ source_id: string; node_ids: string[]; picture: string }>;
   /** not_public: a reader of the site can't open it (its note isn't public); missing: no file on the server.
    *  `node_ids`: the published notes that embed it (empty: it is in the site's design). */
   blocked_media: Array<{ filename: string; reason: "not_public" | "missing"; node_ids: string[] }>;

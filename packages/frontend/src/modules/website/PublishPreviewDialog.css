@@ -13,3 +13,19 @@
 .publish-review-site-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--ac-muted); }
 .publish-review-site-frame { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
 .publish-left-out-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* Confirm / cancel stay in reach at the end of a long review (a phone scrolled far down a list of checks):
+   pinned to the bottom of the card's scroll area, on the card's own surface. */
+.publish-review-actions-sticky { position: sticky; bottom: -16px; margin: 16px -16px -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--ac-surface); border-top: 1px solid var(--ac-line); }
+.publish-review-done { margin: 8px 0 0; }
+.publish-review-failed { margin: 12px 0 0; }
+/* 「會一起公開的圖」: small pictures on the paper they were drawn on, with the notes they are in. */
+.publish-pictures-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.publish-picture { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.publish-picture-thumb { width: 72px; height: 54px; object-fit: contain; background: var(--ac-pure-white); border: 1px solid var(--ac-line); border-radius: var(--ac-radius-sm); }
+.publish-picture-notes { overflow-wrap: anywhere; font-size: var(--ac-fs-caption); }
+/* In a narrow dialog (a phone) the button goes under the note names, which keep the width of the row. */
+.publish-pictures { container-type: inline-size; }
+@container (max-width: 480px) {
+  .publish-picture { grid-template-columns: 72px minmax(0, 1fr); align-items: start; }
+  .publish-picture > :last-child { grid-column: 2; justify-self: start; }
+}

@@ -109,7 +109,7 @@ describe.skipIf(!isTestDb)("digital-garden publish journey (D9 privacy, end to e
     expect(nodes.map((n) => n.title)).toEqual(["My First Post"]);     // draft NOT public
     const published = nodes.find((n) => n.id === post.id)!;
     // the [[Secret Draft]] link is neutralized — the private title can't leak
-    expect(published.markdown).toContain("(private)");
+    expect(published.markdown).toContain("（未公開）");
     expect(published.markdown).not.toContain("Secret Draft");
 
     // ── 4. Put the draft back (its space's rule) → the link resolves ─────────

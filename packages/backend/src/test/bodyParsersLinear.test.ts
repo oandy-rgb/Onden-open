@@ -95,7 +95,7 @@ let headingRuns = 0;
 const parsers: Record<string, (body: string) => unknown> = {
   extractWikilinks, extractAttributes, extractFrontmatterAttributes, legacyBlockAnchors,
   parseBlocks, parseLegacyBlocks,
-  noteSummary: (body) => noteSummary(body, { maxLen: 280 }), redaction: (body) => inertUnpublishedWikilinks(body, []),
+  noteSummary: (body) => noteSummary(body, { maxLen: 280 }), redaction: (body) => inertUnpublishedWikilinks(body, [], "(private)"),
   parseSearchQuery, // a pasted note is a query too
   // D76: /api/nodes/search builds each hit's snippet over the whole body.
   snippetAround: (body) => snippetAround(body, ["a", "😀", "é"]), snippetAroundMiss: (body) => snippetAround(body, ["aaaaaaab", "zz"]),

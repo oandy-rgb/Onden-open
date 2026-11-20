@@ -14,7 +14,8 @@ import { expectedPagesUrl } from "./githubPages.js";
 import { overlaySiteConfig, publishedNodeIds, uniquePublishedSlugs } from "./publishedSet.js";
 import { scrubUnpublishedParents, attachPublishedTags, linkAliasesBySlug, publishedAliases, publishedNames, redactPayloadNodes } from "./redaction.js";
 import { readerHash, type PayloadEdge, type PayloadNode } from "./siteDiff.js";
-import { prepareDrawingEmbeds } from "./drawingEmbeds.js";
+import { carryEmbeddedPictures } from "./drawingEmbeds.js";
+import { presentationWords } from "./siteWords.js";
 import { forgetReplacedPages, prepareHandwritingPages, storeHandwritingPages, type PageFiles } from "./handwritingPages.js";
 import { siteHomeFor } from "./siteHome.js";
 import { scrubNavLinks } from "./siteRows.js";
@@ -121,7 +122,10 @@ function unmarkReferencedBlocks(rows: Array<{ id?: unknown; markdown?: unknown; 
  *  redaction, slugs and tag lists read of them), so one note's reader view
  *  costs one note's text, not the site's. */
 async function frozenPublishedNodes(
-  workspaceId: string, publishedIds: string[], actor: ActorCtx | null, onlyNoteId?: string,
+  workspaceId: string, publishedIds: string[], actor: ActorCtx | null,
+  /** What a link or embed of a note not on the site reads as, in the site's language (siteWords privateText). */
+  privateText: string,
+  onlyNoteId?: string,
 ) {
   // order_key + order_stamp: the site lists siblings in the workspace's order
   // (frontend lib/childOrder), not by title (D64).
@@ -152,21 +156,22 @@ async function frozenPublishedNodes(
   // ![[note#^id]] of an excerpt becomes the excerpt (quote + source link) —
   // before redaction, which would make an embed of an unpublished note inert.
   await expandPublishedExcerpts(workspaceId, nodes.rows, actor);
+  // ![[drawing]] embeds: the picture of what is embedded travels with the note
+  // that embeds it, even from a space that does not publish — before
+  // redaction, which would make such an embed inert (drawingEmbeds.ts).
+  await carryEmbeddedPictures(workspaceId, nodes.rows, actor, aliases);
   const onInert = (node: { id?: unknown; title?: unknown }, link: { target: string; shownAs: string }) => privateLinks.push({
     nodeId: String(node.id), nodeTitle: String(node.title ?? ""), target: link.target, shownAs: link.shownAs,
   });
-  redactPayloadNodes(nodes.rows, onInert, aliases);
+  redactPayloadNodes(nodes.rows, privateText, onInert, aliases);
   // …and a link by alias names its note by the served slug instead (option 3).
   linkAliasesBySlug(nodes.rows, aliases);
-  // ![[drawing]] embeds: each published drawing a published note embeds is
-  // frozen as its picture and named by its served slug (drawingEmbeds.ts).
-  await prepareDrawingEmbeds(workspaceId, nodes.rows, aliases);
   // A handwriting note draws its own pages on its own page (handwritingPages.ts).
   const handwritingPages = await prepareHandwritingPages(workspaceId, nodes.rows, onlyNoteId);
   // onden-query / onden-base blocks: their result now, frozen on the note,
   // listing published notes only (D113) — the site never runs a query.
   const frozen = await freezeQueryBlocks(workspaceId, nodes.rows as Array<{ id: string; title: string; slug: string; markdown: string }>, {
-    actor, listed: nodes.rows,
+    actor, listed: nodes.rows, privateText,
   });
   for (const node of nodes.rows as Array<{ id: string; query_blocks?: unknown }>) {
     const blocks = frozen.get(node.id);
@@ -210,15 +215,16 @@ export async function buildCandidate(workspaceId: string, opts: SnapshotOpts): P
   // inlined exclusion SQL; the snapshot can never diverge from the serve-time
   // takedown filter (servedSite.applyTakedown) because both call publishedNodeIds.
   const publishedIds = [...(await publishedNodeIds(workspaceId))];
-  const { nodes, edges, aliases, privateLinks, handwritingPages } = await frozenPublishedNodes(workspaceId, publishedIds, opts.actor ?? null);
+  // The site settings (brand, nav, SEO, its language …) are frozen with the content: a
+  // changed setting, like an edited note, waits for the next publish (W38a).
+  const overlaid = await overlaySiteConfig(workspaceId, opts.presentation ?? {});
+  const { privateText } = presentationWords(overlaid);
+  const { nodes, edges, aliases, privateLinks, handwritingPages } = await frozenPublishedNodes(workspaceId, publishedIds, opts.actor ?? null, privateText);
 
   // The home is a page of the published set, decided by siteHomeFor (the
   // explicit override, else the workspace's home, else its one fallback).
   const homeNodeId = await siteHomeFor(workspaceId, nodes.rows, opts.homeNodeId);
-  // The site settings (brand, nav, SEO …) are frozen with the content: a
-  // changed setting, like an edited note, waits for the next publish (W38a).
-  // `settings_frozen` tells the loader not to overlay them.
-  const overlaid = await overlaySiteConfig(workspaceId, opts.presentation ?? {});
+  // `settings_frozen` tells the loader not to overlay the settings.
   const site = scrubNavLinks(overlaid.site as { nav?: unknown }, new Set(nodes.rows.map((n) => n.id as string)));
   // The design is the SAVED one (the studio's chrome), never the request's;
   // without a design the default. Its tag pages (and the old free-form home page, when that is the one drawn) are frozen now.
@@ -226,7 +232,7 @@ export async function buildCandidate(workspaceId: string, opts: SnapshotOpts): P
   const frozenHome = await freezeDesign({
     workspaceId, actor: opts.actor ?? null, design,
     nodes: nodes.rows as unknown as Parameters<typeof freezeDesign>[0]["nodes"],
-    names: publishedNames(nodes.rows, aliases),
+    names: publishedNames(nodes.rows, aliases), privateText,
   });
   const manifest = { site, design: frozenHome.design } as Manifest;
   // The addresses earlier snapshots served, so a renamed note's (or tag's) old
@@ -260,7 +266,8 @@ export async function buildCandidate(workspaceId: string, opts: SnapshotOpts): P
 export async function candidateNote(workspaceId: string, nodeId: string, actor: ActorCtx | null) {
   const publishedIds = [...(await publishedNodeIds(workspaceId))];
   if (!publishedIds.includes(nodeId)) return null;
-  const { nodes, edges } = await frozenPublishedNodes(workspaceId, publishedIds, actor, nodeId);
+  const { privateText } = presentationWords(await overlaySiteConfig(workspaceId, null));
+  const { nodes, edges } = await frozenPublishedNodes(workspaceId, publishedIds, actor, privateText, nodeId);
   const node = nodes.rows.find((n) => n.id === nodeId);
   return node ? { node: node as PayloadNode, ids: new Set(publishedIds), edges: edges.rows as PayloadEdge[] } : null;
 }

@@ -10,6 +10,9 @@ import { getSiteConfig } from "../../../services/siteConfig.js";
 import type { LeftOutNote } from "@onden/contract";
 import { KEPT_OFF_BY_PARENT_ATTR_KEY } from "@onden/markdown";
 import { liveNodeSql } from "../../../spine/nodeSql.js";
+import { SITE_OWNED_SPACE_SQL, SITE_SPACE_JOIN } from "../../../spine/spaceScope.js";
+import { sql } from "kysely";
+import { db } from "../../../dbKysely.js";
 
 // Merge live siteConfig (from the workspace-config node) into a snapshot's
 // presentation object. Live config wins over snapshot-frozen values so that
@@ -109,6 +112,27 @@ export async function publishedNodeIds(workspaceId: string): Promise<Set<string>
   );
   const publicReadable = await publiclyReadableNodeIds(workspaceId);
   return new Set(r.rows.map((row) => row.id).filter((id) => publicReadable.has(id)));
+}
+
+/** The drawings among `ids` whose picture a published note may carry where it
+ *  embeds them (`![[drawing]]`, a quoted area `|ink=…`; owner 2026-11-20, after
+ *  Quartz, which publishes the pictures a published note embeds with it). The
+ *  drawing's own page is not part of this: it may sit in a space that does not
+ *  publish. Kept out, as for a page: a drawing marked 「不發布」 (`_published`
+ *  'false', the owner's exception), trashed or hidden, a tag definition or
+ *  system machinery, and anything in a personal space of someone other than the
+ *  workspace owner (SITE_OWNED_SPACE_SQL, the pages' own space rule). Read at
+ *  publish (drawingEmbeds.carryEmbeddedPictures, with the publisher's read
+ *  check on top) and again at every serve (takenDown.servedPictureSources), so
+ *  「不發布」 on the drawing takes its picture down at once. */
+export async function pictureSourceIds(workspaceId: string, ids: readonly string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const r = await sql<{ id: string }>`
+    SELECT n.id::text AS id FROM content_nodes n ${sql.raw(SITE_SPACE_JOIN("n"))} ${sql.raw(FLAG_JOIN("n"))}
+     WHERE n.workspace_id = ${workspaceId} AND n.id = ANY(${[...ids]}::uuid[]) AND ${sql.raw(PAGE_SQL("n"))}
+       AND s.kind <> 'system' AND ${sql.raw(SITE_OWNED_SPACE_SQL)}
+       AND flag.value IS DISTINCT FROM 'false'`.execute(db);
+  return new Set(r.rows.map((row) => row.id));
 }
 
 /** The notes publishedNodeIds leaves out that the owner may want to know

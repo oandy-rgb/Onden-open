@@ -376,6 +376,9 @@ test("braid 3 — publish chain: rich note renders on /site; the private sibling
   await expect(dialog.locator(".publish-preview-list li", { hasText: `Braid rich ${stamp}` })).toBeVisible();
   await expect(dialog.locator(".publish-preview-list li", { hasText: `Braid private ${stamp}` })).toHaveCount(0);
   await dialog.locator(".publish-preview-confirm").click();
+  // The dialog says it went out (and where) until it is closed.
+  await expect(dialog.locator(".publish-review-done")).toBeVisible();
+  await dialog.locator('[data-action="close-published"]').click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(async () => {
     const s = (await (await page.request.get("/api/site")).json()) as { payload?: { nodes?: Array<{ id: string }> } };

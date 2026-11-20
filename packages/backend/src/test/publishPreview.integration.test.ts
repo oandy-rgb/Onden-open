@@ -116,7 +116,7 @@ describe.skipIf(!isTestDb)("publish preview + hash confirmation (DB)", () => {
     expect(p.diff.removed).toEqual([]);
     expect(p.hash).toMatch(/^[0-9a-f]{64}$/);
     expect(p.private_links).toEqual([
-      { node_id: home, node_title: "Home", target: "Secret plans", shown_as: "(private)" },
+      { node_id: home, node_title: "Home", target: "Secret plans", shown_as: "（未公開）" },
       { node_id: home, node_title: "Home", target: "Secret plans", shown_as: "our roadmap" },
     ]);
     expect(p.blocked_media).toEqual(expect.arrayContaining([

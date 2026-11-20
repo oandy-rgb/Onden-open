@@ -1,6 +1,6 @@
 # 任務的連結與嵌入（T6）
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：packages/markdown/src/nodeRef.ts, packages/frontend/src/lib/taskRefs.ts, packages/frontend/src/lib/taskRefs.app.ts, packages/frontend/src/lib/embedDom.ts, packages/backend/src/services/wikilinkEdges.ts, packages/backend/src/modules/website/publishing/redaction.ts
 
 任務是隱藏節點（掛 `#task`），不在筆記樹，也不在前端的 `nodes`（在 `data.tasks`）。本文記錄筆記怎麼連到任務、
@@ -36,7 +36,7 @@
   所以隱藏的任務節點也有邊與反向連結。讀取仍走各讀取入口的既有政策。
 - `nodeSearch.searchNodes(…, { tasks: true })`（`GET /api/nodes/search?tasks=1`）才回傳任務，結果帶 `is_task`；預設仍不含任務，
   範圍限制照舊推進 SQL（`readableScopeSql`）。筆記樹（bootstrap `nodes`）仍排除任務（`notATaskNodeSql`）。
-- 發布：用 id 指到的連結沒有標題／slug／別名可比對，所以在 `redaction.ts` 一律變成無害文字（作者的別名文字或「(private)」），
+- 發布：用 id 指到的連結沒有標題／slug／別名可比對，所以在 `redaction.ts` 一律變成無害文字（作者的別名文字或網站語言的佔位字，中文網站「（未公開）」），
   id 不會進快照、站台或匯出。`publishRedaction.property` 加入 `taskRef`／`taskEmbed`／`taskTitle` 三種連結並禁止任務標題與 id 外洩。
 
 ## 限制

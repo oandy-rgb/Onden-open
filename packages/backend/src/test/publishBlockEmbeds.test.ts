@@ -9,11 +9,13 @@ import { describe, expect, it } from "vitest";
 import { serveDrawingEmbeds } from "../modules/website/publishing/drawingEmbeds.js";
 import { redactPayloadNodes } from "../modules/website/publishing/redaction.js";
 
+const WORDS = { privateText: "(private)", drawingAlt: "Drawing" };
+
 type N = { id: string; title: string; slug: string; markdown: string; embeds?: string[] };
 
 function publishAndServe(nodes: N[]): N[] {
-  redactPayloadNodes(nodes); // publish step: embeds of unpublished notes go inert
-  serveDrawingEmbeds(nodes); // serve step: what is left becomes links
+  redactPayloadNodes(nodes, "(private)"); // publish step: embeds of unpublished notes go inert
+  serveDrawingEmbeds(nodes, () => false, WORDS); // serve step: what is left becomes links
   return nodes;
 }
 
@@ -50,10 +52,10 @@ describe("published block / section embeds", () => {
 
   it("a takedown after the publish still turns the link into the placeholder", () => {
     const frozen = [home(), shared()];
-    redactPayloadNodes(frozen);
+    redactPayloadNodes(frozen, "(private)");
     // Shared is taken down: the served nodes no longer include it.
     const served = frozen.filter((n) => n.id !== "s1");
-    serveDrawingEmbeds(served);
+    serveDrawingEmbeds(served, () => false, WORDS);
     expect(served[0]!.markdown).not.toContain("Shared");
     expect(served[0]!.markdown).not.toContain("Public");
   });

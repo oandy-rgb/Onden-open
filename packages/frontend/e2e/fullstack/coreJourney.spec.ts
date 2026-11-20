@@ -77,6 +77,9 @@ test("core journey: capture → read/excerpt → organize → review → publish
   const review = page.locator(".publish-preview-dialog");
   await expect(review.locator(".publish-preview-list li", { hasText: captureTitle })).toBeVisible();
   await review.locator(".publish-preview-confirm").click();
+  // The dialog says it went out (and where) until it is closed.
+  await expect(review.locator(".publish-review-done")).toBeVisible();
+  await review.locator('[data-action="close-published"]').click();
   await expect(review).toHaveCount(0);
   // serve-time: /api/site now carries the note, with the excerpt intact
   await expect.poll(async () => {

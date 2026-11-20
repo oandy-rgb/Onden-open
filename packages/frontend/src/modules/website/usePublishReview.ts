@@ -35,14 +35,20 @@ export function reportIncluded(result: { failed?: unknown[] } | { deduped: true 
 
 type Writer = Pick<ReturnType<typeof makeWebsiteWriter>, "previewPublish" | "publish"> & Partial<Pick<ReturnType<typeof makeWebsiteWriter>, "includeNotes">>;
 
+/** How the confirmed publish ended, shown in the dialog until it is closed: when the site went out and where it is,
+ *  or why it did not (in plain words; a stale preview is not an outcome: the new preview shows instead). */
+export type PublishOutcome = { kind: "published"; url: string; at: string } | { kind: "failed"; message: string };
+
 export function usePublishReview(writer: Writer) {
   const [pending, setPending] = useState<PendingPublish | null>(null);
+  const [outcome, setOutcome] = useState<PublishOutcome | null>(null);
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const busy = useRef(false);
 
   async function load(body: PublishBody) {
     setPending({ body, preview: await writer.previewPublish(body) });
+    setOutcome(null);
   }
 
   /** Show the preview of publishing `body` (from `prepare`, which may save first). */
@@ -65,11 +71,13 @@ export function usePublishReview(writer: Writer) {
       // their data goes up; what is not ready in time is drawn by the reader's browser.
       const diagrams = await precompileDiagrams(current.preview.diagrams_needed ?? []);
       const result = await writer.publish({ ...current.body, ...(diagrams.length > 0 ? { diagrams } : {}), preview_hash: current.preview.hash });
-      setPending(null);
+      // The dialog stays open to say it went out (and where), until the person closes it.
+      setOutcome({ kind: "published", url: result.url, at: new Date().toISOString() });
       return result;
     } catch (error) {
       // Reported by the writer. Stale: show what would go out now instead.
       if (isPreviewStale(error)) await load(current.body).catch((e) => { setPending(null); writeErrors.report(e, addToast); });
+      else setOutcome({ kind: "failed", message: writeErrors.message(error) });
       return null;
     } finally { busy.current = false; setPublishing(false); }
   }
@@ -100,5 +108,5 @@ export function usePublishReview(writer: Writer) {
     finally { busy.current = false; setLoading(false); }
   }
 
-  return { pending, loading, publishing, start, confirm, include, refresh, cancel: () => setPending(null) };
+  return { pending, outcome, loading, publishing, start, confirm, include, refresh, cancel: () => { setPending(null); setOutcome(null); } };
 }

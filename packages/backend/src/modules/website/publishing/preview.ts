@@ -13,7 +13,8 @@ import { mediaFiles } from "../../../services/mediaFiles.js";
 import { buildCandidate, candidateHash, type SnapshotOpts } from "./snapshot.js";
 import { nodesOf, siteDiff, type SiteDiff } from "./siteDiff.js";
 import { loadServedSite } from "./servedSite.js";
-import { serveDrawingEmbeds } from "./drawingEmbeds.js";
+import { carriedPictures, serveDrawingEmbeds } from "./drawingEmbeds.js";
+import { presentationWords } from "./siteWords.js";
 import { serveHandwritingPages, storeHandwritingPages } from "./handwritingPages.js";
 import { leftOutNotes } from "./publishedSet.js";
 import { takenDownSinceLastPublish } from "./takenDown.js";
@@ -99,8 +100,9 @@ export async function buildPublishPreview(workspaceId: string, opts: SnapshotOpt
 
   // Shown as readers will get it: embedded drawings as their pictures, as
   // the served site draws them (the hash above is of the candidate as stored).
+  // Every picture the candidate carries is shown: this publish is what makes them public.
   const shownNodes = structuredClone(nextNodes);
-  serveDrawingEmbeds(shownNodes);
+  serveDrawingEmbeds(shownNodes, () => true, presentationWords(candidate.payload.presentation));
   serveHandwritingPages(shownNodes);
 
   return {
@@ -112,6 +114,7 @@ export async function buildPublishPreview(workspaceId: string, opts: SnapshotOpt
     live: published ? { snapshot_id: served.id!, published_at: new Date(served.created_at).toISOString() } : null,
     diff,
     private_links: candidate.privateLinks.map((l) => ({ node_id: l.nodeId, node_title: l.nodeTitle, target: l.target, shown_as: l.shownAs })),
+    embedded_pictures: carriedPictures(nextNodes),
     blocked_media,
     new_media,
     large_videos,

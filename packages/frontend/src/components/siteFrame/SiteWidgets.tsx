@@ -16,7 +16,7 @@ import {
   articlesOf, byUpdated, featuredOf, firstOf, firstSentence, footnotesOf, groupByYear, introNoteOf, maturityOf, metaPieces, recentOf, topicsOf, WIDGET_LIST_MAX, yearOfDay,
 } from "./siteWidgetData";
 import {
-  adjacentNotes, backlinksOf, noteTree, notePath, tagPageByName, tagPath, isoDay, type Backlink, type SiteData, type TreeItem,
+  adjacentNotes, backlinksOf, linkedNotes, noteTree, notePath, tagPageByName, tagPath, isoDay, type Backlink, type SiteData, type TreeItem,
 } from "./siteModel";
 import { nodeOf } from "../../lib/nodeIndex";
 
@@ -68,15 +68,28 @@ function Maturity({ node, t }: { node: PublishedNode; t: T }) {
   return level ? <span className="s-maturity" data-level={level}>{t(MATURITY_KEY[level])}</span> : null;
 }
 
+/** Whether `item` is the active note or has it somewhere below: its folder is open on that page. */
+const holds = (item: TreeItem, activeId: string): boolean => item.node.id === activeId || item.children.some((c) => holds(c, activeId));
+
+/** The explorer's tree: a note with notes under it is a folder (open on the path to the current page;
+ *  the reader's other choices are kept on their device, SiteNavigation.astro), a note without is a link. */
 function TreeList({ items, activeId, nodes }: { items: TreeItem[]; activeId: string; nodes: PublishedNode[] }) {
   return (
     <ul>
-      {items.map(({ node, children }) => (
-        <li key={node.id}>
-          <Link href={notePath(nodes, node.slug)} aria-current={node.id === activeId ? "page" : undefined}>{node.title}</Link>
-          {children.length > 0 ? <TreeList items={children} activeId={activeId} nodes={nodes} /> : null}
-        </li>
-      ))}
+      {items.map((item) => {
+        const { node, children } = item;
+        const link = <Link href={notePath(nodes, node.slug)} aria-current={node.id === activeId ? "page" : undefined}>{node.title}</Link>;
+        return (
+          <li key={node.id}>
+            {children.length > 0 ? (
+              <details data-folder={node.id} open={holds(item, activeId) || undefined}>
+                <summary>{link}</summary>
+                <TreeList items={children} activeId={activeId} nodes={nodes} />
+              </details>
+            ) : link}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -238,9 +251,11 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
   toc(_variant, ctx) {
     const toc = ctx.node ? extractTOC(ctx.node.markdown) : [];
     return (
-      <nav className="s-toc" aria-label={ctx.t("onThisPage")}>
-        <h2 className="s-frame-label">{ctx.t("onThisPage")}</h2>
-        <ul>{toc.map((e) => <li key={e.id} className={e.level === 3 ? "s-toc__sub" : undefined}><Link href={e.href}>{e.text}</Link></li>)}</ul>
+      <nav className="s-toc" aria-label={ctx.t("onThisPage")} data-s-toc>
+        <details className="s-toc__fold" open>
+          <summary className="s-frame-label">{ctx.t("onThisPage")}</summary>
+          <ul>{toc.map((e) => <li key={e.id} className={e.level === 3 ? "s-toc__sub" : undefined}><Link href={e.href} data-heading={e.id}>{e.text}</Link></li>)}</ul>
+        </details>
       </nav>
     );
   },
@@ -255,8 +270,11 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
   },
   tree(_variant, ctx) {
     return (
-      <nav className="s-tree" aria-label={ctx.t("allNotes")}>
-        <TreeList items={noteTree(ctx.data.nodes)} activeId={ctx.node?.id ?? ""} nodes={ctx.data.nodes} />
+      <nav className="s-tree s-explorer" aria-label={ctx.t("allNotes")} data-s-explorer>
+        <Pressable className="s-explorer__toggle" aria-expanded="false" aria-controls="s-explorer-panel" data-s-explorer-toggle>{ctx.t("explorer")}</Pressable>
+        <div className="s-explorer__panel" id="s-explorer-panel" data-pagefind-ignore="">
+          <TreeList items={noteTree(ctx.data.nodes)} activeId={ctx.node?.id ?? ""} nodes={ctx.data.nodes} />
+        </div>
       </nav>
     );
   },
@@ -266,6 +284,21 @@ export const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
       <section className="s-backlinks" aria-label={ctx.t("backlinks")} data-pagefind-ignore="">
         <h2 className="s-frame-label">{ctx.t("backlinks")}</h2>
         <ul>{entries.map((entry) => <BacklinkItem key={entry.node.id} entry={entry} nodes={ctx.data.nodes} t={ctx.t} quotes={variant === "quote"} />)}</ul>
+      </section>
+    );
+  },
+  graph(_variant, ctx) {
+    const node = ctx.node;
+    if (!node) return null;
+    const near = linkedNotes(node, ctx.data.nodes, ctx.data.edges);
+    return (
+      <section className="s-graph" aria-label={ctx.t("graph")} data-s-graph={node.id} data-pagefind-ignore="">
+        <h2 className="s-frame-label">{ctx.t("graph")}</h2>
+        <div className="s-graph__canvas" data-s-graph-canvas data-failed={ctx.t("graphUnavailable")} data-close={ctx.t("graphClose")} data-title={ctx.t("graph")} />
+        <ul className="s-graph__list">
+          {near.map((n) => <li key={n.id}><Link href={href(ctx, n)}>{n.title}</Link></li>)}
+        </ul>
+        <Pressable className="s-graph__open s-button s-button--quiet" data-s-graph-open>{ctx.t("graphFull")}</Pressable>
       </section>
     );
   },

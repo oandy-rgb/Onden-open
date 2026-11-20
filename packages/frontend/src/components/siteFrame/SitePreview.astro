@@ -1,8 +1,8 @@
 ---
 // Link previews on an article page: a card with the other note's title, date,
 // reading time, summary and tags, shown when a link to it is hovered (after a
-// short pause) or focused; on a touch screen the first tap on such a link shows
-// the card as a sheet from the bottom and "Open this page" goes there.
+// short pause) or focused. A touch screen has no hover: a tap on such a link just
+// follows it, as any link (no card, no extra tap).
 //
 // The cards' text is the page's own `<script type="application/json"
 // id="s-previews">` (SiteFrames.tsx), keyed by the `data-note` of each link —
@@ -13,7 +13,7 @@ import "./sitePreview.css";
 
 <script>
   type Note = { title: string; meta: string; summary: string; tags: string[] };
-  type Previews = { labels: { open: string; close: string; preview: string }; notes: Record<string, Note> };
+  type Previews = { labels: { open: string; preview: string }; notes: Record<string, Note> };
 
   const HOVER_DELAY = 280;
   const LEAVE_DELAY = 220;
@@ -31,7 +31,6 @@ import "./sitePreview.css";
     let showTimer = 0;
     let pending: HTMLAnchorElement | null = null;
     let hideTimer = 0;
-    let pointerKind = "mouse";
     let seq = 0;
 
     const linkOf = (target: EventTarget | null): HTMLAnchorElement | null => {
@@ -48,9 +47,9 @@ import "./sitePreview.css";
       current = null;
     };
 
-    const build = (link: HTMLAnchorElement, note: Note, sheet: boolean): HTMLElement => {
+    const build = (link: HTMLAnchorElement, note: Note): HTMLElement => {
       const el = document.createElement("div");
-      el.className = sheet ? "s-preview s-preview--sheet" : "s-preview";
+      el.className = "s-preview";
       el.id = `s-preview-${++seq}`;
       el.setAttribute("role", "dialog");
       el.setAttribute("aria-label", note.title);
@@ -80,15 +79,6 @@ import "./sitePreview.css";
       // The link's own address: relative in a copy, so it resolves as the link does.
       open.setAttribute("href", link.getAttribute("href") ?? "#");
       el.append(open);
-      if (sheet) {
-        const x = document.createElement("button");
-        x.type = "button";
-        x.className = "s-preview__close";
-        x.textContent = "×";
-        x.setAttribute("aria-label", labels.close);
-        x.addEventListener("click", close);
-        el.prepend(x);
-      }
       return el;
     };
 
@@ -103,27 +93,19 @@ import "./sitePreview.css";
       el.style.left = `${Math.min(Math.max(GAP, rect.left), Math.max(GAP, window.innerWidth - w - GAP))}px`;
     };
 
-    const show = (link: HTMLAnchorElement, sheet: boolean, at?: { x: number; y: number }) => {
+    const show = (link: HTMLAnchorElement, at?: { x: number; y: number }) => {
       const note = notes[link.dataset.note ?? ""];
       if (!note) return;
       if (current === link && card) return;
       close();
       current = link;
-      card = build(link, note, sheet);
+      card = build(link, note);
       host.append(card);
       link.setAttribute("aria-describedby", card.id);
-      if (!sheet) {
-        card.addEventListener("pointerenter", () => window.clearTimeout(hideTimer));
-        card.addEventListener("pointerleave", () => { hideTimer = window.setTimeout(close, LEAVE_DELAY); });
-        place(card, link, at);
-      }
+      card.addEventListener("pointerenter", () => window.clearTimeout(hideTimer));
+      card.addEventListener("pointerleave", () => { hideTimer = window.setTimeout(close, LEAVE_DELAY); });
+      place(card, link, at);
     };
-
-    document.addEventListener("pointerdown", (event) => {
-      pointerKind = event.pointerType || "mouse";
-      // A tap outside the card (and not on a previewed link) closes the sheet.
-      if (card?.classList.contains("s-preview--sheet") && !card.contains(event.target as Node) && !linkOf(event.target)) close();
-    }, true);
 
     document.addEventListener("pointerover", (event) => {
       if (event.pointerType !== "mouse") return;
@@ -134,7 +116,7 @@ import "./sitePreview.css";
       window.clearTimeout(showTimer);
       pending = link;
       const at = { x: event.clientX, y: event.clientY };
-      showTimer = window.setTimeout(() => { pending = null; show(link, false, at); }, HOVER_DELAY);
+      showTimer = window.setTimeout(() => { pending = null; show(link, at); }, HOVER_DELAY);
     });
 
     document.addEventListener("pointerout", (event) => {
@@ -151,7 +133,7 @@ import "./sitePreview.css";
     document.addEventListener("focusin", (event) => {
       const link = linkOf(event.target);
       // Only a keyboard focus: a tap or click also focuses the link.
-      if (link && link.matches(":focus-visible")) { clearTimers(); show(link, false); }
+      if (link && link.matches(":focus-visible")) { clearTimers(); show(link); }
     });
 
     document.addEventListener("focusout", (event) => {
@@ -159,18 +141,9 @@ import "./sitePreview.css";
       if (linkOf(event.target) && !(to && card?.contains(to))) close();
     });
 
-    document.addEventListener("click", (event) => {
-      const link = linkOf(event.target);
-      // detail 0 is a keyboard activation: it follows the link as usual.
-      if (!link || event.detail === 0 || pointerKind === "mouse" || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      event.preventDefault();
-      clearTimers();
-      show(link, true);
-    });
-
     window.addEventListener("scroll", () => {
       clearTimers();
-      if (card && !card.classList.contains("s-preview--sheet")) close();
+      if (card) close();
     }, { capture: true, passive: true });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && card) close(); });
   }

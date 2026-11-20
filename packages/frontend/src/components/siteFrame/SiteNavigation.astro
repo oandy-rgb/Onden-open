@@ -1,0 +1,113 @@
+---
+// The behaviour of the page-navigation widgets: the explorer (the tree of notes: which folders the
+// reader has open is kept on their device; narrow, a button opens it), the contents list (the heading
+// being read is marked while scrolling) and the graph (its code is loaded only when it scrolls into
+// view, so a page without one carries none of it). Without script the explorer is a plain nested
+// list, the contents a list of links, and the graph its list of neighbours.
+// The widgets themselves are drawn by SiteWidgets.tsx.
+import "./siteNavigation.css";
+---
+
+<script>
+  const FOLDERS_KEY = "s-explorer-open";
+  const readFolders = (): string[] => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FOLDERS_KEY) ?? "[]");
+      return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
+    } catch { return []; }
+  };
+  const writeFolders = (ids: string[]) => {
+    try { localStorage.setItem(FOLDERS_KEY, JSON.stringify(ids)); } catch { /* private mode: the choice lasts this visit */ }
+  };
+
+  // ── Explorer ──
+  const explorer = document.querySelector<HTMLElement>("[data-s-explorer]");
+  if (explorer) {
+    const folders = [...explorer.querySelectorAll<HTMLDetailsElement>("details[data-folder]")];
+    // The folders the page opened (the path to the current note) stay open; the reader's own come back.
+    const remembered = new Set(readFolders());
+    for (const folder of folders) if (remembered.has(folder.dataset.folder ?? "")) folder.open = true;
+    // Only a click is the reader's choice; opening for the current page is not remembered.
+    explorer.addEventListener("toggle", (event) => {
+      const folder = event.target as HTMLDetailsElement;
+      if (!(folder instanceof HTMLDetailsElement) || !folder.dataset.folder) return;
+      const open = new Set(readFolders());
+      if (folder.open) open.add(folder.dataset.folder); else open.delete(folder.dataset.folder);
+      writeFolders([...open]);
+    }, true);
+
+    const toggle = explorer.querySelector<HTMLElement>("[data-s-explorer-toggle]");
+    toggle?.addEventListener("click", () => {
+      const open = explorer.dataset.open !== "true";
+      explorer.dataset.open = String(open);
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+    explorer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && explorer.dataset.open === "true") {
+        explorer.dataset.open = "false";
+        toggle?.setAttribute("aria-expanded", "false");
+        toggle?.focus();
+      }
+    });
+    // Scroll the current page into the middle of a long tree.
+    explorer.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+  }
+
+  // ── Contents: mark the heading being read ──
+  const toc = document.querySelector<HTMLElement>("[data-s-toc]");
+  if (toc && "IntersectionObserver" in window) {
+    // Narrow, the contents starts closed (a collapsed block above the text); wide it is open in its column.
+    if (window.innerWidth < 1280) toc.querySelector<HTMLDetailsElement>("details")?.removeAttribute("open");
+    const links = new Map<string, HTMLAnchorElement>();
+    for (const a of toc.querySelectorAll<HTMLAnchorElement>("a[data-heading]")) links.set(a.dataset.heading!, a);
+    const marker = (id: string) => document.getElementById(id) ?? document.getElementById(`user-content-${id}`);
+    const headings = [...links.keys()].map((id) => marker(id)).filter((h): h is HTMLElement => !!h);
+    const mark = (current: HTMLElement | null) => {
+      for (const [id, a] of links) {
+        const here = !!current && (current.id === id || current.id === `user-content-${id}`);
+        if (here) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
+      }
+    };
+    // The last heading that has reached the top part of the window is the one being read.
+    const update = () => {
+      let current: HTMLElement | null = null;
+      for (const h of headings) if (h.getBoundingClientRect().top <= window.innerHeight * 0.25) current = h;
+      mark(current ?? headings[0] ?? null);
+    };
+    let waiting = false;
+    window.addEventListener("scroll", () => {
+      if (waiting) return;
+      waiting = true;
+      requestAnimationFrame(() => { waiting = false; update(); });
+    }, { passive: true });
+    update();
+  }
+
+  // ── Graph: load its code when it scrolls into view ──
+  const graphs = document.querySelectorAll<HTMLElement>("[data-s-graph]");
+  if (graphs.length > 0) {
+    let view: Promise<typeof import("../../lib/siteGraphView")> | null = null;
+    const code = () => (view ??= import("../../lib/siteGraphView"));
+    const start = (host: HTMLElement) => {
+      const canvas = host.querySelector<HTMLElement>("[data-s-graph-canvas]");
+      const centre = host.dataset.sGraph ?? "";
+      if (canvas) void code().then((m) => m.mountLocalGraph(canvas, centre));
+      const open = host.querySelector<HTMLElement>("[data-s-graph-open]");
+      open?.addEventListener("click", () => {
+        void code().then((m) => m.openFullGraph(centre, {
+          title: canvas?.dataset.title ?? "", close: canvas?.dataset.close ?? "", failed: canvas?.dataset.failed ?? "",
+        }));
+      });
+    };
+    if ("IntersectionObserver" in window) {
+      const seen = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          seen.unobserve(entry.target);
+          start(entry.target as HTMLElement);
+        }
+      }, { rootMargin: "200px" });
+      graphs.forEach((host) => seen.observe(host));
+    } else graphs.forEach(start);
+  }
+</script>

@@ -6,11 +6,12 @@
 import type { SiteLocale } from "@onden/markdown";
 
 type SiteStringKey =
-  | "allNotes" | "backHome" | "backlinks" | "closePreview" | "embedsPage" | "embedsPassage" | "feed" | "navigation" | "next"
+  | "allNotes" | "backHome" | "backlinks" | "embedsPage" | "embedsPassage" | "feed" | "navigation" | "next"
   | "noResults" | "onThisPage" | "openNote" | "pageNotFound" | "preview" | "previous" | "readingTime" | "search" | "updated"
   | "topics" | "recentlyUpdated" | "allArticles" | "latestArticle" | "featured" | "subscribe" | "subscribeLead" | "tagFeed" | "theme"
   | "handwritingPage" | "notesCount" | "maturity1" | "maturity2" | "maturity3" | "footnotes" | "footnoteBack" | "sideNotes" | "articlesInTag"
-  | "stepPrev" | "stepNext" | "stepsAll" | "stepsOne" | "stepCount" | "siteUnavailable" | "siteUnavailableLead";
+  | "stepPrev" | "stepNext" | "stepsAll" | "stepsOne" | "stepCount" | "siteUnavailable" | "siteUnavailableLead"
+  | "explorer" | "graph" | "graphFull" | "graphClose" | "graphUnavailable";
 
 const EN: Record<SiteStringKey, string> = {
   search: "Search…",
@@ -24,7 +25,6 @@ const EN: Record<SiteStringKey, string> = {
   backlinks: "Linked from",
   allNotes: "All notes",
   feed: "RSS",
-  closePreview: "Close",
   embedsPage: "Embeds this page",
   embedsPassage: "Embeds a passage of this page: “{text}”",
   openNote: "Open this page",
@@ -56,6 +56,11 @@ const EN: Record<SiteStringKey, string> = {
   stepCount: "Step {n} of {m}",
   siteUnavailable: "Site unavailable",
   siteUnavailableLead: "The site can't be shown right now. Please try again in a moment.",
+  explorer: "Explorer",
+  graph: "Graph",
+  graphFull: "Open the graph of the whole site",
+  graphClose: "Close the graph",
+  graphUnavailable: "The graph can't be shown right now.",
 };
 
 const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
@@ -72,7 +77,6 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     backlinks: "這些筆記連到這裡",
     allNotes: "所有筆記",
     feed: "RSS 訂閱",
-    closePreview: "關閉",
     embedsPage: "內嵌了這篇",
     embedsPassage: "內嵌了這篇的一段：『{text}』",
     openNote: "打開這篇",
@@ -104,6 +108,11 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     stepCount: "第 {n} 步／共 {m} 步",
     siteUnavailable: "網站暫時無法顯示",
     siteUnavailableLead: "目前讀不到網站內容，請稍後再試。",
+    explorer: "檔案樹",
+    graph: "關係圖",
+    graphFull: "打開整個網站的關係圖",
+    graphClose: "關閉關係圖",
+    graphUnavailable: "目前無法顯示關係圖。",
   },
   ja: {
     search: "検索…",
@@ -117,7 +126,6 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     backlinks: "このページへのリンク",
     allNotes: "すべてのノート",
     feed: "RSS",
-    closePreview: "閉じる",
     embedsPage: "このページを埋め込んでいます",
     embedsPassage: "このページの一部を埋め込んでいます：「{text}」",
     openNote: "このページを開く",
@@ -149,6 +157,11 @@ const STRINGS: Record<SiteLocale, Record<SiteStringKey, string>> = {
     stepCount: "{m} 中 {n} ステップ目",
     siteUnavailable: "サイトを表示できません",
     siteUnavailableLead: "現在サイトを読み込めません。しばらくしてからもう一度お試しください。",
+    explorer: "ファイルツリー",
+    graph: "関係図",
+    graphFull: "サイト全体の関係図を開く",
+    graphClose: "関係図を閉じる",
+    graphUnavailable: "関係図を表示できません。",
   },
 };
 

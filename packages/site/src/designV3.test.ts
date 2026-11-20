@@ -37,8 +37,11 @@ describe("boxes and widgets", () => {
   });
   it("a widget is ready only when the site has what it needs", () => {
     const toc = WIDGETS.get("toc")!;
-    expect(widgetReady(toc, { ...NO_FACTS, headings: 2 })).toBe(false);
-    expect(widgetReady(toc, { ...NO_FACTS, headings: 3 })).toBe(true);
+    expect(widgetReady(toc, { ...NO_FACTS, headings: 1 })).toBe(false);
+    expect(widgetReady(toc, { ...NO_FACTS, headings: 2 })).toBe(true);
+    const graph = WIDGETS.get("graph")!;
+    expect(widgetReady(graph, NO_FACTS)).toBe(false);
+    expect(widgetReady(graph, { ...NO_FACTS, linked: 1 })).toBe(true);
     expect(widgetReady(WIDGETS.get("intro")!, NO_FACTS)).toBe(false);
     expect(widgetReady(WIDGETS.get("rss")!, NO_FACTS)).toBe(true);
     expect(widgetReady(WIDGETS.get("scheme")!, { ...NO_FACTS, scheme: "dark" })).toBe(false);
@@ -113,10 +116,11 @@ describe("home page styles", () => {
     const b = defaultBoxes();
     expect(b["home.hero"]?.widget).toBe("intro");
     expect(b["home.list"].map((p) => `${p.widget}/${p.variant}`)).toEqual(["recent/list", "topics/list", "all/byYear"]);
-    expect(b["note.meta"]).toEqual(pick("meta", "date-reading"));
-    expect(b["note.left"]?.widget).toBe("toc");
-    expect(b["note.right"]?.widget).toBe("sidenotes");
-    expect(b["note.end"].map((p) => p.widget)).toEqual(["backlinks", "prevnext"]);
+    expect(b["note.meta"]).toEqual(pick("meta", "all"));
+    // The Quartz-like page: explorer left, contents right, then the graph, the backlinks and the neighbours.
+    expect(b["note.left"]?.widget).toBe("tree");
+    expect(b["note.right"]?.widget).toBe("toc");
+    expect(b["note.end"].map((p) => p.widget)).toEqual(["graph", "backlinks", "prevnext"]);
     expect(b["tag.end"].map((p) => p.widget)).toEqual(["tagfeed"]);
     expect(b.foot.map((p) => p.widget)).toEqual(["copyright", "rss", "scheme"]);
   });

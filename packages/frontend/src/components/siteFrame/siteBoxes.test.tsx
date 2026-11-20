@@ -86,18 +86,19 @@ describe("the default site reads like a notes garden", () => {
     expect(recent).not.toContain('href="/site/tag-garden"');
   });
 
-  it("article: meta is the date and reading time, a contents list left, side notes right, backlinks with their sentence and neighbours at the end", () => {
+  it("article: the explorer left, the contents right, backlinks with their sentence and neighbours at the end", () => {
     const a = article(d);
     expect(a).toContain('data-box="note.left"');
-    expect(a).toContain('class="s-toc"');
+    expect(a).toContain("s-explorer");
     expect(a).toContain('data-box="note.right"');
-    expect(a).toContain("s-sidenotes");
-    expect(a).toContain("第一個註腳。");
+    expect(a).toContain('class="s-toc"');
+    expect(a).not.toContain("s-sidenotes"); // side notes are a choice, not the default
+    expect(a).toContain("第一個註腳。"); // so the footnote stays at the end of the text
     expect(a).toContain('class="s-backlinks"');
     expect(a).toContain("s-backlinks__context");
     expect(a).toContain('rel="prev"');
     expect(a).toContain("約 1 分鐘讀完");
-    expect(a).not.toContain("s-article__tags"); // the default look is 日期・閱讀時間
+    expect(a).toContain("s-article__tags"); // the default look has the tags, each a link to its page
   });
 
   it("tag page: the description, the notes by year, and a feed for only this tag", () => {
@@ -144,15 +145,18 @@ describe("a widget with nothing to show draws nothing", () => {
     expect(home(bare)).not.toContain("s-box");
   });
 
-  it("contents need three headings; side notes need footnotes; backlinks need links in", () => {
+  it("contents need two headings; side notes need footnotes; backlinks need links in", () => {
     const d = data();
-    const few = node("few", "短文", "# 短文\n\n## 一\n\n## 二\n\n內文");
+    const one = node("one", "短文", "# 短文\n\n## 一\n\n內文");
+    const two = node("two", "兩節", "# 兩節\n\n## 一\n\n## 二\n\n內文");
     const three = node("three", "三節", "# 三節\n\n## 一\n\n## 二\n\n## 三\n\n內文");
-    const all = { ...d, nodes: [...d.nodes, few, three] };
-    expect(article(all, "few")).not.toContain("s-toc");
+    const all = { ...d, nodes: [...d.nodes, one, two, three] };
+    const sideNotes = { ...all, design: { ...all.design, boxes: { ...all.design.boxes, "note.right": { widget: "sidenotes", variant: "margin" } } } } as typeof all;
+    expect(article(all, "one")).not.toContain("s-toc");
+    expect(article(all, "two")).toContain("s-toc");
     expect(article(all, "three")).toContain("s-toc");
-    expect(article(all, "few")).not.toContain("s-sidenotes");
-    expect(article(all, "guide")).toContain("s-sidenotes");
+    expect(article(sideNotes, "one")).not.toContain("s-sidenotes");
+    expect(article(sideNotes, "guide")).toContain("s-sidenotes");
     expect(article(all, "seed")).not.toContain("s-backlinks");
     expect(articleFacts(all, all.nodes.find((n) => n.id === "three")!).headings).toBe(3);
   });
@@ -242,16 +246,16 @@ describe("folding on a narrow screen", () => {
   it("the side boxes sit before and after the article in the markup, marked with how they fold", () => {
     expect(a.indexOf('data-box="note.left"')).toBeLessThan(a.indexOf("s-article__title"));
     expect(a.indexOf('data-box="note.right"')).toBeGreaterThan(a.indexOf("s-article__body"));
-    expect(a).toContain('data-box="note.left" data-fold="hide"');
-    expect(a).toContain('data-box="note.right" data-fold="after"');
-    expect(a).toContain("s-w--narrow-hide"); // contents and side notes: not drawn narrow, in either box
+    expect(a).toContain('data-box="note.left" data-fold="flow"'); // the explorer's button stays in place
+    expect(a).toContain('data-box="note.right" data-fold="after"'); // the contents is lifted above the text by CSS (siteNavigation.css)
   });
 
   it("folds with CSS only: a container query, no script", async () => {
     const { readFileSync } = await import("node:fs");
     const sheet = readFileSync("src/components/siteFrame/siteFrame.css", "utf8");
     expect(sheet).toMatch(/@container site \(min-width: 1280px\)/);
-    expect(sheet).toMatch(/\.s-article-layout > \.s-box--note-left \{ display: none; \}/);
+    const nav = readFileSync("src/components/siteFrame/siteNavigation.css", "utf8");
+    expect(nav).toMatch(/@container site \(max-width: 1279px\)/);
     expect(a.replace(/<script type="application\/json"[\s\S]*?<\/script>/g, "")).not.toContain("<script"); // only the link-preview data
   });
 });

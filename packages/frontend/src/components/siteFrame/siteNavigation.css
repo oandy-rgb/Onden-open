@@ -1,0 +1,67 @@
+/* The page-navigation widgets: explorer (tree), contents, graph (SiteNavigation.astro, SiteWidgets.tsx).
+   Wide (the article frame's side columns, 1280px of the page's own width): the explorer is the left
+   column, the contents the right one. Narrower: the explorer is behind a button, the contents is a
+   collapsed block above the text. Touch targets are 44px on a coarse pointer. */
+
+/* ── Explorer ── */
+.s-explorer__panel ul { list-style: none; margin: 0; padding: 0; }
+.s-explorer details > ul { margin-inline-start: 0.45em; padding-inline-start: 0.7em; border-inline-start: 1px solid var(--f-line); }
+.s-explorer summary { display: flex; align-items: center; cursor: pointer; list-style: none; }
+.s-explorer summary::-webkit-details-marker { display: none; }
+.s-explorer summary::before { content: "▸"; flex: none; inline-size: 1.2em; color: var(--f-muted); transition: transform 0.12s; }
+.s-explorer details[open] > summary::before { transform: rotate(90deg); }
+.s-explorer a { display: block; padding-block: 0.15em; overflow-wrap: anywhere; }
+.s-explorer__toggle {
+  display: none; align-items: center; min-block-size: 44px; padding: 0 1em; box-sizing: border-box;
+  border: 1px solid var(--f-line); border-radius: var(--s-radius); background: var(--f-surface); color: var(--f-fg); font: inherit; cursor: pointer;
+}
+.s-explorer__toggle::before { content: "☰"; margin-inline-end: 0.5em; }
+.s-explorer__panel { overscroll-behavior: contain; }
+
+/* ── Contents ── */
+.s-toc__fold > summary { cursor: pointer; list-style: none; }
+.s-toc__fold > summary::-webkit-details-marker { display: none; }
+.s-toc ul { margin-block-start: 0.4em; padding-inline-start: 0.7em; border-inline-start: 1px solid var(--f-line); }
+.s-toc a { display: block; overflow-wrap: anywhere; }
+.s-toc a[aria-current="location"] { color: var(--s-link); font-weight: 600; }
+
+/* ── Graph ── */
+.s-graph__canvas { inline-size: 100%; }
+.s-graph__svg { display: block; inline-size: 100%; block-size: auto; max-block-size: 20em; }
+.s-graph__links line { stroke: var(--f-line); stroke-width: 1.2; }
+.s-graph__node circle { fill: var(--f-muted); }
+.s-graph__node text { fill: var(--f-muted); font-family: var(--s-font-b); paint-order: stroke; stroke: var(--f-bg); stroke-width: 3px; }
+.s-graph__node--here circle, a.s-graph__node:hover circle, a.s-graph__node:focus-visible circle { fill: var(--s-link); }
+.s-graph__node--here text, a.s-graph__node:hover text { fill: var(--f-fg); }
+.s-graph__node:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); }
+.s-graph__list { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; padding: 0; list-style: none; }
+.s-graph__open { margin-block-start: 0.6em; min-block-size: 44px; font: inherit; cursor: pointer; }
+.s-graph-full { inline-size: 100%; block-size: 100%; max-inline-size: none; max-block-size: none; margin: 0; padding: 0; border: 0; background: var(--f-bg); color: var(--f-fg); }
+.s-graph-full[open] { display: flex; flex-direction: column; }
+.s-graph-full__close {
+  align-self: flex-end; margin: var(--s-space); min-block-size: 44px; min-inline-size: 44px; padding: 0 1em; box-sizing: border-box;
+  border: 1px solid var(--f-line); border-radius: var(--s-radius); background: var(--f-surface); color: var(--f-fg); font: inherit; cursor: pointer;
+}
+.s-graph-full__body { flex: 1; min-block-size: 0; padding: 0 var(--s-space) var(--s-space); }
+.s-graph__svg--full { inline-size: 100%; block-size: 100%; max-block-size: none; touch-action: none; cursor: grab; }
+
+@media (pointer: coarse) {
+  .s-explorer a, .s-explorer summary, .s-toc a, .s-toc__fold > summary { min-block-size: 44px; display: flex; align-items: center; }
+  .s-explorer summary a { flex: 1; }
+}
+
+/* Narrow: the explorer opens from its button, above the text; the contents sits above the text, collapsed (the script closes it). */
+@container site (max-width: 1279px) {
+  .s-article-layout > .s-box--note-left { order: -2; inline-size: min(100%, var(--s-measure, 34em)); }
+  .s-article-layout > .s-box--note-right:has(.s-toc) { order: -1; }
+  .s-explorer__toggle { display: inline-flex; }
+  .s-explorer:not([data-open="true"]) .s-explorer__panel { display: none; }
+  .s-explorer[data-open="true"] .s-explorer__panel { margin-block-start: 0.5em; padding: 0.5em; border: 1px solid var(--f-line); border-radius: var(--s-radius); }
+  .s-toc__fold { border: 1px solid var(--f-line); border-radius: var(--s-radius); padding: 0 0.8em; }
+  .s-toc__fold > summary { display: flex; align-items: center; min-block-size: 44px; }
+  .s-toc__fold[open] { padding-block-end: 0.5em; }
+}
+@container site (min-width: 1280px) {
+  /* A long tree scrolls inside its sticky column instead of running past the bottom of the window. */
+  .s-article-layout > .s-box--note-left, .s-article-layout > .s-box--note-right { order: 0; max-block-size: 40em; overflow-y: auto; }
+}

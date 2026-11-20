@@ -9,6 +9,7 @@ import {
 } from "@onden/markdown";
 import { dateIdAt } from "../../lib/localDate";
 import { siteRedirectsOf } from "../../lib/siteRedirects";
+import type { SiteGraph } from "../../lib/siteGraph";
 import { withBlockIds } from "../../lib/publishedNode";
 import { makeT, type PublishedEdge, type PublishedNode, type SiteChrome } from "../templates";
 
@@ -176,6 +177,38 @@ export function backlinksOf(node: PublishedNode, nodes: readonly PublishedNode[]
   return out;
 }
 
+// ── Graph ────────────────────────────────────────────────────────────────
+
+/** The graph of the published notes: one entry per note and a `[from, to]` pair of
+ *  indexes per link. Nothing but what the page's own snapshot holds — a note
+ *  outside `nodes` or an edge with an end outside it is not here (the snapshot never
+ *  lists an unpublished note's edge, and `servedSite` cuts the ones taken down since). */
+export function siteGraph(data: Pick<SiteData, "nodes" | "edges">): SiteGraph {
+  const at = new Map(data.nodes.map((n, i) => [n.id, i]));
+  const seen = new Set<string>();
+  const links: Array<[number, number]> = [];
+  for (const e of data.edges) {
+    const from = at.get(e.source_node_id);
+    const to = at.get(e.target_node_id);
+    if (from === undefined || to === undefined || from === to || seen.has(`${from}>${to}`)) continue;
+    seen.add(`${from}>${to}`);
+    links.push([from, to]);
+  }
+  return { notes: data.nodes.map((n) => ({ id: n.id, title: n.title, slug: n.slug })), links };
+}
+
+/** The published notes `node` links to and the ones that link to it, each once (the local graph's neighbours). */
+export function linkedNotes(node: PublishedNode, nodes: readonly PublishedNode[], edges: readonly PublishedEdge[]): PublishedNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out = new Map<string, PublishedNode>();
+  for (const e of edges) {
+    const other = e.source_node_id === node.id ? e.target_node_id : e.target_node_id === node.id ? e.source_node_id : null;
+    const found = other ? byId.get(other) : undefined;
+    if (found && found.id !== node.id) out.set(found.id, found);
+  }
+  return [...out.values()];
+}
+
 // ── Link previews ───────────────────────────────────────────────────────
 
 /** What the hover / tap card of a link to a note shows, already worded for the
@@ -184,7 +217,7 @@ export type NotePreview = { title: string; meta: string; summary: string; tags: 
 
 /** The `<script type="application/json">` of an article page: the cards of the
  *  notes this page links to, by note id (the `data-note` of each such link). */
-export type PagePreviews = { labels: { open: string; close: string; preview: string }; notes: Record<string, NotePreview> };
+export type PagePreviews = { labels: { open: string; preview: string }; notes: Record<string, NotePreview> };
 
 const PREVIEW_SUMMARY_LENGTH = 60;
 /** A page that links to more notes than this previews the first ones. */
@@ -223,7 +256,7 @@ export function pagePreviews(targets: readonly PublishedNode[], locale: string |
       tags: n.tags ?? [],
     };
   }
-  return { labels: { open: t("openNote"), close: t("closePreview"), preview: t("preview") }, notes };
+  return { labels: { open: t("openNote"), preview: t("preview") }, notes };
 }
 
 export type TreeItem = { node: PublishedNode; children: TreeItem[] };

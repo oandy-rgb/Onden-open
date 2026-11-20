@@ -13,6 +13,7 @@ import { enqueueSiteOutput } from "../../../services/outbox.js";
 import { expectedPagesUrl } from "./githubPages.js";
 import { overlaySiteConfig, publishedNodeIds, uniquePublishedSlugs } from "./publishedSet.js";
 import { scrubUnpublishedParents, attachPublishedTags, linkAliasesBySlug, publishedAliases, publishedNames, redactPayloadNodes } from "./redaction.js";
+import { withTextEdges } from "./textEdges.js";
 import { readerHash, type PayloadEdge, type PayloadNode } from "./siteDiff.js";
 import { prepareDrawingEmbeds } from "./drawingEmbeds.js";
 import { forgetReplacedPages, prepareHandwritingPages, storeHandwritingPages, type PageFiles } from "./handwritingPages.js";
@@ -178,7 +179,7 @@ async function frozenPublishedNodes(
   // edges of a published type — the frontend's lib/edgeRoles `publishes`.
   // A machine suggestion (status suggested/rejected) or a private relation
   // (highlight provenance, citations) never reaches the static payload.
-  const edges = await q(
+  const edges = await q<{ id?: string; source_node_id: string; target_node_id: string; edge_type: string }>(
     `SELECT id, source_node_id, target_node_id, edge_type
      FROM node_edges
      WHERE workspace_id = $1
@@ -190,7 +191,15 @@ async function frozenPublishedNodes(
      ORDER BY created_at ASC, id ASC`,
     [workspaceId, publishedIds, [...PUBLISHED_EDGE_TYPES], onlyNoteId ?? null],
   );
-  return { nodes, edges, aliases, privateLinks, handwritingPages };
+  // …plus the links the published text itself makes (textEdges.ts), so a page
+  // is not without backlinks only because its stored edge rows are missing.
+  const pages = (nodes.rows as Array<{ id: string; title: string; slug: string; markdown: string }>).map((n) => ({
+    id: String(n.id), title: String(n.title ?? ""), slug: String(n.slug ?? ""), markdown: n.markdown,
+  }));
+  const withText = onlyNoteId
+    ? withTextEdges(pages, edges.rows).filter((e) => e.source_node_id === onlyNoteId || e.target_node_id === onlyNoteId)
+    : withTextEdges(pages, edges.rows);
+  return { nodes, edges: { rows: withText }, aliases, privateLinks, handwritingPages };
 }
 
 /** Build the candidate snapshot from the CURRENT published set (publishedSet.ts:

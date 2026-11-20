@@ -5,7 +5,7 @@ import { FEATURED_TAGS, MATURITY_TAGS, NO_FACTS, type WidgetFacts } from "@onden
 import { firstParagraph } from "@onden/site/react";
 import { byUpdatedDesc } from "../../lib/noteOrder";
 import { extractTOC, type PublishedNode } from "../templates";
-import { adjacentNotes, backlinksOf, isoDay, noteDate, noteTree, showsDate, type SiteData } from "./siteModel";
+import { adjacentNotes, backlinksOf, isoDay, linkedNotes, noteDate, noteTree, showsDate, type SiteData } from "./siteModel";
 import { nodeOf } from "../../lib/nodeIndex";
 
 /** The most notes one list widget writes out. */
@@ -124,6 +124,7 @@ export function articleFacts(data: SiteData, node: PublishedNode): WidgetFacts {
     headings: extractTOC(node.markdown).length,
     footnotes: footnotesOf(node.markdown).length,
     backlinks: backlinksOf(node, data.nodes, data.edges).length,
+    linked: linkedNotes(node, data.nodes, data.edges).length,
     hasPrev: prev !== null,
     hasNext: next !== null,
   };

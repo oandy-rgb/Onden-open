@@ -12,6 +12,7 @@ import { siteLang, type SiteHeadSite, type SiteHeadVariant } from "@onden/markdo
 import SiteHead from "./SiteHead.astro";
 import SiteSearch from "./siteFrame/SiteSearch.astro";
 import SiteScheme from "./siteFrame/SiteScheme.astro";
+import SiteNavigation from "./siteFrame/SiteNavigation.astro";
 import { publicOrigin } from "../lib/siteOrigin";
 import { shareImageUrl } from "../lib/siteShareImage";
 import SiteCopyCode from "./siteFrame/SiteCopyCode.astro";
@@ -52,6 +53,7 @@ const hasHeader = data.design.boxes.header !== null;
     </div>
     <SiteSearch />
     <SiteScheme />
+    <SiteNavigation />
     {usesDiagrams(data.nodes, data.diagrams) && <SiteDiagrams />}
     {usesStepsBlocks(data.nodes) && <SiteSteps />}
     <SiteCopyCode />

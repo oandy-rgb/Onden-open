@@ -26,6 +26,8 @@ export type WidgetFacts = {
   footnotes: number;
   /** Published notes that link to the article. */
   backlinks: number;
+  /** Published notes the article links to or that link to it (the graph's neighbours). */
+  linked: number;
   hasPrev: boolean;
   hasNext: boolean;
   /** Some published note sits under another. */
@@ -36,7 +38,7 @@ export type WidgetFacts = {
 
 export const NO_FACTS: WidgetFacts = {
   introNote: false, articles: 0, topics: 0, featured: 0, scheme: "system",
-  headings: 0, footnotes: 0, backlinks: 0, hasPrev: false, hasNext: false, hasTree: false, tagDescription: false,
+  headings: 0, footnotes: 0, backlinks: 0, linked: 0, hasPrev: false, hasNext: false, hasTree: false, tagDescription: false,
 };
 
 export type WidgetDef = {
@@ -65,7 +67,7 @@ export const MATURITY_TAGS = [
   { level: 3, names: ["常青", "evergreen", "Evergreen"] },
 ] as const;
 /** Headings an article needs before 目錄 shows. */
-export const TOC_MIN_HEADINGS = 3;
+export const TOC_MIN_HEADINGS = 2;
 
 const v = (id: string, label: string): WidgetVariant => ({ id, label });
 
@@ -107,21 +109,26 @@ export const BUILTIN_WIDGETS: readonly WidgetDef[] = [
     variants: [v("date-reading", "日期・閱讀時間"), v("date-tags", "日期・標籤"), v("all", "全部"), v("maturity-date", "成熟度・日期"), v("reading", "閱讀時間"), v("tags", "標籤"), v("reading-tags", "閱讀時間・標籤")],
   },
   {
-    id: "toc", label: "目錄", blurb: "這篇的標題，三個以上才出現", classes: ["side"], variants: [v("list", "清單")],
-    needs: `需要有 ${TOC_MIN_HEADINGS} 個以上標題的文章`, ready: (f) => f.headings >= TOC_MIN_HEADINGS, narrow: "hide",
+    id: "toc", label: "目錄", blurb: "這篇的標題，兩個以上才出現；手機收成一塊放在最上面", classes: ["side"], variants: [v("list", "清單")],
+    needs: `需要有 ${TOC_MIN_HEADINGS} 個以上標題的文章`, ready: (f) => f.headings >= TOC_MIN_HEADINGS,
   },
   {
     id: "sidenotes", label: "側註", blurb: "寬螢幕把註腳放在內文旁邊", classes: ["side"], variants: [v("margin", "放在旁邊")],
     needs: "需要有註腳的文章", ready: (f) => f.footnotes > 0, narrow: "hide",
   },
   {
-    id: "tree", label: "檔案樹", blurb: "全部筆記依階層排開", classes: ["side"], variants: [v("tree", "階層")],
-    needs: "需要有上下層的已發布筆記", ready: (f) => f.hasTree,
+    id: "tree", label: "檔案樹", blurb: "全部筆記依階層排開，資料夾可以收合；手機放在選單按鈕後面", classes: ["side"], variants: [v("tree", "階層")],
+    needs: "需要有兩篇以上的已發布筆記", ready: (f) => f.articles > 1,
   },
   {
     id: "backlinks", label: "反向連結", blurb: "哪些筆記連到這一篇", classes: ["noteEnd"],
     variants: [v("quote", "附引用的那一句"), v("titles", "只有標題")],
     needs: "需要有其他已發布筆記連到的文章", ready: (f) => f.backlinks > 0,
+  },
+  {
+    id: "graph", label: "關係圖", blurb: "這一篇與連到它、它連到的筆記畫成一張小圖，可以打開整個網站的圖", classes: ["noteEnd"],
+    variants: [v("local", "小圖加全螢幕按鈕")],
+    needs: "需要有其他已發布筆記連到、或這一篇連到其他已發布筆記", ready: (f) => f.linked > 0,
   },
   {
     id: "prevnext", label: "上一篇／下一篇", blurb: "文末的前後篇", classes: ["noteEnd"], variants: [v("links", "兩個連結")],

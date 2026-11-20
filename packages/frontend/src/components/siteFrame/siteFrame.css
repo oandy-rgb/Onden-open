@@ -142,8 +142,8 @@ span.published-inline-link { opacity: 0.7; }
 /* ── Article frame ─────────────────────────────────────────────────────
    Boxes: note.left / note.right are side columns when the page is wide
    (container query: the folds follow the page's own width, so the website screen's
-   phone and tablet previews fold like a real narrow screen); narrow, the left box is
-   not drawn and the right box follows the article. A widget marked narrow-hide
+   phone and tablet previews fold like a real narrow screen); narrow, the left box keeps its place
+   (the explorer's button, siteNavigation.css) and the right box follows the article. A widget marked narrow-hide
    (contents, side notes) is not drawn narrow in either box. */
 .site-scope { container: site / inline-size; }
 .s-article-layout { display: grid; gap: var(--s-space); grid-template-columns: minmax(0, 1fr); justify-items: center; }
@@ -167,7 +167,6 @@ span.published-inline-link { opacity: 0.7; }
 .s-prevnext__next { text-align: end; margin-inline-start: auto; }
 
 .s-article-layout > .s-box--note-left, .s-article-layout > .s-box--note-right { font-size: 0.85em; min-inline-size: 0; }
-.s-article-layout > .s-box--note-left { display: none; }
 .s-article-layout > .s-box--note-right { inline-size: min(100%, var(--s-measure, 34em)); }
 .s-w--narrow-hide { display: none; }
 .s-toc ul, .s-tree ul, .s-sidenotes ol { list-style: none; margin: 0; padding: 0; }

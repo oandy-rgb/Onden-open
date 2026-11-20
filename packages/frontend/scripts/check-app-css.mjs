@@ -17,7 +17,7 @@ import { bareHoverRules } from "./hoverWithPointer.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ASTRO = join(ROOT, "dist/client/_astro");
-const SITE_ONLY = new Set(["published-site.css", "print.css", "print-export.css", "siteFrame.css", "sitePreview.css", "siteReading.css"]);
+const SITE_ONLY = new Set(["published-site.css", "print.css", "print-export.css", "siteFrame.css", "sitePreview.css", "siteReading.css", "siteNavigation.css"]);
 
 const walk = (dir) => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);

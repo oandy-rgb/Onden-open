@@ -1,7 +1,7 @@
 # 網站的呈現模型（W38）
 
 > 狀態：現行
-> 涵蓋：packages/backend/src/modules/website/publishing/servedSite.ts, packages/backend/src/modules/website/publishing/publishedSet.ts, packages/backend/src/modules/website/publishing/takenDown.ts, packages/backend/src/modules/website/publishing/snapshot.ts, packages/backend/src/modules/website/publishing/preview.ts, packages/backend/src/modules/website/publishing/siteDiff.ts, packages/backend/src/modules/website/publishing/handwritingPages.ts, packages/backend/src/modules/website/publishing/pagesPush.ts, packages/backend/src/services/siteDefault.ts, packages/frontend/src/components/siteFrame/**
+> 涵蓋：packages/backend/src/modules/website/publishing/servedSite.ts, packages/backend/src/modules/website/publishing/publishedSet.ts, packages/backend/src/modules/website/publishing/takenDown.ts, packages/backend/src/modules/website/publishing/snapshot.ts, packages/backend/src/modules/website/publishing/textEdges.ts, packages/backend/src/modules/website/publishing/preview.ts, packages/backend/src/modules/website/publishing/siteDiff.ts, packages/backend/src/modules/website/publishing/handwritingPages.ts, packages/backend/src/modules/website/publishing/pagesPush.ts, packages/backend/src/services/siteDefault.ts, packages/frontend/src/components/siteFrame/**
 
 何時讀：改發布、網站上有哪些筆記、下架、發布前預覽、網站的 Markdown 輸出或手寫頁時。
 W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）、選項比較與實作順序已移到 [site-render-model-history.md](site-render-model-history.md)。
@@ -62,11 +62,12 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 
 都在同一份 SSR 頁面裡完成，不打 API，所以 zip 與 GitHub Pages 副本一樣能用。
 
-- **連結預覽**（設計的 `reading.preview`）：文章頁帶一段 `<script type="application/json" id="s-previews">`，
+- **連結預覽**（設計的 `reading.preview`）：只在滑鼠懸停（或鍵盤聚焦）時顯示卡片；**觸控裝置沒有懸停，點連結就直接前往**（業主 2026-11-20，原本的第一下點擊出底部卡片已拿掉）。文章頁帶一段 `<script type="application/json" id="s-previews">`，
   只放「這一頁連到的、且在網站上的筆記」（內文連結 + 連到這裡的來源，最多 50 篇），以筆記 id 為鍵；
   內文與「連到這裡」的連結帶 `data-note`，`SitePreview.astro` 的小腳本據此取卡片。
   文字（更新日、閱讀時間）在伺服器端就依網站語言組好，腳本沒有自己的字串。
   卡片的「打開這篇」用觸發連結自己的 `href`，副本裡是相對路徑，不必在 JSON 裡改寫。
+  卡片資料是頁面自帶的 JSON、不另開端點，所以只可能含已在網站上的筆記（拒絕未發布的目標＝資料裡根本沒有它），zip 與靜態主機一樣能用。
 - **連到這裡的那一句**：`backlinksOf` 回傳 `{ node, places }`；句子由 `@onden/markdown` 的 `linkPlaces`
   從來源筆記的 Markdown 取出（段落或清單項、去語法、連結字標 `<mark>`、約 80 字）。
   `![[…]]` 內嵌在發布時已變成 `[[…]]` 連結，所以伺服器端的 `serveDrawingEmbeds` 把「變成連結的內嵌」本文留在
@@ -78,6 +79,21 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
   數 MB 的 Noto Sans TC 與 resvg，並在發布時為每篇產圖、再讓副本爬進去，超出本批範圍。
 - **不洩漏**：頁面只由「已在網站上的節點與邊」組成（`servedSite.applyTakedown`）；預覽資料、連到這裡、head 都從同一份節點算，
   沒有另一條取得筆記的路。測試：`siteReading.test.tsx`。
+
+## 頁面導覽：檔案樹、目錄、關係圖（feat/site-navigation-quartz，業主 2026-11-20「功能與體驗能追上 Quartz」）
+
+全部是盒子與零件（見[網站的盒子模型](proposals/site-boxes-2026-11-01.md)）裡的零件，預設版面改成：左 `tree`、右 `toc`、文末 `graph`、`backlinks`、`prevnext`，標題下的資訊含標籤（連到標籤頁）。**已存設計各自保留自己的選擇**，不自動改。
+
+- **edges 來自已發布的文字**（`publishing/textEdges.ts withTextEdges`，`frozenPublishedNodes` 呼叫）：快照的 edges ＝ `node_edges` 查到的，加上已發布文字裡 `[[連結]]`／`![[內嵌]]` 指到另一篇「網站上的筆記」而還沒有列的，用站台自己開連結的規則（`servedLinkTarget`）。
+  起因：匯入、還原等沒走儲存路徑的筆記沒有 `node_edges` 列，業主 60 篇的網站 edges 是 0，反向連結與關係圖都空。指到未發布筆記的連結在這之前已被 redaction 變成純文字，所以不可能成為 edge。
+  已知限制：`onlyNoteId`（單篇的讀者視圖，`noteSiteState`）只讀那一篇的文字，別篇寫給它的連結只看已存的 `node_edges`；兩者只在「列缺了」的筆記上可能不同，最壞是多顯示一次「有變動」。
+- **檔案樹**（`tree`）：有子筆記的筆記是資料夾（`<details data-folder>`，現在頁的那條路徑展開），其他是連結；現在頁以 `aria-current` 標出。讀者自己展開的資料夾 id 存在 `localStorage`（`s-explorer-open`，try/catch；`SiteNavigation.astro`）。
+  寬（頁面容器 ≥1280px）是左欄；窄時是一顆「檔案樹」按鈕（44px）展開清單。沒有 script 時是一般的巢狀清單。
+- **目錄**（`toc`）：兩個以上標題才出現（`TOC_MIN_HEADINGS`）；寬時是右欄、捲到哪一節就標 `aria-current="location"`；窄時是文章上方收合的一塊（`siteNavigation.css` 用 `order` 提到文字之前，script 把它收起）。
+- **關係圖**（`graph`，在 `note.end`）：頁面只帶「鄰居清單」（螢幕閱讀器與沒有 script 時用）與按鈕；圖的資料是 `/site/graph.json`（`siteGraph(data)`：網站上的筆記與它們之間的連結，同一份「快照 − 下架」；靜態副本也存一份，列在 `static-pages.json` 的 `feeds`）。
+  圖的程式（`lib/siteGraphView.ts`，約 2.4 KB gzip）只在圖捲進視窗時才載入（`SiteNavigation.astro` 的 `IntersectionObserver` + `import()`）；點節點前往該頁（SVG 連結，鍵盤可用），「打開整個網站的關係圖」是全螢幕（拖曳平移、滾輪或雙指縮放、Esc 關閉並把焦點還給按鈕）。排版是固定的力導向（`lib/siteGraph.ts`），同一張圖永遠長一樣。
+- **標籤頁**早已有（`tag/[slug].astro`，列的是發布時凍結、只含已發布筆記的列）；這批只讓每篇的標籤預設顯示出來。
+- 沒做：Quartz 的 SPA 換頁（保留檔案樹狀態與捲動位置）。換頁時檔案樹的展開狀態已由 `localStorage` 保留，捲動位置不保留；SPA 換頁要攔截所有連結並重跑各個 script，不算小，另案。
 
 截圖（本機 SSR + 假 API，Chromium 桌面與手機尺寸，非真機）：
 （截圖未隨公開庫附上：桌面懸停卡片）、

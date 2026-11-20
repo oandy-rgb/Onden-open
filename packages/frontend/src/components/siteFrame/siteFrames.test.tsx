@@ -126,7 +126,7 @@ describe("article frame", () => {
     expect(out).toContain('rel="prev"'); // 播種 comes before in the series
     expect(out).toContain('rel="next"');
     expect(out).toContain('class="s-toc"');
-    expect(out).not.toContain('class="s-tree"');
+    expect(out).not.toContain("s-explorer");
     // [[links]] are anchors; the heading list is the table of contents
     expect(out).toContain('<a class="published-inline-link" href="/site/compost" data-note="compost">堆肥</a>');
     expect(out).toContain('href="#user-content-土壤"');
@@ -144,13 +144,14 @@ describe("article frame", () => {
     expect(article(withBoxes({ "note.end": [] }))).not.toContain("s-backlinks");
     expect(article(withBoxes({ "note.end": [{ widget: "backlinks", variant: "quote" }] }))).not.toContain("s-prevnext");
     expect(article(withBoxes({ "note.end": [{ widget: "prevnext", variant: "links" }] }))).not.toContain("s-backlinks");
-    expect(article(withBoxes({ "note.left": null }))).not.toContain("s-toc");
+    expect(article(withBoxes({ "note.right": null }))).not.toContain("s-toc");
+    expect(article(withBoxes({ "note.left": null }))).not.toContain("s-explorer");
     expect(article(withBoxes({ "note.left": null }))).toContain("s-article__title");
   });
 
   it("the left note tree appears when its widget is in the box, and marks the current note", () => {
     const out = article(withBoxes({ "note.left": { widget: "tree", variant: "tree" } }));
-    expect(out).toContain('class="s-tree"');
+    expect(out).toContain('class="s-tree s-explorer"');
     expect(out).toContain('<a href="/site/guide" aria-current="page">');
     expect(out).toContain("s-box--note-left");
   });

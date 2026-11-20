@@ -30,7 +30,7 @@ export const BOX_SPECS: Record<BoxId, BoxSpec> = {
   "home.hero": { id: "home.hero", page: "home", label: "首頁開頭", accepts: "hero", max: 1, column: false, narrow: "flow" },
   "home.list": { id: "home.list", page: "home", label: "首頁區塊", accepts: "section", max: 8, column: false, narrow: "flow" },
   "note.meta": { id: "note.meta", page: "note", label: "標題下的資訊", accepts: "meta", max: 1, column: false, narrow: "flow" },
-  "note.left": { id: "note.left", page: "note", label: "內文左邊", accepts: "side", max: 1, column: true, narrow: "hide" },
+  "note.left": { id: "note.left", page: "note", label: "內文左邊", accepts: "side", max: 1, column: true, narrow: "flow" },
   "note.right": { id: "note.right", page: "note", label: "內文右邊", accepts: "side", max: 1, column: true, narrow: "after" },
   "note.end": { id: "note.end", page: "note", label: "文末", accepts: "noteEnd", max: 4, column: false, narrow: "flow" },
   "tag.desc": { id: "tag.desc", page: "tag", label: "標籤說明", accepts: "tagDesc", max: 1, column: false, narrow: "flow" },

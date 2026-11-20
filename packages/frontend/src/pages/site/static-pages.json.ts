@@ -15,7 +15,8 @@ export const GET: APIRoute = async ({ request }) => {
   return Response.json({
     pages: sitePagePaths(snapshot),
     // The tag pages' own feeds: files, not pages, so the copy saves them next to the site feed.
-    feeds: snapshot.tagSlugs.map((slug) => `/site/tag/${slug}/feed.xml`),
+    // And the note graph (graph.json): the graph on an article page reads it from next to the site.
+    feeds: [...snapshot.tagSlugs.map((slug) => `/site/tag/${slug}/feed.xml`), "/site/graph.json"],
     // Old addresses of renamed pages: the copy saves a page at each that sends the reader on (GAP-240).
     redirects: snapshot.redirects,
     origin: publicOrigin(new URL(request.url)),

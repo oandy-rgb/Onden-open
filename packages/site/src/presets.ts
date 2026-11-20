@@ -34,10 +34,10 @@ export const DEFAULT_HOME_PRESET: HomePresetId = "simple";
 function baseBoxes(): Omit<SiteBoxes, "home.hero" | "home.list"> {
   return {
     header: pick("nav", "bar"),
-    "note.meta": pick("meta", "date-reading"),
-    "note.left": pick("toc"),
-    "note.right": pick("sidenotes"),
-    "note.end": [pick("backlinks", "quote"), pick("prevnext")],
+    "note.meta": pick("meta", "all"),
+    "note.left": pick("tree"),
+    "note.right": pick("toc"),
+    "note.end": [pick("graph"), pick("backlinks", "quote"), pick("prevnext")],
     "tag.desc": pick("tagdesc"),
     "tag.list": pick("tagnotes", "byYear"),
     "tag.end": [pick("tagfeed")],

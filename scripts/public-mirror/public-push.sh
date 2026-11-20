@@ -19,6 +19,7 @@ fi
 tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
 mkdir -p "$tools/scripts/public-mirror"
 cp "$here/removedPaths.mjs" "$here/removed-paths.json" "$here/strip_links.py" "$tools/scripts/public-mirror/"
+cp "$here/../prCardLib.mjs" "$tools/scripts/"
 removed="$tools/scripts/public-mirror/removedPaths.mjs"
 git checkout -q --detach "$sha"
 # What the mirror leaves out is one piece of data (removed-paths.json): docs images, the scan reports, the deploy log
@@ -56,12 +57,28 @@ fi
 # an addition the owner agreed to.
 # origin/main is fetched first: against a stale one the range reaches back into commits that are already on main, and an override
 # copied from one of those would open the ratchet for this branch without anyone having agreed to it here.
+# The public CI also starts by itself on every push (ci.yml, 2026-11-20), where there is no PR description to pass: the
+# guard lane's two written exemptions — 「不需要更新說明」 (scripts/changesLib.mjs) and 「文件不需要更新：<原因>」
+# (scripts/check-md-links.mjs) — ride along the same way, from the private commits and from the branch's PR description.
 # The lines become public text, and the look above reads only the diff, so they get the same key/token look; keep reasons free of
 # server details and of counts of the owner's data.
 git fetch -q origin main
-overrides=$(git log --format=%B "$(git merge-base origin/main "$sha")..$sha" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]' | sort -u || true)
+# The branch's PR (a ref given as origin/<branch> names the same PR).
+pr_json=$(gh pr view "${ref#origin/}" --repo oandy-rgb/Onden --json body,createdAt 2>/dev/null || true)
+pr_body=$(printf '%s' "$pr_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).body||"")}catch{}})')
+# Every PR is pushed here to be checked, so this is where its 驗收卡 (the five lines the owner reads, scripts/prCardLib.mjs) is
+# required: a PR opened from 2026-11-21 on without a complete card is not pushed (PUBLIC_PUSH_ALLOW=1 overrides, as above).
+if [ -n "$pr_json" ] && ! PR_JSON="$pr_json" node "$tools/scripts/prCardLib.mjs" $(git diff --name-only "$(git merge-base origin/main "$sha")" "$sha") \
+   && [ "${PUBLIC_PUSH_ALLOW:-}" != "1" ]; then
+  echo "NOT pushed: complete the PR's 驗收卡 first."
+  git reset -q --hard; git checkout -q "$back"; exit 1
+fi
+said=$( { git log --format=%B "$(git merge-base origin/main "$sha")..$sha"; printf '%s\n' "$pr_body"; } | sed 's/\r$//')
+# changes.mjs accepts the phrase anywhere in the text, so it travels as one line of its own instead of the sentence around it.
+overrides=$( { printf '%s\n' "$said" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]|^[[:space:]]*文件不需要更新：[[:space:]]*[^[:space:]]';
+  printf '%s\n' "$said" | grep -q '不需要更新說明' && echo '不需要更新說明'; } | sort -u || true)
 if printf '%s' "$overrides" | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[bp]-[0-9A-Za-z-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' && [ "${PUBLIC_PUSH_ALLOW:-}" != "1" ]; then
-  echo "NOT pushed. A ratchet-override line that would become public looks like it holds a key or an address:"; printf '%s\n' "$overrides"
+  echo "NOT pushed. A carried line (ratchet-override / exemption) that would become public looks like it holds a key or an address:"; printf '%s\n' "$overrides"
   git reset -q --hard; git checkout -q "$back"; exit 1
 fi
 c=$(git commit-tree "$tree" -p "$parent" -m "同步：私人庫 ${sha:0:9}（$ref）

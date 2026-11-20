@@ -145,6 +145,17 @@
 - 允許清單守門（預設拒絕：只有列出的主人能用，其他一律失敗）：前端 import 分層 `packages/frontend/eslint.boundaries.config.js`；平台全域（`window`、`document`、`crypto`…）、原生 `<button>`／`<input>` 等、CSS 的顏色／圓角／陰影／z-index／字級／`@media` 寬度（600／900／1280）／`position: fixed` 的主人表在 `packages/frontend/src/test/guards/allowlist/owners.ts`；後端 route 的 import 層、`process.env`、`setInterval`、`console`、route 內直接下 SQL（`.query(`、`q(`；含 `modules/*/routes.ts`） 在 `packages/backend/src/test/guards/allowlist/owners.ts`。`scripts/allowlist-baseline.json`（`{ 規則: { 檔案: 次數 } }`）已清零（2026-10-31），現在是嚴格模式：每條規則必須維持空物件（唯一例外：`be-raw-sql` 逐檔計數、只減不增，見 `allowlistLib.mjs` 的 `RATCHET_RULES`），基準有任何項目、或任何違規，守門測試直接失敗。失敗訊息寫「這個檔不准用 X，請改用 <主人>」：改用主人，不要記基準。新增主人須在 `owners.ts` 該行寫理由，且主人必須是 catalog 某筆的 `entry` 檔；沒有「還沒改」的容身處。新增規則時先把現有違規清到 0 再加（基準檔裡只加該規則的空物件）。
   app 的 CSS／TSX 讀顏色只准 `var(--ac-*)`（規則 `css-legacy-token`；准用前綴與理由在 `TOKEN_PREFIX_OWNERS`）；舊別名（`--accent`、`--muted`、`--onden-text-muted`…）已刪，只剩已發布網站共用樣式表還在讀的幾個，記在基準。
 
+## 交付紀律（業主 2026-11-20 採用，取自 Tolaria 的開發做法）
+
+- **同時進行有上限**：開著的 PR 超過 20 張（`node scripts/wip.mjs`）就不派新工作，先審、合併或關掉；替已開的 PR 修審查意見不算新工作，例外只有業主明說的。
+- **驗收卡**：每張 PR 說明最上面一段「## 驗收卡」，五欄：改了什麼、怎麼試、證據、測了什麼、沒測到什麼（範本 `.github/pull_request_template.md`，檢查 `scripts/prCardLib.mjs`）。
+  白話，不寫執行編號、雜湊、檔名、分數。2026-11-21 起開的 PR 缺卡或有空欄，`public-push.sh` 不推公開庫。
+- **沒有證據不算完成**：修 bug 附測試「修前失敗、修後通過」的輸出；改畫面附改前改後的截圖或錄影，並對照需求逐點寫通過或不通過。
+  觸控、螢幕鍵盤、手寫要在業主的手機**和**平板上各看一次；只有瀏覽器模擬就寫在「沒測到什麼」（`prCardLib.mjs` 對這些檔案要求提到實機）。
+- **實機與測試不碰真實資料**：在業主的裝置上只操作測試空間（例如「大三上（試用）」）；點畫面之前先確認鍵盤收著、焦點在哪。
+  需要動真實筆記時改用 app 自己的功能（刪除有復原、編輯有歷史），不直接改資料庫，也不用模擬點擊碰真實筆記的文字。
+- **main 上不留壞掉的東西**：公開庫每次 push 自動跑全套（`ci.yml`）；合併後 main 變紅、一次修不好，30 分鐘內 revert。每次出事都加一個會重現它的測試，並記進 [mistakes.md](docs/agents/mistakes.md)。
+
 ## 驗證與完成條件（完整：[testing.md](docs/agents/testing.md)）
 
 - 犯了錯（對擁有者說錯、審查放過缺口、擁有者比測試先發現、同類問題再出現），在同一批工作裡記進 [docs/agents/mistakes.md](docs/agents/mistakes.md)：類別、擋住這一類的機制，或明寫「尚無機制」。

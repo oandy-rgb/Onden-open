@@ -1,0 +1,37 @@
+/* 「範圍」 under the review title: one 44px button, and the sheet it opens (ui/Sheet: bottom on a phone, a card on desktop). */
+.review-scope-bar { margin: 0 14px 8px; }
+.review-scope-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-start;
+  background: var(--ac-overlay-subtle);
+}
+.review-scope-label { flex: none; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-name { flex: 1 1 auto; min-width: 0; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+
+.review-scope-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(480px, 100%);
+  max-height: min(600px, 90%);
+  box-sizing: border-box;
+  padding: 14px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-modal);
+}
+.review-scope-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.review-scope-options { list-style: none; margin: 0; padding: 0; }
+.review-scope-heading { margin: 10px 8px 2px; color: var(--ac-muted); font-size: var(--ac-fs-caption); font-weight: 600; }
+.review-scope-row-button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; justify-content: flex-start; text-align: start; }
+.review-scope-row-button[aria-pressed="true"] { background: var(--ac-overlay-subtle); }
+.review-scope-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.review-scope-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-scope-row-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-row-counts { flex: none; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-note { margin: 12px 8px; color: var(--ac-muted); font-size: var(--ac-fs-caption); }

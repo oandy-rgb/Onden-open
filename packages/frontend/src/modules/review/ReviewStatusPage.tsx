@@ -17,7 +17,8 @@ import { cardKey, cardPath } from "./cardKey";
 import { useLiveResource } from "./useLiveResource";
 import StoppedCards from "./StoppedCards";
 import ReviewGroups from "./ReviewGroups";
-import type { ReviewPlace } from "./reviewPlace";
+import { scopeQuery, type ReviewPlace, type ReviewScope } from "./reviewPlace";
+import { useScopeName } from "./ReviewScopePicker";
 import "./ReviewPanel.css";
 import "./ReviewStatusPage.css";
 
@@ -29,11 +30,12 @@ import "./ReviewStatusPage.css";
 
 const ReviewEditSheet = lazyWithReload(() => import("./ReviewEditSheet"));
 
-type Props = { online: boolean; onBack: () => void; onOpenNode: (id: string) => void; onChanged?: () => void; onPractise?: (place: ReviewPlace) => void };
+type Props = { online: boolean; scope?: ReviewScope; onBack: () => void; onOpenNode: (id: string) => void; onChanged?: () => void; onPractise?: (place: ReviewPlace) => void };
 
-export default function ReviewStatusPage({ online, onBack, onOpenNode, onChanged, onPractise }: Props) {
+export default function ReviewStatusPage({ online, scope = { kind: "all" }, onBack, onOpenNode, onChanged, onPractise }: Props) {
   const t = useT();
-  const { value: status, refresh } = useLiveResource<ReviewStatus, ReviewStatus | null>("/api/review/status", (raw) => raw, null, 60_000);
+  const { value: status, refresh } = useLiveResource<ReviewStatus, ReviewStatus | null>(`/api/review/status${scopeQuery(scope)}`, (raw) => raw, null, 60_000);
+  const scopeName = useScopeName(scope);
   const [editing, setEditing] = useState<ReviewStatusCard | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -62,6 +64,7 @@ export default function ReviewStatusPage({ online, onBack, onOpenNode, onChanged
         <EmptyState size="inline" title={online ? t("Loading…") : t("Review status needs a connection.")} />
       ) : (
         <div className="review-status">
+          {scope.kind !== "all" && <p className="review-status-note">{t("Counting only: {name}", { name: scopeName })}</p>}
           <section aria-label={t("Today")}>
             <div className="review-status-today">
               <Figure kind="today" value={status.today} label={t("Due today")} />

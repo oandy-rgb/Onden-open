@@ -32,7 +32,7 @@ test("'Review cards under this note' studies only the note's subtree", async ({ 
 
   // The drawer shows the scope and exactly the subtree's two cards — the
   // outsider (a different deck) is excluded.
-  await expect(page.locator(".review-scope")).toContainText(`Lecture ${stamp}`);
+  await expect(page.locator(".review-scope-button")).toContainText(`Lecture ${stamp}`);
   await expect(page.locator(".review-count")).toHaveText("2 left");
   await expect(page.locator(".review-card-title")).toContainText(stamp.toString());
 

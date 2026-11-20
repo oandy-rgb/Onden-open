@@ -195,6 +195,14 @@
 - 沒有「題組」物件：一組就是一個標籤、或一則筆記與它底下的筆記。選卡規則只有 `modules/review/service.ts` 的 `planSession`；範圍由 `cardsInScope`（`root`／`tag_id`／`untagged`，一次一種）選，
   `GET /api/review/groups?by=tag|note` 每列的到期／新卡數就是 `planSession` 的長度；每日上限仍是全域。AI 的 `reviewQueue` 工具收同樣三種範圍。
 - 頁裡的位置是網址的 `m=`（`lib/moduleAddress.ts`，意義由 `modules/review/reviewPlace.ts` 定）；「按標籤｜按筆記」記在 `PREFS.reviewGroupBy`。
+- **範圍（業主 2026-11-20「複習應該能按分類複習」）**：複習主頁標題下有「範圍」選擇器（`ReviewScopePicker`），預設「全部」；選項是筆記（連同底下全部，`root`）、標籤（`tag`）、有卡片才出現的「沒有標籤」。
+  範圍就是 `ReviewPlace` 去掉 `status`（`ReviewScope`，多一個 `all`），變成請求只經 `reviewPlace.scopeQuery`；佇列、剩餘張數、`/stats`、`/status`（複習狀況）讀同一個範圍，每日上限仍是全域。
+  選項與張數就是狀況頁「分組」的列（`GET /api/review/groups`，由 `placeOfGroup` 轉成範圍），所以「練這組」與選擇器開同一個範圍、同一條程式路徑。
+  筆記選項＝該筆記底下（含自己）有卡片的最上層筆記（`by=note` 的列），顯示它上面的路徑（如「2.Area › 作業系統」），選項多於八個時出現搜尋。
+  最後一次的選擇記在帳號偏好 `reviewScope`（`reviewScopePref`），頁面沒有位址時用它填入位址（不新增歷史項目），所以重新整理與上一頁都保留範圍；狀況頁讀同一個值。
+- **標籤範圍（讀取時算，不寫進卡片）**：卡片屬於標籤 T，當它自己、它所在的筆記、或它所在筆記往上任何一層筆記帶有 T（`tagHierarchy.memberTagIds` 的成員標籤也算）。
+  只有 `service.ts` 的 `tagScope` 一處；群組列、佇列、`/stats`、`/status` 與「沒有標籤」都經它，所以選擇器的張數等於之後佇列給的張數，一張卡在同一範圍只算一次。
+  段落仍不繼承標籤（`block-nodes.md` §5）：這是讀取時的歸類，沒有把標籤寫到任何段落或卡片。
 
 ## 設計例外與尚未做
 

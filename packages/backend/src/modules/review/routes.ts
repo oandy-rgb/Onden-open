@@ -20,17 +20,16 @@ function effectiveNow(testNow: string | undefined): Date {
   if (isTest() && testNow) return new Date(testNow);
   return new Date();
 }
-const queueQuery = z.object({
+// One scope at a time: all cards, a note's subtree (root), a tag (tag_id) or the cards no tag group covers (untagged,
+// the 「沒有標籤」 group). The queue, stats and status read the same scope, so the review page's picker moves all three.
+const scopeQuery = z.object({
   root: z.string().uuid().optional(), tag_id: z.string().uuid().optional(),
-  // The cards no tag group covers (the 「沒有標籤」 group); one scope at a time.
   untagged: z.enum(["true"]).optional(),
   now: z.string().datetime().optional(),
 }).refine(query => [query.root, query.tag_id, query.untagged].filter(Boolean).length <= 1, { message: "root, tag_id and untagged cannot be combined" });
+const scopeOf = (query: z.infer<typeof scopeQuery>) => ({ root: query.root, tagId: query.tag_id, untagged: query.untagged === "true", now: effectiveNow(query.now) });
 
-router.get("/queue", async c => {
-  const query = queueQuery.parse(c.req.query());
-  return c.json(await review.queue(c.get("actor"), { root: query.root, tagId: query.tag_id, untagged: query.untagged === "true", now: effectiveNow(query.now) }));
-});
+router.get("/queue", async c => c.json(await review.queue(c.get("actor"), scopeOf(scopeQuery.parse(c.req.query())))));
 
 // The groups to study by (tags, or notes) with what a session of each gives today.
 router.get("/groups", async c => {
@@ -44,13 +43,11 @@ router.get("/decks", async c => {
 
 // The status page: today, overdue, the next seven days, often-forgotten cards.
 router.get("/status", async c => {
-  const query = parseQuery(c, z.object({ now: z.string().datetime().optional() }));
-  return c.json(await review.status(c.get("actor"), { now: effectiveNow(query.now) }));
+  return c.json(await review.status(c.get("actor"), scopeOf(parseQuery(c, scopeQuery))));
 });
 
 router.get("/stats", async c => {
-  const query = z.object({ tag_id: z.string().uuid().optional(), now: z.string().datetime().optional() }).parse(c.req.query());
-  return c.json(await review.stats(c.get("actor"), { tagId: query.tag_id, now: effectiveNow(query.now) }));
+  return c.json(await review.stats(c.get("actor"), scopeOf(scopeQuery.parse(c.req.query()))));
 });
 
 // Putting a card off ("tomorrow"), leaving it out (suspend) and bringing it

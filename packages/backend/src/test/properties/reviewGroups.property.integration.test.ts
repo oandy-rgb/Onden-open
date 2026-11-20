@@ -10,7 +10,8 @@
 //
 // Invariants (the failure message names them):
 //   same-as-session   every group's due / new equal what queue(scope) returns for it (split by the card's state)
-//   tag-rows          the "by tag" rows are exactly the shown tags with at least one card in their scope, plus
+//   tag-rows          the "by tag" rows are exactly the shown tags with at least one card in their scope (a card is in a tag's scope
+//                     when its note or any note above it carries the tag), plus
 //                     「沒有標籤」 when some card is under no shown tag; and their union covers every card
 //   note-rows         the "by note" rows are exactly the top-most notes that hold cards (a note card's holder is the note
 //                     it sits under), and they partition the cards:
@@ -94,7 +95,14 @@ const tagScope = (w: World, t: number): number[] => {
   return out;
 };
 const cardsOf = (w: World): number[] => w.card.flatMap((isCard, i) => isCard ? [i] : []);
-const inTag = (w: World, i: number, t: number): boolean => tagScope(w, t).some(s => w.carries[i]![s]);
+/** Note i, and every note above it, up to the top. */
+const withAncestors = (w: World, i: number): number[] => {
+  const out = [i];
+  for (let p = w.parent[i]; p !== null && p !== undefined; p = w.parent[p]) out.push(p);
+  return out;
+};
+/** A card is under a tag when its note, or any note above its note, carries the tag or one under it (read-time; block-nodes.md §5 still holds for paragraphs). */
+const inTag = (w: World, i: number, t: number): boolean => withAncestors(w, i).some(n => tagScope(w, t).some(s => w.carries[n]![s]));
 const noteSubtree = (w: World, root: number): number[] => {
   const out = [root];
   for (let k = 0; k < out.length; k++) w.parent.forEach((p, c) => { if (p === out[k] && !out.includes(c)) out.push(c); });

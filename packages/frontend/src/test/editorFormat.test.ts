@@ -48,6 +48,24 @@ describe("editorFormat", () => {
     expect(text()).toBe("> one\n> two\nthree");
   });
 
+  it("a caret on an empty line ends up after the mark a button puts in, so typing goes into the item", () => {
+    // Found on the phone: Bullet on an empty line, then typing, gave "機- " instead of "- 機".
+    for (const press of [
+      (v: EditorView) => toggleLinePrefix(v, "- "),
+      (v: EditorView) => toggleLinePrefix(v, "- [ ] "),
+      (v: EditorView) => toggleHeading(v, 1),
+    ]) {
+      const v = editor("note\n", 5);
+      press(v);
+      v.dispatch(v.state.replaceSelection("x"));
+      expect(text()).toMatch(/^note\n(- |- \[ \] |# )x$/);
+    }
+    // The caret mid-line keeps its place in the text.
+    const v = editor("item", 2);
+    toggleLinePrefix(v, "- ");
+    expect(v.state.selection.main.head).toBe(4);
+  });
+
   it("toggleHeading clears the active level and sets any other", () => {
     editor("## Title\nbody", 4);
     toggleHeading(view!, 2);

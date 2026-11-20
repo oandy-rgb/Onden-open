@@ -2,7 +2,7 @@
 // formatting bar and keyboard commands all write Markdown through these.
 // Each one dispatches a single change and leaves focus to the caller.
 
-import type { Text } from "@codemirror/state";
+import type { ChangeSpec, Text } from "@codemirror/state";
 import type { EditorView, KeyBinding } from "@codemirror/view";
 import { checklistLine } from "@onden/markdown";
 
@@ -127,8 +127,7 @@ export function activeFormats(doc: Text, from: number, to: number, head: number)
 export function setHeading(view: EditorView, level: number): void {
   const line = view.state.doc.lineAt(view.state.selection.main.head);
   const old = /^#{1,6}\s/.exec(line.text)?.[0].length ?? 0;
-  // Only the marks change, so a selection on the line stays where it was.
-  view.dispatch({ changes: { from: line.from, to: line.from + old, insert: "#".repeat(level) + " " } });
+  dispatchMarks(view, { from: line.from, to: line.from + old, insert: "#".repeat(level) + " " });
 }
 
 /** Heading button press: the caret's line becomes a heading of `level`, or a
@@ -138,7 +137,7 @@ export function toggleHeading(view: EditorView, level: number): void {
   const line = view.state.doc.lineAt(view.state.selection.main.head);
   const marks = /^(#{1,6})\s/.exec(line.text);
   if (marks && marks[1].length === level) {
-    view.dispatch({ changes: { from: line.from, to: line.from + marks[0].length, insert: "" } });
+    dispatchMarks(view, { from: line.from, to: line.from + marks[0].length, insert: "" });
     return;
   }
   setHeading(view, level);
@@ -178,7 +177,7 @@ export function toggleLinePrefix(view: EditorView, prefix: string): void {
     const line = doc.line(n);
     changes.push({ from: line.from, to: line.from + presentPrefix(line.text, prefix)!.length });
   }
-  view.dispatch({ changes });
+  dispatchMarks(view, changes);
 }
 
 /** Put `prefix` ("> ", "- ", "- [ ] ") in front of every selected line. */
@@ -187,7 +186,15 @@ export function prefixLines(view: EditorView, prefix: string): void {
   const doc = view.state.doc;
   const changes: { from: number; insert: string }[] = [];
   for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) changes.push({ from: doc.line(n).from, insert: prefix });
-  view.dispatch({ changes });
+  dispatchMarks(view, changes);
+}
+
+/** Every edit to a line's leading marks (heading "#", "> ", "- ", "1. ", "- [ ] ") goes through here. Only the marks
+ *  change, so the selection keeps its place in the text — and a caret where a mark goes in (an empty line, the
+ *  start of a line) moves past it, so what is typed next lands after "- " instead of before it. */
+function dispatchMarks(view: EditorView, changes: ChangeSpec): void {
+  const set = view.state.changes(changes);
+  view.dispatch({ changes: set, selection: view.state.selection.map(set, 1) });
 }
 
 /** Turn [from, to) into a Markdown link to `url`; the caret lands after it. */

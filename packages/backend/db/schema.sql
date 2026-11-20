@@ -3925,6 +3925,7 @@ INSERT INTO schema_migrations (version) VALUES ('213_renew_node_id') ON CONFLICT
 INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('215_block_anchors_replicated') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('217_keep_session_actor_rows') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('219_sign_in_rows_for_better_auth_1_7') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -

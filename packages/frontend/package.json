@@ -60,7 +60,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@xyflow/react": "^12.6.0",
     "astro": "^6.4.2",
-    "better-auth": "^1.6.11",
+    "better-auth": "^1.7.26",
     "docx": "^9.5.1",
     "fflate": "^0.8.3",
     "fuse.js": "^7.3.0",

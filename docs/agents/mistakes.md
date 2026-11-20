@@ -208,6 +208,7 @@
 - 再次出現：2026-11-16，擁有者在同一天的討論中指出自己也有三次（只看了一部分就下結論）。**這一類一天內出現三次以上，是目前最該往上一層做的。**
 - 再次出現：2026-11-17，note-cf 對擁有者說即時通道「連設計都還沒寫」，並建議他去另一個工作階段開口；其實 note-ee 前一晚 22:09 UTC 已開了設計 PR #1798，擁有者也已同意過方向。說之前沒有 `gh pr list` 找過（發現者：審查，note-ee 的回覆）。擁有者為此多回了一次「同意」。
 - 再次出現：2026-11-17，note-cf 看到公開庫 run 44045598011 的一個紅燈（`participantSessionsConcurrent`：`expected 'written before the end' to be 'locked note'`），就對擁有者說「工作階段結束後，排隊中的寫入還是寫進去了，是真的安全缺陷」，並在 PR #1800 上要求作者找原因。作者指出那個標題是同檔另一個測試寫的（兩個測試共用一則筆記、順序打亂）；改成各用各的筆記後，公開庫 run 44054237049 在真 Postgres 上通過（4 個測試）。沒有讀測試檔就把失敗訊息解讀成產品缺陷（發現者：審查，PR 作者的答覆）。往上一層：把紅燈轉述給擁有者之前，先讀失敗那一行所在的測試與它的 `beforeAll`，並寫出「這個值是誰寫的」；做不到就說「原因還不知道」。
+- 再次出現：2026-11-20，better-auth 1.7 升級的任務說明寫「`account.accountId` 改名 `providerAccountId`、`account.issuer` 變成必填」。那是 1.7.0 RC 到 1.7.2 的內容，1.7.3 已收回（官方升級指南 "The account schema is unchanged from 1.6"）；照字面寫 migration 會把 1.7.26 要讀的欄位改掉，讓所有人登不進去。實際讀了升級指南、CHANGELOG，並在 PGlite 上比對 1.6.18 與 1.7.26 的 `runMigrations()` 產出（完全相同）才發現（發現者：審查，接手的工作階段自己查）。〔第 1 層〕`betterAuth17Upgrade.integration.test.ts` 的「1.7 asks for the same tables and columns 1.6.18 made」：登入表的欄位一變就失敗。往上一層：任務說明裡關於外部套件的主張，動手前以套件本身（`npm pack` 的程式、官方文件原文）核對，並在 PR 寫出核對結果。
 
 ### 2026-11-16　釘住現況的測試走的是一個什麼都不寫的路由（測試的模型錯了）
 - **發生了什麼**：2b-1 的「哪些寫入會動筆記的 `updated_at`」那張表裡，「標籤 schema 的 PATCH 不動 `updated_at`」一項，送的是 `PATCH /api/nodes/:id { tag_schema }`；這個路由不收 `tag_schema`，欄位從來沒有被寫進去，所以那一項什麼都沒有釘住。2b-1 的隨機產生器若用同一個路由寫 schema，也會是空轉。

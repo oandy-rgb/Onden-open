@@ -565,7 +565,7 @@
       "packages/frontend/src/modules/rss/RssReaderPanel.tsx": ["articleImageSrc"],
       "packages/frontend/src/modules/rss/groupSources.ts": ["SourceGroup"],
       "packages/frontend/src/modules/rss/readingPosition.ts": ["SWIPE_MIN_DX"],
-      "packages/frontend/src/modules/rss/rssMutes.ts": ["MUTE_WORD_MAX_CHARS", "RssMute"],
+      "packages/frontend/src/modules/rss/rssMutes.ts": ["RssMute"],
       "packages/frontend/src/modules/rss/rssPrefs.ts": ["forgetRssPrefs", "parseFeedCounts", "parseLastVisit", "parseReadingPositions", "parseShowCounts"],
       "packages/frontend/src/modules/rss/rssQuote.ts": ["quoteSourceLine"],
       "packages/frontend/src/modules/rss/rssSections.ts": ["ListRow", "daySection"],

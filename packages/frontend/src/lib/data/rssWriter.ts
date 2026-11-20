@@ -11,7 +11,6 @@ export const rssWriter = {
   fetchFullText: (itemId: string) => sendWrite<{ body?: string }>("POST", `/api/rss/items/${itemId}/fulltext`, "{}"),
   importOpml: (opml: string) => sendWrite<{ imported: number; skipped: number }>("POST", "/api/rss/opml", { opml }),
   /** Answers the mute's id (to take it back). */
-  muteWords: (keyword: string) => sendWrite<{ id: string }>("POST", "/api/rss/mutes", { keyword }),
   muteFeed: (sourceId: string) => sendWrite<{ id: string }>("POST", "/api/rss/mutes", { source_id: sourceId }),
   unmute: (muteId: string) => sendWrite("DELETE", `/api/rss/mutes/${muteId}`),
 };

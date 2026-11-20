@@ -219,7 +219,7 @@ describe("the reader's 放進筆記", () => {
     await openArticle();
     select("The quick brown fox");
     const options = within(await bar());
-    expect(options.getAllByRole("button").map((b) => b.textContent?.trim())).toEqual(["Put in today's note", "Put in “Reading notes”", "Another note…", "See less like this"]);
+    expect(options.getAllByRole("button").map((b) => b.textContent?.trim())).toEqual(["Put in today's note", "Put in “Reading notes”", "Another note…"]);
     expect(options.getByRole("button", { name: "Put in today's note" }).className).toMatch(/rss-quote-main/);
   });
 

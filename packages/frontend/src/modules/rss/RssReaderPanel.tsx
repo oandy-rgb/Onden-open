@@ -8,7 +8,6 @@ import { markRssVisited, useRssUnread, type RssDestination, type RssSource } fro
 import { useRssCounts } from "./rssCounts";
 import { readingPosition, rememberPosition, swipeIntent, viewKey, type TouchPoint } from "./readingPosition";
 import RssSourceSheet from "./RssSourceSheet";
-import { unmute, muteWords, muteWordOf } from "./rssMutes";
 import RssWeekCard from "./RssWeekCard";
 import RssItemList from "./RssItemList";
 import RssSourceBar, { VOICES_VIEW } from "./RssSourceBar";
@@ -374,25 +373,6 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
     const intent = swipeIntent(start, { x: t0.clientX, y: t0.clientY, t: e.timeStamp || Date.now() }, { selecting });
     if (intent === "next" && nextItem) void openItem(nextItem.id, { from: "next" });
     else if (intent === "prev" && prevItem) void openItem(prevItem.id, { from: "prev" });
-  }
-
-  /** 「少看這種」: the selected words, matched against titles only, for a week. */
-  async function seeLess(passage: Passage) {
-    const word = muteWordOf(passage.text);
-    if (!word) return;
-    try {
-      const id = await muteWords(word);
-      setQuote(null);
-      clearSelection();
-      void refreshSources();
-      void loadItems();
-      addToast(t("Fewer titles with “{word}” for a week.", { word: ellipsize(word, 24) }), "success", {
-        label: t("Undo"),
-        onClick: () => void unmute(id).then(() => { void refreshSources(); void loadItems(); }).catch((e) => writeErrors.report(e, addToast)),
-      });
-    } catch (e) {
-      writeErrors.report(e, addToast);
-    }
   }
 
   /** A feed left this list (unsubscribed, or muted for a week): say so, and drop what depended on it. */
@@ -860,9 +840,6 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
                         onClick={() => choose(quote, () => setPicking({ kind: "quote", passage: quote }))}>
                         {t("Another note…")}
                       </Pressable>
-                      {muteWordOf(quote.text) && online && (
-                        <Pressable type="button" onClick={() => void seeLess(quote)}>{t("See less like this")}</Pressable>
-                      )}
                     </span>
                   )}
                 </div>

@@ -515,8 +515,6 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Show again": "恢復顯示",
   "Could not bring it back": "沒辦法恢復，請再試一次",
   "Muted “{title}” for a week. Bring it back from the Sources panel.": "已把「{title}」靜音一週，可以在「來源」面板恢復。",
-  "Fewer titles with “{word}” for a week.": "一週內少看標題含「{word}」的文章。",
-  "See less like this": "少看這種",
   "Read this week": "這週讀到的",
   "Hide until next week": "下週再顯示",
   "Write about it": "寫點想法",

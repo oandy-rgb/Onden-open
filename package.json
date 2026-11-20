@@ -36,6 +36,7 @@
     "dup:near:baseline": "node scripts/dupNear.mjs --write-baseline",
     "test:repeat-changed": "bash scripts/repeat-changed-tests.sh",
     "changes:check": "node scripts/changes.mjs",
+    "audit:check": "node scripts/audit.mjs",
     "docs:covered": "node scripts/check-md-links.mjs --covered",
     "allowlist:baseline": "node scripts/allowlist.mjs",
     "surface:baseline": "node scripts/surface.mjs",

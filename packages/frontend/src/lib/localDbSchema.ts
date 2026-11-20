@@ -43,7 +43,7 @@ export function prepareLocalDatabase(database: Database): void {
   // boot lists children as online does; NULL on rows from older builds.
   // collection_views: the note's saved views (JSON). Without them a cached note
   // forgets its whiteboard tab, so a board opened from this copy shows 內容
-  // instead of its whiteboard (lib/whiteboardNote opensOnWhiteboard).
+  // instead of its whiteboard (lib/viewTabs defaultTabKey).
   for (const col of ["tag_schema TEXT", "class_tag_ids TEXT", "label_tag_ids TEXT", "body_len INTEGER", "space_id TEXT", "created_at TEXT", "collection_views TEXT"]) {
     try { database.run(`ALTER TABLE nodes ADD COLUMN ${col}`); } catch { /* column exists */ }
   }

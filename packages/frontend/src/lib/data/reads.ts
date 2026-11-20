@@ -194,7 +194,7 @@ const events = {
 /** Saved views of a tag or a note, and one page of a view's rows (a Page
  *  plus the view config); `offset` is the previous page's `next`. */
 const views = {
-  list: <T>(owner: ViewOwner) => api<{ views: T[] }>(`${viewOwnerPath(owner)}/views`),
+  list: <T>(owner: ViewOwner) => api<{ views: T[]; content_tab_removable?: boolean }>(`${viewOwnerPath(owner)}/views`),
   run: <T>(owner: ViewOwner, viewId: string, page: { offset?: number; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (page.offset) qs.set("offset", String(page.offset));

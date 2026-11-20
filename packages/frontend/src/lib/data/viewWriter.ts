@@ -48,8 +48,8 @@ export function makeViewWriter(ctx: DataCtx) {
     });
   }
 
-  async function create(owner: ViewOwner, input: ViewInput): Promise<string | null> {
-    const result = await online(`views:${owner.id}`, t("Creating a view needs a connection."), (submit) =>
+  async function create(owner: ViewOwner, input: ViewInput, offlineMessage = t("Creating a view needs a connection.")): Promise<string | null> {
+    const result = await online(`views:${owner.id}`, offlineMessage, (submit) =>
       submit<{ id: string }>(`${viewOwnerPath(owner)}/views`, JSON.stringify(input)));
     return "id" in result ? result.id : null;
   }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HANDWRITING_LAYOUT } from "@onden/markdown";
-import { LayoutDashboard } from "lucide-react";
+import { CONTENT_LAYOUT } from "@onden/markdown/contract";
+import { FileText, LayoutDashboard } from "lucide-react";
 import type { FieldDef } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import { useCanvasImported, useModuleFilter } from "../../hooks/useModuleFilter";
 import { NOTE_VIEW_MODULES, hiddenNoteViewLayouts } from "../../modules";
 import { useOwnerViews } from "../../lib/ownerViews";
-import { autoViewName, buildViewTabs, CANVAS_TAB, freeViewName, type ViewTab } from "../../lib/viewTabs";
+import { autoViewName, buildViewTabs, CANVAS_TAB, CONTENT_TAB, freeViewName, type ViewTab } from "../../lib/viewTabs";
 import { reads, type ViewOwner } from "../../lib/data";
 import { layoutChoices, placementChanges, viewNameParts, type LayoutChoice } from "../collections";
 import { useViewTabActions } from "./useViewTabActions";
@@ -17,7 +18,7 @@ import { isWhiteboardLayout } from "../../lib/whiteboardNote";
 // It lists `choices`, asks for the field of a choice that has `param` with the collections' LayoutChooser, and calls `add`.
 
 export type AddViewSource = {
-  /** The whiteboard when it is on and the page has none, then every built-in view. */
+  /** 「內容」 when the note's tab is hidden, the whiteboard when it is on and the page has none, then every built-in view. */
   choices: LayoutChoice[];
   /** The fields a calendar, board or cards view could be placed by. */
   fields: FieldDef[];
@@ -31,19 +32,17 @@ export type AddViewSource = {
 type Tabs = ReturnType<typeof useViewTabActions>;
 
 /** The tabs of one page, as the tab row shows them. `owner` null: no page. */
-export function useOwnerTabs(owner: ViewOwner | null, opts: { earnsWhiteboard: boolean; canManage: boolean; activeKey: string }) {
+export function useOwnerTabs(owner: ViewOwner | null, opts: { earnsWhiteboard: boolean; canManage: boolean; activeKey: string; retiredBoard?: boolean }) {
   const t = useT();
   const canvasImported = useCanvasImported();
   const hiddenLayouts = useHiddenLayouts(owner?.kind ?? "node");
-  const { views, status } = useOwnerViews(owner);
-  const { earnsWhiteboard, canManage, activeKey } = opts;
+  const { views, status, contentRemovable } = useOwnerViews(owner);
+  const { earnsWhiteboard, canManage, activeKey, retiredBoard } = opts;
   const tabs = useMemo(() => buildViewTabs({
-    views, canvasImported, canManage,
-    // A page opened on its whiteboard keeps the tab while it is open.
-    earnsWhiteboard: earnsWhiteboard || activeKey === CANVAS_TAB,
+    views, canvasImported, canManage, earnsWhiteboard, activeKey, retiredBoard, ownerKind: owner?.kind, contentRemovable,
     // A tag has no 「內容」: its first tab is the list of its tagged notes.
     contentName: owner?.kind === "tag" ? t("List") : t("Content"), whiteboardName: t("Canvas"), hiddenLayouts,
-  }), [views, canvasImported, canManage, earnsWhiteboard, activeKey, owner?.kind, t, hiddenLayouts]);
+  }), [views, canvasImported, canManage, earnsWhiteboard, activeKey, retiredBoard, owner?.kind, contentRemovable, t, hiddenLayouts]);
   return { views, status, tabs };
 }
 
@@ -88,20 +87,25 @@ export function useAddView(args: {
   const { ownerId, open = false, tabs, actions, fields, ownerKind, onSelect } = args;
   const canvasImported = useCanvasImported();
   const offerWhiteboard = canvasImported && !tabs.some((tab) => tab.kind === "canvas");
+  // A tag's list is always a tab, so only a note whose 「內容」 was removed is offered it back.
+  const offerContent = ownerKind === "node" && !tabs.some((tab) => tab.kind === "content");
   // A kind the page already has a tab of is listed as there; choosing it opens that tab.
   const firstTabOf = useCallback((layout: string) => tabs.find((tab) => tab.kind === "view" && tab.view?.layout === layout)?.key ?? null, [tabs]);
   const hidden = useHiddenLayouts(ownerKind);
   const hasPageSurface = useHasPageSurface(ownerId, ownerKind, open);
   const choices = useMemo<LayoutChoice[]>(() => [
+    ...(offerContent ? [{ layout: CONTENT_LAYOUT, title: "Content", Icon: FileText }] : []),
     ...(offerWhiteboard ? [{ layout: "canvas", title: "Canvas", Icon: LayoutDashboard }] : []),
     ...layoutChoices().map((choice) => (firstTabOf(choice.layout) ? { ...choice, present: true } : choice)),
     // A way of seeing this note drawn from its own text (「簡報」), while its module is on.
     ...NOTE_VIEW_MODULES.filter((mod) => ownerKind === "node" && !hidden.has(mod.id) && !(mod.id === HANDWRITING_LAYOUT && hasPageSurface && !firstTabOf(mod.id)))
       .map((mod) => ({ layout: mod.id, title: mod.library.title, Icon: mod.library.Icon, ...(firstTabOf(mod.id) ? { present: true } : {}) })),
-  ], [offerWhiteboard, firstTabOf, hidden, ownerKind, hasPageSurface]);
-  const { create, addWhiteboard } = actions;
+  ], [offerContent, offerWhiteboard, firstTabOf, hidden, ownerKind, hasPageSurface]);
+  const { create, addWhiteboard, addContent } = actions;
 
   const add = useCallback(async (picked: LayoutChoice, chosen: string) => {
+    // Shown only once the write was accepted: a refused one was reported by the writer, and nothing opens.
+    if (picked.layout === CONTENT_LAYOUT) { if (await addContent()) onSelect(CONTENT_TAB); return; }
     if (isWhiteboardLayout(picked)) { await addWhiteboard(); onSelect(CANVAS_TAB); return; }
     const existing = firstTabOf(picked.layout);
     if (existing) { onSelect(existing); return; }
@@ -111,7 +115,7 @@ export function useAddView(args: {
     input.name = freeViewName(autoViewName(viewNameParts({ ...input, layout: picked.layout }, fields)), actions.takenNames);
     const id = await create(input);
     if (id) onSelect(id);
-  }, [addWhiteboard, create, fields, firstTabOf, onSelect, actions.takenNames]);
+  }, [addContent, addWhiteboard, create, fields, firstTabOf, onSelect, actions.takenNames]);
 
   return { choices, fields, ownerKind, busy: actions.busy, add };
 }

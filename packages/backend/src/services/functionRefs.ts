@@ -37,7 +37,7 @@ import { withEventTransaction } from "../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { StatusError } from "../statusError.js";
 import { canReadNode, canSeeTag } from "./readPolicy.js";
-import { isViewLayout, viewLayouts } from "./viewLayouts.js";
+import { isViewLayout, viewLayouts, WHITEBOARD_LAYOUT } from "./viewLayouts.js";
 import { extendsIdsOf } from "./tagExtendsList.js";
 import { buildTagSchema, writeTagSchema } from "./tagWrites.js";
 import {
@@ -45,7 +45,7 @@ import {
   type EventRow, type RestoreContext, type RestoreError, type RestoreResult,
 } from "./restoreContract.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
-import { TAG_NODE_TYPE, isTag } from "@onden/markdown/contract";
+import { CONTENT_LAYOUT, TAG_NODE_TYPE, isTag } from "@onden/markdown/contract";
 
 // ── 型別 ────────────────────────────────────────────────────────────────────
 
@@ -557,9 +557,40 @@ export async function viewRecordById(kind: "tag" | "note", workspaceId: string, 
 /** 這個名字已有別的檢視用了嗎（精確比對、照輸入）。`exceptViewId` 是正在改名的那一個。 */
 export async function viewNameTaken(workspaceId: string, holderId: string, name: string, exceptViewId?: string): Promise<boolean> {
   let query = db.selectFrom("function_refs").select("id")
-    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "<>", "").where(sql`config->>'name'`, "=", name);
+    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "<>", "").where(sql`config->>'name'`, "=", name)
+    // The 「內容」 record's stored name is never shown (the tab is called by the person's language), so it takes no part in "taken".
+    .where("function_id", "<>", CONTENT_LAYOUT);
   if (exceptViewId) query = query.where("instance", "<>", exceptViewId);
   return (await query.limit(1).executeTakeFirst()) !== undefined;
+}
+
+/** 這則筆記的「內容」分頁可以收起來嗎：還有別的分頁會顯示。這是唯一的答案：列出檢視時回給畫面（`content_tab_removable`），
+ *  下面的保證也用它，畫面不自己再算一次。別的分頁＝沒收起來的其他檢視紀錄，或一塊有卡片卻還沒有白板紀錄的白板
+ *  （畫面把它算成分頁），或已退役的白板種類；白板紀錄若收起來了就不算。紀錄還在但這台看不到的分頁（模組關著）算有：
+ *  那種情況由畫面的保底算出來顯示「內容」。 */
+export async function contentTabRemovable(workspaceId: string, holderId: string): Promise<boolean> {
+  const found = await sql<{ yes: boolean }>`SELECT (
+      EXISTS (SELECT 1 FROM function_refs fr
+               WHERE fr.workspace_id = ${workspaceId} AND fr.holder_node_id = ${holderId} AND fr.instance <> '' AND fr.function_id <> ${CONTENT_LAYOUT}
+                 AND COALESCE(fr.config->'layout_config'->>'hidden', '') <> 'true')
+      OR (
+        NOT EXISTS (SELECT 1 FROM function_refs wr
+                     WHERE wr.workspace_id = ${workspaceId} AND wr.holder_node_id = ${holderId} AND wr.instance <> '' AND wr.function_id = ${WHITEBOARD_LAYOUT})
+        AND (EXISTS (SELECT 1 FROM node_positions np WHERE np.workspace_id = ${workspaceId} AND np.surface = ${holderId}::text)
+             OR EXISTS (SELECT 1 FROM content_nodes cn WHERE cn.workspace_id = ${workspaceId} AND cn.id = ${holderId} AND cn.node_type = 'canvas'))
+      )) AS yes`.execute(db);
+  return found.rows[0]?.yes === true;
+}
+
+/** 一則筆記沒有別的分頁可顯示時，它的「內容」分頁不是收起來的（收起來是「別的分頁在，這個先不看」）。
+ *  寫檢視紀錄的三個函式（新增、改、刪）在同一筆交易的最後都過這裡：建立、複製、備份還原、別台或 MCP 刪掉最後一個分頁，
+ *  都得到同一個保證，客戶端不必再補一個請求。 */
+async function keepContentTabShowing(workspaceId: string, holderId: string): Promise<void> {
+  const hidden = await db.selectFrom("function_refs").select("instance")
+    .where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("function_id", "=", CONTENT_LAYOUT).where("instance", "<>", "")
+    .where(sql`config->'layout_config'->>'hidden'`, "=", "true").limit(1).executeTakeFirst();
+  if (!hidden) return;
+  if (!(await contentTabRemovable(workspaceId, holderId))) await patchView(workspaceId, holderId, hidden.instance, { layout_config_patch: { hidden: null } });
 }
 
 /** 新增一個檢視（呼叫者已檢查名字與權限）。`element` 是檢視的內容（不含 id、版面）。 */
@@ -573,6 +604,7 @@ export async function insertView(input: {
     config: JSON.stringify(config), holder_node_id: input.holderId,
     created_by: input.by ? carriedActorId(input.by) : null,
   }).execute();
+  await keepContentTabShowing(input.workspaceId, input.holderId);
 }
 
 /** 把改到的欄位併進檢視（版面變成 function_id，其餘併進 config）。回傳有沒有這個檢視。 */
@@ -594,12 +626,14 @@ export async function patchView(workspaceId: string, holderId: string, viewId: s
     config, updated_at: sql`now()`,
     ...(typeof layout === "string" ? { function_id: normalizedLayout(layout) } : {}),
   }).where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "=", viewId).executeTakeFirst();
+  await keepContentTabShowing(workspaceId, holderId);
   return Number(result.numUpdatedRows) > 0;
 }
 
 export async function removeView(workspaceId: string, holderId: string, viewId: string): Promise<void> {
   requireTransaction("removeView");
   await db.deleteFrom("function_refs").where("workspace_id", "=", workspaceId).where("holder_node_id", "=", holderId).where("instance", "=", viewId).execute();
+  await keepContentTabShowing(workspaceId, holderId);
 }
 
 /** 一列節點（`SELECT *`／`RETURNING *` 拿到的）換成客戶端存的樣子：`collection_views` 凍結了，改由引用組回。

@@ -18,6 +18,7 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   owner_only: "Only the workspace owner can do that.",
   browser_app_unavailable: "The trial version doesn't have this feature.",
   view_layout_not_for_tags: "Only notes can have this view.",
+  view_layout_not_changeable: "This view can't be turned into the Content tab.",
   view_module_tag: "This tag is a view. Add it as a tab on a tag's page, not to a note.",
   push_not_configured: "Lock-screen reminders are not set up on this server.",
   push_humans_only: "Only a person can turn on lock-screen reminders.",

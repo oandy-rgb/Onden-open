@@ -52,6 +52,8 @@ export type ServerOp =
   | { op: "deleteCanvas"; canvas: number }
   /** Hide (shown false) or show the board's 白板 tab, as the tab row does: its placements stay. */
   | { op: "setWhiteboardTab"; canvas: number; shown: boolean }
+  /** Remove (shown false) or show the note's 「內容」 tab, as the tab row does: the text stays; the tab's record says it is hidden. */
+  | { op: "setContentTab"; note: number; shown: boolean }
   | { op: "moveSpace"; note: number; space: number }
   | { op: "setMember"; space: number; perm: Perm }
   | { op: "burst"; count: number };
@@ -216,6 +218,17 @@ export async function createWorld(app: App): Promise<World> {
         const layout_config = o.shown ? rest : { ...rest, hidden: true };
         if (tab) await call("owner", "PATCH", `/api/nodes/${c}/views/${tab.id}`, { layout_config });
         else await call("owner", "POST", `/api/nodes/${c}/views`, { name: "Canvas", layout: "canvas", layout_config });
+        break;
+      }
+      case "setContentTab": {
+        const n = pick(pools.notes, o.note);
+        if (!n) break;
+        const listed = await call("owner", "GET", `/api/nodes/${n}/views`);
+        const body = listed.body as { views?: unknown[] } | unknown[] | null;
+        const views = (Array.isArray(body) ? body : body?.views ?? []) as Array<{ id: string; layout: string }>;
+        const tab = views.find((view) => view.layout === "content");
+        if (tab) await call("owner", "PATCH", `/api/nodes/${n}/views/${tab.id}`, { layout_config_patch: { hidden: o.shown ? null : true } });
+        else if (!o.shown) await call("owner", "POST", `/api/nodes/${n}/views`, { name: "Content", layout: "content", layout_config: { hidden: true }, pin_order: 1 });
         break;
       }
       case "deleteCanvas": { const c = pick(pools.canvases, o.canvas); if (c) await call("owner", "DELETE", `/api/canvases/${c}`); break; }

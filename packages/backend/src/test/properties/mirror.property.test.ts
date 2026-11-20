@@ -483,6 +483,7 @@ const serverOp: fc.Arbitrary<ServerOp> = fc.oneof(
   { weight: 4, arbitrary: fc.record({ op: fc.constant("placeOnCanvas" as const), canvas: small, note: idx }) },
   { weight: 1, arbitrary: fc.record({ op: fc.constant("removeFromCanvas" as const), canvas: small, note: idx }) },
   { weight: 2, arbitrary: fc.record({ op: fc.constant("setWhiteboardTab" as const), canvas: small, shown: fc.boolean() }) },
+  { weight: 2, arbitrary: fc.record({ op: fc.constant("setContentTab" as const), note: idx, shown: fc.boolean() }) },
   { weight: 1, arbitrary: fc.record({ op: fc.constant("deleteCanvas" as const), canvas: small }) },
   { weight: 3, arbitrary: fc.record({ op: fc.constant("moveSpace" as const), note: idx, space: fc.nat(3) }) },
   { weight: 4, arbitrary: fc.record({ op: fc.constant("setMember" as const), space: fc.nat(2), perm: fc.constantFrom("view" as const, "edit" as const, "none" as const) }) },

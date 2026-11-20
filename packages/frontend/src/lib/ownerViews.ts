@@ -31,9 +31,10 @@ export interface SavedView {
 }
 
 export type OwnerViewsStatus = "loading" | "ready" | "failed";
-export type OwnerViewsState = { views: SavedView[]; status: OwnerViewsStatus };
+/** `contentRemovable` is the server's answer to "may this note's 「內容」 tab be removed" (another tab shows); the page only reads it. */
+export type OwnerViewsState = { views: SavedView[]; status: OwnerViewsStatus; contentRemovable: boolean };
 
-const LOADING: OwnerViewsState = { views: [], status: "loading" };
+const LOADING: OwnerViewsState = { views: [], status: "loading", contentRemovable: false };
 const states = new Map<string, OwnerViewsState>();
 const listeners = new Set<() => void>();
 const inFlight = new Map<string, Promise<void>>();
@@ -61,9 +62,9 @@ export function reloadOwnerViews(owner: ViewOwner): Promise<void> {
       // one restored from an older event still shows as a table.
       const views = (Array.isArray(reply?.views) ? reply.views : [])
         .map((view) => (view.layout as string) === "list" ? { ...view, layout: "table" as const } : view);
-      put(key, { views, status: "ready" });
+      put(key, { views, status: "ready", contentRemovable: reply?.content_tab_removable === true });
     } catch {
-      put(key, { views: states.get(key)?.views ?? [], status: "failed" });
+      put(key, { ...(states.get(key) ?? LOADING), status: "failed" });
     } finally {
       inFlight.delete(key);
     }

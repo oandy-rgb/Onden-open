@@ -69,6 +69,8 @@ export const OFFLINE_SCREENS: ReadonlyArray<() => Promise<unknown>> = [
   // What modules load on use and works offline: the capture box, the quick-add
   // task sheet and the view layouts.
   () => import("../modules").then((m) => m.loadOfflineModuleScreens()),
+  // Adding a removed 「內容」 tab back, and the question before a jump into the text (lib/contentTab).
+  () => import("./contentTab"),
   // Typo-tolerant search and command-palette matching (lib/lazyFuse.ts).
   () => import("./lazyFuse").then((m) => m.loadFuse()),
   () => import("@onden/markdown/snippet"),

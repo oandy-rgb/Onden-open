@@ -2351,6 +2351,7 @@
     "GET /api/nodes/:id/views": {
       "status": 200,
       "shape": {
+        "content_tab_removable": "boolean",
         "views": [
           {
             "created_at": "string",

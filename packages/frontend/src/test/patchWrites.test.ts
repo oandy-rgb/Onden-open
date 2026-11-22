@@ -14,7 +14,7 @@ vi.mock("../lib/localDb", () => ({
 }));
 
 import { ApiError } from "../lib/api";
-import { addPendingWrite, getPendingWrites, clearPendingWrite, type PendingWrite } from "../lib/localDb";
+import { addPendingWrite, getPendingWrites, clearPendingWrite, storeRejectedWrite, type PendingWrite } from "../lib/localDb";
 import { submitWrite, flushPendingWrites } from "../lib/data/writeQueue";
 import { patchedBody, MIN_PATCH_UNITS } from "../lib/data/patchedBody";
 import { setPending } from "../lib/data/syncStatus";
@@ -68,6 +68,9 @@ describe("sending patches", () => {
       writes.push({ id: (writes.at(-1)?.id ?? 0) + 1, method, path, body, idem_key: idem_key ?? null, attempts: 0 });
     });
     vi.mocked(clearPendingWrite).mockImplementation(async (id) => { writes = writes.filter((w) => w.id !== id); });
+    // Like the real store: a refused save comes back as its row. Left to resetAllMocks it would answer undefined, and the
+    // refusal test would leave that hole in writeRecovery's rows for whichever test the shuffle runs next.
+    vi.mocked(storeRejectedWrite).mockImplementation(async (request, rejection) => ({ ...request, id: 1000 + bodies.length, attempts: 0, rejection }));
     mocks.api.mockImplementation(async (_path: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string) as { markdown?: string; markdown_patch?: { base_hash: string; hunks: never[] } };
       bodies.push(body);

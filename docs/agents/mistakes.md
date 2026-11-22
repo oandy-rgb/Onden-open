@@ -65,6 +65,15 @@
 
 ## 紀錄
 
+### 2026-11-22　`patchWrites` 隨機順序下紅：假的 `storeRejectedWrite` 回 `undefined`，被拒的那一列變成空洞（測試的模型錯了）
+- **發生了什麼**：`patchWrites.test.ts` 用 `vi.resetAllMocks()` 重設假的 localDb，`storeRejectedWrite` 因此回 `undefined`（真的一定回一列）。「other refusals」那則 403 把這個 `undefined` 收進 `writeRecovery` 的模組狀態；#1911 起每次送出都會讀那份清單（`withoutRefusedBase`），讀到空洞就拋錯，那次存檔被當成送不出去。測試順序是隨機的，所以只有 403 先跑時才紅（seed 1、3 重現，seed 2、4、5、6 不紅）。我在合併批次 2c 看到它紅一次、2d 又綠，就當偶發合了，結果 main 之後的三個公開 run 都紅。
+- **證據**：公開 run 44998095520、45006870035、45008330098、45008470647 的 Frontend 工作；本機 `--sequence.seed=3` 紅三則、拿掉 #1911 的 `lib/data/` 改動後同一個 seed 全綠。
+- **發現者**：公開 CI（我追查）。
+- **為什麼沒擋到**：假物件的回傳值不受型別約束（`resetAllMocks` 一律回 `undefined`）；一次紅、一次綠被我當成偶發，沒有用印出的 seed 重跑。
+- **類別**：測試的模型錯了。
+- **機制**：〔第 1 層〕這個檔的假 `storeRejectedWrite` 回一列，和 `failedWriteRecovery.test.tsx` 相同。〔第 4 層〕偶發紅先用 vitest 印出的 seed 重跑那一個檔，重現得出來就不是偶發。
+- **還沒擋住的**：其他測試的 localDb 假物件仍可能回 `undefined`；沒有共用、帶型別的假 localDb。
+
 ### 2026-11-22　一則 `it.fails` 釘的是種子，不是那個錯：抽到什麼取決於前面跑了哪些測試，而且任何失敗都算通過（釘法不決定、不指名）
 
 - **發生了什麼**：PR「fix/merge-core-before-transport-1」把種子 416864270 的兩台不同釘成 `it.fails(writeAndExchange(種子))`。產生器的 `ROW_TURNS` 是全域的，檔內測試順序被打亂，所以同一個種子寫什麼取決於前面的測試；`writeAndExchange` 把任何 throw 都變成字串，這則 `it.fails` 對**任何**失敗都通過。釘住之後我又改了產生器。

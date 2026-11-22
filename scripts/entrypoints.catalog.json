@@ -31,6 +31,39 @@
       "why": "視角、縮圖與全螢幕播放畫同一個組件，看到的就是播的；頁的切分、講稿、自動版型、頁的鍵都在 `@onden/markdown` 的 slidePages.ts 一處（伺服器的 getSlides 工具讀同一份）。"
     },
     {
+      "id": "slides-page-edit",
+      "need": "要在簡報上排頁（搬動、複製、刪除、新增一頁），或讓簡報分頁知道游標在筆記哪一頁",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/modules/slides/deckEdit.ts",
+          "exports": [
+            "movePage",
+            "duplicatePage",
+            "deletePage",
+            "insertPage",
+            "carryLayouts",
+            "undoLayouts",
+            "pageIndexAt"
+          ]
+        },
+        {
+          "file": "packages/frontend/src/lib/editorCaretStore.ts",
+          "exports": [
+            "useEditorCaret",
+            "scrollEditorTo",
+            "focusEditorAt",
+            "placeEditorCaret",
+            "replaceEditorText"
+          ]
+        }
+      ],
+      "use": "import { movePage } from \"./modules/slides/deckEdit\";\nexport const moved = movePage(\"## A\\n\\n---\\n\\n## B\", 0, 1)?.text;",
+      "replaces": "在簡報裡自己切字串搬頁、另存一份簡報順序、直接碰編輯器取游標",
+      "rules": [],
+      "why": "簡報沒有自己的副本：頁就是筆記文字的一段（parseDeck 的 from／to）。操作是文字進文字出的純函式，經 drafts.editText 寫回；游標與捲動由編輯器經 editorCaretStore 提供，簡報不碰編輯器。"
+    },
+    {
       "id": "slides-look",
       "need": "要用網站的式樣公式畫網站頁面以外的東西（簡報）",
       "area": "共用邏輯",
@@ -1901,6 +1934,32 @@
         "guard:shared-helpers"
       ],
       "why": "依最近更新排序用它，最近清單和側欄的順序才一樣。"
+    },
+    {
+      "id": "line-words",
+      "need": "要知道哪些字（{task}、{review}）讓一行變成任務或複習卡",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/lineWords.ts",
+          "exports": [
+            "activeWords",
+            "isLineWord"
+          ]
+        },
+        {
+          "file": "packages/frontend/src/lib/appStore.ts",
+          "exports": [
+            "useLineWords"
+          ]
+        }
+      ],
+      "use": "import { useLineWords } from \"./lib/appStore\";\nimport { activeWords } from \"./lib/lineWords\";\nconst words = activeWords(useLineWords()?.tasks ?? null); // 空陣列＝模組關著",
+      "replaces": "從標籤清單自己推字（moduleLineWord）、每個模組各寫一張字表",
+      "rules": [
+        "guard:lineWords"
+      ],
+      "why": "字由伺服器決定（services/lineWords.ts），經啟動資料與同步增量送來；編輯器自己推會和存檔的判斷分歧（有 {task} 卻沒圖示）。"
     },
     {
       "id": "tree-walk",

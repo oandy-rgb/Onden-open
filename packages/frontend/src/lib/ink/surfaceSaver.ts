@@ -11,7 +11,9 @@
 //     device's strokes the surface does not show, the save is first merged here the way the server would merge it (the
 //     surface's last saved drawing is the merge base, the server's answer the other side), so it carries those strokes
 //     and its patch is made against text the server has: a save never reads them as deleted, and never needs a second
-//     request with the whole value.
+//     request with the whole value. When that merge would drop something the save holds (both changed the same item and
+//     the other side sorts later), the save is sent as it is with the surface's last saved drawing as its base instead,
+//     and the server's merge keeps the dropped version with its conflict record.
 //   • A save made while an earlier one is still unanswered is made from that earlier drawing (a stroke drawn then undone
 //     before the answer must read as removed).
 //   • If that earlier save is then refused (or its local copy failed), the later one was made from a drawing the server
@@ -27,7 +29,7 @@
 
 import { useCallback, useRef } from "react";
 import { mergeInk, encodeInk } from "@onden/markdown/ink";
-import { saveInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions } from "../data";
+import { mergeDropsSent, saveInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions } from "../data";
 
 /** How a save ended: accepted or not, what the server stored, and the text that was sent as the value (null: only the offline queue holds it). */
 type InkSaveOutcome = { saved: boolean; stored: string | null; sent: string | null };
@@ -125,15 +127,34 @@ export class InkSaver {
     if (typeof server !== "string") return { value: next, base: server, merged: false, replayed: [] };
     const nextText = encodeInk(next);
     if (unsent.length > 0) {
-      let value = server;
-      for (const change of unsent) value = mergeInk(change.from, value, change.to).value;
+      // Each step checked (PR #1783 round 4): a step that leaves out this surface's version of something another device
+      // changed too means that version would exist nowhere — so the surface's drawing goes instead, with the base the
+      // chain started from, and the server merges it and keeps it with the conflict record (`submitted_value_ref`).
+      let value = server, lost = false;
+      for (const change of unsent) {
+        const step = mergeInk(change.from, value, change.to);
+        lost ||= mergeDropsSent(step, change.to);
+        value = step.value;
+      }
       const last = unsent[unsent.length - 1]!.to;
-      if (last !== nextText) value = mergeInk(last, value, nextText).value;
+      if (last !== nextText) {
+        const step = mergeInk(last, value, nextText);
+        lost ||= mergeDropsSent(step, nextText);
+        value = step.value;
+      }
+      if (lost) return { value: next, base: unsent[0]!.from, merged: false, replayed: [...unsent] };
       return { value, base: server, merged: true, replayed: [...unsent] };
     }
     if (own === server) return { value: next, base: server, merged: false, replayed: [] };
     const ownText = inkText(own);
-    return ownText === server ? { value: next, base: server, merged: false, replayed: [] } : { value: mergeInk(ownText, server, nextText).value, base: server, merged: true, replayed: [] };
+    if (ownText === server) return { value: next, base: server, merged: false, replayed: [] };
+    const merge = mergeInk(ownText, server, nextText);
+    // The merge dropped something this save holds (the other side's version of an item both changed sorts later): that
+    // version exists nowhere else, so it is not sent as a merge nobody sees. The original goes with its true base and the
+    // server merges it the same way and keeps it with the conflict record (attributeWrites `submitted_value_ref`).
+    // `own ?? null`: a surface that loaded nothing still sends a base ("" = none), so the server merges instead of overwriting.
+    if (mergeDropsSent(merge, nextText)) return { value: next, base: own ?? null, merged: false, replayed: [] };
+    return { value: merge.value, base: server, merged: true, replayed: [] };
   }
 
   /** A save's change, from the drawing it was made from (the one before it, else the last change's, else the surface's own). */

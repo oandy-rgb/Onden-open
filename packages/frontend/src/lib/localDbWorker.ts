@@ -1,7 +1,7 @@
 import { applyTagCatalog, restoreTagCatalog } from "./tagProjection";
 import { prepareLocalDatabase } from "./localDbSchema";
 import { createInitializationGate } from "./initializationGate";
-import { upsertWorkspaceInto, updateWorkspaceSettingsInto, readWorkspaceSettings, readWorkspaceModules, writeWorkspaceModules, type WorkspaceSettings } from "./workspaceMirror";
+import { upsertWorkspaceInto, updateWorkspaceSettingsInto, readWorkspaceSettings, readWorkspaceModules, writeWorkspaceModules, readLineWords, writeLineWords, type WorkspaceSettings } from "./workspaceMirror";
 /// <reference lib="webworker" />
 import { decodeTaskRow, upsertTaskInto } from "./taskMirror";
 // ───────────────────────────────────────────────────────────────────────────
@@ -461,7 +461,7 @@ async function adoptLegacyStore(S: SqlJsStatic): Promise<Database | null> {
  *  reads when idle and merges. Everything else is the same, including the queue
  *  projection, so a pending edit is in the first paint either way. */
 async function loadBootstrapCore(listOnly: boolean): Promise<Bootstrap | null> {
-  const ws = qry<Omit<Workspace, "modules" | "modules_to_confirm"> & { actor_role: string | null; actor_is_owner?: number | null; can_review?: number | null; site_config: string | null; chrome: string | null; modules?: string | null; modules_to_confirm?: string | null }>("SELECT * FROM workspace LIMIT 1");
+  const ws = qry<Omit<Workspace, "modules" | "modules_to_confirm" | "line_words"> & { line_words?: string | null; actor_role: string | null; actor_is_owner?: number | null; can_review?: number | null; site_config: string | null; chrome: string | null; modules?: string | null; modules_to_confirm?: string | null }>("SELECT * FROM workspace LIMIT 1");
   if (ws.length === 0) return null;
   const pending = await getPendingWrites();
   // A large workspace paints slim, like its online session: bodies stay in the
@@ -522,7 +522,7 @@ async function loadBootstrapCore(listOnly: boolean): Promise<Bootstrap | null> {
   const paintedNodes = restoredNodes.map((n) => queuedIds.has(n.id) && n.markdown ? { ...n, body_len: n.markdown.length } : n);
   return {
     ...(slimPaint ? { bodies: "none" as const } : {}),
-    workspace: { ...ws[0], modules: readWorkspaceModules(ws[0].modules), modules_to_confirm: readWorkspaceModules(ws[0].modules_to_confirm) },
+    workspace: { ...ws[0], modules: readWorkspaceModules(ws[0].modules), modules_to_confirm: readWorkspaceModules(ws[0].modules_to_confirm), line_words: readLineWords(ws[0].line_words) },
     ...readWorkspaceSettings(ws[0]),
     // A queue commit can precede its optimistic cache upsert. On offline cold
     // start the durable request still supplies the pending text in that gap.
@@ -889,7 +889,7 @@ async function applySync(delta: SyncDelta): Promise<AppliedSyncDelta> {
     }
     if (delta.workspace) {
       const w = delta.workspace;
-      d.run("UPDATE workspace SET name=?, slug=?, home_node_id=?, modules=?, modules_to_confirm=?, time_zone=?, day_start_hour=?", [w.name, w.slug, w.home_node_id ?? null, writeWorkspaceModules(w.modules), writeWorkspaceModules(w.modules_to_confirm), w.time_zone ?? null, w.day_start_hour ?? 0] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      d.run("UPDATE workspace SET name=?, slug=?, home_node_id=?, modules=?, modules_to_confirm=?, time_zone=?, day_start_hour=?, line_words=?", [w.name, w.slug, w.home_node_id ?? null, writeWorkspaceModules(w.modules), writeWorkspaceModules(w.modules_to_confirm), w.time_zone ?? null, w.day_start_hour ?? 0, writeLineWords(w.line_words)] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     }
     if (delta.site_config !== undefined) updateWorkspaceSettingsInto(d, { site_config: delta.site_config, chrome: delta.chrome ?? null });
     // Delete after every remote channel so a same-batch edge/task/attribute

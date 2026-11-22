@@ -393,11 +393,8 @@ export type FrontendModule = {
     title: string;
     description: string;
     Icon: LucideIcon;
-    /** The word `{word}` on a checkbox line that this module recognises (tasks: `{task}`). It is the module's own
-     *  reserved word, never resolved to a tag. Not translated on purpose: it is typed into notes. */
-    lineWord?: string;
     /** A row of the paragraph menu's 「試試功能」 that is not a tag function (tasks: 「把這段做成任務」): it writes the
-     *  module's `lineWord` after the paragraph. `id` keys the preview example (components/functionCatalog/examples). */
+     *  module's word (`workspace.line_words`, decided by the server; lib/lineWords) after the paragraph. `id` keys the preview example (components/functionCatalog/examples). */
     paragraphAction?: { id: string; label: string; Icon: LucideIcon };
     /** A module that gives tags an ability has a module tag (#複習): importing
      *  the module creates it under this name (an i18n key, sent translated),

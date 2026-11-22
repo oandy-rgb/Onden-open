@@ -23,6 +23,8 @@ export type ConflictPayload = {
   overridden_value?: string;
   value_type?: string;
   overridden_value_type?: string;
+  /** The items both sides changed; the server keeps both values (overridden and, since the merge stopped favouring the
+   *  last writer, the value as sent) so Revert gives back the one the merge did not keep. */
   ink_conflicts?: InkMergeConflict[];
   /** Text boxes on a page (`page_text`): the boxes both sides changed. */
   page_text_conflicts?: Array<{ pageKey: string; id: string }>;

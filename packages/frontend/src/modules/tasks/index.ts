@@ -50,7 +50,6 @@ export const tasksModule: FrontendModule = {
     Icon: ListChecks,
     group: { id: "time", order: 2 },
     blurb: "Things to do, with deadlines and reminders",
-    lineWord: "task",
     paragraphAction: { id: "tasks_line", label: "Make this block a task", Icon: ListChecks },
     manifest: {
       adds: [

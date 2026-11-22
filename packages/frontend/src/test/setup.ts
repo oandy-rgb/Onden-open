@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom";
 import { afterAll, afterEach, beforeEach, vi } from "vitest";
 import { flushNanostoresUnmountTimers, trackNanostoresUnmountTimers } from "./helpers/nanostoresCleanup";
+import { EditorView } from "@codemirror/view";
 import { assertNoRealNetwork, forbidRealNetwork } from "./helpers/noRealNetwork";
 // The app registers its translation tables at boot (bootApp); tests that switch
 // locale without booting the app get the same wording.
@@ -130,3 +131,27 @@ afterEach(async () => {
 // helpers/nanostoresCleanup.ts.
 trackNanostoresUnmountTimers();
 afterAll(() => { flushNanostoresUnmountTimers(); });
+
+// happy-dom fires `selectionchange` inside the call that moves the selection; browsers fire it later, as a task of its own.
+// CodeMirror 6.43.15 takes the synchronous one, fired while its own update writes the selection to the DOM, for an update inside
+// its own update ("Calls to EditorView.update are not allowed while an update is in progress"). So while an editor update runs,
+// the event is delivered after it, once however many moves there were (browsers coalesce them); everywhere else it stays
+// synchronous (the rest of the app's tests read the selection at once).
+let editorUpdating = 0;
+const updateEditor = EditorView.prototype.update;
+EditorView.prototype.update = function (this: EditorView, ...args: Parameters<EditorView["update"]>) {
+  editorUpdating++;
+  try { return updateEditor.apply(this, args); } finally { editorUpdating--; }
+};
+if (typeof document !== "undefined") {
+  const deliverNow = document.dispatchEvent.bind(document);
+  let selectionChangePending = false;
+  document.dispatchEvent = ((event: Event) => {
+    if (event.type !== "selectionchange" || editorUpdating === 0) return deliverNow(event);
+    if (!selectionChangePending) {
+      selectionChangePending = true;
+      setTimeout(() => { selectionChangePending = false; deliverNow(event); }, 0);
+    }
+    return true;
+  }) as typeof document.dispatchEvent;
+}

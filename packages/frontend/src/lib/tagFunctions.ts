@@ -1,9 +1,9 @@
 import type { LucideIcon } from "lucide-react";
-import type { Tag } from "./api";
+import type { Tag, Workspace } from "./api";
 import { t } from "./i18n";
 import { getPrefJson, setPrefJson, PREFS } from "./prefs";
 import { functionModule, moduleTagOf, type TagFunctionSpec } from "./tagModules";
-import { MODULES, TAG_FUNCTIONS, moduleLineWord, type ModuleStatusOf } from "../modules";
+import { MODULES, TAG_FUNCTIONS, type ModuleStatusOf } from "../modules";
 
 // The function catalog: every function a tag can have, from the modules'
 // `tagFunction` registrations (modules/index.ts TAG_FUNCTIONS) — the one list
@@ -56,7 +56,7 @@ export type BlockFunction = {
  *  Functions in `used` come last. Fields on a paragraph (papers) are not offered:
  *  a block has nowhere to keep them yet (docs/architecture/block-nodes.md). */
 export function blockFunctions(
-  tags: readonly Tag[], status: ModuleStatusOf, { canImport, used = [] }: { canImport: boolean; used?: readonly string[] },
+  tags: readonly Tag[], status: ModuleStatusOf, { canImport, used = [], lineWords }: { canImport: boolean; used?: readonly string[]; lineWords?: Workspace["line_words"] },
 ): BlockFunction[] {
   const rows = TAG_FUNCTIONS.flatMap((fn, order): Array<BlockFunction & { order: number }> => {
     const moduleId = functionModule(fn);
@@ -72,7 +72,7 @@ export function blockFunctions(
   // A module's own paragraph action (tasks): not a tag function, so it needs no tag; it writes the module's word.
   const own = MODULES.flatMap((mod, at): Array<BlockFunction & { order: number }> => {
     const action = mod.library.paragraphAction;
-    const word = action && moduleLineWord(mod.id, tags);
+    const word = action && lineWords?.[mod.id]?.words[0];
     if (!action || !word) return [];
     return [{ fn: { id: action.id, module: mod.id }, title: t(mod.library.title), description: t(action.label), Icon: action.Icon, tagName: word, off: status(mod.id) !== "on", canTurnOn: canImport, order: TAG_FUNCTIONS.length + at }];
   });

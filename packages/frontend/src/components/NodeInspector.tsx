@@ -154,7 +154,7 @@ function NodeInspector({
           // The panel still loads: a parent may share values down to a note that has nothing itself ("From parent").
           : tab === "tags" && tagsEmpty && !noHeadings ? (
             <InfoTagsTab key={node.id} node={node} canEdit={canEdit} onOpen={onSelectNode} onAttrUpsert={onAttrUpsert} onAttrRemove={onAttrRemove}
-              onTagsChanged={onTagsChanged} whenEmpty={<p className="info-panel-quiet">{t("No tags yet")}</p>} />
+              onTagsChanged={onTagsChanged} whenEmpty={<p className="info-panel-quiet">{t("No tags on this note. A #word typed in the text is only text, not a tag; add one with “+ Tag” under the title, or tag one paragraph by typing {example} at the end of it.", { example: `{${t("tag name")}}` })}</p>} />
           )
           : tab === "functions" ? (
             <>

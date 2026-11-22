@@ -73,14 +73,16 @@ describe.skipIf(!isTestDb)("attribute conflicts: recorded and reverted by type (
 
   /** Laptop recolours s1 red and draws S2; the tablet, from the same base,
    *  recolours s1 blue and draws S3. The merge keeps blue s1 (a conflict). */
-  async function inkConflict(): Promise<{ nodeId: string; eventId: string; merged: string; overridden: string }> {
+  /** Two devices change s1 from the same base: the stored one to `storedColor` (+ S2), the sent one to `sentColor` (+ S3). */
+  async function inkConflict(storedColor = "#f00", sentColor = "#00f"): Promise<{ nodeId: string; eventId: string; merged: string; overridden: string; sent: string }> {
     const nodeId = await newNote();
     await put(nodeId, "ink_data", { value: page([S1]), base_value: "" });
-    const overridden = page([stroke("s1", "#f00"), S2]);
+    const overridden = page([stroke("s1", storedColor), S2]);
     await put(nodeId, "ink_data", { value: overridden, base_value: page([S1]) });
-    const merged = (await put(nodeId, "ink_data", { value: page([stroke("s1", "#00f"), S3]), base_value: page([S1]) })).value as string;
+    const sent = page([stroke("s1", sentColor), S3]);
+    const merged = (await put(nodeId, "ink_data", { value: sent, base_value: page([S1]) })).value as string;
     const [record] = await conflicts(nodeId);
-    return { nodeId, eventId: record!.id, merged, overridden };
+    return { nodeId, eventId: record!.id, merged, overridden, sent };
   }
 
   it("an ink conflict stores blob references, not the drawings inline", async () => {
@@ -98,24 +100,32 @@ describe.skipIf(!isTestDb)("attribute conflicts: recorded and reverted by type (
     const blob = (hash: unknown) => q<{ content: string }>(`SELECT content FROM blobs WHERE hash = $1`, [hash]).then((r) => r.rows[0]?.content);
     expect(await blob(p.incoming_value_ref)).toBe(merged);
     expect(await blob(p.overridden_value_ref)).toBe(overridden);
+    // The value as sent, too: the merge keeps one s1 by a fixed order, so the sent one may be the one it did not keep.
+    expect(await blob(p.submitted_value_ref)).toBe(page([stroke("s1", "#00f"), S3]));
     // The inbox's poll carries the summary only.
     const listed = (await (await req(`/api/events?event_type=ATTRIBUTE_CONFLICT&target_id=${nodeId}&limit=50`)).json()) as { events: Array<{ payload: Record<string, unknown> }> };
     expect(JSON.stringify(listed.events[0]!.payload)).not.toContain("strokes");
   });
 
-  it("revert takes back the conflicting stroke and keeps both devices' other strokes, and one drawn since", async () => {
-    const { nodeId, eventId, merged } = await inkConflict();
-    expect(strokesOf(merged)).toEqual([["s1", "#00f"], ["s3", "#000"], ["s2", "#000"]]);
-    // Another device draws S4 after the merge.
-    await put(nodeId, "ink_data", { value: page([stroke("s1", "#00f"), S3, S2, S4]), base_value: merged });
-    const res = await revert(eventId);
-    expect(res.status).toBe(200);
-    const doc = await stored(nodeId, "ink_data");
-    expect(strokesOf(doc.value)).toEqual([["s1", "#f00"], ["s3", "#000"], ["s2", "#000"], ["s4", "#000"]]);
-    expect(((await res.json()) as { value: string }).value).toBe(doc.value);
-    // A plain new write, not another conflict.
-    expect(await conflicts(nodeId)).toHaveLength(1);
-  });
+  // Both directions: which s1 the merge keeps follows a fixed order of the two values, not who saved last, so in one of these
+  // the sending device's own version is the one Revert must bring back — from the recorded `submitted` value.
+  for (const [storedColor, sentColor] of [["#f00", "#00f"], ["#00f", "#f00"]] as const) {
+    it(`revert gives back the s1 the merge did not keep (stored ${storedColor}, sent ${sentColor}), keeps both devices' other strokes and one drawn since`, async () => {
+      const { nodeId, eventId, merged } = await inkConflict(storedColor, sentColor);
+      const kept = strokesOf(merged)[0]![1];
+      const lost = kept === storedColor ? sentColor : storedColor;
+      expect(strokesOf(merged)).toEqual([["s1", kept], ["s2", "#000"], ["s3", "#000"]]);
+      // Another device draws S4 after the merge.
+      await put(nodeId, "ink_data", { value: page([stroke("s1", kept), S2, S3, S4]), base_value: merged });
+      const res = await revert(eventId);
+      expect(res.status).toBe(200);
+      const doc = await stored(nodeId, "ink_data");
+      expect(strokesOf(doc.value)).toEqual([["s1", lost], ["s2", "#000"], ["s3", "#000"], ["s4", "#000"]]);
+      expect(((await res.json()) as { value: string }).value).toBe(doc.value);
+      // A plain new write, not another conflict.
+      expect(await conflicts(nodeId)).toHaveLength(1);
+    });
+  }
 
   it("a numeric attribute reverts as a number, once per request key, and not over a later edit", async () => {
     const nodeId = await newNote();

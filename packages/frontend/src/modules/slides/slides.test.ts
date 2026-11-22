@@ -25,7 +25,7 @@ describe("parseDeck", () => {
 
   it("a plain note is one slide; an empty one still has a slide", () => {
     expect(parseDeck("Just text").slides).toHaveLength(1);
-    expect(parseDeck("").slides).toEqual([{ markdown: "", cites: [] }]);
+    expect(parseDeck("").slides).toEqual([{ markdown: "", cites: [], from: 0, to: 0 }]);
   });
 
   it("a last part of [n] lines is the source list: not a slide, and each slide names what it cites", () => {

@@ -45,12 +45,12 @@
 //      This version writes neither list, so existing data is unaffected;
 //      INK_KNOWN_FEATURES is the set this version can edit (today: none yet).
 
-import { mergeById, sameJson } from "./jsonMerge.js";
-import { emptyInkPages, legacyFingerprint } from "./inkPages.js";
+import { inMergedKeyOrder, mergeItemsById, mergeValues, sameJson, weaveOrder } from "./jsonMerge.js";
+import { emptyInkPages, legacyFingerprint, pdfPageOfKey } from "./inkPages.js";
 import { INK_PAGE_KEY } from "./pageText.js";
 import type { InkPageRecord, InkPages } from "./inkPages.js";
 import { INK_DEFAULT_PAGE_WIDTH, decodeInk, encodeInk, isRecord, mergeIntervals, subtractIntervals } from "./inkFormat.js";
-import type { EraseInterval, ErasedIntervals, InkDocument, InkEnvelope } from "./inkFormat.js";
+import type { DecodedInk, EraseInterval, ErasedIntervals, InkDocument, InkEnvelope } from "./inkFormat.js";
 
 export {
   emptyInkPages, pdfPageRecord, pdfPageOfKey, inkPageOrder, notePages, noteDoc, blankPageRecord, withPageAppended, withPageDoc, legacyFingerprint, currentUnits, INK_PAGE_UNITS, INK_NOTE_MIN_HEIGHT,
@@ -70,16 +70,36 @@ export type {
   InkAnnotation, InkEnvelope, DecodedInk,
 } from "./inkFormat.js";
 
-// ── Three-way merge ────────────────────────────────────────────────────────
+// ── Merging several saves of one drawing ──────────────────────────────────
+// mergeInkHeads is THE merge: a base and the set of saves ("heads") made from
+// it. Its result depends only on that base and that set — not on the order the
+// heads are given or arrive in, and a head given twice or equal to the base
+// changes nothing. mergeInk (base, stored, incoming) is the same function with
+// two heads, so the server and the app merge exactly as a replicated-value
+// table that holds every head would. What decides where anything goes (a
+// stroke in its list, a page in `order`) is jsonMerge weaveOrder; what two
+// heads changed differently is decided by one fixed order of the heads (their
+// text, compared as strings: the last keeps its version) and reported, and
+// every losing version stays in the heads, so a caller that keeps them (the
+// server's conflict record) can give it back (revertInkConflicts).
+//
+// Folding pairwise (merge(merge(a, b), c)) is NOT the same as merging the set
+// {a, b, c}: an intermediate result has lost where a deleted item used to be,
+// so a page or stroke another head added next to it may land elsewhere. The
+// server merges each write into what is stored as it arrives — pairwise — so
+// three writes at once can still give a page order that depends on their
+// arrival. There is one server, so nothing diverges, and nothing is dropped.
 
-/** Something both sides changed differently. The merge still decides (the
- *  incoming save wins, nothing is dropped that either side changed); the
- *  caller records it so a person can look. */
+/** Something two heads changed differently. The merge still decides (the
+ *  head last in the fixed order keeps its version; nothing either changed is
+ *  dropped from the heads) and reports it so a person can look. */
 export type InkMergeConflict = {
   /** stroke / shape / annotation: one item by id; page: a page's settings
-   *  (width, background); format: stored and incoming are different shapes
-   *  (page vs PDF envelope), so the incoming value replaced the stored one. */
-  kind: "stroke" | "shape" | "annotation" | "page" | "format";
+   *  (width, background, size); deletedPage: a further page one head deleted
+   *  while another drew on it (it is kept as the heads that drew have it);
+   *  format: the heads are different shapes (page vs PDF envelope, or one is
+   *  unreadable), so one is kept whole. */
+  kind: "stroke" | "shape" | "annotation" | "page" | "deletedPage" | "format";
   id?: string;
   /** The PDF page the item is on. */
   page?: number;
@@ -91,14 +111,7 @@ export type InkMergeConflict = {
 export type InkMergeResult = { value: string; conflicts: InkMergeConflict[] };
 
 type Located = Omit<InkMergeConflict, "kind" | "id">;
-
-/** mergeById (jsonMerge.ts) for one kind of item, each conflict located. */
-function mergeItems<T extends { id: string }>(
-  base: readonly T[], stored: readonly T[], incoming: readonly T[],
-  kind: InkMergeConflict["kind"], at: Located, conflicts: InkMergeConflict[],
-): T[] {
-  return mergeById(base, stored, incoming, (id) => conflicts.push({ kind, id, ...at }));
-}
+type Conflicts = InkMergeConflict[];
 
 /** Points covered by both sorted interval lists. */
 function intersect(a: EraseInterval[], b: EraseInterval[]): EraseInterval[] {
@@ -116,74 +129,80 @@ function intersect(a: EraseInterval[], b: EraseInterval[]): EraseInterval[] {
 const intervalsOf = (erased: ErasedIntervals, id: string): EraseInterval[] =>
   Array.isArray(erased[id]) ? mergeIntervals(erased[id]!.filter((iv) => Array.isArray(iv) && iv.length === 2) as EraseInterval[]) : [];
 
-/** Erasure as point sets: what either side newly erased, plus what the base
- *  had erased and neither side restored (undo of an erase is a removal). */
-function mergeErased(base: ErasedIntervals, stored: ErasedIntervals, incoming: ErasedIntervals, strokeIds: Iterable<string>): ErasedIntervals {
+/** Erasure as point sets: what any head newly erased, plus what the base had
+ *  erased and no head restored (undo of an erase is a removal). Keys follow
+ *  the merged strokes. */
+function mergeErased(base: ErasedIntervals, sides: readonly ErasedIntervals[], strokeIds: Iterable<string>): ErasedIntervals {
   const out: ErasedIntervals = {};
   for (const id of strokeIds) {
-    const b = intervalsOf(base, id), s = intervalsOf(stored, id), i = intervalsOf(incoming, id);
-    const merged = mergeIntervals([...intersect(intersect(b, s), i), ...subtractIntervals(s, b), ...subtractIntervals(i, b)]);
+    const b = intervalsOf(base, id);
+    const each = sides.map((side) => intervalsOf(side, id));
+    const kept = each.reduce(intersect, b);
+    const merged = mergeIntervals([...kept, ...each.flatMap((iv) => subtractIntervals(iv, b))]);
     if (merged.length > 0) out[id] = merged;
   }
   return out;
-}
-
-/** A plain value (a page's settings) three ways: the side that changed it;
- *  incoming when both did, reported. */
-function mergeValue<T>(base: T, stored: T, incoming: T, conflict: () => void): T {
-  if (sameJson(incoming, base)) return stored;
-  if (!sameJson(stored, base) && !sameJson(stored, incoming)) conflict();
-  return incoming;
 }
 
 function emptyPage(width = INK_DEFAULT_PAGE_WIDTH): InkDocument {
   return { version: 1, strokes: [], erased: {}, page: { width } };
 }
 
-const union = (...lists: Array<readonly string[] | undefined>): string[] | undefined =>
-  lists.some(Array.isArray) ? [...new Set(lists.flatMap((l) => l ?? []))] : undefined;
+/** `features` / `requires` lists: everything any head has (they only grow) —
+ *  the base's names in its order, then the others sorted; undefined when none has the list. */
+function unionList(base: readonly string[] | undefined, sides: readonly (readonly string[] | undefined)[]): string[] | undefined {
+  if (![base, ...sides].some(Array.isArray)) return undefined;
+  const first = [...new Set(base ?? [])];
+  const added = [...new Set(sides.flatMap((s) => s ?? []))].filter((name) => !first.includes(name)).sort();
+  return [...first, ...added];
+}
 
-/** Fields this version does not manage, merged as plain values three-way (the
- *  side that changed one wins; incoming when both did). `managed` are the keys
- *  the caller merges itself. Applied to `target` in place. */
-function mergeUnknownFields(
-  target: Record<string, unknown>, base: object, stored: object, incoming: object, managed: ReadonlySet<string>,
-): void {
-  const b = base as Record<string, unknown>, s = stored as Record<string, unknown>, i = incoming as Record<string, unknown>;
-  for (const key of new Set([...Object.keys(b), ...Object.keys(s), ...Object.keys(i)])) {
+/** Fields this version does not manage, merged as plain values (jsonMerge
+ *  mergeValues: the heads that changed one; the last in order when they
+ *  differ — not reported: no conflict kind names a field, but the heads keep
+ *  every version). `managed` are the keys the caller merges itself. */
+function mergeUnknownFields(target: Record<string, unknown>, base: object, sides: readonly object[], managed: ReadonlySet<string>): void {
+  const b = base as Record<string, unknown>, all = sides as Record<string, unknown>[];
+  for (const key of new Set([...Object.keys(b), ...all.flatMap((s) => Object.keys(s))])) {
     if (managed.has(key)) continue;
-    const value = mergeValue(b[key], s[key], i[key], () => {});
+    const value = mergeValues(b[key], all.map((s) => s[key]), () => {});
     if (value === undefined) delete target[key];
     else target[key] = value;
   }
 }
 
-const UNITS_MANAGED: ReadonlySet<string> = new Set(["version", "pages"]);
+const UNITS_MANAGED: ReadonlySet<string> = new Set(["version", "pages", "order"]);
 const RECORD_MANAGED: ReadonlySet<string> = new Set(["key", "background", "size", "doc"]);
-const PAGE_MANAGED: ReadonlySet<string> = new Set(["version", "strokes", "erased", "page", "shapes", "morePages", "features", "requires"]);
-const MORE_MANAGED: ReadonlySet<string> = new Set(["version", "pages", "order"]);
+const PAGE_MANAGED: ReadonlySet<string> = new Set(["version", "strokes", "erased", "page", "shapes", "features", "requires"]);
+// A literal, not a spread of PAGE_MANAGED: a spread runs at module load, which would keep this whole module in every bundle that imports one name from it (the app's boot JS).
+const NOTE_MANAGED: ReadonlySet<string> = new Set(["version", "strokes", "erased", "page", "shapes", "features", "requires", "morePages"]);
 const ENVELOPE_MANAGED: ReadonlySet<string> = new Set(["version", "pages", "annotations", "units", "unitsFrom", "features", "requires"]);
+/** Field order of a merged record / page list whose base did not have it (inMergedKeyOrder): the order the app writes. */
+const RECORD_FIELDS = { key: 0, background: 0, size: 0, doc: 0 };
+const PAGES_FIELDS = { version: 0, pages: 0, order: 0 };
 
-function mergeFeatureLists(target: { features?: string[]; requires?: string[] }, base: typeof target, stored: typeof target, incoming: typeof target): void {
+function mergeFeatureLists(target: { features?: string[]; requires?: string[] }, base: typeof target, sides: readonly (typeof target)[]): void {
   for (const key of ["features", "requires"] as const) {
-    const merged = union(incoming[key], stored[key], base[key]);
+    const merged = unionList(base[key], sides.map((s) => s[key]));
     if (merged) target[key] = merged;
     else delete target[key];
   }
 }
 
-function mergePage(base: InkDocument, stored: InkDocument, incoming: InkDocument, at: Located, conflicts: InkMergeConflict[]): InkDocument {
-  const strokes = mergeItems(base.strokes, stored.strokes, incoming.strokes, "stroke", at, conflicts);
-  const hasShapes = [base, stored, incoming].some((d) => Array.isArray(d.shapes));
-  const shapes = hasShapes ? mergeItems(base.shapes ?? [], stored.shapes ?? [], incoming.shapes ?? [], "shape", at, conflicts) : undefined;
-  const page = mergeValue(base.page, stored.page, incoming.page, () => conflicts.push({ kind: "page", ...at }));
-  const erased = mergeErased(base.erased, stored.erased, incoming.erased, strokes.map((s) => s.id));
-  const merged: InkDocument = { ...incoming, version: 1, strokes, erased, page };
+/** One page's drawing from several heads. `managed`: the fields merged here
+ *  or by the caller (a note's first page leaves `morePages` to mergeNote). */
+function mergePage(base: InkDocument, sides: readonly InkDocument[], at: Located, conflicts: Conflicts,
+  managed: ReadonlySet<string> = PAGE_MANAGED): InkDocument {
+  const strokes = mergeItemsById(base.strokes, sides.map((d) => d.strokes), (id) => conflicts.push({ kind: "stroke", id, ...at }));
+  const hasShapes = [base, ...sides].some((d) => Array.isArray(d.shapes));
+  const shapes = hasShapes ? mergeItemsById(base.shapes ?? [], sides.map((d) => d.shapes ?? []), (id) => conflicts.push({ kind: "shape", id, ...at })) : undefined;
+  const page = mergeValues(base.page, sides.map((d) => d.page), () => conflicts.push({ kind: "page", ...at }))!;
+  const erased = mergeErased(base.erased, sides.map((d) => d.erased), strokes.map((s) => s.id));
+  const merged: InkDocument = { version: 1, strokes, erased, page };
   if (shapes) merged.shapes = shapes;
-  else delete merged.shapes;
-  mergeUnknownFields(merged as unknown as Record<string, unknown>, base, stored, incoming, PAGE_MANAGED);
-  mergeFeatureLists(merged, base, stored, incoming);
-  return merged;
+  mergeUnknownFields(merged as unknown as Record<string, unknown>, base, sides, managed);
+  mergeFeatureLists(merged, base, sides);
+  return inMergedKeyOrder(merged, base);
 }
 
 /** The pages `side`'s `units` stand for, or null when they are not known to
@@ -207,137 +226,182 @@ function emptyRecord(key: string, from: InkPageRecord): InkPageRecord {
 }
 
 /** `units` of the merged envelope (`merged` already holds the merged older
- *  fields). Pages merge by key, a page's strokes and shapes by id like any
- *  other drawing; two sides that cannot both be trusted leave `units` stale
- *  (`unitsFrom` dropped), so readers convert the merged older fields instead,
- *  which hold everything either side drew. Conflicts are reported by the older
- *  fields, not twice. */
-function mergeUnits(base: InkEnvelope, stored: InkEnvelope, incoming: InkEnvelope, merged: InkEnvelope): void {
-  if (![base, stored, incoming].some((d) => d.units)) return;
-  const b = unitsOf(base, base), s = unitsOf(stored, base), i = unitsOf(incoming, base);
-  if (!b || !s || !i) {
-    if (incoming.units) merged.units = incoming.units; else delete merged.units;
-    delete merged.unitsFrom;
-    return;
-  }
-  const pages: InkPages["pages"] = {};
-  const quiet: InkMergeConflict[] = [];
-  for (const key of new Set([...Object.keys(s.pages), ...Object.keys(i.pages)])) {
-    pages[key] = mergeRecord(key, b.pages[key], s.pages[key], i.pages[key], {}, quiet);
-  }
-  merged.units = { ...i, version: 1, pages };
-  mergeUnknownFields(merged.units as unknown as Record<string, unknown>, b, s, i, UNITS_MANAGED);
-  merged.unitsFrom = legacyFingerprint(merged);
+ *  fields). Pages merge as a notebook's do (mergePages), each head read as the
+ *  pages its `units` stand for (unitsOf), else as the `units` it carries (one
+ *  without any did not change them: the base's). When any head's cannot be
+ *  trusted, the merge is stale: `unitsFrom` is dropped, so readers convert the
+ *  merged older fields instead, which hold everything any head drew, and
+ *  `units` still keeps whatever a newer app wrote there. Conflicts are
+ *  reported by the older fields, not twice. */
+function mergeUnits(base: InkEnvelope, sides: readonly InkEnvelope[], merged: InkEnvelope): void {
+  if (![base, ...sides].some((d) => d.units)) return;
+  const b = unitsOf(base, base);
+  const each = sides.map((side) => unitsOf(side, base));
+  merged.units = mergePages(b ?? base.units, sides.map((side, n) => each[n] ?? side.units ?? base.units), (key) => ({ pageKey: key }), []);
+  if (b && each.every(Boolean)) merged.unitsFrom = legacyFingerprint(merged);
+  else delete merged.unitsFrom;
 }
 
-/** One page record three ways (its drawing by id, its settings as values). */
-function mergeRecord(key: string, br: InkPageRecord | undefined, sr: InkPageRecord | undefined, ir: InkPageRecord | undefined,
-  at: Located, conflicts: InkMergeConflict[]): InkPageRecord {
-  const from = (ir ?? sr)!;
-  const blank = () => emptyRecord(key, from).doc;
+/** One page record from the heads that have it (its drawing by id, its
+ *  settings as values: one "page" conflict when either setting differs). */
+function mergeRecord(key: string, br: InkPageRecord | undefined, records: readonly InkPageRecord[], at: Located, conflicts: Conflicts): InkPageRecord {
+  if (!br && records.length === 1) return records[0]!;
+  let settings = false;
+  const changedBoth = () => { settings = true; };
   const record: InkPageRecord = {
-    ...from,
-    background: mergeValue(br?.background ?? from.background, sr?.background ?? from.background, ir?.background ?? from.background, () => {}),
-    size: mergeValue(br?.size ?? from.size, sr?.size ?? from.size, ir?.size ?? from.size, () => {}),
-    doc: mergePage(br?.doc ?? blank(), sr?.doc ?? blank(), ir?.doc ?? blank(), at, conflicts),
+    key,
+    background: mergeValues(br?.background, records.map((r) => r.background), changedBoth)!,
+    size: mergeValues(br?.size, records.map((r) => r.size), changedBoth)!,
+    doc: mergePage(br?.doc ?? emptyPage(), records.map((r) => r.doc), at, conflicts),
   };
-  mergeUnknownFields(record as unknown as Record<string, unknown>, br ?? {}, sr ?? {}, ir ?? {}, RECORD_MANAGED);
-  return record;
+  if (settings && !conflicts.some((c) => c.kind === "page" && sameJson(c, { kind: "page", ...at }))) conflicts.push({ kind: "page", ...at });
+  mergeUnknownFields(record as unknown as Record<string, unknown>, br ?? {}, records, RECORD_MANAGED);
+  return inMergedKeyOrder(record, br ?? RECORD_FIELDS);
 }
 
-/** A handwriting note's further pages three ways, by key. A page either side
- *  added stays; a page one side removed goes when the other left it as the
- *  base had it, and stays whole as the other side has it when that side drew
- *  on it (nothing drawn is lost). A page both kept merges like the first page,
- *  its conflicts located by `pageKey`. `order` is one value: the side that
- *  changed it, incoming when both did; keys of pages that went are dropped. */
-function mergeMorePages(base: InkPages | undefined, stored: InkPages | undefined, incoming: InkPages | undefined,
-  conflicts: InkMergeConflict[]): InkPages | undefined {
-  if (!base && !stored && !incoming) return undefined;
-  const b = base?.pages ?? {}, s = stored?.pages ?? {}, i = incoming?.pages ?? {};
+/** A drawing's pages (a notebook's further pages, a PDF's `units`) from
+ *  several heads, by key. A page a head added stays. A page some head deleted
+ *  goes when every other head left it as the base had it; when another head
+ *  drew on it (or changed it) since the base, it stays as the heads that kept
+ *  it have it (merged) and a "deletedPage" conflict is reported — an edit the
+ *  deleter never saw beats the delete, as for a stroke. `order` is woven
+ *  (jsonMerge weaveOrder): pages added by any head are all listed; keys of
+ *  pages that went are dropped. The `pages` object's own key order is where a
+ *  page `order` does not name is shown (inkPageOrder): the named ones in
+ *  `order`, then `page`, PDF pages by number, the rest woven too. */
+function mergePages(base: InkPages | undefined, sides: readonly (InkPages | undefined)[], locate: (key: string) => Located, conflicts: Conflicts): InkPages {
+  const b = base?.pages ?? {};
+  const each = sides.map((side) => side?.pages ?? {});
   const pages: InkPages["pages"] = {};
-  for (const key of new Set([...Object.keys(s), ...Object.keys(i)])) {
-    const br = b[key], sr = s[key], ir = i[key];
-    if (br && (!sr || !ir)) {
-      const kept = (sr ?? ir)!;
-      if (!sameJson(kept, br)) pages[key] = kept;
-      continue;
+  for (const key of new Set(each.flatMap((p) => Object.keys(p)))) {
+    const br = b[key];
+    const records = each.map((p) => p[key]).filter((r): r is InkPageRecord => r !== undefined);
+    if (br && records.length < each.length) { // deleted by some head
+      if (records.every((r) => sameJson(r, br))) continue; // the others left it alone: it stays deleted
+      conflicts.push({ kind: "deletedPage", ...locate(key) });
     }
-    pages[key] = mergeRecord(key, br, sr, ir, { pageKey: key }, conflicts);
+    pages[key] = mergeRecord(key, br, records, locate(key), conflicts);
   }
-  const out: InkPages = { ...(incoming ?? stored), version: 1, pages };
-  mergeUnknownFields(out as unknown as Record<string, unknown>, base ?? {}, stored ?? {}, incoming ?? {}, MORE_MANAGED);
-  const order = mergeValue(base?.order, stored?.order, incoming?.order, () => {});
-  if (order) out.order = order.filter((key) => key === INK_PAGE_KEY || key in pages);
-  else delete out.order;
-  return Object.keys(pages).length > 0 || out.order ? out : undefined;
+  const out: InkPages = { version: 1, pages: {} };
+  mergeUnknownFields(out as unknown as Record<string, unknown>, base ?? {}, sides.map((s) => s ?? {}), UNITS_MANAGED);
+  // `order` present or absent: what the heads did to that; a key it names stays while its page does (`page` always).
+  const hasOrder = mergeValues(Array.isArray(base?.order), sides.map((s) => Array.isArray(s?.order)), () => {});
+  if (hasOrder) out.order = weaveOrder(base?.order ?? [], sides.map((s) => s?.order ?? []), new Set([INK_PAGE_KEY, ...Object.keys(pages)]));
+  const named = (out.order ?? []).filter((key) => key in pages);
+  const rank = (key: string) => (key === INK_PAGE_KEY ? -1 : pdfPageOfKey(key) ?? Number.MAX_SAFE_INTEGER);
+  const rest = weaveOrder(Object.keys(b), each.map((p) => Object.keys(p)), new Set(Object.keys(pages).filter((key) => !named.includes(key))))
+    .map((key, n) => ({ key, n })).sort((x, y) => rank(x.key) - rank(y.key) || x.n - y.n).map((x) => x.key);
+  out.pages = Object.fromEntries([...named, ...rest].map((key) => [key, pages[key]!]));
+  return inMergedKeyOrder(out, base ?? PAGES_FIELDS);
 }
 
-/** A handwriting note's stored document three ways: its first page, then its
- *  further pages. */
-function mergeNote(base: InkDocument, stored: InkDocument, incoming: InkDocument, conflicts: InkMergeConflict[]): InkDocument {
-  const merged = mergePage(base, stored, incoming, {}, conflicts);
-  const more = mergeMorePages(base.morePages, stored.morePages, incoming.morePages, conflicts);
-  if (more) merged.morePages = more;
-  else delete merged.morePages;
-  return merged;
+/** A handwriting note's stored document: its first page, then its further
+ *  pages (mergePages; left out when the merged note has none and no order). */
+function mergeNote(base: InkDocument, sides: readonly InkDocument[], conflicts: Conflicts): InkDocument {
+  const merged = mergePage(base, sides, {}, conflicts, NOTE_MANAGED);
+  if ([base, ...sides].some((d) => d.morePages)) {
+    const more = mergePages(base.morePages, sides.map((d) => d.morePages), (key) => ({ pageKey: key }), conflicts);
+    if (Object.keys(more.pages).length > 0 || more.order) merged.morePages = more;
+  }
+  return inMergedKeyOrder(merged, base);
 }
 
-function mergeEnvelope(base: InkEnvelope, stored: InkEnvelope, incoming: InkEnvelope, conflicts: InkMergeConflict[]): InkEnvelope {
+function mergeEnvelope(base: InkEnvelope, sides: readonly InkEnvelope[], conflicts: Conflicts): InkEnvelope {
   const pages: InkEnvelope["pages"] = {};
-  const numbers = new Set([...Object.keys(stored.pages), ...Object.keys(incoming.pages)].map(Number));
+  const numbers = new Set(sides.flatMap((d) => Object.keys(d.pages)).map(Number));
   for (const n of [...numbers].sort((a, b) => a - b)) {
-    const s = stored.pages[n], i = incoming.pages[n];
-    const width = (i ?? s)!.page.width;
-    pages[n] = mergePage(base.pages[n] ?? emptyPage(width), s ?? emptyPage(width), i ?? emptyPage(width), { page: n }, conflicts);
+    // A page a head does not have is blank there, as wide as the base's (the default when the base has none either).
+    const from = base.pages[n] ?? emptyPage();
+    pages[n] = mergePage(from, sides.map((d) => d.pages[n] ?? emptyPage(base.pages[n]?.page.width)), { page: n }, conflicts);
   }
-  // A side without records (an envelope saved before they moved in) did not
+  // A head without records (an envelope saved before they moved in) did not
   // change them: read it as the base's, never as "all removed".
   const baseRecords = base.annotations ?? [];
-  const storedRecords = stored.annotations ?? baseRecords;
-  const incomingRecords = incoming.annotations ?? baseRecords;
-  const hasRecords = [base, stored, incoming].some((d) => Array.isArray(d.annotations));
-  const merged: InkEnvelope = { ...incoming, version: 1, pages };
-  if (hasRecords) merged.annotations = mergeItems(baseRecords, storedRecords, incomingRecords, "annotation", {}, conflicts);
-  mergeUnknownFields(merged as unknown as Record<string, unknown>, base, stored, incoming, ENVELOPE_MANAGED);
-  mergeFeatureLists(merged, base, stored, incoming);
-  mergeUnits(base, stored, incoming, merged);
-  return merged;
+  const hasRecords = [base, ...sides].some((d) => Array.isArray(d.annotations));
+  const merged: InkEnvelope = { version: 1, pages };
+  if (hasRecords) merged.annotations = mergeItemsById(baseRecords, sides.map((d) => d.annotations ?? baseRecords), (id) => conflicts.push({ kind: "annotation", id }));
+  mergeUnknownFields(merged as unknown as Record<string, unknown>, base, sides, ENVELOPE_MANAGED);
+  mergeFeatureLists(merged, base, sides);
+  mergeUnits(base, sides, merged);
+  return inMergedKeyOrder(merged, base);
 }
 
-/** Merge a drawing save into what is stored. `base` is the drawing the
- *  incoming save was made from (what its device loaded or last saved); `stored`
- *  is the current value, which another device may have changed since. Strokes,
- *  shapes and highlight records merge three-way by id and erasure as interval
- *  sets, so a stroke drawn on either device survives and a stroke undone on
- *  one stays gone. Pure and deterministic. Values that are not the same kind
- *  of drawing (a page against a PDF envelope) cannot merge: the incoming value
- *  is kept and a "format" conflict reported. An unreadable or empty base
- *  merges as an empty drawing (keep everything either side has). */
-export function mergeInk(base: string | null | undefined, stored: string | null | undefined, incoming: string): InkMergeResult {
-  const conflicts: InkMergeConflict[] = [];
-  const s = decodeInk(stored);
-  const i = decodeInk(incoming);
-  if (i.kind === "none" || s.kind === "none") return { value: incoming, conflicts };
-  if (s.kind !== i.kind) return { value: incoming, conflicts: [{ kind: "format" }] };
+/** What an empty head ("") stands for: the base with nothing drawn — every
+ *  stroke, shape, record and further page removed, settings as the base had
+ *  them — so it merges as "this head cleared the drawing". */
+function cleared(base: DecodedInk): DecodedInk {
+  if (base.kind === "page") {
+    const doc: InkDocument = { ...base.doc, strokes: [], erased: {} };
+    if (doc.shapes) doc.shapes = [];
+    if (doc.morePages) doc.morePages = { ...doc.morePages, pages: {}, ...(doc.morePages.order ? { order: doc.morePages.order.filter((k) => k === INK_PAGE_KEY) } : {}) };
+    return { kind: "page", doc };
+  }
+  if (base.kind === "pdf") {
+    const pages = Object.fromEntries(Object.entries(base.doc.pages).map(([n, p]) => [n, { ...p, strokes: [], erased: {}, ...(p.shapes ? { shapes: [] } : {}) }]));
+    const doc: InkEnvelope = { ...base.doc, pages };
+    if (doc.annotations) doc.annotations = [];
+    delete doc.unitsFrom;
+    return { kind: "pdf", doc };
+  }
+  return base;
+}
+
+/** Merge the saves `heads` of one drawing, all made from `base` (what each
+ *  device loaded or last saved; null or "" = none). The result depends only on
+ *  `base` and the set of heads (see above). Strokes, shapes and highlight
+ *  records merge by id and erasure as interval sets, so a stroke drawn on any
+ *  device survives and a stroke undone on one stays gone (unless another
+ *  changed it). A head that is "" cleared the drawing. Heads of another kind
+ *  than the one the fixed order keeps (a page against a PDF envelope), or
+ *  unreadable ones, do not merge: one "format" conflict. When the merge comes
+ *  out as one head or the base (same JSON), that text is returned as it is, so
+ *  nothing is rewritten. Pure; inputs are not changed.
+ *  Use: mergeInkHeads(base, [laptop, tablet, phone]). */
+export function mergeInkHeads(base: string | null | undefined, heads: readonly string[]): InkMergeResult {
+  const baseText = base ?? "";
+  // Order of the heads, fixed by their text: only what two heads changed differently depends on it.
+  const set = [...new Set(heads)].filter((h) => h !== baseText).sort();
+  if (set.length === 0) return { value: heads.length ? baseText : "", conflicts: [] };
+  if (set.length === 1) return { value: set[0]!, conflicts: [] };
   const b = decodeInk(base);
-  if (i.kind === "page" && s.kind === "page") {
-    const from = b.kind === "page" ? b.doc : emptyPage(i.doc.page.width);
-    return { value: encodeInk(mergeNote(from, s.doc, i.doc, conflicts)), conflicts };
-  }
-  if (i.kind === "pdf" && s.kind === "pdf") {
+  const decoded = set.map((h) => (h === "" ? cleared(b) : decodeInk(h)));
+  const conflicts: Conflicts = [];
+  const readable = decoded.map((d, n) => ({ d, n })).filter((x) => x.d.kind !== "none");
+  if (readable.length === 0) return { value: set[set.length - 1]!, conflicts: [{ kind: "format" }] };
+  const kind = readable[readable.length - 1]!.d.kind;
+  const same = readable.filter((x) => x.d.kind === kind);
+  if (same.length < set.length) conflicts.push({ kind: "format" });
+  if (same.length === 1) return { value: set[same[0]!.n]!, conflicts };
+  let merged: InkDocument | InkEnvelope;
+  if (kind === "page") {
+    const from = b.kind === "page" ? b.doc : emptyPage();
+    merged = mergeNote(from, same.map((x) => (x.d as { doc: InkDocument }).doc), conflicts);
+  } else {
     const from: InkEnvelope = b.kind === "pdf" ? b.doc : { version: 1, pages: {} };
-    return { value: encodeInk(mergeEnvelope(from, s.doc, i.doc, conflicts)), conflicts };
+    merged = mergeEnvelope(from, same.map((x) => (x.d as { doc: InkEnvelope }).doc), conflicts);
   }
-  return { value: incoming, conflicts };
+  // Come out as one of the heads or the base (same JSON): that text, so a merge that changed nothing rewrites nothing.
+  const matches = [...same.map((x) => ({ text: set[x.n]!, doc: (x.d as { doc: object }).doc })), ...(b.kind === kind ? [{ text: baseText, doc: (b as { doc: object }).doc }] : [])]
+    .filter((x) => x.text !== "" && sameJson(x.doc, merged)).map((x) => x.text).sort();
+  return { value: matches[0] ?? encodeInk(merged), conflicts };
+}
+
+/** Merge a drawing save into what is stored: mergeInkHeads(base, [stored,
+ *  incoming]). `base` is the drawing the incoming save was made from;
+ *  `stored` is the current value, which another device may have changed since
+ *  (null: nothing stored, the save is kept as sent). Both orders of `stored`
+ *  and `incoming` give the same result. */
+export function mergeInk(base: string | null | undefined, stored: string | null | undefined, incoming: string): InkMergeResult {
+  if (stored === null || stored === undefined) return { value: incoming, conflicts: [] };
+  return mergeInkHeads(base, [stored, incoming]);
 }
 
 // ── Reverting a merge conflict ─────────────────────────────────────────────
 
-/** The overridden side's version of `id` in place of the merged one: swapped
- *  in place, removed when that side had none, appended when only it had it. */
-function takeItem<T extends { id: string }>(merged: readonly T[], overridden: readonly T[], id: string): T[] {
-  const theirs = overridden.find((item) => isRecord(item) && item.id === id);
+/** The version of `id` in `from` in place of the merged one: swapped in
+ *  place, removed when `from` had none, appended when only it had it. */
+function takeItem<T extends { id: string }>(merged: readonly T[], from: readonly T[], id: string): T[] {
+  const theirs = from.find((item) => isRecord(item) && item.id === id);
   const at = merged.findIndex((item) => isRecord(item) && item.id === id);
   if (at < 0) return theirs ? [...merged, theirs] : [...merged];
   const out = [...merged];
@@ -347,48 +411,114 @@ function takeItem<T extends { id: string }>(merged: readonly T[], overridden: re
 }
 
 /** One conflict on one page: the stroke (with its erasure), the shape, or the
- *  page settings as the overridden side had them. */
-function revertOnPage(page: InkDocument, overridden: InkDocument, conflict: InkMergeConflict): InkDocument {
+ *  page settings as `from` had them. */
+function revertOnPage(page: InkDocument, from: InkDocument, conflict: InkMergeConflict): InkDocument {
   const next: InkDocument = { ...page, erased: { ...page.erased } };
-  if (conflict.kind === "page") next.page = overridden.page;
+  if (conflict.kind === "page") next.page = from.page;
   else if (conflict.kind === "stroke" && conflict.id !== undefined) {
-    next.strokes = takeItem(page.strokes, overridden.strokes, conflict.id);
-    const erased = overridden.erased[conflict.id];
+    next.strokes = takeItem(page.strokes, from.strokes, conflict.id);
+    const erased = from.erased[conflict.id];
     if (erased) next.erased[conflict.id] = erased;
     else delete next.erased[conflict.id];
   } else if (conflict.kind === "shape" && conflict.id !== undefined) {
-    next.shapes = takeItem(page.shapes ?? [], overridden.shapes ?? [], conflict.id);
+    next.shapes = takeItem(page.shapes ?? [], from.shapes ?? [], conflict.id);
   }
   return next;
 }
 
-/** The drawing a merge conflict reverts to: `merged` (what the merge stored)
- *  with only the items both sides changed — `conflicts`, as mergeInk reported
- *  them — taken back from `overridden` (the value the merge was made over).
- *  Every other item stays as merged, so mergeInk(merged, current, result)
- *  re-applies just those items onto the drawing as it is now and keeps
- *  everything else either device drew, then or since. A "format" conflict,
- *  or values that are not the same kind of drawing, revert whole: the
- *  overridden value. Pure. */
-export function revertInkConflicts(merged: string, overridden: string, conflicts: readonly InkMergeConflict[]): string {
+/** What one conflict is about in a drawing, as JSON (for telling versions apart). */
+function conflictPart(d: DecodedInk, c: InkMergeConflict): unknown {
+  if (d.kind === "page") {
+    const record = c.pageKey === undefined ? undefined : d.doc.morePages?.pages[c.pageKey];
+    if (c.kind === "deletedPage") return record ?? null;
+    const doc = c.pageKey === undefined ? d.doc : record?.doc;
+    if (!doc) return null;
+    if (c.kind === "page") return { page: doc.page, ...(record ? { background: record.background, size: record.size } : {}) };
+    if (c.kind === "stroke") return [doc.strokes.find((s) => s.id === c.id) ?? null, doc.erased[c.id ?? ""] ?? null];
+    if (c.kind === "shape") return (doc.shapes ?? []).find((s) => s.id === c.id) ?? null;
+    return null;
+  }
+  if (d.kind === "pdf") {
+    if (c.kind === "annotation") return (d.doc.annotations ?? []).find((a) => a.id === c.id) ?? null;
+    const doc = c.page === undefined ? undefined : d.doc.pages[c.page];
+    if (!doc) return null;
+    if (c.kind === "page") return doc.page;
+    if (c.kind === "stroke") return [doc.strokes.find((s) => s.id === c.id) ?? null, doc.erased[c.id ?? ""] ?? null];
+    if (c.kind === "shape") return (doc.shapes ?? []).find((s) => s.id === c.id) ?? null;
+  }
+  return null;
+}
+
+/** The versions that lost conflict `c`: each of `versions` (the heads the
+ *  merge was made from, as a caller kept them) whose version of that item
+ *  differs from `merged`'s, once each, in `versions`' order. A "format"
+ *  conflict: the whole values that differ. Use it to show or give back what
+ *  a merge did not keep. */
+export function inkConflictLosers(merged: string, versions: readonly string[], c: InkMergeConflict): string[] {
   const m = decodeInk(merged);
-  const o = decodeInk(overridden);
-  if (conflicts.some((c) => c.kind === "format")) return overridden;
-  if (m.kind === "page" && o.kind === "page") {
+  const seen: unknown[] = [];
+  const out: string[] = [];
+  for (const v of versions) {
+    if (v === merged) continue;
+    const d = decodeInk(v);
+    const part = c.kind === "format" ? (d.kind === "none" ? v : d.doc) : d.kind === m.kind ? conflictPart(d, c) : undefined;
+    if (part === undefined || sameJson(part, c.kind === "format" ? (m.kind === "none" ? merged : m.doc) : conflictPart(m, c))) continue;
+    if (seen.some((p) => sameJson(p, part))) continue;
+    seen.push(part);
+    out.push(v);
+  }
+  return out;
+}
+
+/** The drawing a merge's conflicts revert to: `merged` (what the merge
+ *  stored) with each item two heads changed differently — `conflicts`, as the
+ *  merge reported them — taken from the first of `versions` (the heads it was
+ *  made from, as the caller kept them; inkConflictLosers) that the merge did
+ *  not keep. Every other item stays as merged, so a merge of the result into
+ *  the drawing as it is now re-applies just those items and keeps everything
+ *  else any device drew, then or since. A page one head deleted while another
+ *  drew on it is deleted again (or given back) the same way. A "format"
+ *  conflict reverts whole: that losing value. A conflict no version lost
+ *  changes nothing. Pure. */
+export function revertInkConflicts(merged: string, versions: string | readonly string[], conflicts: readonly InkMergeConflict[]): string {
+  const all = typeof versions === "string" ? [versions] : versions;
+  const loser = (c: InkMergeConflict) => inkConflictLosers(merged, all, c)[0];
+  const format = conflicts.find((c) => c.kind === "format");
+  if (format) return loser(format) ?? merged;
+  const m = decodeInk(merged);
+  if (m.kind === "page") {
     return encodeInk(conflicts.reduce((doc, c) => {
+      const raw = loser(c);
+      const o = raw === undefined ? null : decodeInk(raw);
+      if (!o || o.kind !== "page") return doc;
       if (c.pageKey === undefined) return revertOnPage(doc, o.doc, c);
-      const current = doc.morePages?.pages[c.pageKey];
-      const theirs = o.doc.morePages?.pages[c.pageKey];
+      const key = c.pageKey;
+      const current = doc.morePages?.pages[key];
+      const theirs = o.doc.morePages?.pages[key];
+      const more: InkPages = doc.morePages ?? { version: 1, pages: {} };
+      if (c.kind === "deletedPage") {
+        // The page as the losing head had it: deleted again, or its version back (listed where that head had it).
+        const pages = { ...more.pages };
+        if (theirs) pages[key] = theirs; else delete pages[key];
+        const order = more.order && (theirs
+          ? (more.order.includes(key) ? more.order : weaveOrder([], [more.order, o.doc.morePages?.order ?? [key]], new Set([INK_PAGE_KEY, ...Object.keys(pages)])))
+          : more.order.filter((k) => k !== key));
+        return { ...doc, morePages: { ...more, pages, ...(order ? { order } : {}) } };
+      }
       const from = current ?? theirs;
       if (!from) return doc;
-      const page = revertOnPage(current?.doc ?? emptyRecord(c.pageKey, from).doc, theirs?.doc ?? emptyRecord(c.pageKey, from).doc, c);
-      const more: InkPages = doc.morePages ?? { version: 1, pages: {} };
-      return { ...doc, morePages: { ...more, pages: { ...more.pages, [c.pageKey]: { ...from, doc: page } } } };
+      const page = revertOnPage(current?.doc ?? emptyRecord(key, from).doc, theirs?.doc ?? emptyRecord(key, from).doc, c);
+      // A page's settings are its record's background and size too.
+      const settings = c.kind === "page" && theirs ? { background: theirs.background, size: theirs.size } : {};
+      return { ...doc, morePages: { ...more, pages: { ...more.pages, [key]: { ...from, ...settings, doc: page } } } };
     }, m.doc));
   }
-  if (m.kind === "pdf" && o.kind === "pdf") {
+  if (m.kind === "pdf") {
     const doc: InkEnvelope = { ...m.doc, pages: { ...m.doc.pages } };
     for (const c of conflicts) {
+      const raw = loser(c);
+      const o = raw === undefined ? null : decodeInk(raw);
+      if (!o || o.kind !== "pdf") continue;
       if (c.kind === "annotation" && c.id !== undefined) {
         doc.annotations = takeItem(doc.annotations ?? [], o.doc.annotations ?? [], c.id);
       } else if (c.page !== undefined) {
@@ -400,7 +530,7 @@ export function revertInkConflicts(merged: string, overridden: string, conflicts
     }
     return encodeInk(doc);
   }
-  return overridden;
+  return merged;
 }
 
 export {

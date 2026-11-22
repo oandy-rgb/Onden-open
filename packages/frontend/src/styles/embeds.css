@@ -25,25 +25,12 @@
   max-width: 100%;
 }
 
-/* Strokes are stored in their light-theme colours (lib/ink/color): dark
-   themes invert lightness and keep the hue, as the live ink renderer does. */
-:root[data-theme="dark"] .md-drawing-picture svg {
-  filter: invert(1) hue-rotate(180deg);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .md-drawing-picture svg {
-    filter: invert(1) hue-rotate(180deg);
-  }
-}
-
-/* Pictures laid on the page are not strokes: the dark theme's inversion of the whole picture is undone for them. */
-:root[data-theme="dark"] .md-drawing-picture svg image {
-  filter: invert(1) hue-rotate(180deg);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .md-drawing-picture svg image {
-    filter: invert(1) hue-rotate(180deg);
-  }
+/* A drawing is a picture of paper (--ac-pure-white, white in both themes): the strokes keep the colours they were stored with, the
+   same as on the handwriting page, so there is no dark-theme inversion here. The paper is this background, so a picture drawn
+   without a sheet (a transparent svg) reads the same as one with it. Pictures laid on the page need no un-inverting either. */
+.md-drawing-picture svg {
+  background: var(--ac-pure-white);
+  border-radius: var(--ac-radius-sm);
 }
 
 .md-drawing-empty,

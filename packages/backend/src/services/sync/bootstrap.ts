@@ -18,6 +18,7 @@ import { readPositionsForSurface } from "../boardStore.js";
 import { getCanvasMemberships } from "../canvasMemberships.js";
 import { readableNodeIdSet } from "../readPolicy.js";
 import { workspaceWireRow } from "../workspaceModules.js";
+import { withLineWords } from "../lineWords.js";
 import { edgeColumnsSql, attributeColumnsSql, pointerColumnsSql, workspaceColumnsSql } from "../syncProjection.js";
 import { SIBLING_ORDER_N, SIBLING_ORDER_P } from "../orderKeys.js";
 import { dayClock } from "../../localDay.js";
@@ -285,7 +286,7 @@ async function readBootstrap(actor: ActorCtx, workspaceId: string, slimBodies: b
     ...(await serverIdentityField()),
     membership_epoch: membershipEpoch,
     server_time: serverTime,
-    workspace: ws.rows[0] ? workspaceWireRow(ws.rows[0]) : ws.rows[0],
+    workspace: ws.rows[0] ? await withLineWords(workspaceId, workspaceWireRow(ws.rows[0])) : ws.rows[0],
     // Compact (lean2): see bootstrapWire.ts. `nodes`/`attributes` replaced.
     ...(wire ?? { nodes: nodeRows, attributes: attributes.rows }),
     edges: edges.rows,

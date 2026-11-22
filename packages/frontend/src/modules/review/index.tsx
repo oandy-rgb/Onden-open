@@ -4,7 +4,7 @@
 //   • screen — the card-at-a-time study page (`?view=review`), optionally
 //     scoped to one note's subtree; lazy so the markdown renderer chunk stays
 //     out of the main bundle;
-//   • lineWord / paragraphAction — a paragraph with `{review}` is a card (a note save gives it its own reference);
+//   • paragraphAction — a paragraph with `{review}` is a card (a note save gives it its own reference);
 //   • noteCommands — make a whole note a card or stop, review the cards under a note, extract Q:/A: blocks into cards;
 //   • HomeSection — "N notes ready to review" with the busiest decks;
 //   • openCommand — open the session.
@@ -36,7 +36,6 @@ export const reviewModule: FrontendModule = {
     group: { id: "reading", order: 3 },
     blurb: "Turn notes into cards and review them on schedule",
     // Not translated on purpose: the word `{review}` in a paragraph makes it a card.
-    lineWord: "review",
     paragraphAction: { id: "review_block", label: "Make this block a review card", Icon: GraduationCap },
     manifest: {
       adds: [
@@ -75,9 +74,18 @@ export const reviewModule: FrontendModule = {
       label: "Extract review cards (Q:/A:)",
       keywords: ["flashcards", "study", "spaced", "review"],
       available: (_node, body) => extractReviewCards(body).length > 0,
+      // Named for what it does, so it is not the second 「複習」 of the tab (the row below is the one that starts a review).
       row: {
-        Icon: Layers, action: "Make cards",
-        describe: (_node, body) => t("{n} Q&A pairs in this note", { n: extractReviewCards(body).length }),
+        Icon: Layers, name: "Cards from Q&A", action: "Make cards",
+        describe: (node, body) => {
+          const all = extractReviewCards(body);
+          // A question already made a card under this note is matched by its title, as the extraction itself does (extractCards).
+          const titles = new Set(noteStructure.children(node.id).map((child) => (child.title ?? "").trim()));
+          const done = all.filter((card) => titles.has(card.question)).length;
+          if (done === 0) return t("{n} Q&A pairs in this note", { n: all.length });
+          if (done >= all.length) return t("All {n} Q&A pairs are already cards", { n: all.length });
+          return t("{n} Q&A pairs in this note, {done} already cards", { n: all.length, done });
+        },
       },
       run: async ({ node, refresh }) => { if (await extractCardsFromNote(node) > 0) await refresh(); },
     },
@@ -89,7 +97,7 @@ export const reviewModule: FrontendModule = {
       // Offered where there is something to review here: notes under it, the note itself is a card, or a paragraph of it
       // carries the review word (then opening it also offers back the paragraph cards that were stopped, StoppedInNote).
       available: (node, body) => noteHasReviewCards(node, body, noteStructure.children(node.id).length),
-      row: { Icon: GraduationCap, action: "Review", describe: () => t("Study the cards in this note and under it") },
+      row: { Icon: GraduationCap, name: "Review this note's cards", action: "Review", describe: () => t("Study the cards in this note and under it") },
       run: ({ node, open }) => open({ rootId: node.id, rootTitle: node.title || "" }),
     },
   ],

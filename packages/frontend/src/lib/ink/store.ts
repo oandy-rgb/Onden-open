@@ -50,3 +50,10 @@ export const inkReadOnlyMessage = (): string =>
 export function notifyInkReadOnly(): void {
   addToast(inkReadOnlyMessage(), "info");
 }
+
+/** The one notice when a save met another device's change to the same strokes and the merge kept the other version
+ *  (owner 2026-11-20: tell the person, never swap the drawing under the pen; decisions-canvas.md). The version this
+ *  device sent is kept with the conflict in the inbox, where Revert brings it back. */
+export function notifyInkVersionNotKept(): void {
+  addToast(t("Another device changed the same strokes, and its version was kept. Yours is under Recent conflicts in the Inbox, where you can bring it back."), "info");
+}

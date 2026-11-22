@@ -9,6 +9,7 @@ import type { ActorCtx } from "../types.js";
 import { trashSubtreeIds } from "./nodeTrash.js";
 import { canSeeTag, readableScopeSql } from "./readPolicy.js";
 import { liveTagNodeSql, notTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
+import { tagBlocks } from "./blockNodes.js";
 
 /** Tag `id`'s definition (A1.4: a class_tag IS a node, so name, color, schema
  *  parts, markdown and times all come off its content_nodes row), or null. */
@@ -32,7 +33,7 @@ export async function readTagDetail(actor: ActorCtx, workspaceId: string, id: st
 }
 
 /** P2 safe-delete: what deleting tag `tagId` would AFFECT, in plain numbers —
- *  members losing the tag, schema fields whose values stay behind as free-form
+ *  members (notes and paragraphs) losing the tag, schema fields whose values stay behind as free-form
  *  attrs, and the function references that disappear. The delete itself is the
  *  node soft-delete (tag = node; junction rows survive, so undelete restores
  *  everything). Null when the tag is missing or not visible to `actor`.
@@ -126,10 +127,14 @@ export async function tagDeletePreview(actor: ActorCtx, workspaceId: string, tag
     views = v.rows[0]?.n ?? 0;
   }
 
+  // Paragraphs carrying the tag itself: the figure the tag page and the sidebar give (blockNodes.tagBlocks).
+  const paragraphs = (await tagBlocks(actor, workspaceId, tagId, { limit: 1, offset: 0 }, { direct: true })).total ?? 0;
+
   const sampleSize = 5;
   return {
     tag: { id: tag.rows[0].id, name: tag.rows[0].title },
     members: visibleMembers.length,
+    paragraphs,
     sample_titles: visibleMembers.slice(0, sampleSize).map((m) => m.title),
     fields,
     views,

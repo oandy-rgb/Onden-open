@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo, undoDepth } from "@codemirror/commands";
-import { blockTaskTagName, editorBlocks } from "../lib/editorBlocks";
+import { blockTaskWords, editorBlocks } from "../lib/editorBlocks";
 import { insertBlockTag, insertBlockTags } from "../lib/editorParagraphActions";
 import { writeBlockTagName } from "../lib/editorCompletion";
 
@@ -16,7 +16,7 @@ function open(doc: string, caret = 0, taskTag: string | null = "任務") {
   document.body.append(parent);
   const view = new EditorView({
     parent,
-    state: EditorState.create({ doc, selection: { anchor: caret }, extensions: [history(), editorBlocks, blockTaskTagName.of(taskTag)] }),
+    state: EditorState.create({ doc, selection: { anchor: caret }, extensions: [history(), editorBlocks, blockTaskWords.of(taskTag ? [taskTag] : [])] }),
   });
   views.push(view);
   return { view, text: () => view.state.doc.toString() };

@@ -38,7 +38,8 @@ import { readPdfInk, type InkMultiPageDoc } from "../lib/pdf";
 import { makeNoteFromFile, embedMarkdown, goesIntoNote, newNoteResult } from "../lib/fileIntake";
 import { useAiEnabled, useModuleFilter, useModuleStatus } from "../hooks/useModuleFilter";
 import { blockFunctions } from "../lib/tagFunctions";
-import { moduleLineWord, slashInsertsOf } from "../modules";
+import { slashInsertsOf } from "../modules";
+import { activeWords } from "../lib/lineWords";
 import { Columns2, Eye, Minimize2, PenLine, type LucideIcon } from "lucide-react";
 import EmptyState from "./EmptyState";
 import { useZenMode } from "../hooks/useZenMode";
@@ -58,7 +59,7 @@ import { claimNoteTitleFocus, focusTitleField, onNoteTitleFocusRequest } from ".
 import { PREFS, usePersistedFlag } from "../lib/prefs";
 import { requestSplitClose, requestSplitOpen, useSplit } from "../lib/splitViewStore";
 import { CONTENT_TAB } from "../lib/viewTabs";
-import { addToast, getAppState, useTagRows } from "../lib/appStore";
+import { addToast, getAppState, useLineWords, useTagRows } from "../lib/appStore";
 
 import { ellipsize } from "@onden/markdown";
 import { Segmented, TextArea, Pressable, layerClass } from "./ui";
@@ -266,8 +267,9 @@ export default function OverviewEditor({
       .map(({ insert }) => ({ kind: "module" as const, title: insert.title, Icon: insert.Icon, run: () => insert.run({ node }) }))
     : undefined, [canEdit, isImported, node]);
   // A checkbox line becomes a task by carrying the tasks module's own word `{task}` (B4), which the module's save
-  // reads; it is never a tag.
-  const taskTagName = moduleLineWord("tasks", tags ?? []);
+  // reads; it is never a tag. The server says which words count (lib/lineWords).
+  const lineWords = useLineWords();
+  const taskWords = activeWords(lineWords?.tasks ?? null);
   // The { menu: own tags, tags of functions that are on, and tags a function
   // has not made yet or that is turned off; the owner picks one and its tag is
   // made and written, asking once first only for a function that waits for the
@@ -278,8 +280,8 @@ export default function OverviewEditor({
   const importer = useModuleImportConfirm();
   // The catalog's functions a paragraph can take (the tag panel's 「試試功能」); turning one on is the owner's.
   const paragraphFunctions = useMemo(
-    () => blockFunctions(tags ?? [], moduleStatus, { canImport: isOwner && online }),
-    [tags, moduleStatus, isOwner, online],
+    () => blockFunctions(tags ?? [], moduleStatus, { canImport: isOwner && online, lineWords }),
+    [tags, moduleStatus, isOwner, online, lineWords],
   );
   const importModuleTag = async (moduleId: string, name: string): Promise<string | null> => {
     let written: string | null = null;
@@ -761,7 +763,7 @@ export default function OverviewEditor({
                 readOnly={!canEdit}
                 onOpenNoteHistory={onOpenVersion}
                 blockFunctions={paragraphFunctions}
-                taskTagName={taskTagName}
+                taskWords={taskWords}
                 ref={editorRef}
                 value={draft}
                 onChange={onDraftChange}
@@ -779,7 +781,9 @@ export default function OverviewEditor({
                 onExtract={onExtract}
                 attrClassTags={attrClassTags}
                 onAttrSet={onAttrSet}
-                onCreateTask={onCreateTask}
+                // Words not known yet (a local copy from before the server sent them, opened offline): no second, line-less
+                // task for Ctrl/⌘+Enter; the line becomes a task once the words arrive.
+                onCreateTask={lineWords ? onCreateTask : undefined}
                 onOpenWikilink={onOpenWikilink}
                 blockCitations={blockCitations}
                 onOpenBlockCitations={openCitations}

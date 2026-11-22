@@ -43,7 +43,7 @@
 | 前端 `modules/importers/drawingImport.ts`、`excalidraw.ts` | 不用改 | 匯入的繪圖是手寫筆記，寫 `ink_data` |
 | 前端 `modules/review/ReviewPanel.tsx`、後端 `modules/review/service.ts` | 不用改 | 複習卡的手寫面是筆記的手寫頁 |
 | 前端 `lib/pdf/*` | 不用改 | PDF 信封 |
-| 後端 `services/attributeWrites.ts` | 改 | `MERGED_KEYS` 含 `board_ink`（`base_value` 合併、衝突紀錄） |
+| 後端 `services/attributeWrites.ts` | 改 | `MERGED_KEYS` 含 `board_ink`（`base_value` 合併、衝突紀錄；合併沒留下送出的那一版時，紀錄多存 `submitted_value_ref`，還原兩個方向都拿得回來） |
 | 後端 `services/eventLog/attributeSnapshot.ts` | 改 | `board_ink` 的事件同樣內容定址（`value_ref`），復原讀得到 |
 | 後端 `services/eventQuery.ts` | 改 | `board_ink` 的 ATTRIBUTE_CONFLICT 列表同樣不帶兩份整張圖 |
 | 後端 `services/sync/bootstrap.ts`、`sync/drawings.ts`、`routes/sync.ts` | 改 | `BOOTSTRAP_DEFERRED_ATTRIBUTE_KEYS`＝`INK_PAGE_ATTRS` ＋ `pdf_annotations` ＋ `pdf_text`（2026-11-17 起）；`drawings.ts` 用同一串，不另寫 |

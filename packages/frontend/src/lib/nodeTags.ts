@@ -202,16 +202,16 @@ export function tagMemberCounts(
   return counts;
 }
 
-/** How many listed notes carry each tag DIRECTLY (no child tags, no
- *  extenders). A usage figure — "N notes are tagged #x" — not the
- *  member count; the server's usage_count (services/tagCatalog.ts) is the
- *  same direct figure. */
-export function directTagUsage(nodes: readonly MemberRow[]): Map<string, number> {
+/** How much each tag is used DIRECTLY (no child tags, no extenders): the listed notes that carry it plus the
+ *  paragraphs that carry it (the catalog's block_usage_count; the tag page lists both). A usage figure — "used in N
+ *  places" — not the member count. The sidebar's number, 「沒在用」 and the tidy line all read this one. */
+export function directTagUsage(nodes: readonly MemberRow[], tags: ReadonlyArray<{ id: string; block_usage_count?: number }> = []): Map<string, number> {
   const counts = new Map<string, number>();
   for (const node of nodes) {
     if (!listsAsTagMember(node)) continue;
     for (const id of nodeTagIds(node)) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
+  for (const tag of tags) if (tag.block_usage_count) counts.set(tag.id, (counts.get(tag.id) ?? 0) + tag.block_usage_count);
   return counts;
 }
 

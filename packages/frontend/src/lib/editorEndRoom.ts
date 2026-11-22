@@ -26,7 +26,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from 
 //   collapseEndRoom(view, () => compartment.reconfigure([]));
 
 const setRoomOn = StateEffect.define<boolean>();
-interface RoomConfig { readonly px: number; readonly bottomEdge: () => number }
+interface RoomConfig { readonly px: number; readonly bottomEdge: () => number; readonly atOnce: boolean }
 const roomConfig = Facet.define<RoomConfig, RoomConfig | null>({ combine: (v) => v[0] ?? null });
 // Module-level on purpose: while the host only changes `px` (keyboard opening) the same
 // field and watcher stay installed, so the room already out does not blink away and back.
@@ -77,7 +77,10 @@ class RoomWatcher {
       key: this,
       read: (v) => {
         const cfg = v.state.facet(roomConfig);
-        return !!cfg && cfg.bottomEdge() - (v.documentTop + v.lineBlockAt(v.state.doc.length).bottom) <= cfg.px;
+        // `atOnce`: the host decided the room is needed (a touch screen, once its keyboard has settled), so it is there now and does
+        // not wait for the caret to come near the bottom, which made it appear in the middle of typing. Otherwise (a computer) it
+        // comes when the last line nears the bottom.
+        return !!cfg && (cfg.atOnce || cfg.bottomEdge() - (v.documentTop + v.lineBlockAt(v.state.doc.length).bottom) <= cfg.px);
       },
       // A measure's write phase may not dispatch; the microtask still runs before the frame is painted.
       write: (needed, v) => {
@@ -99,21 +102,24 @@ class RoomWatcher {
 
 const watcher = ViewPlugin.fromClass(RoomWatcher);
 
-/** The scroll margin the room asks for: `px` while the caret is within `px` of the end of the text, else 0.
- *  lib/editorKeyboard folds it into the editor's one scrollMargins. */
+/** The scroll margin the room asks for: while the caret is within `px` of the end of the text, `px` but never more than the comfort
+ *  room of a third of what can be seen (64 to 220 px, as baseRoomPx): the room is grown to cover keyboard and bar so the end CAN be
+ *  scrolled above them, and that size must not become the distance the caret is pushed from the bottom (it ended at the top of the
+ *  screen, under the top row: randomized combination test, 2026-11-20). lib/editorKeyboard folds it into the editor's one scrollMargins. */
 export function endRoomMargin(view: EditorView): number {
   const cfg = view.state.facet(roomConfig);
   if (!cfg) return 0;
   const block = view.lineBlockAt(view.state.selection.main.head);
   // contentHeight counts the room block only while it is there.
   const textEnd = view.contentHeight - (view.state.field(roomOn, false) ? cfg.px : 0);
-  return textEnd - block.bottom <= cfg.px ? cfg.px : 0;
+  const comfort = Math.min(220, Math.max(64, Math.round(cfg.bottomEdge() * 0.3)));
+  return textEnd - block.bottom <= cfg.px ? Math.min(cfg.px, comfort) : 0;
 }
 
-export function endRoom(px: number, bottomEdge: () => number): Extension {
+export function endRoom(px: number, bottomEdge: () => number, atOnce = false): Extension {
   if (px <= 0) return [];
   return [
-    roomConfig.of({ px, bottomEdge }),
+    roomConfig.of({ px, bottomEdge, atOnce }),
     roomOn,
     watcher,
     EditorView.decorations.compute([roomOn, "doc", roomConfig], (state) => {

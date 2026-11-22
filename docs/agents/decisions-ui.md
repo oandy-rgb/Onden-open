@@ -1,6 +1,6 @@
 # 邊界決定：介面（側欄與頂欄、指令面板、匯出、選位置、視角分頁、設定、編輯器）
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts, packages/frontend/src/components/ui/initialFocus.ts, packages/frontend/src/components/tagPage/FieldPopover.tsx
 
 何時讀：改側欄與頂欄、寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置、筆記與標籤頁的視角分頁、並排、設定頁、編輯器的輸入與鍵盤行為之前。
@@ -60,7 +60,7 @@
 
 - **標籤與筆記一個入口、兩側**：`SidebarTagTree` 同時是手機筆記首頁的「標籤」分頁（`placement="tab"`）與桌面側欄筆記樹下方可收合的「標籤」區（`placement="section"`，開關 `PREFS.sidebarTagsOpen`）；
   列、選單、排序、隱藏都在這一份。手機分頁為「標籤｜筆記」，記在 `PREFS.sidebarPane`；預設底部列只釘「任務」（`DEFAULT_PHONE_PINS`）。標籤不是導覽目的地。
-- 列只列標籤階層，▸ 只展開子標籤；點名稱開標籤頁；右側是直接套用數（`directTagUsage`）。排序每層同規則（`pinnedThenUsed`）：釘選 → 筆記數多到少 → 名稱。
+- 列只列標籤階層，▸ 只展開子標籤；點名稱開標籤頁；右側是直接套用數（`directTagUsage`）：**筆記數加段落數**（業主決定 2026-11-19，與標籤頁分開列筆記與段落的方式一致）——標籤直接掛在筆記上算一個，直接掛在段落上也各算一個，所以一則裡 5 段帶同一標籤算 5，不等於「幾則筆記」；只掛在段落上的標籤不算「沒在用」。段落數是伺服器目錄的 `block_usage_count`。排序每層同規則（`pinnedThenUsed`）：釘選 → 用量多到少 → 名稱。
   篩選框只在標籤多於 `TAG_FILTER_THRESHOLD`（12）時出現。右鍵／長按選單：釘選、從側欄隱藏、重新命名、刪除（`TagDeleteConfirm`）、在裡面新增；重新命名與刪除只給擁有者。
 - **釘選與隱藏跟著帳號**：偏好 `sidebarTags`（`services/actorPrefs.ts`），同步機制在 `lib/syncedPrefStore.ts`（本機副本立即生效、離線補送、有未送出的編輯時本機勝出）。
   側欄隱藏只是不列出，標籤照常運作，與標籤自己的「隱藏標籤」（擁有者、全工作區）是兩件事，後者也算進「還有 N 個隱藏的標籤」。
@@ -159,6 +159,25 @@
   鍵盤高度變化、visual viewport 平移永不捲動；擁有者是 `lib/editorKeyboard.ts`（編輯器端）與 `hooks/useEditorKeyboard.ts`（React 端）。iOS 的 visualViewport 只用來擺工具列。
 - **焦點、游標落點、捲動都歸編輯器**（`lib/editorTouch.ts` 管落點）：附在編輯器旁的浮層按下去不拿走焦點，共用層做一次（`usePopover` 的 `keepFocus`，表面外的按鈕用 `components/ui` 的 `keepFocus`）。
   守門規則 `fe-keyboard-state`、`fe-focus-steal-guard`、`fe-editor-scroll-margin`（`test/guards/allowlist/fileRules.ts`）。需要真機：Android Brave 按 `/` 選單邊緣不收鍵盤、點最後一行下方游標只落一次。
+- **鍵盤分段升起（2026-11-20，Tab S9 的三星鍵盤多一排工具列、升得慢）**：「鍵盤開好了」是鍵盤**大小**（`useVirtualKeyboard` 的 `size`，resizes-content 下 `height` 恆為 0）靜止 250 ms 之後，每次大小變化都重新計時，平移不重算也不捲動；
+  之後才做一次「nearest」。檢查 `e2e/browser-app/caretClearOfBar.mjs` 在 Pixel 5 與 1204×714 平板各跑瞬間升起與分段升起（150、+120、+80 px，各隔 300 ms）。
+- **統一做法（2026-11-20，業主在 #1931 同意）**：①resizes-content 的瀏覽器上，筆記欄在工具列處結束（`html[data-kb-bar]` 加 `--ac-kb-bar-height`，`global.css` 讓 `.obsidian-main` 的 `margin-bottom` 等於工具列高），
+  瀏覽器原生與 CodeMirror 的游標捲動都停在工具列上方；`barClearance` 改成「工具列蓋住捲動區底部多少」＋間隙（`barClearancePx`），捲動區本來就止於工具列時只剩間隙；沒有 resizes-content（iOS）仍用 visualViewport 與 inset。
+  ②任何單擊（文字、空白行、最後一行下面）由編輯器放游標並做一次「最近」捲動（`lib/editorTouch`）；長按、雙擊、連結與控制項、輸入法、S Pen 維持原生。
+  ③鍵盤打開後的那一次捲動等「捲動區與鍵盤大小連續 6 個影格都沒變」（ResizeObserver＋`size`），不用固定毫秒；一次鍵盤打開只做一次（鍵盤再變大才重做）。實際等待：60 Hz 約 100 ms、120 Hz（Tab S9）約 50 ms、掉到 30 fps 約 200 ms；一次長任務只算一格（延後但不縮短），所以太早做的那次會被之後的大小變化再做一次補正。隨機組合測試的步間停頓取 40／150／300 ms。
+  ④`@codemirror/view` 6.43.1 → 6.43.15（它要 `@codemirror/state` ≥ 6.7.0，所以 state 也到 6.7.6，鎖定檔只動這兩個套件；測試環境 happy-dom 要在編輯器更新中把 `selectionchange` 事後送達，見 `test/setup.ts`）。
+  ⑤「鍵盤曾開」只屬於它被看到的那次寫字：上一次寫字結束時關掉的鍵盤，不會讓下一次點擊在鍵盤升起前就被當成「鍵盤關了」而離開編輯器（隨機組合測試抓到）。
+  檢查 `e2e/browser-app/caretKeyboardMatrix.mjs`：點的位置 × 鍵盤升法 × 尺寸（Pixel 5／1204×714）隨機組合，種子每次隨機並印出，`--seed` 重播；在 main 上紅（種子 424242 九項、種子 7 八項）。
+- **寫到底不黏底，由版面幾何達成（2026-11-20，業主：「打字時最下面不要突然塞幾行空白」）**：resizes-content 的瀏覽器（Android 的 Chromium 系與 Firefox；以鍵盤造成的 inset 為 0 判斷，不看瀏覽器名稱）
+  **沒有**會出現或長大的結尾空間（電腦沒有觸控工具列，結尾空間照舊在最後一行靠近底部時出現）：筆記欄止於工具列，最後一行捲得到工具列正上方，底部只靠編輯器本來就有的固定 padding（`.md-editor-cm .cm-content` 的 70 px），從載入到最後一個字都不變。
+  沒有 resizes-content 的（iOS）才用 `editorEndRoom`，而且只在鍵盤停住時一次放入（大小 = 鍵盤＋工具列，鍵盤本身變大才加大），不再等游標靠近底部才出現，打字中不變；結尾空間的大小不再當作游標的捲動邊距（邊距只取可見高度的三分之一，64–220 px）。
+  檢查 `e2e/browser-app/typeAtTheEnd.mjs`（Pixel 5、1204×714 平板、iPhone 視窗；長筆記與短筆記；在最後一行打字加 Enter 十次：頁面高度每次只多一行、最後一行完整在工具列上方）；在 main 上紅（Android 有結尾空間；短筆記第一個 Enter 讓頁面一次多 247 px）。
+- **短高度打字版面（2026-11-20）**：寫字、鍵盤開著、可見高度低於 520 px（`SHORT_VISIBLE_PX`；平板橫向鍵盤開著約 364）時，頂欄與筆記的分頁列讓路（`html[data-typing-short]`，`global.css`），
+  文字多拿到它們的高度；狀態來自同一個鍵盤擁有者（`useEditorKeyboard`），殼只讀這個屬性，沒有第二個偵測器；游標那行在筆記往下捲過時不動（`keepCaretLineStill`），
+  在筆記最上面時文字跟著欄位上移那兩列的高度（頂端之上無處可捲）。返回鍵、編輯器自己的工具列不變。檢查 `e2e/browser-app/shortTypingLayout.mjs`。
+- **紙在兩種主題都是白的（2026-11-20，擁有者：「紙應該要白色的吧」）**：手寫頁、PDF 頁、嵌在筆記裡的手繪圖（`styles/embeds.css` 的 `.md-drawing-picture`）、引用的手寫區域，底色是 `--ac-pure-white`（`#fff`，兩種主題相同），
+  筆跡用存下來的（淺色主題）顏色畫，**不**反轉；周圍的介面仍跟主題。`lib/ink/color.ts` 的明度反轉只給吃主題的面（白板畫布）。筆預設近黑。守門 `inkPaper.guard.test.ts`；`handwritingTab.mjs` 在深色主題量畫布像素。
+- **手寫／PDF 頁與筆工具列在筆記欄置中**：`.view-pane-fill` 左右都是頁面留白（`--ac-page-gutter`）；原本跟表格一樣從 `--view-start` 起算，1204 寬時左邊離螢幕邊 134 px、右邊 24 px。檢查 `handwritingFillsHeight.mjs` 的置中斷言（含 1204×714 側欄開／關）。
 
 ## 編輯器的畫法與輸入清單
 

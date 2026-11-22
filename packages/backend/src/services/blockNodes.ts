@@ -32,6 +32,7 @@ import { AuthorityError } from "../spine/authority.js";
 import { TASK_TAG_NAME } from "../spine/taskIdentity.js";
 import { systemJobOf } from "../spine/systemJobs.js";
 import { taskSeam, type TaskLine } from "./taskSeam.js";
+import { lineIsTask, writtenTagName } from "./lineWordRules.js";
 import { reviewSeam } from "./reviewSeam.js";
 import { insertAnchors, listNoteAnchors, takeBackStrandedAnchors } from "./blockAnchors/index.js";
 import { liveNodeSql } from "../spine/nodeSql.js";
@@ -150,7 +151,7 @@ export async function syncBlockNodes(change: {
     const text = cutToUnits(markdown.slice(b.start, b.end), TEXT_CACHE_MAX);
     const existing = byRef.get(b.ref!);
     const cardWord = b.tags.some(isReviewWord);
-    const taskLine = b.checkbox && linesAreTasks && b.tags.some(isTaskWord)
+    const taskLine = lineIsTask({ checkbox: !!b.checkbox, tags: b.tags }, [...taskWords], linesAreTasks)
       ? (blockId: string) => taskLines.push({ blockId, ref: b.ref!, title: taskLineTitle(markdown, b), checked: b.checkbox!.checked }) : null;
     if (!existing) {
       // The row's id is derived from its anchor's (services/derivedIds.ts): two nodes that each make the row for the same anchor make the same row, so a merge sees one.
@@ -165,13 +166,15 @@ export async function syncBlockNodes(change: {
     if (cardWord) cardBlockIds.push(existing.id); else wordlessBlockIds.push(existing.id);
     // The text is in this note: the paragraph is not standing alone as a note any more (taken back, or the
     // edit that moved it out was undone). Its tasks and schedule were never touched. The move itself is the
-    // note's own edit event; no event of the row's own is written for it.
-    if (existing.detached_note_id !== null) {
+    // note's own edit event; the row's own event says it is back (`reattached`), because the paragraph counts for its tags again
+    // (the sync delta re-ships the tag catalog on it, tagCatalog.blockEventTagUse).
+    const reattached = existing.detached_note_id !== null;
+    if (reattached) {
       await db.updateTable("block_nodes").set({ detached_note_id: null, detached_tags: null }).where("id", "=", existing.id).execute();
     }
     const before = { parent_block_id: existing.parent_block_id, kind: existing.kind, tag_ids: existing.tag_ids, hidden: existing.hidden };
     const after = { parent_block_id: parentId, kind: b.kind, tag_ids: wantTags, hidden: false };
-    const structural = JSON.stringify(before) !== JSON.stringify(after);
+    const structural = reattached || JSON.stringify(before) !== JSON.stringify(after);
     if (!structural && existing.label === b.label && existing.text_cache === text) continue;
     await q(
       `UPDATE block_nodes SET parent_block_id = $2, kind = $3, label = $4, text_cache = $5, hidden_at = NULL, updated_at = now()
@@ -181,7 +184,7 @@ export async function syncBlockNodes(change: {
     // A text-only change is the note's own edit event; only a change of
     // place, kind, tags or presence is the block node's.
     if (structural) {
-      await record(existing.hidden ? "BLOCK_NODE_RESTORED" : "BLOCK_NODE_UPDATED", existing.id, { block_ref: b.ref, before, after });
+      await record(existing.hidden ? "BLOCK_NODE_RESTORED" : "BLOCK_NODE_UPDATED", existing.id, { block_ref: b.ref, before, after, ...(reattached ? { reattached: true } : {}) });
     }
   }
 
@@ -264,8 +267,6 @@ async function setTags(workspaceId: string, blockId: string, tagIds: string[]): 
  *  mid-typing (`{重}` before `{重要}`) must not stay behind as a tag. */
 const AUTO_TAG_KEY = "_block_autotag";
 
-/** A tag name as written in `{…}` or as `#tag`, without the `#`. */
-const writtenTagName = (name: string): string => name.replace(/^#/, "").trim();
 
 /** Tag names (as written in `{…}` or as `#tags`) → class_tag ids, keyed by the
  *  name exactly as given. Each resolves by the one written-name rule
@@ -334,14 +335,29 @@ async function dropUnusedAutoTags(workspaceId: string, dropped: Set<string>, act
 // A block node has only the tags written in its own `{…}`: none come down from the block above or the note, as a
 // note takes none from its parent (owner 2026-11-09, docs/architecture/block-nodes.md §5).
 
+/** Whether any of these block nodes carries a tag (a removed or restored paragraph keeps its tags; the sync delta asks
+ *  whether the tag catalog's block_usage_count could have moved). */
+export async function anyBlockHasTags(blockIds: readonly string[]): Promise<boolean> {
+  return !!(await db.selectFrom("block_node_tags").select("block_node_id").where("block_node_id", "in", [...blockIds]).limit(1).executeTakeFirst());
+}
+
+/** Whether any of these notes carries a paragraph with a tag (the sync delta asks, after a note is deleted, restored, hidden or
+ *  moved, whether the tag catalog's block_usage_count could have moved). */
+export async function anyNoteHasTaggedBlocks(noteIds: readonly string[]): Promise<boolean> {
+  return !!(await db.selectFrom("block_nodes as b").innerJoin("block_node_tags as bt", "bt.block_node_id", "b.id")
+    .select("b.id").where("b.note_id", "in", [...noteIds]).limit(1).executeTakeFirst());
+}
+
 /** A block node a tag's page lists: its words, and the note it is in. */
 export type TagBlockRow = { id: string; note_id: string; note_title: string; label: string };
 
 /** One page of the block nodes carrying `tagId` or one of its member tags themselves (tagHierarchy.memberTagIds,
- *  the rule the page lists its notes by), in notes the reader can read: by note title, then where in the note. */
-export async function tagBlocks(actor: ActorCtx, workspaceId: string, tagId: string, page: PageInput): Promise<Page<TagBlockRow>> {
+ *  the rule the page lists its notes by), in notes the reader can read: by note title, then where in the note.
+ *  `direct`: only `tagId` itself (what the delete confirmation names). The catalog's block_usage_count is the same
+ *  direct count for every tag, from the same blockQuerySql. */
+export async function tagBlocks(actor: ActorCtx, workspaceId: string, tagId: string, page: PageInput, { direct = false }: { direct?: boolean } = {}): Promise<Page<TagBlockRow>> {
   const params: unknown[] = [workspaceId];
-  const blocks = blockQuerySql(params, { tagIds: await memberTagIds(workspaceId, tagId), actor });
+  const blocks = blockQuerySql(params, { tagIds: direct ? [tagId] : await memberTagIds(workspaceId, tagId), actor });
   const rows = (await q<TagBlockRow & { total: string }>(
     `WITH hits AS (${blocks})
      SELECT h.block_id::text AS id, h.note_id::text, n.title AS note_title, h.label, count(*) OVER () AS total
@@ -359,19 +375,20 @@ export async function tagBlocks(actor: ActorCtx, workspaceId: string, tagId: str
  *  system machinery (the reader's scope over the alias `n`). It yields (note_id, block_id, block_ref, label,
  *  block_at). Its parameters are pushed onto `params`, whose $1 must be the workspace id. */
 export function blockQuerySql(params: unknown[], opts: {
-  tagIds: string[];
+  /** Blocks carrying one of these tags; absent: every block that carries any tag (the catalog's usage count). */
+  tagIds?: string[];
   /** Whose reading rights apply. */
   actor: ActorCtx | null;
   /** List only blocks of these notes (a published subset). */
   within?: readonly string[];
 }): string {
-  const tags = params.push(opts.tagIds);
+  const tags = opts.tagIds ? params.push(opts.tagIds) : null;
   const scope = `n.hidden = false AND ${liveNodeSql("n")} AND ${LISTED_NODE_SQL("n")} AND ${readableScopeSql(opts.actor, "n", params)}`
     + (opts.within ? ` AND n.id = ANY($${params.push(opts.within)}::uuid[])` : "");
   return `SELECT b.note_id, b.id AS block_id, b.block_ref, b.label, b.created_at AS block_at
        FROM block_nodes b JOIN content_nodes n ON n.id = b.note_id
       WHERE b.workspace_id = $1 AND b.hidden_at IS NULL AND b.detached_note_id IS NULL AND ${scope}
-        AND EXISTS (SELECT 1 FROM block_node_tags bt WHERE bt.block_node_id = b.id AND bt.tag_id = ANY($${tags}::uuid[]))`;
+        AND EXISTS (SELECT 1 FROM block_node_tags bt WHERE bt.block_node_id = b.id${tags === null ? "" : ` AND bt.tag_id = ANY($${tags}::uuid[])`})`;
 }
 
 /** A recurring task written as a line of a note: the line stands for the occurrence that is current. Lines that point at

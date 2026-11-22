@@ -8,6 +8,7 @@ import { getWorkspaceId } from "../../db.js";
 import { moduleLeftOn } from "../../services/workspaceModules.js";
 import { functionTagNames } from "../../services/functionRefs.js";
 import { TASK_WORD_WHEN_TASK_IS_A_TAG } from "../../services/tasksStore.js";
+import { taskLineWords } from "../../services/lineWordRules.js";
 import { installTaskSeam } from "../../services/taskSeam.js";
 import { syncBlockTasks } from "./blockTasks.js";
 import { splitValidTaskFields } from "./fields.js";
@@ -24,11 +25,8 @@ export const tasksOn = (workspaceId: string): Promise<boolean> => moduleLeftOn(w
 /** See TaskSeam.lineWords. The module's tag nodes stay until the last function-reference batch; until then the word
  *  is whatever the tag is called now. */
 async function lineWords(workspaceId: string): Promise<string[]> {
-  const { names, otherTagNamed } = await functionTagNames(workspaceId, TASKS_MODULE_ID, TASK_TAG_NAME);
-  const words = new Set(names);
-  if (!otherTagNamed) words.add(TASK_TAG_NAME);
-  else if (words.size === 0) words.add(TASK_WORD_WHEN_TASK_IS_A_TAG); // the user's own `task` tag stays a tag; see tasksStore.taskLineWord
-  return [...words];
+  // The user's own `task` tag stays a tag; see tasksStore.taskLineWord.
+  return taskLineWords(await functionTagNames(workspaceId, TASKS_MODULE_ID, TASK_TAG_NAME), TASK_TAG_NAME, TASK_WORD_WHEN_TASK_IS_A_TAG);
 }
 
 installTaskSeam({

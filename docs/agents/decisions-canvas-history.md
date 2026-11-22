@@ -374,7 +374,7 @@
   `pageKey`：`pdf:<頁碼>`、手寫頁固定 `page`（手寫頁沒有頁 id）、投影片以後 `slide:<id>`。PDF 頁寬 1000 單位；手寫頁用自己的頁面座標（寬 1000）。
   `v` 大於 1 的值只讀（不編輯、不存）。未知欄位（框、頁、文件）原樣保留。
 - **合併**（`MERGED_KEYS` 加 `page_text`，`attributeWrites.mergeAttribute` 依 key 選合併器）：以框 id 三方合併，不同框都留；兩邊改同一框→後存的為準，
-  另一版記成 `ATTRIBUTE_CONFLICT`（欄位 `page_text_conflicts`，收件匣 Revert 只拿回那幾個框）；一邊刪一邊改→保留修改。與 ink 共用 `jsonMerge.ts` 的 `mergeById`。
+  另一版記成 `ATTRIBUTE_CONFLICT`（欄位 `page_text_conflicts`，收件匣 Revert 只拿回那幾個框）；一邊刪一邊改→保留修改。與 ink 共用 `jsonMerge.ts` 的 `mergeItemsById`（page_text 傳 [stored, incoming]，兩邊都改時 incoming 的；ink 傳排好順序的所有頭）。
 - **事件**：沿用屬性寫入，不開新事件類型或路由。一次儲存＝一筆 `ATTRIBUTE_SET`（含改之前的快照，`eventRestore` 的屬性還原直接支援，後來改過就 `state_conflict`）。
   何時存（controller 負責，介面不重複判斷）：打字停約 1 秒、放開（移動／改寬）、改大小／顏色／刪除／復原立即、點到別處（blur／空白處）與 `pagehide`／分頁隱藏／離開頁面。
   輸入法組字中不存、不動作（Esc／Enter／Ctrl+Z 都留給候選字）。空的框不存（結束編輯時刪掉，不留復原步驟）。離線同 ink：先寫本機副本再排隊，帶 `base_value`。

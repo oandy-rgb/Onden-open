@@ -38,13 +38,13 @@ describe("useVirtualKeyboard", () => {
     Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
     const vv = installViewport(800);
     const { result } = renderHook(() => useVirtualKeyboard(true));
-    expect(result.current).toEqual({ open: false, inset: 0, height: 0 });
+    expect(result.current).toEqual({ open: false, inset: 0, height: 0, size: 0 });
 
     vv.resize(450);
-    expect(result.current).toEqual({ open: true, inset: 350, height: 350 });
+    expect(result.current).toEqual({ open: true, inset: 350, height: 350, size: 350 });
 
     vv.resize(800);
-    expect(result.current).toEqual({ open: false, inset: 0, height: 0 });
+    expect(result.current).toEqual({ open: false, inset: 0, height: 0, size: 0 });
   });
 
   it("a pan of the visual viewport changes the inset but not the keyboard height", () => {
@@ -53,9 +53,9 @@ describe("useVirtualKeyboard", () => {
     const { result } = renderHook(() => useVirtualKeyboard(true));
     vv.resize(450);
     vv.pan(60);
-    expect(result.current).toEqual({ open: true, inset: 290, height: 350 });
+    expect(result.current).toEqual({ open: true, inset: 290, height: 350, size: 350 });
     vv.pan(0);
-    expect(result.current).toEqual({ open: true, inset: 350, height: 350 });
+    expect(result.current).toEqual({ open: true, inset: 350, height: 350, size: 350 });
   });
 
   it("detects the keyboard when the browser shrinks the whole layout", () => {
@@ -65,7 +65,23 @@ describe("useVirtualKeyboard", () => {
     Object.defineProperty(window, "innerHeight", { value: 450, configurable: true });
     vv.resize(450);
     // The layout moved with the keyboard: nothing to lift the bar by, but it is open.
-    expect(result.current).toEqual({ open: true, inset: 0, height: 0 });
+    expect(result.current).toEqual({ open: true, inset: 0, height: 0, size: 350 });
+  });
+
+  it("size follows a keyboard that rises in steps, also when the layout shrinks with it (height stays 0 there)", () => {
+    Object.defineProperty(window, "innerHeight", { value: 714, configurable: true });
+    const vv = installViewport(714);
+    const { result } = renderHook(() => useVirtualKeyboard(true));
+    const sizes: number[] = [];
+    for (const kb of [150, 270, 350]) {
+      Object.defineProperty(window, "innerHeight", { value: 714 - kb, configurable: true });
+      vv.resize(714 - kb);
+      sizes.push(result.current.size);
+      expect(result.current.height).toBe(0);
+    }
+    expect(sizes).toEqual([150, 270, 350]);
+    vv.pan(40);
+    expect(result.current.size).toBe(350);
   });
 
   it("ignores small viewport changes such as the URL bar collapsing", () => {
@@ -79,7 +95,7 @@ describe("useVirtualKeyboard", () => {
   it("stays closed while inactive", () => {
     installViewport(400);
     const { result } = renderHook(() => useVirtualKeyboard(false));
-    expect(result.current).toEqual({ open: false, inset: 0, height: 0 });
+    expect(result.current).toEqual({ open: false, inset: 0, height: 0, size: 0 });
   });
 });
 

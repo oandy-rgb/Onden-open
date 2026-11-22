@@ -411,6 +411,7 @@ Obsidian 不支援連到引用、提示框、表格的**局部**，所以引用�
 - [Logseq：子區塊繼承頁面的引用（path-refs）](https://discuss.logseq.com/t/inherit-block-links-refs-to-child-blocks-via-outliner-consistent-with-page-tags/17067)
 - [Logseq：標籤放在那一行最後的慣例](https://discuss.logseq.com/t/blocks-proper-format-for-title-and-tags/25829)
 - [Org-mode：標籤放在標題最後](https://orgmode.org/manual/Tags.html)
+- 段落上的標籤也算「在用」：標籤目錄的 `block_usage_count`、標籤頁的段落清單、刪除前說明的 `paragraphs` 都用 `blockQuerySql` 這一個範圍（`services/tagCatalog.ts`、`tagReads.ts`）；側欄數字＝筆記數加段落數。
 - [Pandoc：屬性、fenced divs 與 bracketed spans](https://pandoc.org/chunkedhtml-demo/8.18-divs-and-spans.html)
 - [Capacities：把區塊變成物件（文字會被搬走）](https://docs.capacities.io/faq/editing/blocks-into-object)
 - [Tasks 與 TaskNotes：一行還是一則筆記](https://www.obsidianstats.com/posts/2026-07-03-tasks-vs-tasknotes-one-line-vs-one-note)

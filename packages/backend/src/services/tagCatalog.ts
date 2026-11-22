@@ -6,6 +6,7 @@ import { spaceScopeSql } from "../spine/spaceScope.js";
 import { effectiveTagFields, type EffectiveField } from "./tagFields.js";
 import { isViewLayout } from "./viewLayouts.js";
 import { liveNodeSql, liveTagNodeSql } from "../spine/nodeSql.js";
+import { blockQuerySql } from "./blockNodes.js";
 
 type AbilityColumns = { id: string; parent_id?: string | null; schema_module?: unknown; schema_extends?: unknown; schema_behaviour?: unknown; schema_fields?: unknown };
 
@@ -42,6 +43,28 @@ function withTagAbilities<T extends AbilityColumns>(
   }));
 }
 
+/** What a block node event (BLOCK_NODE_*, written by a note save when a paragraph appears, changes tags, goes, comes back
+ *  or is taken back from a child note) says about the catalog's block_usage_count, which is stale after a change:
+ *  `moved` the event itself shows a count changed; `check` the block node whose tags decide it (removed, restored and
+ *  re-attached paragraphs keep their tags, so the caller asks whether it has any: blockNodes.anyBlockHasTags). */
+export function blockEventTagUse(type: string, payload: unknown): { moved: boolean; check?: string } {
+  // Who can read a space changed: every reader's paragraph count may move.
+  if (type === "SPACE_MEMBER_SET" || type === "SPACE_DELETED") return { moved: true };
+  if (!type.startsWith("BLOCK_NODE_")) return { moved: false };
+  const body = (payload ?? {}) as { block_node_id?: unknown; reattached?: unknown; tag_ids?: unknown; before?: { tag_ids?: unknown }; after?: { tag_ids?: unknown } };
+  const block = typeof body.block_node_id === "string" ? body.block_node_id : undefined;
+  if (type === "BLOCK_NODE_CREATED") return { moved: Array.isArray(body.tag_ids) && body.tag_ids.length > 0 };
+  if (type === "BLOCK_NODE_UPDATED" && JSON.stringify(body.before?.tag_ids ?? []) !== JSON.stringify(body.after?.tag_ids ?? [])) return { moved: true };
+  if (type === "BLOCK_NODE_REMOVED" || type === "BLOCK_NODE_RESTORED" || body.reattached === true) return block ? { moved: false, check: block } : { moved: true };
+  return { moved: false };
+}
+
+/** Events after which a note stops or starts counting for readers (gone, back, hidden, in another space): the paragraphs
+ *  it carries move in or out of every tag's block_usage_count, though no BLOCK_NODE_* event says so. */
+export const NOTE_REACH_EVENTS: ReadonlySet<string> = new Set([
+  "NODE_DELETED", "NODE_UNDELETED", "NODE_RESTORED", "NODE_HIDDEN_CHANGED", "NODE_MOVED_SPACE", "NODE_SPACE_CHANGED",
+]);
+
 /** The tag catalog: every tag definition (global), with usage counted over the
  * notes the caller can read. The one tag list the client receives: GET
  * /api/tags, the bootstrap payload and the sync delta/membership pages all send
@@ -52,6 +75,8 @@ export async function readTagCatalog(actor: ActorCtx | null, workspaceId: string
   const params: unknown[] = [workspaceId];
   const countScope = spaceScopeSql(actor, "m", params);
   const tagScope = spaceScopeSql(actor, "n", params); // for a tag definition (no space) this is the tag branch alone: a temporary session is not told the names of tags used only in spaces it does not reach
+  // The paragraphs carrying a tag count with its notes, by the same scope the tag page lists them by (blockNodes.blockQuerySql).
+  const blockHits = blockQuerySql(params, { actor });
   const result = await q(
     `SELECT n.id, n.title AS name, n.reserved_key, n.tag_color AS color,
             -- Hidden by the owner (「隱藏標籤」, D104): still applied and working,
@@ -81,7 +106,10 @@ export async function readTagCatalog(actor: ActorCtx | null, workspaceId: string
             -- lib/nodeTags.ts directTagUsage). Only readable notes count: a
             -- tag is global, so an unfiltered count would reveal how many
             -- private notes use it.
-            COALESCE(uc.usage_count, 0)::int AS usage_count
+            COALESCE(uc.usage_count, 0)::int AS usage_count,
+            -- block_usage_count = the paragraphs that carry it directly, in notes the caller can read: what a tag's
+            -- page lists as 「段落」. The sidebar's number and 「沒在用」 count notes and paragraphs together.
+            COALESCE(bc.block_usage, 0)::int AS block_usage_count
        FROM content_nodes n
        -- One aggregate over the readable notes' tag rows, joined once; a
        -- per-tag correlated subquery rescanned node_tags for each of 300 tags.
@@ -91,6 +119,11 @@ export async function readTagCatalog(actor: ActorCtx | null, workspaceId: string
           WHERE ${countScope}
           GROUP BY nt.tag_id
        ) uc ON uc.tag_id = n.id
+       LEFT JOIN (
+         SELECT bt.tag_id, COUNT(*) AS block_usage
+           FROM (${blockHits}) h JOIN block_node_tags bt ON bt.block_node_id = h.block_id
+          GROUP BY bt.tag_id
+       ) bc ON bc.tag_id = n.id
       WHERE n.workspace_id=$1 AND ${liveTagNodeSql("n")} AND ${tagScope}
       ORDER BY n.title`, params,
   );

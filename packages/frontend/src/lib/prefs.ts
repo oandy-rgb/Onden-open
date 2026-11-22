@@ -34,6 +34,8 @@ export const PREFS = {
   /** This browser's install id (lib/deviceId): device scope on purpose, so it neither follows the account nor changes on sign-in. */
   deviceId: { key: "onden.deviceId", scope: "device" },
   focusMode: { key: "onden.focusMode", scope: "device" },
+  /** 並排: the slides tab beside the same note's text follows the caret (lib/splitViewStore useFollowCaret). */
+  splitFollowCaret: { key: "onden.split.followCaret", scope: "device" },
   inspectorOpen: { key: "onden.inspectorOpen", scope: "device" },
   /** The notes list is folded away on its own (the top bar's left switch); focusMode folds both sides. */
   sidebarCollapsed: { key: "onden.sidebarCollapsed", scope: "device" },

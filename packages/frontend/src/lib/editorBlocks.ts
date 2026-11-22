@@ -2,6 +2,7 @@ import { blocksParsable, blockTagSlot, mayHaveBlocks, parseBlocks, taskBoxEdit, 
 import { EditorState, Facet, StateEffect, StateField, Transaction, type Extension, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, showPanel, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { t } from "./i18n";
+import { NO_WORDS, isLineWord } from "./lineWords";
 import { composingField, trackComposing } from "./editorComposing";
 
 // Block nodes in the editor (docs/architecture/block-nodes.md, B2).
@@ -77,24 +78,24 @@ const reparseAfterPause = ViewPlugin.fromClass(class {
   destroy() { if (this.timer) clearTimeout(this.timer); }
 });
 
-/** The name of the tasks module's tag in this note's space (OverviewEditor
- *  resolves it from the reserved tag), or null when there is none. */
-export const blockTaskTagName = Facet.define<string | null, string | null>({
-  combine: (values) => values.find((v) => v) ?? null,
+/** The words that make a checkbox line a task in this workspace (the server's, lib/lineWords); empty while the
+ *  tasks module is off. The first is the one the editor writes. */
+export const blockTaskWords = Facet.define<readonly string[], readonly string[]>({
+  combine: (values) => values.find((v) => v.length > 0) ?? NO_WORDS,
 });
 
-const sameTag = (a: string, b: string | null) => !!b && a.toLowerCase() === b.toLowerCase();
+const isTaskWord = (tag: string, words: readonly string[]) => isLineWord(tag, words);
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 class TagChips extends WidgetType {
-  constructor(readonly tags: string[], readonly taskTag: string | null) { super(); }
-  eq(other: TagChips) { return other.tags.join("\u0000") === this.tags.join("\u0000") && other.taskTag === this.taskTag; }
+  constructor(readonly tags: string[], readonly taskWords: readonly string[]) { super(); }
+  eq(other: TagChips) { return other.tags.join("\u0000") === this.tags.join("\u0000") && other.taskWords.join("\u0000") === this.taskWords.join("\u0000"); }
   toDOM() {
     const wrap = document.createElement("span");
     wrap.className = "cm-block-tags";
     for (const tag of this.tags) {
-      if (sameTag(tag, this.taskTag)) { wrap.append(taskIcon(wrap)); continue; }
+      if (isTaskWord(tag, this.taskWords)) { wrap.append(taskIcon(wrap)); continue; }
       const chip = document.createElement("span");
       chip.className = "cm-block-tag";
       chip.textContent = tag;
@@ -139,17 +140,17 @@ function buildDecorations(state: EditorState): DecorationSet {
   const sel = state.selection.main;
   const head = sel.head;
   const cursorLine = doc.lineAt(head).number;
-  const taskTag = state.facet(blockTaskTagName);
+  const taskWords = state.facet(blockTaskWords);
   const ranges: Range<Decoration>[] = [];
   for (const b of blocks) {
     const tags = b.marks.tags;
     if (tags && tags.from < tags.to && tags.to <= doc.length) {
       // A task tag shows its text only while the selection touches the `{…}`;
       // other tags show it on the whole cursor line.
-      const isTask = b.tags.some((tag) => sameTag(tag, taskTag));
+      const isTask = b.tags.some((tag) => isTaskWord(tag, taskWords));
       const showRaw = isTask ? sel.from <= tags.to && sel.to >= tags.from : doc.lineAt(tags.from).number === cursorLine;
       if (showRaw) ranges.push(Decoration.mark({ class: "cm-block-tags-raw" }).range(tags.from, tags.to));
-      else ranges.push(Decoration.replace({ widget: new TagChips(b.tags, taskTag) }).range(tags.from, tags.to));
+      else ranges.push(Decoration.replace({ widget: new TagChips(b.tags, taskWords) }).range(tags.from, tags.to));
     }
   }
   const current = blockAt(blocks, head);
@@ -179,8 +180,8 @@ const blockDecorations = StateField.define<DecorationSet>({
  *  selects the whole `{…}` instead; the next press deletes it. */
 const protectTaskTag = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !(tr.isUserEvent("delete.backward") || tr.isUserEvent("delete.forward"))) return tr;
-  const taskTag = tr.startState.facet(blockTaskTagName);
-  if (!taskTag) return tr;
+  const taskWords = tr.startState.facet(blockTaskWords);
+  if (taskWords.length === 0) return tr;
   const forward = tr.isUserEvent("delete.forward");
   let single: { from: number; to: number } | null = null;
   let count = 0;
@@ -188,7 +189,7 @@ const protectTaskTag = EditorState.transactionFilter.of((tr) => {
   const hit = single as { from: number; to: number } | null;
   if (count !== 1 || !hit || hit.to - hit.from !== 1) return tr;
   const tags = tr.startState.field(blockScanField).blocks
-    .map((b) => (b.tags.some((tag) => sameTag(tag, taskTag)) ? b.marks.tags : null))
+    .map((b) => (b.tags.some((tag) => isTaskWord(tag, taskWords)) ? b.marks.tags : null))
     .find((m) => m && (forward ? m.from === hit.from : m.to === hit.to));
   if (!tags) return tr;
   return { selection: { anchor: tags.to, head: tags.from }, scrollIntoView: true };
@@ -200,8 +201,8 @@ const protectTaskTag = EditorState.transactionFilter.of((tr) => {
  *  elsewhere) are not "applying the tag". While an IME composes nothing changes; when the composition ends, a tag
  *  closed by it is looked at then. Removing the tag leaves the box (a plain checkbox). */
 const boxWithTaskTag = EditorState.transactionFilter.of((tr) => {
-  const taskTag = tr.startState.facet(blockTaskTagName);
-  if (!taskTag || tr.annotation(Transaction.remote)) return tr;
+  const taskWords = tr.startState.facet(blockTaskWords);
+  if (taskWords.length === 0 || tr.annotation(Transaction.remote)) return tr;
   if (["undo", "redo", "input.paste", "input.drop", "move", "delete"].some((e) => tr.isUserEvent(e))) return tr;
   const wasComposing = tr.startState.field(composingField, false) === true;
   const composing = tr.state.field(composingField, false) === true;
@@ -210,7 +211,7 @@ const boxWithTaskTag = EditorState.transactionFilter.of((tr) => {
   if (tr.docChanged && !wasComposing) {
     tr.changes.iterChanges((_fa, _ta, _fb, toB, inserted) => {
       const text = inserted.toString();
-      if (toB > 0 && (text === "}" || (text.length <= taskTag.length + 4 && sameTag(text.replace(/[\s{},]/g, ""), taskTag)))) spots.push(toB - 1);
+      if (toB > 0 && (text === "}" || (text.length <= Math.max(...taskWords.map((word) => word.length)) + 4 && isTaskWord(text.replace(/[\s{},]/g, ""), taskWords)))) spots.push(toB - 1);
     });
   } else if (wasComposing) {
     const head = tr.newSelection.main.head;
@@ -224,7 +225,7 @@ const boxWithTaskTag = EditorState.transactionFilter.of((tr) => {
     const slot = blockTagSlot(doc, pos);
     if (!slot?.braces || pos < slot.braces.from || pos >= slot.braces.to || seen.has(slot.start)) continue;
     seen.add(slot.start);
-    if (!slot.tags.some((tag) => sameTag(tag, taskTag))) continue;
+    if (!slot.tags.some((tag) => isTaskWord(tag, taskWords))) continue;
     const edit = taskBoxEdit(doc, slot.start);
     if (edit) changes.push({ from: edit.at, insert: edit.insert });
   }

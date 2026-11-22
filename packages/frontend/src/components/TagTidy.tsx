@@ -21,7 +21,7 @@ export default function TagTidy({ openTag }: { openTag?: (id: string) => void })
   const tags = useAppSelector((s) => s.data.tags ?? NO_TAGS);
   const nodes = useAllNodes();
   const [open, setOpen] = useState(false);
-  const usage = useMemo(() => directTagUsage(nodes), [nodes]);
+  const usage = useMemo(() => directTagUsage(nodes, tags), [nodes, tags]);
   const tidy = useMemo(() => tagTidyReport(tagTreeRows(tags), usage), [tags, usage]);
   const parts = [
     tidy.unused.length > 0 && t(tidy.unused.length === 1 ? "1 unused tag" : "{n} unused tags", { n: tidy.unused.length }),

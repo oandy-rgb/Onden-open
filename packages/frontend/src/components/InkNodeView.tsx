@@ -24,7 +24,6 @@ import { useT } from "../lib/i18n";
 import PageMoreMenu from "./PageMoreMenu";
 import { useExpandedPane } from "../hooks/useExpandedPane";
 import ExpandPaneButton from "./ExpandPaneButton";
-import { useAppSchemeMode } from "../hooks/useAppSchemeMode";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { classNames } from "../lib/utils";
 import "./InkNodeView.css";
@@ -143,7 +142,6 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
   const pen = useInkPen({ color: INK_COLORS[0].value, sizeId: INK_SIZES[1].id });
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const dark = useAppSchemeMode() === "dark";
 
   const input = useInkInputPrefs();
   const shownPages = useMemo(() => withSizes(pagesFittingLayers(pages, textDoc, picDoc), pageSizes), [pages, textDoc, picDoc, pageSizes]);
@@ -330,7 +328,6 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
       />}
       <PageBook
         pages={shownPages}
-        dark={dark}
         session={session}
         tool={readOnly ? null : engineToolOf(tool)}
         pen={pen}

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { BLOCK_PARSE_MAX } from "@onden/markdown";
-import { blockAt, blockScanField, blockTaskTagName, editorBlocks, scanBlocks } from "../lib/editorBlocks";
+import { blockAt, blockScanField, blockTaskWords, editorBlocks, scanBlocks } from "../lib/editorBlocks";
 
 // The block-node display in the editor: chips for {…}, the range line and the too-long notice. A paragraph's identity is
 // an anchor, not text: nothing in the text is hidden, and a `^word` shows as typed.
@@ -11,7 +11,7 @@ const views: EditorView[] = [];
 function open(doc: string, cursor = 0, taskTag: string | null = null) {
   const parent = document.createElement("div");
   document.body.append(parent);
-  const view = new EditorView({ parent, state: EditorState.create({ doc, selection: { anchor: cursor }, extensions: [editorBlocks, blockTaskTagName.of(taskTag)] }) });
+  const view = new EditorView({ parent, state: EditorState.create({ doc, selection: { anchor: cursor }, extensions: [editorBlocks, blockTaskWords.of(taskTag ? [taskTag] : [])] }) });
   views.push(view);
   return view;
 }

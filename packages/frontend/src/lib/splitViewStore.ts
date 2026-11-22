@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createAccountPref } from "./accountPrefStore";
 import { isMobileLayout } from "./mediaQuery";
-import { PREFS } from "./prefs";
+import { PREFS, usePersistedFlag } from "./prefs";
 import { viewOfRetiredToday } from "./retiredViews";
 import {
   SPLIT_RATIO_DEFAULT, clampRatio, decodePane, dropSideAt, encodePane, panesConflict, samePane,
@@ -53,6 +53,10 @@ const remember = () => {
   if (!canSplit() || !splitPanePref.bound()) return;
   splitPanePref.store.save({ right: state.right ? encodePane(state.right) : null, ratio: state.ratio });
 };
+
+/** 「跟著游標」: the slides tab beside the note's own text shows the page the caret is in. On unless turned off; a habit of
+ *  this browser (the pane pref is synced by the server, whose shape for it has no room for more). */
+export const useFollowCaret = () => usePersistedFlag(PREFS.splitFollowCaret, true);
 
 export const getSplit = (): State => state;
 export const subscribeSplit = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };

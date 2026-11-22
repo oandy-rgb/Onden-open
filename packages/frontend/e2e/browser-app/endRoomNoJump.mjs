@@ -73,7 +73,9 @@ try {
     return Math.round((window.visualViewport?.height ?? window.innerHeight) - last.bottom);
   });
   check("long note: the last line rose off the bottom edge", gap >= 40, `${gap}px above the bottom`);
-  check("long note: room block is there while writing", await page.locator(".cm-end-room").count() === 1);
+  // A computer gets the room under the last line; a touch screen where the keyboard shrinks the layout (Android) does not: its note
+  // column ends at the bar and the editor's bottom padding is the foot (typeAtTheEnd.mjs checks typing there).
+  check(engine === "chromium" ? "long note: room block is there while writing" : "long note: no room block on a touch screen that shrinks for the keyboard", await page.locator(".cm-end-room").count() === (engine === "chromium" ? 1 : 0));
   await blurEditor();
   await page.waitForTimeout(600);
   check("long note: room is gone after leaving the editor", await page.locator(".cm-end-room").count() === 0);

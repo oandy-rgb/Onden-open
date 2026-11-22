@@ -93,6 +93,12 @@ export type DomainEvent = {
   external: boolean;
 };
 
+/** The words `{word}` that make a checkbox line a task, or a paragraph a review card, in this workspace. Decided by the
+ *  server alone (backend services/lineWords.ts); the editor draws and writes by these and keeps no rule of its own.
+ *  `words` are lower case and recognised whether or not the module is on; the first is the one to write. `on`: false
+ *  when the module is off here, where the server makes nothing of a line carrying them. */
+export type LineWords = { words: string[]; on: boolean };
+
 export type Workspace = {
   id: string;
   name: string;
@@ -111,6 +117,9 @@ export type Workspace = {
   /** The hour (0–6) a day starts at; 4 means 02:00 still counts as the day
    *  before. Absent (an older server or copy) reads as 0. */
   day_start_hour?: number;
+  /** The words each module recognises on a line, by module id (`tasks`, `review`). Absent from an older server or
+   *  local copy: the editor then recognises none until the next sync. */
+  line_words?: Record<string, LineWords>;
 };
 
 export type NodeAttribute = {

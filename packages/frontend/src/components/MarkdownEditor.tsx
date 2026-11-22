@@ -16,8 +16,9 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { CheckSquare, Square, Plus, ChevronDown } from "lucide-react";
 import type { ContentNode, NodeAttribute, SchemaField, Tag } from "../lib/api";
 import { editorLinks } from "../lib/editorLinks";
+import { publishCaret, registerEditorControls } from "../lib/editorCaretStore";
 import { composingEnded, composingField } from "../lib/editorComposing";
-import { blockTaskTagName, editorBlocks } from "../lib/editorBlocks";
+import { blockTaskWords, editorBlocks } from "../lib/editorBlocks";
 import { carriedInUpdate, editorAnchors, setEditorAnchors } from "../lib/editorAnchors";
 import { anchorSpansOf, anchorsVersion, watchAnchors } from "../lib/blockAnchorStore";
 import { editorCitations, editorLinkedParagraphs, pasteBlockLink, setCitations } from "../lib/blockSafety";
@@ -36,6 +37,7 @@ import { useEditorLinkFollow } from "./useEditorLinkFollow";
 import { emptyDocHint } from "../lib/editorEmptyHint";
 import { editorFrontmatter } from "../lib/editorFrontmatter";
 import { useT } from "../lib/i18n";
+import { NO_WORDS } from "../lib/lineWords";
 import { isImeComposing, isEscapeKey } from "../lib/keys";
 import { selectionBubblePosition } from "../lib/selectionBubble";
 import { COARSE_POINTER_QUERY, useIsMobile, useMediaQuery } from "../hooks/useIsMobile";
@@ -209,7 +211,8 @@ type Props = {
   /** A checkbox line becomes a task by writing this tag
    *  (the reserved #task's name) into its `{…}` — the line IS the task
    *  (block-nodes.md B4) — instead of minting a separate task node. */
-  taskTagName?: string | null;
+  /** The words that make a checkbox line a task (lib/lineWords; empty while the tasks module is off). */
+  taskWords?: readonly string[];
   /** Open a note an embed shows (the 「開啟手寫頁」 button under a `![[drawing]]`,
    *  lib/editorEmbeds): its title and id, as a clicked [[link]] opens it. */
   onOpenWikilink?: (label: string, targetId: string | null, blockId?: string) => void;
@@ -306,7 +309,7 @@ const editorTheme = EditorView.theme({
 
 function MarkdownEditor({
   value, onChange, onComposingChange, nodes, nodeKey, noteTitle, workspaceTags = [], onMediaInsert, onUnsupportedDrop, placeholder,
-  extractTags = [], onExtract, attrClassTags = [], onAttrSet, onCreateTask, onInsertPage, moduleInserts, editLeftNote, zen = false, readOnly = false, blockFunctions = NO_FUNCTIONS, taskTagName = null,
+  extractTags = [], onExtract, attrClassTags = [], onAttrSet, onCreateTask, onInsertPage, moduleInserts, editLeftNote, zen = false, readOnly = false, blockFunctions = NO_FUNCTIONS, taskWords = NO_WORDS,
   onOpenWikilink, onImportModuleTag, canEditEmbedSource, blockCitations, onOpenBlockCitations, onOpenNoteHistory, mentions, suggestions, handToAi,
 }: Props, ref: React.Ref<MarkdownEditorHandle>) {
   const t = useT();
@@ -355,9 +358,10 @@ function MarkdownEditor({
   // Keeps the caret above the mobile bottom bar while the bar is up.
   // The note whose saved folds the editor last applied (see the restore effect).
   const foldsAppliedFor = useRef<string | undefined>(undefined);
-  const taskTagNameRef = useRef(taskTagName);
+  const taskWord = taskWords[0] ?? null;
+  const taskWordRef = useRef(taskWord);
   const blockTaskTagRef = useRef(new Compartment());
-  taskTagNameRef.current = taskTagName;
+  taskWordRef.current = taskWord;
   // Undo history lives in a compartment so a note switch can start it afresh.
   const historyRef = useRef(new Compartment());
   // The note the editor's text (and its undo history) belongs to.
@@ -466,6 +470,53 @@ function MarkdownEditor({
     view.dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length } });
     view.focus();
   }, []);
+
+  // Other panes read this note's caret and scroll this editor (lib/editorCaretStore) while it is open.
+  useEffect(() => {
+    if (!nodeKey) return;
+    registerEditorControls(nodeKey, {
+      scrollTo: (offset) => {
+        const v = viewRef.current;
+        if (!v) return;
+        const at = Math.min(Math.max(offset, 0), v.state.doc.length);
+        revealFolded(v, at);
+        v.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 16 }) });
+      },
+      focusAt: (offset) => {
+        const v = viewRef.current;
+        if (!v) return;
+        const anchor = Math.min(Math.max(offset, 0), v.state.doc.length);
+        revealFolded(v, anchor);
+        v.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y: "center" }) });
+        v.focus();
+      },
+      placeCaret: (offset) => {
+        const v = viewRef.current;
+        if (!v) return;
+        v.dispatch({ selection: { anchor: Math.min(Math.max(offset, 0), v.state.doc.length) } });
+      },
+      replaceText: (change) => {
+        const v = viewRef.current;
+        if (!v) return;
+        const before = v.state.doc.toString();
+        const after = change(before);
+        // Only the stretch that differs is replaced, so the caret and the folds elsewhere stay and one Ctrl+Z puts it back.
+        let start = 0;
+        while (start < before.length && start < after.length && before[start] === after[start]) start++;
+        let end = 0;
+        while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+        if (start === before.length && start === after.length) return;
+        // Not between the two halves of a character written as a surrogate pair (an emoji).
+        const high = (c: number) => c >= 0xd800 && c <= 0xdbff;
+        if (start > 0 && high(before.charCodeAt(start - 1))) start--;
+        if (end > 0 && high(before.charCodeAt(before.length - end - 1))) end--;
+        v.dispatch({ changes: { from: start, to: before.length - end, insert: after.slice(start, after.length - end) }, userEvent: "input" });
+      },
+    });
+    const main = viewRef.current?.state.selection.main;
+    publishCaret(nodeKey, { from: main?.from ?? 0, head: main?.head ?? 0 });
+    return () => { registerEditorControls(nodeKey, null); publishCaret(nodeKey, null); };
+  }, [nodeKey]);
 
   useImperativeHandle(ref, () => ({ insertMediaFile: insertMediaAtCaret, insertText: insertTextAtCaret, openFind: () => { const v = viewRef.current; if (v) openFind(v); },
     foldAll: () => { const v = viewRef.current; if (v) foldAllHeadings(v); },
@@ -607,8 +658,8 @@ function MarkdownEditor({
     const create = onCreateTaskRef.current;
     const view = viewRef.current;
     // With the #task name known, the line becomes the task (`{task}`), box left as is.
-    if (view && taskTagNameRef.current) {
-      if (insertBlockTag(view, pos, taskTagNameRef.current)) { view.focus(); setToolbar(null); }
+    if (view && taskWordRef.current) {
+      if (insertBlockTag(view, pos, taskWordRef.current)) { view.focus(); setToolbar(null); }
       return;
     }
     if (!create || !view) return;
@@ -971,7 +1022,7 @@ function MarkdownEditor({
           editorSelectionTools(),
           editorBlocks,
           editorAnchors(() => nodeKeyRef.current),
-          blockTaskTagRef.current.of(blockTaskTagName.of(taskTagName)),
+          blockTaskTagRef.current.of(blockTaskWords.of(taskWords)),
           editorCitations((blockId, anchor) => openCitationsRef.current?.(blockId, anchor)),
           renderedExtensions,
           codeHighlightOnDemand,
@@ -1020,7 +1071,7 @@ function MarkdownEditor({
               // Promote the caret's checkbox line to a task. Only consumes the
               // key when the line is actually an unconverted checkbox AND a
               // host handler is wired — otherwise it falls through.
-              if (!onCreateTaskRef.current && !taskTagNameRef.current) return false;
+              if (!onCreateTaskRef.current && !taskWordRef.current) return false;
               const line = v.state.doc.lineAt(v.state.selection.main.head);
               if (!unconvertedTaskAt(v.state.doc.toString(), line.number - 1)) return false;
               void convertCheckboxToTask(v.state.selection.main.head);
@@ -1070,6 +1121,11 @@ function MarkdownEditor({
             if ((update.docChanged || update.selectionSet) && !external && shownNote) {
               const sel = update.state.selection.main;
               writeSession(SESSION_KEYS.cursor(shownNote), JSON.stringify({ anchor: sel.anchor, head: sel.head }));
+            }
+            // Beside the editor, other panes follow the caret (the slides tab: lib/editorCaretStore).
+            if ((update.docChanged || update.selectionSet) && nodeKeyRef.current) {
+              const { from, head } = update.state.selection.main;
+              publishCaret(nodeKeyRef.current, { from, head });
             }
             if (touchRef.current) {
               if (update.selectionSet || update.docChanged) {
@@ -1390,8 +1446,8 @@ function MarkdownEditor({
   // turning zen ON, immediately centre the current line so the jump happens
   // once on toggle rather than only on the next keystroke.
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: blockTaskTagRef.current.reconfigure(blockTaskTagName.of(taskTagName)) });
-  }, [taskTagName]);
+    viewRef.current?.dispatch({ effects: blockTaskTagRef.current.reconfigure(blockTaskWords.of(taskWords)) });
+  }, [taskWords]);
 
   useEffect(() => {
     viewRef.current?.dispatch({ effects: readOnlyRef.current.reconfigure(readOnlyExtension(readOnly)) });
@@ -1605,7 +1661,7 @@ function MarkdownEditor({
   const blockChild = useBlockChildNote({ viewRef, nodeKey, readOnly, confirmDialog });
   const paragraphExtras = (from: number, span?: ParagraphSpan) => {
     const v = viewRef.current;
-    const line = v && (onCreateTask || taskTagName) ? v.state.doc.lineAt(from) : null;
+    const line = v && (onCreateTask || taskWord) ? v.state.doc.lineAt(from) : null;
     const entries = blockChild.entries(from);
     return {
       onBlockHistory: blockHistory.open && (() => blockHistory.open!(from)),

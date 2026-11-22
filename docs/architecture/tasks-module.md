@@ -121,7 +121,7 @@
 提案：[功能引用第三批](proposals/function-refs-b3-2026-11-12.md)第 2、7 節。
 
 - **身分**：任務節點是**有一筆 `function_refs`（`function_id = 'tasks'`，引用者＝該節點）、並有 `_task_status` 的隱藏節點**；不再掛任務模組標籤。判斷只在 `spine/taskIdentity.ts` 的 `hasTaskRefSql`／`isTaskSql`（用 `function_refs_holder_node_idx`）；建立在 `tasksStore.createTaskNode`／`insertTaskNodeTx`／`addTaskRefTx`（引用由建立節點的事件記下，不另記事件）。同步給客戶端的 `tasks` 列、備份匯出的任務表示法不變。
-- **`{task}`**：任務模組自己的保留字（`taskIdentity.TASK_TAG_NAME`；前端 `moduleLineWord("tasks")`），`blockNodes` 存檔時不把它交給 `resolveTagNames`，所以不會在任何情況下新建 `task` 標籤。保留字是**任務模組標籤目前的名稱**（`tasksStore.taskLineWord`；沒有那個標籤節點時是 `task`）：標籤被改名、或因已有普通的 `task` 根標籤而叫 `任務` 的工作區，寫的是 `{任務}`，與 main 上「靠標籤認」的行為一致，普通的 `{task}` 標籤也不會被拿掉；標籤節點移除時再決定改名的工作區怎麼轉；行內任務的 `block_node_tags` 列移除，`block_nodes.task_id` 不動。
+- **`{task}`**：任務模組自己的保留字（`taskIdentity.TASK_TAG_NAME`；編輯器用的字由伺服器決定，經 `workspace.line_words.tasks` 送到前端：`services/lineWords.ts`、`lineWordRules.ts`、前端 `lib/lineWords.ts`；前端不再自己推），`blockNodes` 存檔時不把它交給 `resolveTagNames`，所以不會在任何情況下新建 `task` 標籤。保留字是**任務模組標籤目前的名稱**（`tasksStore.taskLineWord`；沒有那個標籤節點時是 `task`）。存檔認的字是「標籤現名 ∪ 保留字 `task`」（工作區另有普通的 `task` 標籤時不含 `task`），編輯器認同一組、第一個是它寫的字；模組關掉時 `on` 為假，兩邊都不當任務：標籤被改名、或因已有普通的 `task` 根標籤而叫 `任務` 的工作區，寫的是 `{任務}`，與 main 上「靠標籤認」的行為一致，普通的 `{task}` 標籤也不會被拿掉；標籤節點移除時再決定改名的工作區怎麼轉；行內任務的 `block_node_tags` 列移除，`block_nodes.task_id` 不動。
 - **移除第三種任務**：標籤的 `tasks_checkable`／`tasks_dates` 功能、`services/noteTasks.ts`、`PATCH /api/nodes/:id/task`、agenda 與日記對它的支援、前端 `lib/tasks/noteTasks.ts` 全部拿掉。migration 把仍持有這兩個功能的引用列刪掉（NOTICE 印出標籤 id）；筆記與它們的 `_task_*` 屬性值不動，只是不再被當成任務。
 - **備份**：還原舊備份時，備份裡的任務標籤不當標籤還原（`TagAction` 的 `tasks_tag`），任務由 `createTaskNode`／`createStandaloneTask` 重建並得到引用。
 - **模組標籤節點**這一批仍在（之後的 PR 移除）；沒有程式再依賴它存在。

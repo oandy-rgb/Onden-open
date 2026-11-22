@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -20,11 +20,12 @@ function mount(doc = "one\ntwo") {
   const view = new EditorView({ parent, state: EditorState.create({ doc, extensions: [editorKeyboard()] }) });
   views.push(view);
   const bar = document.createElement("div");
-  bar.getBoundingClientRect = () => ({ height: 52 }) as DOMRect;
+  bar.getBoundingClientRect = () => ({ top: 716, height: 52 }) as DOMRect; // the window is 768 px high
   return { view, viewRef: { current: view }, barRef: { current: bar } };
 }
 const bottomMargin = (view: EditorView) => Math.max(0, ...view.state.facet(EditorView.scrollMargins).map((f) => f(view)?.bottom ?? 0));
 
+beforeEach(() => { Object.defineProperty(document.documentElement, "clientHeight", { value: 768, configurable: true }); });
 afterEach(() => {
   vi.useRealTimers();
   Object.defineProperty(window, "innerHeight", { value: 768, configurable: true });
@@ -40,6 +41,7 @@ describe("editor keyboard owner", () => {
     expect(bottomMargin(view)).toBe(0);
     rerender({ barUp: true, writing: false });
     expect(bottomMargin(view)).toBe(52 + 8);
+    // (the bar covers the page's foot by its own height here: window 768, bar from 716)
     rerender({ barUp: false, writing: false });
     expect(bottomMargin(view)).toBe(0);
   });
@@ -60,7 +62,10 @@ describe("editor keyboard owner", () => {
     expect(dispatch.mock.calls.some(([spec]) => (spec as { scrollIntoView?: boolean })?.scrollIntoView)).toBe(false);
   });
 
-  it("asks for one 'nearest' scroll once the keyboard has finished opening, and none for later inset changes", () => {
+  // The wait is frames of nothing changing (what scrolls the editor, the keyboard's size), not milliseconds: a frame is 16 ms here.
+  const frames = (n: number) => act(() => { vi.advanceTimersByTime(16 * n); });
+
+  it("asks for one 'nearest' scroll once the keyboard has been still for a few frames, again only after its SIZE changes (never for a pan)", () => {
     vi.useFakeTimers();
     const vv = installViewport(800);
     const { view, viewRef, barRef } = mount();
@@ -68,31 +73,79 @@ describe("editor keyboard owner", () => {
     const scroll = vi.spyOn(EditorView, "scrollIntoView");
     renderHook(() => useEditorKeyboard({ viewRef, barRef, barUp: true, writing: true, onKeyboardClosed: () => {} }));
     vv.move({ height: 500 });
-    act(() => { vi.advanceTimersByTime(100); });
+    frames(3);
     expect(scroll).not.toHaveBeenCalled(); // still rising
-    act(() => { vi.advanceTimersByTime(200); });
+    frames(5);
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(scroll.mock.calls[0]![1]).toEqual({ y: "nearest" });
     vv.move({ offsetTop: 30 });
+    frames(30);
+    expect(scroll).toHaveBeenCalledTimes(1); // a pan moves the viewport, not the keyboard
     vv.move({ height: 480 });
-    act(() => { vi.advanceTimersByTime(1000); });
+    frames(30);
+    expect(scroll).toHaveBeenCalledTimes(2); // a keyboard that grew: one more, once it is still
+  });
+
+  it("a keyboard that rises in steps is waited for: every size change restarts the wait, one scroll when it has been still", () => {
+    vi.useFakeTimers();
+    const vv = installViewport(800);
+    const { view, viewRef, barRef } = mount();
+    view.focus();
+    const scroll = vi.spyOn(EditorView, "scrollIntoView");
+    renderHook(() => useEditorKeyboard({ viewRef, barRef, barUp: true, writing: true, onKeyboardClosed: () => {} }));
+    for (const height of [650, 530, 450]) { vv.move({ height }); frames(4); } // steps closer than the wait
+    expect(scroll).not.toHaveBeenCalled();
+    frames(4);
     expect(scroll).toHaveBeenCalledTimes(1);
   });
 
-  it("decides the room under the last line once when writing starts, and does not follow the inset", () => {
+  const room = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-end-room");
+
+  it("without resizes-content (iOS) the room under the last line is put in ONCE when the keyboard has settled, never at the start of writing or while typing", async () => {
     vi.useFakeTimers();
     const vv = installViewport(800);
     const { view, viewRef, barRef } = mount();
     renderHook(() => useEditorKeyboard({ viewRef, barRef, barUp: true, writing: true, onKeyboardClosed: () => {} }));
-    const started = bottomMargin(view);
-    expect(started).toBe(baseRoomPx(800));
-    // The browser only shrinks the visual viewport here (no resizes-content): the room covers keyboard + bar, once.
+    frames(3);
+    expect(room(view)).toBeNull(); // writing started: no room yet
     vv.move({ height: 500 });
-    act(() => { vi.advanceTimersByTime(400); });
-    const grown = bottomMargin(view);
-    expect(grown).toBe(Math.max(started, 300 + 52 + 8));
-    for (const inset of [310, 280, 330, 300]) { vv.move({ height: 800 - inset }); act(() => { vi.advanceTimersByTime(400); }); }
-    expect(bottomMargin(view)).toBe(grown);
+    frames(3);
+    expect(room(view)).toBeNull(); // the keyboard is still rising
+    frames(25);
+    await Promise.resolve(); // the room is dispatched from a microtask after its measure
+    await Promise.resolve();
+    const height = room(view)?.style.height;
+    expect(height).toBeTruthy();
+    for (let typed = 0; typed < 10; typed++) { view.dispatch({ changes: { from: view.state.doc.length, insert: "\nx" } }); frames(10); await Promise.resolve(); expect(room(view)?.style.height).toBe(height); }
+    expect(bottomMargin(view)).toBeLessThanOrEqual(baseRoomPx(500)); // the room's size is not the caret's margin
+  });
+
+  it("where the browser shrinks the layout for the keyboard (Android: the inset stays 0) there is no room under the last line at any time", () => {
+    vi.useFakeTimers();
+    const vv = installViewport(800);
+    const { view, viewRef, barRef } = mount();
+    renderHook(() => useEditorKeyboard({ viewRef, barRef, barUp: true, writing: true, onKeyboardClosed: () => {} }));
+    for (const height of [800, 650, 500, 450]) {
+      Object.defineProperty(window, "innerHeight", { value: height, configurable: true }); // the window shrinks with the keyboard
+      vv.move({ height }); frames(30); expect(room(view), `${height}`).toBeNull();
+    }
+    for (let typed = 0; typed < 10; typed++) { view.dispatch({ changes: { from: view.state.doc.length, insert: "\nx" } }); frames(10); expect(room(view)).toBeNull(); }
+  });
+
+  it("a keyboard that closed while nobody was writing does not end the next writing session before its keyboard is up", () => {
+    vi.useFakeTimers();
+    const vv = installViewport(800);
+    const { viewRef, barRef } = mount();
+    const closed = vi.fn();
+    const { rerender } = renderHook((p) => useEditorKeyboard({ viewRef, barRef, barUp: true, onKeyboardClosed: closed, ...p }), { initialProps: { writing: true } });
+    vv.move({ height: 450 }); // up under the first session
+    rerender({ writing: false }); // it ends (blur); the keyboard goes away with it
+    vv.move({ height: 800 });
+    act(() => { vi.advanceTimersByTime(1000); });
+    closed.mockClear();
+    rerender({ writing: true }); // a tap: the keyboard is still on its way up
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(closed).not.toHaveBeenCalled();
   });
 
   it("places the bar by the inset only, and reports a keyboard that stayed closed", () => {
@@ -105,7 +158,7 @@ describe("editor keyboard owner", () => {
     vv.move({ height: 500 });
     expect(result.current.barInset).toBe("300px");
     vv.move({ height: 800 });
-    act(() => { vi.advanceTimersByTime(400); });
+    frames(25);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 

@@ -18,6 +18,7 @@ export type { BoundPartLink, PartToLink } from "./blockLinkWriter";
 export { retryLocalCopySave } from "./deviceStatus";
 export { drafts } from "./drafts";
 export type { ReloadGate } from "./draftActions";
+export { mergeDropsSent } from "./inkMergeLoss";
 export { saveInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions } from "./inkWriter";
 export { saveNotePages } from "./notePagesWriter";
 export { savePageImages } from "./pageImagesWriter";

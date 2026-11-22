@@ -626,7 +626,6 @@
       "packages/markdown/src/callouts.ts": ["CalloutFold"],
       "packages/markdown/src/core.ts": ["PUBLISHED_HTML_TAGS"],
       "packages/markdown/src/diagramLayout.ts": ["DiagramBox"],
-      "packages/markdown/src/ink.ts": ["InkMergeResult"],
       "packages/markdown/src/inkSvg.ts": ["InkNotePage", "InkRegionLayers"],
       "packages/markdown/src/mediaEnhance.ts": ["cycleAudioSpeed", "playLiteEmbed"],
       "packages/markdown/src/mediaTypes.ts": ["SITE_IMAGE_EXTS"],

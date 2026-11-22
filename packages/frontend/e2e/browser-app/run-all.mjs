@@ -76,7 +76,7 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 // pass/fail; touchHold.mjs and the slide scripts have their own npm scripts. The last row (bigInk … phoneViewTabs) was
 // listed by no runner until 2026-11-22; each passed against dist-browser that day.
 const FEATURES = [
-  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
+  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["caretClearOfBar.mjs", "tablet"], ["caretKeyboardMatrix.mjs"], ["caretClearOfBar.mjs", "ios"], ["typeAtTheEnd.mjs"], ["shortTypingLayout.mjs", "tablet"], ["shortTypingLayout.mjs", "mobile-chrome"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["pdfNoteText.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
@@ -87,7 +87,7 @@ for (const [script, ...args] of chromiumRan ? FEATURES : []) {
   // --dir is passed only to the scripts that read it (the others take an engine as their first argument)
   const takesDir = readFileSync(join(dirname(smoke), script), "utf8").includes('"--dir"');
   const run = spawnSync(process.execPath, [join(dirname(smoke), script), ...args, ...(takesDir ? dirArgs : [])], { stdio: "inherit" });
-  summary.push([script.replace(/\.mjs$/, ""), run.status === 0 ? "passed" : "FAILED"]);
+  summary.push([[script.replace(/\.mjs$/, ""), ...args].join(" "), run.status === 0 ? "passed" : "FAILED"]);
 }
 // A student's day as ONE continuous session (dayWalk.mjs; steps in walk/steps.mjs): desktop 1280×800 and the tablet profile
 // (layout-audit/env.mjs PROFILES "tablet-landscape": 1280×800, 2 device pixels, touch). Needs Chromium like the feature scripts.

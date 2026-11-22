@@ -124,6 +124,7 @@
   列在設定裡的還要 `group` 與 `blurb`。
 - 後端 `library` 選填：`inUse`、`requires`、`confirmOnce`、`alwaysOn`、`whenTurnedOn`、`moduleTag`。後端用 `routePrefixes` 宣告路由前綴才會得到「關著時擋寫入」。
 - 判斷成員或功能一律問核心入口，不自己讀標籤名稱或旗標。
+- 前端 `library` 不再有 `lineWord`：讓一行變任務或複習卡的字由伺服器決定，放在 `workspace.line_words`（`services/lineWords.ts`、前端 `lib/lineWords.ts`）。
 - 模組撰寫指南尚無檔案。
 
 ## 不做的事

@@ -18,7 +18,7 @@ vi.mock("../db.js", () => ({ pool: { query: poolQuery }, q: poolQuery }));
 const { collectOrphanBlobs } = await import("../services/maintenance/prune.js");
 
 const REFS = ["payload->>'body_hash'", "payload->>'value_ref'", "prev_field_values'->>'value_ref'",
-  "payload->>'incoming_value_ref'", "payload->>'overridden_value_ref'"];
+  "payload->>'incoming_value_ref'", "payload->>'overridden_value_ref'", "payload->>'submitted_value_ref'"];
 
 beforeEach(() => { queries.length = 0; poolQuery.mockClear(); });
 

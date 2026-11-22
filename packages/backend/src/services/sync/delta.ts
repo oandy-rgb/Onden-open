@@ -16,10 +16,12 @@ import type { ActorCtx } from "../../types.js";
 import { readableNodeIdSet, readableTrashedNodeIds, restrictRowsToScope } from "../readPolicy.js";
 import { taskNodeIdsAmong, taskRowReadable, taskRowsByIds, notATaskNodeSql } from "../tasksStore.js";
 import { withActorReadSnapshot } from "../actorReadSnapshot.js";
-import { readTagCatalog } from "../tagCatalog.js";
+import { anyBlockHasTags, anyNoteHasTaggedBlocks } from "../blockNodes.js";
+import { NOTE_REACH_EVENTS, blockEventTagUse, readTagCatalog } from "../tagCatalog.js";
 import type { CanvasMembership, ServerNode } from "@onden/contract";
 import { nodeRowColumnsSql, nodeEventMetaJoinSql } from "../nodeRowProjection.js";
 import { workspaceWireRow } from "../workspaceModules.js";
+import { withLineWords } from "../lineWords.js";
 import { attributeColumnsSql, edgeColumnsSql, workspaceColumnsSql } from "../syncProjection.js";
 import { edgeRowsTouching, pointerRowsTouching, readablePointer } from "./rows.js";
 import { canvasMembershipsTouching } from "../canvasMemberships.js";
@@ -93,7 +95,8 @@ export async function buildSyncDelta(
 
     const eventsRes = await q(
       // payload included so ATTRIBUTE_SET / ATTRIBUTE_DELETED can identify the key.
-      `SELECT id, event_type, target_type, target_id, payload
+      // ui_context: a block move between notes (block.move_to_child…) changes counts with no BLOCK_NODE_* event.
+      `SELECT id, event_type, target_type, target_id, payload, tx_meta->>'ui_context' AS ui_context
        FROM domain_events
        WHERE workspace_id = $1 AND id > $2
        ORDER BY id ASC
@@ -151,6 +154,10 @@ export async function buildSyncDelta(
     const attrDelete = new Set<string>();
     const tagTargets = new Set<string>();
     let workspaceChanged = false;
+    // A paragraph gained or lost a tag: the catalog's block_usage_count moved (tagCatalog.blockEventMovesTagUse).
+    let blockTagUseMoved = false;
+    const blocksToCheck = new Set<string>(); // removed, restored or re-attached paragraphs: do they carry tags?
+    const reachChanged = new Set<string>(); // notes deleted, restored, hidden or moved: do they carry tagged paragraphs?
     let siteSettingsChanged = false;
     const purges: Array<{ spaceId: string; at: number; nodes: string[]; tasks: string[] }> = [];
     // Sibling groups whose keys were all rewritten by one write (services/orderKeys.ts respaceIfTooLong).
@@ -173,6 +180,10 @@ export async function buildSyncDelta(
         revivedAt.set(id, Number(ev.id));
       }
       if (ev.target_type === "tag") tagTargets.add(id);
+      const tagUse = blockEventTagUse(type, ev.payload);
+      if (tagUse.moved) blockTagUseMoved = true;
+      else if (tagUse.check) blocksToCheck.add(tagUse.check);
+      else if ((NOTE_REACH_EVENTS.has(type) || String(ev.ui_context ?? "").startsWith("block.")) && isUuid(id)) reachChanged.add(id);
       // NODE_HIDDEN_CHANGED is emitted by the dispatcher (not by routes/nodes.ts),
       // so it needs to trigger a node-row refresh on the client. NODE_UNDELETED is
       // what BOTH the undelete route AND restore-of-a-NODE_DELETED emit — without
@@ -265,7 +276,12 @@ export async function buildSyncDelta(
     // read snapshot and existing channel filters remain the authority gate.
     // Epoch changes alone only reconcile visibility, not an already-held row.
     const possibleTags = [...new Set([...tagTargets, ...nodeUpsert, ...nodeDelete])];
-    let tagCatalogChanged = tagTargets.size > 0;
+    // Only a note that carries tagged paragraphs moves a count: one cheap existence check, not a re-ship per delete.
+    if (!blockTagUseMoved && blocksToCheck.size > 0) blockTagUseMoved = await anyBlockHasTags([...blocksToCheck]);
+    if (!blockTagUseMoved && reachChanged.size > 0) {
+      blockTagUseMoved = await anyNoteHasTaggedBlocks([...reachChanged]);
+    }
+    let tagCatalogChanged = tagTargets.size > 0 || blockTagUseMoved;
     if (possibleTags.length) {
       const tags = await q<{ id: string; deleted_at: string | null }>(
         `SELECT id, deleted_at FROM content_nodes WHERE workspace_id=$1
@@ -373,7 +389,8 @@ export async function buildSyncDelta(
     const pointersRes = edgeScope.length > 0 ? await pointerRowsTouching(workspaceId, edgeScope) : [];
     // Synthesized task rows (the frozen node_tasks shape) from task nodes.
     const tasksRes = { rows: await taskRowsByIds(workspaceId, [...taskUpsert]) };
-    const wsRes = workspaceChanged
+    // The tag catalog changing re-ships it too: the words a line needs to be a task follow the module tag's name (lineWords.ts).
+    const wsRes = workspaceChanged || tagCatalogChanged
       ? await q<Workspace & { modules_off: unknown; modules_confirmed: unknown }>(`SELECT ${workspaceColumnsSql("w")} FROM workspaces w WHERE w.id = $1`, [workspaceId])
       : { rows: [] };
     // The reader's view of the settings (the owner's tokens only to the
@@ -486,7 +503,7 @@ export async function buildSyncDelta(
       // Complete catalog snapshot, not a node projection or a tag delta.
       // An empty list revokes all held metadata; omission keeps the catalog.
       ...(tagCatalogChanged ? { tags: await readTagCatalog(actor, workspaceId) } : {}),
-      workspace: wsRes.rows[0] ? workspaceWireRow(wsRes.rows[0]) : null,
+      workspace: wsRes.rows[0] ? await withLineWords(workspaceId, workspaceWireRow(wsRes.rows[0])) : null,
       ...(siteSettings?.configFound ? { site_config: siteSettings.site_config, chrome: siteSettings.chrome } : {}),
     };
     return delta;

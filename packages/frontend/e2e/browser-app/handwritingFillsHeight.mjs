@@ -24,6 +24,8 @@ const CASES = [
   { id: "tablet-landscape-1280x800-panel-closed", width: 1280, height: 800, panel: false, sidebar: true },
   { id: "tablet-landscape-1280x800-sidebar-closed", width: 1280, height: 800, panel: true, sidebar: false },
   { id: "tablet-landscape-1280x800-both-closed", width: 1280, height: 800, panel: false, sidebar: false },
+  { id: "tablet-landscape-1204x714-sidebar-open", width: 1204, height: 714, panel: false, sidebar: true },
+  { id: "tablet-landscape-1204x714-sidebar-closed", width: 1204, height: 714, panel: false, sidebar: false },
   { id: "desktop-1440x900", width: 1440, height: 900, panel: true, sidebar: true },
   { id: "desktop-1920x1080", width: 1920, height: 1080, panel: true, sidebar: true },
   { id: "side-by-side-1920x1080", width: 1920, height: 1080, panel: false, sidebar: true, split: true },
@@ -41,6 +43,7 @@ const measure = (page) => page.evaluate(() => {
     vh: innerHeight, docHeight: document.scrollingElement.scrollHeight,
     // The area's bottom: the screen, or the bottom navigation / the side pane's body when those are what ends it.
     areaBottom: splitBody ? splitBody.getBoundingClientRect().bottom - parseFloat(getComputedStyle(splitBody).paddingBottom) : shown(nav) ? nav.getBoundingClientRect().top : innerHeight,
+    column: box(splitBody ?? document.querySelector(".notes-center-wrap")), sides: ((el, col) => el && col ? { left: el.getBoundingClientRect().left - col.getBoundingClientRect().left, right: col.getBoundingClientRect().right - el.getBoundingClientRect().right } : null)(document.querySelector(".ink-note-toolbar"), splitBody ?? document.querySelector(".notes-center-wrap")),
     pane: box(pane), toolbar: box(document.querySelector(".ink-note-toolbar")), tabs: box(tabs), title: box(document.querySelector(".obsidian-title-input, .view-pane-title, .split-pane-name")),
   };
 });
@@ -80,6 +83,8 @@ for (const c of CASES.filter((x) => !only || x.id.includes(only))) {
     check(m.areaBottom - m.toolbar.bottom <= SLACK && m.toolbar.bottom <= m.areaBottom + 1, "the toolbar sits at the bottom of the area, inside the screen", detail);
     check(m.toolbar.top >= (m.tabs?.bottom ?? 0) && m.pane.height >= 300, "the toolbar is under the tab strip and the book has room", `pane height ${Math.round(m.pane.height)}`);
   }
+  // The page and the pen toolbar are centred in the note column: the same room at both sides (a scrollbar may take ~15 px of one).
+  if (m.sides) check(Math.abs(m.sides.left - m.sides.right) <= 2, "the pen toolbar is centred in the note column", `left ${Math.round(m.sides.left)} / right ${Math.round(m.sides.right)}`);
   check(!!m.tabs && m.tabs.top >= 0 && m.tabs.bottom <= m.vh, "the tab strip is still on the screen");
   check(m.docHeight <= m.vh + 1, "the page itself does not scroll (no second scrollbar)", `document ${m.docHeight} / screen ${m.vh}`);
   await context.close();

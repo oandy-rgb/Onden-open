@@ -43,6 +43,10 @@ export type VirtualKeyboard = {
    *  pans the visual viewport (offsetTop moves, size stays), as Android does while the person scrolls: key
    *  anything that must react to the keyboard, not to a pan, on this. */
   height: number;
+  /** Layout px the keyboard takes of the tallest height seen at this width. Unlike `height` it also works when the browser
+   *  resizes the layout (resizes-content: innerHeight shrinks with the keyboard, so `height` stays 0 there), and unlike `inset`
+   *  it ignores pans. The one number that says "the keyboard grew or shrank": a keyboard with a tall top row rises in steps. */
+  size: number;
 };
 
 /**
@@ -57,11 +61,11 @@ export type VirtualKeyboard = {
  * bounces (measured on the owner's phone, 2026-10-30). Settled, it moves once.
  */
 export function useVirtualKeyboard(active: boolean, settleMs = 0): VirtualKeyboard {
-  const [state, setState] = useState<VirtualKeyboard>({ open: false, inset: 0, height: 0 });
+  const [state, setState] = useState<VirtualKeyboard>({ open: false, inset: 0, height: 0, size: 0 });
   const baseline = useRef({ width: 0, height: 0 });
   useEffect(() => {
     const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) { setState({ open: false, inset: 0, height: 0 }); return; }
+    if (!vv) { setState({ open: false, inset: 0, height: 0, size: 0 }); return; }
     // The tallest height is learned whether or not anyone is using the keyboard yet: a bar that appears while the
     // keyboard is already up (title tapped first, then the text) would otherwise take the shrunken height as the
     // full one and never see the keyboard close (Android, resizes-content).
@@ -73,7 +77,7 @@ export function useVirtualKeyboard(active: boolean, settleMs = 0): VirtualKeyboa
     };
     if (!active) {
       learn();
-      setState({ open: false, inset: 0, height: 0 });
+      setState({ open: false, inset: 0, height: 0, size: 0 });
       vv.addEventListener("resize", learn);
       return () => vv.removeEventListener("resize", learn);
     }
@@ -81,8 +85,9 @@ export function useVirtualKeyboard(active: boolean, settleMs = 0): VirtualKeyboa
       learn();
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       const height = Math.max(0, window.innerHeight - vv.height);
-      const open = baseline.current.height - vv.height > OPEN_THRESHOLD_PX;
-      setState((prev) => (prev.open === open && prev.inset === inset && prev.height === height ? prev : { open, inset, height }));
+      const size = Math.max(0, Math.round(baseline.current.height - vv.height));
+      const open = size > OPEN_THRESHOLD_PX;
+      setState((prev) => (prev.open === open && prev.inset === inset && prev.height === height && prev.size === size ? prev : { open, inset, height, size }));
     };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = settleMs > 0 ? () => { clearTimeout(timer); timer = setTimeout(update, settleMs); } : update;

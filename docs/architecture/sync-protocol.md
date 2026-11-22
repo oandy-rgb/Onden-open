@@ -375,3 +375,16 @@ rows back. Two such writes change rows an answer carries:
 Every other write without an event (account prefs, review progress, RSS, external calendars, uploads, push
 subscriptions, MCP sessions) writes tables no answer carries. To be done in a later batch: give these two an event, or
 leave their rows out of the answers.
+
+### Line words and paragraph usage ride on the workspace row and the tag catalog
+
+- `workspace.line_words` (`{ [moduleId]: { words, on } }`, backend `services/lineWords.ts`) says which `{word}` makes a
+  checkbox line a task or a paragraph a review card. It is in the bootstrap, in every delta that carries `workspace`, and in
+  the settings reply; the local mirror keeps it in the `workspace.line_words` column. A delta carries `workspace` when a
+  workspace event happened **or the tag catalog changed** (the words follow the module tag's name).
+- A tag catalog row has `block_usage_count`: the paragraphs that carry the tag directly, in notes the reader can read
+  (`blockNodes.blockQuerySql`, the scope the tag page lists them by). The delta re-ships the catalog when a `BLOCK_NODE_*`
+  event changed a paragraph's tags, when a paragraph that carries tags was removed, restored or taken back from a child
+  note (`tagCatalog.blockEventTagUse`, one existence check on that block node), when a space's members or existence
+  changed, and when a note that carries tagged paragraphs is deleted, restored, hidden, moved or has a paragraph moved
+  into a child note (`tagCatalog.NOTE_REACH_EVENTS` and the event's `ui_context` `block.*`, one existence check).

@@ -29,7 +29,7 @@ export default function RemovedModuleTags({ moduleId, openTag }: { moduleId: str
   const tags = useAppSelector((s) => s.data.tags ?? NO_TAGS);
   const nodes = useAllNodes();
   const [open, setOpen] = useState(false);
-  const usage = useMemo(() => directTagUsage(nodes), [nodes]);
+  const usage = useMemo(() => directTagUsage(nodes, tags), [nodes, tags]);
   const removed = useMemo(() => splitTagSections(tags, isImported).removed.filter((tag) => moduleId === null ? !MODULES.some((mod) => mod.id === tag.schema_module) : tag.schema_module === moduleId), [tags, isImported, moduleId]);
   if (!isOwner || removed.length === 0) return null;
   const moduleTitle = (id: string) => t(MODULES.find((mod) => mod.id === id)?.library.title ?? id);

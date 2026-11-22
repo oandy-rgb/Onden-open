@@ -136,7 +136,7 @@ export default function SidebarTagTree({ nav, rename, onCreateTag, onCreateInsid
   const rootRef = useRef<HTMLDivElement | null>(null);
   const rootEl = useCallback((el: HTMLDivElement | null) => { rootRef.current = el; holdSurface(el); }, []);
 
-  const usage = useMemo(() => directTagUsage(nodes), [nodes]);
+  const usage = useMemo(() => directTagUsage(nodes, tags), [nodes, tags]);
   const { own, hidden: hiddenTags } = useMemo(() => splitTagSections(tags), [tags]);
   // A function is not a tag: a hidden one is Settings › 功能's, never listed here.
   const workspaceHidden = useMemo(() => hiddenTags.filter((tag) => !tag.schema_module), [hiddenTags]);

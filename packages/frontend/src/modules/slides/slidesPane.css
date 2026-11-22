@@ -7,7 +7,23 @@
 .sp-main.has-replace { grid-template-columns: 168px minmax(0, 1fr) 248px; }
 .sp-replace { position: sticky; top: var(--ac-space-3); }
 .sp-thumbs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ac-space-2); max-height: 70dvh; overflow-y: auto; }
+.sp-side { display: flex; flex-direction: column; gap: var(--ac-space-2); min-width: 0; }
 .sp-thumbs > li { flex: none; }
+.sp-thumb { flex-wrap: wrap; }
+.sp-thumb.is-dragging { background: var(--ac-selected); }
+.sp-thumb.is-over .sp-thumb-pic { border-color: var(--ac-accent); }
+.sp-thumb.is-over, .sp-end.is-over { background: var(--ac-selected); }
+.ui-btn.sp-grip { position: absolute; top: 0; right: 0; z-index: var(--z-local-1); touch-action: none; cursor: grab; visibility: hidden; }
+.sp-thumb:hover .sp-grip, .sp-grip:focus-visible { visibility: visible; }
+/* The tools of the selected thumbnail sit above the button that covers it. */
+.sp-tools { position: relative; z-index: var(--z-local-1); display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: var(--ac-space-1); justify-content: space-between; }
+/* A thin band between two thumbnails: its 「＋」 shows when the pointer is there. */
+.sp-gap { position: relative; z-index: var(--z-local-2); height: 16px; margin: calc(-1 * var(--ac-space-4)) 0; display: flex; justify-content: center; align-items: center; }
+.sp-gap .sp-add { visibility: hidden; }
+.sp-gap:hover .sp-add, .sp-gap .sp-add:focus-visible { visibility: visible; }
+.sp-end { display: flex; }
+.sp-follow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ac-space-2); font-size: var(--ac-fs-small); color: var(--ac-muted); }
+.sp-follow-switch { display: inline-flex; align-items: center; gap: var(--ac-space-2); cursor: pointer; }
 .sp-thumb { position: relative; display: flex; gap: var(--ac-space-2); align-items: flex-start; padding: var(--ac-space-1); border-radius: var(--ac-radius-md); }
 .sp-thumb.is-on { background: var(--ac-selected); }
 /* The button that selects a thumbnail or a layout covers it, so nothing inside the picture can be clicked or focused. */
@@ -28,7 +44,11 @@
 /* Phone: the large slide on top, the thumbnails in a row under it. */
 @media (max-width: 900px) {
   .sp-main, .sp-main.has-replace { grid-template-columns: minmax(0, 1fr); }
-  .sp-thumbs { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; order: 2; }
+  .sp-side { order: 2; }
+  .sp-thumbs { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; align-items: stretch; }
+  .sp-end { align-items: center; }
+  .sp-tools { justify-content: flex-start; gap: var(--ac-space-2); }
+  .sp-tools .ui-btn { min-width: var(--ac-tap); min-height: var(--ac-tap); }
   .sp-thumb { flex-direction: column; align-items: stretch; width: 112px; }
   .sp-thumb-n { width: auto; text-align: left; }
   .sp-bar .ui-btn { min-height: 44px; }

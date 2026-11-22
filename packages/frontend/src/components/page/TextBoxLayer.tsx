@@ -4,7 +4,7 @@ import {
   type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent,
 } from "react";
 import { PAGE_TEXT_DEFAULT_WIDTH, PAGE_TEXT_MIN_WIDTH, PAGE_TEXT_SIZES, type PageTextBox, type PageTextDoc } from "@onden/markdown/page-text";
-import { DEFAULT_QUICK_COLORS, themedStrokeColor } from "../../lib/ink";
+import { DEFAULT_QUICK_COLORS } from "../../lib/ink";
 import { isEscapeKey, isImeComposing } from "../../lib/keys";
 import { useT } from "../../lib/i18n";
 import { classNames } from "../../lib/utils";
@@ -16,7 +16,6 @@ import "./TextBoxLayer.css";
 import { capturePointer, DRAG_SLOP_PX } from "../../lib/pointerDrag";
 import { observeSize } from "../../lib/observeSize";
 import { Pressable, TextArea, keepFocus } from "../ui";
-import { isDarkTheme, observeTheme } from "../../lib/documentAccess";
 
 // The text boxes of one page — the same layer on a PDF page, a handwriting
 // page and (later) a slide. The page supplies only: its key, how wide it is in
@@ -54,18 +53,11 @@ type Props = {
 const px = (n: number) => `${n}px`;
 const BAR_HEIGHT = 40;
 
-function useDarkTheme(): boolean {
-  const [dark, setDark] = useState(isDarkTheme);
-  useEffect(() => observeTheme(() => setDark(isDarkTheme())), []);
-  return dark;
-}
-
 export default function TextBoxLayer({ controller, doc, pageKey, pageWidth, mode, tapTarget, scale: scaleProp }: Props) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [capture, setCapture] = useState<HTMLDivElement | null>(null);
   const [measured, setMeasured] = useState(1);
-  const dark = useDarkTheme();
   const palette = useInkPalette().palette;
   const selection = useSyncExternalStore(controller.subscribe, controller.getSelection);
   const scale = scaleProp ?? measured;
@@ -122,7 +114,6 @@ export default function TextBoxLayer({ controller, doc, pageKey, pageWidth, mode
           pageKey={pageKey}
           pageWidth={pageWidth}
           scale={scale}
-          dark={dark}
           interactive={interactive}
           selected={selected?.id === box.id}
           editing={selected?.id === box.id && selected.editing}
@@ -186,8 +177,8 @@ type Press =
   | { kind: "move"; id: number; x: number; y: number; box: { x: number; y: number }; moved: boolean }
   | { kind: "resize"; id: number; x: number; w: number; moved: boolean };
 
-function TextBox({ box, pageKey, pageWidth, scale, dark, interactive, selected, editing, controller }: {
-  box: PageTextBox; pageKey: string; pageWidth: number; scale: number; dark: boolean; interactive: boolean;
+function TextBox({ box, pageKey, pageWidth, scale, interactive, selected, editing, controller }: {
+  box: PageTextBox; pageKey: string; pageWidth: number; scale: number; interactive: boolean;
   selected: boolean; editing: boolean; controller: PageTextController;
 }) {
   const t = useT();
@@ -292,7 +283,7 @@ function TextBox({ box, pageKey, pageWidth, scale, dark, interactive, selected, 
       data-ink-color={box.color}
       style={{
         "--ptb-left": px(box.x * scale), "--ptb-top": px(box.y * scale), "--ptb-width": px(box.w * scale),
-        "--ptb-size": px(box.size * scale), "--ptb-color": themedStrokeColor(box.color, dark), "--ptb-align": box.align,
+        "--ptb-size": px(box.size * scale), "--ptb-color": box.color, "--ptb-align": box.align,
       } as CSSProperties}
       tabIndex={interactive && !editing ? 0 : -1}
       role={interactive ? "group" : undefined}

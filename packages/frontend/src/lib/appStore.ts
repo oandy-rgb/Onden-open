@@ -21,7 +21,7 @@ import { setWorkspaceDayStartSource, setWorkspaceTimeZoneSource } from "./localD
 import { workspaceZoneOf } from "./workspaceTime";
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { nodeIndexOf } from "./nodeIndex";
-import { noWorkspaceData, type Bootstrap, type Canvas, type CanvasMeta, type ContentNode, type Tag } from "./api";
+import { noWorkspaceData, type Bootstrap, type Canvas, type CanvasMeta, type ContentNode, type Tag, type Workspace } from "./api";
 import type { LocalCopyState } from "./localCopyState";
 import { isSystemNode, tagsById } from "./systemNodes";
 import { canvasList } from "./canvasList";
@@ -375,7 +375,18 @@ export function useTaskRows(): Bootstrap["tasks"] {
   return useAppSelector((s) => s.data.tasks);
 }
 
+/** The open editor's unsaved text for `noteId` (null when the editor holds another note): re-renders as it is typed,
+ *  for a pane that reads the text beside the editor (`drafts.read` is the read, this is the subscription). */
+export function useOverviewDraftOf(noteId: string): string | null {
+  return useAppSelector((s) => (s.selectedId === noteId ? s.overviewDraft : null));
+}
+
 /** Subscribes to one node: re-renders only when that node's row changes. */
+/** The words each module recognises on a line (`workspace.line_words`, the server's; lib/lineWords reads them). */
+export function useLineWords(): Workspace["line_words"] {
+  return useAppSelector((s) => s.data.workspace?.line_words);
+}
+
 export function useNode(id: string | null | undefined): ContentNode | undefined {
   return useAppSelector((s) => (id ? nodeIndexOf(s.data.nodes).get(id) : undefined));
 }

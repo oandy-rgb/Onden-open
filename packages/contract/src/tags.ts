@@ -48,6 +48,9 @@ export type Tag = {
   /** Role of a system-reserved tag ("task", "workspace-config",
    *  "page"), whatever it is titled; null/absent for ordinary tags. */
   reserved_key?: string | null;
+  /** Paragraphs that carry the tag directly, in notes the reader can read (backend tagCatalog; what the tag page lists
+   *  as 「段落」). Counts with the notes in a tag's use (frontend lib/nodeTags directTagUsage). Absent from an older server. */
+  block_usage_count?: number;
   /** Null for a tag nobody coloured (the catalog sends tag_color as it is stored). */
   color: string | null;
   // Non-null when the tag carries a schema (= "class tag" in substrate-speak:

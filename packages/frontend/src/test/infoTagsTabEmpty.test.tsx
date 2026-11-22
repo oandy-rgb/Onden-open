@@ -28,7 +28,7 @@ describe("info panel Tags tab", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Tags" }));
     const panel = screen.getByRole("tabpanel");
     // The panel loads first (a parent may share values down), then says so.
-    await waitFor(() => expect(panel).toHaveTextContent("No tags yet"));
+    await waitFor(() => expect(panel).toHaveTextContent("No tags on this note."));
     expect(panel).not.toHaveTextContent("This note has no tags, features or connections yet.");
   });
 });

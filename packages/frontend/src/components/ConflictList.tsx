@@ -22,6 +22,8 @@ function inkConflictSummary(p: ConflictPayload, t: Translate): string {
     strokes > 0 ? tn("1 stroke", "{count} strokes", strokes) : null,
     shapes > 0 ? tn("1 shape", "{count} shapes", shapes) : null,
     highlights > 0 ? tn("1 highlight", "{count} highlights", highlights) : null,
+    // A page one device deleted while the other drew on it: kept, and counted as a page both changed.
+    count("deletedPage") > 0 ? tn("1 page", "{count} pages", count("deletedPage")) : null,
     count("page") > 0 ? t("page settings") : null,
   ].filter((part): part is string => part !== null);
   return parts.length === 0 ? t("The drawing changed on both devices") : t("{items} changed on both devices", { items: parts.join(t(", ")) });

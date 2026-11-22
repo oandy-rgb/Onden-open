@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import type { Tag } from "../lib/api";
 import { noteWriter, reads, writeErrors } from "../lib/data";
 import { addToast } from "../lib/appStore";
-import { useT } from "../lib/i18n";
+import { tn, useT } from "../lib/i18n";
 import { Modal, Pressable } from "./ui";
 import "./ConfirmDialog.css";
 import "./SchemaLens.css";
@@ -15,7 +15,9 @@ import "./SchemaLens.css";
 // the delete is still reversible and queues, so the confirm says that.
 
 type DeletePreview = {
-  members: number; sample_titles: string[];
+  members: number;
+  /** Paragraphs that carry the tag itself (older servers send none). */
+  paragraphs?: number; sample_titles: string[];
   fields: Array<{ name: string; values_count: number }>;
   views: number; reversible: boolean;
   // The delete trashes the tag's live subtree too. Sub-tag names are global;
@@ -81,11 +83,16 @@ export default function TagDeleteConfirm({ tag, onDeleteNode, onDone, onCancel }
         <p className="schema-lens-delete-note">{t("Offline — the impact report isn't available, but this is reversible.")}</p>
       ) : (
         <ul className="schema-lens-delete-list">
-          <li>{t("{n} tagged note(s) lose the tag", { n: preview.members })} {t("(the notes stay)")}
-            {preview.sample_titles.length > 0 && (
-              <span className="schema-lens-delete-sample"> — {preview.sample_titles.join(" · ")}{preview.members > preview.sample_titles.length ? " …" : ""}</span>
-            )}
-          </li>
+          {(preview.members > 0 || !preview.paragraphs) && (
+            <li>{t("{n} tagged note(s) lose the tag", { n: preview.members })} {t("(the notes stay)")}
+              {preview.sample_titles.length > 0 && (
+                <span className="schema-lens-delete-sample"> — {preview.sample_titles.join(" · ")}{preview.members > preview.sample_titles.length ? " …" : ""}</span>
+              )}
+            </li>
+          )}
+          {(preview.paragraphs ?? 0) > 0 && (
+            <li>{tn("1 tagged paragraph loses the tag", "{n} tagged paragraphs lose the tag", preview.paragraphs!)} {t("(the notes stay)")}</li>
+          )}
           {(preview.sub_tags?.length ?? 0) > 0 && (
             <li>{t("{n} sub-tag(s) are deleted with it", { n: preview.sub_tags!.length })}
               <span className="schema-lens-delete-sample"> — {preview.sub_tags!.slice(0, 5).map((st) => `#${st.name}`).join(" · ")}{preview.sub_tags!.length > 5 ? " …" : ""}</span>

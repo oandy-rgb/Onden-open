@@ -99,8 +99,6 @@ export interface PageContext {
 
 export interface PageBookProps {
   pages: InkPages;
-  /** The app is dark (strokes are drawn with inverted lightness). */
-  dark?: boolean;
   background?: (page: InkPageRecord, context: PageContext) => ReactNode;
   layers?: (page: InkPageRecord, host: HTMLElement | null, context: PageContext) => ReactNode;
   session: PageSurfaceSession;
@@ -149,7 +147,7 @@ function Sheet({ pageKey, box, children }: { pageKey: string; box: { width: numb
 }
 
 export function PageBook({
-  pages, dark = false, background, layers, session, tool, pen, penSize = "page", reloadKey, penDraws, stylusOnly, onPenSeen, onPenShortcut, onAddPage, onReady, t,
+  pages, background, layers, session, tool, pen, penSize = "page", reloadKey, penDraws, stylusOnly, onPenSeen, onPenShortcut, onAddPage, onReady, t,
 }: PageBookProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pagesRef = useRef<HTMLDivElement | null>(null);
@@ -467,7 +465,6 @@ export function PageBook({
                           shapeKind={pen.shapeKind}
                           shapeFill={pen.shapeFill}
                           autoShape={pen.autoShape}
-                          dark={dark}
                           stylusOnly={stylusOnly}
                           penDraws={penDraws}
                           onPenSeen={onPenSeen}

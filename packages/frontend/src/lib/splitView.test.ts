@@ -34,6 +34,7 @@ describe("which two destinations may share the screen", () => {
   });
   it("the same note in two different views is the point", () => {
     expect(panesConflict(note("a"), note("a", "canvas"))).toBe(false);
+    expect(panesConflict(note("a"), note("a", "slides-view"))).toBe(false); // 內容｜簡報
     expect(panesConflict(note("a", "v1"), note("a", "v2"))).toBe(false);
   });
   it("different notes, or a note beside a page, never conflict", () => {

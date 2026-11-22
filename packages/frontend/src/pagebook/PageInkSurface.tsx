@@ -49,8 +49,6 @@ export interface PageInkSurfaceProps {
   shapeKind: InkShapeKind;
   shapeFill: InkShapeFill;
   autoShape: boolean;
-  /** The app is dark: strokes are drawn with their lightness inverted (a PDF page stays white: omit). */
-  dark?: boolean;
   /** The device's finger and pen settings (lib/inkInputPrefs). */
   stylusOnly: boolean;
   penDraws: boolean;
@@ -83,7 +81,7 @@ function sizeCanvases(host: HTMLElement, canvases: HTMLCanvasElement[], ratioRef
 
 export function PageInkSurface({
   pageKey, box, session, getDoc, scrollerSelector, tool, color, size, penSize, shapeKind, shapeFill, autoShape,
-  dark = false, stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, onLiveChange, onHost,
+  stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, onLiveChange, onHost,
 }: PageInkSurfaceProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const committedRef = useRef<HTMLCanvasElement | null>(null);
@@ -97,8 +95,8 @@ export function PageInkSurface({
   heightRatio.current = box.height / box.width;
   const ratioRef = useRef(1);
   // Latest props for the engine built once below.
-  const live = useRef({ tool, color, size, penSize, shapeKind, shapeFill, autoShape, dark, stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, getDoc });
-  live.current = { tool, color, size, penSize, shapeKind, shapeFill, autoShape, dark, stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, getDoc };
+  const live = useRef({ tool, color, size, penSize, shapeKind, shapeFill, autoShape, stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, getDoc });
+  live.current = { tool, color, size, penSize, shapeKind, shapeFill, autoShape, stylusOnly, penDraws, onPenSeen, onPenShortcut, gestures, getDoc };
   const onLiveChangeRef = useRef(onLiveChange);
   onLiveChangeRef.current = onLiveChange;
   const onHostRef = useRef(onHost);
@@ -161,7 +159,6 @@ export function PageInkSurface({
     engine.setShapeKind(live.current.shapeKind);
     engine.setShapeFill(live.current.shapeFill);
     engine.setAutoShape(live.current.autoShape);
-    engine.setDarkMode(live.current.dark);
     engine.load(live.current.getDoc());
     const disposePointers = engine.addPointerHandlers(host);
     const onDown = () => { session.pointerDown(); session.touched(pageKey); };
@@ -201,7 +198,6 @@ export function PageInkSurface({
   useEffect(() => { engineRef.current?.setShapeKind(shapeKind); }, [shapeKind]);
   useEffect(() => { engineRef.current?.setShapeFill(shapeFill); }, [shapeFill]);
   useEffect(() => { engineRef.current?.setAutoShape(autoShape); }, [autoShape]);
-  useEffect(() => { engineRef.current?.setDarkMode(dark); }, [dark]);
   useEffect(() => { engineRef.current?.setInputPrefs({ stylusOnly, penDraws }); }, [stylusOnly, penDraws]);
 
   // Not `data-ink-tool`: that one marks the toolbar's tool buttons, and a test finds a tool by it.

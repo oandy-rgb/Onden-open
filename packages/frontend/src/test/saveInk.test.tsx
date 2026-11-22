@@ -35,7 +35,7 @@ import type { InkMultiPageDoc } from "../lib/pdf/pdfAdapter";
 const PAGE = { version: 1, strokes: [], erased: {}, page: { width: 1000 } } as InkDocument;
 import { setPending, getPendingCount } from "../lib/data/syncStatus";
 import { getRecoveryWrites } from "../lib/data/writeRecovery";
-import { setOnline, getAppState } from "../lib/appStore";
+import { setOnline, getAppState, dismissToast } from "../lib/appStore";
 
 const reject422 = () => Promise.reject(new ApiError(422, JSON.stringify({ error: "field_invalid", detail: "nope" })));
 const fail500 = () => Promise.reject(new ApiError(500, "internal"));
@@ -224,3 +224,49 @@ describe("saveInk never saves a read-only drawing (T1-0)", () => {
     expect(apiMock).toHaveBeenCalledTimes(1);
   });
 });
+
+// Owner 2026-11-20 (#1783): when the server's merge keeps another device's version of strokes this save changed, the
+// person is told once (the conflict is in the inbox); the drawing on screen is not swapped.
+describe("saveInk: telling the person when their version was not kept", () => {
+  const h = (x: number) => ({ id: "h", points: [[x, 0], [x + 5, 5]] as [number, number][], color: "#000", size: 2, toolId: "pen" });
+  const doc = (x: number) => JSON.stringify({ ...PAGE, strokes: [h(x)] });
+  const base = doc(0), other = doc(10);
+  const notice = "Another device changed the same strokes, and its version was kept. Yours is under Recent conflicts in the Inbox, where you can bring it back.";
+  const answerFor = async (mine: string) => {
+    const { mergeInk } = await import("@onden/markdown/ink");
+    const merged = mergeInk(base, other, mine);
+    return { key: "ink_data", value: merged.value, value_type: "text", is_inheritable: false, source: "ui", conflict: { ink_conflicts: merged.conflicts } };
+  };
+  const answerOnly = (mine: string, answer: object) => apiMock.mockImplementation(async (_path: string, init?: { body?: unknown }) => {
+    const sent = typeof init?.body === "string" ? (JSON.parse(init.body) as { value?: unknown }).value : undefined;
+    return sent === mine ? answer : {};
+  });
+  // The same reset as the other blocks: a write an earlier test left pending made this save queue behind it instead of
+  // being answered (the cause of a 1-in-5 failure here).
+  beforeEach(() => {
+    apiMock.mockReset();
+    vi.mocked(addPendingWrite).mockClear(); queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    setPending(0);
+    setOnline(true);
+    for (const toast of getAppState().toasts) dismissToast(toast.id);
+  });
+
+  it("the merge kept the other device's h: one notice", async () => {
+    const mine = doc(-5); // sorts before the other device's text: the merge keeps the other h
+    const answer = await answerFor(mine);
+    expect(answer.value).toBe(other);
+    answerOnly(mine, answer);
+    await saveInk("node-conflict-lost", mine, base);
+    expect(getAppState().toasts.map((toast) => toast.message)).toEqual([notice]);
+  });
+
+  it("the merge kept this device's h: no notice", async () => {
+    const mine = doc(20);
+    const answer = await answerFor(mine);
+    expect(answer.value).toBe(mine);
+    answerOnly(mine, answer);
+    await saveInk("node-conflict-kept", mine, base);
+    expect(getAppState().toasts).toEqual([]);
+  });
+});
+

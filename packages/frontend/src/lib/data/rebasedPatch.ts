@@ -33,6 +33,11 @@ export async function rebasedOnStored(method: string | undefined, path: string, 
 async function mergeAttributeValue(key: string, base: string, stored: string, incoming: string): Promise<string | null> {
   if (key === "page_text") return (await import("@onden/markdown/page-text")).mergePageText(base, stored, incoming).value;
   if (key === "page_images") return (await import("@onden/markdown/page-images")).mergePageImages(base, stored, incoming).value;
+  // A drawing: the merge's value, as main always sent. When it leaves out the writer's version of something both changed,
+  // that version is not recorded (the server never saw this request's base, so it cannot merge it with a conflict
+  // record); sending the writer's value whole instead would replace what is stored and silently hide another device's
+  // new strokes (PR #1783 review round 3) — worse. This path only runs for a request too big to send whole whose
+  // patch base the server no longer has.
   if ((INK_PAGE_ATTRS as readonly string[]).includes(key)) return (await import("@onden/markdown/ink")).mergeInk(base, stored, incoming).value;
   return null;
 }

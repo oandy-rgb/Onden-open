@@ -11,6 +11,7 @@ import { canReadNode } from "./readPolicy.js";
 import { StatusError } from "../statusError.js";
 import { workspaceColumnsSql } from "./syncProjection.js";
 import { workspaceWireRow } from "./workspaceModules.js";
+import { withLineWords } from "./lineWords.js";
 import { getSiteConfig, patchSiteConfig, getChromeBlocks, setChromeBlocks } from "./siteConfig.js";
 
 /** Set or clear (null) the home note; undefined changes nothing and returns
@@ -49,7 +50,7 @@ export async function setHomeNode(authenticated: ActorCtx | null, workspaceId: s
       return result.rows[0];
     },
   });
-  return workspaceWireRow(row);
+  return withLineWords(workspaceId, workspaceWireRow(row));
 }
 
 /** The site config and chrome. The workspace's own settings are for the people of the workspace, not for a temporary session on someone else's computer. */

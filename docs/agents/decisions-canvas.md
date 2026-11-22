@@ -77,7 +77,7 @@
 - **停住修形**（`lib/ink/recognize.ts`，純函式）：只認直線、箭頭、矩形、橢圓／圓、三角形、菱形，只對筆；寧可不修。0.5 秒（`HOLD_MS`）由引擎計時，動過 4px 重算；
   放開時 `InkModel.snapStrokeToShape` 一次提交，一步復原回原筆畫。開關是帳號偏好 `inkAutoShapePref`（預設開）。
 - **顏色與預設**：帳號偏好都在 `lib/inkPrefs.ts`（`inkPalettePref`、`inkShapeKindPref`、`inkAutoShapePref`、`inkShapeFillPref`、`inkPresetsPref`），後端 `PREF_SCHEMAS` 同形狀，
-  `backend/src/test/prefKeysContract.test.ts` 對 key。顏色存十六進位值，深色模式在渲染時反轉亮度。筆預設最多 `MAX_PRESETS`（6）個，名稱至多 `INK_PRESET_NAME_MAX`。
+  `backend/src/test/prefKeysContract.test.ts` 對 key。顏色存十六進位值；白板畫布（吃主題的面）在深色模式渲染時反轉亮度，**紙不反轉**：手寫頁、PDF 頁、嵌入的手繪圖、引用的手寫區域在兩種主題都是白底（`--ac-pure-white`）、筆跡用存下來的顏色（2026-11-20，見 decisions-ui.md「紙在兩種主題都是白的」）。筆預設最多 `MAX_PRESETS`（6）個，名稱至多 `INK_PRESET_NAME_MAX`。
 - **取色器**（`hooks/useEyedropper.ts`、`lib/ink/colorPick.ts`）從資料取色、不讀畫面像素：引擎登記成取色來源，文字框根元素帶 `data-ink-color`。
   取色時下一次按壓以 capture 階段攔下 pointer／mouse／touch／click，且這次按壓的後續事件也不讓頁面看到（`keepFromPage`），否則筆的 `buttons≠0` 會被當成側鍵切成橡皮擦。
 - **形狀**：幾何只有一份，`@onden/markdown` 的 `inkShapes.ts`，引擎、頁面 SVG、靜態 SVG 共用；形狀是引擎的工具（`InkActiveTool` 的 `"shape"`），不在宿主另寫一個指標面。
@@ -108,8 +108,15 @@
   同一個 codec、`saveInk(nodeId, doc, base, { attr })`、同一條 `PUT /attributes/:key` 合併與離線佇列。
 - **離開頁面不掉筆跡**：`pagehide`／分頁隱藏時 PDF（`commitDrawSession`）與 `InkNodeView` 立刻以 `keepalive` 存出還沒存的筆跡。
 - **存檔基底**（`lib/ink/surfaceSaver.ts` 的 `InkSaver`，手寫、PDF、白板共用）：伺服器回合併值時，下一次存檔先在本機 `mergeInk` 合併再以伺服器文字為基底送 patch，
-  不能直接拿伺服器的回答當基底（引擎還看不到別台的筆，下一次存檔會把它們刪掉）；前一次被拒絕的存檔之後的存檔，等沒有存檔在途時用伺服器現值當基底重存，而且從第一筆被拒絕的存檔起，每一次存檔「從哪份筆跡改成哪份」都記下來（`unsent`），重存時依序套在伺服器文字上、各用自己的基底（只用一個舊基底，伺服器已接受的擦除會被當成對方的擦除，使用者之後的復原就丟了）；
+  不能直接拿伺服器的回答當基底（引擎還看不到別台的筆，下一次存檔會把它們刪掉）；前一次被拒絕的存檔之後的存檔，等沒有存檔在途時用伺服器現值當基底重存，而且從第一筆被拒絕的存檔起，每一次存檔「從哪份筆跡改成哪份」都記下來（`unsent`），重存時依序套在伺服器文字上、各用自己的基底（只用一個舊基底，伺服器已接受的擦除會被當成對方的擦除，使用者之後的復原就丟了）；每一步都做與用戶端先合併同一個檢查（`mergeDropsSent`）：有一步丟掉本機這一版（另一台也改了同一筆、排序在後），就不送重播結果，改送畫面上的筆跡、base 用這串改動最早的那份，由伺服器合併並用 `submitted_value_ref` 留下（#1783 第 4 輪，`test/inkSaverLoser.test.ts`）；
   從歷史還原後 `announceDrawingRestored(nodeId)`，開著的筆層重新載入。
+- **合併一次吃所有頭**（`@onden/markdown/ink` 的 `mergeInkHeads(base, heads)`；`mergeInk` 是兩個頭）：結果只看 base 與那組頭，與到達順序、重複、把 base 當一個頭無關；
+  兩邊改同一樣東西時由頭的文字順序決定留哪一版並回報。輸掉的那一版要找得回來：伺服器在衝突紀錄多存 `submitted_value_ref`（後端 `sentVersionLost`），
+  `revertInkConflicts` 兩個方向都能拿回。**用戶端先合併時同一條規則**：先合併的結果若丟掉本機這一版（`lib/data/inkMergeLoss.ts` 的 `mergeDropsSent`，與後端 `sentVersionLost` 同一個判斷），`InkSaver` 不送合併值，
+  改送本機原版加真正的 base（上次存的那份），由伺服器合併並留下；`rebasedOnStored`（伺服器不認得 base 的超大請求）照舊送合併值：原樣整份送出會蓋掉現值、靜靜藏掉另一台新畫的筆（#1783 第 3 輪審查），所以這條少見的路接受「寫入者那一筆有爭議的版本沒被記下」。
+  本機贏的那一方，對方的版本本來就是它自己的存檔、在歷史裡。**伺服器判定本機輸了時只告訴人，不在筆底下換掉畫**（業主 2026-11-20「按建議」）：
+  `saveInk` 收到的回答帶 `conflict.ink_conflicts`、且合併丟掉了這次送出的版本（同一個 `mergeDropsSent`）時，跳一次提示（`lib/ink/store.ts` 的 `notifyInkVersionNotKept`），
+  畫面維持本機版本到重新載入；衝突紀錄在收件匣，按還原拿回。兩邊都改過的同一筆由固定順序決定，不是後存的贏（業主沒有反對）。
 
 ## 手寫存檔量
 

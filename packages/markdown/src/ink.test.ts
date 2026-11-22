@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { currentUnits, decodeInk, encodeInk, INK_KNOWN_FEATURES, legacyFingerprint, inkPageOrder, withPageAppended, withPageDoc, noteDoc, notePages, blankPageRecord, pdfPageOfKey, pdfPageRecord, inkUnknownRequirements, isInkReadOnly, mergeInk, mergeIntervals, revertInkConflicts, type InkDocument, type InkEnvelope, type InkStroke } from "./ink.js";
+import { currentUnits, decodeInk, encodeInk, INK_KNOWN_FEATURES, legacyFingerprint, inkPageOrder, withPageAppended, withPageDoc, noteDoc, notePages, blankPageRecord, pdfPageOfKey, pdfPageRecord, inkUnknownRequirements, isInkReadOnly, mergeInk, mergeIntervals, revertInkConflicts, type InkDocument, type InkEnvelope, type InkStroke, inkConflictLosers } from "./ink.js";
 
 // Fixtures in the shapes the app stores (frontend test/ink.test.ts,
 // overviewEditorPdfInk.test.tsx, lib/pdf/pdfAdapter): pressure and plain
@@ -91,11 +91,14 @@ describe("mergeInk — two devices drawing from the same base", () => {
     expect(u.kind === "page" && u.doc.erased).toEqual({});
   });
 
-  it("the same stroke changed on both sides → incoming wins and a conflict is reported", () => {
-    const result = merged(page([S1]), page([stroke("s1", 4, { color: "#f00" })]), page([stroke("s1", 4, { color: "#00f" })]));
+  it("the same stroke changed on both sides → one version kept, the same in both orders, a conflict reported, the other version recoverable", () => {
+    const red = page([stroke("s1", 4, { color: "#f00" })]), blue = page([stroke("s1", 4, { color: "#00f" })]);
+    const result = merged(page([S1]), red, blue);
+    expect(merged(page([S1]), blue, red)).toEqual(result);
     const d = decodeInk(result.value);
-    expect(d.kind === "page" && d.doc.strokes[0]!.color).toBe("#00f");
+    expect(["#f00", "#00f"]).toContain(d.kind === "page" && d.doc.strokes[0]!.color);
     expect(result.conflicts).toEqual([{ kind: "stroke", id: "s1" }]);
+    expect(inkConflictLosers(result.value, [enc(red), enc(blue)], result.conflicts[0]!)).toHaveLength(1);
   });
 
   it("a stroke changed on one side and removed on the other is kept and reported", () => {
@@ -105,14 +108,16 @@ describe("mergeInk — two devices drawing from the same base", () => {
   });
 
   it("no base (first save from an empty surface) keeps everything either side has", () => {
-    expect(ids(merged(null, page([S2]), page([S3])).value)).toEqual(["s3", "s2"]);
+    // Added on both sides at the same place: smallest id first, whichever side is incoming (jsonMerge mergeOrder).
+    expect(ids(merged(null, page([S2]), page([S3])).value)).toEqual(["s2", "s3"]);
+    expect(ids(merged(null, page([S3]), page([S2])).value)).toEqual(["s2", "s3"]);
   });
 
   it("shapes merge by id like strokes", () => {
     const shape = (id: string) => ({ id, kind: "arrow" as const, start: [0, 0] as [number, number], end: [1, 1] as [number, number], color: "#000", size: 2 });
     const result = merged(page([], {}, { shapes: [] }), page([], {}, { shapes: [shape("a")] }), page([], {}, { shapes: [shape("b")] }));
     const d = decodeInk(result.value);
-    expect(d.kind === "page" && d.doc.shapes?.map((s) => s.id)).toEqual(["b", "a"]);
+    expect(d.kind === "page" && d.doc.shapes?.map((s) => s.id)).toEqual(["a", "b"]);
   });
 
   it("page settings: the side that changed them; both → incoming, reported", () => {
@@ -124,16 +129,20 @@ describe("mergeInk — two devices drawing from the same base", () => {
     expect(both.conflicts).toEqual([{ kind: "page" }]);
   });
 
-  it("a page against a PDF envelope cannot merge: incoming kept, reported", () => {
-    const pdf: InkEnvelope = { version: 1, pages: {}, annotations: [] };
-    const incoming = enc(page([S1]));
-    expect(mergeInk(enc(page([])), enc(pdf), incoming)).toEqual({ value: incoming, conflicts: [{ kind: "format" }] });
+  it("a page against a PDF envelope cannot merge: one kept whole, the same in both orders, reported", () => {
+    const pdf = enc({ version: 1, pages: {}, annotations: [] } as InkEnvelope);
+    const note = enc(page([S1]));
+    const result = mergeInk(enc(page([])), pdf, note);
+    expect(mergeInk(enc(page([])), note, pdf)).toEqual(result);
+    expect([pdf, note]).toContain(result.value);
+    expect(result.conflicts).toEqual([{ kind: "format" }]);
   });
 
-  it("nothing stored (or unreadable) → the incoming value as sent", () => {
+  it("nothing stored → the incoming value as sent; an unreadable stored value never wins over a drawing (reported)", () => {
     const incoming = enc(page([S1]));
     expect(mergeInk(null, null, incoming)).toEqual({ value: incoming, conflicts: [] });
-    expect(mergeInk(null, "{broken", incoming)).toEqual({ value: incoming, conflicts: [] });
+    expect(mergeInk(null, "{broken", incoming)).toEqual({ value: incoming, conflicts: [{ kind: "format" }] });
+    expect(mergeInk(null, incoming, "{broken")).toEqual({ value: incoming, conflicts: [{ kind: "format" }] });
   });
 });
 
@@ -155,7 +164,7 @@ describe("mergeInk — the PDF envelope (strokes per page + highlight records)",
     const doc = decodePdf(result.value);
     expect(doc.pages[1]!.strokes.map((s) => s.id)).toEqual(["s1", "s2"]);
     expect(doc.pages[2]!.strokes.map((s) => s.id)).toEqual(["s3"]);
-    expect(doc.annotations!.map((a) => a.id)).toEqual(["h1", "h3", "h2"]);
+    expect(doc.annotations!.map((a) => a.id)).toEqual(["h1", "h2", "h3"]);
     expect(result.conflicts).toEqual([]);
   });
 
@@ -164,9 +173,10 @@ describe("mergeInk — the PDF envelope (strokes per page + highlight records)",
     expect(decodePdf(result.value).annotations!.map((a) => a.id)).toEqual(["h2", "h3"]);
   });
 
-  it("a highlight changed on both → incoming's, reported", () => {
+  it("a highlight changed on both → one kept, the same in both orders, reported", () => {
     const result = merged(env({}, [rec("h1")]), env({}, [rec("h1", "red")]), env({}, [rec("h1", "blue")]));
-    expect(decodePdf(result.value).annotations).toEqual([rec("h1", "blue")]);
+    expect(merged(env({}, [rec("h1")]), env({}, [rec("h1", "blue")]), env({}, [rec("h1", "red")]))).toEqual(result);
+    expect([[rec("h1", "red")], [rec("h1", "blue")]]).toContainEqual(decodePdf(result.value).annotations);
     expect(result.conflicts).toEqual([{ kind: "annotation", id: "h1" }]);
   });
 
@@ -191,19 +201,25 @@ describe("revertInkConflicts — undoing what a merge decided, item by item (D90
     return d.doc;
   };
 
-  it("takes back only the conflicting stroke; the rest of the merge stays", () => {
-    // stored had red s1 (+ S2), the incoming save blue s1 (+ S3): merged = blue s1, S3, S2.
+  it("takes back only the conflicting stroke — the version the merge did not keep, whichever side that was; the rest stays", () => {
+    // stored had red s1 (+ S2), the incoming save blue s1 (+ S3): one s1 is kept, with S2 and S3.
+    const versions = [enc(page([red, S2])), enc(page([blue, S3]))];
     const result = merged(page([S1]), page([red, S2]), page([blue, S3]));
-    const reverted = revertInkConflicts(result.value, enc(page([red, S2])), result.conflicts);
-    expect(doc(reverted).strokes.map((s) => [s.id, s.color])).toEqual([["s1", "#f00"], ["s3", "#000"], ["s2", "#000"]]);
+    const kept = doc(result.value).strokes[0]!.color;
+    const reverted = revertInkConflicts(result.value, versions, result.conflicts);
+    expect(doc(reverted).strokes.map((s) => [s.id, s.color])).toEqual([["s1", kept === "#f00" ? "#00f" : "#f00"], ["s2", "#000"], ["s3", "#000"]]);
+    // A record from before the incoming value was kept (only the overridden one): as before, that one's version.
+    expect(doc(revertInkConflicts(result.value, versions[0]!, result.conflicts)).strokes[0]!.color).toBe("#f00");
   });
 
   it("re-applied with mergeInk onto a drawing changed since, it keeps the newer strokes", () => {
     const result = merged(page([S1]), page([red]), page([blue]));
-    const reverted = revertInkConflicts(result.value, enc(page([red])), result.conflicts);
-    const now = enc(page([blue, S2], { s2: [[0, 1]] })); // another device drew S2 after the merge
+    const kept = doc(result.value).strokes[0]!;
+    const lost = kept.color === "#f00" ? "#00f" : "#f00";
+    const reverted = revertInkConflicts(result.value, [enc(page([red])), enc(page([blue]))], result.conflicts);
+    const now = enc(page([kept, S2], { s2: [[0, 1]] })); // another device drew S2 after the merge
     const applied = mergeInk(result.value, now, reverted);
-    expect(doc(applied.value).strokes.map((s) => [s.id, s.color])).toEqual([["s1", "#f00"], ["s2", "#000"]]);
+    expect(doc(applied.value).strokes.map((s) => [s.id, s.color])).toEqual([["s1", lost], ["s2", "#000"]]);
     expect(doc(applied.value).erased).toEqual({ s2: [[0, 1]] });
     expect(applied.conflicts).toEqual([]);
   });

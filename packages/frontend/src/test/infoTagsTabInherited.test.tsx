@@ -35,10 +35,10 @@ describe("info panel Tags tab on a note with nothing of its own", () => {
     expect(screen.getByText("Ada")).toBeInTheDocument();
   });
 
-  it("still says 'No tags yet' when the parent shares nothing", async () => {
+  it("still says there are no tags when the parent shares nothing", async () => {
     answer([]);
     render(<NodeInspector node={node("child", "Child")} onSelectNode={() => {}} onTagsChanged={() => {}} />);
     fireEvent.click(screen.getByRole("tab", { name: "Tags" }));
-    await waitFor(() => expect(screen.getByRole("tabpanel")).toHaveTextContent("No tags yet"));
+    await waitFor(() => expect(screen.getByRole("tabpanel")).toHaveTextContent("No tags on this note."));
   });
 });

@@ -40,7 +40,7 @@ import { readInkValue } from "./inkChunks.js";
 import { INK_PAGE_ATTRS, type AttributeValueType } from "@onden/markdown";
 import { NOTE_PAGES_ATTR } from "@onden/markdown/contract";
 import { decodeNotePages, mergeNotePages } from "@onden/markdown/note-pages";
-import { mergeInk, revertInkConflicts, type InkMergeConflict } from "@onden/markdown/ink";
+import { inkConflictLosers, mergeInkHeads, revertInkConflicts, type InkMergeConflict } from "@onden/markdown/ink";
 import { mergePageImages, revertPageImagesConflicts, type PageImagesConflict } from "@onden/markdown/page-images";
 import { mergePageText, revertPageTextConflicts, type PageTextConflict } from "@onden/markdown/page-text";
 
@@ -107,13 +107,14 @@ function mergeAttribute(key: string, base: string, stored: string, incoming: str
     const merged = layer.merge(base, stored, incoming);
     return { value: merged.value, conflicts: { field: layer.field, items: merged.conflicts } };
   }
-  const merged = mergeInk(base, stored, incoming);
+  // The two heads a write meets: what is stored and what was sent (the same function a replicated-value table runs on all of them).
+  const merged = mergeInkHeads(base, [stored, incoming]);
   return { value: merged.value, conflicts: { field: "ink_conflicts", items: merged.conflicts } };
 }
 
 export type AttributeConflict = {
   previous_value: string; server_updated_at: string; client_updated_at: string;
-  /** A merged drawing: the items both sides changed (the incoming side's kept). */
+  /** A merged drawing: the items both sides changed (one version kept, by a fixed order of the two values). */
   ink_conflicts?: InkMergeConflict[];
   /** Merged text boxes: the boxes both sides changed (the incoming side's kept). */
   page_text_conflicts?: PageTextConflict[];
@@ -248,7 +249,7 @@ export async function setNodeAttribute(input: {
           await event(
             workspaceId, "ATTRIBUTE_CONFLICT", "node", nodeId,
             {
-              ...await conflictRecord(workspaceId, nodeId, key, row, previous),
+              ...await conflictRecord(workspaceId, nodeId, key, row, previous, sentVersionLost(mergeConflicts, stringValue, incomingValue) ? { ...row, value: incomingValue } : null),
               server_updated_at: updatedAt, client_updated_at: seen, actor_id: actor.id,
               ...(merging && mergeConflicts ? { [mergeConflicts.field]: mergeConflicts.items } : {}),
             },
@@ -263,15 +264,22 @@ export async function setNodeAttribute(input: {
 
 // ── Attribute conflicts: the record and its revert ──────────────────────────
 
-/** An ATTRIBUTE_CONFLICT's two values: `incoming` (what the write stored —
- *  for a drawing, the merge) and `overridden` (what it replaced), each with
- *  its stored type. A value is inline (`incoming_value`), or for a drawing a
+/** An ATTRIBUTE_CONFLICT's values: `incoming` (what the write stored —
+ *  for a drawing, the merge), `overridden` (what it replaced), each with its
+ *  stored type, and for a merged write whose merge did not keep it as sent,
+ *  `submitted` (the value as the writer sent it): the merge keeps one version
+ *  of what two devices changed differently, decided by a fixed order and not
+ *  by which one wrote last, so the version it did not keep may be this
+ *  write's own — with `overridden` and `submitted` the record holds both, and
+ *  Revert can give back whichever lost (records before this have no
+ *  `submitted`: their merge always kept the sent version, so `overridden`
+ *  was the one that lost). A value is inline (`incoming_value`), or for a drawing a
  *  blob reference (`incoming_value_ref` + `_len`, eventLog encodeSnapshot):
  *  the inbox polls these events every few seconds and must never download two
  *  drawings each time. The blob GC keeps what they reference
  *  (maintenance/prune.ts). */
-async function conflictRecord(workspaceId: string, nodeId: string, key: string, incoming: AttributeState, overridden: AttributeState): Promise<Record<string, unknown>> {
-  const side = async (name: "incoming" | "overridden", state: AttributeState) => {
+async function conflictRecord(workspaceId: string, nodeId: string, key: string, incoming: AttributeState, overridden: AttributeState, submitted: AttributeState | null): Promise<Record<string, unknown>> {
+  const side = async (name: "incoming" | "overridden" | "submitted", state: AttributeState) => {
     const snapshot = await encodeSnapshot(key, state, { workspaceId, nodeId });
     return "value_ref" in snapshot
       ? { [`${name}_value_ref`]: snapshot.value_ref, [`${name}_value_len`]: snapshot.value_len }
@@ -280,11 +288,19 @@ async function conflictRecord(workspaceId: string, nodeId: string, key: string, 
   return {
     key, value_type: incoming.value_type, overridden_value_type: overridden.value_type,
     ...await side("incoming", incoming), ...await side("overridden", overridden),
+    ...(submitted ? await side("submitted", submitted) : {}),
   };
 }
 
+/** Whether a merged drawing did not keep some item as the writer sent it: then the record keeps the sent value too, so Revert
+ *  can give that version back (inkConflictLosers). Page layers keep the sent version of what both changed: `overridden` covers them. */
+function sentVersionLost(conflicts: MergeConflicts | null, merged: string, sent: string): boolean {
+  if (!conflicts || conflicts.field !== "ink_conflicts" || merged === sent) return false;
+  return conflicts.items.some((c) => inkConflictLosers(merged, [sent], c).length > 0);
+}
+
 /** One side's value as the record holds it (records before D90: inline). */
-async function recordedValue(workspaceId: string, nodeId: string, payload: Record<string, unknown>, name: "incoming" | "overridden"): Promise<string> {
+async function recordedValue(workspaceId: string, nodeId: string, payload: Record<string, unknown>, name: "incoming" | "overridden" | "submitted"): Promise<string> {
   const ref = payload[`${name}_value_ref`];
   const inline = payload[`${name}_value`];
   if (typeof ref === "string") {
@@ -300,8 +316,9 @@ async function recordedValue(workspaceId: string, nodeId: string, payload: Recor
  *  `actor`: the note's set_attribute authority, an ATTRIBUTE_SET event, the
  *  attribute's inheritance flag kept; a retry with the request's idempotency
  *  key applies once.
- *   - A drawing (MERGED_KEYS) gets back only the items both sides changed
- *     (@onden/markdown/ink revertInkConflicts), merged into the drawing as it
+ *   - A drawing (MERGED_KEYS) gets back only the items both sides changed —
+ *     the version the merge did not keep, from the recorded `overridden` or
+ *     `submitted` value (@onden/markdown/ink revertInkConflicts) — merged into the drawing as it
  *     is now with the recorded merge as base: strokes either device drew,
  *     then or since, stay. A record without the item list (before D88) takes
  *     back the whole overridden drawing, still merged into today's.
@@ -330,6 +347,8 @@ export async function revertAttributeConflict(input: {
   const nodeId = found.target_id;
   const incoming = await recordedValue(workspaceId, nodeId, found.payload, "incoming");
   const overridden = await recordedValue(workspaceId, nodeId, found.payload, "overridden");
+  const hasSubmitted = typeof found.payload.submitted_value_ref === "string" || typeof found.payload.submitted_value === "string";
+  const submitted = hasSubmitted ? await recordedValue(workspaceId, nodeId, found.payload, "submitted") : null;
 
   return withIdempotencyClaim(workspaceId, (claim) => withEventTransaction(workspaceId, async () => {
     // Claimed first: a retry of a revert that committed is answered as a
@@ -353,7 +372,8 @@ export async function revertAttributeConflict(input: {
     if (MERGED_KEYS.has(key) && key !== NOTE_PAGES_ATTR) {
       const recorded = found.payload.ink_conflicts;
       const items: InkMergeConflict[] = Array.isArray(recorded) ? recorded as InkMergeConflict[] : [{ kind: "format" }];
-      const value = revertInkConflicts(incoming, overridden, items);
+      // Both values the merge was made from, so the version it did not keep comes back whichever side it was.
+      const value = revertInkConflicts(incoming, submitted === null ? [overridden] : [overridden, submitted], items);
       return setNodeAttribute({ workspaceId, actor, nodeId, attribute: { ...keep, value, base_value: incoming } });
     }
     if (current.value !== incoming) {

@@ -53,13 +53,16 @@ describe("ConflictList", () => {
       ink(2, { ink_conflicts: [{ kind: "stroke", id: "s1", page: 2 }, { kind: "annotation", id: "h1" }, { kind: "page", page: 2 }] }),
       ink(3, { ink_conflicts: [{ kind: "format" }] }),
       ink(4, {}),
+      // A page one device deleted while the other drew on it (kept, reported): counted as a page.
+      ink(5, { ink_conflicts: [{ kind: "deletedPage", pageKey: "p2" }, { kind: "stroke", id: "s9", pageKey: "p3" }] }),
     ]} />);
     expect(screen.getByText("2 strokes changed on both devices")).toBeInTheDocument();
     expect(screen.getByText("1 stroke, 1 highlight, page settings changed on both devices")).toBeInTheDocument();
     expect(screen.getByText("Both devices saved a different kind of drawing")).toBeInTheDocument();
     expect(screen.getByText("The drawing changed on both devices")).toBeInTheDocument();
+    expect(screen.getByText("1 stroke, 1 page changed on both devices")).toBeInTheDocument();
     expect(screen.queryByText("(empty)")).toBeNull();
-    expect(screen.getAllByText(/Revert/)).toHaveLength(4);
+    expect(screen.getAllByText(/Revert/)).toHaveLength(5);
   });
 
   it("a conflict on a deleted note cannot be reverted, and an empty list renders nothing", () => {

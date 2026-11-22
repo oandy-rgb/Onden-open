@@ -81,7 +81,7 @@ describe("checkbox → task line (B4)", { timeout: 30_000 }, () => {
   it("writes {task} on the line instead of minting a separate task; the box stays open", async () => {
     const onCreateTask = vi.fn(async (_title: string) => true);
     const utils = render(<MarkdownEditor nodeKey="note-b" value={"- [ ] call Sam\n- [ ] other"} onChange={vi.fn()} nodes={[]}
-      onMediaInsert={vi.fn(async () => null)} onCreateTask={onCreateTask} taskTagName="任務" />);
+      onMediaInsert={vi.fn(async () => null)} onCreateTask={onCreateTask} taskWords={["任務"]} />);
     const view = viewOf(utils.container);
     act(() => { view.dispatch({ selection: { anchor: view.state.doc.line(1).to } }); });
     fireEvent.keyDown(view.contentDOM, { key: "Enter", ctrlKey: true, shiftKey: true });

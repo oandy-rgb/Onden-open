@@ -178,13 +178,10 @@ export function pagesOf(markdown: string, anchors: readonly AnchorSpan[] = []): 
   const used = new Set<string>();
   const legacySeen = new Map<string, number>();
   const text = markdown.replace(/\r\n/g, "\n");
-  let cursor = 0;
   const deckKeys: { key: string; legacyKey?: string }[] = [];
   const pages = parseDeck(markdown).slides.map((slide, index) => {
     const { parts, notes, headingLine, texts } = partsOf(slide.markdown, index);
-    // Slides come in order, each from the text the last ended at (the text is trimmed, so find it by search).
-    const found = slide.markdown ? text.indexOf(slide.markdown, cursor) : -1;
-    if (found >= 0) cursor = found + slide.markdown.length;
+    const found = slide.markdown ? slide.from : -1;
     if (anchors.length > 0) parts.headingId = headingAnchorId(text, slide.markdown, found, headingLine, anchors);
     const base = keyOf(parts, texts, index);
     // A heading that itself reads `a~2` could meet a suffixed key: take the next number until the key is free.
@@ -198,7 +195,7 @@ export function pagesOf(markdown: string, anchors: readonly AnchorSpan[] = []): 
     legacySeen.set(oldBase, oldCount);
     const legacyKey = oldCount === 1 ? oldBase : `${oldBase}~${oldCount}`;
     deckKeys.push({ key, ...(legacyKey !== key ? { legacyKey } : {}) });
-    const range = found >= 0 ? { from: found, to: found + slide.markdown.length } : null;
+    const range = found >= 0 ? { from: slide.from, to: slide.to } : null;
     return { key, parts, notes, cites: slide.cites, autoLayout: autoLayoutOf(parts, index), ...(legacyKey !== key ? { legacyKey } : {}), deckKeys, headingLine, range };
   });
   return pages;

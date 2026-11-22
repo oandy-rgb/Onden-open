@@ -46,7 +46,9 @@ const TAGS: TagItem[] = [
 const tag = (extra: Partial<Tag>): Tag => ({ id: extra.name ?? "x", name: "x", color: "", schema_id: "x", ...extra });
 const moduleTags = [tag({ id: "m-review", name: "review", schema_module: "review" })];
 /** The catalog's functions for a paragraph, with review on and tasks off (what a workspace that has not turned tasks on shows). */
-const functions = (canImport = true) => blockFunctions(moduleTags, (id) => (id === "review" ? "on" : "off"), { canImport });
+// The words are the server's (workspace.line_words): `task` with tasks off, `review` with review on.
+const lineWords = { tasks: { words: ["task"], on: false }, review: { words: ["review", "複習"], on: true } };
+const functions = (canImport = true) => blockFunctions(moduleTags, (id) => (id === "review" ? "on" : "off"), { canImport, lineWords });
 
 /** A stand-in for hooks/useHandToAi: one ready-made action, no roles. */
 const handToAi = () => ({

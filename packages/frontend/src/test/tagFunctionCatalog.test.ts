@@ -36,17 +36,21 @@ describe("function catalog", () => {
 
   it("offers a paragraph the actions a paragraph can take (a review card, a task line), once, on or off", () => {
     const status = (id: string) => (id === "review" ? "on" : "off") as "on" | "off";
-    const rows = blockFunctions([], status, { canImport: true });
+    // The words are the server's (workspace.line_words), not worked out from the tags here.
+    const lineWords = { tasks: { words: ["task"], on: false }, review: { words: ["review", "複習"], on: true } };
+    const rows = blockFunctions([], status, { canImport: true, lineWords });
     // Both are the module's own paragraph action (not tag functions): each writes the workspace's word, with no tag to make.
     expect(rows.map((row) => [row.fn.id, row.tagName, row.off, row.canTurnOn])).toEqual([
       ["review_block", "review", false, true],
       ["tasks_line", "task", true, true],
     ]);
-    // A plain tag of the user's with the word's name moves the word; a renamed tasks module tag is the word of that workspace.
-    expect(blockFunctions([tag("tk", { name: "待辦", schema_module: "tasks" })], status, { canImport: true }).map((row) => row.tagName)).toEqual(["review", "待辦"]);
-    expect(blockFunctions([tag("mine", { name: "task" }), tag("mine2", { name: "review" })], status, { canImport: true }).map((row) => row.tagName)).toEqual(["複習", "任務"]);
+    // The first word the server sends is the one written (a renamed tag's name, or 任務 when the user's own `task` tag holds the word).
+    const renamed = { ...lineWords, tasks: { words: ["待辦", "task"], on: true } };
+    expect(blockFunctions([], status, { canImport: true, lineWords: renamed }).map((row) => row.tagName)).toEqual(["review", "待辦"]);
+    // With no words from the server (an older server) the paragraph offers no word-writing action.
+    expect(blockFunctions([], status, { canImport: true }).map((row) => row.fn.id)).toEqual([]);
     // A person who can't decide still sees the example (canTurnOn false).
-    expect(blockFunctions([], status, { canImport: false, used: ["review_block"] }).map((row) => [row.fn.id, row.canTurnOn]))
+    expect(blockFunctions([], status, { canImport: false, used: ["review_block"], lineWords }).map((row) => [row.fn.id, row.canTurnOn]))
       .toEqual([["tasks_line", false], ["review_block", false]]);
     // Every row has an example for the card shown before it is on.
     for (const row of rows) expect(exampleOf(row.fn), row.fn.id).toBeTruthy();
@@ -56,7 +60,7 @@ describe("function catalog", () => {
 describe("one registration for the paragraph's action and the tag page's row (2026-11-12)", () => {
   it("review is a paragraph action only: the catalog of tag functions lists none for it", () => {
     expect(functionCatalog().filter((fn) => fn.blockAction).map((fn) => fn.id)).not.toContain("review");
-    expect(blockFunctions([], () => "on", { canImport: true }).map((row) => row.fn.id)).toContain("review_block");
+    expect(blockFunctions([], () => "on", { canImport: true, lineWords: { review: { words: ["review"], on: true } } }).map((row) => row.fn.id)).toContain("review_block");
   });
 });
 

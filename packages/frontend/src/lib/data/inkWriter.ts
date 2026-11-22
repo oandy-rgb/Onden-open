@@ -1,10 +1,11 @@
-import { isInkReadOnly, INK_DATA_ATTR, encodeInk } from "@onden/markdown/ink";
+import { isInkReadOnly, INK_DATA_ATTR, encodeInk, type InkMergeConflict } from "@onden/markdown/ink";
 import { upsertAttribute } from "../localDb";
 import { announceDrawingChange } from "../drawingChanges";
 import { domainContext } from "./domainWriters";
 import { makeWriteLifecycle } from "./writeLifecycle";
 import { runBackgroundWrite } from "./backgroundWrite";
-import { type InkPageAttr } from "../ink/store";
+import { notifyInkVersionNotKept, type InkPageAttr } from "../ink/store";
+import { mergeDropsSent } from "./inkMergeLoss";
 import type { InkDocument } from "../ink/types";
 import type { InkMultiPageDoc } from "../pdf";
 import type { NodeAttribute } from "../api";
@@ -71,7 +72,14 @@ export function saveInk(nodeId: string, doc: InkSaveBase, base?: InkSaveBase | n
   }, {
     mirror: () => upsertAttribute(nodeId, attr, mirrored, "text", false, "ui"),
     accepted: (result) => {
-      if (result.status === "synced" && typeof result.value?.value === "string") { mirrored = result.value.value; options.onServerAnswer?.(mirrored, value); }
+      if (result.status === "synced" && typeof result.value?.value === "string") {
+        mirrored = result.value.value;
+        options.onServerAnswer?.(mirrored, value);
+        // The merge kept another device's version of something this save changed: say so once; the drawing on screen is
+        // not swapped (the version sent is in the conflict record, and Revert in the inbox brings it back).
+        const conflicts = (result.value as { conflict?: { ink_conflicts?: InkMergeConflict[] } }).conflict?.ink_conflicts;
+        if (conflicts?.length && mergeDropsSent({ value: mirrored, conflicts }, value)) notifyInkVersionNotKept();
+      }
     },
   });
   runBackgroundWrite(write);

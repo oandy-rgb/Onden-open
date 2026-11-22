@@ -330,6 +330,7 @@
         ],
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -424,6 +425,20 @@
           "day_start_hour": "number",
           "home_node_id": "null",
           "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
           "modules": [
             "string"
           ],
@@ -633,6 +648,7 @@
         ],
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -727,6 +743,20 @@
           "day_start_hour": "number",
           "home_node_id": "null",
           "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
           "modules": [
             "string"
           ],
@@ -935,6 +965,7 @@
         ],
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -1030,6 +1061,20 @@
           "day_start_hour": "number",
           "home_node_id": "null",
           "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
           "modules": [
             "string"
           ],
@@ -1239,6 +1284,7 @@
         ],
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -1333,6 +1379,20 @@
           "day_start_hour": "number",
           "home_node_id": "null",
           "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
           "modules": [
             "string"
           ],
@@ -1541,6 +1601,7 @@
         ],
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -1635,6 +1696,20 @@
           "day_start_hour": "number",
           "home_node_id": "null",
           "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
           "modules": [
             "string"
           ],
@@ -2924,6 +2999,7 @@
         "site_config": {},
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -3019,7 +3095,34 @@
             }
           ]
         },
-        "workspace": "null"
+        "workspace": {
+          "day_start_hour": "number",
+          "home_node_id": "null",
+          "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
+          "modules": [
+            "string"
+          ],
+          "modules_to_confirm": [
+            "string"
+          ],
+          "name": "string",
+          "slug": "string",
+          "time_zone": "null"
+        }
       }
     },
     "GET /api/sync/drawings": {
@@ -3041,6 +3144,7 @@
         "next_cursor": "null",
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -3120,6 +3224,7 @@
         "event_cursor": "string",
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -3191,6 +3296,7 @@
       "status": 200,
       "shape": [
         {
+          "block_usage_count": "number",
           "color": "null|string",
           "created_at": "string",
           "effective_fields": [
@@ -3355,6 +3461,7 @@
         ],
         "hidden_descendants?": "number",
         "members": "number",
+        "paragraphs": "number",
         "reversible": "boolean",
         "sample_titles": [
           "string"
@@ -3823,6 +3930,7 @@
         "site_config": {},
         "tags": [
           {
+            "block_usage_count": "number",
             "color": "null|string",
             "created_at": "string",
             "effective_fields": [
@@ -3918,7 +4026,34 @@
             }
           ]
         },
-        "workspace": "null"
+        "workspace": {
+          "day_start_hour": "number",
+          "home_node_id": "null",
+          "id": "string",
+          "line_words": {
+            "review": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            },
+            "tasks": {
+              "on": "boolean",
+              "words": [
+                "string"
+              ]
+            }
+          },
+          "modules": [
+            "string"
+          ],
+          "modules_to_confirm": [
+            "string"
+          ],
+          "name": "string",
+          "slug": "string",
+          "time_zone": "null"
+        }
       }
     },
     "POST /api/sync/bodies": {

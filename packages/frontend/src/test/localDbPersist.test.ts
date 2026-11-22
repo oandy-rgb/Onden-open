@@ -22,7 +22,7 @@ beforeEach(async () => {
 function freshDb(): Database {
   const db = new SQL.Database();
   db.run("CREATE TABLE sync_state(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
-  db.run(`CREATE TABLE workspace (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL, home_node_id TEXT, actor_role TEXT, site_config TEXT, chrome TEXT, modules TEXT, modules_to_confirm TEXT, time_zone TEXT, day_start_hour INTEGER, actor_is_owner INTEGER, can_review INTEGER)`);
+  db.run(`CREATE TABLE workspace (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL, home_node_id TEXT, actor_role TEXT, site_config TEXT, chrome TEXT, modules TEXT, modules_to_confirm TEXT, time_zone TEXT, day_start_hour INTEGER, actor_is_owner INTEGER, can_review INTEGER, line_words TEXT)`);
   db.run(`CREATE TABLE nodes (
     id TEXT PRIMARY KEY, source_type TEXT NOT NULL, node_type TEXT NOT NULL,
     title TEXT NOT NULL, slug TEXT NOT NULL, markdown TEXT NOT NULL DEFAULT '',

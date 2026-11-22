@@ -99,20 +99,6 @@ export async function loadOfflineModuleScreens(): Promise<void> {
   await Promise.all([loadTableLayout(), loadCalendarLayout(), loadKanbanLayout(), loadGalleryLayout()]);
 }
 
-/** The word `{word}` a module recognises on a checkbox line (tasks: `task`), or null when it has none. The editor
- *  writes it to make a line a task; the module's own save turns it into a task (it is never a tag). */
-export function moduleLineWord(moduleId: string, tags: readonly Tag[] = []): string | null {
-  const word = MODULES.find((m) => m.id === moduleId)?.library.lineWord ?? null;
-  if (word === null) return null;
-  // The workspace's word is the module tag's current name while that tag exists (renamed, or `任務` because a plain
-  // `task` tag was there first); with no module tag, the word, unless the user's own tag already has that name
-  // (the backend, services/tasksStore.taskLineWord, answers the same).
-  const own = moduleTagOf(tags, moduleId);
-  if (own) return own.name;
-  return tags.some((tag) => tag.name.toLowerCase() === word) ? ALT_LINE_WORD[moduleId] ?? word : word;
-}
-const ALT_LINE_WORD: Readonly<Record<string, string>> = { tasks: "任務", review: "複習" };
-
 /** The skills module's id, for the shell's 「存成技能」 (lib/createSkillNote). */
 export const SKILLS_MODULE = skillsModule.id;
 

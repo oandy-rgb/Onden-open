@@ -85,18 +85,20 @@ describe.skipIf(!isTestDb)("ink_data saves merge with their base (D88)", () => {
     expect(await conflicts(id)).toEqual([]);
   });
 
-  it("the same stroke changed on both devices: incoming kept, ATTRIBUTE_CONFLICT recorded", async () => {
+  it("the same stroke changed on both devices: one version kept (a fixed order of the two values, not who saved last), ATTRIBUTE_CONFLICT recorded with both", async () => {
     const id = await newNote(page([S1]));
     await saveInk(id, page([stroke("s1", "#f00")]), page([S1]));
     const result = await saveInk(id, page([stroke("s1", "#00f"), S2]), page([S1]));
     const doc = await stored(id);
-    expect(doc.strokes.map((s) => [s.id, s.color])).toEqual([["s1", "#00f"], ["s2", "#000"]]);
+    expect(doc.strokes.map((s) => s.id)).toEqual(["s1", "s2"]);
+    expect(["#f00", "#00f"]).toContain(doc.strokes[0]!.color);
     expect(result.conflict?.ink_conflicts).toEqual([{ kind: "stroke", id: "s1" }]);
     const [record, ...more] = await conflicts(id);
     expect(more).toEqual([]);
     // The two drawings are blob references (D90: attributeConflictRevert.integration.test.ts).
     expect(record).toMatchObject({
       key: "ink_data", overridden_value_len: page([stroke("s1", "#f00")]).length, incoming_value_len: result.value.length,
+      submitted_value_len: page([stroke("s1", "#00f"), S2]).length,
       ink_conflicts: [{ kind: "stroke", id: "s1" }],
     });
   });

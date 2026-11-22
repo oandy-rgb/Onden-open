@@ -49,7 +49,8 @@ const BLOB_REFS_SQL = (e: string) => `ARRAY[
   ${e}.payload->>'value_ref',
   ${e}.tx_meta->'prev_field_values'->>'value_ref',
   ${e}.payload->>'incoming_value_ref',
-  ${e}.payload->>'overridden_value_ref']`;
+  ${e}.payload->>'overridden_value_ref',
+  ${e}.payload->>'submitted_value_ref']`;
 
 /** Events (aliased `e`) about the notes `ids` ($2): those that target one
  *  (a target type of $3), and edge events that name one as an end. The

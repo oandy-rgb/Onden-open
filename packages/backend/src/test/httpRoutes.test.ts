@@ -32,7 +32,9 @@ const poolQuery = vi.fn<(sql: string, params?: unknown[]) => Promise<QueryResult
     queries.push({ sql, params });
     // The owner check (spine/authority.ts isWorkspaceOwner): the native System
     // actor is the owner (mock.systemIsOwner). Not a scripted slot.
-    if (sql.includes("owner_actor_id") && sql.includes("FROM actors a JOIN workspaces w")) {
+    // (A bigger query that embeds the reader's scope, such as the tag catalog's block count, carries the same words as these
+    // bookkeeping lookups: only the small ones are answered here.)
+    if (sql.includes("owner_actor_id") && sql.includes("FROM actors a JOIN workspaces w") && !sql.includes("block_node_tags")) {
       return mock.systemIsOwner ? { rows: [{ owner: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     // Recognise the native-origin actor lookup and return the System sentinel.
@@ -60,7 +62,7 @@ const poolQuery = vi.fn<(sql: string, params?: unknown[]) => Promise<QueryResult
     }
     // Authority bookkeeping: the reserved workspace-config lookup (reservedNodes.ts)
     // answers "not a config node" without consuming a scripted slot.
-    if (sql.includes("reserved_key = 'workspace-config'")) return { rows: [], rowCount: 0 };
+    if (sql.includes("reserved_key = 'workspace-config'") && !sql.includes("block_node_tags")) return { rows: [], rowCount: 0 };
     // MB3: uniqueTagSlug's existence probe (SELECT id … WHERE slug = $2) is
     // slug bookkeeping, not part of the scripted SQL shape — empty = "free".
     if (/SELECT id FROM content_nodes WHERE workspace_id = \$1 AND slug = \$2/.test(sql)) return { rows: [], rowCount: 0 };

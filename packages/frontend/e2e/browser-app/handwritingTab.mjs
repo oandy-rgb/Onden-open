@@ -70,6 +70,21 @@ for (const { name, vp } of RUNS) {
   await shot("1-tab");
 
   await draw(0);
+  // Paper is white in both themes and strokes keep their stored (light-theme) colours on it: the default pen (#15130d) is
+  // near-black on white in the dark theme too, never inverted to near-white.
+  const paper = await page.evaluate(() => {
+    const sheet = document.querySelector(".pagebook-page");
+    const canvases = [...document.querySelectorAll(".page-ink-surface canvas")];
+    let drawn = 0, lightest = 0;
+    for (const c of canvases) {
+      const data = c.getContext("2d")?.getImageData(0, 0, c.width, c.height).data;
+      if (!data) continue;
+      for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 200) { drawn++; lightest = Math.max(lightest, data[i], data[i + 1], data[i + 2]); }
+    }
+    return { background: getComputedStyle(sheet).backgroundColor, drawn, lightest };
+  });
+  check(paper.background === "rgb(255, 255, 255)", `the page's paper is white (${name})`, paper.background);
+  check(paper.drawn > 0 && paper.lightest < 90, `the stroke on the paper is near-black (${name})`, JSON.stringify(paper));
   check(await until(async () => (await inkOf(NOTE, "note_ink")).strokes >= 1), "a stroke is saved in the note's note_ink");
   await page.getByRole("button", { name: "＋ 新增一頁" }).click();
   await page.waitForTimeout(600);

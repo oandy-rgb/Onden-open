@@ -512,7 +512,7 @@ export const dialog = ReconfirmDialog;`
 - 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
 - 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
 
-## 共用邏輯（118）
+## 共用邏輯（120）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -521,6 +521,14 @@ export const dialog = ReconfirmDialog;`
 export const layouts = pagesOf("## A\n- x").map((page) => page.autoLayout);`
 - 取代：在播放器或別處另寫一套 Markdown → 投影片的渲染
 - 為什麼：視角、縮圖與全螢幕播放畫同一個組件，看到的就是播的；頁的切分、講稿、自動版型、頁的鍵都在 `@onden/markdown` 的 slidePages.ts 一處（伺服器的 getSlides 工具讀同一份）。
+
+### 要在簡報上排頁（搬動、複製、刪除、新增一頁），或讓簡報分頁知道游標在筆記哪一頁
+
+- 入口：`frontend/src/modules/slides/deckEdit.ts`（`movePage`、`duplicatePage`、`deletePage`、`insertPage`、`carryLayouts`、`undoLayouts`、`pageIndexAt`）；`frontend/src/lib/editorCaretStore.ts`（`useEditorCaret`、`scrollEditorTo`、`focusEditorAt`、`placeEditorCaret`、`replaceEditorText`）　項目 `slides-page-edit`
+- 寫法：`import { movePage } from "./modules/slides/deckEdit";
+export const moved = movePage("## A\n\n---\n\n## B", 0, 1)?.text;`
+- 取代：在簡報裡自己切字串搬頁、另存一份簡報順序、直接碰編輯器取游標
+- 為什麼：簡報沒有自己的副本：頁就是筆記文字的一段（parseDeck 的 from／to）。操作是文字進文字出的純函式，經 drafts.editText 寫回；游標與捲動由編輯器經 editorCaretStore 提供，簡報不碰編輯器。
 
 ### 要用網站的式樣公式畫網站頁面以外的東西（簡報）
 
@@ -834,6 +842,16 @@ if (isTemporarySession()) { /* 不寫任何持久儲存 */ }`
 - 取代：手寫 updated_at localeCompare
 - 守門：`guard:shared-helpers`
 - 為什麼：依最近更新排序用它，最近清單和側欄的順序才一樣。
+
+### 要知道哪些字（{task}、{review}）讓一行變成任務或複習卡
+
+- 入口：`frontend/src/lib/lineWords.ts`（`activeWords`、`isLineWord`）；`frontend/src/lib/appStore.ts`（`useLineWords`）　項目 `line-words`
+- 寫法：`import { useLineWords } from "./lib/appStore";
+import { activeWords } from "./lib/lineWords";
+const words = activeWords(useLineWords()?.tasks ?? null); // 空陣列＝模組關著`
+- 取代：從標籤清單自己推字（moduleLineWord）、每個模組各寫一張字表
+- 守門：`guard:lineWords`
+- 為什麼：字由伺服器決定（services/lineWords.ts），經啟動資料與同步增量送來；編輯器自己推會和存檔的判斷分歧（有 {task} 卻沒圖示）。
 
 ### 要沿著 parent_id 走（祖先、子樹）
 

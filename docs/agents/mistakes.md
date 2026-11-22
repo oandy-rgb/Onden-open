@@ -1,5 +1,6 @@
 # 犯過的錯與對應的機制
 
+> 狀態：現行（最後確認 2026-11-22）
 > 狀態：現行（最後確認 2026-11-20）
 > 狀態：現行（最後確認 2026-11-17）
 > 狀態：現行（最後確認 2026-11-18）
@@ -65,6 +66,7 @@
 | 新增的東西沒人核對它進了備份 | 新增資料表、模式或面（側欄捷徑、關係圖位置、訂閱）時，備份的寫出或還原沒跟上，也沒有任何清單會因此失敗；缺口只存在於 `it.fails` 的註解，沒人修 |
 | 註解裡的不變條件沒人檢查 | 註解或規則寫「只可能」「一定」「永遠不會」，程式裡有反例，也沒有測試或守門擋住反例 |
 | 不可信來源的值被記下 | 不被信任的那一端（臨時工作階段的電腦、請求的標頭或本文欄位）自己給的值，被這台當成事實記下，或跟著寫入送給別台 |
+| 比較的兩邊型別不同，索引用不上 | SQL 把有索引的欄位和另一個型別的值比（`text` 欄位對觸發器的 `TG_TABLE_NAME`（`name`）），規劃器只能整表讀；小資料庫看不出來，成本隨資料量成長 |
 | 實機操作碰到真實資料 | 在業主的裝置上量測或驗收時，模擬的點擊、按鍵落在真實筆記上（打了字、改了東西），而不是在測試空間 |
 | 同時進行太多、整合落後 | 開著的 PR 累積到審不完；修正卡在沒合併的 PR 裡，業主以為修好了的問題在正式站上還在 |
 | 只在一台裝置上驗過觸控 | 觸控、螢幕鍵盤的修正只在一台裝置（或一次瞬間的模擬鍵盤）上驗過，業主的另一台裝置照樣壞 |
@@ -72,6 +74,23 @@
 
 ## 紀錄
 
+### 2026-11-22　215 的兩個語句觸發器每次讀整張 `sync_stamps`：`text` 欄位比 `name` 值，主鍵用不上（比較的兩邊型別不同，索引用不上）
+- **發生了什麼**：`anchorBulkCost.integration.test.ts` 在公開 CI 真 Postgres 2/4 間歇 `canceling statement due to statement timeout`（run 44987745126、45001716704）。慢的是它種資料的那一句（每批 100 則筆記，最慢 11.5 秒）。原因有兩層：（1）`sync_rows_made_afresh`／`sync_rows_go_with_note`（migration 215）的 SQL 寫 `s.table_name = TG_TABLE_NAME`；`TG_TABLE_NAME` 是 `name`，`text = name` 不在主鍵的 btree 族裡，每個語句整表讀 `sync_stamps`（一次讀 63,187 列找到 0 列）；同一個函式的 `UPDATE … meta` 另外把一個標籤的全部標記先 `UNION ALL` 再 hash join，鍵推不進去。存檔的成本隨資料庫的標記數成長，大量寫入是平方。（2）種資料比 autovacuum 快，觸發器在這條連線上快取的計畫停在表還小的時候（`note_anchor_places_is_rows` 的 `EXISTS` 整表讀 `block_anchors`）。
+- **證據**：`auto_explain`（analyze、巢狀語句）的計畫：`Seq Scan on sync_stamps … Rows Removed by Filter: 63187`；在獨立資料庫 6.3 萬列：`table_name = $1::name` → Seq Scan（cost 1534），`$1::text` → Index Scan（cost 8.46）。`plan_cache_mode = force_custom_plan` 與批間 `ANALYZE` 都沒讓（1）變好（不是統計的問題）。新測試 `stampTriggersUseTheKey.integration.test.ts`：同一筆寫入在 1 千／1 萬／10 萬個其他標記時讀的標記列數，修正後 3,873／82／82（建立）與 6,847／47／46（刪除）；把 `v_table` 換回 `name` 時 78,201／685,746／6,610,747（紅）；只修型別、不改成 LATERAL 時建立仍是 8,649／45,733／450,736（紅）。真實存檔（含 `{標籤}` 段落）的中位數：2,192 個標記 54.8→52.5 ms，1 萬則筆記級（2 萬～10 萬個標記）58→47、79→51 ms，100 萬個 379→63 ms。
+- **發現者**：測試（公開 CI）。
+- **為什麼沒擋到**：215 的成本測試量的是「種完資料、`ANALYZE` 之後」的兩步，而且只和沒有觸發器的寫法比列數的倍數；沒有任何測試讓同一筆寫入在不同的表大小下比較。正式站只有約 2,100 個標記，看不出來。
+- **類別**：比較的兩邊型別不同，索引用不上。
+- **機制**：〔第 1 層〕migration 226：兩個函式用 `v_table text := TG_TABLE_NAME`，`UPDATE … meta` 改成每個鍵 `LATERAL` 查自己的標記；`stampTriggersUseTheKey.integration.test.ts` 用行為量（`pg_stat_user_tables` 讀到的列數在三種表大小下在常數倍內），兩種寫法拿掉任一個都紅。`anchorBulkCost` 的種資料在批間 `ANALYZE` 那些表（代替 autovacuum），附原因。全部函式盤點過：其他提到 `TG_TABLE_NAME`／`relname`／`attname`／`regclass` 的四個函式不在 SQL 裡拿 `text` 欄位比 `name`（226 檔頭逐一列出）。
+- **還沒擋住的**：（2）觸發器計畫在一次大量載入中停在表還小的時候：產品上靠 autovacuum 的 `ANALYZE` 使計畫失效，單一交易的大匯入仍會變慢（尚無機制；#1948 的 ANALYZE 只在 migration 之後）。新寫的觸發器若再拿欄位比 `name`／`regclass`，只有涵蓋到那張表的成本測試會抓到，沒有通用守門（擁有者說不要掃 SQL 文字）。
+
+### 2026-11-22　換節點時關掉舊連線沒有等它真的關，而且「沒有連線」把伺服器自己的 autovacuum 也算進去（測試的模型錯了）
+- **發生了什麼**：`nodeDatabaseSwitch.integration.test.ts`「two nodes taken in turn 20 times」在公開 CI 真 Postgres 第 2 片間歇紅：`a connection to switch-a is left after leaving it: expected 1 to be 0`（run 44962322821、44994424989）。兩個原因，都不是產品晚放連線：（1）測試的接縫 `helpers/distSim/postgresNodes.ts` `pointPoolAt` 用 `release(true)` 關掉舊節點的閒置連線，但 `release(true)` 在 pg 送出 Terminate 後就返回，伺服器那一端還沒結束，`pg_stat_activity` 還列著那條 session；（2）測試數的是那個資料庫的**所有** session，負載高時伺服器自己的 autovacuum worker（`VACUUM ANALYZE pg_catalog.pg_shdepend`、`ANALYZE pg_catalog.pg_database`）正好在那個節點的資料庫上，它不是這個程序的連線。
+- **證據**：失敗訊息改成印出留下的 session 與連線池裡還被拿著的連線（`connectionLedger.ts`）。單獨探針（真 Postgres 16）：`release(true)` 一返回就查，300 輪有 100 輪還列著；等每個 client 的 `'end'` 之後查，0 輪。整個檔案各跑 200 次（雲端，原生 Postgres 16.15＋PGroonga）：4 個平行迴圈＋2 個吃滿 CPU 的程序，修正前 0/200 紅（另一輪被中止的 163 次裡紅 1 次：`client backend, idle, last SQL: SELECT current_database()`），修正後 0/200；8 個平行迴圈＋4 個吃滿 CPU 的程序，修正前 12/200 紅（9 次 autovacuum worker、3 次剛關掉的 client backend），只修 `pointPoolAt` 10/200 紅（全是 autovacuum worker），兩處都修 0/200。
+- **發現者**：測試（公開 CI）。
+- **為什麼沒擋到**：接縫把「交回並關掉」當成「已經關掉」；斷言的名稱說的是「這個程序沒有連線」，查的卻是「伺服器上沒有任何 session」。本機負載低時兩者都看不到。
+- **類別**：測試的模型錯了。
+- **機制**：〔第 1 層〕`pointPoolAt` 對每條關掉的連線等它的 `'end'`（伺服器關了它那一端，session 已離開 `pg_stat_activity`）再換資料庫；`nodeDatabaseSwitch` 只數 `backend_type = 'client backend'`，失敗時印出留下的 session（類型、狀態、最後的 SQL）與連線池裡還被拿著的連線，下次直接看得出是誰。
+- **還沒擋住的**：測試輔助裡其他「關了不等」的 `pg.Client` 沒有守門掃描（尚無機制；`release(true)` 在後端只有這一處）。
 ### 2026-11-23　把紅燈當偶發合併，main 的真實 Postgres 第 1 段因此紅（未查證就回報）
 - **發生了什麼**：合併批次 7b（含 #1756）的真實 Postgres 第 1 段紅，我看到紀錄裡印出的 RSS 清理計時表（×10 輸入花 ×96 時間），沒找實際失敗的是哪一項，就說是「負載下的計時」，照合。真正的原因是 #1756 新增的 `browserBringNotes.integration.test.ts` 在真實 Postgres 上被跳過、沒有登記，跳過檢查讓整段失敗；所有測試檔其實都通過。合併後 main 的這一段一直紅，之後每一批也都帶著同一個紅。前一天也犯過同類的錯（patchWrites 紅一次就當偶發）。
 - **證據**：公開 run 45045725074、45050762572、45051088634 的 Backend — real Postgres (1/4) 最後一行 `[tests] FAILED: skipped tests in a postgres run … browserBringNotes.integration.test.ts: 1 skipped, none listed`；計時表是那個測試照常印出的紀錄，不是失敗。
@@ -123,6 +142,8 @@
 - **類別**：測試量不到它要擋的東西。
 - **機制**：〔第 1 層〕兩則：一則 `it` 斷言前置條件與指名的差異（B 多一個 `deleted` 的頭），一則 `it.fails` 在前置條件不成立或情境 throw 時 return（`it.fails` 不 throw 就紅），只讓那個差異算數；`snapshotBrought` 的 `updated_at` 同樣。「`it.fails` 只對指名的失敗通過」：尚無機制，靠審查。
 - **同一類又一次**（同一天，第 2 批的測試）：`snapshotBrought`「P4: a source with an unfinished join…」假設 B 的隨機寫入碰到筆記以外的表，沒有斷言；種子 896523（main 與這個分支，兩種引擎）B 的寫入全在筆記上，把 `have` 切到只剩筆記那個標籤之後沒有東西超過，該拒的沒拒。改成 B 先寫一個屬性，並斷言 A 握有 B 在別的標籤的寫入。
+- **同一類又一次**（同一天，公開 CI 真 Postgres 第 4 片）：同一則 P4 以 `PROPS_SEED=169095` 紅在同一行；單獨重播就重現，A 上 B 的標記只在 `content_nodes`（最高 21，與降過的列相同），`snapshotSourceNode` 回 `null` 是對的。上面那個修正（B 先寫一個屬性、斷言前提）已涵蓋，PR #1946 合併 main 後改用它。
+- **同一類又一次**（同一天，PR #1946）：`stampedSawThreeNodes` 的 `orphanOne` 假設「兩台都有的筆記丟進垃圾桶之後一定能永久刪除」，沒有斷言。交換之後，筆記底下可以有一則已在垃圾桶、它底下又有一則活的（4.9）；丟進垃圾桶只帶走活的子樹、停在已在垃圾桶的那則，永久刪除照規則拒絕（`live_descendant`，產品是對的）。種子 980034（base 980033、`--sequence.seed=1795358838085`）抽到這樣一則：B 3 ＞ A 1（垃圾桶）＞ A title 10（活的）。改成只挑永久刪除的前提成立的筆記。同一個檔沒有在每個測試前 `resetRowTurns()`，種子寫什麼取決於前面跑了什麼，紅的種子單獨重放是綠的；補上。
 
 ### 2026-11-22　把「誠實節點握得住的一定收得下」放寬成「資料庫沒擋的都收」：排序鍵也放掉了（性質的範圍放錯）
 

@@ -64,6 +64,11 @@ async function bulkNode(without215: boolean): Promise<{ node: RealNode; ws: stri
             FROM notes n CROSS JOIN generate_series(1, $4::int) p RETURNING note_id, anchor_id)
         INSERT INTO block_nodes (workspace_id, note_id, block_ref, kind, anchor_id)
         SELECT $1, note_id, anchor_id, 'paragraph', anchor_id FROM anchors`, [world.ws, space, done, PER]);
+      // what autovacuum would tell the planner between the batches of a load: the row triggers' plans (215: note_anchor_places_is_rows, the stamp
+      // writes) are cached on this connection while the tables were small, and a load this fast outruns autovacuum, so without it they kept reading
+      // whole tables and one batch took up to 11.5 s on a real Postgres, past the statement timeout under load (PR #1946). The cost pinned below is
+      // measured after the load; what the statements cost whatever the statistics say is pinned by stampTriggersUseTheKey.integration.test.ts
+      await q(`ANALYZE content_nodes, block_anchors, block_nodes, note_anchor_places, sync_stamps, sync_stamp_heads`);
     }
     await q(`ANALYZE`);
     return { node, ws: world.ws, owner: world.owner.id, space };

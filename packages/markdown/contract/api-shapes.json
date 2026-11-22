@@ -3572,6 +3572,7 @@
             "current_title": "string",
             "id": "string",
             "node_id": "string",
+            "on_another_device": "boolean",
             "slug": "string",
             "title": "string"
           }

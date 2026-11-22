@@ -3931,6 +3931,7 @@ INSERT INTO schema_migrations (version) VALUES ('220_note_versions') ON CONFLICT
 INSERT INTO schema_migrations (version) VALUES ('221_merge_core_before_transport') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('222_sync_join_source_brought') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('224_sync_restore_kept_node_id') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('225_analyze_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key') ON CONFLICT (version) DO NOTHING;
 
 --

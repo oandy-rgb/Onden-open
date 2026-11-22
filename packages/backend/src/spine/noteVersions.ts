@@ -42,14 +42,28 @@ type NewVersion = {
   restoredFrom?: string | null;
 };
 
+/** Whether this note has a version list: a note or a board, not a tag and not a system note (migration 220 note_version_in_scope, the one rule).
+ *  What the writer mints and what History reads from the version tables (services/history/storedVersions.ts) is exactly these notes. */
+export async function hasVersionList(workspaceId: string, noteId: string): Promise<boolean> {
+  const row = (await sql<{ scoped: boolean }>`
+    SELECT note_version_in_scope(node_type, source_type) AS scoped FROM content_nodes WHERE id = ${noteId}::uuid AND workspace_id = ${workspaceId}::uuid`.execute(db)).rows[0];
+  return row?.scoped === true;
+}
+
+/** Which of `noteIds` have a version list (the same rule for many notes at once: a backup measures a whole workspace). */
+export async function notesWithVersionLists(workspaceId: string, noteIds: readonly string[]): Promise<Set<string>> {
+  if (noteIds.length === 0) return new Set();
+  const rows = (await sql<{ id: string }>`
+    SELECT id::text AS id FROM content_nodes WHERE workspace_id = ${workspaceId}::uuid AND id = ANY(${noteIds}::uuid[]) AND note_version_in_scope(node_type, source_type)`.execute(db)).rows;
+  return new Set(rows.map((r) => r.id));
+}
+
 /** Mint one version of this transaction's write: `s:<origin>:<seq>:<n>`, n = its place among the transaction's versions of that note and
  *  unit (a cascade undo that writes one note twice gets two). Returns the key, or null for a note that has no version list (a tag, a system
  *  note: migration 220 note_version_in_scope, the one rule). Call inside the root write, after the content is stored. */
 export async function recordVersion(v: NewVersion): Promise<string | null> {
   if (v.contentHash === null && v.kind !== "removed") throw new Error("a version names its content");
-  const scoped = (await sql<{ scoped: boolean }>`
-    SELECT note_version_in_scope(node_type, source_type) AS scoped FROM content_nodes WHERE id = ${v.noteId}::uuid AND workspace_id = ${v.workspaceId}::uuid`.execute(db)).rows[0];
-  if (!scoped?.scoped) return null;
+  if (!(await hasVersionList(v.workspaceId, v.noteId))) return null;
   const why = (await sql<{ why: string | null }>`SELECT note_version_exempt(${v.workspaceId}::uuid) AS why`.execute(db)).rows[0]!.why;
   // A join or a merge writes what it received, the shell and a data migration are no one's write: minting there is a bug of the caller
   // (an internal error, not a refusal a person could see).
@@ -82,11 +96,48 @@ export async function recordVersion(v: NewVersion): Promise<string | null> {
   return minted.key;
 }
 
-/** The version a save event recorded on this node (note_version_events), or null: what a "restored from" names when the caller knows the event. */
-export async function versionOfEvent(eventId: string): Promise<string | null> {
+/** The version a save event recorded on this node (note_version_events), or null: what a "restored from" names when the caller knows the event.
+ *  `of` limits it to one note and one unit (the version list's old address: the number of an event; a number of another note names nothing). */
+export async function versionOfEvent(eventId: string, of?: { noteId: string; unit: string }): Promise<string | null> {
   if (!/^\d{1,18}$/.test(eventId)) return null;
-  const row = (await sql<{ version_key: string }>`SELECT version_key FROM note_version_events WHERE event_id = ${eventId}::bigint`.execute(db)).rows[0];
+  const row = (await sql<{ version_key: string }>`
+    SELECT version_key FROM note_version_events WHERE event_id = ${eventId}::bigint
+       ${of ? sql`AND note_id = ${of.noteId}::uuid AND unit = ${of.unit}` : sql``}`.execute(db)).rows[0];
   return row?.version_key ?? null;
+}
+
+/** A version that says what the note WAS like: every kind but `set_aside` (a text a conflict put aside is content the note never had; migration 220). Every reader
+ *  that lists, cuts, restores or exports versions as the note's states ANDs this on `v` = note_versions (historyReadersSetAside.integration.test.ts feeds every
+ *  reader one set-aside text). */
+export const STATE_VERSION_SQL = "v.kind <> 'set_aside'";
+
+/** A version's address from either spelling: its key (checked to be this note's, this unit's), or the number of an event of this node (the old address,
+ *  kept for one release: docs/architecture/history-api.md). Null when this note has no such version. */
+export async function resolveVersionKey(noteId: string, unit: string, id: string): Promise<string | null> {
+  if (/^[sgbm]:.+$/.test(id)) {
+    const row = (await sql<{ version_key: string }>`
+      SELECT v.version_key FROM note_versions v WHERE v.note_id = ${noteId}::uuid AND v.unit = ${unit} AND v.version_key = ${id} AND ${sql.raw(STATE_VERSION_SQL)}`.execute(db)).rows[0];
+    return row?.version_key ?? null;
+  }
+  return versionOfEvent(id, { noteId, unit });
+}
+
+/** The lowest event of this node that recorded the version (what an old event payload names), or null for a version made elsewhere. */
+export async function eventOfVersion(noteId: string, unit: string, versionKey: string): Promise<string | null> {
+  const row = (await sql<{ id: string }>`
+    SELECT min(event_id)::text AS id FROM note_version_events WHERE note_id = ${noteId}::uuid AND unit = ${unit} AND version_key = ${versionKey}`.execute(db)).rows[0];
+  return row?.id ?? null;
+}
+
+/** The title and text of one version of a note's text (by key or by an event number of this node), and the key it has; null when this note has no
+ *  such version or its text is not stored here. The restore of a version reads it (services/nodeUpdate.ts) after the note's write check. */
+export async function loadBodyVersion(workspaceId: string, nodeId: string, id: string): Promise<{ key: string; title: string | null; markdown: string } | null> {
+  const key = await resolveVersionKey(nodeId, "body", id);
+  if (key === null) return null;
+  const row = (await sql<{ title: string | null; markdown: string }>`
+    SELECT v.title, b.content AS markdown FROM note_versions v JOIN blobs b ON b.hash = v.content_hash
+     WHERE v.note_id = ${nodeId}::uuid AND v.workspace_id = ${workspaceId}::uuid AND v.unit = 'body' AND v.version_key = ${key}`.execute(db)).rows[0];
+  return row ? { key, ...row } : null;
 }
 
 /** The version an event undo puts back: the last version of the unit recorded before `undoneEventId` on this node, when it holds `contentHash`

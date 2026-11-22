@@ -1,7 +1,10 @@
 // A note's version history inside a backup (format 3): what is written, how big it is, and how it is read back.
 //
-//   .onden/history/<note id>.jsonl   one JSON line per version (a body-bearing save: bodyEventSql), oldest first:
+//   .onden/history/<note id>.jsonl   one JSON line per version, oldest first (a note's or board's versions: note_versions; a tag's
+//     description and a system note have none yet, so their saves: bodyEventSql):
 //     { id, kind, at, title, hash, markdown, actor: { type, name }, restored_from }
+//   `id` names the version in the source: its `version_key` (a file from before the version tables holds the number of the save's event);
+//   `restored_from` names an earlier line's `id`. The restore only uses them as names (spine/importedHistory.ts).
 //
 // Scope: the text history of notes — what the History page of a note lists and can restore. The operation log (undo
 // ledger), AI run records and anything sealed with the source server's secrets stay out (docs/architecture/backup-move.md).
@@ -19,7 +22,8 @@ import { appendImportedVersions, ImportedHistoryError, isImportedAt, type Import
 import type { ActorCtx } from "../types.js";
 import { shownAuthorName, versionAuthor } from "./authorName.js";
 import { NO_INVERSE_PATCH } from "./eventLog/index.js";
-import { bodyEventSql, versionActorTypeSql } from "./history/index.js";
+import { hasVersionList, notesWithVersionLists } from "../spine/noteVersions.js";
+import { AUTHOR_REF, VERSION_ORDER_ASC_SQL, VERSION_SORT_PARTS_SQL, STATE_VERSION_SQL, authorColumns, bodyEventSql, versionActorTypeSql } from "./history/index.js";
 import type { BackupHistoryInfo } from "@onden/contract";
 
 export const HISTORY_DIR = ".onden/history";
@@ -42,6 +46,9 @@ export type HistoryLine = {
   markdown: string;
   actor: { type: "user" | "ai_agent" | "system"; name: string | null };
   restored_from: string | null;
+  /** Present (true) on the `created` line that was the source's baseline: the content a note held when its history began, which is no edit (migration 220).
+   *  A reader that does not know the field takes the line as a creation, as before. */
+  baseline?: true;
 };
 
 const KIND: Record<string, HistoryLine["kind"]> = { NODE_CREATED: "created", NODE_UPDATED: "updated", NODE_RESTORED: "restored" };
@@ -51,10 +58,17 @@ const KIND: Record<string, HistoryLine["kind"]> = { NODE_CREATED: "created", NOD
 export async function measureHistory(workspaceId: string, noteIds: readonly string[]): Promise<BackupHistoryInfo> {
   let notes = 0, versions = 0, bytes = 0;
   for (let at = 0; at < noteIds.length; at += ID_CHUNK) {
+    const ids = noteIds.slice(at, at + ID_CHUNK);
+    // the versions of notes and boards, and the saves of what has no versions yet (a tag's description, a system note)
+    const versioned = await notesWithVersionLists(workspaceId, ids);
+    const [withVersions, withEvents] = [ids.filter((id) => versioned.has(id)), ids.filter((id) => !versioned.has(id))];
     const r = await sql<{ notes: string; versions: string; bytes: string }>`
-      SELECT count(DISTINCT e.target_id)::text AS notes, count(*)::text AS versions, coalesce(sum(b.size_bytes), 0)::text AS bytes
-        FROM domain_events e JOIN blobs b ON b.hash = e.payload->>'body_hash'
-       WHERE e.workspace_id = ${workspaceId} AND e.target_id = ANY(${noteIds.slice(at, at + ID_CHUNK)}::text[]) AND ${sql.raw(bodyEventSql("e"))}`.execute(db);
+      SELECT count(DISTINCT s.note)::text AS notes, count(*)::text AS versions, coalesce(sum(s.size_bytes), 0)::text AS bytes FROM (
+        SELECT v.note_id::text AS note, b.size_bytes FROM note_versions v JOIN blobs b ON b.hash = v.content_hash
+         WHERE v.workspace_id = ${workspaceId}::uuid AND v.unit = 'body' AND ${sql.raw(STATE_VERSION_SQL)} AND v.note_id = ANY(${withVersions}::uuid[])
+        UNION ALL
+        SELECT e.target_id, b.size_bytes FROM domain_events e JOIN blobs b ON b.hash = e.payload->>'body_hash'
+         WHERE e.workspace_id = ${workspaceId}::uuid AND e.target_id = ANY(${withEvents}::text[]) AND ${sql.raw(bodyEventSql("e"))}) s`.execute(db);
     notes += Number(r.rows[0]!.notes); versions += Number(r.rows[0]!.versions); bytes += Number(r.rows[0]!.bytes);
   }
   return { notes, versions, bytes };
@@ -64,8 +78,48 @@ type PageRow = { id: string; event_type: string; at: string; at_cursor: string; 
 
 /** Write `noteId`'s versions to the scratch file `path`, a page at a time. Returns how many (0: no file is wanted). */
 export async function writeHistoryFile(workspaceId: string, noteId: string, path: string): Promise<{ versions: number; bytes: number }> {
-  let versions = 0, bytes = 0, cursor: { at: string; id: string } | null = null;
   await writeFile(path, "");
+  return (await hasVersionList(workspaceId, noteId)) ? writeVersionPages(workspaceId, noteId, path) : writeEventPages(workspaceId, noteId, path);
+}
+
+type VersionPageRow = { id: string; kind: string; at: string; title: string | null; hash: string; restored_from: string | null; author_kind: string; author_name: string | null; row_type: string | null;
+  markdown: string; s_ms: string; s_counter: string; s_ordinal: string };
+
+/** A note's or board's versions, in the order of the version list (services/history/storedVersions.ts), paged by that order. */
+async function writeVersionPages(workspaceId: string, noteId: string, path: string): Promise<{ versions: number; bytes: number }> {
+  let versions = 0, bytes = 0, cursor: { ms: string; counter: string; ordinal: string; id: string } | null = null;
+  for (;;) {
+    const page: { rows: VersionPageRow[] } = await sql<VersionPageRow>`
+      SELECT v.version_key AS id, v.kind, to_char(v.at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at, v.title, v.content_hash AS hash, v.restored_from,
+             v.author_kind, coalesce(v.source_name, a.name) AS author_name, a.type AS row_type, b.content AS markdown, ${sql.raw(VERSION_SORT_PARTS_SQL)}
+        FROM note_versions v
+        JOIN blobs b ON b.hash = v.content_hash
+   LEFT JOIN actors a ON a.id::text = ${AUTHOR_REF}
+       WHERE v.workspace_id = ${workspaceId}::uuid AND v.note_id = ${noteId}::uuid AND v.unit = 'body' AND ${sql.raw(STATE_VERSION_SQL)}
+         AND (${cursor?.ms ?? null}::bigint IS NULL OR (${sql.raw(VERSION_ORDER_ASC_SQL)}) > (${cursor?.ms ?? null}::bigint, ${cursor?.counter ?? null}::int, ${cursor?.ordinal ?? null}::int, ${cursor?.id ?? null}::text))
+       ORDER BY ${sql.raw(VERSION_ORDER_ASC_SQL)} LIMIT ${sql.raw(String(HISTORY_PAGE))}`.execute(db);
+    if (page.rows.length === 0) break;
+    const lines = page.rows.map((r): HistoryLine => {
+      const { actor_type, author_row_type } = authorColumns(r.author_kind);
+      return {
+        id: r.id, kind: r.kind === "restored" ? "restored" : r.kind === "created" || r.kind === "baseline" ? "created" : "updated", at: r.at, title: r.title, hash: r.hash, markdown: r.markdown,
+        // a session's save goes with no name (services/authorName.ts): a label is not a person's name, and the file outlives this node
+        actor: { type: actor_type, name: shownAuthorName(r.row_type ?? author_row_type, r.author_name) }, restored_from: r.restored_from,
+        ...(r.kind === "baseline" ? { baseline: true as const } : {}),
+      };
+    }).map((l) => JSON.stringify(l)).join("\n") + "\n";
+    await appendFile(path, lines);
+    versions += page.rows.length; bytes += page.rows.reduce((n, r) => n + Buffer.byteLength(r.markdown, "utf8"), 0);
+    const last = page.rows[page.rows.length - 1]!;
+    cursor = { ms: last.s_ms, counter: last.s_counter, ordinal: last.s_ordinal, id: last.id };
+    if (page.rows.length < HISTORY_PAGE) break;
+  }
+  return { versions, bytes };
+}
+
+/** A tag's description or a system note: no versions yet, so the saves in the event log (as before). */
+async function writeEventPages(workspaceId: string, noteId: string, path: string): Promise<{ versions: number; bytes: number }> {
+  let versions = 0, bytes = 0, cursor: { at: string; id: string } | null = null;
   for (;;) {
     const page: { rows: PageRow[] } = await sql<PageRow>`
       SELECT e.id::text AS id, e.event_type, e.created_at::text AS at_cursor,
@@ -81,7 +135,6 @@ export async function writeHistoryFile(workspaceId: string, noteId: string, path
     if (page.rows.length === 0) break;
     const lines = page.rows.map((r) => ({ r, author: versionAuthor(r) })).map(({ r, author }): HistoryLine => ({
       id: r.id, kind: KIND[r.event_type] ?? "updated", at: r.at, title: r.title, hash: r.hash, markdown: r.markdown,
-      // a session's save goes with no name (services/authorName.ts): a label is not a person's name, and the file outlives this node
       actor: { type: r.actor_type, name: shownAuthorName(author.rowType, author.name) }, restored_from: r.event_type === "NODE_RESTORED" ? r.version_id : null,
     })).map((l) => JSON.stringify(l)).join("\n") + "\n";
     await appendFile(path, lines);
@@ -102,9 +155,10 @@ export class HistoryLineError extends StatusError {
 // were committed. Refused here, so only that note's history fails.
 const isStr = (v: unknown): v is string => typeof v === "string" && !v.includes("\u0000");
 const isNullStr = (v: unknown): v is string | null => v === null || isStr(v);
-const EVENT_ID = /^\d{1,18}$/;
-/** A source event id: a string of digits (a number would not match the string keys the dedupe compares). */
-const isEventId = (v: unknown): v is string => typeof v === "string" && EVENT_ID.test(v);
+const SOURCE_ID = /^(?:\d{1,18}|[sgbm]:[\x21-\x7e]{1,300})$/;
+/** A name of a version in the source: a version key (`s:…`, `g:…`, `b:…`, `m:…`), or the digits of an event number (a file from before the version tables).
+ *  A string either way (a JSON number would not match the string keys the dedupe compares). */
+const isEventId = (v: unknown): v is string => typeof v === "string" && SOURCE_ID.test(v);
 
 /** One line of a history file, checked. */
 export function parseHistoryLine(text: string): HistoryLine {
@@ -114,7 +168,7 @@ export function parseHistoryLine(text: string): HistoryLine {
   const ok = !!raw && isEventId(raw.id) && isStr(raw.kind) && ["created", "updated", "restored"].includes(raw.kind)
     && isStr(raw.at) && isImportedAt(raw.at) && isNullStr(raw.title) && isStr(raw.hash) && /^[0-9a-f]{64}$/.test(raw.hash)
     && isStr(raw.markdown) && !!actor && ["user", "ai_agent", "system"].includes(String(actor.type)) && isNullStr(actor.name)
-    && (raw.restored_from === null || isEventId(raw.restored_from));
+    && (raw.restored_from === null || isEventId(raw.restored_from)) && (raw.baseline === undefined || raw.baseline === true);
   if (!ok) throw new HistoryLineError();
   return raw as HistoryLine;
 }
@@ -127,7 +181,7 @@ export type HistoryImport = { versions: number; alreadyThere: number };
 export async function importNoteHistory(actor: ActorCtx, workspaceId: string, noteId: string, readLines: () => AsyncIterable<string>): Promise<HistoryImport> {
   const toVersion = (l: HistoryLine): ImportedVersion => ({
     sourceEventId: l.id, kind: l.kind, at: l.at, title: l.title, bodyHash: l.hash, markdown: l.markdown,
-    actorType: l.actor.type, actorName: l.actor.name, restoredFrom: l.restored_from,
+    actorType: l.actor.type, actorName: l.actor.name, restoredFrom: l.restored_from, ...(l.baseline ? { baseline: true as const } : {}),
   });
   // Pass 1 holds one line: shape and hash of every version are known good before the note gets its first.
   for await (const text of readLines()) {

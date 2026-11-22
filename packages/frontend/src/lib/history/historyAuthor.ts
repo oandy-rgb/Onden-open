@@ -16,8 +16,15 @@ export type HistoryAuthorTone = "agent" | "system" | "session" | "self" | "membe
 
 export type HistoryAuthor = { text: string; tone: HistoryAuthorTone };
 
-/** `selfName`: the signed-in account's name (null before the account is known: nobody is "you" then). */
-export function historyAuthor(kind: AuthorKind, name: string | null, selfName: string | null): HistoryAuthor {
+/** `selfName`: the signed-in account's name (null before the account is known: nobody is "you" then).
+ *  `onAnotherDevice`: the version was made on another of the person's devices than this one (the server says so; it names no device yet): the
+ *  line says so after the author, in every history screen. */
+export function historyAuthor(kind: AuthorKind, name: string | null, selfName: string | null, onAnotherDevice = false): HistoryAuthor {
+  const who = historyAuthorWho(kind, name, selfName);
+  return onAnotherDevice ? { ...who, text: t("{who} · on another device", { who: who.text }) } : who;
+}
+
+function historyAuthorWho(kind: AuthorKind, name: string | null, selfName: string | null): HistoryAuthor {
   if (kind === "agent") return { text: agentLabel(name), tone: "agent" };
   if (kind === "system") return { text: t("Automatic"), tone: "system" };
   if (kind === "session") return { text: t("A temporary session"), tone: "session" };

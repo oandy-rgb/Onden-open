@@ -127,6 +127,54 @@ describe("note history slider", () => {
   });
 });
 
+describe("a version made on another device", () => {
+  // the server marks a version it did not record itself, and only then (no device is named yet)
+  const elsewhere: NoteHistoryVersion[] = [versions[0]!, { ...versions[1]!, on_another_device: true }, versions[2]!];
+
+  it("says so after its author in the status line and in the list of all versions, and no other version does", async () => {
+    h.versions.mockResolvedValue(elsewhere);
+    show({ versions: elsewhere, initialVersionId: "v2" });
+    // the status line and the version's row in the list (the signed-in person is "You")
+    const marked = await screen.findAllByText("You · on another device");
+    expect(marked).toHaveLength(2);
+    expect(marked.every((el) => el.classList.contains("nh-author"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "All versions" }));
+    const rows = within(screen.getByRole("complementary", { name: "All versions" })).getAllByRole("button").filter((b) => b.classList.contains("nh-row"));
+    expect(rows.map((row) => row.textContent?.includes("on another device"))).toEqual([false, false, true, false]);
+    fireEvent.click(rows[1]!); // the newest version, made here: the status line no longer says it
+    expect(document.querySelector(".nh-status-main .nh-author")).toHaveTextContent(/^Helper$/);
+  });
+
+  it("says it in Traditional Chinese too", async () => {
+    setLocalePref("zh-TW");
+    h.versions.mockResolvedValue(elsewhere);
+    show({ versions: elsewhere, initialVersionId: "v2" });
+    expect((await screen.findAllByText("你・在另一台裝置上")).length).toBeGreaterThan(0);
+  });
+
+  it("the note's earliest remembered state says what it is, in both languages", async () => {
+    const withBaseline: NoteHistoryVersion[] = [versions[0]!, { ...versions[2]!, id: "b:abc", actor_name: null, actor_type: "system", markers: ["baseline"] }];
+    h.versions.mockResolvedValue(withBaseline);
+    show({ versions: withBaseline });
+    fireEvent.click(screen.getByRole("button", { name: "All versions" }));
+    expect((await screen.findAllByText("The earliest it was kept")).length).toBeGreaterThan(0);
+    cleanup();
+    setLocalePref("zh-TW");
+    show({ versions: withBaseline });
+    expect((await screen.findAllByText("最早留下的樣子")).length).toBeGreaterThan(0);
+  });
+
+  it("a restore names the version it went back to by its key: the line says which one", async () => {
+    const restored: NoteHistoryVersion[] = [
+      { id: "s:other:3:1", title: "Plan", markdown: "# Todo", changed_at: "2026-09-04T08:00:00Z", actor_name: "Me", actor_type: "user", markers: ["restored"], restored_from: "g:abc" },
+      { id: "g:abc", title: "Plan", markdown: "# Todo", changed_at: "2026-09-01T08:00:00Z", actor_name: "Me", actor_type: "user", on_another_device: true },
+    ];
+    h.versions.mockResolvedValue(restored);
+    show({ versions: restored, initialVersionId: "s:other:3:1" });
+    expect(await screen.findByText(/Went back to the version of/)).toBeVisible();
+  });
+});
+
 describe("smooth dragging and time marks", () => {
   it("shows the nearest version while the thumb is between two, and settles on it at release", async () => {
     show({ initialVersionId: "v3" });

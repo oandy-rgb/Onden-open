@@ -15,8 +15,10 @@ vi.mock("../db.js", async (original) => ({ ...await original<typeof import("../d
 
 import { encodeInk, type InkDocument, type InkStroke } from "@onden/markdown/ink";
 import { apiOnError } from "../httpError.js";
-import { pool } from "../db.js";
+import { allowUnstampedWrite, pool, q, withTransaction } from "../db.js";
 import { seedQ } from "./helpers/seedQ.js";
+import { ALIGN_VERSION_TIMES_SQL } from "./helpers/alignVersionTimes.js";
+import { versionKeyOf } from "./helpers/versionFixtures.js";
 import historyRouter from "../routes/history.js";
 import nodesRouter from "../routes/nodes.js";
 import { localDayId } from "../localDay.js";
@@ -51,6 +53,7 @@ async function stamp(eventIds: string[], at: Date) {
     await client.query("BEGIN");
     await client.query("SET LOCAL session_replication_role = replica");
     await client.query(`UPDATE domain_events SET created_at = $2 WHERE id = ANY($1::bigint[])`, [eventIds, at]);
+    await client.query(ALIGN_VERSION_TIMES_SQL); // History reads the versions the saves recorded
     await client.query("COMMIT");
   } finally { client.release(); }
 }
@@ -71,7 +74,8 @@ describe.skipIf(!isTestDb)("History carries a whiteboard's pen layer", () => {
     for (const [value] of saves) await save(nodeId, key, value);
     const events = (await eventsOf(nodeId, key)).slice(before);
     for (const [i, [, when]] of saves.entries()) await stamp([events[i]!], when);
-    return events;
+    // History names a drawing's version by its key: the keys, in save order
+    return Promise.all(events.map(async (id) => (await versionKeyOf(id))!));
   }
 
   beforeAll(async () => { w = await agentWorld("boardinkhist", { ownWorkspace: { modules: [] } }); WS = w.ws; });
@@ -147,10 +151,18 @@ describe.skipIf(!isTestDb)("History carries a whiteboard's pen layer", () => {
          VALUES ($1, $2, $3, 'ambiguous', 'unknown', '{}'::jsonb, gen_random_uuid(), 'x', $4)`, [id, w.ws, action, movedAt]);
     }
     await seedQ(`UPDATE node_attributes SET key = 'board_ink' WHERE node_id = $1 AND key = 'ink_data'`, [moved]);
+    // Migration 220 files a save made before the move under the drawing the board_ink_moves table gives it then (the version's unit is written once):
+    await allowUnstampedWrite("test: the unit migration 220 gives a save before migration 172's move", () => withTransaction(async () => {
+      await q("SET LOCAL session_replication_role = replica");
+      for (const table of ["note_versions", "note_version_events", "note_version_positions"]) {
+        await q(`UPDATE ${table} SET unit = 'board_ink' WHERE note_id = $1 AND unit = 'ink_data' AND version_key = ANY($2::text[])`, [moved, oldOnes]);
+      }
+    }));
     await save(moved, "ink_data", drawing(ids(1, 70))); // a handwriting page the note got after the move
     const [newBoard] = await drawn(moved, "board_ink", [[drawing(ids(6)), at("14:00", day)]]);
-    const [laterHand] = (await eventsOf(moved, "ink_data")).slice(-1);
-    await stamp([laterHand!], at("14:30", day));
+    const laterHandEvent = (await eventsOf(moved, "ink_data")).slice(-1)[0]!;
+    await stamp([laterHandEvent], at("14:30", day));
+    const laterHand = (await versionKeyOf(laterHandEvent))!;
 
     const board = await call(w.owner, `/api/nodes/${moved}/ink-edits?kind=board`);
     expect(board.body.map((e: { after_event: string }) => e.after_event)).toEqual([newBoard, oldOnes[1], oldOnes[0]]);

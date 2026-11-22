@@ -1,7 +1,7 @@
 # 部署、回滾與備份（VPS）
 
 > 狀態：現行（最後確認 2026-11-01）
-> 涵蓋：scripts/deploy-vps.sh, scripts/backup-vps.sh, scripts/restore-vps.sh, scripts/restore-drill.sh
+> 涵蓋：scripts/deploy-vps.sh, scripts/backup-vps.sh, scripts/restore-drill.sh
 
 何時讀：要部署到正式 VPS、回滾、做或還原備份，或正式站／localhost 連不上、登入出現 `INVALID_ORIGIN` 時。
 每次部署在 docs/deploy-log.md（未隨公開庫附上） 加一列。以下流程整理自 2026-09-28～10-22 的實際部署紀錄
@@ -111,8 +111,7 @@
 每個伺服器有一個節點編號（`sync_node`），它寫下的每一筆修改都記著「哪個編號、第幾號」。備份裡帶著當時的編號與號碼；
 伺服器在備份之後又往下編了號，所以還原後如果沿用舊編號，接下來的修改會用到**已經發出去過、內容不同**的號碼。
 因此 `scripts/restore.sh` 載入備份之後、任何寫入之前（包括開機時的 migration），會讓資料庫換一個新編號
-（`scripts/lib/renewNodeId.sh` → `scripts/lib/renewNodeId.sql` → migration 213 的 `sync_renew_node_id()`）。
-不變條件：**任何一次還原結束時，節點編號一定是新的、舊編號記成這台以前的編號；做不到就拒絕、什麼都不動**，不會以結束碼 0 留著舊編號。
+（`scripts/lib/renewNodeId.sh` → migration 213 的 `sync_renew_node_id()`）：
 
 - 新編號從第 1 號開始編；**已經存著的東西一筆都不改**：備份之前的修改仍記在舊編號名下。
 - 舊編號改記成「這台握有的另一個來源，握到第 N 號」（`sync_origins`，`vouched_by = 'self-restore'`）。
@@ -121,53 +120,16 @@
   舊編號是來源自己報的，所以加入時會核對：每個編號都要是節點編號的格式、最多 32 個、每一頁都相同，而且送來的舊編號標記不能超過它報的號碼；不合就整個拒收（`join_bad_former`、`join_wrong_former`、`join_stamp_beyond_former`）。
   資料形狀升到 3，所以**版本 2 與版本 3 的節點之間**快照與修改包一律拒收（`join_data_shape`／`bundle_data_shape`），要兩邊都升級。
 
-- 被蓋掉的資料庫原本若是**另一個**編號（備份之後它又被還原、換過號），那個編號也記成這台以前的編號，握到 0（備份裡沒有它的修改，別台握有的可以送回來）。
-
-怎麼做到（`scripts/restore.sh`；收 `backup.sh` 的 `onden-<時間>.sql.gz`、`pg_dump -Fc` 的 `database.dump`、`backup-vps.sh` 的 `manual-<時間>/` 資料夾）：
-1. **先把整份備份讀一遍、驗過，才動任何東西**：解得開（gzip 的 CRC、`-Fc` 由 `pg_restore` 整份讀過）、結尾有 `pg_dump` 最後那一行「dump complete」；資料夾附的 `SHA256SUMS` 要相符。
-   壞掉、被截斷（包括剛好斷在一行或一個語句的邊界）都在這一步拒絕，資料庫沒動。
-2. **載入到一個新的資料庫** `<名稱>_restoring`，換號也在那裡做（換號的列只在整份備份進去之後才出現；備份的來源中途失敗，就沒有那一列，新資料庫丟掉）。
-   不在正在用的資料庫上清 schema：正在用的那一份（含 pgroonga 的索引）從頭到尾沒被碰過，也不需要一個拿著上千把鎖的大交易。
-3. **兩者都成功才對調名字**，一個交易：還原好的拿到原來的名字，被換下來的改名 `<名稱>_before_restore_<UTC 時間>` 留著，就是還原前的安全複本（`restore.sh` 會印出刪掉它的指令；要不要刪由人決定）。
-   所以還原期間需要的空間約等於資料庫的大小，再加上載入時 WAL 的成長（最多到伺服器的 `max_wal_size`，預設 1 GB，檢查點會回收）：compose 模式先看 postgres 容器的磁碟，
-   需要「較大的那份 × 1.1 ＋ min(那份, 1 GB)」，不夠就拒絕（`--no-space-check` 跳過）；`DATABASE_URL` 模式看不到伺服器的磁碟，只印提醒。
-   開始時列出之前的還原留下的 `<名稱>_before_restore_*` 與大小：每份都是一整個資料庫，**沒有人會自動刪**；確認不需要了就 `DROP DATABASE "<名稱>";`。
-   被換下來的資料庫**一個工作區都沒有**時（compose 的 postgres 開機時只載入 schema 的那個空資料庫）不留複本：裡面沒有可以退回去的東西，對調之後就刪掉並說一聲。
-4. 任何失敗、被拒、中途被中斷（`Ctrl-C`、`kill`）：正在用的資料庫完全是還原前的樣子。最壞只留下一個 `<名稱>_restoring`，下一次執行會先把它丟掉。
-   對調名字需要沒有人連著那個資料庫：先停後端；還有連線（只算人或程式的連線，`backend_type = 'client backend'`，不算 autovacuum 這類伺服器自己的工作）就拒絕，並列出是哪個程式。
-   對調送出之後才被中斷時，腳本會問資料庫實際是哪一個，照實說「已經還原完成」或「維持原樣」；問不到就說怎麼自己確認（第 2 輪審查 A1）。
-   載入完成、對調還沒送出時被中斷：說「維持原樣」並丟掉 `<名稱>_restoring`（2026-11-22 筆電演練找到：這一格以前在 `set -e` 下一聲不吭地以 1 結束）。
-   對調本身失敗（有人在這期間連上）：丟掉 `<名稱>_restoring`、說資料庫維持原樣；再跑一次會重新載入整份備份。
-5. **同一個資料庫一次只有一個還原**：這台機器上的鎖（`$TMPDIR/onden-restore-<目標的雜湊>.lock`，記著行程編號）；第二個直接拒絕、什麼都不問伺服器。
-   持有鎖的行程已經不在（`kill -9`）時，下一次接手。
-6. **含 Apache AGE 的舊備份**（2026-10-31 之前）：`scripts/lib/strip-age.sed` 是唯一的一份規則，`restore.sh` 與 `restore-drill.sh` 共用。
-   `-Fc` 先過濾 `pg_restore -l` 的目錄、再用 `-L` 只還原其餘項目（`ag_catalog` 裡的每一項，包括 AGE 設定表的 `TABLE DATA`，以及 `age` 的 extension 與註解）；
-   純 SQL 逐行刪掉同樣的項目，包括 `COPY ag_catalog.… FROM stdin;` 到 `\.` 的資料區塊。AGE 的圖（另外的 schema）不在這份規則裡：Onden 從沒建過圖（見「移除 Apache AGE」）。
-
-- 備份來自 migration 213 之前的版本（沒有 `sync_renew_node_id()`）：`renewNodeId.sql` 帶著 migration 自己的定義（`scripts/lib/renewNodeIdSql.mjs` 從 migrations 逐字取最後一份，守門測試核對；它只認得 `CREATE OR REPLACE FUNCTION fn(` 加 `$$` 的寫法，遇到別的寫法或 `DROP FUNCTION` 直接失敗，不會悄悄漏掉），
-  只在資料庫缺少時裝上再換號；已經有的不覆蓋（主機上的 checkout 比備份舊時，不會換成較舊的定義）。之後開機的 migration 以 `CREATE OR REPLACE` 定義同樣的函式。
-- **拒絕**（結束碼 1，資料庫不動）：備份來自 migration 190–205 的版本（2026-11-12～16：有編號、卻沒有 `sync_origins` 可以記舊編號）；或備份沒有編號（190 之前）、被蓋掉的資料庫卻有。
-  備份沒有編號、目標是空資料庫時照常完成（從沒編過號，第一次寫入才取得編號）。
-- **被拒時的出路**：`--keep-node-id`。照樣還原、**保留**資料庫手上的編號，大聲印出後果：這台之後可能編出伺服器已經發過的號碼，**在每台和它交換過的裝置重新加入之前，不能和它們交換**；
-  資料庫記下這件事（`sync_restore_kept_node_id`：何時、保留的編號、被蓋掉的編號、原因），交換的那一批要在這張表有列時拒絕（合併核心 README「接上傳輸前必須完成」）。
-  換得了號的備份帶這個旗標照樣換號（它只是被拒時的出路）。
-
-看到什麼：還原成功時多一行 `[restore] the restored database is a new node: id <舊> -> <新> …`，以及安全複本的名字；拒絕時 `ERROR: restore refused, nothing was changed: <原因>` 與 `--keep-node-id` 的用法。
-沒有腳本經手的還原（磁碟快照、自己跑的 `pg_restore`）之後跑 `bash scripts/lib/renewNodeId.sh …`：結束碼 0 換好、3 資料庫沒有編號（不用換）、4 換不了（原因在 stderr，資料庫沒動）、1 psql 失敗（沒動）。
+看到什麼：還原成功時多一行 `[restore] the restored database is a new node: id <舊> -> <新> …`。
+若備份來自 migration 213 之前的版本，資料庫裡沒有這個函式：還原照常完成，但印一行 `WARNING`，說這次**沒有換編號**（見 PR 的「需要決定」）。
+換號失敗時腳本以結束碼 1 停下，請**不要啟動後端**，照訊息重跑 `bash scripts/lib/renewNodeId.sh …`。
 
 - 後端開機**從不**換編號（守門：`packages/backend/src/test/guards/restoreRenewsNodeId.guard.test.ts`）：只有還原指令知道資料庫被還原過。
-- `scripts/upgrade.sh rollback` 經過 `restore.sh`，所以自動涵蓋。舊版映像用一次性的環境變數下載，`.env` **在還原前一刻**才切到舊版本；
-  還原（對調名字）完成之前，失敗、被拒或被中斷（`Ctrl-C`）都會把 `.env` 切回原本的版本、重新啟動服務；完成之後中斷，版本留在舊版（資料已是舊版的）。
-  腳本靠 `onden_before_restore_<這次的時間>` 在不在判斷還原是否完成（守門：`restoreRenewsNodeId.guard.test.ts`「scripts/upgrade.sh rollback」；`scripts/upgrade-selftest.sh` 含 `Ctrl-C` 的情形）。
-- 桌面版的還原（選單手動還原、升級失敗退回、補完中斷的更新、使用者自己把資料夾放回去）同一份 SQL，見 [桌面版說明](../desktop/README.md)「還原之後的節點編號」。
+- `scripts/upgrade.sh rollback` 經過 `restore.sh`，所以自動涵蓋。
 - `scripts/deploy-vps.sh rollback` **不是還原**：它只把映像標籤換回 `before-<sha>`，資料庫不動，所以編號不換也不該換。
-  需要把 VPS 的資料庫倒回部署前備份時，在 VPS 上跑 `scripts/restore-vps.sh /srv/onden/backups/manual-<時間> --yes [--with-content]`：拿 `deploy.lock`（與 `deploy-vps.sh` 同一把）、停後端、
-  用這台的 compose（`-p onden-vps`、`shared/.env`、`current/compose.yaml`）跑同一個 `restore.sh`、再啟動後端。
-  `--with-content` 在後端停著時把上傳檔換成備份裡的（先清空 `onden-vps_content_data` 再解 `content.tar`，先核對 `SHA256SUMS`）；不帶它，資料庫是備份的、檔案是現在的
-  （備份之後上傳的還在、備份之後刪掉的不見了），腳本會說明。不要在後端跑著時手動解 `content.tar`。
-  整機或磁碟快照回滾沒有腳本可掛：啟動後端之前自己跑 `bash scripts/lib/renewNodeId.sh <連到那個資料庫的 psql 指令>`。
-- `DATABASE_URL` 模式用主機的 `psql`／`pg_restore`：PG 18 的 `pg_dump` 會在備份裡寫 `\restrict`，主機的 psql 早於 17.6 時讀不懂，還原會在驗證或載入時失敗（資料庫不動）；裝同一個大版本的用戶端，或改用 compose 模式（容器裡的工具與伺服器同版）。
-- 這些腳本只讀未加密的備份檔：把備份加密後存到異地（例如用 age）的，還原前先解開成原本的 `onden-<時間>.sql.gz`、`database.dump` 與 `SHA256SUMS`。
+  需要把 VPS 的資料庫倒回部署前備份時（`manual-*/database.dump`，手動 `pg_restore`），還原完、啟動後端之前自己跑一次：
+  `bash scripts/lib/renewNodeId.sh <連到那個資料庫的 psql 指令>`（例如 `psql "$DATABASE_URL"`；VPS 上 compose 的專案名、服務名與帳號以 `deploy-vps.sh` 與該主機的 `.env` 為準，這裡沒有核對）。
+  整機或磁碟快照回滾也一樣：沒有腳本可掛，要手動跑這一步。
 
 ## 還原演練
 
@@ -193,8 +155,7 @@
 - ✗ **migration 失敗**：只印失敗的檔號、PostgreSQL 錯誤代碼與表／約束名稱。
 - ✗ **節點編號**（`node_id_renewed`）：還原後沒有換成新編號、舊編號名下的修改標記在還原後被寫入或改寫、舊編號沒有變成「握有到第 N 號」的來源、
   或時鐘比備份裡的標記還早。成功時印「節點編號：已換新」。這一項不能用 `-- drill: allows` 聲明掉。
-  第 5b 步在 migration **之前**換號（`restore.sh` 的位置，213 之前的備份也是）；備份來自 migration 190–205 的版本時演練停下（`restore.sh` 不帶 `--keep-node-id` 會拒絕它）；
-  備份沒有任何編號（190 之前）時印 △、不比對這一項。
+  第 5b 步在 migration **之前**換號（`restore.sh` 的位置）；備份早於 migration 213 時演練印 △、改在 migration 之後換，以檢查換號本身。
 - 失敗時暫存目錄保留（路徑會印出；內含計數、id 與雜湊，不含內容）供查詢，通過時自動刪除；容器一律刪除。
 
 要加新檢查：在 `drillInvariants.ts` 的 `COUNTS`（數量）或 `STRUCTURE`（回傳違規 id 的查詢）加一列。
@@ -204,9 +165,6 @@
 ## 清理與磁碟
 
 - 回滾映像保留最近 2 次（建置當下 1 次）、release 保留最近 3 次；nginx 仍掛載的 release 與有 `KEEP.txt` 的備份不刪。
-- **還原留下的資料庫複本**（`onden_before_restore_<時間>`，`restore.sh`／`restore-vps.sh` 每還原一次多一份，大小約一整個資料庫）也佔這顆磁碟，而且不會被自動清：
-  確認還原沒問題後 `sudo docker compose -p onden-vps … exec postgres psql -U onden -d postgres -c 'DROP DATABASE "onden_before_restore_<時間>";'`。下一次還原開始時會列出還在的複本與大小。
-  `deploy-vps.sh` 在 90% 拒絕部署時只列 `before-*` 映像標籤，這些複本也要看。
 - 每次部署約多 2.7 GB 建置快取；`deploy-vps.sh switch` 做完會自動清掉（業主 2026-11-14 同意；只清建置快取，不動映像、回滾點與 release 目錄），
   下一次建置因此從頭來、會慢一些。`docker builder prune` 可能刪掉執行中映像的內容，所以腳本清完會逐一確認執行中映像與回滾映像都還建得出容器，
   壞了會印 `IMAGE DAMAGED AFTER PRUNE`。

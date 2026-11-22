@@ -237,10 +237,6 @@
   "class": "node-local",
   "note": "which other nodes this node takes change bundles from, and how far it holds each: what THIS node took from whom, never copied (migration 206)"
  },
- "sync_restore_kept_node_id": {
-  "class": "node-local",
-  "note": "a restore kept this node's id instead of renewing it (scripts/restore.sh --keep-node-id): rows <=> the current id was kept and the node was not joined again; goes with this database's own backups, never copied to another node (migration 224)"
- },
  "structure_log": {
   "class": "node-local",
   "note": "each node's own history of structure; never sent (S1, proposal §8.5)"

@@ -48,17 +48,13 @@ fake_commit() { # <migration sql>
   GIT_INDEX_FILE=$idx git -C "$repo" read-tree HEAD
   GIT_INDEX_FILE=$idx git -C "$repo" update-index --add --cacheinfo "100644,$blob,packages/backend/db/migrations/999_drill_selftest.sql"
   tree=$(GIT_INDEX_FILE=$idx git -C "$repo" write-tree)
-  # its own author: a CI checkout has no git identity, and commit-tree refuses without one
-  GIT_AUTHOR_NAME="drill selftest" GIT_AUTHOR_EMAIL="drill-selftest@localhost" GIT_COMMITTER_NAME="drill selftest" GIT_COMMITTER_EMAIL="drill-selftest@localhost" \
-    git -C "$repo" commit-tree "$tree" -p HEAD -m "drill selftest"
+  git -C "$repo" commit-tree "$tree" -p HEAD -m "drill selftest"
 }
 
 fails=0
 run_case() { # <名稱> <預期結束碼> <預期輸出片段> <備份目錄> [演練參數…]
   local name=$1 want=$2 pattern=$3 backup=$4; shift 4
   local out rc=0
-  # "$(fake_commit …)" that failed gives an empty ref: say so, instead of a FAIL that reads like the drill's
-  if [[ ${1:-} == --commit && -z ${2:-} ]]; then printf 'FAIL  %s（做不出假的 migration commit）\n' "$name"; fails=$((fails + 1)); return; fi
   out=$("$repo/scripts/restore-drill.sh" "$backup" --no-docker --database-url "$(url_for "st_${RANDOM}_drill")" "$@" 2>&1) || rc=$?
   if [[ $rc == "$want" ]] && grep -q -- "$pattern" <<<"$out"; then
     printf 'PASS  %s（結束碼 %s）\n' "$name" "$rc"

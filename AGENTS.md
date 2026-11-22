@@ -163,7 +163,8 @@
 - 影響介面的變更用瀏覽器檢查桌面與手機尺寸（文字密度、留白、重疊、溢出、焦點、保存回饋）；
   手機 viewport 須如實標示，不宣稱真機通過。
 - 改 UI（版面、樣式、元件結構）的 PR 要跑 `npm run build:browser`（根目錄），再在 packages/frontend 跑 `npm run layout:audit`：用程式量位置，檢查被蓋住、重疊、截斷、捲不到底、hover 位移、橫向捲軸、手機點擊目標、對齊；
-  基準外的新違規就失敗，修好的從 `packages/frontend/e2e/layout-audit/baseline.json` 刪掉（只准變少）。規則與誤報處理見該資料夾的 README。CI 不自動跑，由擁有者指定時才跑。
+  基準外的新違規就失敗，修好的從 `packages/frontend/e2e/layout-audit/baseline.json` 刪掉（只准變少）。規則與誤報處理見該資料夾的 README。CI 每天在 main 上跑一次（`ci.yml` 的 `scheduled-browser`）；改 UI 的 PR 仍要自己跑。
+- 每個測試檔與檢查指令都要有 CI 工作在跑（`ciReach.guard.test.ts`）；刻意不跑的寫進 `scripts/ci-reach-baseline.json` 並附理由，只准減少（[testing.md](docs/agents/testing.md)）。
 - 以效能為由改設計，先建立有代表性的量測並向下一層定位成本，修改後同條件比較。
 - 部署與連線診斷見 [deploy.md](docs/agents/deploy.md)：核對實際提供的版本，不以停用來源檢查、
   清除本機資料或放寬登入來源修復問題；每次部署在 docs/deploy-log.md（未隨公開庫附上） 加一列。

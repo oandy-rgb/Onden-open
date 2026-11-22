@@ -893,27 +893,10 @@
 - **為什麼沒擋到**：寫觸發器時只想到「哪一欄改了」，沒有想到「是誰改的」；4.9 照提案的句子做，沒有先問 `seen` 能不能當成那個判斷的依據（檔頭本來就寫它只決定通知誰）。
 - **類別**：機制的前提沒有驗證。
 - **機制**：〔第 1 層〕兩則測試各自釘住（第一則兩種先後都跑，第二則是隨機種子與固定種子 2 的 R4）；觸發器改成不帶欄位清單、用 WHEN 判斷。BEFORE 觸發器改的欄位被 `UPDATE OF` 依賴：尚無機制擋。
-
-### 2026-11-22　交回前只跑改到的測試；本機有 git 身分、CI 沒有，新 CI job 第一次跑就紅（PR #1937 第 2 輪後）
-- **發生了什麼**：第 2 輪加了 migration 224 與一個會建／刪資料庫的真 Postgres 測試，交回 `b6a0d2023` 時只跑了改到的測試檔。公開 CI 紅了五個 job：`backupFidelity`（新表有 `node_id` 欄但沒進 `NODE_TABLES`）、`crossWorkspaceReadSweep`（新表沒有工作區欄）、`testDatabaseGate` 加上 unit lane 載不進檔（`restoreScript.postgres` 沒有 `isTestDatabase()` 關卡，沒有 `DATABASE_URL` 時 `new URL(undefined)` 在收集階段就丟錯），還有新的 restore-scripts job 裡演練自我測試的 8 個 `--commit` 案例：`fake_commit` 用 `git commit-tree`，runner 上沒有 git 身分，做出的 ref 是空的。
-- **證據**：CI run 44975964641；本機用 `HOME=/nonexistent GIT_CONFIG_GLOBAL=/dev/null` 跑 `restore-drill-selftest.sh` 重現，加上身分之後 14/14。
-- **發現者**：擁有者（公開 CI）。
-- **為什麼沒擋到**：把「改到的檔都綠」當作完成，整套 pglite 是交回之後才跑；新的 CI job 只在本機有設定的環境驗過（git 身分、`DATABASE_URL`）。
-- **類別**：驗證範圍比改動的影響小；本機環境比 CI 多了東西。
-- **機制**：〔第 1 層〕`fake_commit` 自帶作者，空 ref 時自我測試直接說「做不出 commit」；`restoreScript.postgres` 以 `isTestDatabase()` 守門，只碰 `onden_restore_test_` 開頭的資料庫（`starts_with`，不用 LIKE）。〔第 2 層〕新增資料表或會碰資料庫的測試時，交回前跑整套 `npm run test:pglite`：尚無機制擋，靠這條紀錄。CI 的 job 在沒有 git 身分的環境下跑過：尚無機制。
-
-### 2026-11-22　還原腳本的中斷處理在 `set -e` 下一聲不吭地結束；AGE 舊備份的資料區塊沒過濾（PR #1937，擁有者的筆電演練）
-- **發生了什麼**：第 2 輪 A1 為 `restore.sh` 加了「中斷時說實話」。trap 裡寫成 `{ swapped; state=$?; }`：載入完、對調還沒送出時被中斷，`swapped` 回 1，`set -e` 讓腳本當場以 1 結束，什麼都沒說，留下 `_restoring`。另外 `strip-age.sed` 只刪 AGE 的 schema、extension、註解，沒刪 `ag_catalog` 設定表的資料（`TABLE DATA`／`COPY` 區塊），一份 2026-10-31 的真備份完全還原不了。演練腳本用 `pg_restore -L` 過了，`restore.sh` 沒過。
-- **證據**：PR #1937 留言 7076062458（`bash -x` 軌跡；`ERROR: schema "ag_catalog" does not exist`）。`restoreScript.postgres` 新的兩則在舊的 trap、舊的 sed 上都紅。
-- **發現者**：擁有者（筆電演練，PG 18、真備份）。
-- **為什麼沒擋到**：守門裡假的 psql 只測了「對調已完成」與「載入中」兩格，沒測「載入完、對調前」；以為 bash 的 `set -e` 在 trap 的 `{ …; }` 裡不生效，沒有驗證。AGE 的備份只用合成的資料測過，那份資料沒有 AGE 的設定表。
-- **類別**：狀態機少測一格；機制的前提沒有驗證；測試資料不像真的。
-- **機制**：〔第 1 層〕`ONDEN_RESTORE_TEST_HOLD_BEFORE_SWAP` 讓測試停在對調前送 TERM（守門與真 Postgres 各一則）；AGE：純 SQL 帶 `COPY ag_catalog` 區塊的備份（真 Postgres）、`-Fc` 帶 `ag_catalog` 資料的備份（`restore-ci-selftest.sh`），`restore.sh` 的 `-Fc` 改走與演練同一個目錄過濾。〔第 2 層〕每一種結束是否都說出資料庫的狀態：尚無機制自動列舉，靠這三格的測試。
-
-### 2026-11-22　真 Postgres 的還原測試共用一個目標資料庫，結果看測試順序（PR #1937，公開 CI）
-- **發生了什麼**：`restoreScript.postgres.integration.test.ts` 的每一則都還原到同一個 `TARGET`，第一則數 `TARGET_before_restore_*` 要剛好一份。vitest 打亂順序時，AGE 或「對調前中斷」那幾則先跑，就先留下一份複本，第一則數到 2。本機各跑一次都剛好是過的順序。順便發現：目標名稱太長時，`_before_restore_<時間>` 超過 Postgres 的 63 bytes 被截斷（只有一個 NOTICE），對調後的檢查會找一個不存在的名字。
-- **證據**：CI run 45008624115（真 Postgres 2/4，`expected [ …(2) ] to have a length of 1 but got 2`）；舊檔在本機連跑 6 次，3 次重現同一個錯。
-- **發現者**：擁有者（公開 CI）。
-- **為什麼沒擋到**：每則測試的前提（目標裡只有自己的複本）沒有寫成每則自己建立；只跑一次就當作穩定。
-- **類別**：測試之間共用狀態；只跑一次。
-- **機制**：〔第 1 層〕每則測試用自己的目標資料庫（`beforeEach` 建、`afterEach` 刪掉它與 `restore.sh` 在它後面加的名字），只數自己的複本；連跑 20 次（每次不同的順序種子）全過、沒有殘留。`restore.sh` 在目標名稱讓複本名超過 63 bytes 時直接拒絕（守門一則）。〔第 2 層〕會 DROP／RENAME 資料庫的測試檔交回前連跑 20 次：尚無機制，靠這條紀錄。
+### 2026-11-22　改 lint:boundaries 的設定只跑了它自己，沒跑讀同一份設定的守門；對擁有者說「規則一樣有效」
+- **發生了什麼**：為了消掉 136 個「行內註解無效」警告，我把 `eslint.boundaries.config.js` 的 `noInlineConfig` 搬到指令列的 `--no-inline-config`，跑了 `npm run lint:boundaries` 看到通過，就跟擁有者說規則一樣有效。守門 `allowlistBoundaries.guard.test.ts` 用設定檔本身跑 ESLint、證明 disable 註解繞不過邊界規則，搬走之後它失敗了。
+- **證據**：公開庫 CI 執行 45013171522 的 Guard lane 與 Frontend：「an eslint-disable comment does not silence it」expected [] to have a length of 1。
+- **發現者**：CI 的守門通道（我第一次跑定期檢查時）。
+- **為什麼沒擋到**：改設定檔前沒有找誰讀它（`git grep eslint.boundaries.config`），只驗了我直接要的那個指令。
+- **類別**：未查證就回報；只驗自己要的出口、沒驗同一份輸入的其他讀者。
+- **機制**：守門通道本身（它擋下了）；改回設定、指令改用 `--quiet`。改共用設定檔前列出它的讀者：尚無機制。

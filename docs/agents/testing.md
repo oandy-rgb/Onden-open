@@ -56,7 +56,9 @@
 | --- | --- | --- |
 | 每個 PR | 雲端 | 相關測試、`npx tsc --noEmit`、`npm run lint`、守門（前端完整 vitest 內的 `*.guard.test.ts`、`npm run dup:check`、`npm run changes:check`）；後端 PGlite 完整套；瀏覽器版（`dist-browser`）冒煙 `e2e/browser-app/smoke.mjs`（`run-all.mjs` 跑完各引擎後接著跑 `handwritingTab.mjs`：筆記的「手寫」分頁——新增、畫、新增一頁、切回內容打字、重新整理、拿掉分頁再加回，筆畫都在；桌面淺色／深色與手機）；改 UI 時 `layout:audit`（`test/layout-audit` 合併後）；改到下表「桌面版與三宿主對照」所列路徑的 PR 加 `npm run desktop:check` 與 `npm run parity`（每個 PR 的 CI 只跑守門；這兩個在本機跑，或手動觸發 CI 的 `parity` 工作） |
 | 合併前（一批 PR 一次） | 筆電 | 只跑後端需要真 Postgres 的部分、`npm run build`、B 類全端 e2e（下表）、WebKit 冒煙 |
-| 每晚 | 雲端 | 完整前端 vitest、完整全端 e2e（`e2e:cloud-stack`）、屬性測試（`test:props:long`）、規模測試、`zz*` 探針 |
+| 每天、每週 | 公開庫的 GitHub CI（`.github/workflows/scheduled.yml` 啟動 `ci.yml`，`extended=daily`／`weekly`；擁有者 2026-11-22：只排每天與每週，不跟推送跑） | 每天：完整全端 e2e、模糊測試（`test:fuzz`，種子每次不同）、`test:astro`、`parity:test`、瀏覽器版 `run-all.mjs`（含全部功能腳本）、`e2e:slides`、`e2e:touch-hold`、`layout:audit` 與兩個工具的自我測試、圖表檢查；每週：三個套件的變異測試、`test:props:long`、`style:census`、`bench` + `bench:check`。結果在公開庫標籤 `scheduled-checks` 的同一個 issue 留言（工作、測試名稱、種子、執行連結，不貼紀錄原文）；全端 e2e 只列 `packages/frontend/e2e/known-red-baseline.json` 以外的新紅，那份清單只准減少 |
+
+**每個測試都要有 CI 在跑**（擁有者 2026-11-22）：`packages/markdown/src/test/guards/ciReach.guard.test.ts`（在守門通道）用 `scripts/ciReachLib.mjs` 從會自己啟動的 workflow（push、pull_request、schedule）一路追 `npm run`、`cd`、`vitest`、`node`、`bash` 與它們啟動的腳本，找出沒有任何工作會跑的測試檔（vitest 由 `vitest list` 判斷歸屬）與檢查指令（`test`、`check`、`lint`、`e2e`… 開頭或 `:check` 結尾）。新加的測試或指令沒進 CI 就失敗：把它放進 `ci.yml` 的工作或 `scripts/guard-lane.sh`，或在 `scripts/ci-reach-baseline.json` 寫明刻意不跑的理由（只准減少）。`covered` 一欄是「同一個檢查在另一個測試裡跑」，守門會查那個測試真的有人跑、而且用到同一個模組。已知看不到的（note-91 審查 #1947）：工作的 `if:` 不看（`ci.yml` 裡的工作都算有在跑，刪掉 `scheduled.yml` 或寫 `if: false` 守門仍綠）；環境變數前綴不看（`test:pglite`、`test:fuzz:long` 和一般跑法算同一個）；Playwright 的 `--grep`、`--project` 與測試裡的 skip 不看，檔案歸屬從設定檔文字讀（守門環境沒裝 Playwright）。`vitest run <路徑>` 只算那個資料夾，用執行時才算出的清單（`$files`）的那一行什麼都不算。
 
 **新增或修改測試後、合併前**：跑 `npm run test:repeat-changed`（`scripts/repeat-changed-tests.sh [次數]`，預設 5）。它找出相對 `git merge-base HEAD origin/main`
 新增或修改的 `*.test.ts(x)`（backend、frontend、markdown、site、contract），逐檔單獨連跑，任何一次失敗就停下並印出是哪個檔第幾次；沒有改到測試就印一句話、結束碼 0。

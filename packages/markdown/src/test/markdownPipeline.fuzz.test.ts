@@ -100,7 +100,9 @@ describe("markdown pipeline fuzz", () => {
     expect(htmlHazards(html, "embed-allowlist")).toEqual([]);
   });
 
-  it.fails("FINDING data: URL of any media type survives on <img src>", () => {
+  // Was a FINDING (it.fails) until a8abf827f dropped non-media data: addresses from published src; nobody saw it pass: no
+  // CI job ran the fuzz files before the scheduled run of 2026-11-22.
+  it("a data: URL that is not media does not survive on <img src>", () => {
     const html = renderers.published("![x](data:text/html;base64,aW5lcnQ=)");
     expect(htmlHazards(html, "embed-allowlist")).toEqual([]);
   });

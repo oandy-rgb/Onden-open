@@ -1,7 +1,6 @@
 // 啟動流程中不依賴 Electron 的部分：資料準備的順序、啟動失敗要說什麼、「備份不見」的出口。
 // main.mjs 只負責把它接到真的對話框與視窗；test/startup.test.mjs 用假的對話框測整段流程。
 import { dataLayout, ensureDataDirs, loadOrCreateSecrets, readSettings } from "./dataLayout.mjs";
-import { keepNodeIdOnNextStart } from "./nodeRenewal.mjs";
 import { abandonInterruptedUpdate, diagnosticsText, recoverFromInterruptedUpdate, stampLabel, UpdateFailure } from "./safeUpdate.mjs";
 
 /**
@@ -35,7 +34,6 @@ export function failureDialog(error, t, build) {
       : error.kind === "no_space" ? t.noSpace(error.neededBytes ?? 0, error.freeBytes ?? 0)
       : error.kind === "restore_failed" ? t.restoreFailed
       : error.kind === "backup_missing" ? t.backupMissing
-      : error.kind === "renewal_refused" ? t.renewalRefused
       : t.rolledBack(error.from, error.to);
     return { message, detail, diagnostics: error.diagnostics };
   }
@@ -48,28 +46,23 @@ export function failureDialog(error, t, build) {
  * 啟動，失敗時處理對話框。回傳 true＝啟動成功；false＝已經告知使用者，呼叫者直接結束。
  *   backup_missing（沒辦法自動還原）：只問一次「結束／直接開啟現有資料」，不再另跳第二個對話框；
  *   選「直接開啟」＝放棄還原（只清標記）再啟動一次；這次再失敗就照一般失敗顯示。
- *   renewal_refused（還原後的資料換不了節點編號，nodeRenewal.mjs）：同一個對話框形狀；選「直接開啟」＝保留原本的編號
- *   （keepNodeIdOnNextStart，下次開後端時記在資料庫裡）再啟動一次。不選就結束，資料不動，下次開還是會問。
  * @param {{
  *   boot: () => Promise<void>, layout: () => import("./dataLayout.mjs").DataLayout | null,
  *   askBackupMissing: (error: UpdateFailure) => Promise<"quit" | "open">,
- *   askRenewalRefused: (error: UpdateFailure) => Promise<"quit" | "open">,
  *   showFailure: (error: unknown) => Promise<void>,
  * }} options
  */
-export async function runStartup({ boot, layout, askBackupMissing, askRenewalRefused, showFailure }) {
+export async function runStartup({ boot, layout, askBackupMissing, showFailure }) {
   try {
     await boot();
     return true;
   } catch (error) {
     let failure = error;
-    if (error instanceof UpdateFailure && (error.kind === "backup_missing" || error.kind === "renewal_refused")) {
-      const ask = error.kind === "backup_missing" ? askBackupMissing : askRenewalRefused;
-      if ((await ask(error)) === "quit") return false;
+    if (error instanceof UpdateFailure && error.kind === "backup_missing") {
+      if ((await askBackupMissing(error)) === "quit") return false;
       try {
         const where = layout();
-        if (where && error.kind === "backup_missing") abandonInterruptedUpdate(where);
-        if (where && error.kind === "renewal_refused") keepNodeIdOnNextStart(where);
+        if (where) abandonInterruptedUpdate(where);
         await boot();
         return true;
       } catch (second) {

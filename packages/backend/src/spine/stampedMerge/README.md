@@ -138,7 +138,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
   同樣的包再套一次什麼都不改。
 - **`bundle_stamp_clash` 抓得到與抓不到**：抓得到——接收方的單位還握著那個標記：A 寫了標題（A, s），B 收下；A 被還原後又寫出（A, s）但內容不同，並多寫一筆讓這一列被送出 → 同一個（來源, 序號）內容不同，整包拒收（`stampedBundle.integration`「the same (origin, seq) with other content」）。
   抓不到——接收方的單位已經被後續寫入蓋掉：A 寫了（A, s）又寫了（A, s+1），B 只握有後者；還原後的 A 再寫出（A, s）不同內容 → 後者的 `saw` 已涵蓋（A, s），沒有東西可比，整包照收（已釘成測試：預期不拒收，`what bundle_stamp_clash cannot see`）。
-  解法是還原後換新的節點編號：伺服器（`scripts/restore.sh`，任何年代的備份；換不了就拒絕）與桌面版（`packages/desktop/src/nodeRenewal.mjs`）都做了，見 [deploy.md「還原」](../../../../../docs/agents/deploy.md)。
+  真正的解法是還原後換新的節點編號（不在這批）。
 
 ### 收不進去：三個原因、一個出口
 
@@ -231,9 +231,8 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **別的表：收件那台的連鎖清掉欄位標記，刪除的那台留著**（第十輪第 7 點）：B 設了筆記 N 的屬性又改，A 永久刪除 N，B 的寫入之後才到 A。A 不握有那一列，留著那些標記（沒有值，上面「別的表不留值」）；B 收到 A 的刪除時列被連鎖刪掉，刪除觸發器清掉那一列的欄位標記（合併不寫自己的墓碑，`sync_stamp_put_over`），建立的標記留著。所以 A 有 B 的值的標記、B 沒有；交換不再送（在 B 的 `have` 之下），整份重送才送，B 存下（沒有值）。沒有拒收、沒有留下字，兩台的標記不同（`anchorsReplicated`「round 10, 7」，`it.fails`）。第五到十輪的測試裡，整份重送會再存的別張表單位只有這一個（對所有表的標記在 `resendAll` 前後比對）。
 - **215 之前各台各自衍生的錨點與段落列**：起始標記假設每台握有相同的列；今天只有快照加入（兩台的列來自同一份），沒有影響。已經各自衍生過的兩台要對齊，傳輸那一批要先定做法。
 - **包的大小**：一次內文寫入帶一則筆記的一個錨點單位：50 個錨點 16.0 KB（gzip 2.7 KB）、200 個 61.9 KB（gzip 9.1 KB），未壓縮時一個錨點約 0.3 KB；快照與包都不壓縮。壓縮或不重複帶文字，傳輸那一批決定。
-- **還原時保留了舊編號的節點不能交換**：`scripts/restore.sh --keep-node-id`（或桌面版「直接開啟現有資料」）把換不了號的備份照樣放回去時，資料庫的 `sync_restore_kept_node_id`（migration 224）有一列。
-  規則：**這張表有列 ⇔ 這台現在的編號是還原時保留下來的、還沒重新加入**；之後一次成功的換號會清空它（`scripts/lib/renewNodeId.sql`），重新加入（交換那一批做）也要清。
-  那台可能編出別台已經握有、內容不同的號碼；交換要在這張表有列時拒絕（見 [deploy.md「還原」](../../../../../docs/agents/deploy.md)）。今天沒有交換，所以沒有東西要擋。
+- **`scripts/upgrade.sh rollback` 改成先切版本再還原**，`scripts/restore.sh` 才能在備份缺 `sync_renew_node_id()`（migration 213 之前的版本做的備份）時先補上函式再換號。
+  在那之前，213 之前的備份還原到全新的資料庫後**節點編號不變**（`restore.sh` 印 WARNING、結束碼 0；釘住在 `restoreRenewsNodeId.guard.test.ts`「a backup older than migration 213」）。今天沒有任何交換，所以沒有人握有會撞號的號碼；有了傳輸就有。
 
 ### 筆記的空間跟著它的樹（migration 218）
 

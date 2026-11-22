@@ -13,14 +13,9 @@ import { fileURLToPath } from "node:url";
 import { LOOPBACK } from "./ports.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-/** 還原後換節點編號的 SQL（scripts/lib/renewNodeId.sql）：打包時 stage.mjs 放在 server/ 旁；沒打包（開發、測試）用 repo 裡那一份。 @param {string} [serverRoot] */
-export function renewalSqlPath(serverRoot) {
-  const staged = serverRoot ? join(serverRoot, "renewNodeId.sql") : "";
-  return staged && existsSync(staged) ? staged : join(here, "../../../scripts/lib/renewNodeId.sql");
-}
 
-/** 後端子程序的環境變數（獨立出來好測：啟動參數有沒有只聽本機）。 @param {{ layout: import("./dataLayout.mjs").DataLayout, secrets: { ONDEN_SECRET_KEY: string, BETTER_AUTH_SECRET: string }, backendPort: number, origin: string, timezone: string, buildId?: string, serverRoot?: string }} options */
-export function backendEnv({ layout, secrets, backendPort, origin, timezone, buildId, serverRoot }) {
+/** 後端子程序的環境變數（獨立出來好測：啟動參數有沒有只聽本機）。 @param {{ layout: import("./dataLayout.mjs").DataLayout, secrets: { ONDEN_SECRET_KEY: string, BETTER_AUTH_SECRET: string }, backendPort: number, origin: string, timezone: string, buildId?: string }} options */
+export function backendEnv({ layout, secrets, backendPort, origin, timezone, buildId }) {
   return {
     PATH: process.env.PATH ?? "", // 筆記備份用 git
     HOME: process.env.HOME ?? layout.root,
@@ -28,9 +23,6 @@ export function backendEnv({ layout, secrets, backendPort, origin, timezone, bui
     NODE_ENV: "production",
     ONDEN_DB_DRIVER: "pglite",
     ONDEN_PGLITE_DIR: layout.pgdata,
-    // serverEntry.mjs 開後端之前看資料是不是被還原過、要不要換節點編號（nodeRenewal.mjs）
-    ONDEN_DESKTOP_DATA_DIR: layout.root,
-    ONDEN_RENEWAL_SQL: renewalSqlPath(serverRoot),
     PORT: String(backendPort),
     // 只聽本機：不寫的話後端會聽所有網路介面，同網段的人能繞過 webServer.mjs 直接連。
     ONDEN_LISTEN_HOST: LOOPBACK,
@@ -77,7 +69,7 @@ export async function startBackend({ serverRoot, layout, secrets, backendPort, w
     // 沒有它（開發時沒先跑 stage）才退回 Electron 本身當 Node 用。
     execPath: existsSync(bundledNode) ? bundledNode : process.execPath,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
-    env: backendEnv({ layout, secrets, backendPort, origin, timezone, buildId, serverRoot }),
+    env: backendEnv({ layout, secrets, backendPort, origin, timezone, buildId }),
   });
   const tail = /** @type {string[]} */ ([]);
   const collect = (/** @type {Buffer} */ chunk) => {

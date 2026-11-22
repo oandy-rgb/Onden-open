@@ -12,13 +12,12 @@ import { shellLocale, shellMessages } from "../src/messages.mjs";
 import {
   backupSpaceNeeded, createBackup, InsufficientSpaceError, isDataNewerFailure, listBackups, NEWER_DATA_LOG_MARKER, pruneBackups,
   readBuildInfo, readUpdateMarker, readVersionStamp, requiredFreeBytes, restoreBackup, restoreFromBackup,
-  abandonInterruptedUpdate, recoverFromInterruptedUpdate, resumeInterruptedUpdate, startWithSafeUpdate, UpdateFailure, writeUpdateMarker, writeVersionStamp, RENEWAL_REFUSED_LOG_MARKER,
+  abandonInterruptedUpdate, recoverFromInterruptedUpdate, resumeInterruptedUpdate, startWithSafeUpdate, UpdateFailure, writeUpdateMarker, writeVersionStamp,
 } from "../src/safeUpdate.mjs";
 import { backendEnv, BackendStartError, startBackend } from "../src/backendProcess.mjs";
 
 const dirs = [];
-// one level down: a layout keeps <userData>.node-record.json NEXT TO the folder (dataLayout.mjs), inside this temporary one
-const tmp = () => { const d = mkdtempSync(join(tmpdir(), "onden-safe-update-")); dirs.push(d); const u = join(d, "u"); mkdirSync(u); return u; };
+const tmp = () => { const d = mkdtempSync(join(tmpdir(), "onden-safe-update-")); dirs.push(d); return d; };
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 const OLD = { version: "0.1.0", buildId: "aaa111" };
@@ -48,8 +47,7 @@ function fingerprint(root) {
     for (const name of readdirSync(dir).sort()) {
       const path = join(dir, name);
       const here = rel ? `${rel}/${name}` : name;
-      // the renewal request a restore leaves (nodeRenewal.mjs) is not the data; its own tests are in nodeRenewal.test.mjs
-      if (here === "backups" || here === "renew-node-id.json") continue;
+      if (here === "backups") continue;
       if (statSync(path).isDirectory()) { lines.push(`${here}/`); walk(path, here); }
       else lines.push(`${here}:${createHash("sha256").update(readFileSync(path)).digest("hex")}`);
     }
@@ -528,7 +526,7 @@ describe("startBackend 真的逾時／提早結束（假的後端程式）", () 
     const root = tmp();
     const dist = join(root, "packages", "backend", "dist");
     mkdirSync(dist, { recursive: true });
-    writeFileSync(join(dist, "db.js"), "export const pglite = null;\nexport const pool = { query: async () => ({ rows: [] }), end: async () => {} };\n");
+    writeFileSync(join(dist, "db.js"), "export const pglite = null;\n");
     writeFileSync(join(dist, "server.js"), serverJs);
     return root;
   }
@@ -629,22 +627,3 @@ describe("寫入後的殘留（注意：fsync 本身沒有測試能涵蓋，斷�
     assert.deepEqual(readdirSync(layout.backups).filter((n) => n.endsWith(".partial")), []);
   });
 });
-
-describe("還原後的資料換不了節點編號（review of #1937 point 6）：不還原、不重試、不留沒用的備份", () => {
-  const refusedStart = async () => { throw Object.assign(new Error("backend exited"), { tail: [`${RENEWAL_REFUSED_LOG_MARKER}: the restored data cannot take a new node id (no-origins-table)`] }); };
-  it("換版時：丟 renewal_refused，資料與備份前相同，沒有還原、沒有留下這次的備份與更新標記", async () => {
-    const layout = seedOldData();
-    const before = fingerprint(layout.root);
-    await assert.rejects(startWithSafeUpdate({ layout, current: NEW, startBackend: refusedStart }), (e) => e instanceof UpdateFailure && e.kind === "renewal_refused");
-    assert.equal(fingerprint(layout.root), before);
-    assert.equal(readUpdateMarker(layout), null);
-    assert.deepEqual(listBackups(layout), []);
-  });
-  it("版本沒變時：同樣丟 renewal_refused（不是一般的啟動失敗），再開一次還是一樣，沒有任何還原", async () => {
-    const layout = seedOldData();
-    writeVersionStamp(layout, NEW);
-    for (let i = 0; i < 2; i++) await assert.rejects(startWithSafeUpdate({ layout, current: NEW, startBackend: refusedStart }), (e) => e instanceof UpdateFailure && e.kind === "renewal_refused");
-    assert.deepEqual(listBackups(layout), []);
-  });
-});
-

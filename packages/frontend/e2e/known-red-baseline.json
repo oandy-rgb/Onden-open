@@ -1,0 +1,11 @@
+{
+  "//": "全端 E2E 在 main 上已知會紅的測試（scripts/ciScheduledReport.mjs 讀）：定期檢查只列這份以外的新紅。只准減少（scripts/ratchetLib.mjs）；修好一個就刪一行。",
+  "tests": {
+    "[chromium] › fullstack/navigationMenuParity.spec.ts › desktop shows the core pages and the imported modules' pages; the phone More sheet opens the shared destinations": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）",
+    "[chromium] › fullstack/tagMembershipJourney.spec.ts › configure a tag, apply it without losing the note, and remove only this note's membership": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）",
+    "[chromium] › fullstack/zzDeepCan01.spec.ts › CAN-01: board create / rename / delete through the UI": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）",
+    "[chromium] › fullstack/zzDeepCol02.spec.ts › COL-02: saved-view config › API: multi-sort, compound filter, partial PATCH, rejections; UI builder; offline; phone": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）",
+    "[chromium] › fullstack/zzDeepPdf03.spec.ts › PDF-03: ink save timing, Escape, refusal": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）；真的問題：重新載入後手寫群組不見",
+    "[chromium] › fullstack/zzI18nAudit.spec.ts › zh-TW: no English left on the main screens": "#1909 之後 main（1ff93338a，執行 45018602565）全端 E2E 仍紅（2026-11-22）；真的問題：「history」還是英文"
+  }
+}

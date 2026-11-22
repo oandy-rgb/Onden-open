@@ -222,7 +222,5 @@ if (runtimeVersion !== `v${NODE_VERSION}`) throw new Error(`server/runtime/node 
 // schema＝這個建置帶的最新一個資料庫升級檔：換版時不開資料庫就能判斷「資料比程式新」（降版）。
 const schema = readdirSync(join(root, "packages/backend/db/migrations")).filter((f) => f.endsWith(".sql")).sort().at(-1) ?? "";
 writeFileSync(join(server, "build.json"), JSON.stringify({ buildId, schema }, null, 2));
-// 還原後換節點編號的 SQL（serverEntry.mjs 開後端前讀它；backendProcess.mjs renewalSqlPath）。與伺服器的 scripts/restore.sh 同一份。
-cpSync(join(root, "scripts/lib/renewNodeId.sql"), join(server, "renewNodeId.sql"));
 
 console.log(`stage ok: ${stage} (build ${buildId || "unset"})`);

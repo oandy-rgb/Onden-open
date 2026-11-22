@@ -26,12 +26,19 @@ on:
         description: "The PR description, for the change-note check (it looks for 「不需要更新說明」)"
         type: string
         default: ""
+      extended:
+        description: "Also run the scheduled set: daily (fuzz, browser version, layout audit…) or weekly (mutation, long property runs, census, bench)"
+        type: choice
+        options: ["", daily, weekly]
+        default: ""
 
 # Cancel superseded runs on the same ref to save CI minutes.
 # Main is not cancelled: every merge synced to the public main keeps its own result.
+# A scheduled run (`extended`) has a group of its own: sharing main's would let it hold the group while a merge's push run
+# waits, and a dispatch waiting behind a push run would be cancelled by the next push, leaving a night with no report.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.ref }}${{ inputs.extended && format('-{0}', inputs.extended) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !inputs.extended }}
 
 jobs:
   guard:
@@ -222,58 +229,6 @@ jobs:
       - name: Postgres logs (on failure)
         if: failure()
         run: docker logs onden-pg
-
-  # The restore and upgrade scripts the way the servers run them (PR #1937, review round 2, point 2): scripts/restore.sh in compose mode on
-  # the repo's compose.yaml and Postgres image (PG 18 with pgroonga) with a pg_dump -Fc backup-vps folder; the fake-docker self-test of
-  # upgrade.sh / rollback; and the restore drill's self-test against the same image (host client tools of the same major version).
-  restore-scripts:
-    name: Restore scripts — compose · pg_dump -Fc · PG 18 + pgroonga
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Postgres image
-        run: docker build -t onden-ci-postgres:selftest ./docker/postgres
-
-      - name: restore.sh in compose mode, pg_dump -Fc folder (scripts/restore-ci-selftest.sh)
-        env:
-          REQUIRE_PGROONGA: "1"
-        run: bash scripts/restore-ci-selftest.sh
-
-      - name: upgrade.sh / rollback against a fake docker (scripts/upgrade-selftest.sh)
-        run: bash scripts/upgrade-selftest.sh
-
-      # The drill runs pg_dump / pg_restore on the host: they must be the server's major version (18), which the runner does not ship.
-      - name: PostgreSQL 18 client tools
-        run: |
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update -q && sudo apt-get install -y -q postgresql-client-18
-          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-
-      - name: Start Postgres for the drill
-        run: |
-          docker run -d --name onden-drill-pg -p 5432:5432 -e POSTGRES_DB=postgres -e POSTGRES_USER=onden -e POSTGRES_PASSWORD=onden \
-            onden-ci-postgres:selftest postgres -c shared_preload_libraries='pg_stat_statements'
-          for i in $(seq 1 60); do
-            docker exec onden-drill-pg pg_isready -h 127.0.0.1 -U onden -d postgres >/dev/null 2>&1 && exit 0
-            sleep 2
-          done
-          docker logs onden-drill-pg; exit 1
-
-      - name: The restore drill's self-test (scripts/restore-drill-selftest.sh)
-        run: bash scripts/restore-drill-selftest.sh postgres://onden:onden@localhost:5432/postgres
 
   frontend:
     name: Frontend — lint · typecheck · unit · build
@@ -475,3 +430,153 @@ jobs:
           path: /tmp/pw-host-out/**/error-context.md
           if-no-files-found: ignore
           retention-days: 7
+
+  # ── The scheduled set (owner, 2026-11-22: 「加每天一次和每週一次就好」) ──────────────────────────────────────────
+  # Checks that existed but that no job ran (scripts/ciReachLib.mjs finds them; its guard keeps the list empty). They run
+  # when .github/workflows/scheduled.yml dispatches this workflow with `extended` (daily or weekly; never on push), or by
+  # hand with `-f extended=daily`. Every run of them comments on one issue (scripts/ciScheduledReport.mjs).
+  scheduled-unit:
+    name: Scheduled — fuzz · Astro head · parity tool
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.extended == 'daily'
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Fresh random inputs every night (owner 2026-11-18 「種子都隨機」): a red is a finding; the seed is in the log.
+      - name: Fuzz tests (backend, frontend, markdown)
+        run: npm run test:fuzz
+      - name: Astro page tests
+        if: success() || failure()
+        working-directory: packages/frontend
+        run: npm run test:astro
+      - name: The parity tool's own tests
+        if: success() || failure()
+        run: npm run parity:test
+
+  scheduled-browser:
+    name: Scheduled — browser version (feature scripts · slides · touch · layout audit · diagrams)
+    # Pinned like the parity job: the pinned Playwright cannot install Chromium on ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' && inputs.extended == 'daily'
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the browser version
+        run: |
+          npm run build -w packages/markdown
+          npm run build -w packages/contract
+          npm run build -w packages/site
+          npm run build:browser
+      - name: Install the browsers
+        working-directory: packages/frontend/e2e
+        run: npm ci && npx playwright install --with-deps chromium webkit
+      # Each step runs even when one before it failed, so one night shows every red.
+      - name: Smoke and feature scripts (run-all.mjs)
+        working-directory: packages/frontend
+        # --require-engines: an engine that cannot start fails the step (on a developer's machine it is a skip).
+        run: node e2e/browser-app/run-all.mjs --require-engines
+      - name: Slide tables
+        if: success() || failure()
+        working-directory: packages/frontend
+        run: npm run e2e:slides
+      - name: Touch hold
+        if: success() || failure()
+        working-directory: packages/frontend
+        run: npm run e2e:touch-hold
+      - name: Layout audit (rules on the rendered pages, baseline e2e/layout-audit/baseline.json)
+        if: success() || failure()
+        working-directory: packages/frontend
+        run: npm run layout:audit
+      - name: Layout audit and style census, their own tests
+        if: success() || failure()
+        working-directory: packages/frontend
+        run: npm run layout:audit:selftest && npm run style:census:selftest
+      - name: Diagram layout in a real browser
+        if: success() || failure()
+        run: node packages/frontend/e2e/diagrams/check.mjs "$RUNNER_TEMP/diagrams.png"
+
+  scheduled-weekly:
+    name: Scheduled weekly — ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    if: github.event_name == 'workflow_dispatch' && inputs.extended == 'weekly'
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "mutation (backend)", runner: ubuntu-latest, db: true, dir: packages/backend, cmd: "npm run test:mutation" }
+          - { name: "mutation (frontend)", runner: ubuntu-latest, db: false, dir: packages/frontend, cmd: "npm run test:mutation" }
+          - { name: "mutation (markdown)", runner: ubuntu-latest, db: false, dir: packages/markdown, cmd: "npm run test:mutation" }
+          - { name: "long property runs", runner: ubuntu-latest, db: true, dir: ".", cmd: "npm run test:props:long --workspaces --if-present" }
+          - { name: "style census", runner: ubuntu-24.04, db: false, dir: ".", cmd: "npm run build:browser && npm ci --prefix packages/frontend/e2e && (cd packages/frontend/e2e && npx playwright install --with-deps chromium) && npm run style:census -w packages/frontend" }
+          - { name: "bench", runner: ubuntu-latest, db: true, dir: ".", cmd: "npm run bench && npm run bench:check" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the packages the backend imports
+        run: npm run build -w packages/markdown && npm run build -w packages/contract && npm run build -w packages/site
+      - name: Test Postgres
+        if: matrix.db
+        uses: ./.github/actions/test-postgres
+      # The mutation reports and the census report are files, kept as the run's artifacts (never committed).
+      - name: ${{ matrix.name }}
+        working-directory: ${{ matrix.dir }}
+        env:
+          DATABASE_URL: ${{ matrix.db && 'postgres://onden:onden@localhost:5432/onden_test' || '' }}
+          # Without a database the skip gate (scripts/lib/skipGateReporter.mjs) wants to be told this is a no-database run.
+          ONDEN_TESTS_WITHOUT_DATABASE: ${{ !matrix.db && '1' || '' }}
+          BENCH_DATABASE_URL: postgres://onden:onden@localhost:5432/onden_bench
+          ONDEN_TEST_DB_KEEP: "1"
+        run: ${{ matrix.cmd }}
+      - name: Keep the reports
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-${{ strategy.job-index }}
+          path: |
+            packages/*/reports/mutation/
+            packages/frontend/e2e/style-census/report.json
+            bench-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # One issue collects every scheduled red: a comment per run (job, test names, seed lines, run link; no log text, which
+  # could carry a note's words). Full-stack E2E reds already listed in packages/frontend/e2e/known-red-baseline.json are
+  # counted, not listed, until main is green; that list only shrinks (scripts/ratchetLib.mjs).
+  scheduled-report:
+    name: Scheduled — report
+    runs-on: ubuntu-latest
+    needs: [guard, pairing-relay, backend, backend-postgres, frontend, parity, e2e-critical, e2e-fullstack, scheduled-unit, scheduled-browser, scheduled-weekly]
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.extended != '' && github.repository == 'oandy-rgb/Onden-open'
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Comment on the scheduled-checks issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          KIND: ${{ inputs.extended }}
+        run: node scripts/ciScheduledReport.mjs

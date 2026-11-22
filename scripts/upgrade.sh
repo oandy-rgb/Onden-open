@@ -190,9 +190,8 @@ do_rollback() {
 ═══ 請注意 ═══
 回退會做這些事：
   1. 停止 Onden 服務（網站暫時打不開）
-  2. 切回版本 $from（先切版本：之後任何一步中斷，設定記的都是資料所屬的版本）
-  3. 把資料庫與上傳檔案還原成 $stamp 那一刻的樣子，資料庫換一個新的節點編號
-  4. 啟動
+  2. 把資料庫與上傳檔案還原成 $stamp 那一刻的樣子
+  3. 切回版本 $from 並啟動
 還原會「蓋掉」那一刻之後寫入的所有資料（新筆記、修改、上傳）。
 為了不讓這些資料憑空消失，會先另外存一份「回退前」備份到 $dir，需要時還能找回。
 EOF2
@@ -202,73 +201,29 @@ EOF2
   compose ps --status running --services 2>/dev/null | grep -qx postgres \
     || compose up -d postgres
   say ""
-  local current; current="$(env_get "$VERSION_VAR")"
-  say "步驟 1/6：保存回退前的現況（以防反悔）…"
+  say "步驟 1/5：保存回退前的現況（以防反悔）…"
   local out
   if ! out="$(compose run --rm --no-deps -T backup once "pre-rollback current=${to}" 2>&1)"; then
     printf '%s\n' "$out" >&2
     die "回退前備份失敗，為安全起見中止，沒有動任何東西。"
   fi
 
-  say "步驟 2/6：停止服務…"
+  say "步驟 2/5：停止服務…"
   local -a others
   mapfile -t others < <(compose config --services | grep -vx postgres)
   compose stop "${others[@]}"
 
-  # The version goes with the data (own-node-transport §6 batch 3; review of #1937, point 5): .env names `from` from the moment the database
-  # could be the older one, and names `current` again whenever it is not. So the older image is pulled with the version given only to that
-  # one command; .env changes right before the restore; and until the restore has swapped the database in (restore.sh keeps the replaced
-  # one as onden_before_restore_<stamp>, which is how this script can tell afterwards), an interruption or failure puts .env back to
-  # `current` and starts the services again: the database is still the one they belong to.
-  local rstamp; rstamp="rollback$(date -u +%Y%m%d%H%M%S)"
-  # 0 = swapped in; 1 = not; 2 = the server could not be asked (then nothing is guessed: .env and the services are left as they are)
-  restored() {
-    local n
-    n=$(compose exec -T postgres psql -U onden -d postgres -X -At -c "SELECT count(*) FROM pg_database WHERE datname = 'onden_before_restore_$rstamp'" 2>/dev/null) || return 2
-    [[ $n == 1 ]] && return 0; [[ $n == 0 ]] && return 1; return 2
-  }
-  undo_version() { # <why>
-    trap - INT TERM
-    local state=0; restored || state=$?
-    if [[ $state == 0 ]]; then
-      say "（$1：資料庫已經還原成 $stamp，版本維持 $from。上傳檔案還沒還原：照 docs/self-host/upgrade.md「回退」的步驟 5、6 做完，再 docker compose up -d。）"
-      exit 1
-    fi
-    if [[ $state == 2 ]]; then
-      printf '錯誤：%s，而且問不到資料庫是否已經還原。.env 留在 %s、服務停著，沒有再動任何東西。\n' "$1" "$from" >&2
-      printf '  確認：docker compose exec postgres psql -U onden -d postgres -c "SELECT datname FROM pg_database WHERE datname = '"'"'onden_before_restore_%s'"'"'"\n' "$rstamp" >&2
-      printf '  有這個資料庫＝已還原：還原上傳檔案再啟動。沒有＝沒還原：把 .env 的 %s 改回 %s 再 docker compose up -d。\n' "$VERSION_VAR" "${current:-原本的版本}" >&2
-      exit 1
-    fi
-    [[ -z "$current" ]] || env_set "$VERSION_VAR" "$current"
-    compose up -d >/dev/null 2>&1 || true
-    die "$1：資料庫沒有還原，資料庫與版本都維持回退前的樣子（${current:-未記錄的版本}），服務已重新啟動。"
-  }
-  trap 'undo_version "回退被中斷"' INT TERM
+  say "步驟 3/5：還原資料庫…"
+  "$SCRIPT_DIR/restore.sh" "$dir/onden-$stamp.sql.gz" --yes
 
-  say "步驟 3/6：下載 $from 的映像…"
-  if [[ "$from" != "unknown" ]]; then
-    ONDEN_VERSION="$from" compose pull --ignore-buildable || say "（下載 $from 失敗；沿用這台已有的映像。沒有的話啟動會失敗，資料不受影響。）"
-  fi
+  say "步驟 4/5：還原上傳檔案…"
+  gunzip -c "$dir/onden-content-$stamp.tar.gz" \
+    | compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /app/packages/backend'
 
-  say "步驟 4/6：切回 $from 並還原資料庫（換一個新的節點編號）…"
+  say "步驟 5/5：切回 $from 並啟動…"
   [[ "$from" == "unknown" ]] || env_set "$VERSION_VAR" "$from"
   [[ "$from" != "unknown" ]] || say "（升級前沒有記錄版本，.env 的 $VERSION_VAR 沒有改，請自行確認要用哪個版本。）"
-  # this script already kept the pre-rollback state above; restore.sh also keeps the replaced database (dropping it is the person's call)
-  if ! ONDEN_RESTORE_STAMP="$rstamp" ONDEN_ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/restore.sh" "$dir/onden-$stamp.sql.gz" --yes; then
-    undo_version "資料庫沒有還原（原因在上面）"
-  fi
-  trap - INT TERM
-
-  say "步驟 5/6：還原上傳檔案…"
-  if ! gunzip -c "$dir/onden-content-$stamp.tar.gz" \
-    | compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /app/packages/backend'; then
-    die "資料庫已經還原成 $stamp（版本 $from），但上傳檔案沒有還原完成，服務停著。排除原因（磁碟空間？）後再跑一次這一步：
-    gunzip -c $dir/onden-content-$stamp.tar.gz | docker compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /app/packages/backend'
-  然後 docker compose up -d。不要再跑一次回退（那會再還原一次資料庫）。"
-  fi
-
-  say "步驟 6/6：啟動 $from…"
+  compose pull --ignore-buildable || true
   compose up -d
   if wait_healthy; then
     say ""

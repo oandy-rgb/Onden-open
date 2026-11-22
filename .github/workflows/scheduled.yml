@@ -1,0 +1,38 @@
+name: Scheduled checks
+
+# Once a day and once a week (owner, 2026-11-22: 「加每天一次和每週一次就好」; not on every push), start ci.yml on main with
+# the scheduled set: `extended=daily` adds the full-stack E2E and the checks no other job runs (fuzz, browser-version
+# scripts, layout audit…), `extended=weekly` the slow ones (mutation, long property runs, style census, bench).
+# One definition of every job stays in ci.yml; this file only says when. A workflow started with GITHUB_TOKEN by
+# workflow_dispatch is the one kind GitHub lets a workflow start. Only on the public mirror: its minutes are free,
+# and the private repo's would be spent twice.
+on:
+  schedule:
+    - cron: "0 18 * * *"    # daily, 02:00 Taipei
+    - cron: "0 20 * * 6"    # weekly, Sunday 04:00 Taipei
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: "Which set to start"
+        type: choice
+        options: [daily, weekly]
+        default: daily
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  start:
+    name: Start ci.yml on main
+    runs-on: ubuntu-latest
+    if: github.repository == 'oandy-rgb/Onden-open'
+    steps:
+      - name: Dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ inputs.extended || (github.event.schedule == '0 20 * * 6' && 'weekly' || 'daily') }}
+        run: |
+          if [ "$KIND" = daily ]; then full=true; else full=false; fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main -f extended="$KIND" -f fullstack="$full"
+          echo "started ci.yml on main: extended=$KIND fullstack=$full"

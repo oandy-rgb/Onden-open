@@ -1,0 +1,25 @@
+# The test database the scheduled jobs use: the same image compose uses (pgroonga, pg_stat_statements, pgvector,
+# pgcrypto) on :5432, user/password onden, with onden_test loaded from the generated schema.sql. The steps are the
+# backend-postgres job's (see the comments there: TCP readiness on purpose, schema.sql pre-seeds schema_migrations).
+name: Test Postgres
+description: Start the onden Postgres image with onden_test loaded from packages/backend/db/schema.sql
+runs:
+  using: composite
+  steps:
+    - name: Build Postgres image
+      shell: bash
+      run: docker build -t onden-postgres ./docker/postgres
+    - name: Start Postgres and load onden_test
+      shell: bash
+      run: |
+        docker run -d --name onden-pg -p 5432:5432 \
+          -e POSTGRES_DB=onden -e POSTGRES_USER=onden -e POSTGRES_PASSWORD=onden \
+          -v "$PWD/packages/backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro" \
+          onden-postgres postgres -c shared_preload_libraries='pg_stat_statements'
+        for i in $(seq 1 60); do
+          if docker exec onden-pg pg_isready -h 127.0.0.1 -U onden -d onden >/dev/null 2>&1; then ready=1; break; fi
+          sleep 2
+        done
+        [ -n "${ready:-}" ] || { echo "Postgres never became ready"; docker logs onden-pg; exit 1; }
+        docker exec onden-pg psql -U onden -d onden -c "CREATE DATABASE onden_test;"
+        docker exec -i onden-pg psql -U onden -d onden_test -v ON_ERROR_STOP=1 -q -f /docker-entrypoint-initdb.d/01_schema.sql

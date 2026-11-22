@@ -3929,7 +3929,6 @@ INSERT INTO schema_migrations (version) VALUES ('218_space_follows_tree') ON CON
 INSERT INTO schema_migrations (version) VALUES ('220_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('221_merge_core_before_transport') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('222_sync_join_source_brought') ON CONFLICT (version) DO NOTHING;
-INSERT INTO schema_migrations (version) VALUES ('224_sync_restore_kept_node_id') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -7239,12 +7238,3 @@ END;
 $$ LANGUAGE plpgsql;
 -- 222: a snapshot names the other origins its source holds, per label; the join remembers them (db/migrations/222_sync_join_source_brought.sql)
 ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_brought jsonb NOT NULL DEFAULT '{}'::jsonb;
-
--- 224: a database restored WITHOUT a new node id says so (db/migrations/224_sync_restore_kept_node_id.sql)
-CREATE TABLE IF NOT EXISTS sync_restore_kept_node_id (
-  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  kept_at timestamptz NOT NULL DEFAULT now(),
-  node_id text,
-  overwritten text,
-  reason text NOT NULL
-);

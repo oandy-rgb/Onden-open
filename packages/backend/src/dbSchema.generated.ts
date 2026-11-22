@@ -978,14 +978,6 @@ export interface SyncOrigins {
   workspace_id: string;
 }
 
-export interface SyncRestoreKeptNodeId {
-  kept_at: Generated<Timestamp>;
-  node_id: string | null;
-  overwritten: string | null;
-  reason: string;
-  workspace_id: string;
-}
-
 export interface SyncStampHeads {
   author: string | null;
   content_hash: Generated<string>;
@@ -1125,7 +1117,6 @@ export interface DB {
   sync_join: SyncJoin;
   sync_node: SyncNode;
   sync_origins: SyncOrigins;
-  sync_restore_kept_node_id: SyncRestoreKeptNodeId;
   sync_stamp_heads: SyncStampHeads;
   sync_stamps: SyncStamps;
   workspaces: Workspaces;

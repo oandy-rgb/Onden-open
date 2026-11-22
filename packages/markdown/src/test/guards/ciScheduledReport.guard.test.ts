@@ -1,0 +1,57 @@
+// The scheduled run's report (scripts/ciScheduledReport.mjs) must not say false things: a red night is never silent, a
+// known E2E red is called removable only when the log shows it passing, the skips a kind never starts are not news, and
+// nothing but test names, seeds and the link goes into the comment.
+import { describe, expect, it } from "vitest";
+import { compose, readJobLog } from "../../../../../scripts/ciScheduledReport.mjs";
+
+const known = { "[chromium] › fullstack/a.spec.ts › old red": "known", "[chromium] › fullstack/b.spec.ts › fixed since": "known" };
+const job = (name: string, conclusion: string, databaseId = 1) => ({ name, conclusion, databaseId });
+const at = (text: string) => `2026-11-22T10:00:00.0000000Z ${text}`;
+const e2eLog = [
+  at("  ✓   3 [chromium] › fullstack/b.spec.ts:10:5 › fixed since (2.1s)"),
+  at("  1) [chromium] › fullstack/a.spec.ts:4:5 › old red ────────"),
+  at("  2) [chromium] › fullstack/c.spec.ts:9:5 › new red (retry #1)"),
+].join("\n");
+const unitLog = [at("[fuzz] seed=1234 long=false"), at("\x1b[41m FAIL \x1b[49m src/x.fuzz.test.ts > pipeline > keeps text"), at("secret words of a note")].join("\n");
+const base = { kind: "daily", sha: "0123456789abcdef", url: "https://example.test/run/1", known };
+
+describe("the scheduled report", () => {
+  it("reads failing tests, passing E2E tests and seeds from a job log, whichever way the colour codes come", () => {
+    const e2e = readJobLog(e2eLog);
+    expect([...e2e.failed]).toEqual(["[chromium] › fullstack/a.spec.ts › old red", "[chromium] › fullstack/c.spec.ts › new red"]);
+    expect([...e2e.passed]).toEqual(["[chromium] › fullstack/b.spec.ts › fixed since"]);
+    const unit = readJobLog(unitLog.replace(/\x1b/g, "^["));
+    expect([...unit.failed]).toEqual(["src/x.fuzz.test.ts › pipeline > keeps text"]);
+    expect([...unit.seeds]).toEqual(["FUZZ_SEED=1234"]);
+  });
+
+  it("a red night lists the new reds and the seeds, counts the known ones, and never copies other log text", () => {
+    const logs: Record<number, string> = { 1: unitLog, 2: e2eLog };
+    const text = compose({ ...base, jobs: [job("Scheduled — fuzz · Astro head · parity tool", "failure", 1), job("Full-stack E2E (chromium 1/4)", "failure", 2), job("Scheduled weekly — bench", "skipped", 3)], readLog: (j: { databaseId: number }) => logs[j.databaseId] ?? null });
+    expect(text).toContain("`src/x.fuzz.test.ts › pipeline > keeps text`");
+    expect(text).toContain("`[chromium] › fullstack/c.spec.ts › new red`");
+    expect(text).not.toContain("`[chromium] › fullstack/a.spec.ts › old red`");
+    expect(text).toContain("新的紅 1 個；已知的紅 1 個");
+    expect(text).toContain("`FUZZ_SEED=1234`");
+    expect(text).not.toContain("secret words");
+    expect(text).not.toContain("不該略過"); // a weekly job on a daily night is expected to be skipped
+  });
+
+  it("a known red is removable only when seen passing; a log that cannot be read is said, not taken as green", () => {
+    const noProof = compose({ ...base, jobs: [job("Full-stack E2E (chromium 1/4)", "failure", 2)], readLog: () => null });
+    expect(noProof).toContain("紀錄讀不到");
+    expect(noProof).not.toContain("可以從已知清單刪掉");
+    const withProof = compose({ ...base, jobs: [job("Full-stack E2E (chromium 1/4)", "failure", 2)], readLog: () => e2eLog });
+    expect(withProof).toContain("可以從已知清單刪掉的：\n  - `[chromium] › fullstack/b.spec.ts › fixed since`");
+    const diedEarly = compose({ ...base, jobs: [job("Full-stack E2E (chromium 1/4)", "failure", 2)], readLog: () => at("docker build failed") });
+    expect(diedEarly).not.toContain("可以從已知清單刪掉");
+  });
+
+  it("a job the kind should have run but skipped is named; the comment stays under GitHub's limit", () => {
+    const text = compose({ ...base, jobs: [job("Scheduled — browser version (…)", "skipped")], readLog: () => null });
+    expect(text).toContain("不該略過卻沒有跑的工作：Scheduled — browser version (…)");
+    const many = Array.from({ length: 3000 }, (_, i) => at(`  ${i + 1}) [chromium] › fullstack/x${i}.spec.ts:1:1 › ${"long title ".repeat(10)}${i}`)).join("\n");
+    const jobs = Array.from({ length: 40 }, (_, i) => job(`Full-stack E2E (${i})`, "failure", i));
+    expect(compose({ ...base, jobs, readLog: () => many }).length).toBeLessThanOrEqual(60_100);
+  });
+});

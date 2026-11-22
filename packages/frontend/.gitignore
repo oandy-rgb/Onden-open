@@ -7,3 +7,4 @@ dist-cap/
 .env.local
 coverage/
 e2e/browser-app/failed-*.png
+e2e/style-census/report.json

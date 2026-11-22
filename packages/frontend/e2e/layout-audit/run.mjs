@@ -14,7 +14,7 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? pro
 const flag = (name) => process.argv.includes(name);
 const list = (name) => arg(name)?.split(",").filter(Boolean) ?? null;
 const widths = VIEWPORTS.filter((v) => !list("--widths") || list("--widths").includes(v.id));
-const screens = SCREENS.filter((s) => !list("--screens") || list("--screens").includes(s.id));
+const screens = SCREENS.filter((s) => !s.census).filter((s) => !list("--screens") || list("--screens").includes(s.id));
 const rules = RULES.filter((r) => !list("--rules") || list("--rules").includes(r.id));
 const jobs = Number(arg("--jobs") ?? 3);
 const shotsDir = arg("--shots");

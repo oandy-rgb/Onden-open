@@ -393,7 +393,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（111）
+## 共用邏輯（112）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1130,6 +1130,12 @@ const zip: Blob | null = due ? await makeBackupBlob() : null; // 就是設定裡
 - 入口：`frontend/e2e/layout-audit/run.mjs`；`frontend/e2e/layout-audit/baseline.json`　項目 `layout-audit`
 - 取代：在各個 e2e 測試裡各寫一段量位置的程式，或只在 1280×800 看「按了會不會動」；改 UI 的 PR 以截圖肉眼檢查版面
 - 為什麼：跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run layout:audit`（約 10 分鐘）。用程式量元素位置（不存基準截圖），在多個寬度與深色模式檢查通用規則。基準 baseline.json 只准變少：新違規失敗、修好的要從基準刪掉。規則定義與誤報處理見 e2e/layout-audit/README.md。改 UI 的 PR 要跑。
+
+### 要知道整個 app 實際算出來的外觀有幾種值、哪些不在規則的刻度上（字級、間距、圓角、邊框、陰影、控制項高度、圖示、顏色…），或要產生各畫面×寬度×主題的截圖聯絡表
+
+- 入口：`frontend/e2e/style-census/run.mjs`；`frontend/e2e/style-census/scale.mjs`；`docs/agents/appearance-rules.md`　項目 `style-census`
+- 取代：自己在各個測試或腳本裡 getComputedStyle 量某一種值，或各自維護一份畫面清單（畫面清單只有 e2e/layout-audit/screens.mjs 一份，普查專用的畫面標 census: true）
+- 為什麼：跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run style:census`（手動，不在測試或 CI；全部約 20 分鐘）。刻度（scale.mjs）與規則文件（appearance-rules.md）是同一份，selftest 檢查兩邊每一種都有。只讀，不改產品程式。
 
 ### 要在沒有 docker 的環境（雲端、CI 容器）起一整套全端 e2e 堆疊（後端＋前端 SSR＋同源轉發）並跑 Playwright
 

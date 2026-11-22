@@ -17,7 +17,7 @@ const note = (id, lens = "editor") => `?view=notes&node=${id}&lens=${lens}`;
 const byName = (h, name, opts = {}) => h.page.getByRole(opts.role ?? "button", { name, exact: opts.exact ?? true });
 async function click(loc, what) {
   const first = loc.first();
-  try { await first.waitFor({ state: "visible", timeout: 12_000 }); } catch { skip(`找不到「${what}」`); }
+  try { await first.waitFor({ state: "visible", timeout: Number(process.env.AUDIT_CLICK_TIMEOUT_MS ?? 12_000) }); } catch { skip(`找不到「${what}」`); }
   await first.click();
 }
 async function settle(h, ms = 700) { await h.page.waitForTimeout(ms); await installHelpers(h.page); }
@@ -160,3 +160,63 @@ async function openSettings(h, which = 1) {
     await click(h.page.getByRole("dialog").getByRole("button", { name: "外觀" }), "設定的「外觀」"); await settle(h, 800);
   }
 }
+
+// ── Screens only the style census visits (`census: true`; layout-audit/run.mjs leaves them out so its baseline and
+// its running time stay as they were). They use the extra data of seed.mjs `seedCensusData`. `empty: true` runs in a
+// workspace with the sample notes cleared; `after(h)` undoes what the screen changed in the browser.
+import { CENSUS_IDS } from "./seed.mjs";
+
+const SETTINGS_PAGES = ["筆記", "記一筆", "手寫", "導覽列", "通知", "功能", "語言", "日期與時間", "資料與備份", "關於 Onden"];
+async function settingsPage(h, name) {
+  await openSettings(h);
+  const dialog = h.page.getByRole("dialog");
+  // (The first page, 「我」, is what the plain `settings` screen shows.) The rows carry their current value after the name ("語言跟隨系統"), so the name is matched at the start.
+  const row = new RegExp(`^${name}`);
+  await click(dialog.getByRole("button", { name: row }).or(dialog.getByRole("tab", { name: row })), `設定的「${name}」`); await settle(h, 800);
+}
+
+export const CENSUS_SCREENS = [
+  { id: "note-callouts", name: "筆記：提示框、清單、行內樣式", go: (h) => open(h, note(CENSUS_IDS.callouts)) },
+  { id: "note-image", name: "筆記：有圖片", go: (h) => open(h, note(CENSUS_IDS.image)) },
+  { id: "note-ink", name: "手寫頁", go: (h) => open(h, note(CENSUS_IDS.ink)) },
+  { id: "note-pdf", name: "PDF 筆記", async go(h) { await open(h, note(CENSUS_IDS.pdf)); await settle(h, 2500); } },
+  { id: "day-with-notes", name: "日記：有內容的一天", go: (h) => open(h, `?view=daily&date=${new Date().toISOString().slice(0, 10)}`) },
+  { id: "ai-panel", name: "AI 面板：有一段對話", async go(h) {
+    await open(h, note(IDS.long));
+    if (h.phone) await click(h.page.getByRole("button", { name: "問 AI 這則筆記" }), "問 AI 這則筆記");
+    else await infoTab(h, "AI");
+    await settle(h, 900);
+  } },
+  { id: "account-menu", name: "帳號選單／帳號面板", async go(h) {
+    await open(h, note(IDS.long));
+    if (h.phone) await goList(h);
+    await click(h.page.getByRole("button", { name: /^我/ }).or(h.page.getByRole("button", { name: "帳號" })), "帳號"); await settle(h);
+  } },
+  { id: "phone-more-sheet", name: "手機：底部列的「更多」面板", async go(h) {
+    if (!h.phone) skip("只有手機版面有底部列");
+    await open(h, note(IDS.long));
+    await click(h.page.getByRole("button", { name: /^(更多|More)$/ }), "更多"); await settle(h);
+  } },
+  { id: "tasks-sheet", name: "任務：打開一則任務", async go(h) {
+    await open(h, "?view=tasks");
+    await click(h.page.getByText("今天要做的任務", { exact: true }), "今天要做的任務"); await settle(h, 800);
+  } },
+  { id: "search-empty", name: "搜尋：沒有結果", async go(h) {
+    await open(h, note(IDS.long));
+    if (h.phone) await goList(h);
+    await click(h.page.getByRole("button", { name: "搜尋筆記" }), "搜尋筆記");
+    await h.page.keyboard.type("zzzzqqqq"); await settle(h, 1200);
+  } },
+  { id: "note-missing", name: "錯誤：筆記不存在", go: (h) => open(h, note("00000000-0000-4000-8000-0000000009ff")) },
+  { id: "offline", name: "離線狀態", async go(h) {
+    await open(h, note(IDS.long));
+    await h.page.context().setOffline(true);
+    await h.page.evaluate(() => window.dispatchEvent(new Event("offline")));
+    await settle(h, 1500);
+  }, async after(h) { await h.page.context().setOffline(false); await h.page.evaluate(() => window.dispatchEvent(new Event("online"))); } },
+  { id: "empty-notes", name: "空狀態：還沒有任何筆記", empty: true, go: (h) => open(h, "?view=notes") },
+  { id: "empty-tasks", name: "空狀態：沒有任務", empty: true, go: (h) => open(h, "?view=tasks") },
+  { id: "empty-daily", name: "空狀態：日記沒有內容", empty: true, go: (h) => open(h, "?view=daily") },
+  ...SETTINGS_PAGES.map((name, i) => ({ id: `settings-${i + 1}`, name: `設定：${name}`, go: (h) => settingsPage(h, name) })),
+].map((s) => ({ ...s, census: true }));
+SCREENS.push(...CENSUS_SCREENS);

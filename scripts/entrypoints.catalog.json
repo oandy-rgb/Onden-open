@@ -4378,6 +4378,27 @@
       "why": "跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run layout:audit`（約 10 分鐘）。用程式量元素位置（不存基準截圖），在多個寬度與深色模式檢查通用規則。基準 baseline.json 只准變少：新違規失敗、修好的要從基準刪掉。規則定義與誤報處理見 e2e/layout-audit/README.md。改 UI 的 PR 要跑。"
     },
     {
+      "id": "style-census",
+      "need": "要知道整個 app 實際算出來的外觀有幾種值、哪些不在規則的刻度上（字級、間距、圓角、邊框、陰影、控制項高度、圖示、顏色…），或要產生各畫面×寬度×主題的截圖聯絡表",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/e2e/style-census/run.mjs"
+        },
+        {
+          "file": "packages/frontend/e2e/style-census/scale.mjs"
+        },
+        {
+          "file": "docs/agents/appearance-rules.md"
+        }
+      ],
+      "use": "",
+      "useLang": "none",
+      "replaces": "自己在各個測試或腳本裡 getComputedStyle 量某一種值，或各自維護一份畫面清單（畫面清單只有 e2e/layout-audit/screens.mjs 一份，普查專用的畫面標 census: true）",
+      "rules": [],
+      "why": "跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run style:census`（手動，不在測試或 CI；全部約 20 分鐘）。刻度（scale.mjs）與規則文件（appearance-rules.md）是同一份，selftest 檢查兩邊每一種都有。只讀，不改產品程式。"
+    },
+    {
       "id": "e2e-cloud-stack",
       "need": "要在沒有 docker 的環境（雲端、CI 容器）起一整套全端 e2e 堆疊（後端＋前端 SSR＋同源轉發）並跑 Playwright",
       "area": "共用邏輯",

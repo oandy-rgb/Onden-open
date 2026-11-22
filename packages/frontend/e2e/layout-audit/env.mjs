@@ -28,9 +28,10 @@ export async function launch() {
 }
 
 export function contextOptions(vp) {
-  const base = { locale: "zh-TW", timezoneId: "UTC", colorScheme: vp.dark ? "dark" : "light", reducedMotion: "reduce" };
+  const base = { locale: "zh-TW", timezoneId: "UTC", colorScheme: vp.dark ? "dark" : "light", reducedMotion: vp.motion ?? "reduce" };
   if (vp.mobile) return { ...playwright.devices[vp.device], ...base };
-  return { ...base, viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1 };
+  // `touch`: a touch screen of any width (a tablet): the page sees (pointer: coarse), as on the real device.
+  return { ...base, viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1, ...(vp.touch ? { isMobile: true, hasTouch: true } : {}) };
 }
 
 export function startSite(dir = "dist-browser") {
@@ -38,8 +39,9 @@ export function startSite(dir = "dist-browser") {
 }
 
 /** Open the app in a fresh browser context (its own empty database), put the fixed data in, reload so the app shows it. */
-export async function openApp(browser, site, vp, { seed = true } = {}) {
+export async function openApp(browser, site, vp, { seed = true, extraSeed = null, beforeLoad = null } = {}) {
   const context = await browser.newContext(contextOptions(vp));
+  if (beforeLoad) await beforeLoad(context);
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
@@ -47,6 +49,7 @@ export async function openApp(browser, site, vp, { seed = true } = {}) {
   await page.getByText(READY_TEXT).first().waitFor({ state: "attached", timeout: 120_000 });
   if (seed) {
     await seedFixedData(page);
+    if (extraSeed) await extraSeed(page); // data only the style census uses; the layout audit's own data stays as it was
     await waitSaved(page);
     await page.goto(site.base);
     await page.getByText(READY_TEXT).first().waitFor({ state: "attached", timeout: 120_000 });

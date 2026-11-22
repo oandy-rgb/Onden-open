@@ -40,7 +40,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { randomUUID } from "node:crypto";
 import {
-  attributeValues, compareAttribute, compareAttributeOrder, encodeValues, isCalendarDate, normalize, NUMBER_PATTERN,
+  attributeValues, compareAttribute, compareAttributeOrder, encodeValues, isCalendarDate, normalize,
   storedNumber, type FilterOpName,
 } from "@onden/markdown";
 import { pool, q, withTransaction } from "../../db.js";
@@ -144,7 +144,7 @@ type View = {
 const OPS: FilterOpName[] = ["eq", "ne", "contains", "empty", "nempty", "gt", "gte", "lt", "lte"];
 const RANGE: FilterOpName[] = ["gt", "gte", "lt", "lte"];
 const FILTER_VALUES = ["", "a", "Alice", "alice", "筆記", "中文", "5", "-3", "12.5", "10", "9", "007", "1e3", "0", "100%", "%", "_", "\\", "[draft",
-  "true", "todo", "2026-01-15", "2026-03-02T12:00:00Z", "2026-01-15T10:00:00Z", "2026-1", "2026-11-31", "2026-02-30T00:00:00Z", "2026-01-15T25:00:00Z",
+  "a1", "a2", "true", "todo", "2026-01-15", "2026-03-02T12:00:00Z", "2026-01-15T10:00:00Z", "2026-1", "2026-11-31", "2026-02-30T00:00:00Z", "2026-01-15T25:00:00Z",
   "not a date", "O'Brien", "x".repeat(700), "長".repeat(500)];
 /** KNOWN K1: a value that has the date's shape but is no calendar day. */
 const dateShaped = (v: string) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(v) && !isCalendarDate(v);
@@ -278,24 +278,27 @@ function localMatches(row: Row, c: Clause): boolean | "skip" {
   const value = c.value ?? "";
   if ((BUILT_INS as readonly string[]).includes(c.field)) {
     const column: Record<string, string | number> = {
-      title: row.note.title, slug: row.slug, updated_at: row.note.updatedAt, created_at: row.note.createdAt, sort_order: row.note.sortOrder,
+      title: row.note.title, slug: row.slug, updated_at: row.note.updatedAt, created_at: row.note.createdAt,
+      // The name saved views keep for manual order; the column is the order key (migration 200), compared as text by byte.
+      sort_order: keyOfSortOrder(row.note.sortOrder),
     };
     const v = column[c.field]!;
     if (c.op === "contains") return String(v).toLowerCase().includes(value.toLowerCase());
     if (c.op === "empty") return String(v) === "";
     if (c.op === "nempty") return String(v) !== "";
-    const typed = c.field === "sort_order" ? "number" : c.field === "title" || c.field === "slug" ? null : "date";
-    if (typed === null) {
+    if (c.field === "title" || c.field === "slug" || c.field === "sort_order") {
+      if (c.field === "sort_order" && RANGE.includes(c.op)) { // order_key is COLLATE "C": byte order, no collation to wait for
+        const order = Buffer.compare(Buffer.from(String(v)), Buffer.from(value));
+        return cmpOp[c.op as keyof typeof cmpOp](order);
+      }
       if (RANGE.includes(c.op)) return "skip";
       return c.op === "eq" ? v === value : v !== value;
     }
-    const accepted = typed === "number" ? new RegExp(NUMBER_PATTERN).test(value) : isCalendarDate(value);
-    if (!accepted) return c.op === "ne";
-    const vt = typed === "number" ? "number" : "date";
+    if (!isCalendarDate(value)) return c.op === "ne";
     const sv = String(v);
-    if (c.op === "eq") return compareAttribute(sv, vt, ">=", value) && compareAttribute(sv, vt, "<=", value);
-    if (c.op === "ne") return !(compareAttribute(sv, vt, ">=", value) && compareAttribute(sv, vt, "<=", value));
-    return compareAttribute(sv, vt, OP_SYMBOL[c.op]!, value);
+    if (c.op === "eq") return compareAttribute(sv, "date", ">=", value) && compareAttribute(sv, "date", "<=", value);
+    if (c.op === "ne") return !(compareAttribute(sv, "date", ">=", value) && compareAttribute(sv, "date", "<=", value));
+    return compareAttribute(sv, "date", OP_SYMBOL[c.op]!, value);
   }
   const a = row.note.attrs[c.field];
   switch (c.op) {
@@ -638,5 +641,35 @@ describe.skipIf(!isTestDb)("known view defects (fix/views-severe-2026-11-14)", (
   it.fails("K4b: a visible sort_order has no value in the rows", async () => {
     const world: World = { fields: [], notes: [note({ sortOrder: 2 })] };
     await withWorld(world, (b) => checkFieldValues(world, b, view({ visible_fields: ["sort_order"] })));
+  }, 60_000);
+});
+
+// ── Regressions: counterexamples a fresh seed found (2026-11-18, first CI run with a seed per run) ─────────
+// PROPS_SEED=455072009 PROPS_RUNS=25 on real Postgres. Both were the TEST's model, not the product: the model
+// still compared the built-in `sort_order` as the old integer, while the column is the order key since
+// migration 200 and filter/sqlClauses.ts:96 says "compared as text by byte" (order_key is COLLATE "C"). The
+// literal views are kept (the second is the shrunk `where: { sort_order: { op: "gte" } }`, no value at all).
+describe.skipIf(!isTestDb)("regressions: sort_order filter is the order key (seed 455072009)", () => {
+  beforeAll(() => { registerShippedModules(); });
+
+  it("a saved view `sort_order eq 0` lists nothing: the key of the first note is a1, not 0", async () => {
+    const world: World = { fields: [], notes: [note({ title: "100%" }), note({ title: "100%" })] };
+    await withWorld(world, (b) => checkRuns(world, b, view({ filters: [{ field: "sort_order", op: "eq", value: "0" }] })));
+  }, 60_000);
+
+  it("a saved view `sort_order eq a1` lists the notes whose key is a1", async () => {
+    const world: World = { fields: [], notes: [note({ sortOrder: 0 }), note({ sortOrder: 1 }), note({ sortOrder: 0, fate: "hidden", listed: false })] };
+    await withWorld(world, async (b) => {
+      await checkRuns(world, b, view({ filters: [{ field: "sort_order", op: "eq", value: "a1" }] }));
+      expect(modelRows(world, b, [{ field: "sort_order", op: "eq", value: "a1" }]).ids).toEqual([b.ids[0]]);
+    });
+  }, 60_000);
+
+  it("nodeQuery `sort_order gte` with no value reads it as '' by byte: every live note of the tag", async () => {
+    const world: World = { fields: [], notes: [note({ sortOrder: 1 }), note(), note({ sortOrder: -1 }), note({ fate: "trashed", listed: false })] };
+    await withWorld(world, async (b) => {
+      await checkNodeQuery(world, b, { tags: [], where: { sort_order: { op: "gte" } } }, 1);
+      expect(modelRows(world, b, [{ field: "sort_order", op: "gte" }]).ids).toHaveLength(3);
+    });
   }, 60_000);
 });

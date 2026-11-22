@@ -81,16 +81,13 @@ export function createTouchPressGuard() {
  *  to the touch, at the finger. The menu (or drop) has just opened there, so
  *  that click would pick its first item: swallow the next click, briefly. */
 export function swallowNextClick(ms = 500) {
-  // The window the listener was put on, kept: the timer can outlive the page that started it (a test's window is
-  // gone 500 ms later, and `window` is then not defined), and it must take its listener off that same window.
+  // The timer can outlive the page that started it (a test's window is torn down 500 ms later: `window` is gone
+  // or has lost its methods). So the end of the wait calls nothing on the window: the listener carries an
+  // AbortSignal, and aborting it is what takes the listener off, whatever state the window is in by then.
   const host = window;
-  const stop = (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); done(); };
-  const timer = host.setTimeout(() => done(), ms);
-  function done() {
-    host.clearTimeout(timer);
-    host.removeEventListener("click", stop, true);
-  }
-  host.addEventListener("click", stop, true);
+  const ended = new AbortController();
+  const timer = host.setTimeout(() => ended.abort(), ms);
+  host.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); host.clearTimeout(timer); ended.abort(); }, { capture: true, signal: ended.signal });
 }
 
 /** How long a press must stay still to count as a long press (opens a menu or shows an embed's
@@ -173,6 +170,9 @@ export function beginTouchHold(e: PointerEvent | React.PointerEvent, guard: Retu
   if (!isHoldPointer(e.pointerType) || e.button !== 0) return false;
   const startX = e.clientX;
   const startY = e.clientY;
+  // The element that took the press. If it is gone from the page by the time the hold would lift (its row was
+  // removed or its screen closed mid-press), the gesture ends instead of lifting something that no longer exists.
+  const owner = (e.currentTarget ?? e.target) as Node | null;
   let lifted = false;
   let moved = false;
   guard.begin();
@@ -184,7 +184,10 @@ export function beginTouchHold(e: PointerEvent | React.PointerEvent, guard: Retu
     if (lifted) te.preventDefault();
   };
   window.addEventListener("touchmove", onTouchMove, { passive: false });
-  const timer = window.setTimeout(() => { lifted = true; vibrate(10); h.onLift(); }, HOLD_MS);
+  const timer = window.setTimeout(() => {
+    if (owner && !owner.isConnected) { finish(); h.onAbort(); return; }
+    lifted = true; vibrate(10); h.onLift();
+  }, HOLD_MS);
   const finish = () => {
     window.clearTimeout(timer);
     window.removeEventListener("touchmove", onTouchMove);

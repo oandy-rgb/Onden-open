@@ -105,7 +105,7 @@ describe.skipIf(!isTestDatabase())("members sync simulator (DB)", () => {
     }
     try {
       await fc.assert(
-        fc.asyncProperty(fc.array(opArbitraryMembers, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true }); }),
+        fc.asyncProperty(fc.array(opArbitraryMembers, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true, strictGradeOnce: true, strictUndo: true }); }),
         { seed, numRuns, path: process.env.SYNC_SIM_PATH, endOnFailure: false, interruptAfterTimeLimit: 8 * 60_000 },
       );
     } catch (error) {

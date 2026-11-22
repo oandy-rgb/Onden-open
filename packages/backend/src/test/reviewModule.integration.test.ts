@@ -282,7 +282,12 @@ describe.skipIf(!isTestDb)("review module (DB)", () => {
     const id = await mkNode(`Double undo ${stamp}`);
     await makeCard(id);
     currentActor = admin;
-    for (let i = 0; i < 4; i++) expect((await grade(id, 3, new Date(Date.parse(T0) + i * 3 * DAY_MS).toISOString())).status).toBe(200);
+    // A real client names the reps it saw, so studying the card again before its due date is allowed.
+    for (let i = 0; i < 4; i++) {
+      const graded = await app.request(`/api/review/${id}/grade`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating: 3, now: new Date(Date.parse(T0) + i * 3 * DAY_MS).toISOString(), seen_reps: i }) });
+      expect(graded.status).toBe(200);
+    }
     const undo = (key: string) => app.request(`/api/review/${id}/undo-grade`, { method: "POST", headers: { "Idempotency-Key": key } });
     const first = await undo(randomUUID());
     expect(first.status).toBe(200);
@@ -290,6 +295,50 @@ describe.skipIf(!isTestDb)("review module (DB)", () => {
     expect((await undo(randomUUID())).status).toBe(409);
     const row = await q<{ state: string }>(`SELECT state FROM review_states WHERE node_id = $1 AND actor_id = $2`, [id, admin.id]);
     expect(JSON.parse(row.rows[0]!.state).reps).toBe(3);
+  });
+
+  describe("a request is accepted only if the card is still as the screen showed it", () => {
+    const post = (id: string, path: string, body: unknown) => app.request(`/api/review/${id}/${path}`, {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify(body) });
+    const repsOf = async (id: string) => ((await (await app.request(`/api/review/${id}/state`)).json()) as { state: ReviewState | null }).state?.reps ?? 0;
+
+    it("a grade that names no reps is refused when the card is not due: another device graded it since", async () => {
+      const id = await mkNode(`Not due ${stamp}`);
+      await makeCard(id);
+      currentActor = admin;
+      expect((await grade(id, 3, T0)).status).toBe(200);
+      const soon = new Date(Date.parse(T0) + 60 * 60_000).toISOString();
+      expect((await grade(id, 3, soon)).status).toBe(409);
+      expect(await repsOf(id)).toBe(1);
+    });
+    it("a grade that names the reps it saw may study a card ahead of its due date", async () => {
+      const id = await mkNode(`Ahead ${stamp}`);
+      await makeCard(id);
+      currentActor = admin;
+      expect((await grade(id, 3, T0)).status).toBe(200);
+      const soon = new Date(Date.parse(T0) + 60 * 60_000).toISOString();
+      expect((await post(id, "grade", { rating: 3, now: soon, seen_reps: 1 })).status).toBe(200);
+      expect(await repsOf(id)).toBe(2);
+    });
+    it("a grade that names no reps is refused on a card put off until tomorrow", async () => {
+      const id = await mkNode(`Put off ${stamp}`);
+      await makeCard(id);
+      currentActor = admin;
+      expect((await grade(id, 3, T0)).status).toBe(200);
+      const later = new Date(Date.parse(T0) + 60 * DAY_MS).toISOString();
+      expect((await post(id, "tomorrow", { now: later })).status).toBe(200);
+      expect((await grade(id, 3, later)).status).toBe(409);
+      expect(await repsOf(id)).toBe(1);
+    });
+    it("\"tomorrow\" from a stale device does not undo a stop made on another device", async () => {
+      const id = await mkNode(`Stopped ${stamp}`);
+      await makeCard(id);
+      currentActor = admin;
+      expect((await post(id, "suspend", {})).status).toBe(200);
+      expect((await post(id, "tomorrow", { now: T0 })).status).toBe(409);
+      const hold = ((await (await app.request(`/api/review/${id}/state`)).json()) as { hold: { suspended: boolean } | null }).hold;
+      expect(hold?.suspended).toBe(true);
+    });
   });
 
   it("a row from before the first-grade marker (previous_state NULL) is not deleted by undo", async () => {
@@ -694,7 +743,7 @@ describe.skipIf(!isTestDb)("review module (DB)", () => {
     expect((await state())!.reps).toBe(1);
 
     // Grade again, then undo twice with one key: one step back, not two.
-    expect((await grade(id, 3, new Date(Date.parse(T0) + 3 * DAY_MS).toISOString())).status).toBe(200);
+    expect((await grade(id, 3, new Date(Date.parse(T0) + 60 * DAY_MS).toISOString())).status).toBe(200);
     expect((await state())!.reps).toBe(2);
     const undoKey = randomUUID();
     expect((await post(`/api/review/${id}/undo-grade`, undoKey, {})).status).toBe(200);

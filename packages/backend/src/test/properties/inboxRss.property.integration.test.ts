@@ -297,9 +297,25 @@ class MarkSeen implements Cmd {
   toString = () => `MarkSeen(${this.who}, src#${this.srcPick}, art#${this.artPick}, ${this.seen})`;
 }
 
+/** KNOWN F1 (pinned by the `it.fails` at the end): the situation the random sequences leave out so the other invariants
+ *  keep being checked. `PROPS_RSS_KNOWN=include` puts it back (the property then fails with the shrunk sequence). */
+const INCLUDE_KNOWN = process.env.PROPS_RSS_KNOWN === "include";
+/** True only while the random property runs: the named cases at the end write the situation out on purpose. */
+let leaveOutKnown = false;
+
+/** The saver already has a note (live or in the trash) of the article, but the article's one pointer names another
+ *  person's note, so the save cannot see it and makes a second one. */
+function pointerLostToAnotherSaver(m: Model, s: Src, a: Art, who: Who): boolean {
+  const pointed = a.saved ? m.notes.find((n) => n.id === a.saved) : undefined;
+  return m.notes.some((n) => n.src === s && n.guid === a.guid && n.by === who) && pointed?.by !== who;
+}
+
 class Save implements Cmd {
   constructor(readonly who: Who, readonly srcPick: number, readonly artPick: number) {}
-  check = (m: Model) => pickArt(m, this.srcPick, this.artPick) !== undefined;
+  check = (m: Model) => {
+    const picked = pickArt(m, this.srcPick, this.artPick);
+    return picked !== undefined && (!leaveOutKnown || !pointerLostToAnotherSaver(m, picked.s, picked.a, this.who));
+  };
   async run(m: Model, real: Real) {
     const { s, a } = pickArt(m, this.srcPick, this.artPick)!;
     const label = `${this.who} saves ${a.guid} of ${s.id}`;
@@ -639,10 +655,13 @@ describe.skipIf(!isTestDb)("inbox and RSS reader: model-based random test", () =
   it(`random command sequences keep every invariant `, async () => {
     const runs = process.env.PROPS_RUNS ? PROPS_RUNS : DEFAULT_RUNS;
     writeSync(2, `[inboxRss.property] PROPS_SEED=${process.env.PROPS_SEED ?? "(default)"} PROPS_RUNS=${runs} (replay with both set)\n`);
-    await checkAsync(fc.asyncProperty(
-      fc.commands(commandArbs, { maxCommands: MAX_COMMANDS, size: "large" }),
-      async (commands) => { await runCommands(commands as Iterable<Cmd>); },
-    ), process.env.PROPS_RUNS ? Infinity : DEFAULT_RUNS);
+    leaveOutKnown = !INCLUDE_KNOWN;
+    try {
+      await checkAsync(fc.asyncProperty(
+        fc.commands(commandArbs, { maxCommands: MAX_COMMANDS, size: "large" }),
+        async (commands) => { await runCommands(commands as Iterable<Cmd>); },
+      ), process.env.PROPS_RUNS ? Infinity : DEFAULT_RUNS);
+    } finally { leaveOutKnown = false; }
     writeSync(2, `[inboxRss.property] reach: ${[...reach].sort().map(([k, n]) => `${k}=${n}`).join(", ")}\n`);
   }, process.env.PROPS_RUNS ? 6 * 3600_000 : 600_000);
 
@@ -671,7 +690,9 @@ describe.skipIf(!isTestDb)("inbox and RSS reader: model-based random test", () =
     expect(again.body.node_id, "B's save must not answer A's private note id").not.toBe(noteId);
   }, 120_000);
 
-  // Nightly 2026-11-05, seed 555824178 (replay: PROPS_SEED=555824178 PROPS_RUNS=300, this suite). Broken
+  // F1. Nightly 2026-11-05, seed 555824178 (replay: PROPS_SEED=555824178 PROPS_RUNS=300, this suite); met again by the
+  // first run with a fresh seed per run, 2026-11-18, PROPS_SEED=104376501 PROPS_RUNS=40, shrunk to exactly the same
+  // sequence (the literal case below). Broken
   // invariant: one live note per article per person. rss_staging.saved_node_id is one column per article, so
   // after A's save overwrites B's pointer, B's next save cannot see B's own note and creates a second one.
   it.fails("B saves, A saves, B saves again: B ends with two live notes of the same article (nightly 2026-11-05)", async () => {
@@ -679,5 +700,30 @@ describe.skipIf(!isTestDb)("inbox and RSS reader: model-based random test", () =
       new SetFeed(1, [[0, 0]]), new Subscribe("A", 1, true),
       new Save("B", 0, 0), new Save("A", 0, 0), new Save("B", 0, 0),
     ]);
+  }, 120_000);
+
+  // F1, the literal sequence of PROPS_SEED=104376501 (replayPath "CBCBBHD/O:qG"): two people save the same article of a
+  // shared feed, the second person twice. Pinned as the same defect, with what each person ends up holding
+  // (asserted below the failing line so the case shows the whole picture when it is fixed): nothing a person wrote is lost.
+  it.fails("F1 literal: Subscribe(A, shared), Refresh, Save(B), Save(A), Save(B): B holds two live notes of the article (seed 104376501)", async () => {
+    await runCommands([
+      new Subscribe("A", 0, true), new SetFeed(0, [[0, 0]]), new Refresh("A", 0, false),
+      new Save("B", 0, 0), new Save("A", 0, 0), new Save("B", 0, 0),
+    ]);
+  }, 120_000);
+
+  // Only what must hold whichever way F1 is decided: nothing a person saved is lost (the defect itself is the `it.fails` above).
+  it("F1: after B, A, B save the same article, B's first note and A's note are both still live", async () => {
+    const real = await newReal();
+    const model = new Model(real);
+    for (const command of [new Subscribe("A", 0, true), new SetFeed(0, [[0, 0]]), new Refresh("A", 0, false)]) await command.run(model, real);
+    const stagingRow = (await q<{ id: string }>(`SELECT id::text FROM rss_staging WHERE subscription_id = $1`, [model.srcs[0]!.id])).rows[0]!.id;
+    const save = async (who: Who) => (await real.call(who, "POST", `/api/rss/items/${stagingRow}/save`, {})).body as { node_id: string };
+    const b1 = (await save("B")).node_id;
+    const a1 = (await save("A")).node_id;
+    await save("B");
+    const live = (await q<{ id: string }>(
+      `SELECT n.id::text FROM content_nodes n JOIN node_attributes g ON g.node_id = n.id AND g.key = '_rss_guid' WHERE n.workspace_id = $1 AND n.deleted_at IS NULL`, [real.ws])).rows.map((r) => r.id);
+    expect(live).toEqual(expect.arrayContaining([a1, b1]));
   }, 120_000);
 });

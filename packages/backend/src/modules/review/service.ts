@@ -515,6 +515,18 @@ export async function cardState(identity: ActorCtx | null, nodeId: string, targe
 
 // ── Grading ─────────────────────────────────────────────────────────────────
 
+/** The one rule for a request that comes from a screen showing the card: it is accepted only if the card is still as the screen
+ *  showed it. Whatever the client does not say, the queue implies: the card is not stopped, and (`dueToo`, for a grade without
+ *  `seen_reps`) due and not put off. Another device that stopped, put off or graded the card since makes it a 409, nothing written.
+ *  Example: laptop and phone both show card X; the phone stops it; the laptop's "tomorrow" or grade must not undo that. */
+function assertShownAsIs(raw: string | null, now: Date, { dueToo }: { dueToo: boolean }): void {
+  const hold = holdOf(raw);
+  if (hold?.suspended) throw new ReviewError(409, "card is stopped");
+  if (!dueToo) return;
+  const state = parseReviewState(raw);
+  if ((hold?.until && new Date(hold.until) > now) || !isDue(state, now)) throw new ReviewError(409, "card changed since it was shown");
+}
+
 /** Grade a card for the actor: their schedule advances with the settings of
  *  every enabled review tag on the card (the note's, or the block node's own)
  *  combined. Personal progress, not a change to the shared note: no domain
@@ -532,10 +544,10 @@ export async function grade(identity: ActorCtx | null, nodeId: string, rating: R
     const { noteId, behaviour } = await enrolledCard(actor, workspaceId, target);
     // The row lock serializes concurrent grades from the same person.
     const previousRaw = await lockReviewState(workspaceId, target, actor.id);
-    // A card this person stopped (perhaps on another device) is not graded by a stale queue.
-    if (holdOf(previousRaw)?.suspended) throw new ReviewError(409, "card is stopped");
     const previous = parseReviewState(previousRaw);
-    // The client graded a card as it saw it; another device may have graded it since.
+    // A client that names the reps it saw is checked against them (due-ness is not asked: study-ahead is allowed);
+    // one that names nothing is taken to have shown the card as the queue does.
+    assertShownAsIs(previousRaw, now, { dueToo: seenReps === undefined });
     if (seenReps !== undefined && seenReps !== (previous?.reps ?? 0)) throw new ReviewError(409, "card changed since it was shown");
     const introducedAt = previous ? introductionDate(previous) : now.toISOString();
     const state: ReviewState = { ...schedule(previous, rating, now, behaviour), ...(introducedAt ? { introduced_at: introducedAt } : {}) };
@@ -598,11 +610,13 @@ export type HoldResult = { node_id: string; block_id?: string; hold: ReviewHold 
 
 /** Change the actor's hold on a card without grading it. Personal progress,
  *  like a grade: no domain event, and a retried request lands once. */
-async function changeHold(identity: ActorCtx | null, target: CardTarget, holdFor: () => ReviewHold | null, mustBeEnrolled: boolean): Promise<HoldResult> {
+async function changeHold(identity: ActorCtx | null, target: CardTarget, holdFor: () => ReviewHold | null, mustBeEnrolled: boolean, shownInQueue: Date | null = null): Promise<HoldResult> {
   const workspaceId = await getWorkspaceId();
   const authenticated = requireActor(identity);
   return mutatePersonal({ actor: authenticated, workspaceId, apply: async ({ actor }) => {
     const noteId = mustBeEnrolled ? (await enrolledCard(actor, workspaceId, target)).noteId : await cardNote(actor, workspaceId, target);
+    // "Tomorrow" is chosen on the queue's screen: a card stopped elsewhere since stays stopped.
+    if (shownInQueue) assertShownAsIs(await lockReviewState(workspaceId, target, actor.id), shownInQueue, { dueToo: false });
     const hold = holdFor();
     await saveHold(workspaceId, target, actor.id, hold);
     return { node_id: noteId, ...(target.kind === "block" ? { block_id: target.id } : {}), hold };
@@ -611,7 +625,7 @@ async function changeHold(identity: ActorCtx | null, target: CardTarget, holdFor
 
 /** 明天再說: no grade; the card comes back when the workspace's next day begins. */
 export const putOffUntilTomorrow = (identity: ActorCtx | null, target: CardTarget, now: Date = new Date()) =>
-  changeHold(identity, target, () => ({ suspended: false, until: dayStartInstant(addDays(localDayId(now), 1)).toISOString() }), true);
+  changeHold(identity, target, () => ({ suspended: false, until: dayStartInstant(addDays(localDayId(now), 1)).toISOString() }), true, now);
 
 /** Stop reviewing a card: it leaves this person's queue and counts until resumed. */
 export const stopReviewing = (identity: ActorCtx | null, target: CardTarget) =>

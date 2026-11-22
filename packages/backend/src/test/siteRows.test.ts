@@ -5,10 +5,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 import { cleanedChrome } from "../services/siteConfig.js";
 import {
-  EXCERPT_MAX, excerptOf, firstImageUrl, isoDateOf, safeImageUrl, siteRowOf, tagSlugs, takeDownDesign, viewKindFor,
+  EXCERPT_MAX, excerptOf, isoDateOf, safeImageUrl, siteRowOf, tagSlugs, takeDownDesign, viewKindFor,
 } from "../modules/website/publishing/siteRows.js";
 import type { SiteRow } from "@onden/site";
 import { resetDayClock, setDayClock } from "../localDay.js";
+
+/** The image a note's row shows (the first one a page may show, or ""). */
+const firstImageUrl = (markdown: string): string => siteRowOf({ id: "n", title: "n", slug: "n", markdown }).image;
 
 const row = (id: string): SiteRow => ({ id, title: id, slug: id, date: "2026-10-01", fields: {}, image: "", excerpt: "" });
 

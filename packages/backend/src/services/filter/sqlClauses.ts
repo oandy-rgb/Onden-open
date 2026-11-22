@@ -16,7 +16,7 @@
 // is not a trust boundary. This module covers the flat, AND-composed SQL
 // filters that ARE trust boundaries.)
 
-import { BUILT_IN_FIELD_NAMES, isCalendarDate, NUMBER_PATTERN, type FilterOpName } from "@onden/markdown";
+import { BUILT_IN_FIELDS, isCalendarDate, NUMBER_PATTERN, type FilterOpName } from "@onden/markdown";
 import { containsPattern } from "../../utils.js";
 import { numericValueSql } from "../attributeNumber.js";
 import { sqlIdentifier } from "../../sqlText.js";
@@ -31,8 +31,6 @@ export interface FilterClause {
   op: FilterOp;
   value?: string;
 }
-
-export const BUILT_IN_FIELDS: ReadonlySet<string> = new Set(BUILT_IN_FIELD_NAMES);
 
 // Range ops → SQL comparator.
 const RANGE_OPS: Record<string, string> = { gt: ">", gte: ">=", lt: "<", lte: "<=" };

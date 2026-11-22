@@ -77,8 +77,8 @@ export default function RssItemList({ items, today, lastReadId, activeId, single
           onClick={() => onOpen(it.id)}>
           {cover && <Img className="rss-item-cover" src={it.image!} alt="" loading="lazy" referrerPolicy="no-referrer" />}
           <span className="rss-item-text">
-            <span className="rss-item-title">{it.title}</span>
-            {text && !cover ? <span className="rss-item-excerpt">{text}</span> : null}
+            <span className="rss-item-title" data-user-content>{it.title}</span>
+            {text && !cover ? <span className="rss-item-excerpt" data-user-content>{text}</span> : null}
             <span className="rss-item-meta">
               {singleSource ? dateLabel(it.published_at, "short") : [sourceTitle(it.source_id), dateLabel(it.published_at, "short")].filter(Boolean).join(" · ")}
             </span>

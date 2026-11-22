@@ -8,9 +8,8 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { PROPS_RUNS, PROPS_SEED } from "../helpers/propsConfig";
-import { decodeInk, mergeInk, type InkDocument, type InkStroke } from "@onden/markdown/ink";
+import { decodeInk, mergeInk, type InkDocument, type InkStroke, encodeInk } from "@onden/markdown/ink";
 import { InkSaver } from "../../lib/ink/surfaceSaver";
-import { encodeInk } from "../../lib/ink/store";
 import type { InkSaveBase, InkSaveDoc } from "../../lib/data";
 import { emptyMultiPageDoc, type InkMultiPageDoc } from "../../lib/pdf/pdfAdapter";
 import { emptyPageDoc, pdfPageDoc, readPdfInk, setPdfPageDoc } from "../../lib/pdf/pageUnits";

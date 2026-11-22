@@ -6,7 +6,7 @@ import { t } from "../../lib/i18n";
 import { ReviewCard } from "../../components/markdownSurfaces";
 import { useReviewStats } from "./useReviewStats";
 import { inkThumbnailSvg } from "../../lib/ink/thumbnail";
-import { decodeInk } from "../../lib/ink/store";
+import { decodeInk } from "@onden/markdown/ink";
 import { randomUUID } from "../../lib/uuid";
 import { reads, sendWrite, writeErrors } from "../../lib/data";
 import { getAppState, subscribeApp, useAppSelector } from "../../lib/appStore";

@@ -413,3 +413,13 @@ jobs:
           E2E_ARGS: ${{ matrix.args }}
         # E2E_ARGS comes from the matrix above (not from user input); unquoted on purpose so it splits into flags.
         run: bash packages/frontend/e2e/fullstack/run.sh $E2E_ARGS
+
+      # A red shard is only explainable from what the page showed: keep the text snapshots (no images) of each failure.
+      - name: Keep the failure snapshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures-${{ strategy.job-index }}
+          path: /tmp/pw-host-out/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 7

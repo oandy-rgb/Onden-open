@@ -100,6 +100,17 @@ describe("QuickCapture offline-safe save", () => {
     expect(getAppState().toasts).toEqual([expect.objectContaining({ message: "Connect once to set up the inbox. Your text is kept." })]);
   });
 
+  it("the offline hint under the box does not promise a local save the inbox cannot give yet", () => {
+    renderCapture({ online: false, tags: [] });
+    expect(screen.getByText("Connect once to set up the inbox. Your text is kept.")).toBeInTheDocument();
+    expect(screen.queryByText("Offline — saved locally, will sync on reconnect.")).toBeNull();
+  });
+
+  it("with the inbox's tag known, the offline hint promises the local save", () => {
+    renderCapture({ online: false });
+    expect(screen.getByText("Offline — saved locally, will sync on reconnect.")).toBeInTheDocument();
+  });
+
   it("mints today's day node through the write queue when the setting is today's journal", async () => {
     captureDestinationPref.store.save("today");
     renderCapture({ online: false });

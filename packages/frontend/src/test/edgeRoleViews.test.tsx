@@ -60,6 +60,15 @@ describe("every view uses its edgeRoles predicate", () => {
     }
   });
 
+  it("a board arrow is named by its two notes' titles, never React Flow's \"Edge from <id> to <id>\"", () => {
+    const { result } = renderHook(() => useGraphLayout({ nodes: NODES, edges: EDGES, activeCanvas: BOARD,
+      mode: "notes", notesView: "canvas", selectedNode: null, selectedId: null,
+      graphLocalMode: false, canvasSearch: "", showTagEdges: false, tags: [] }));
+    const drawn = result.current.displayGraphEdges.find((e) => e.id === "drawn")!;
+    expect(drawn.ariaLabel).toBe("b → c");
+    for (const edge of result.current.displayGraphEdges) expect(edge.ariaLabel).toMatch(/^\S+ → \S+$/);
+  });
+
   it("the force graph draws drawsInGraph", () => {
     let resize!: ResizeObserverCallback;
     vi.stubGlobal("ResizeObserver", class {

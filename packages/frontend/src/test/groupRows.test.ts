@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { BUILT_IN_FIELDS } from "@onden/markdown";
 import {
-  BUILT_IN_FIELDS,
   EMPTY_GROUP_KEY,
   aggregateField,
   fieldValue,

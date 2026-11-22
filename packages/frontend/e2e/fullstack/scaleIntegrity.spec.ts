@@ -99,7 +99,7 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   const bodyTail = `SCALEINT-TAIL-${stamp}`;
   const bodyMarker = `SCALEINT-BODY-${stamp} ${"unique body content ".repeat(20)}${bodyTail}`;
   const lazyNode = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-lazy ${run}`,
     markdown: bodyMarker,
   });
@@ -107,7 +107,7 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   // A node with a UNIQUE ALL-LETTERS token in its title, for search (#3).
   const searchToken = `scaleintfind${run}q`; // one unbroken FTS token, unique
   const searchNode = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-search ${searchToken}`,
     markdown: `searchable target body (${stamp})`,
   });
@@ -117,12 +117,12 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   // B already exists (services/nodes.ts:63 + :105 knowledge_link edge).
   const linkTargetTitle = `scaleint-target ${run}b`;
   const nodeB = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: linkTargetTitle,
     markdown: `backlink target body (${stamp})`,
   });
   const nodeA = await makeNode(page, {
-    parentId: container.id,
+    parent_id: container.id,
     title: `scaleint-source ${run}a`,
     markdown: `links to [[${linkTargetTitle}]] (${stamp})`,
   });
@@ -264,13 +264,18 @@ test("5k-node workspace stays intact: no loss, slim→hydrate, search, export, b
   // more). This proves no seeded node is dropped from the export at scale.
   expect(mdEntries.length).toBeGreaterThanOrEqual(FILLER + 5);
 
-  // The KNOWN markers are present as entries by slug/id (export.ts:196). Each
-  // seeded node has a unique slug derived from its unique title (uniqueSlug,
-  // routes/nodes.ts:143), so the entry name carries the node's slug.
-  for (const n of [container, lazyNode, searchNode, nodeB, nodeA]) {
-    const expected = `${n.slug && n.slug.length > 0 ? n.slug : n.id}.md`;
-    expect(entries, `export missing entry for ${n.title}`).toContain(expected);
+  // The export is a folder tree named by title (services/vaultPath.ts, D109 — the rule the folder
+  // import reads back): the container is `<title>.md` and its children are in the folder
+  // `<title>/` beside it, each `<title>.md`. Every title here is unique and free of characters a file name
+  // cannot hold, so each path is exactly the title. Checking the whole folder (not just the marked nodes)
+  // is stricter than the old flat check: every one of the FILLER children must have its own file.
+  const folder = `${container.title}/`;
+  expect(entries, `export missing entry for ${container.title}`).toContain(`${container.title}.md`);
+  for (const n of [lazyNode, searchNode, nodeB, nodeA]) {
+    expect(entries, `export missing entry for ${n.title}`).toContain(`${folder}${n.title}.md`);
   }
+  const inFolder = mdEntries.filter((n) => n.startsWith(folder) && !n.slice(folder.length).includes("/"));
+  expect(new Set(inFolder).size, "every child of the container has its own file in the export").toBe(FILLER + 4);
 
   // ───────────────────────────────────────────────────────────────────────
   // #5 — BACKLINKS/EDGES CORRECT AT SCALE. The known A→B wikilink is reflected

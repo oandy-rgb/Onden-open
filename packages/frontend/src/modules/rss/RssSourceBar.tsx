@@ -31,7 +31,7 @@ export default function RssSourceBar({ sources, active, counts, onPick, onOpenSo
     ...((sources ?? []).some((s) => s.voice === "person") ? [{ value: VOICES_VIEW, label: t("Voices") }] : []),
     ...(sources ?? []).map((s) => ({
       value: s.id,
-      label: `${s.last_error ? "⚠ " : ""}${s.title}`,
+      label: <span data-user-content>{`${s.last_error ? "⚠ " : ""}${s.title}`}</span>,
       count: counts.showFor(s.id) ? s.unseen : undefined,
       onContextMenu: onOpenSources,
     })),

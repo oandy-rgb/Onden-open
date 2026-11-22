@@ -11,7 +11,7 @@ function usesOutside(pattern: RegExp, owners: string[]): string[] {
 
 describe("values both sides agree on are defined once (sharedContract.ts)", () => {
   const OWNER = "markdown/src/sharedContract.ts";
-  const NAMES = ["TASKS_MODULE_ID", "TASK_ATTR", "PUBLISHED_EDGE_TYPES", "REWIND_MAX_NOTES", "TAG_PAGE_ROWS_MAX", "PASSWORD_MIN_LENGTH", "PASSWORD_MAX_LENGTH", "BUILT_IN_FIELD_NAMES", "FILTER_OP_NAMES", "TAG_NAME_MAX", "VIEW_NAME_MAX", "SPACE_NAME_MAX", "TASK_TITLE_MAX"];
+  const NAMES = ["TASKS_MODULE_ID", "TASK_ATTR", "PUBLISHED_EDGE_TYPES", "REWIND_MAX_NOTES", "TAG_PAGE_ROWS_MAX", "PASSWORD_MIN_LENGTH", "PASSWORD_MAX_LENGTH", "BUILT_IN_FIELD_NAMES", "BUILT_IN_FIELDS", "FILTER_OP_NAMES", "TAG_NAME_MAX", "VIEW_NAME_MAX", "SPACE_NAME_MAX", "TASK_TITLE_MAX"];
 
   it.each(NAMES)("%s is declared only in sharedContract.ts", (name) => {
     expect(usesOutside(new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`), [OWNER]), "import it from @onden/markdown").toEqual([]);

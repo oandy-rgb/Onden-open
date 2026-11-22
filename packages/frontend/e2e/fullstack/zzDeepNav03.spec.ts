@@ -9,7 +9,6 @@ import { ready, switchNoteView, BASE, H } from "./helpers";
 test("NAV-03: back across wikilink / search / graph, scroll restore, phone", async ({ page, browser }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
-  const out: Record<string, unknown> = {};
   const mk = async (t: string, md: string) => (await (await page.request.post("/api/nodes", { ...H, data: { title: t, markdown: md } })).json()).id as string;
   const B = await mk(`NavB ${stamp}`, "b body");
   const C = await mk(`NavC ${stamp}`, "c body");
@@ -18,12 +17,10 @@ test("NAV-03: back across wikilink / search / graph, scroll restore, phone", asy
   const title = (p: Page) => p.locator(".obsidian-title-input, [aria-label='Note title']").first().inputValue().catch(() => null);
   // The top bar has no back button: the browser's Back (also Alt+←) returns along the link trail.
   const back = async (p: Page) => { await p.goBack(); };
-  const expectTitle = async (p: Page, what: string) => expect(await title(p)).toBe(what);
   // The note page's scroller is the one element `.obsidian-main.note-document` (desktop: the editor's .cm-scroller and
   // the preview's .obsidian-preview do not scroll), the window on a phone.
   const scrollTop = (p: Page) => p.evaluate(() => Math.round(document.querySelector(".obsidian-main.note-document")!.scrollTop || window.scrollY));
   const expectTitleSoon = async (p: Page, what: string) => expect.poll(() => title(p)).toBe(what);
-  try {
   await ready(page, `/?view=notes&node=${A}`);
   await switchNoteView(page, "preview");
   const link = page.locator(".obsidian-preview").getByText(`NavB ${stamp}`).first();
@@ -32,63 +29,54 @@ test("NAV-03: back across wikilink / search / graph, scroll restore, phone", asy
   const before = await scrollTop(page);
   await link.click();
   await expectTitleSoon(page, `NavB ${stamp}`);
-  out.afterWikilink = { title: await title(page) };
   await back(page);
   await expectTitleSoon(page, `NavA ${stamp}`);
   await expect(link).toBeVisible(); // the body is drawn again: the position is put back with it, not after
   expect(Math.abs((await scrollTop(page)) - before), "Back returns the note to where it was left").toBeLessThan(40);
-  out.afterBack = { title: await title(page), scrollBefore: before, scrollAfter: await scrollTop(page), preview: await page.locator(".obsidian-preview").isVisible().catch(() => false) };
+  // The position is put back in the view it was left in (decisions-ui.md: the scroller is marked note-edit / note-preview, so only the view the note was left in is restored).
+  await expect(page.locator(".obsidian-preview")).toBeVisible();
 
-  // Search jump via palette.
+  // Search jump via palette: a plain jump to another note is a push (hooks/useUrlLocation.ts, the history table), so Back is "the page
+  // I was on before": the first note.
   await page.keyboard.press("Control+k");
   await page.locator(".palette-input-wrap input").fill(`NavC ${stamp}`);
-  await page.waitForTimeout(800);
+  await expect(page.locator(".palette-item", { hasText: `NavC ${stamp}` }).first()).toBeVisible();
   await page.locator(".palette-input-wrap input").press("Enter");
-  await page.waitForTimeout(1200);
-  out.afterPalette = { title: await title(page) };
-  await expectTitle(page, `NavC ${stamp}`);
+  await expectTitleSoon(page, `NavC ${stamp}`);
   await back(page);
-  await page.waitForTimeout(1200);
-  // Not asserted: a palette jump is not a link follow, so it has no trail entry and Back's target is the browser's.
-  out.backAfterPalette = await title(page);
+  await expectTitleSoon(page, `NavA ${stamp}`);
 
   // Graph relation list → note → Back.
   await ready(page, `/?view=notes&node=${B}`);
   await page.getByRole("tab", { name: "Relations", exact: true }).click();
   await page.locator(".links-relation-row", { hasText: `NavC ${stamp}` }).click();
-  await page.waitForTimeout(1200);
-  out.afterGraphJump = { title: await title(page) };
-  await expectTitle(page, `NavC ${stamp}`);
+  await expectTitleSoon(page, `NavC ${stamp}`);
   await back(page);
-  await page.waitForTimeout(1200);
-  out.backAfterGraph = { url: page.url().replace(BASE, "").slice(0, 50), title: await title(page) };
-  await expectTitle(page, `NavB ${stamp}`);
+  await expectTitleSoon(page, `NavB ${stamp}`);
+  await expect(page, "Back lands on the note it left").toHaveURL(new RegExp(`node=${B}`));
 
   // Browser back after a wikilink jump.
   await ready(page, `/?view=notes&node=${A}`);
   await switchNoteView(page, "preview");
   await page.locator(".obsidian-preview").getByText(`NavB ${stamp}`).first().click();
-  await page.waitForTimeout(1200);
-  await page.goBack().catch(() => {});
-  await page.waitForTimeout(1500);
-  out.browserBack = { url: page.url().replace(BASE, "").slice(0, 60), title: await title(page) };
-  await expectTitle(page, `NavA ${stamp}`);
+  await expectTitleSoon(page, `NavB ${stamp}`);
+  await page.goBack();
+  await expectTitleSoon(page, `NavA ${stamp}`);
 
   // Phone: wikilink then "‹ Back".
   const ph = await browser.newContext({ baseURL: BASE, storageState: process.env.E2E_STORAGE || "/tmp/pw-auth.json", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const pp = await ph.newPage();
-  await ready(pp, `/?view=notes&node=${A}`);
-  await switchNoteView(pp, "preview").catch(() => {});
-  await pp.locator(".obsidian-preview").getByText(`NavB ${stamp}`).first().click().catch(() => {});
-  await pp.waitForTimeout(1200);
-  const pb = pp.getByRole("button", { name: "Back", exact: true }).filter({ visible: true }).first();
-  out.phone = { title: await title(pp), backLabel: await pb.innerText().catch(() => null) };
-  await pb.click().catch(() => {});
-  await pp.waitForTimeout(1200);
-  out.phoneAfterBack = await title(pp);
-  await ph.close();
+  try {
+    const pp = await ph.newPage();
+    await ready(pp, `/?view=notes&node=${A}`);
+    await switchNoteView(pp, "preview");
+    await pp.locator(".obsidian-preview").getByText(`NavB ${stamp}`).first().click();
+    await expectTitleSoon(pp, `NavB ${stamp}`);
+    const pb = pp.getByRole("button", { name: "Back", exact: true }).filter({ visible: true }).first();
+    await expect(pb).toHaveText(""); // pinned: today's behaviour, no written rule (the phone's ‹ is an icon with the accessible name "Back")
+    await pb.click();
+    await expectTitleSoon(pp, `NavA ${stamp}`);
   } finally {
-    console.log("NAV03 " + JSON.stringify(out, null, 2));
+    await ph.close();
   }
 });
 

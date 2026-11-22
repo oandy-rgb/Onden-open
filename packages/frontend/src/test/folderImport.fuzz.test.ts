@@ -7,9 +7,8 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { compressToBase64 } from "lz-string";
-import { encodeInk } from "../lib/ink";
 import { decodeExcalidraw, isExcalidrawFile } from "../modules/importers/excalidraw";
-import { inkToSvg } from "@onden/markdown/ink";
+import { inkToSvg, encodeInk } from "@onden/markdown/ink";
 import { convertDrawings } from "../modules/importers/drawingImport";
 import { planImportBatches, type FolderImportFile } from "../modules/importers/folderImport";
 import { anyString, expectWithinBudget, fuzzParams, soup } from "./fuzzSupport";

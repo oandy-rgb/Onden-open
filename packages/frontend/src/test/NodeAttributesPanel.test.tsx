@@ -75,6 +75,24 @@ describe("NodeAttributesPanel", () => {
     expect(screen.queryByText("none yet")).toBeNull();
   });
 
+  it("reads again when changes waiting in this device's queue go out (a queued change lands after the panel read)", async () => {
+    const { setPending } = await import("../lib/data/syncStatus");
+    setPending(1);
+    let stored = "reading";
+    mockFetch((url) => url.endsWith("/attributes") ? [{ key: "status", value: stored, value_type: "text", is_inheritable: false, source: "explicit" }] : []);
+    render(<NodeAttributesPanel nodeId="node-q" classTags={[bookTag]} />);
+    expect(await screen.findByRole("button", { name: "reading", pressed: true })).toBeInTheDocument();
+    stored = "done"; // the queued write reached the server
+    setPending(0);
+    expect(await screen.findByRole("button", { name: "done", pressed: true })).toBeInTheDocument();
+    // More waiting (a new change queued) is no reason to read: only changes going out are.
+    const reads = calls.filter((c) => c.url.endsWith("/node-q/attributes")).length;
+    setPending(2);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.filter((c) => c.url.endsWith("/node-q/attributes")).length).toBe(reads);
+    setPending(0);
+  });
+
   it("a stale in-flight load for the previous node doesn't overwrite the current node (M12)", async () => {
     let resolveA: (() => void) | null = null;
     let resolveB: (() => void) | null = null;

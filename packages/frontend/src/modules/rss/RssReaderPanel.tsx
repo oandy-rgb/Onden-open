@@ -759,7 +759,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
                 onClickCapture={onArticleClickCapture}>
                 <div className="rss-article-head">
                   <div className="rss-article-head-row">
-                    <h3 className="rss-article-title">{article.title}</h3>
+                    <h3 className="rss-article-title" data-user-content>{article.title}</h3>
                   </div>
                   <div className="rss-article-meta">
                     <span>{sourceTitle(article.source_id)}</span>
@@ -771,7 +771,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
                     )}
                   </div>
                 </div>
-                <div className="rss-article-body" ref={articleRef} onMouseUp={readSelection} onDoubleClick={onArticleDoubleClick}>
+                <div className="rss-article-body" data-user-content={article.body ? true : undefined} ref={articleRef} onMouseUp={readSelection} onDoubleClick={onArticleDoubleClick}>
                   {/* raw: feed bodies are HTML — rehype-raw + rehype-sanitize
                       (the renderer's existing html path) keep it safe. */}
                   <ReaderArticle resolveImage={(src) => articleImageSrc(src, article.url)}>{article.body || t("*This article has no content — try “Load full text”.*")}</ReaderArticle>

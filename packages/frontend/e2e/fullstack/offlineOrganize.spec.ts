@@ -48,10 +48,17 @@ test("offline organize: set inline attributes on several notes, all converge on 
   const a = await (await page.request.post("/api/nodes", { ...H, data: { title: `Organize A ${stamp}`, markdown: "# A\n\nbody a" } })).json();
   const b = await (await page.request.post("/api/nodes", { ...H, data: { title: `Organize B ${stamp}`, markdown: "# B\n\nbody b" } })).json();
 
+  // A first load paints titles first and downloads every note's body on idle afterwards (syncEngine: the slim bootstrap,
+  // then hydrateFullBootstrap). Offline before that lands, note B honestly says "not downloaded to this device yet"
+  // (OverviewEditorHost) — the scenario is organizing notes this device already holds. The drawings download is
+  // requested only once the bodies have landed (hydrateFullBootstrap().then(downloadDrawingsForOffline)), so its
+  // request is the moment B is on this device.
+  const bodiesLanded = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/sync/drawings", { timeout: 30_000 });
   await ready(page, `/?view=notes&node=${a.id}`);
   await page.locator(".cm-content").waitFor({ state: "visible" });
   await expectOnline(page);
   await expectNoPending(page);
+  await bodiesLanded;
 
   // ── Go offline, then organize ─────────────────────────────────────────────
   await goOffline(page, context);

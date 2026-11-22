@@ -19,8 +19,7 @@
 //     surface's drawing once more, now made from what the server does hold, so they come back (they are still on screen).
 
 import { useCallback, useRef } from "react";
-import { mergeInk } from "@onden/markdown/ink";
-import { encodeInk } from "./store";
+import { mergeInk, encodeInk } from "@onden/markdown/ink";
 import { saveInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions } from "../data";
 
 /** How a save ended: accepted or not, what the server stored, and the text that was sent as the value (null: only the offline queue holds it). */

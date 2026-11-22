@@ -11,7 +11,8 @@ vi.mock("../lib/localDb", async (original) => ({
   getPendingWrites: async () => pending,
   fillNodeAttributes: (id: string, rows: unknown[]) => filled(id, rows),
 }));
-const { loadInkAttributes, loadInkPage, decodeInk } = await import("../lib/ink/store");
+const { loadInkAttributes, loadInkPage } = await import("../lib/ink/store");
+const { decodeInk } = await import("@onden/markdown/ink");
 const { decodePdfInk } = await import("../lib/pdf/pdfAdapter");
 
 const stroke = (id: string) => ({ id, points: [[0, 0], [10, 5, 0.5]], color: "#15130d", size: 4, toolId: "pen" });

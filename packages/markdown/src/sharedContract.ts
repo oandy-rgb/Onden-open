@@ -135,7 +135,9 @@ export const AI_NAME_MAX = 80;
 /** The fields a note row carries on its top level (everything else is an
  *  attribute). The saved-view filter, sort and column rules on the server
  *  (services/filter/sqlClauses.ts) and the collection layouts read the same list. */
-export const BUILT_IN_FIELD_NAMES = ["title", "slug", "updated_at", "created_at", "sort_order"] as const;
+const BUILT_IN_FIELD_NAMES = ["title", "slug", "updated_at", "created_at", "sort_order"] as const;
+/** The fields a note row carries on its top level, as a set: the one test of "is this field a column of the row or an attribute". */
+export const BUILT_IN_FIELDS: ReadonlySet<string> = new Set(BUILT_IN_FIELD_NAMES);
 
 /** The comparisons a saved-view filter may use. The server validates a clause
  *  against these (nodeQuery.ts); the view builder offers them. */

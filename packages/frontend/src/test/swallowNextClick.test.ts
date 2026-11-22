@@ -1,6 +1,6 @@
-// swallowNextClick (lib/touchHold): its timer can fire after the page that started it is gone. On CI the timer of
-// timelineBlockDrag.test.tsx fired after the test's window was torn down and `window` was not defined: an unhandled
-// error that failed the whole run with every test passing (public run 44074610697, 2026-11-17).
+// swallowNextClick (lib/touchHold). It used to hold a timer that could fire after the page that started it was
+// gone (public run 44074610697, 2026-11-17: `window` not defined, an unhandled error failing a run with every
+// test passing). It now schedules nothing; touchHoldNoStrayTimers.test.tsx pins that.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { beginTouchHold, createTouchPressGuard, HOLD_MS, swallowNextClick } from "../lib/touchHold";
 

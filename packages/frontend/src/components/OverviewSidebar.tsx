@@ -426,31 +426,60 @@ function OverviewSidebar({ nav, actions, rename, tree, create, onCreateTag }: Pr
   // search results, tag-filtered list). A single ref-on-root + query selector
   // covers all of them without threading refs through five branches.
   const sidebarRootRef = useRef<HTMLElement | null>(null);
+  // The reveal stays owed until the row is on screen: on a cold load the open note's row arrives after the selection,
+  // and in windowed mode the first jump only estimates the row's place (the pitch is measured once rows exist, and
+  // space headings are not one row tall), landing a few rows short with nothing to correct it. Once shown it is kept
+  // in view while the list settles — space groups arrive and move rows, and what sits below the list loads later and
+  // shortens it (the tag tidy bar is lazy) — until the person scrolls the list themselves. A few seconds at most, so a
+  // note that is not in the list never moves the person's scrolling later.
+  const reveal = useRef<{ id: string; until: number; jumpedAtPitch: number | null; shown: boolean } | null>(null);
+  const REVEAL_OWED_MS = 10_000;
   useEffect(() => {
     // A phone shows the note full-screen, not beside the list: nothing to reveal.
-    if (mobileLayout || !overviewSelectedNode?.id) return;
+    reveal.current = mobileLayout || !overviewSelectedNode?.id ? null : { id: overviewSelectedNode.id, until: Date.now() + REVEAL_OWED_MS, jumpedAtPitch: null, shown: false };
+  }, [overviewSelectedNode?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- mobileLayout read at selection time
+  // After every render (rows arriving or moving, the window moving) and whenever the list's box changes size: bring the
+  // active row into the list's visible box if it is not there.
+  const tryReveal = () => {
+    const owed = reveal.current;
     const root = sidebarRootRef.current;
-    if (!root) return;
-    // Defer so the new "active" class has been applied to the DOM by the time
-    // we look for it.
-    const t = setTimeout(() => {
-      const el = root.querySelector<HTMLElement>(".obsidian-page-button.active");
-      if (!el && virtualized) {
-        // Windowed mode: the active row may not EXIST in the DOM yet — jump
-        // the scroll container to its flat index so the window materializes
-        // it (a second pass via the scroll handler then renders the row).
-        const idx = flatRows.findIndex((r) => r.kind === "node" && r.item.id === overviewSelectedNode.id);
-        const list = root.querySelector<HTMLElement>(".obsidian-page-list");
-        if (idx >= 0 && list) list.scrollTop = Math.max(0, idx * virtRow - list.clientHeight / 2);
-        return;
-      }
-      // `nearest` keeps the scroll minimal — only scrolls when actually
-      // offscreen. inline MUST be explicit: its default ("auto"→center) pans
-      // the list horizontally on expand, knocking titles out of alignment.
-      el?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-    }, 30);
-    return () => clearTimeout(t);
-  }, [overviewSelectedNode?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- flatRows/virtualized read at fire time; keying them would re-scroll on every list change
+    if (!owed || !root) return;
+    if (Date.now() > owed.until) { reveal.current = null; return; }
+    const el = root.querySelector<HTMLElement>(".obsidian-page-button.active");
+    const list = root.querySelector<HTMLElement>(".obsidian-page-list");
+    if (el) {
+      const box = list?.getBoundingClientRect();
+      const row = el.getBoundingClientRect();
+      if (box && row.top >= box.top && row.bottom <= box.bottom) { owed.shown = true; return; }
+      // `nearest` keeps the scroll minimal — only scrolls when actually offscreen. inline MUST be explicit: its
+      // default ("auto"→center) pans the list horizontally on expand, knocking titles out of alignment. The first reveal
+      // of a plain list glides; a correction, and any windowed jump (each scroll re-renders the window and re-measures
+      // the pitch, resizing the spacers under a smooth scroll's fixed target), is at once.
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: owed.shown || virtualized ? "auto" : "smooth" });
+      return;
+    }
+    // Jumped already with the pitch known now: wait for the window to render (a measured pitch jumps again, closer).
+    if (!virtualized || owed.jumpedAtPitch === virtRow) return;
+    // Windowed mode: the active row may not EXIST in the DOM yet — jump the scroll container near its flat index so
+    // the window materializes it; the render that follows (scroll handler) brings it fully into view above.
+    const idx = flatRows.findIndex((r) => r.kind === "node" && r.item.id === owed.id);
+    if (idx >= 0 && list) {
+      owed.jumpedAtPitch = virtRow;
+      list.scrollTop = Math.max(0, idx * virtRow - list.clientHeight / 2);
+    }
+  };
+  const tryRevealRef = useRef(tryReveal);
+  tryRevealRef.current = tryReveal;
+  useEffect(() => { tryRevealRef.current(); });
+  useEffect(() => {
+    const list = pageListRef.current;
+    const stopSize = observeSize(list, () => tryRevealRef.current());
+    // The person scrolling the list ends the reveal (a programmatic scroll fires no wheel, touch, pointer or key).
+    const personScrolls = () => { reveal.current = null; };
+    const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    for (const type of events) list?.addEventListener(type, personScrolls, { passive: true });
+    return () => { stopSize(); for (const type of events) list?.removeEventListener(type, personScrolls); };
+  }, []);
 
   const showToolbar = overviewPane === "nodes" && !overviewSearch.trim();
   // The 標籤 tab's ＋ and filter, in the same row and style as the 筆記 tab's tools.

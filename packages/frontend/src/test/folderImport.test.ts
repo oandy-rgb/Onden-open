@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { compressToBase64 } from "lz-string";
-import { MAX_REQUEST_BYTES, importedMediaKind, mergeImportResults, planImportBatches, uploadFolderImport, type FolderImportFile, type ImportResult } from "../modules/importers/folderImport";
+import { MAX_IMPORT_REQUEST_BYTES, importedMediaKind, mergeImportResults, planImportBatches, uploadFolderImport, type FolderImportFile, type ImportResult } from "../modules/importers/folderImport";
 
 const note = (path: string, size = 10): FolderImportFile => ({ path, content: "x".repeat(size) });
 const image = (path: string, size = 10): FolderImportFile => ({ path, base64: "A".repeat(size), kind: "image" });
@@ -16,7 +16,7 @@ describe("folder import batches", () => {
   });
 
   it("gives an oversized file its own batch, and lists one over the request limit instead of sending it", () => {
-    const { batches, tooLarge } = planImportBatches([image("big.png", 5000), image("huge.jpg", MAX_REQUEST_BYTES + 1), note("a.md")], 1000);
+    const { batches, tooLarge } = planImportBatches([image("big.png", 5000), image("huge.jpg", MAX_IMPORT_REQUEST_BYTES + 1), note("a.md")], 1000);
     expect(batches.map(batch => batch.map(file => file.path))).toEqual([["big.png"], ["a.md"]]);
     expect(tooLarge).toEqual([{ path: "huge.jpg", kind: "file" }]);
   });
@@ -40,7 +40,7 @@ describe("folder import batches", () => {
 
   it("lists a database too large for one request instead of sending part of it", () => {
     const { batches, tooLarge } = planImportBatches([
-      note("Huge.csv", 400), note("Huge/a.md", MAX_REQUEST_BYTES / 2), note("Huge/b.md", MAX_REQUEST_BYTES / 2), note("other.md"),
+      note("Huge.csv", 400), note("Huge/a.md", MAX_IMPORT_REQUEST_BYTES / 2), note("Huge/b.md", MAX_IMPORT_REQUEST_BYTES / 2), note("other.md"),
     ]);
     expect(tooLarge).toEqual([{ path: "Huge.csv", kind: "collection" }]);
     expect(batches.map(batch => batch.map(file => file.path))).toEqual([["other.md"]]);

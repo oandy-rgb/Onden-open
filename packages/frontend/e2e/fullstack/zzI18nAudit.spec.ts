@@ -2,6 +2,11 @@
 // English UI text left (text nodes and title / aria-label / placeholder).
 // Fixture content is Chinese, so English found is UI chrome. Prints a report;
 // fails only when English is found, so a clean run proves the sweep.
+// A note's own words are user content wherever they show, the same as its title: the heading outline at the edge of an open note
+// (.note-edge-outline) and a history row's text sample (.wh-note-sample). Inside interface text — a history row's 「added N
+// paragraphs under <headings>」, a task row's 「Plan <title> for today」 — only the user's words are cut out (headings and task
+// titles join the titles below), so the sentence around them is still checked. Other specs leave English-headed notes
+// (templates, the palette's Daily note) in the shared workspace, and this screen sweep runs after them.
 // Note titles and space names are the user's content wherever they appear
 // (a list row, its 「開啟 {title}」 tooltip, a sidebar space group), so the
 // workspace's titles and spaces are cut out before the check, and a history
@@ -13,7 +18,9 @@ import { ready, PAGE } from "./helpers";
 import { makeReviewCard } from "./reviewFixtures";
 
 // Words that are fine in a Chinese UI: product/format names and key labels.
-const ALLOWED = /^(Onden|RSS|OPML|PDF|Markdown|BibTeX|DOI|URL|AI|API|CSS|HTML|JSON|JSON Canvas|Obsidian|Notion|Puck|E2E|Esc|Enter|Tab|Shift|Ctrl|Cmd|Alt|OK|ID|UUID|SQLite|Git|GitHub|Google|Tailscale|PWA|OAuth|MCP|zh-TW|English|SVG|PNG|JPG|WebP|CSV|ZIP|HTTP|HTTPS|Excalidraw|React|Flow|canvas|Anki|Zotero|Bluesky|Mastodon)$/i;
+const ALLOWED = /^(Onden|RSS|OPML|PDF|Markdown|BibTeX|DOI|URL|AI|API|CSS|HTML|JSON|JSON Canvas|Obsidian|Notion|Puck|E2E|Esc|Enter|Tab|Shift|Ctrl|Cmd|Alt|OK|ID|UUID|SQLite|Git|GitHub|Google|Tailscale|PWA|OAuth|MCP|zh-TW|English|SVG|PNG|JPG|WebP|CSV|ZIP|HTTP|HTTPS|Excalidraw|React|Flow|canvas|Anki|Zotero|Bluesky|Mastodon|PPTX|SKILL|Logseq|Haskell|Elixir|Dockerfile|PowerShell|LaTeX|App|Del)$/i;
+// SKILL (the SKILL.md file), Logseq, and the language names in the "What's new" text are names of things, like the
+// formats above; "App" is the loanword the zh-TW UI uses for the installed app; Del is a key label like Esc/Enter.
 
 async function englishOn(page: Page, noteTitles: string[]): Promise<string[]> {
   return page.evaluate(({ allowed, titles }) => {
@@ -26,7 +33,7 @@ async function englishOn(page: Page, noteTitles: string[]): Promise<string[]> {
     // The site preview's page bodies and page-list entries (title + excerpt)
     // are notes' text, the user's content like the editor's.
     const puckChrome = (el: Element | null) => !!el?.closest("[class*='PuckHeader'], [class*='PuckLayout-leftSideBar'] h2, [class*='SidebarSection-title'], [class*='Loader'], [class*='IconButton'], [class*='ViewportControls']");
-    const skip = (el: Element | null) => puckChrome(el) || !!el?.closest(".cm-content, .cm-editor, .obsidian-title-input, .day-lens-row-title, .sb-item-title, .sidebar-node, [data-user-content], .react-flow__node, .card-node, script, style, code, pre, .tiptap, .markdown-body, .md-preview, .published-body, .published-page-list-item, .tl-title-btn");
+    const skip = (el: Element | null) => puckChrome(el) || !!el?.closest(".cm-content, .cm-editor, .obsidian-title-input, .day-lens-row-title, .sb-item-title, .sidebar-node, [data-user-content], .react-flow__node, .card-node, script, style, code, pre, .tiptap, .markdown-body, .md-preview, .published-body, .published-page-list-item, .tl-title-btn, .note-edge-outline, .wh-note-sample");
     const consider = (raw: string, where: string) => {
       let text = raw.replace(/\s+/g, " ").trim();
       for (const title of userTitles) if (text.includes(title)) text = text.split(title).join(" ").replace(/\s+/g, " ").trim();
@@ -83,9 +90,18 @@ test("zh-TW: no English left on the main screens", async ({ page }) => {
   await Promise.all([page.request.put(`/api/nodes/${note.id}/tags/${tag.id}`, { ...H, data: {} }), makeReviewCard(page.request, note.id)]);
 
   const spaces = ((await (await page.request.get("/api/spaces")).json()).spaces as Array<{ name?: string }>);
+  const nodes = (await (await page.request.get("/api/bootstrap")).json()).nodes as Array<{ title?: string; markdown?: string }>;
+  // Task titles show in labels like 「Plan {title} for today」 and a note's headings in 「added N paragraphs under “…”」:
+  // the user's words inside interface text. They are cut out like titles, so the sentence around them is still checked.
+  const titlesIn = (value: unknown): string[] => Array.isArray(value) ? value.flatMap(titlesIn)
+    : value && typeof value === "object" ? Object.entries(value).flatMap(([key, v]) => key === "title" && typeof v === "string" ? [v] : titlesIn(v)) : [];
+  const taskTitles = titlesIn(await (await page.request.get("/api/tasks/agenda")).json());
+  const headings = nodes.flatMap((node) => (node.markdown ?? "").split("\n").filter((line) => /^#{1,6}\s/.test(line)).map((line) => line.replace(/^#+\s*/, "")));
   const noteTitles = [
-    ...((await (await page.request.get("/api/bootstrap")).json()).nodes as Array<{ title?: string }>).map((node) => node.title),
+    ...nodes.map((node) => node.title),
     ...spaces.map((space) => space.name),
+    ...taskTitles,
+    ...headings,
   ].map((name) => name?.replace(/\s+/g, " ").trim() ?? "").filter(Boolean);
   const report: Record<string, string[]> = {};
   const visit = async (name: string, url: string, then?: () => Promise<void>) => {

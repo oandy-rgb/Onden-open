@@ -6,13 +6,14 @@
 // a #word written in a note's body or title is text, not a tag: inline-only
 // notes are never members, and quick capture leaves its #word as text.
 import { test, expect, type Page } from "@playwright/test";
-import { ready, openQuickCapture, titleTags, applyTagFromTitle, H } from "./helpers";
+import { ready, ensureInbox, openQuickCapture, saveQuickCapture, titleTags, titleTagAdd, titleTagOption, applyTagFromTitle, expectOfflineReady, H } from "./helpers";
 
 
+// 2026-11-18 (owner: 「都改成檢查」): every value this probe used to record is now a check. Each `expect` names the written
+// rule it follows; a line marked `pinned:` has no written rule and only records today's behaviour.
 test("TAG-02: projections agree, duplicate names, offline entries, renamed task tag", async ({ page, context }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
-  const out: Record<string, string> = {};
   const mk = async (title: string, markdown = "x") => (await (await page.request.post("/api/nodes", { ...H, data: { title, markdown } })).json()).id as string;
   const rp = async (path: string) => (await (await page.request.post("/api/tags/resolve-path", { ...H, data: { path } })).json()).leaf_id as string;
   const tagOn = (n: string, t: string) => page.request.put(`/api/nodes/${n}/tags/${t}`, { ...H, data: {} });
@@ -22,151 +23,159 @@ test("TAG-02: projections agree, duplicate names, offline entries, renamed task 
     return [...(row?.class_tag_ids ?? []), ...(row?.label_tag_ids ?? [])];
   };
   const searchIds = async (q: string) => ((await (await page.request.get(`/api/nodes/search?q=${encodeURIComponent(q)}`)).json()) as { id: string }[]).map((r) => r.id);
-  const sidebarChip = (p: Page, name: string) => p.locator(".sidebar-tag-chip").filter({ hasText: new RegExp(`^#${name}\\s*\\d*$`) });
-  const sidebarCountAndClick = async (p: Page, name: string, ids: Record<string, string>) => {
-    const chip = sidebarChip(p, name);
-    const n = await chip.count();
-    if (!n) return `no chip; chips containing name=${JSON.stringify((await p.locator(".sidebar-tag-chip").allInnerTexts()).filter((c) => c.toLowerCase().includes(name.toLowerCase())))}`;
-    const count = (await chip.first().locator(".sidebar-tag-count").innerText()).trim();
-    await chip.first().click();
-    await p.waitForTimeout(1200);
-    const nodeParam = new URL(p.url()).searchParams.get("node");
-    let landed = "", items: string[] = [];
-    if (await p.locator(".tag-members-section").isVisible().catch(() => false)) {
-      landed = `tagPage(${nodeParam?.slice(0, 8)}) members=${(await p.locator(".tag-members-section .tag-member-count").innerText()).trim()}`;
-      items = await p.locator(".tag-members-section li, .tag-members-section tbody tr").allInnerTexts();
-    } else {
-      landed = "no tag page";
-    }
-    const label = Object.entries(ids).filter(([, title]) => items.some((i) => i.includes(title))).map(([k]) => k);
-    return `chips=${n} count=${count} click=${landed} items=${JSON.stringify(label)}`;
-  };
+  const tagTree = async () => ((await (await page.request.get("/api/tags/tree")).json()).tags as { id: string; name: string; parent_id: string | null }[]);
+  // The sidebar's tag tree: one row per tag ("Open #name"), with the count of directly tagged notes
+  // (SidebarTagTree.tsx: directTagUsage). The name opens the tag's page.
+  const sidebarRow = (p: Page, name: string) => p.getByRole("button", { name: `Open #${name}`, exact: true });
+  const sidebarCount = async (p: Page, name: string) => Number((await sidebarRow(p, name).locator(".sb-tagtree-count").innerText()).trim());
+  const memberTitles = async (p: Page) => (await p.locator(".tag-members-section li, .tag-members-section tbody tr").allInnerTexts());
 
-  // A) Label tag L: n1 stored membership, n2 inline #L only, n3 both, n4 inline #l (case).
-  //    Expected (T10): members are n1 and n3 only — n2/n4 are text.
+  // A) Label tag L: n1 stored membership, n2 inline #L only, n3 both, n4 inline #L in capitals.
+  //    docs/decisions/tag-model.md 3: a #word in the text is text, not a tag — members are n1 and n3 only,
+  //    and the inline words create no tag of their own.
   const L = `lab${stamp}`;
   const tL = await rp(L);
   const n1 = await mk(`T02 member ${stamp}`), n2 = await mk(`T02 inline ${stamp}`, `text #${L} here`), n3 = await mk(`T02 both ${stamp}`, `#${L}`), n4 = await mk(`T02 lower ${stamp}`, `#${L.toUpperCase()}`);
   await tagOn(n1, tL); await tagOn(n3, tL);
-  const titles: Record<string, string> = { n1: `T02 member ${stamp}`, n2: `T02 inline ${stamp}`, n3: `T02 both ${stamp}`, n4: `T02 lower ${stamp}` };
   await ready(page, "/?view=notes");
-  out.labelSidebar = await sidebarCountAndClick(page, L, titles);
-  await ready(page, "/?view=notes");
-  out.labelSidebarUpper = await sidebarCountAndClick(page, L.toUpperCase(), titles);
-  const sL = await searchIds(`#${L}`);
-  out.labelSearch = JSON.stringify(Object.entries({ n1, n2, n3, n4 }).filter(([, id]) => sL.includes(id)).map(([k]) => k));
-  // Tag page: the tag node view, its "notes with this tag" list.
-  await ready(page, `/?view=notes&node=${tL}`);
-  await page.waitForTimeout(1500);
-  const tagPageText = (await page.locator(".tag-members-section").innerText().catch(() => ""));
-  out.labelTagPage = JSON.stringify(Object.entries(titles).filter(([, t]) => tagPageText.includes(t)).map(([k]) => k));
+  await expect(sidebarRow(page, L)).toBeVisible();
+  expect(await sidebarCount(page, L)).toBe(2);
+  await expect(sidebarRow(page, L.toUpperCase())).toHaveCount(0);
+  expect((await tagTree()).filter((t) => t.name.toLowerCase() === L)).toHaveLength(1);
+  await sidebarRow(page, L).click();
+  await expect(page.locator(".tag-members-section")).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("node")).toBe(tL);
+  await expect.poll(async () => (await memberTitles(page)).length).toBe(2);
+  const tagPageText = (await memberTitles(page)).join("\n");
+  expect(tagPageText).toContain(`T02 member ${stamp}`);
+  expect(tagPageText).toContain(`T02 both ${stamp}`);
+  expect(tagPageText).not.toContain(`T02 inline ${stamp}`);
+  expect(tagPageText).not.toContain(`T02 lower ${stamp}`);
+  // Search `#tag` lists what the tag page lists (tagHierarchy.ts memberTagIdsNamed), names case-insensitive.
+  for (const q of [`#${L}`, `#${L.toUpperCase()}`]) {
+    const ids = await searchIds(q);
+    expect(ids, q).toContain(n1); expect(ids, q).toContain(n3);
+    expect(ids, q).not.toContain(n2); expect(ids, q).not.toContain(n4);
+  }
 
-  // B) Same leaf name under two parents.
+  // B) Same leaf name under two parents: two tags (the name rule is per parent), each with its own members;
+  //    a name search lists the members of every tag with that title (memberTagIdsNamed).
   const dup = `dup${stamp}`;
   const tA = await rp(`pa${stamp}/${dup}`), tB = await rp(`pb${stamp}/${dup}`);
+  expect(tA).not.toBe(tB);
   const d1 = await mk(`T02 dupA ${stamp}`), d2 = await mk(`T02 dupB ${stamp}`);
   await tagOn(d1, tA); await tagOn(d2, tB);
-  await ready(page, "/?view=notes");
-  out.dupSidebar = await sidebarCountAndClick(page, dup, { d1: `T02 dupA ${stamp}`, d2: `T02 dupB ${stamp}` });
-  out.dupCatalog = JSON.stringify(((await (await page.request.get("/api/tags")).json()) as { id: string; name: string; parent_id?: string | null }[]).filter((t) => t.id === tA || t.id === tB).map((t) => `${t.name}|parent=${t.parent_id ?? "-"}`));
+  const dupTags = (await tagTree()).filter((t) => t.name === dup);
+  expect(dupTags.map((t) => t.id).sort()).toEqual([tA, tB].sort());
+  expect(new Set(dupTags.map((t) => t.parent_id)).size).toBe(2);
   const sD = await searchIds(`#${dup}`);
-  out.dupSearch = `d1=${sD.includes(d1)} d2=${sD.includes(d2)}`;
-  // Picker on a fresh note: how are the two options told apart?
+  expect(sD).toContain(d1); expect(sD).toContain(d2);
+  for (const [tagId, mine, other] of [[tA, `T02 dupA ${stamp}`, `T02 dupB ${stamp}`], [tB, `T02 dupB ${stamp}`, `T02 dupA ${stamp}`]]) {
+    await ready(page, `/?view=notes&node=${tagId}`);
+    await expect(page.locator(".tag-members-section")).toBeVisible();
+    await expect.poll(async () => (await memberTitles(page)).join("\n")).toContain(mine);
+    expect((await memberTitles(page)).join("\n")).not.toContain(other);
+  }
+  // The note's tag picker offers both and no "Create" (TitleTagRow.tsx: a tag that differs only in parent is offered instead of a near-duplicate).
   const pick = await mk(`T02 picker ${stamp}`);
   await ready(page, `/?view=notes&node=${pick}`);
   const sources = titleTags(page);
-  await sources.locator(".prop-tag--add").click();
-  await sources.getByRole("combobox", { name: "Add a tag" }).fill(String(stamp));
-  await expect.poll(async () => (await sources.getByRole("option").allTextContents()).join("|").includes(L), { timeout: 15_000 }).toBe(true).catch(() => {});
-  const opts = await sources.getByRole("option").allTextContents();
-  out.dupPickerOptions = `total=${opts.length} mine=${JSON.stringify(opts.filter((o) => o.includes(String(stamp))))}`;
+  await (await titleTagAdd(page)).click();
+  await sources.getByRole("combobox", { name: "Add a tag" }).fill(dup);
+  await expect(page.locator("#title-tag-options").getByRole("option")).toHaveCount(2);
+  await expect(titleTagOption(page, `#${dup}`)).toHaveCount(2);
+  expect(await page.locator("#title-tag-options .title-tag-create").count()).toBe(0);
   await sources.getByRole("combobox", { name: "Add a tag" }).press("Escape");
 
-  // C) Picker online → offline → reconnect.
+  // C) Picker online → offline → reconnect. A queued write shows as saved locally and waiting, never as synced
+  //    (AGENTS.md 「保存確認」; docs/decisions/no-p2p-intermittent-server.md: usable offline, synced on reconnect).
   const tOff = await rp(`off${stamp}`);
   await ready(page, `/?view=notes&node=${pick}`);
+  // The harness has no cache of the lazily loaded screens until the idle warm-up has run (lib/offlineWarmup.ts). Offline
+  // before that, the first screen the page needs is a failed chunk load: the whole app becomes "Not available offline yet",
+  // its reconnect handler is gone and the queued removal below is never sent (a device that has used Onden online has them).
+  await expectOfflineReady(page);
   await context.setOffline(true);
   await applyTagFromTitle(page, `off${stamp}`);
-  await page.waitForTimeout(1200);
-  out.offlineApply = `chip=${await sources.getByRole("button", { name: `#off${stamp}`, exact: true }).count()} toasts=${JSON.stringify(await page.locator(".toast-message").allInnerTexts())} sidebarChip=${await sidebarChip(page, `off${stamp}`).locator(".sidebar-tag-count").innerText().catch(() => "-")}`;
+  await expect(sources.getByRole("button", { name: `#off${stamp}`, exact: true })).toBeVisible();
+  await expect(page.locator(".toast-message", { hasText: "Tag saved locally; waiting to sync." })).toBeVisible();
   await context.setOffline(false);
   await expect.poll(async () => (await memberIds(pick)).includes(tOff), { timeout: 30_000 }).toBe(true);
-  out.offlineApplyDrained = "server has membership";
-  // A membership tick that lands just before the connection drops: is the workspace usable offline?
+  // A membership tick that lands just before the connection drops must not lock the workspace while offline.
   const gate = page.locator(".membership-gate");
-  await page.waitForTimeout(150);
-  const gateBefore = await gate.isVisible().catch(() => false);
   await context.setOffline(true);
-  await page.waitForTimeout(4000);
-  out.gateWhenOfflineRightAfterTick = `gateBeforeOffline=${gateBefore} gateAfter4sOffline=${await gate.isVisible().catch(() => false)} text=${JSON.stringify((await gate.innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 120))}`;
-  await page.waitForTimeout(8000);
-  out.gateAfter12sOffline = String(await gate.isVisible().catch(() => false));
+  await expect(gate).toBeHidden();
+  await expect(sources.getByRole("button", { name: `Remove #off${stamp} from this note`, exact: true })).toBeVisible();
+  await expect(gate, "still usable after the browser has been offline a while").toBeHidden();
   await context.setOffline(false);
-  const t0 = Date.now();
-  await expect(gate).toBeHidden({ timeout: 30_000 }).catch(() => {});
-  out.gateClearsOnReconnect = `${await gate.isVisible().catch(() => false) ? "still locked" : `cleared in ${Date.now() - t0}ms`} withoutClick=true`;
-  if (await gate.isVisible().catch(() => false)) { await page.getByRole("button", { name: "Check again" }).click(); await expect(gate).toBeHidden({ timeout: 20_000 }); }
-  await page.waitForTimeout(1500);
+  await expect(gate, "reconnecting needs no click").toBeHidden({ timeout: 30_000 });
   // Remove offline, reconnect.
   await context.setOffline(true);
   await sources.getByRole("button", { name: `Remove #off${stamp} from this note`, exact: true }).click();
-  await page.waitForTimeout(1200);
-  out.offlineRemove = `chip=${await sources.getByRole("button", { name: `#off${stamp}`, exact: true }).count()}`;
+  await expect(sources.getByRole("button", { name: `#off${stamp}`, exact: true })).toHaveCount(0);
   await context.setOffline(false);
   await expect.poll(async () => (await memberIds(pick)).includes(tOff), { timeout: 30_000 }).toBe(false);
-  out.offlineRemoveDrained = "server membership gone";
-  // 503 on apply.
+  // 503 on apply is a retryable failure (errors-and-saves.md): the chip stays, the change is shown as waiting to sync
+  // (no failure toast), and it lands once the server answers again.
   await page.route(`**/api/nodes/${pick}/tags/${tOff}`, (r) => r.fulfill({ status: 503, contentType: "application/json", body: '{"error":"unavailable"}' }));
   await applyTagFromTitle(page, `off${stamp}`);
-  await page.waitForTimeout(2000);
-  out.apply503 = `chip=${await sources.getByRole("button", { name: `#off${stamp}`, exact: true }).count()} toasts=${JSON.stringify(await page.locator(".toast-message").allInnerTexts())} sync=${JSON.stringify((await page.locator(".sync-indicator, [class*=sync-status]").first().innerText().catch(() => "-")).slice(0, 60))}`;
+  await expect(sources.getByRole("button", { name: `#off${stamp}`, exact: true })).toBeVisible();
+  await expect(page.locator(".sync-indicator, [class*=sync-status]").first()).toContainText("1 change waiting to sync");
+  await expect(page.locator(".toast-message").filter({ hasNotText: "saved locally" }), "a 503 is retried, not reported as a failure").toHaveCount(0);
+  expect((await memberIds(pick)).includes(tOff)).toBe(false);
   await page.unroute(`**/api/nodes/${pick}/tags/${tOff}`);
-  await expect.poll(async () => (await memberIds(pick)).includes(tOff), { timeout: 90_000 }).toBe(true).catch(() => {});
-  out.apply503Eventually = `serverHas=${(await memberIds(pick)).includes(tOff)}`;
+  await expect.poll(async () => (await memberIds(pick)).includes(tOff), { timeout: 90_000 }).toBe(true);
 
-  // D) Quick capture with a #word online vs offline. Expected (T10): the #word
-  //    stays in the title/body, member=0, no tag is created.
+  // D) Quick capture with a #word, online and offline: the #word stays in the title and body, and no tag is made for it
+  //    (tag-model.md 3). The note is filed in the inbox (docs/decisions/quick-capture-inbox.md), so its only membership is the inbox's.
+  await ensureInbox(page);
+  const inboxTagId = (await (await page.request.post("/api/capture/inbox", { ...H, data: {} })).json()).tag_id as string;
   const qcOn = `qcon${stamp}`, qcOff = `qcoff${stamp}`;
-  const capture = async (text: string) => {
-    await openQuickCapture(page);
-    await page.locator(".quick-capture-textarea").fill(text);
-    await page.locator(".quick-capture-save").click();
-    await page.waitForTimeout(2000);
+  const findByTitle = async (prefix: string) => {
+    const boot = await (await page.request.get("/api/bootstrap")).json();
+    return (boot.nodes as { id: string; title: string; markdown: string }[]).find((n) => n.title.startsWith(prefix));
   };
-  try {
-    await ready(page, "/?view=notes");
-    await capture(`QC online ${stamp} #${qcOn}`);
-    const findByTitle = async (prefix: string) => {
-      const boot = await (await page.request.get("/api/bootstrap?slim=1")).json().catch(() => null) ?? await (await page.request.get("/api/bootstrap")).json();
-      return (boot.nodes as { id: string; title: string; markdown: string }[]).find((n) => n.title.startsWith(prefix));
-    };
-    const on = await findByTitle(`QC online ${stamp}`);
-    out.qcOnline = on ? `title=${JSON.stringify(on.title)} body=${JSON.stringify(on.markdown)} member=${(await memberIds(on.id)).length}` : "not created";
-    await context.setOffline(true);
-    await capture(`QC offline ${stamp} #${qcOff}`);
-    await context.setOffline(false);
-    await page.waitForTimeout(6000);
-    const off = await findByTitle(`QC offline ${stamp}`);
-    out.qcOffline = off ? `title=${JSON.stringify(off.title)} body=${JSON.stringify(off.markdown)} member=${(await memberIds(off.id)).length} tagExists=${(await (await page.request.get("/api/tags/tree")).json()).tags.some((t: { name: string }) => t.name === qcOff)} search#=${(await searchIds(`#${qcOff}`)).includes(off.id)}` : "not created";
-  } catch (e) {
-    out.qc = `capture UI not reached: ${String(e).slice(0, 120)}`;
-    await context.setOffline(false);
-  }
+  await ready(page, "/?view=notes");
+  await openQuickCapture(page);
+  await page.locator(".quick-capture-textarea").fill(`QC online ${stamp} #${qcOn}`);
+  await saveQuickCapture(page);
+  await expect.poll(async () => !!(await findByTitle(`QC online ${stamp}`))).toBe(true);
+  const on = (await findByTitle(`QC online ${stamp}`))!;
+  expect(on.title).toBe(`QC online ${stamp} #${qcOn}`);
+  expect(on.markdown).toBe(`QC online ${stamp} #${qcOn}`);
+  expect(await memberIds(on.id)).toEqual([inboxTagId]);
+  await context.setOffline(true);
+  await openQuickCapture(page);
+  await page.locator(".quick-capture-textarea").fill(`QC offline ${stamp} #${qcOff}`);
+  await saveQuickCapture(page);
+  await context.setOffline(false);
+  await expect.poll(async () => !!(await findByTitle(`QC offline ${stamp}`)), { timeout: 30_000 }).toBe(true);
+  const off = (await findByTitle(`QC offline ${stamp}`))!;
+  expect(off.title).toBe(`QC offline ${stamp} #${qcOff}`);
+  expect(off.markdown).toBe(`QC offline ${stamp} #${qcOff}`);
+  expect(await memberIds(off.id)).toEqual([inboxTagId]);
+  const names = (await tagTree()).map((t) => t.name);
+  expect(names).not.toContain(qcOn);
+  expect(names).not.toContain(qcOff);
+  expect(await searchIds(`#${qcOff}`)).not.toContain(off.id);
 
-  // E) Tasks are not tags: a task is a node that references the tasks function (migration 191), so making one
-  // creates no `task` tag, and a plain nested tag named "task" does not make a note a task.
+  // E) Tasks are not tags: a task is its own row (docs/architecture/tasks-module.md), so making one creates no `task` tag, and a plain
+  //    nested tag named "task" does not make a note a task (tag-model.md 2: a tag is not a state).
   const host = await mk(`T02 task host ${stamp}`);
-  const tasksTags = async () => ((await (await page.request.get("/api/tags/tree")).json()).tags as { id: string; name: string }[]).filter((t) => t.name === "task").length;
+  const tasksTags = async () => (await tagTree()).filter((t) => t.name === "task").length;
   const before = await tasksTags();
   const mkTask = await page.request.post(`/api/nodes/${host}/tasks`, { ...H, data: { title: `T02 task ${stamp}` } });
   const agendaHas = async (title: string) => JSON.stringify((await (await page.request.get("/api/tasks/agenda")).json())).includes(title);
   const bootTitles = async () => JSON.stringify((await (await page.request.get("/api/bootstrap")).json()).nodes.map((n: { title: string }) => n.title));
-  out.task = `create=${mkTask.status()} agenda=${await agendaHas(`T02 task ${stamp}`)} asNote=${(await bootTitles()).includes(`T02 task ${stamp}`)} newTaskTags=${(await tasksTags()) - before}`;
+  expect(mkTask.status()).toBe(201);
+  expect(await agendaHas(`T02 task ${stamp}`)).toBe(true);
+  expect(await bootTitles()).not.toContain(`T02 task ${stamp}`);
+  expect(await tasksTags()).toBe(before);
   const nestedTask = await rp(`proj${stamp}/task`);
   const plain = await mk(`T02 plain ${stamp}`);
   await tagOn(plain, nestedTask);
-  out.nestedTaskPlainNote = `inBootstrap=${(await bootTitles()).includes(`T02 plain ${stamp}`)} inAgenda=${await agendaHas(`T02 plain ${stamp}`)} directGet=${(await page.request.get(`/api/nodes/${plain}`)).status()}`;
+  expect(await bootTitles()).toContain(`T02 plain ${stamp}`);
+  expect(await agendaHas(`T02 plain ${stamp}`)).toBe(false);
+  expect((await page.request.get(`/api/nodes/${plain}`)).status()).toBe(200);
   await page.request.delete(`/api/nodes/${nestedTask}`, H);
-
-  console.log(`AUDIT TAG-02 ${JSON.stringify(out)}`);
 });

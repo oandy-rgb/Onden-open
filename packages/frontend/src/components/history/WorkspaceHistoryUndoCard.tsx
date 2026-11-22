@@ -30,6 +30,8 @@ export type UndoOutcome = { undone: number; conflicts: number; kept: number; ski
 export type UndoCardText = {
   /** Heading line over the card's tag and time: the tag (agent name / 「Restore」) and the time. */
   tag: string;
+  /** The tag is a name the user gave (an agent), not interface text. */
+  tagIsName?: boolean;
   when: string;
   ariaLabel: string;
   /** A sentence under the head (the run's summary, the rewind's title). */
@@ -139,7 +141,7 @@ export default function WorkspaceHistoryUndoCard(props: Props) {
   return (
     <article className={"wh-run " + className + (afterCut ? " wh-after-cut" : "")} aria-label={text.ariaLabel}>
       <header className="wh-run-head">
-        <span className="wh-run-tag">{text.tag}</span>
+        <span className="wh-run-tag" data-user-content={text.tagIsName || undefined}>{text.tag}</span>
         <span className="wh-run-when">{text.when}</span>
         {afterCut && <span className="wh-cut-badge">{t("Will be undone")}</span>}
       </header>

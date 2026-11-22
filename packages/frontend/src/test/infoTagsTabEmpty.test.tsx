@@ -3,7 +3,7 @@
 // The screens under test load data on mount; the network is down for the whole file (helpers/offlineNetwork.ts).
 import "./helpers/offlineNetwork";
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import NodeInspector from "../components/NodeInspector";
 import { noWorkspaceData, type ContentNode, type NodeEdge } from "../lib/api";
 import { resetAppState } from "../lib/appStore";
@@ -19,7 +19,7 @@ const node = (id: string, title: string): ContentNode => ({
 afterEach(() => { cleanup(); act(() => setLocalePref("system")); });
 
 describe("info panel Tags tab", () => {
-  it("says the note has no tags when other tabs have something", () => {
+  it("says the note has no tags when other tabs have something", async () => {
     const target = node("n1", "Target");
     const linked = node("n2", "Linked");
     const edges: NodeEdge[] = [{ id: "e1", source_node_id: "n2", target_node_id: "n1", edge_type: "knowledge_link", status: "active" }];
@@ -27,7 +27,8 @@ describe("info panel Tags tab", () => {
     render(<NodeInspector node={target} onSelectNode={() => {}} onTagsChanged={() => {}} />);
     fireEvent.click(screen.getByRole("tab", { name: "Tags" }));
     const panel = screen.getByRole("tabpanel");
-    expect(panel).toHaveTextContent("No tags yet");
+    // The panel loads first (a parent may share values down), then says so.
+    await waitFor(() => expect(panel).toHaveTextContent("No tags yet"));
     expect(panel).not.toHaveTextContent("This note has no tags, features or connections yet.");
   });
 });

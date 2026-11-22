@@ -37,6 +37,13 @@
     立刻讓當下的測試失敗並寫出網址（`helpers/noRealNetwork.ts`）。畫面一掛載就載資料、而測試不關心的檔案，
     第一個 import 放 `./helpers/offlineNetwork`（整個檔案網路都是斷的，請求立刻失敗）；要回應就自己 `vi.stubGlobal("fetch", …)`。
     渲染資訊面板（`NodeInspector`）的檔案，在測試前 `await loadNoteFunctionModules()`，避免測試結束時模組還在動態載入。
+- 端對端不得只記錄不斷言（業主 2026-11-18：「都改成檢查」）：spec 量到的每個值都是 `expect`，不寫進 `out` 物件再 `console.log`。
+  期望值來自成文規則（`docs/agents/decisions-*.md`、`docs/decisions/`、`docs/architecture/`、產品程式的註解、i18n 字典、spec 檔頭），
+  在該行旁用一句短註解寫出處；規則是**最新**的決定，探針當年量到的舊值不算依據（功能改版後探針過時，改成現行流程再斷言）。
+  成文規則存在而產品沒做：獨立成 `test("FINDING: …")` 並 `test.fail()`，標題後一句寫產品實際怎麼做（沒有任何決定或改版能解釋的差異才用）。
+  找不到成文規則：照現況斷言並在該行寫 `// pinned: today's behaviour, no written rule`，PR 說明列出讓擁有者決定。
+  量到的耗時、截圖路徑這類無法檢查的值不留在 spec 裡，PR 說明列出。
+  等「不會發生的事」（沒有多一次寫入、畫面不再變）時用有上限的 `expect.poll(…, { timeout }).…catch(() => {})` 後再斷言結果，不用固定睡眠。
 - 完成時說明：哪些入口已遷移、呼叫者少理解哪些概念、保留了哪些行為、測試結果和剩餘限制。
   當本批使用案例已符合契約且驗證通過，停止擴大重構。
 
@@ -65,9 +72,19 @@ site 套件測試、後端與前端的 `src/test/guards/`、`ratchet:check`、`c
 2026-11-10 的 main 同時帶著過期的資料庫型別檔、五個紅的 markdown 守門和一個紅的 site 測試，每個都是「自己的套件全綠」的 PR 合進來的。
 合併的人在 PR 分支（已併入最新 main）上跑，紅的不合併；雲端任務的驗證清單也要列這一條。它不取代完整套件。
 
+**離線的端對端 spec 先等「離線就緒」（2026-11-18）**：`setOffline(true)` 之前呼叫 `expectOfflineReady(page)`（`e2e/fullstack/helpers.ts`）。harness 要等閒置時的離線預熱
+（`lib/offlineWarmup.ts`）才有延後載入的畫面；之前離線，第一個還沒載入的畫面會讓 `AppErrorBoundary` 取代整個 app，排隊的寫入沒人送，看起來像「離線的修改沒有到伺服器」。
+守門：`src/test/guards/e2eOfflineReady.guard.test.ts`（既有未等待的檔案列在 `NOT_YET_WAITING`，只准減少）。
+
 **e2e 的選擇器必須指向現在還畫得出來的東西**：`packages/frontend/src/test/guards/e2eSelectors.guard.test.ts` 檢查非 `zz*` 的 e2e 腳本用到的 class 與 `data-testid` 都在 `src/`（或 `packages/site/src`）找得到
 （函式庫自己的 class 如 `cm-*`、`react-flow*` 除外）。對已不存在的 class 寫 `toHaveCount(0)`／`toBeHidden()` 永遠是綠的，點擊再加 `.catch(() => {})` 就是沒點。
 沒修好的記在 `e2e-selectors-baseline.json`（今天的數字，只准減；修好的項目一定要從清單刪掉，測試會擋殘留）。要斷言「不存在」，用 role／標籤，不是舊 class。
+
+**把 e2e 探針改成檢查，補充（上面那條之外；2026-11-18 檢視／查詢八支）**：交出前每個 `FINDING` 拿掉 `test.fail()` 跑一次，確認失敗的是規則那一行、不是前置
+（setUp 壞掉時 `test.fail()` 也是綠的）；「預期失敗」的檢查若要看一個會在幾百毫秒內消失的狀態，等應用程式自己的下一個信號（例如佇列的第二次重試）再看，不要搶在重讀之前。
+測試自己開的瀏覽器環境一律經 `viewChecks.ts` 的 `contextsClosedAfterEach` 開，測試結束（含停在失敗行）就關：沒關的環境留著一個會一直同步的 app 頁面，後面每支 spec 都變慢（一支 35 秒的 spec 變 8 分鐘）。
+等「別的用戶端的改動即時出現在已開的頁面」前，先用 `readyLive` 等頁面的即時串流（`GET /api/events/stream`）開好；之前的改動只靠慢的備援輪詢。
+大量建立資料要在開任何 app 頁面之前做完（頁面開著時連續建立會讓單連線的 PGlite 堆疊停頓）。手機點擊目標的量法同 layout-audit R7（`viewChecks.ts` 的 `clickableSize`：沿元素中心線量實際點得到的長度，`::after` 擴大的範圍算）。
 
 ### 後端：每一輪都說明自己是哪一種（2026-11-14）
 
@@ -171,6 +188,7 @@ Astro node 伺服器 → 以 Node 內建 http 做同源轉發（取代 compose �
 首次 build 約 1.5 分鐘；全套 spec 的耗時與結果見 PR 說明。
 
 - **時區寫死**：後端與瀏覽器端（`--run` 的子程序）都是 `TZ=UTC`，與 compose 的 backend、playwright 容器一致（兩者都沒設 TZ），日期類 spec 因此與筆電行為一致。兩邊必須同一個時區：瀏覽器時區與工作區時區不同時，擁有者會看到「旅行時詢問」卡片（`TimeZoneAsk`），它會擋住點擊；`E2E_BROWSER_TZ` 可覆寫，但要連工作區時區一起設。
+- **轉發不重用連線**（2026-11-18）：同源轉發每個請求自己開一條連線。Node 預設重用連線，而後端的 keep-alive 逾時是 5 秒；後端被長請求占住時（單連線 PGlite 上一個 `/api/sync` 可停 12 秒）逾時的計時器先於已寫進該連線的請求執行，轉發收到 ECONNRESET 回 502，完整套件跑到後面常在建資料的 API 呼叫上看到。這是雲端堆疊的環境差異（C 類），不是產品。
 - **瀏覽器版本**：預裝的 Chromium 版本若與 `e2e/package.json` 釘的 Playwright 不同，腳本在暫存目錄建符號連結對應，不需要 `playwright install`。
 - **B 類略過**：`E2E_CLOUD=1`（`--run` 自動設）時 `playwright.config.ts` 略過 `scaleIntegrity.spec.ts`：它灌 5000+ 筆記，PGlite（單連線）跑 4 分多鐘，之後每個 API 都逾時，會連累字母序在它後面的所有 spec。留給筆電的真 Postgres。
 - **站內 feed 位址**：`rssReader`／`composition` 讓後端抓自己的 `/site/feed.xml`；compose 裡是 `http://nginx`，雲端用 `E2E_FEED_ORIGIN`（`cloud-stack.mjs` 設為轉發的 loopback 位址，`helpers.ts` 的 `FEED_ORIGIN`）。

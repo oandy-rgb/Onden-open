@@ -56,7 +56,7 @@ export default function TaskRow({ task, today, showWhen, justDone = false, disab
         <span className="tk-box-mark" aria-hidden>{done && <Check size={14} strokeWidth={3} />}</span>
       </Pressable>
       <Pressable type="button" className="tk-main" onClick={() => onOpen(task)} aria-label={t("Edit {title}", { title: task.title })}>
-        <span className="tk-title">{displayTitle(task.title)}</span>
+        <span className="tk-title" data-user-content>{displayTitle(task.title)}</span>
         {(whenText || late || task.time || task.deadline || task.recur || task.evening) && (
           <span className="tk-chips">
             {late && <span className="tk-chip tk-chip--overdue">{late}</span>}

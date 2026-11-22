@@ -5,13 +5,8 @@ import { t } from "../../lib/i18n";
 import { reads, writersFor, type WriterOptions } from "../../lib/data";
 import { getAppState } from "../../lib/appStore";
 import { randomUUID } from "../../lib/uuid";
-import { validateDesign, type SiteDesign, type SiteDesignV2 } from "@onden/site";
+import { chromeRevision, validateDesign, type SiteDesign, type SiteDesignV2 } from "@onden/site";
 import { designForSave } from "./studio/designModel";
-
-/** The revision of a chrome (`rev`, stored by the server), or null for none. */
-export function chromeRevision(chrome: Record<string, unknown> | null | undefined): string | null {
-  return typeof chrome?.rev === "string" && chrome.rev ? chrome.rev : null;
-}
 
 /** A save refused because the design changed elsewhere since this tab loaded it. */
 export function isDesignStale(error: unknown): boolean {

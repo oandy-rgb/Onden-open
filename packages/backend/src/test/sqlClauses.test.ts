@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { numericValueSql } from "../services/attributeNumber.js";
-import { appendFilterClauses, BUILT_IN_FIELDS, type FilterClause } from "../services/filter/sqlClauses.js";
+import { appendFilterClauses, type FilterClause } from "../services/filter/sqlClauses.js";
+import { BUILT_IN_FIELDS } from "@onden/markdown";
 
 // The shared filter-clause SQL compiler (unifies executeView + onden-query).
 // Pure string/param building — assert the generated SQL + parameter list.

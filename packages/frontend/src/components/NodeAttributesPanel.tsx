@@ -1,5 +1,5 @@
 import { TagName } from "./FunctionChip";
-import { propertyWriter, reads, tagSchemaWriter } from "../lib/data";
+import { propertyWriter, reads, tagSchemaWriter, usePendingWrites } from "../lib/data";
 // Schema-driven properties panel — option C from the substrate-first plan.
 //
 // Behaviour:
@@ -66,6 +66,8 @@ type Props = {
   /** The person may read but not change this note: values only, no add or
    *  remove. */
   readOnly?: boolean;
+  /** Drawn when the panel has nothing to show once loaded (no tag card, no property, nothing inherited or rolled up). */
+  whenEmpty?: ReactNode;
   /** A tag card's head; defaults to "#name". */
   renderTagHead?: (tag: Tag) => ReactNode;
   /** Drawn at the end of a tag card (NoteTagCards: the owner's
@@ -88,7 +90,7 @@ type Props = {
 };
 
 export default function NodeAttributesPanel({
-  nodeId, classTags = [], cardTagIds, showOther = true, allNodes = [], readOnly = false, renderTagHead, renderTagFoot, canEditTags = false, otherLabel, renderLegacyAction, onUpsert, onRemove, onOpenNote, onTagsChanged,
+  nodeId, classTags = [], cardTagIds, showOther = true, allNodes = [], readOnly = false, whenEmpty, renderTagHead, renderTagFoot, canEditTags = false, otherLabel, renderLegacyAction, onUpsert, onRemove, onOpenNote, onTagsChanged,
 }: Props) {
   const t = useT();
   const [attrs, setAttrs] = useState<NodeAttribute[]>([]);
@@ -141,6 +143,15 @@ export default function NodeAttributesPanel({
   }, [nodeId]);
 
   useEffect(() => { void load(); }, [load]);
+  // A change that waited in this device's queue (offline, a 5xx, a page closed mid-save) lands when the queue sends it,
+  // after this panel read the server: read again whenever waiting changes go out, or the panel keeps showing the value
+  // from before it until the note is opened again (since #1794 a reload can open the panel before the queue is sent).
+  const waiting = usePendingWrites();
+  const waitingBefore = useRef(waiting);
+  useEffect(() => {
+    if (waiting < waitingBefore.current) void load();
+    waitingBefore.current = waiting;
+  }, [waiting, load]);
 
   const upsert = useCallback(async (
     key: string,
@@ -210,9 +221,12 @@ export default function NodeAttributesPanel({
   const drawn = cardTagIds ? cards.filter(({ tag }) => cardTagIds.includes(tag.id)) : cards;
   const showsOther = showOther && (customAttrs.length > 0 || rollups.length > 0 || inherited.length > 0);
 
+  const nothingToShow = drawn.length === 0 && !showsOther;
+
   return (
     <div className="attr-panel">
       {loading && <p className="attr-panel-loading">{t("Loading…")}</p>}
+      {!loading && nothingToShow && whenEmpty}
 
       {/* One card per applied tag — fields ordered by schema. */}
       {drawn.map(({ tag, fields }) => (

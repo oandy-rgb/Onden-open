@@ -336,6 +336,9 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
   // Until the note is accepted (or durably queued), a failure keeps the input
   // for a retry, and the retry reuses the same client ids so it can never
   // create a second note or day note. Once it is accepted the capture is done.
+  // The one thing offline cannot do: the first capture to the inbox needs the tag the server makes. Save refuses (text kept),
+  // and the hint under the box must say so instead of promising "saved locally".
+  const inboxNeedsConnection = destination.kind === "inbox" && !online && !inboxTagId(tags) && !reading.link;
   const send = useCallback(async () => {
     if ((!text.trim() && images.length === 0) || busy) return;
     if (images.length > 0 && !online) {
@@ -345,7 +348,7 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
     // The inbox's tag is made by the server the first time; without a
     // connection there is no tag to put the note in yet. Nothing is lost:
     // the text stays in the box.
-    if (destination.kind === "inbox" && !online && !inboxTagId(tags) && !reading.link) {
+    if (inboxNeedsConnection) {
       addToast(t("Connect once to set up the inbox. Your text is kept."), "error");
       return;
     }
@@ -422,7 +425,7 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
     setBusy(false);
     textareaRef.current?.focus();
     if (madeInboxTag) await onRefresh();
-  }, [busy, destination, images, landingFor, listening, noteCanHold, onRefresh, online, placeName, reading, stopListening, t, tags, text]);
+  }, [busy, destination, images, inboxNeedsConnection, landingFor, listening, noteCanHold, onRefresh, online, placeName, reading, stopListening, t, tags, text]);
 
   // Handwriting, a file or photo, a bookmark: the shared create entry makes the
   // note; in the inbox it then gets the tag and the flag like a typed capture.
@@ -557,7 +560,7 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
               // queued, names the concrete count so the capture is verifiably
               // safe (not just a promise).
               <div className="quick-capture-hint">
-                {t("Offline — saved locally, will sync on reconnect.")}
+                {inboxNeedsConnection ? t("Connect once to set up the inbox. Your text is kept.") : t("Offline — saved locally, will sync on reconnect.")}
                 {pendingWrites > 0 && (
                   <span className="quick-capture-pending">{t("{n} change(s) waiting to sync", { n: pendingWrites })}</span>
                 )}

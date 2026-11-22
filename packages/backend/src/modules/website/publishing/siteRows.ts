@@ -29,7 +29,7 @@ export function safeImageUrl(url: string): string {
 }
 
 /** The first image of `markdown` a page may show (`firstImage`, then `safeImageUrl`), or "". */
-export function firstImageUrl(markdown: string): string {
+function firstImageUrl(markdown: string): string {
   const url = firstImage(markdown, (candidate) => safeImageUrl(candidate) !== "");
   return url === undefined ? "" : safeImageUrl(url);
 }

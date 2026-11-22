@@ -44,7 +44,8 @@ test("issue and revoke a key through Spaces and members", async ({ page }) => {
 
   // Revoke through the UI; the list no longer offers it.
   await keys.getByRole("button", { name: `Revoke the key “ci ${stamp}”` }).click();
-  await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  // A key is stopped after asking (settings/ai/actions revokeCode): the dialog's button is 「Revoke code」.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Revoke code", exact: true }).click();
   await expect(keys.getByText(`ci ${stamp}`)).toHaveCount(0);
   const after = await (await page.request.get(`/api/actors/${agent.id}/tokens`)).json() as Array<{ name: string; revoked_at: string | null }>;
   expect(after.find((t) => t.name === `ci ${stamp}`)?.revoked_at).toBeTruthy();

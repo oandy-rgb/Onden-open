@@ -49,7 +49,8 @@ import { MANUAL_ORDER_CN_ASC, MANUAL_ORDER_CN_DESC, UNSORTED_ORDER_CN } from "./
 import type { ActorCtx } from "../types.js";
 import { memberTagIdsNamed } from "./tagHierarchy.js";
 import { attributeSortSql } from "./collectionViewQuery.js";
-import { appendFilterClauses, BUILT_IN_FIELDS, type FilterClause } from "./filter/index.js";
+import { appendFilterClauses, type FilterClause } from "./filter/index.js";
+import { BUILT_IN_FIELDS } from "@onden/markdown";
 import { readableScopeSql } from "./readPolicy.js";
 import { LISTED_NODE_SQL } from "../spine/reservedNodes.js";
 import { blockQuerySql } from "./blockNodes.js";

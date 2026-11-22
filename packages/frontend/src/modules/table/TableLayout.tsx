@@ -21,10 +21,10 @@
 import { Pressable } from "../../components/ui";
 import { useEffect, useRef, useState } from "react";
 import { useFieldDraft } from "../../hooks/useFieldDraft";
-import { inferFieldType, storageType } from "@onden/markdown";
+import { BUILT_IN_FIELDS, inferFieldType, storageType } from "@onden/markdown";
 import { propertyWriter, writeErrors } from "../../lib/data";
 import type { ExecResponse } from "../../lib/viewExec";
-import { BUILT_IN_FIELDS, groupRows, groupLabel, aggregateField, formatFooter } from "../../components/viewLayoutKit";
+import { groupRows, groupLabel, aggregateField, formatFooter } from "../../components/viewLayoutKit";
 import { StarRating, parseRating } from "../../components/attributes/StarRating";
 import { useRowWindow } from "../../components/viewLayoutKit";
 import { t as tr, useT } from "../../lib/i18n";

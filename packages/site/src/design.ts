@@ -83,3 +83,10 @@ export type SiteDesign = {
   /** The v2 Puck home page, kept until the owner picks a home page style. */
   legacy_home: PuckData | null;
 };
+
+/** The revision of a stored chrome (`rev`), or null for none (no chrome, or one saved before revisions).
+ *  The server compares it with the one a save started from (a stale save is refused); the editor sends it. */
+export function chromeRevision(chrome: unknown): string | null {
+  const rev = chrome && typeof chrome === "object" ? (chrome as { rev?: unknown }).rev : undefined;
+  return typeof rev === "string" && rev ? rev : null;
+}

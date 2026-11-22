@@ -12,10 +12,10 @@ async function seed(page: Page) {
   const stamp = Date.now();
   const src = await makeNode(page, `SpSrc ${stamp}`);
   const passing = await makeNode(page, `SpPassing ${stamp}`);
-  await makeNode(page, `SpPassingKid ${stamp}`, passing.id);
+  const passingKid = await makeNode(page, `SpPassingKid ${stamp}`, passing.id);
   const host = await makeNode(page, `SpHost ${stamp}`);
   const kid = await makeNode(page, `SpKid ${stamp}`, host.id);
-  return { src, passing, host, kid };
+  return { src, passing, passingKid, host, kid };
 }
 
 async function revealRow(page: Page, row: Locator) {
@@ -29,9 +29,19 @@ async function revealRow(page: Page, row: Locator) {
   await row.evaluate((el) => el.scrollIntoView({ block: "center" }));
 }
 
+// Where the pointer must go: the row's centre once the list has stopped moving. A note the drag just opened renders its
+// child rows, and the browser's scroll anchoring may shift the list, a frame or two after `data-sb-expanded` flips; a
+// centre read before that sends the pointer to the row above (the first opened note's child), and the target never opens.
 async function center(row: Locator) {
-  const b = (await row.boundingBox())!;
-  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  const read = async () => {
+    await row.page().evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    const b = (await row.boundingBox())!;
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+  let last = await read();
+  await expect.poll(async () => { const now = await read(); const same = now.x === last.x && now.y === last.y; last = now; return same; },
+    { message: "the row stays put for two frames" }).toBe(true);
+  return last;
 }
 
 const rowOf = (page: Page, id: string) => page.locator(`[data-sb-id="${id}"]`);
@@ -68,9 +78,13 @@ test("desktop: stay over a folded note → it opens; drop inside keeps only that
   await page.mouse.move(p.x, p.y, { steps: 6 });
   await expect(rowOf(page, ids.passing.id)).toHaveClass(/sb-drop-spring/);
   await expect(rowOf(page, ids.passing.id)).toHaveAttribute("data-sb-expanded", "true", { timeout: 3000 });
+  await expect(rowOf(page, ids.passingKid.id)).toBeVisible(); // its child row is in the list before anything below it is measured
 
   // Then another one: the list is longer now, so measure again, and drop inside its child.
+  // Opening the first one pushed this one down: with notes left over from earlier runs it can sit at the clipped
+  // edge of the list, where the pointer would not be over it. Bring it to the middle before measuring.
   const hostHeader = header(page, ids.host.id);
+  await revealRow(page, rowOf(page, ids.host.id));
   p = await center(hostHeader);
   await page.mouse.move(p.x, p.y, { steps: 6 });
   await expect(rowOf(page, ids.host.id)).toHaveAttribute("data-sb-expanded", "true", { timeout: 3000 });
@@ -121,6 +135,7 @@ test.describe("phone", () => {
     await page.waitForTimeout(500);
     await touch(page, { type: "pointermove", x: p.x + 4, y: p.y + 2 });
     await expect(rowOf(page, ids.passing.id)).toHaveAttribute("data-sb-expanded", "true", { timeout: 3000 });
+    await expect(rowOf(page, ids.passingKid.id)).toBeVisible(); // its child row is in the list before anything below it is measured
 
     await revealRow(page, rowOf(page, ids.host.id));
     p = await center(header(page, ids.host.id));

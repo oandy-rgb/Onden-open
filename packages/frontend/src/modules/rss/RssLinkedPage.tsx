@@ -33,10 +33,10 @@ export default function RssLinkedPage({ page, sourceTitle, resolveImage }: {
   return (
     <div className="rss-article-scroll rss-linked-page" key={page.url}>
       <div className="rss-article-head">
-        <div className="rss-article-head-row"><h3 className="rss-article-title">{page.title}</h3></div>
+        <div className="rss-article-head-row"><h3 className="rss-article-title" data-user-content>{page.title}</h3></div>
         <div className="rss-article-meta"><span>{sourceTitle}</span>{original}</div>
       </div>
-      <div className="rss-article-body">
+      <div className="rss-article-body" data-user-content={page.body ? true : undefined}>
         <ReaderArticle resolveImage={(src) => resolveImage(src, page.url)}>{page.body}</ReaderArticle>
       </div>
     </div>

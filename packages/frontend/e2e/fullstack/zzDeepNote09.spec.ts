@@ -18,8 +18,22 @@ async function openPalette(page: Page) {
 }
 const selectedId = (page: Page) => new URL(page.url()).searchParams.get("node");
 
+// The "Daily note" template does not mint a note: it opens today's note, and stamps its scaffold only when that note is
+// empty (useNodeCreation.createTemplateNote — a day that already has words is opened as it is). Other specs write into
+// today's note (usecases.spec.ts types a line there), so this one first puts it in the state it asserts about.
+async function blankTodaysNote(page: Page) {
+  const today = await page.evaluate(() => new Date().toLocaleDateString("sv")); // the browser and the workspace share a zone (cloud-stack.mjs)
+  const nodes = (await (await page.request.get("/api/bootstrap?bodies=none", H)).json()).nodes as Array<{ id: string; title: string; markdown?: string }>;
+  for (const day of nodes.filter((n) => n.title === today)) {
+    const res = await page.request.patch(`/api/nodes/${day.id}`, { ...H, data: { markdown: "" } });
+    expect(res.ok(), `empty today's note ${day.id}: ${res.status()}`).toBe(true);
+  }
+}
+
 test("NOTE-09: palette mints each template with its scaffold and default tag, no carry-over", async ({ page }) => {
   test.setTimeout(180_000);
+  await ready(page, "/?view=notes"); // so the page has a zone to say what today is
+  await blankTodaysNote(page);
   await ready(page, "/?view=notes");
   const out: Record<string, string> = {};
   let previousId: string | null = null;

@@ -15,7 +15,9 @@ test("mobile: Back from a note returns the list to its scroll position", { tag: 
   await expect
     .poll(async () => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight))
     .toBeGreaterThan(1200);
-  await page.evaluate(() => window.scrollTo(0, 1200));
+  // Scroll to the seeded rows themselves, not to a fixed offset: earlier specs leave any number of other notes
+  // above them, and at a fixed offset the screen can show only those (no row of ours to open).
+  await page.locator("[data-sb-id]").filter({ hasText: /BackScroll/ }).nth(40).evaluate((el) => el.scrollIntoView({ block: "center" }));
   const before = await page.evaluate(() => Math.round(window.scrollY));
   expect(before).toBeGreaterThan(1000);
 

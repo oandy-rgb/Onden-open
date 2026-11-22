@@ -7,7 +7,7 @@ import { Button, Checkbox, FieldError, FileInput, Select, TextField } from "../.
 import { DataRow } from "../../settings/DataRow";
 import type { SettingContext } from "../../lib/settingsTypes";
 import DrawingImportReport from "./DrawingImportReport";
-import { MAX_REQUEST_BYTES, importedMediaKind, isHiddenImportPath, uploadFolderImport, type FolderImportFile, type ImportResult, type SkippedNoteReason } from "./folderImport";
+import { MAX_IMPORT_REQUEST_BYTES, importedMediaKind, isHiddenImportPath, uploadFolderImport, type FolderImportFile, type ImportResult, type SkippedNoteReason } from "./folderImport";
 import type { ImportSource } from "@onden/contract";
 
 // 「匯入資料夾」 in Your Data › Import: one chosen folder goes to POST
@@ -139,8 +139,8 @@ export default function FolderImportSetting({ ctx }: { ctx: SettingContext }) {
         unsupported_exts:[...new Set([...(res.unsupported_exts ?? []),...upload.extensions])].sort() });
       setLocalSkips({ hidden: upload.hidden, trash: includeTrash ? 0 : upload.trash.length, skipped: [
         ...tooLarge.map(({ path, kind }) => ({ path, reason: kind === "collection"
-          ? tr("Database too large to upload with its pages (over {mb} MB); not imported", { mb: capMegabytes(MAX_REQUEST_BYTES) })
-          : tr("Too large to upload (over {mb} MB)", { mb: capMegabytes(MAX_REQUEST_BYTES) }) })),
+          ? tr("Database too large to upload with its pages (over {mb} MB); not imported", { mb: capMegabytes(MAX_IMPORT_REQUEST_BYTES) })
+          : tr("Too large to upload (over {mb} MB)", { mb: capMegabytes(MAX_IMPORT_REQUEST_BYTES) }) })),
         ...upload.unsupported.map(path => ({ path, reason: tr("Unsupported file type") })),
       ] });
       setStatus("done");

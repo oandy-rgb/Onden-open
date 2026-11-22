@@ -2,8 +2,8 @@
 // every component only points at notes and tags, the canvas is the site's own
 // rendering, and the design is saved as the workspace chrome (v: 2).
 // Written for the P1b backend (GET /api/site design, /api/publish/include).
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
-import { defaultSpaceId, ready, H } from "./helpers";
+import { test, expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import { createPublishingSpace, keepOffSite, ready, H } from "./helpers";
 
 
 test.use({ viewport: { width: 1400, height: 900 } });
@@ -12,11 +12,13 @@ const stamp = Date.now();
 let counter = 0;
 const unique = (name: string) => `${name} ${stamp}-${++counter}`;
 
+// Notes live in a space that publishes (the studio lists what the site would show, and a space that does not publish shows
+// nothing: owner 2026-11-10, 211dda77). `published: false` is the note's own 「不發布」.
+let publishingSpace: Promise<string> | undefined;
 async function note(request: APIRequestContext, title: string, body: string, published: boolean): Promise<{ id: string; slug: string }> {
-  // In 共用: a new note lands in the creator's 只有我, whose notes the studio does not list (it never publishes).
-  const space_id = await defaultSpaceId(request);
+  const space_id = await (publishingSpace ??= createPublishingSpace(request));
   const created = (await (await request.post("/api/nodes", { ...H, data: { title, markdown: `# ${title}\n\n${body}`, space_id } })).json()) as { id: string; slug: string };
-  if (published) await request.put(`/api/nodes/${created.id}/attributes/_published`, { ...H, data: { value: "true", value_type: "bool" } });
+  if (!published) await keepOffSite(request, created.id);
   return created;
 }
 async function tagWith(request: APIRequestContext, name: string, noteIds: string[]): Promise<string> {
@@ -48,9 +50,18 @@ const pickNote = (page: Page, title: string) => page.getByRole("tabpanel").getBy
 const entry = (page: Page, label: string | RegExp) => assets(page).locator("[data-puck-drawer-item]")
   .filter({ hasText: typeof label === "string" ? new RegExp(`^\\s*${label}`) : label }).filter({ visible: true }).last();
 
+/** The element's box, taken as the thing waited for. `waitFor({ state: "visible" })` and then `boundingBox()` are two looks, and the
+ *  studio can replace its whole editor between them (HomeStudio: `<Puck key={designVersion}>` — a design saved elsewhere while this
+ *  page is open, e.g. by the previous test's closing page, is followed on purpose, D119): the second look then finds the new tree
+ *  not yet laid out and gets null. Waiting on the box itself leaves no gap. */
+async function boxOf(locator: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  await expect.poll(async () => (box = await locator.boundingBox()), { timeout: 30_000 }).not.toBeNull();
+  return box!;
+}
+
 async function dragTo(page: Page, from: ReturnType<typeof entry>, to: { x: number; y: number }) {
-  await from.waitFor({ state: "visible" }); // the drawer may still be laying out: no box yet
-  const box = (await from.boundingBox())!;
+  const box = await boxOf(from);
   await from.hover();
   await page.mouse.down();
   await page.waitForTimeout(300);
@@ -76,8 +87,7 @@ test("drag 一篇筆記 from 區塊 onto the home page, choose the note on the r
   await openStudio(page);
   // The last slot on the page, or the page itself when the design has no parts yet.
   const zone = page.locator('[data-puck-dropzone$=":items"], [data-puck-dropzone="root:default-zone"]').last();
-  await zone.waitFor({ state: "visible" });
-  const box = (await zone.boundingBox())!;
+  const box = await boxOf(zone);
   await dragTo(page, entry(page, "一篇筆記"), { x: box.x + box.width / 2, y: box.y + Math.max(box.height / 2, 4) });
   await canvas(page).locator(".s-missing").last().click();
   await pickNote(page, title);

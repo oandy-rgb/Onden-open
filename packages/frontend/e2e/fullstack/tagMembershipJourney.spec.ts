@@ -21,13 +21,12 @@ test("configure a tag, apply it without losing the note, and remove only this no
   const route = `**/api/nodes/${note.id}/tags/${tagId}`;
   try {
     const skillsTag = await moduleTag(page, "skills");
-    const review = await moduleTag(page, "review");
     await ready(page, "/?view=tags");
     await page.getByRole("button", { name: `Open #${name}`, exact: true }).click();
     await expect(page.locator(".schema-lens-title")).toHaveText(`#${name}`);
-    // The tag gets Skills and Review from the server (it extends their module tags).
+    // The tag gets Skills from the server (it extends its module tag). Review is no longer a tag
+    // function: cards are a note's or paragraph's own reference since migration 195.
     await giveTagFunction(page, tagId, "skills", "Skills");
-    await giveTagFunction(page, tagId, "review", "Review");
     expect((await page.request.put(`/api/nodes/${other.id}/tags/${tagId}`, { ...H, data: {} })).ok()).toBe(true);
 
     await ready(page, `/?view=notes&node=${note.id}`);
@@ -52,7 +51,7 @@ test("configure a tag, apply it without losing the note, and remove only this no
       } else await request.continue();
     });
     await sources.getByRole("button", { name: `Remove #${name} from this note`, exact: true }).click();
-    await expect(sources.getByText(`Remove #${name}? This note will stop receiving Skills · Review.`)).toBeVisible();
+    await expect(sources.getByText(`Remove #${name}? This note will stop receiving Skills.`)).toBeVisible();
     await sources.getByRole("button", { name: "Remove tag", exact: true }).click();
     await expect(page.locator(".toast-message").filter({ hasText: "You don't have permission to do that." })).toBeVisible();
     await expect(sources.getByRole("button", { name: `#${name}`, exact: true })).toBeVisible();
@@ -81,7 +80,7 @@ test("configure a tag, apply it without losing the note, and remove only this no
     }
     // Removing the tag from one note leaves what the tag extends alone.
     const storedTag = await (await page.request.get(`/api/tags/${tagId}`)).json();
-    expect(storedTag.extends).toEqual([skillsTag.id, review.id]);
+    expect(storedTag.extends).toEqual([skillsTag.id]);
 
     // The refusal left nothing behind to acknowledge.
     await expect(page.locator(".failed-write-recovery")).toHaveCount(0);
@@ -101,7 +100,7 @@ test("configure a tag, apply it without losing the note, and remove only this no
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
       await page.screenshot({ path: `/tmp/pw-output/tag-overview-${width}.png` });
       await card.click();
-      await expect(tagFunctionEntry(page, "複習")).toBeVisible();
+      await expect(tagFunctionEntry(page, "技能")).toBeVisible();
       await ready(page, `/?view=notes&node=${other.id}`);
       // Tags are removed under the title at every width. On a phone a chip
       // shows its remove x only while its card is open (OverviewEditor.css,

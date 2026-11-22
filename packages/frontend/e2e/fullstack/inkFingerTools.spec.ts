@@ -181,10 +181,10 @@ test.describe("handwriting page tools (phone, 390×844, touch)", () => {
     expect(rows.distinct).toBe(1); // every button on the same line
     expect(rows.firstTool).toBe("pen");
 
-    // The tools are one group — the four ink tools plus Shape (0422ea6e) and
-    // Text (inkShapesColorsUi.test, InkNodeView trailing tools) — exactly one pressed.
+    // The tools are one group — the four ink tools plus Shape (0422ea6e), Text and Quote
+    // (InkNodeView trailing tools; Quote = 9d6ec4483, "quote an area as an embed") — exactly one pressed.
     const tools = await page.locator("[data-ink-tool]").evaluateAll((els) => els.map((e) => [e.getAttribute("data-ink-tool"), e.getAttribute("aria-pressed")]));
-    expect(tools).toEqual([["pen", "true"], ["highlighter", "false"], ["eraser", "false"], ["shape", "false"], ["hand", "false"], ["text", "false"]]);
+    expect(tools).toEqual([["pen", "true"], ["highlighter", "false"], ["eraser", "false"], ["shape", "false"], ["hand", "false"], ["text", "false"], ["quote", "false"]]);
 
     // Undo is on screen (pinned right) even though the row scrolls sideways.
     const undo = page.getByRole("button", { name: /^Undo|復原/ }).first();

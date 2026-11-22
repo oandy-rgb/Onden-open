@@ -92,6 +92,13 @@ sweep_orphaned_runners() {
 }
 
 cleanup() {
+  local status=$?
+  # A failed run prints what the server itself reported as unexpected: a test that got a 500 shows only
+  # {"error":"internal"}, and the stack (with its log) is gone a line later.
+  if [ "$status" -ne 0 ]; then
+    echo "▸ server errors during this run (unhandled route errors, at most 200 lines):"
+    docker compose -f "$COMPOSE" -p "$PROJECT" logs --no-color 2>/dev/null | grep -A 14 "unhandled route error" | head -200 || true
+  fi
   remove_own_runners
   docker compose -f "$COMPOSE" -p "$PROJECT" down -v >/dev/null 2>&1 || true
 }

@@ -86,7 +86,7 @@ export type ImportResult = Partial<DrawingReport> & {
 
 /** The proxy's request cap less 1 MB of room for headers and the
  *  uploaded_images map. */
-export const MAX_REQUEST_BYTES = PROXY_MAX_REQUEST_BYTES - 1024 * 1024;
+export const MAX_IMPORT_REQUEST_BYTES = PROXY_MAX_REQUEST_BYTES - 1024 * 1024;
 /** Batches aim for this size: short requests stay well inside the proxy's
  *  120 s timeout and a failed batch costs little to resend. */
 export const BATCH_TARGET_BYTES = 8 * 1024 * 1024;
@@ -137,7 +137,7 @@ function noteFamilies(files: FolderImportFile[]): FolderImportFile[][] {
  *  database with the pages in its folder (the innermost database owns a
  *  nested folder), then the remaining text. A file, or a database, that alone
  *  exceeds `maxRequestBytes` cannot be sent and is returned in `tooLarge`. */
-export function planImportBatches(files: FolderImportFile[], targetBytes = BATCH_TARGET_BYTES, maxRequestBytes = MAX_REQUEST_BYTES) {
+export function planImportBatches(files: FolderImportFile[], targetBytes = BATCH_TARGET_BYTES, maxRequestBytes = MAX_IMPORT_REQUEST_BYTES) {
   const tooLarge: TooLarge[] = [];
   const batches: FolderImportFile[][] = [];
   // A unit is files that must arrive in one request (see noteFamilies). One too big to keep whole is split file by file.

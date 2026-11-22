@@ -69,4 +69,13 @@ test("350 notes: windowed DOM, tail reachable and clickable", async ({ page }) =
   const lastRow = page.locator(".obsidian-page-button", { hasText: `vs-LAST ${stamp}` }).first();
   await lastRow.click();
   await expect(page.locator('.cm-content:has-text("tail body")')).toBeVisible({ timeout: 15_000 });
+
+  // Opened by its address on a fresh load, the open note's row is brought into view although the window starts at the top
+  // and the first jump only estimates where the row is (OverviewSidebar: the reveal stays owed until the row is inside the
+  // list's box). It stays in view once what loads below the list later (the tag tidy bar) has shortened it.
+  await ready(page, `/?view=notes&node=${last.id}`);
+  const openRow = page.locator(".obsidian-page-button.active", { hasText: `vs-LAST ${stamp}` });
+  await expect(openRow).toBeInViewport({ ratio: 0.9 }); // 0.9: the list box ends on a fraction of a pixel
+  await page.waitForTimeout(1500); // a stability check: the late content below the list has loaded by now
+  await expect(openRow).toBeInViewport({ ratio: 0.9 }); // 0.9: the list box ends on a fraction of a pixel
 });

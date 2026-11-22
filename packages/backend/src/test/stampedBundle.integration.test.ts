@@ -575,7 +575,7 @@ describe.skipIf(!isTestDb)("slugs: the same writes, whatever the order they arri
   }, 600_000);
 });
 
-describe.skipIf(!isTestDb)("what a body written on one node derives there, and a node that takes it by bundle does not (item by item; equal ones are plain tests, differing ones are it.fails: the day a bundle derives it, they turn around — feeds 2b-2)", () => {
+describe.skipIf(!isTestDb)("what a body written on one node derives there, and what a node that takes it by bundle derives (item by item; equal ones are plain tests, differing ones are it.fails: links and block refs turned around in batch 4a, domain events wait for 4b)", () => {
   const BODY = "# Probe\n\nSee [[Target Note]] here {#probe-tag}\n\n- [ ] do a thing {task}\n\nlast paragraph {^para2}\n";
   const projections: Record<string, string> = {
     // [[links]]: services/linkIndex (note_link_index): what the note links to, by lower-cased title and by slug
@@ -619,9 +619,9 @@ describe.skipIf(!isTestDb)("what a body written on one node derives there, and a
   it("task lines' child notes: the task note a `- [ ] x {task}` line makes is an ordinary note, so it is carried", same("taskChildren"), 300_000);
   it("review cards: none on either node (a card is made by a person's grade, not by a body write; the cascade when an edit removes a block follows the blocks row below)", same("reviewCards"), 300_000);
   it("tag marks on the note: none on either node (`{#tag}` marks a block, see block tag marks)", same("tagMarks"), 300_000);
-  it.fails("[[links]] (note_link_index): the receiver holds the row empty and stale=true (it is rebuilt when read, so a read self-heals; the stored row differs)", same("links"), 300_000);
+  it("[[links]] (note_link_index): the receiver derives the row from the merged body (batch 4a: services/receivedDerivation.ts, bodyDerivation.ts deriveFromBody)", same("links"), 300_000);
   it("block nodes: the receiver holds the writer's block rows for the text (they travel since migration 215; label and text as the writer derived them)", same("blocks"), 300_000);
-  it.fails("block refs of the note: not made on the receiver", same("blockRefs"), 300_000);
+  it("block refs of the note: the receiver derives them from the note's anchors (batch 4a)", same("blockRefs"), 300_000);
   it("anchors: the receiver holds the writer's anchors, ids and places (they travel since migration 215)", same("anchors"), 300_000);
   it("task lines: the block that links a line to its task arrives with the task note (its `task` unit, migration 215)", same("taskLines"), 300_000);
   it("tag marks of blocks (`{#tag}`): arrive with their block rows", same("blockTagMarks"), 300_000);

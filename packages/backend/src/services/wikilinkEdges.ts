@@ -8,6 +8,8 @@
 // nothing that reaches back there.
 
 import { q, requireTransaction } from "../db.js";
+import { db } from "../dbKysely.js";
+import { sql } from "kysely";
 import { extractWikilinks } from "../utils.js";
 import { NODE_REF_PREFIX, linkSlug, normalizeText } from "@onden/markdown";
 import { liveNodeSql, tagNodeSql } from "../spine/nodeSql.js";
@@ -166,6 +168,9 @@ export async function wikilinkTargets(workspaceId: string, sourceNodeId: string,
   return named;
 }
 
+/** How many targets relinkTarget works out in one statement. */
+const RELINK_BATCH = 50;
+
 /** A character a link's target can hold (Postgres regex): a link body never
  *  holds `]` or a line break, and its target ends at the first `|` or `#`
  *  (@onden/markdown wikilinkTarget). */
@@ -213,11 +218,29 @@ export function nodeAliasesSql(n: string): string {
  *  slug is looked for in both its NFC and its NFD spelling. Like the title
  *  rule itself, this takes Postgres lower() / ~* to fold case as
  *  JavaScript's toLowerCase does. The exact rule then runs in SQL. */
-export async function relinkTarget(workspaceId: string, nodeIds: string[]): Promise<void> {
+export async function relinkTarget(workspaceId: string, nodeIds: string[], unread?: readonly string[]): Promise<void> {
   requireTransaction("relinkTarget");
   if (nodeIds.length === 0) return;
-  const targets = (await q<{ id: string; title: string; slug: string; aliases: string[] }>(
-    `SELECT n.id::text, n.title, n.slug, ${nodeAliasesSql("n")} AS aliases
+  // Each target's edges are worked out on their own, so many targets are taken a batch at a time: with thousands in one statement (a change bundle that made
+  // them, services/receivedDerivation.ts) the candidate query was planned over the whole array and ran past the statement timeout on a real Postgres
+  // (stampedBundleScale.integration.test.ts). The notes whose index row is stale do not depend on the targets: they are read ONCE for all the batches (`unread`),
+  // and only those that hold a `[[`. With that, a batch costs a scan or two of the notes whatever its size when the receiver's statistics are old (the plan of
+  // `id = ANY(...)` is a sequential scan), so the batches are large (500): batches of 50 read the notes table again for every 50 targets (anchorSaveCost and
+  // stampedBundleScale on a real Postgres, PR #1941 CI).
+  // Every other caller passes a handful and runs as one batch, as before.
+  if (nodeIds.length > RELINK_BATCH) {
+    const stale = unread ?? (await db.selectFrom("note_link_index as i").innerJoin("content_nodes as s", "s.id", "i.note_id").select("i.note_id as id")
+      .where("i.workspace_id", "=", workspaceId).where("i.stale", "=", true)
+      .where(sql<boolean>`${sql.raw(liveNodeSql("s"))} AND strpos(s.markdown, '[[') > 0`).execute()).map((r) => r.id);
+    for (let i = 0; i < nodeIds.length; i += RELINK_BATCH) await relinkTarget(workspaceId, nodeIds.slice(i, i + RELINK_BATCH), stale);
+    return;
+  }
+  // each target with the keys a link index row names it by (`lc`: its title, its node reference and its aliases, lower-cased in NFC; the same expressions
+  // syncWikilinkEdges' rows are compared with), its space and whether it is a tag
+  const targets = (await q<{ id: string; title: string; slug: string; aliases: string[]; lc: string[]; space_id: string | null; tag: boolean }>(
+    `SELECT n.id::text, n.title, n.slug, ${nodeAliasesSql("n")} AS aliases, n.space_id::text, ${tagNodeSql("n")} AS tag,
+            ARRAY[lower(normalize(n.title, NFC)), '${NODE_REF_PREFIX}' || n.id::text]
+              || ARRAY(SELECT lower(normalize(x, NFC)) FROM unnest(${nodeAliasesSql("n")}) x) AS lc
        FROM content_nodes n
       WHERE n.workspace_id = $1 AND n.id = ANY($2::uuid[]) AND ${liveNodeSql("n")}`,
     [workspaceId, nodeIds],
@@ -240,52 +263,43 @@ export async function relinkTarget(workspaceId: string, nodeIds: string[]): Prom
       }
     }
   }
-  const candidates = await q<{ id: string; markdown: string | null }>(
-    `WITH keys AS (
-       SELECT t.id, t.space_id, t.node_type, t.slug,
-              ARRAY[lower(normalize(t.title, NFC)), '${NODE_REF_PREFIX}' || t.id::text]
-                || ARRAY(SELECT lower(normalize(x, NFC)) FROM unnest(${nodeAliasesSql("t")}) x) AS lc
-         FROM content_nodes t WHERE t.id = ANY($2::uuid[])
-     ),
-     named_by AS (
-       SELECT i.note_id, k.id AS target_id FROM keys k JOIN note_link_index i ON i.workspace_id = $1 AND NOT i.stale AND i.link_lc && k.lc
-       UNION
-       SELECT i.note_id, k.id FROM keys k JOIN note_link_index i ON i.workspace_id = $1 AND NOT i.stale AND i.link_slug && ARRAY[k.slug]
-     ),
-     unindexed AS MATERIALIZED (
+  // Notes whose index row names a target: one look-up of the index by the targets' keys as constants, so the GIN indexes on link_lc / link_slug answer it
+  // (a join of the index with the keys was planned as a scan of every row of the index and of the notes, for every batch: PR #1941 CI, anchorSaveCost).
+  // A superset is fine: what each candidate really links to is matched exactly below (linkMatchesNodeSql: the space, the liveness, the name).
+  const indexed = (await db.selectFrom("note_link_index").select("note_id").where("workspace_id", "=", workspaceId).where("stale", "=", false)
+    .where(sql<boolean>`(link_lc && ${[...new Set(targets.flatMap((t) => t.lc))]}::text[] OR link_slug && ${[...new Set(targets.map((t) => t.slug))]}::text[])`).execute()).map((r) => r.note_id);
+  const found = await q<{ id: string }>(
+    `WITH unindexed AS MATERIALIZED (
        SELECT i.note_id AS id FROM note_link_index i JOIN content_nodes s ON s.id = i.note_id
-        WHERE i.workspace_id = $1 AND i.stale AND ${liveNodeSql("s")}
-     ),
-     found AS (
-       -- Notes that link to a target now: they may have to lose the edge.
-       SELECT e.source_node_id AS id FROM node_edges e
-        WHERE e.workspace_id = $1 AND e.origin = 'wikilink' AND e.target_node_id = ANY($2::uuid[])
-       UNION
-       -- Indexed notes: the index says which names their text links to.
-       SELECT b.note_id FROM named_by b
-         JOIN keys k ON k.id = b.target_id
-         JOIN content_nodes s ON s.id = b.note_id
-        WHERE ${liveNodeSql("s")} AND s.id <> k.id AND (${tagNodeSql("k")} OR k.space_id IS NOT DISTINCT FROM s.space_id)
-       UNION
-       -- A note whose index row is stale has not been read yet: look in its text.
-       -- strpos, not LIKE '%[[%': the planner may answer a LIKE through the
-       -- pgroonga text index, whose tokenizer reads "![[" as one token, so an
-       -- embed-only note ("see ![[Name]]") was dropped whenever that plan won.
-       SELECT s.id FROM unindexed u JOIN content_nodes s ON s.id = u.id
-        WHERE strpos(s.markdown, '[[') > 0 AND EXISTS (
-          SELECT 1 FROM content_nodes t
-           WHERE t.id = ANY($2::uuid[]) AND t.id <> s.id
-             AND (${tagNodeSql("t")} OR t.space_id IS NOT DISTINCT FROM s.space_id)
-             AND (EXISTS (SELECT 1 FROM unnest($3::uuid[], $4::text[]) k(target_id, name)
-                           WHERE k.target_id = t.id AND strpos(lower(s.markdown), lower(k.name)) > 0)
-                  OR EXISTS (SELECT 1 FROM unnest($5::uuid[], $6::text[]) k(target_id, pattern)
-                              WHERE k.target_id = t.id AND s.markdown ~* k.pattern)
-                  OR strpos(lower(s.markdown), '${NODE_REF_PREFIX}' || t.id::text) > 0))
+        WHERE $7::uuid[] IS NULL AND i.workspace_id = $1 AND i.stale AND ${liveNodeSql("s")}
+       UNION ALL SELECT unnest($7::uuid[])
      )
-     SELECT s.id::text, s.markdown FROM content_nodes s WHERE s.workspace_id = $1 AND s.id IN (SELECT id FROM found)`,
+     -- Notes that link to a target now: they may have to lose the edge.
+     SELECT e.source_node_id::text AS id FROM node_edges e
+      WHERE e.workspace_id = $1 AND e.origin = 'wikilink' AND e.target_node_id = ANY($2::uuid[])
+     UNION
+     -- Indexed notes: the index says which names their text links to.
+     SELECT unnest($8::uuid[])::text
+     UNION
+     -- A note whose index row is stale has not been read yet: look in its text.
+     -- strpos, not LIKE '%[[%': the planner may answer a LIKE through the
+     -- pgroonga text index, whose tokenizer reads "![[" as one token, so an
+     -- embed-only note ("see ![[Name]]") was dropped whenever that plan won.
+     SELECT s.id::text FROM unindexed u JOIN content_nodes s ON s.id = u.id
+      WHERE strpos(s.markdown, '[[') > 0 AND EXISTS (
+        SELECT 1 FROM unnest($2::uuid[], $9::uuid[], $10::boolean[]) t(id, space_id, tag)
+         WHERE t.id <> s.id AND (t.tag OR t.space_id IS NOT DISTINCT FROM s.space_id)
+           AND (EXISTS (SELECT 1 FROM unnest($3::uuid[], $4::text[]) k(target_id, name)
+                         WHERE k.target_id = t.id AND strpos(lower(s.markdown), lower(k.name)) > 0)
+                OR EXISTS (SELECT 1 FROM unnest($5::uuid[], $6::text[]) k(target_id, pattern)
+                            WHERE k.target_id = t.id AND s.markdown ~* k.pattern)
+                OR strpos(lower(s.markdown), '${NODE_REF_PREFIX}' || t.id::text) > 0))`,
     [workspaceId, targetIds, names.map(([id]) => id), names.map(([, name]) => name),
-      patterns.map(([id]) => id), patterns.map(([, pattern]) => pattern)],
+      patterns.map(([id]) => id), patterns.map(([, pattern]) => pattern), unread ?? null, indexed,
+      targets.map((t) => t.space_id), targets.map((t) => t.tag)],
   );
+  const candidates = { rows: found.rows.length === 0 ? [] : await db.selectFrom("content_nodes").select(["id", "markdown"])
+    .where("workspace_id", "=", workspaceId).where("id", "in", found.rows.map((r) => r.id)).execute() };
 
   const linkSource: string[] = [];
   const linkLc: string[] = [];

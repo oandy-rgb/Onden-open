@@ -43,6 +43,16 @@ export const PERSON_SOURCE = "ui" satisfies AttributeWriteSource;
  *  copied attributes, an import's local-change baseline (D106). */
 export const PERSON_AUTHORED_SOURCES: readonly string[] = ["ui", "explicit", "frontmatter"];
 
+/** The sources whose rows are units: stamped by the stamp trigger and carried by a snapshot and a change bundle (migration 223
+ *  `sync_attribute_source_stamped` is the SQL side; test/stampedAttributeSources.integration.test.ts holds the two, and the snapshot's
+ *  `where` of node_attributes in spine/snapshotTables.json, to the same list). The values a note's text gives it (`markdown`, `frontmatter`)
+ *  are among them since batch 4a (docs/architecture/proposals/own-node-transport-2026-11-22.md §2.12.1, option (b)): the dispatcher's write on
+ *  the node where the text was saved travels, and a node that takes the body never derives them again. `derived` is not: it is worked out
+ *  on every node (services/receivedDerivation.ts) or is the importer's (batch 4b). */
+export const STAMPED_ATTRIBUTE_SOURCES: readonly string[] = ["ui", "explicit", "dispatcher", "markdown", "frontmatter"];
+/** SQL over the row alias `t`: the row's source is one of STAMPED_ATTRIBUTE_SOURCES. */
+export const stampedAttributeSourceSql = (t: string): string => `${t}.source IN (${STAMPED_ATTRIBUTE_SOURCES.map((x) => `'${x}'`).join(", ")})`;
+
 /** True iff a row with this source holds a value a person authored (see
  *  PERSON_AUTHORED_SOURCES). An unknown or missing source is not. */
 export function isPersonAuthored(source: string | null | undefined): boolean {

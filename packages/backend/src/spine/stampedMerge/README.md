@@ -206,7 +206,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **擴大範圍時，讀者握有的進度以下、範圍外的舊列不會補送**：I5 只管「包扣下的寫入」（下面「讀者範圍外的寫入」）。一個節點用快照加入時沒拿到的空間（快照就不帶），之後讀者成了那個空間的成員，那個空間裡在它 `have` 以下的列（空間本身、舊筆記）永遠不會送；只有之後的寫入會到，掛在不在的空間上的筆記建不起來。範圍變大時要整份重送那些列（或分空間的 `have`）。
 - **`upTo` 被扣下時，每一包都再送同一段**：被扣下的寫入之後那個來源寫的，每一包都會再送一次（收下不改任何東西），直到讀者讀得到。一個讀者永遠讀不到的空間（別人的個人空間）會讓這段一直長。解法是「已知缺口」清單（`have` 帶著扣下的序號），傳輸那一批決定。
 - **不在任何根寫入裡的寫入，碰到有衝突的單位會 409**（migration 221 之後；PR #1940 第 1 輪第 8 點）：`sync_clock.writes_without_mutate` 數到的那些產品路徑，若一個人的動作經過其中一條、又碰到有衝突的單位，拿到的是 ON001；在 `withEventTransaction` 之外的寫入不會被翻成 `sync_unit_in_conflict`（409），是原始錯誤。交換打開之前要清點這些路徑（每一條改成走根寫入，或接到第 7 批「衝突的最小畫面」）。
-- **大子樹換空間的成本在 slug，不在推導**（PR #1907 第 1 輪第 13 點，量過，PostgreSQL 16）：1,000 則（深約 7 層）搬到別的空間，收到的那台 1.5 秒、3,052 個語句，其中推導 14 個（每層一個向下、一個載入），3,003 個是 `assignSlugs` 每則三個（查、查撞名、寫）；同一棵樹改最深那則的內文 20 毫秒、35 個語句。300 層的一條鏈：每層兩個語句（向下一層、向上一層），收到 0.5 秒。要變快：`assignSlugs` 改成整批（照 id 順序在記憶體裡模擬撞名），祖先改成一個遞迴查詢。
+- **大子樹換空間的成本在 slug，不在推導**（PR #1907 第 1 輪第 13 點，量過，PostgreSQL 16）：1,000 則（深約 7 層）搬到別的空間，收到的那台 1.5 秒、3,052 個語句，其中推導 14 個（每層一個向下、一個載入），3,003 個是給 slug 的那一步每則三個（查、查撞名、寫；4a 批起是 `spine/noteSlugs.ts` `settleSlugs`，撞名時還多讀「佔」的標記）；同一棵樹改最深那則的內文 20 毫秒、35 個語句。300 層的一條鏈：每層兩個語句（向下一層、向上一層），收到 0.5 秒。要變快：`settleSlugs` 改成整批（照 id 順序在記憶體裡模擬撞名），祖先改成一個遞迴查詢。
 - **跟著樹換空間的筆記沒有通知**：回報在 `followedSpaces`（誰的筆記因為上層搬走而換了空間、能讀到它的人跟著變），沒有人讀；給 2b-2b／畫面。被留下的空間刪除（`keptSpaces`）一樣。
 - **寫下的空間這台沒有**：推導用預設空間（每台相同）；沒有產品路徑做得出來（空間的列從不刪），所以沒有測試。
 - **4.9 在丟進垃圾桶的父層底下**：資料庫只回報永久刪除的父層（上面 4.9）；父層在垃圾桶裡、晚到的子筆記仍是活的，打開父層的人看不到它，讀取（清單、樹、搜尋）把它當普通筆記。模擬器裡的檢視（跟著最近的已刪除祖先）要接到 `orphansOf` 與讀取。
@@ -231,6 +231,9 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **別的表：收件那台的連鎖清掉欄位標記，刪除的那台留著**（第十輪第 7 點）：B 設了筆記 N 的屬性又改，A 永久刪除 N，B 的寫入之後才到 A。A 不握有那一列，留著那些標記（沒有值，上面「別的表不留值」）；B 收到 A 的刪除時列被連鎖刪掉，刪除觸發器清掉那一列的欄位標記（合併不寫自己的墓碑，`sync_stamp_put_over`），建立的標記留著。所以 A 有 B 的值的標記、B 沒有；交換不再送（在 B 的 `have` 之下），整份重送才送，B 存下（沒有值）。沒有拒收、沒有留下字，兩台的標記不同（`anchorsReplicated`「round 10, 7」，`it.fails`）。第五到十輪的測試裡，整份重送會再存的別張表單位只有這一個（對所有表的標記在 `resendAll` 前後比對）。
 - **215 之前各台各自衍生的錨點與段落列**：起始標記假設每台握有相同的列；今天只有快照加入（兩台的列來自同一份），沒有影響。已經各自衍生過的兩台要對齊，傳輸那一批要先定做法。
 - **包的大小**：一次內文寫入帶一則筆記的一個錨點單位：50 個錨點 16.0 KB（gzip 2.7 KB）、200 個 61.9 KB（gzip 9.1 KB），未壓縮時一個錨點約 0.3 KB；快照與包都不壓縮。壓縮或不重複帶文字，傳輸那一批決定。
+- **三則以上同時被搬或還原進一個空間、要同一個 slug 時，兩台的後綴可能不同**（4a 批，PR #1941；`receivedDerivation.integration`「slugs, NOT SETTLED: three notes moved into one space at once」`it.fails`）：因位置讓位的那則拿「第一個空的」，看的是這台的狀態。被搬或還原的筆記的基底 slug 沒有任何單位握著，所以這一批做不到。**slug（或「這筆寫入要的 slug」）在第 5 批成為單位**時收斂（note-91 決定，2026-11-22）。
+- **內文寫出的值撞上另一台的 `derived` 預設列：`bundle_unique_clash`**（PR #1941 最後審查）：一台握有某個（筆記、鍵）的 `derived` 列（欄位預設、`_block_autotag`、`_import_*`：不是單位），另一台的內文把同一個鍵寫成 `markdown`（migration 223 起是單位）；帶過來的列撞 `(node_id, key)` 唯一鍵，整包被拒。`ui` 的值在 main 上已有同一類；223 把它擴大到內文寫出的值。要定的是「單位的列進來時，同一鍵不是單位的列怎麼辦」（讓位、合併或保留）。
+- **`bundle_derivation_failed` 把程式錯誤也變成永久拒收**（4a 批，PR #1941）：收尾的每一步把「每次重送都一樣」的失敗包成有代碼的拒絕（`spine/receivedDerivation.ts` `deriving`），一個衍生的程式錯誤因此讓同一包每次都被拒、兩台的交換卡住。打開交換之前要有「這包卡在哪一步、哪幾則筆記」看得到的出口，修好程式之後能重試（拒收碼與訊息已經指名步驟與筆記）。
 - **還原時保留了舊編號的節點不能交換**：`scripts/restore.sh --keep-node-id`（或桌面版「直接開啟現有資料」）把換不了號的備份照樣放回去時，資料庫的 `sync_restore_kept_node_id`（migration 224）有一列。
   規則：**這張表有列 ⇔ 這台現在的編號是還原時保留下來的、還沒重新加入**；之後一次成功的換號會清空它（`scripts/lib/renewNodeId.sql`），重新加入（交換那一批做）也要清。
   那台可能編出別台已經握有、內容不同的號碼；交換要在這張表有列時拒絕（見 [deploy.md「還原」](../../../../../docs/agents/deploy.md)）。今天沒有交換，所以沒有東西要擋。
@@ -290,8 +293,11 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 ### 沒做到的（在測試裡釘住，見 `stampedBundle.integration.test.ts`）
 
-- 衍生資料：由內文衍生的（連結、搜尋文字、段落列的顯示欄位）與領域事件，合併進來時都不會更新（2b-2b，一個機制）。錨點、段落列的 id 與任務行的連結、段落標籤自 migration 215 起是複製的，跟著寫入走（見下面那一節）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
-- slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；兩個活著的筆記在同一空間要同一個 slug 時，id 較大的加上 `-<id 前八碼>`。這只保證資料庫的唯一索引不破，不保證所有歷史下各節點相同（需要決定）。
+- 衍生資料：由內文衍生的（連結、段落列的顯示欄位、`note_block_refs`）與內文以外的寫入衍生的（連進來的連結、跨空間的邊、型別、`_block_autotag`、網站重建、永久刪除的清理、成員 epoch），自 4a 批起在收包的收尾、同一個交易裡由 `spine/receivedDerivation.ts` 插槽重算，用本機寫入用的同一組函式（`services/receivedDerivation.ts`、`services/bodyDerivation.ts` `deriveFromBody`），不寫任何單位。領域事件仍不寫（4b）。搜尋文字就是內文欄，本來就相同。錨點、段落列的 id 與任務行的連結、段落標籤自 migration 215 起是複製的，跟著寫入走（見下面那一節）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
+- slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；還原要的是它的標題給的 slug，換空間要的是它原本的。同一個空間兩則活著的筆記要同一個 slug 時，照一條規則（`spine/noteSlugs.ts` `settleSlugs`，本機搬動與收包都用它）：**比較晚「佔」這個名字的那則讓位**。讓位的那則若「佔」的是建立或標題（它的 slug 跟著那筆寫入走），改成 `slug-<id 前八碼>`（與 4a 之前的合併相同：名字不看這台的狀態，所以兩台同時新建、改名多少則都收斂）；若「佔」的是位置（搬動、跟著樹、還原：沒有寫入帶著它的 slug），拿從它開始第一個空的（`freeSlug`，`-2`…，與寫的那台的寫入路徑相同）。「佔」的時間是它的建立、標題、還原、它與它上面每一則的 `parent`、最上面那則寫下的空間這些標記裡最新的一個（`claimOf`）；標記是複製的，所以每一台選的是同一則。本機的搬動、還原、改名是這台最新的寫入，所以讓位的永遠是被搬的那些（含底下跟著的），原本就在目標空間的筆記 slug 不變（已發布的網址只因自己的寫入而變；PR #1941 審查第 1 輪第 1 點），與 main 相同。兩台各自把同 slug 的筆記搬進同一個空間（或一台搬、一台新建）：兩種送達順序都由較早的那則保留（`receivedDerivation.integration` 的三則 slug 測試）。**沒解決的**：因位置讓位的那則拿的「第一個空的」看的是這台的狀態；三則以上同時被搬或還原到一個 slug，或同時有人新建了剛好是那個 `-2` 的筆記，兩台的後綴可能不同。釘成 `it.fails`（`receivedDerivation.integration`「slugs, NOT SETTLED: three notes moved into one space at once」）。讓後綴成為複製狀態的純函數（PR #1941 第 2 輪的第三條路）在這一批做不到：被搬或還原的筆記的基底 slug 沒有任何單位握著（slug 不是單位，搬過之後只有標題跟著走）；拿標題的 slug 當基底，單機上一則 `x-2` 單獨搬進 `x` 空著的空間會變成 `x`（main 保留 `x-2`），而且同一組的另一則改名離開或被刪時，這一則的 slug（已發布的網址）也會變。兩條路（讓位的一律 `-<id 前八碼>`；slug 成為單位，第 5 批）由業主決定。只帶 slug 跟著還原或換空間那筆寫入走不行：兩台各贏一個單位時 slug 會對調（`stampedBundle.integration`「either order of delivery」抓到）。
+- 從內文寫出的屬性（4a 批的 (b)）加上「`source` 不是單位」：A 的 `due` 是 `ui` 寫的，B 的同一個鍵是 `markdown` 寫的，B 存一份帶 `due:: x` 的內文，那筆寫入照一般規則在 B 贏、傳過去、蓋掉 A 的值。不會來回（收包從不重新衍生這些屬性）。兩台的內文被合成一份時，合成文字與它的屬性可能要到有人在本機存檔才一致。這是**接受的限制**，留給第 5 批（§2.12.4，每一個有寫入者的欄位：`source` 成為單位）與 4c（核取方塊↔任務）；PR #1941 審查第 1 輪第 6 點。
+- 收包的衍生的成本（真 Postgres，一包 N 則新筆記、每則兩個 `[[連結]]`，PR #1941 第 2 輪）：1,000 則整包 11.1 s（衍生 7.6 s），5,000 則 94.9 s（衍生 76.8 s）。整段在包的交易裡、拿著事件鎖，收 5,000 則時本機寫入要等這麼久；衍生每則的成本隨筆記數變大（`deriveFromBody` 每則一次），第 6 批（分段收包）要用這些數字。
+- 收到一份改了的內文，收的一方照本機存檔排一筆備份意圖（`enqueueBackup`：`git_commit`，空間允許時 `github_backup`）與內容掛鉤；語意搜尋模組開著時多一列 `embed`（每台自己的嵌入，用本機模型，不送外部）。模組沒匯入時掛鉤不跑（`modules/index.ts` `hooksWhenImported`），什麼都不排。PR #1941 審查第 1 輪第 7 點。
 - 同一個 id 在兩個節點各自建立（算出來的 id）：輸的創建值以頭的形式留下，列的建立欄位（slug、建立時間）跟著勝出的建立。
 
 ## 握有別台修改的節點也能被快照（自己的裝置之間的交換第 2 批，migration 222）
@@ -342,7 +348,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 | 任務筆記 id 與「這一行是哪個任務」 | `modules/tasks/blockTasks.ts` `syncBlockTasks`（`randomUUID`） | 任務筆記本身＋段落列的 `task` 單位（`task_id`） | 任務筆記是普通筆記；行與任務的連結是段落列的欄位 |
 | 複習卡 | `reviewSeam.markCards` → `function_refs` | `function_refs`（2b-2a 起） | 已經是複製的；它指的段落列現在也跟著走 |
 | 段落標籤 | `setTags` → `block_node_tags` | `block_node_tags`（`NOT_CARRIED_YET` 現在是空的） | 掛在段落列上 |
-| 由 `{名稱}` 新建的標籤 | `tagHierarchy.tagIdForWrittenName` | 標籤筆記本身 | 已經是複製的；旁邊的 `_block_autotag` 屬性 `source = 'derived'`，不跟著走（表 2.3 的權限衍生寫入，不在本批） |
+| 由 `{名稱}` 新建的標籤 | `tagHierarchy.tagIdForWrittenName` | 標籤筆記本身 | 已經是複製的；旁邊的 `_block_autotag` 屬性 `source = 'derived'`，不跟著走，收的一方由 `blockNodes.markReceivedAutoTags` 補上（標籤與那一列段落標籤的建立標記相同：同一筆寫入，4a 批） |
 
 - **一則筆記所有錨點的位置是一個單位**（`note_anchor_places`，鍵＝筆記 id，審查第二輪第 2 點）：`places` ＝ 量的那份內文的雜湊 `h`，加每個錨點的位置、狀態、備選、quote 與前後文、待補找；
   錨點自己的 `at_body_hash` 不是 `h` 時（215 之前留下、之後沒被讀過的列）帶第十個元素。有錨點的筆記，每一次內文寫入都寫它（至少 `h` 換新），所以這個單位的標記就是那筆內文寫入的標記，兩個單位同贏同輸（PR #1759 note-cf 第 2 題）；一次存檔寫一列、一個標記，與錨點數無關。沒有錨點的筆記沒有單位，它的內文寫入也不寫。
@@ -373,7 +379,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
   - 列的工作區必須是它筆記的（`sync_rows_in_their_notes_workspace`，每次新增與更新；`content_nodes` 沒有 `(workspace_id, id)` 的唯一鍵可以讓外鍵指，所以由寫入端擋，合併時是 `bundle_malformed`）。
   測試：`anchorsReplicated`「round 5, 1 / round 6, 3」（三種：刪除前已送、刪除前有沒送的錨點寫入、單位有衝突；兩種到達順序；兩台的標記集合相同，那則筆記的列的鍵與它的字都不在）、「round 5, 1: … moves one of its paragraphs into a child note」、「round 6, 2 (a)／(b)／(c)」（產品的搬移：單一段落的「獨立出去」與選取的範圍兩種，後者走 `carryBlockRow`；兩種到達順序）、「round 8, 1 (a)／(b)」與「round 8, 2」（三台的星狀，兩種：兩筆並行的任務寫入；握有者的欄位不同而路上沒有有值的寫入）。每一則交換到穩定之後**再交換一輪**，再用空的 `have` **整份重送一次**（第九輪第 5 點 d：送的是每台存下來的狀態，不是空包），斷言什麼都沒變、沒有拒收，標記與頭（連同留著的值與記號）每台相同。「round 9, 1」（產品的永久刪除，任務與子筆記兩種欄位、兩種鍵的順序、第三台晚到）、「round 9, 2」（屬性值、JSON 鍵：刪除的那台搜不到那些字）、「round 9, 5 c」。
 - **單位與列不會悄悄不一致**：兩個方向各查一次（列→單位 `note_anchor_entry`、單位→列 `note_anchor_place`，各只有一處），所以兩個函式任一個錯了，另一個會抓到。寫的一台在提交時查「單位的每個條目都正好做出它的列、每一列都有條目」（`note_anchor_places_is_rows`，對該筆記的列一趟 FULL JOIN）；收的一台展開後查「列換回單位，等於它展開的頭」。不合就 `anchor_unit_not_rows`（OD215）。`anchorUnitIsRows.integration.test.ts`。
-- **段落列**：`label`／`text_cache`／`kind`／父層／隱藏是內文與錨點的純函式，**不是**單位。列由快照或修改包建立時帶著寫入者的 `label`／`text_cache`／`kind`，但**父層是空的**（`snapshotTables.json` `deferred: ["parent_block_id"]`）：收的一方到自己下一次存檔才算出父層，那次存檔替每個巢狀段落記一筆 `BLOCK_NODE_UPDATED`（`anchorsReplicated`「nested paragraphs」釘住）。收的一方重算這些欄位是 2b-2b。
+- **段落列**：`label`／`text_cache`／`kind`／父層／隱藏是內文與錨點的純函式，**不是**單位。列由快照或修改包建立時帶著寫入者的 `label`／`text_cache`／`kind`，但**父層是空的**（`snapshotTables.json` `deferred: ["parent_block_id"]`）：收的一方到自己下一次存檔才算出父層，那次存檔替每個巢狀段落記一筆 `BLOCK_NODE_UPDATED`（`anchorsReplicated`「nested paragraphs」釘住）。收的一方重算這些欄位：修改包自 4a 批起（`blockNodes.deriveBlockRows`，在 `expandAnchorUnits` 之後），快照加入仍到下一次存檔。
 - **雜湊守門**：`block_anchors_hash_is_body`（語句層級）：寫入 `at_body_hash` 的錨點列（新增，或改了雜湊或筆記；改名 `anchor_id` 不算），雜湊必須是那則筆記此刻的內文；每個交易每個版本的內文只算一次雜湊（以列的 ctid 為鍵）。合併與快照匯入不檢查。`anchorHashGuard.integration.test.ts`。
 - **一列以外的唯一鍵是宣告出來的規則**（`RowSource.naturalKeys`，審查第 1 點）：兩台用兩個 id 建了同一個自然鍵的兩列，每台都留建立標記較早的那一列（再比鍵），另一列不建、它的標記留著，回報 `duplicateRows`；掛在輸的那列上的（段落標籤、複習卡、任務連結）跟著它走（資料庫自己的串聯），也在回報裡。
   宣告的：`block_nodes` 的 `anchor_uq`、`note_ref_uq`、`task_uq`、`detached_uq`，`function_refs` 的 `holder_unique`、`view_instance_unique`（原本 function_refs 專用的 `keepEarlierReference` 換成這條規則）。沒宣告的唯一鍵撞到 → 整包 `bundle_unique_clash`；已在的列寫入時撞到唯一鍵也是。`bundleNaturalKeys.integration.test.ts`。

@@ -2,6 +2,7 @@
 // is not one a writer makes is refused whole (`bundle_malformed`) before anything is written, and a value the database will not hold is refused the same way, never as a
 // raw database error. Each case changes one thing in a real bundle between the sender and the receiver. Both engines.
 import { afterEach, describe, expect, it } from "vitest";
+import { withEventTransaction } from "../spine/eventTransaction.js";
 import { q } from "../db.js";
 import type { ChangeBundle } from "../spine/snapshotSql.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
@@ -405,6 +406,25 @@ describe.skipIf(!isTestDb)("a received value of any carried table is checked, ev
     expect(r?.code).toBe("bundle_malformed");
     expect(r?.message).toContain("not the units the bundle says");
     expect(await notesOn(b)).toBe(before);
+  }, 600_000);
+
+  it("a new attribute row whose carried source is not one that travels (a `derived` value): bundle_malformed, no value written; a value the text gave (`markdown`, migration 223) is taken", async () => {
+    const { a, b } = await updated();
+    await take(b, await bundleFor(a, b));
+    const host = await onNode(a.node, async () => (await a.call("POST", "/api/nodes", { title: "Valued", markdown: "", space_id: a.space })).id as string);
+    await onNode(a.node, () => withEventTransaction(a.ws, () => q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source) VALUES ($1, $2, 'mood', 'calm', 'text', 'markdown')`, [a.ws, host])));
+    const bundle = await bundleFor(a, b);
+    const row = rowsOf(bundle, "node_attributes").find((r) => r.stamps.some((st) => st.rowKey === `${host}/mood`));
+    expect(row, "the bundle carries the text's value").toBeTruthy();
+    const honest = structuredClone(bundle);
+    row!.values.source = "derived";
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("source is not one that travels");
+    const held = () => onNode(b.node, async () => (await q<{ source: string }>(`SELECT source FROM node_attributes WHERE node_id = $1 AND key = 'mood'`, [host])).rows);
+    expect(await held()).toEqual([]);
+    await take(b, honest);
+    expect(await held()).toEqual([{ source: "markdown" }]);
   }, 600_000);
 
   it("an element of a set (the module switches) whose value is not the element it names, as a head: bundle_malformed", async () => {

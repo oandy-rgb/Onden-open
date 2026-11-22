@@ -9,6 +9,7 @@
     "e2e:quote-region": "node e2e/browser-app/quoteRegion.mjs chromium && node e2e/browser-app/quoteRegion.mjs mobile-chrome",
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
     "check:specs": "bash e2e/scripts/checkSpecsLoad.sh",
+    "e2e:webkit-scan": "bash e2e/fullstack/run.sh --config playwright.webkit-scan.config.ts",
     "e2e:cloud-stack": "node e2e/fullstack/cloud-stack.mjs",
     "e2e:probes": "cd e2e && npx playwright test --config probes/playwright.config.ts",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && node scripts/check-app-css.mjs && node scripts/check-worker-bundle.mjs app && node scripts/check-boot-bundle.mjs",

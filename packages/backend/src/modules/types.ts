@@ -75,6 +75,10 @@ export type ModuleDefinition = {
    *  (a note marked 「不發布」 or trashed leaves the static copy) when the owner has
    *  turned the module off; it only removes, and never publishes on its own. */
   nodeHooksWhenOff?: true;
+  /** The node hooks also run for a change this node took from another node's change bundle (services/receivedDerivation.ts, spine/nodeHooks.ts HookOrigin).
+   *  Only for hooks that record work derived from committed state (an outbox intent that reads the state when it runs: the website's rebuild after a takedown,
+   *  the semantic index's embedding). A hook that writes a replicated row must not set it: the writer's node already wrote it and the bundle carried it. */
+  nodeHooksOnReceive?: true;
   /** Optional background loop bootstrap (timers/schedulers). Called once by
    *  startModuleBackground() from the server bootstrap — NEVER under
    *  NODE_ENV=test, mirroring startOutboxReconciler/startTaskScheduler. A

@@ -45,11 +45,15 @@ type Row = {
   label: string; text_cache: string; hidden: boolean; tag_ids: string[]; detached_note_id: string | null;
 };
 
-/** The note's block_nodes follow `markdown` (as stored). Call in the writing
- *  transaction, after the body UPDATE; `eventId` is the body change's event. */
+/** The REPLICATED half of the note's block_nodes following `markdown` (as stored): the anchors a block needs, the rows that are made, their own tags,
+ *  the task lines and review marks, the tags a block save made and dropped, and the events. Call in the writing transaction, after the body UPDATE;
+ *  `eventId` is the body change's event. The display columns are NOT written here: the caller runs services/bodyDerivation.ts deriveFromBody after it
+ *  (the one function a node that takes this note by bundle runs too), passing `retagged` on. Never run for a note taken by bundle: what it writes
+ *  is replicated, so the writer's node already wrote it and the bundle carried it (a second task for one `- [ ] x {task}` line otherwise). */
 export async function syncBlockNodes(change: {
   workspaceId: string; noteId: string; markdown: string; actor: ActorCtx; eventId: string;
-}): Promise<void> {
+}): Promise<{ retagged: ReadonlySet<string> }> {
+  const none = { retagged: new Set<string>() };
   const { workspaceId, noteId, markdown, actor, eventId } = change;
   // Too long to read: the block nodes stay as they are (BLOCK_PARSE_MAX) —
   // never silently: logged here; the editor shows the note is too long (B2).
@@ -57,7 +61,7 @@ export async function syncBlockNodes(change: {
     if (markdown.includes("{") || markdown.includes("^")) {
       log.warn("blocks", "note too long for block nodes; left as they are", { workspaceId, noteId, length: markdown.length });
     }
-    return;
+    return none;
   }
   // The text of a paragraph a child note of this one holds in the trash is back (its move out was undone): first,
   // its anchor and row come back to it.
@@ -69,7 +73,7 @@ export async function syncBlockNodes(change: {
       WHERE b.workspace_id = $1 AND b.note_id = $2
       GROUP BY b.id`, [workspaceId, noteId],
   )).rows;
-  if (rows.length === 0 && !markdown.includes("{") && !markdown.includes("^")) return;
+  if (rows.length === 0 && !markdown.includes("{") && !markdown.includes("^")) return none;
 
   // A block with `{…}` is a block node, known by its anchor: the valid anchor of this note that starts at it. One
   // that has none gets one now (a paragraph just tagged, an import, an undo). An anchor that is `maybe` or `lost`
@@ -121,6 +125,8 @@ export async function syncBlockNodes(change: {
   // unsupported in its cascade).
   const record = (type: string, blockId: string, payload: Record<string, unknown>) =>
     event(workspaceId, type, "node", noteId, { block_node_id: blockId, ...payload }, eventActorType(actor.type), actor.id, { triggeredBy: eventId });
+  // Rows whose own tags changed: deriveBlockRows moves their `updated_at` with the display columns, as one UPDATE did before it was split out.
+  const retagged = new Set<string>();
 
   // The new rows first, in ONE statement (their tags in one more): each statement that writes paragraph rows runs migration 215's statement-level triggers
   // once, so one statement per row made a first save with n tagged paragraphs cost n passes over the stamps (review of PR #1853 after the merge, N2). Their
@@ -172,12 +178,8 @@ export async function syncBlockNodes(change: {
     const before = { parent_block_id: existing.parent_block_id, kind: existing.kind, tag_ids: existing.tag_ids, hidden: existing.hidden };
     const after = { parent_block_id: parentId, kind: b.kind, tag_ids: wantTags, hidden: false };
     const structural = JSON.stringify(before) !== JSON.stringify(after);
-    if (!structural && existing.label === b.label && existing.text_cache === text) continue;
-    await q(
-      `UPDATE block_nodes SET parent_block_id = $2, kind = $3, label = $4, text_cache = $5, hidden_at = NULL, updated_at = now()
-        WHERE id = $1`, [existing.id, parentId, b.kind, b.label, text],
-    );
-    if (existing.tag_ids.join() !== wantTags.join()) await setTags(workspaceId, existing.id, wantTags);
+    // The display columns (parent, kind, label, text, shown) are deriveBlockRows' below: here only what is replicated, and the events.
+    if (existing.tag_ids.join() !== wantTags.join()) { await setTags(workspaceId, existing.id, wantTags); retagged.add(existing.id); }
     // A text-only change is the note's own edit event; only a change of
     // place, kind, tags or presence is the block node's.
     if (structural) {
@@ -191,7 +193,6 @@ export async function syncBlockNodes(change: {
   const removedRows = rows.filter((row) => !row.hidden && row.detached_note_id === null && !present.has(row.block_ref));
   const stillWritten = new Set(stored.filter((a) => a.status === "valid").map((a) => a.anchorId));
   for (const row of removedRows) {
-    await q(`UPDATE block_nodes SET hidden_at = now(), updated_at = now() WHERE id = $1`, [row.id]);
     await record("BLOCK_NODE_REMOVED", row.id, { block_ref: row.block_ref, kept: true });
     // Its `{…}` is gone but the paragraph is still in the text (its anchor still finds it): that is "the review word was taken out".
     // A paragraph whose text is gone too keeps its reference like all of its data.
@@ -205,6 +206,57 @@ export async function syncBlockNodes(change: {
   // Creating or removing this reference is part of saving the text: it writes no event of its own.
   if (review && cardBlockIds.length > 0) await review.markCards({ workspaceId, holders: cardBlockIds.map((id) => ({ kind: "block" as const, id })), actor, via: "word" });
   if (review && wordlessBlockIds.length > 0) await review.unmarkCardsWord({ holders: wordlessBlockIds.map((id) => ({ kind: "block" as const, id })) });
+  return { retagged };
+}
+
+/**
+ * The DERIVED half of a note's paragraph rows (docs/architecture/proposals/own-node-transport-2026-11-22.md §2.12.2: "the :162 UPDATE"): each row's parent, kind,
+ * label, text and whether it is shown, as the stored body and the note's anchors give them. Its inputs are replicated state only — the body, the anchors (a row's
+ * anchor is the valid anchor of this note that its `block_ref` names) and the rows themselves — and it writes no unit (none of these columns is one: dbUnits.ts
+ * `fields` of block_nodes), so a node that took the note by bundle and the node that saved it hold the same columns. Called by syncBlockNodes after it wrote the
+ * rows, and by a node that takes a change bundle (services/receivedDerivation.ts, through bodyDerivation.ts deriveFromBody). Never mints, inserts, tags or removes a row.
+ *   shown: a row whose anchor starts a block of the text; hidden (kept, with its data) otherwise, unless it stands alone as a note (detached).
+ *   `touched`: rows whose `updated_at` moves even when no column here changes (syncBlockNodes: their own tags changed). In the caller's transaction.
+ */
+export async function deriveBlockRows(workspaceId: string, noteId: string, markdown: string, touched: ReadonlySet<string> = new Set()): Promise<void> {
+  if (!blocksParsable(markdown)) return; // too long to read: the rows stay as they are (syncBlockNodes says why)
+  const rows = (await db.selectFrom("block_nodes").select(["id", "block_ref", "parent_block_id", "kind", "label", "text_cache", "hidden_at", "detached_note_id"])
+    .where("workspace_id", "=", workspaceId).where("note_id", "=", noteId).execute()).map((r) => ({ ...r, hidden: r.hidden_at !== null }));
+  if (rows.length === 0) return;
+  const refs = new Set(rows.map((r) => r.block_ref));
+  // Each block's anchor as syncBlockNodes gave it: of the valid anchors at its start, the first listed (listNoteAnchors' order; parseBlocks: the first listed for a
+  // start wins). When that one is another note's row's (a paragraph standing alone as a note took it), the save made the block an anchor of its own: of the anchors
+  // at that start that are a row's of this note, the newest (review of PR #1941, round 1, point 5: the row the save just wrote is the one shown, as on main).
+  const valid = (await listNoteAnchors(workspaceId, noteId)).filter((a) => a.status === "valid");
+  const lent = valid.length === 0 ? new Set<string>() : new Set((await db.selectFrom("block_nodes").select("anchor_id")
+    .where("workspace_id", "=", workspaceId).where("note_id", "<>", noteId).where("anchor_id", "in", valid.map((a) => a.anchorId)).execute()).map((r) => r.anchor_id));
+  const at = (list: typeof valid) => list.map((a) => ({ id: a.anchorId, from: a.span.from }));
+  const all = parseBlocks(markdown, at(valid));
+  const own = parseBlocks(markdown, at(valid.filter((a) => refs.has(a.anchorId)).reverse()));
+  for (const [i, b] of all.entries()) if (b.ref && lent.has(b.ref)) b.ref = own[i]?.ref ?? null;
+  const byRef = new Map(rows.map((r) => [r.block_ref, r]));
+  const idOfIndex = new Map<number, string>();
+  const shown = new Set<string>();
+  // Document order: a parent's row is known before its children's.
+  for (const [index, b] of all.entries()) {
+    const row = b.ref ? byRef.get(b.ref) : undefined;
+    if (!row || shown.has(row.id)) continue;
+    idOfIndex.set(index, row.id);
+    shown.add(row.id);
+    const parentId = parentRowId(all, b, idOfIndex);
+    const text = cutToUnits(markdown.slice(b.start, b.end), TEXT_CACHE_MAX);
+    const same = row.parent_block_id === parentId && row.kind === b.kind && row.label === b.label && row.text_cache === text && !row.hidden;
+    if (same && !touched.has(row.id)) continue;
+    await q(
+      `UPDATE block_nodes SET parent_block_id = $2, kind = $3, label = $4, text_cache = $5, hidden_at = NULL, updated_at = now()
+        WHERE id = $1`, [row.id, parentId, b.kind, b.label, text],
+    );
+  }
+  // A paragraph standing alone as a note (detached_note_id) has no text here by design: it stays as it is.
+  for (const row of rows) {
+    if (shown.has(row.id) || row.hidden || row.detached_note_id !== null) continue;
+    await q(`UPDATE block_nodes SET hidden_at = now(), updated_at = now() WHERE id = $1`, [row.id]);
+  }
 }
 
 /** How many new rows one INSERT of a save writes at most (9 parameters a row, under the 65,535 one statement takes). */
@@ -279,13 +331,7 @@ async function resolveTagNames(workspaceId: string, noteId: string, names: strin
     // A system job (rewriting a note's text, not tagging it) holds no authority to make a tag: a name that names none stays unresolved.
     const { id, created } = await tagIdForWrittenName(workspaceId, name, { create: !systemJobOf(actor), actor });
     if (!id) continue;
-    for (const tagId of created) {
-      await q(
-        `INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source)
-         VALUES ($1, $2, $3, $4, 'text', 'derived') ON CONFLICT (node_id, key) DO NOTHING`,
-        [workspaceId, tagId, AUTO_TAG_KEY, noteId],
-      );
-    }
+    await markAutoTags(workspaceId, created.map((tagId) => ({ tagId, noteId })));
     idOf.set(name, id);
   }
   // `{a, #a}` land on one tag; `{A}` too, unless a tag titled exactly `A` exists.
@@ -295,6 +341,33 @@ async function resolveTagNames(workspaceId: string, noteId: string, names: strin
     if (id) out.set(n, id);
   }
   return out;
+}
+
+/** Mark tags as made by a block save of `noteId` (AUTO_TAG_KEY, source `derived`: no unit, so it never travels). Written where the block save made the tag, and,
+ *  on a node that took that save by change bundle, for the tags autoTagsMadeBy finds (services/receivedDerivation.ts): both nodes then drop the same stray tags. */
+async function markAutoTags(workspaceId: string, marks: readonly { tagId: string; noteId: string }[]): Promise<void> {
+  for (const { tagId, noteId } of marks) {
+    await q(
+      `INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source)
+       VALUES ($1, $2, $3, $4, 'text', 'derived') ON CONFLICT (node_id, key) DO NOTHING`,
+      [workspaceId, tagId, AUTO_TAG_KEY, noteId],
+    );
+  }
+}
+
+/** For a node that took tags by change bundle: mark those a block save made (markAutoTags), given as the paragraph rows each was made with
+ *  (spine/receivedDerivation.ts tagsMadeWithTheirMark: one write made the tag and the mark). The note is the paragraph's. A tag already marked keeps its mark. */
+export async function markReceivedAutoTags(workspaceId: string, made: readonly { tagId: string; blockNodeId: string }[]): Promise<void> {
+  if (made.length === 0) return;
+  const noteOf = new Map((await db.selectFrom("block_nodes").select(["id", "note_id"])
+    .where("workspace_id", "=", workspaceId).where("id", "in", made.map((m) => m.blockNodeId)).execute()).map((r) => [r.id, r.note_id] as const));
+  await markAutoTags(workspaceId, made.flatMap((m) => (noteOf.has(m.blockNodeId) ? [{ tagId: m.tagId, noteId: noteOf.get(m.blockNodeId)! }] : [])));
+}
+
+/** The notes the paragraph rows `ids` are in (for a node that took the rows by bundle: services/receivedDerivation.ts). */
+export async function notesOfBlockRows(workspaceId: string, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  return [...new Set((await db.selectFrom("block_nodes").select("note_id").where("workspace_id", "=", workspaceId).where("id", "in", [...ids]).execute()).map((r) => r.note_id))];
 }
 
 /** Tags this save's blocks dropped that a block save created and nothing

@@ -21,4 +21,7 @@
 // origin ({ label: { origin: n } }, spine/stampedBundle.ts Have) instead of one number per origin (the least over every label); a snapshot page and the hello of a
 // snapshot stream carry `brought`, the other origins the source holds with those numbers, and a joiner takes stamps of them. A node of version 5 would read a
 // per-label header as origins named like labels, and refuse a snapshot's brought stamps one by one (`join_stamp_origin`) instead of saying why.
-export const SYNC_DATA_SHAPE_VERSION = 6;
+// 7 (the values a note's text gives it travel, migration 223, batch 4a): node_attributes rows whose source is `markdown` or `frontmatter` are units, carried by a
+// snapshot and a change bundle (spine/attributeSource.ts STAMPED_ATTRIBUTE_SOURCES). A node of version 6 holds such a row as no unit: it would make the carried row
+// again over its own (a unique clash on (node, key)) and leave it out of what it sends.
+export const SYNC_DATA_SHAPE_VERSION = 7;

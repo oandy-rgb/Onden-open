@@ -255,7 +255,7 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
   // review of PR #1853, point 7: a paragraph row's parent is worked out from the body (not a unit) and a snapshot or bundle leaves it empty when it makes the row
   // (spine/snapshotTables.json `deferred: ["parent_block_id"]`): the receiver holds the nested rows without their parent until its own next save works it out, and that save
   // records a BLOCK_NODE_UPDATED for each nested row. Pinned as it is today; the receiver working out these columns after a merge is batch 2b-2b.
-  it("nested paragraphs: the receiver holds them without their parent until it saves, and that save records BLOCK_NODE_UPDATED for each", async () => {
+  it("nested paragraphs: the receiver works their parents out when it takes the bundle (batch 4a: services/receivedDerivation.ts, blockNodes.ts deriveBlockRows), so its next save records no BLOCK_NODE_UPDATED for them", async () => {
     const { a, b } = await threeNodes(7);
     const note = await newNote(a, "8b8b8b8b-8b8b-4b8b-8b8b-8b8b8b8b8b8b", "Nested");
     await write(a, note, "- outer item {plan}\n  - inner item one {plan}\n  - inner item two {plan}\n");
@@ -264,12 +264,12 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
       `SELECT b.block_ref AS ref, p.block_ref AS parent FROM block_nodes b LEFT JOIN block_nodes p ON p.id = b.parent_block_id WHERE b.note_id = $1 ORDER BY b.label`, [note])).rows);
     const atA = await parents(a), atB = await parents(b);
     expect(atA.filter((r) => r.parent !== null)).toHaveLength(2);
-    expect(atB.map((r) => r.parent)).toEqual([null, null, null]); // the rows are there, their parents are not
+    expect(atB).toEqual(atA); // before batch 4a the rows were there and their parents were not, until B's own save
     const updates = (p: Peer) => onNode(p.node, async () => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM domain_events WHERE target_id = $1::text AND event_type = 'BLOCK_NODE_UPDATED'`, [note])).rows[0]!.n));
     const before = await updates(b);
     await write(b, note, "- outer item {plan}\n  - inner item one {plan}\n  - inner item two, edited on B {plan}\n");
-    expect(await parents(b)).toEqual(atA.map((r) => ({ ...r }))); // B's own save worked the parents out
-    expect((await updates(b)) - before).toBe(2);
+    expect(await parents(b)).toEqual(atA.map((r) => ({ ...r })));
+    expect((await updates(b)) - before).toBe(0); // a text-only edit: the structure was right already
   }, 600_000);
 
   // review of PR #1853, point 8a (round 2: the places of a note are one unit): the losing write minted an anchor. The unit's head that goes with the stored body is the
@@ -1087,7 +1087,7 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
 
   // round 3, point 11: a review card on the paragraph of an anchor the losing write minted (8a). Pinned as it is: the card travels with its paragraph row and stays; the next
   // save hides the row on the node that saves (not on the other until it saves) and keeps the card on it, so the card is on a paragraph that is not in the note.
-  it("round 3, 11: a review card on the paragraph of the losing write's anchor: kept, on a row the next save hides (pinned)", async () => {
+  it("round 3, 11: a review card on the paragraph of the losing write's anchor: kept, on a row each node hides as soon as it holds the winning body (batch 4a)", async () => {
     const { a, b } = await threeNodes(22);
     const note = await newNote(a, "fbfbfbfb-fbfb-4fbf-8fbf-fbfbfbfbfbfb", "Card");
     await write(a, note, "First paragraph stays {plan}\n\nSecond paragraph stays\n");
@@ -1105,17 +1105,19 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
               (SELECT x.status FROM block_anchors x WHERE x.note_id = $1 AND x.quote = 'A new paragraph only A writes {plan}') AS status`, [note])).rows[0]!);
     const exchanged = [await card(a), await card(b)];
     expect(exchanged[1]).toEqual(exchanged[0]);
-    expect(exchanged[0]).toEqual({ cards: 1, hidden: false, status: "lost" }); // the card came along with its paragraph row; the anchor is lost, its row not yet hidden
+    expect(exchanged[0]).toEqual({ cards: 1, hidden: true, status: "lost" }); // the card came along with its paragraph row; the anchor is lost, so its row is hidden (deriveBlockRows: on A when it took B's body, on B when it took the row)
     await write(a, note, "First paragraph stays {plan}\n\nSecond paragraph stays, B edited it, A saved\n");
     await exchange(a, b); await exchange(b, a);
     const saved = [await card(a), await card(b)];
-    // the card stays, on a paragraph row the saving node hides (hidden_at is worked out by each node's own save, not replicated: B hides it at its own next save)
-    expect(saved).toEqual([{ cards: 1, hidden: true, status: "lost" }, { cards: 1, hidden: false, status: "lost" }]);
+    // the card stays, on a hidden paragraph row on both (hidden_at is derived, not replicated: before batch 4a B hid it only at its own next save)
+    expect(saved).toEqual([{ cards: 1, hidden: true, status: "lost" }, { cards: 1, hidden: true, status: "lost" }]);
   }, 600_000);
 
   // point 9: two nodes tag the same new paragraph at once: two anchors (two ids), two rows, two tasks. The next save keeps the row of the anchor made first (ORDER BY
   // created_at, anchor_id: the minting node's wall clock, carried with the row), hides the other and trashes its task. Pinned; the rule proposed is in the PR.
-  it("9: the same new task line written on two nodes: two anchors and two tasks after the exchange; the next save on each keeps the same one", async () => {
+  // Since batch 4a each node shows that same row as soon as it takes the bundle (deriveBlockRows: the first anchor listed for a start), and hides the other; the
+  // other's task is a replicated write, which only a save makes (a node that takes a bundle never writes one).
+  it("9: the same new task line written on two nodes: two anchors and two tasks after the exchange, one row shown on both; the next save on each keeps that row", async () => {
     const { a, b } = await threeNodes(10);
     const note = await newNote(a, "bebebebe-bebe-4ebe-8ebe-bebebebebebe", "Twice");
     await write(a, note, "Intro\n\n- [ ] the shared task\n");
@@ -1126,13 +1128,17 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     const live = (p: Peer) => onNode(p.node, async () => (await q<{ id: string; task: string | null; trashed: boolean | null }>(
       `SELECT b.id::text, b.task_id::text AS task, (SELECT c.deleted_at IS NOT NULL FROM content_nodes c WHERE c.id = b.task_id) AS trashed
          FROM block_nodes b WHERE b.note_id = $1 AND b.hidden_at IS NULL ORDER BY b.id`, [note])).rows);
-    expect((await live(a)).length).toBe(2);
-    expect(await live(b)).toEqual(await live(a));
+    const shown = await live(a);
+    expect(shown).toHaveLength(1);
+    expect(await live(b)).toEqual(shown);
+    const rows = (p: Peer) => onNode(p.node, async () => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM block_nodes WHERE note_id = $1 AND task_id IS NOT NULL`, [note])).rows[0]!.n));
+    expect([await rows(a), await rows(b)]).toEqual([2, 2]); // two rows, two tasks: nothing replicated was written by taking the bundle
     await write(a, note, "Intro, edited\n\n- [ ] the shared task {task}\n");
     await write(b, note, "Intro, edited\n\n- [ ] the shared task {task}\n");
     const [la, lb] = [await live(a), await live(b)];
     expect(la).toHaveLength(1);
     expect(lb).toEqual(la); // the same row stays on both
+    expect(la[0]!.id).toBe(shown[0]!.id); // the row the save keeps is the one shown since the exchange
   }, 600_000);
 
   // Item 10 of the transport proposal (own-node-transport-2026-11-22 §4.2), with every write stamped and the product's delete for good: A links a paragraph row to task

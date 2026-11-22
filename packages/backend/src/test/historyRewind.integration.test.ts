@@ -5,6 +5,7 @@
 // SAFETY: skips entirely unless DATABASE_URL points at a *_test database.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { ALIGN_VERSION_TIMES_SQL } from "./helpers/alignVersionTimes.js";
 import { Hono } from "hono";
 import fc from "fast-check";
 
@@ -54,6 +55,7 @@ async function inThePast(ids: string[], minutesBeforeT: number) {
     await client.query("SET LOCAL session_replication_role = replica"); // domain_events is append-only
     await client.query(`UPDATE domain_events SET created_at = $2 WHERE target_id = ANY($1::text[]) AND created_at > $3`,
       [ids, new Date(T.getTime() - minutesBeforeT * 60_000), T]);
+    await client.query(ALIGN_VERSION_TIMES_SQL);
     await client.query("COMMIT");
   } finally { client.release(); }
 }

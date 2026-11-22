@@ -22,6 +22,7 @@ import { putBlob } from "../services/blobs.js";
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
+import { eventOfVersionKey, migrateLegacySave, versionKeyOf } from "./helpers/versionFixtures.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
 
 const database = process.env.DATABASE_URL ?? "";
@@ -184,9 +185,13 @@ describe.skipIf(!isTestDb)("a save that changes nothing is no history point", ()
            FROM domain_events WHERE id = $1 RETURNING id::text`,
         [fromId, String(minutesLater), bodyHash ?? null],
       );
+      // an older server's save is a version after migration 220 (a repeat of the one before it maps to that one)
+      await migrateLegacySave(r.rows[0]!.id);
       return r.rows[0]!.id;
     };
-    const lastSaveId = async () => (await raw())[0]!.id;
+    /** The event number of the note's newest version (the version list names versions by key; a legacy copy starts from an event). */
+    const eventOfKey = async (key: string) => (await eventOfVersionKey(nodeId, key))!;
+    const lastSaveId = async () => eventOfKey((await raw())[0]!.id);
 
     it("saves that repeat the previous text and title join the previous point, however far apart; no event is deleted", async () => {
       await patch({ markdown: B, base_markdown: A });
@@ -198,11 +203,11 @@ describe.skipIf(!isTestDb)("a save that changes nothing is no history point", ()
       expect(versions.map((v) => v.markdown)).toEqual([B, A]);
       expect((await q<{ n: string }>(`SELECT count(*) AS n FROM domain_events WHERE target_id = $1`, [nodeId])).rows[0]!.n).toBe(String(Number(eventsBefore) + 2));
       // The first appearance of the text is the point.
-      expect(versions[0]!.id).toBe(id);
+      expect(versions[0]!.id).toBe(await versionKeyOf(id));
     });
 
     it("text that goes A, B, A is three points: a repeat only joins the one right before it", async () => {
-      const createdId = (await raw())[0]!.id;
+      const createdId = await eventOfKey((await raw())[0]!.id);
       await patch({ markdown: B, base_markdown: A });
       await legacyCopy(createdId, 60); // the old text again, later
       expect((await list()).map((v) => v.markdown)).toEqual([A, B, A]);
@@ -249,7 +254,7 @@ describe.skipIf(!isTestDb)("a save that changes nothing is no history point", ()
     });
 
     it("more than 50 versions: the oldest listed row is never shown as a creation, merges or not", async () => {
-      const base = (await raw())[0]!.id;
+      const base = await eventOfKey((await raw())[0]!.id);
       for (let i = 1; i <= 54; i++) {
         // every 10th save repeats the text before it with trailing spaces: it merges away
         const text = i % 10 === 0 ? `${A}\n\n第 ${i - 1} 段  ` : `${A}\n\n第 ${i} 段`;
@@ -275,7 +280,7 @@ describe.skipIf(!isTestDb)("a save that changes nothing is no history point", ()
       expect(res.status).toBe(200);
       const after = await list() as unknown as Array<{ restored_from: string | null; id: string; changed_at: string }>;
       const restore = after.find((v) => v.restored_from !== null);
-      if (restore) expect(after.some((v) => v.changed_at === restore.restored_from)).toBe(true);
+      if (restore) expect(after.some((v) => v.id === restore.restored_from)).toBe(true);
     });
   });
 

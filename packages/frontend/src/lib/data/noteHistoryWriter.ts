@@ -19,7 +19,7 @@ export function makeNoteHistoryWriter(ctx: DataCtx) {
   /** Undefined means committed but not loaded; callers must retain their draft.
    * A retry of that operation reads current server state without restoring again. */
   async function restoreVersion(nodeId: string, versionId: string, { restoreTitle }: { restoreTitle: boolean }): Promise<ContentNode | undefined> {
-    const path = `/api/nodes/${nodeId}/versions/${versionId}/restore`;
+    const path = `/api/nodes/${nodeId}/versions/${encodeURIComponent(versionId)}/restore`; // a version key has colons
     const body = JSON.stringify({ restore_title: restoreTitle } satisfies RestoreVersionRequest);
     // A different title choice is a different operation: never borrow the earlier one's acknowledgement.
     const operationKey = `${path}:${body}`;

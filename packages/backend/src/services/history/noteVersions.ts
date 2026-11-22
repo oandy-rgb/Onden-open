@@ -1,19 +1,22 @@
 // 單篇筆記的版本清單（GET /api/nodes/:id/versions）。
 //
-// 版本來自事件紀錄：每個帶 body_hash 的 NODE_CREATED／NODE_UPDATED／NODE_RESTORED 是一次儲存；
-// 同一作者 5 分鐘內的連續儲存合成一列（`saves` = 合併次數）。內容沒變的儲存不算一個時間點：
-// 標題與內文雜湊都和前一筆相同的事件在查詢裡併進前一筆；只差段尾 ^id、行尾空白或空行數的併進較新的一筆。
-// 事件本身一個都不刪，只是顯示時併。這支檔案分兩層：
+// 版本來自版本表（note_versions，storedVersions.ts）：每一列是一個版本，身分是 `version_key`（回應的 `id`）；
+// 同一作者 5 分鐘內的連續儲存合成一列（`saves` = 合併次數）。內容沒變的儲存沒有鑄版本（遷移 220），所以不算一個時間點；
+// 只差段尾 ^id、行尾空白或空行數的併進較新的一筆。標籤的說明與系統筆記還沒有版本，仍讀事件紀錄（同檔最後一段，
+// 業主 2026-11-22 的決定）。這支檔案分兩層：
 //   - 純函式（summarizeChange、describeVersions）：不碰資料庫，單元測試直接餵字串。
-//   - listNoteVersions：讀取閘（canReadNode）+ SQL，再交給純函式補上 summary／markers／restored_from。
-// 讀取只經 canReadNode 之後才查事件，不可讀等同不存在（回傳 null，不洩漏存在與否）。
+//   - listNoteVersions：讀取閘（canReadNode）+ 取列，再交給純函式補上 summary／markers／restored_from。
+// 讀取只經 canReadNode 之後才查，不可讀等同不存在（回傳 null，不洩漏存在與否）。
 
 import { replaceWikilinks, splitWikilink } from "@onden/markdown";
 import { shownAuthorKind, shownAuthorName, versionAuthor } from "../authorName.js";
 import { q } from "../../db.js";
+import { sqlInt } from "../../sqlText.js";
 import type { ActorCtx } from "../../types.js";
 import { canReadNode } from "../readPolicy.js";
+import { hasVersionList } from "../../spine/noteVersions.js";
 import { bodyEventSql, versionActorTypeSql } from "./bodyEvents.js";
+import { authorColumns, keepVersionStatisticsCurrent, listBodySessions, listBodyVersions } from "./storedVersions.js";
 import { alignParagraphs, paragraphSample, sameTextIgnoringIds, splitParagraphs, summarizeAlignment, summarizeChange, type Alignment, type ChangeSummary } from "@onden/markdown";
 
 /* ------------------------------------------------------------------ */
@@ -80,8 +83,11 @@ export type VersionRow = {
   author_row_type?: string | null;
   saves: number;
   is_restore: boolean;
-  /** 被還原那一版（所在那一列）的 changed_at；不是這篇的版本則 null。 */
-  restored_at: Date | string | null;
+  is_baseline?: boolean;
+  /** 被還原那一版所在那一列的說法：版本表＝那一列的 version_key；事件紀錄（標籤說明）＝那一列的 changed_at；找不到則 null。 */
+  restored_from: string | null;
+  /** 在另一台裝置上做的（recorded_by 不是這台）。事件紀錄的列沒有這回事。 */
+  elsewhere?: boolean;
 };
 
 /** `rows` 由新到舊。與下一筆較舊的列相比，文字只差段尾 `^id`、行尾空白或空行數
@@ -107,15 +113,13 @@ export function absorbSameText(rows: VersionRow[]): VersionRow[] {
 
 export type PublishedSnapshot = { n: number; at: Date | string };
 
-export type DescribedVersion = Omit<VersionRow, "is_restore" | "restored_at" | "changed_at"> & {
+export type DescribedVersion = Omit<VersionRow, "is_restore" | "is_baseline" | "restored_from" | "elsewhere" | "changed_at"> & {
   changed_at: Date | string;
   actor_kind: ActorKind;
   summary: ChangeSummary;
   markers: string[];
   restored_from: string | null;
 };
-
-const iso = (d: Date | string): string => new Date(d).toISOString();
 
 /**
  * `rows` 由新到舊；`olderMarkdownOfLast` 是最後一列再更舊的那一版內文
@@ -146,15 +150,18 @@ export function describeVersions(
     const newer = index > 0 ? rows[index - 1]! : null;
     const markers: string[] = [];
     if (row.is_restore) markers.push("restored");
+    if (row.is_baseline) markers.push("baseline");
     if (newer && actorKindOf(newer.actor_type) === "agent") markers.push("before_agent");
     for (const n of published.get(index) ?? []) markers.push(`published:${n}`);
-    const { is_restore: _isRestore, restored_at, author_row_type, ...rest } = row;
+    const { is_restore: _isRestore, is_baseline: _isBaseline, restored_from, author_row_type, elsewhere, ...rest } = row;
     return {
       ...rest,
       actor_kind: shownAuthorKind(author_row_type, actorKindOf(row.actor_type)),
       summary,
       markers,
-      restored_from: row.is_restore && restored_at ? iso(restored_at) : null,
+      restored_from: row.is_restore ? restored_from : null,
+      // only where it is true: a list that cannot tell (the event log) has no such field
+      ...(elsewhere ? { on_another_device: true } : {}),
     };
   });
 }
@@ -166,18 +173,10 @@ export function describeVersions(
 /** 清單最多幾列；多抓一列只為了算最後一列的摘要。 */
 const VERSION_LIMIT = 50;
 
-type RawVersion = {
-  id: string;
-  title: string | null;
-  markdown: string;
-  changed_at: Date;
-  actor_name: string | null;
-  actor_type: string;
-};
-
 /**
- * 這篇筆記的版本。`raw` = 未合併的儲存事件（最新 50 筆，只多一個 actor_kind）；
+ * 這篇筆記的版本。`raw` = 未合併的版本（最新 50 筆，只多一個 actor_kind；版本表沒有「內容沒變」的重複儲存）；
  * 否則是合併後的清單，附 summary／markers／restored_from。筆記對 actor 不可讀 → null。
+ * 筆記與白板讀版本表；標籤說明與系統筆記還沒有版本，讀事件（同檔最後一段）。
  */
 export async function listNoteVersions(
   workspaceId: string,
@@ -186,24 +185,82 @@ export async function listNoteVersions(
   opts: { raw: boolean },
 ): Promise<Array<Record<string, unknown>> | null> {
   if (!(await canReadNode(actor, nodeId))) return null;
+  const stored = await hasVersionList(workspaceId, nodeId);
+  if (stored) keepVersionStatisticsCurrent();
   if (opts.raw) {
-    const raw = await q<Omit<RawVersion, "actor_name"> & { imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
-      `SELECT e.id, (e.payload->>'title') AS title, b.content AS markdown,
-              e.created_at AS changed_at, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, ${versionActorTypeSql("e")} AS actor_type
-         FROM domain_events e
-         JOIN blobs b ON b.hash = e.payload->>'body_hash'
-    LEFT JOIN actors a ON a.id::text = e.actor_id
-        WHERE e.target_id = $1 AND e.workspace_id = $2
-          AND ${bodyEventSql("e")}
-        ORDER BY e.created_at DESC, e.id DESC LIMIT ${VERSION_LIMIT}`,
-      [nodeId, workspaceId],
-    );
-    return raw.rows.map(({ imported, import_name, row_name, row_type, ...r }) => {
-      const author = versionAuthor({ imported, import_name, row_name, row_type });
-      return { ...r, actor_name: shownAuthorName(author.rowType, author.name), actor_kind: shownAuthorKind(author.rowType, actorKindOf(r.actor_type)) };
+    if (!stored) {
+      return (await listEventSaves(workspaceId, nodeId, VERSION_LIMIT)).map(({ author_row_type, ...r }) => ({ ...r, actor_kind: shownAuthorKind(author_row_type, actorKindOf(r.actor_type)) }));
+    }
+    return (await listBodyVersions(workspaceId, nodeId, VERSION_LIMIT)).map((r) => {
+      const { actor_type, author_row_type: kindRow } = authorColumns(r.author_kind);
+      const author_row_type = r.row_type ?? kindRow;
+      const out = { id: r.id, title: r.title, markdown: r.markdown, changed_at: r.changed_at, actor_type, actor_name: shownAuthorName(author_row_type, r.author_name), actor_kind: shownAuthorKind(author_row_type, actorKindOf(actor_type)) };
+      return r.elsewhere ? { ...out, on_another_device: true } : out;
     });
   }
 
+  const listed: VersionRow[] = stored
+    ? (await listBodySessions(workspaceId, nodeId, VERSION_LIMIT + 1)).map((r) => {
+      const { actor_type, author_row_type: kindRow } = authorColumns(r.author_kind);
+      const author_row_type = r.row_type ?? kindRow;
+      return { id: r.id, title: r.title, markdown: r.markdown, changed_at: r.changed_at, actor_name: shownAuthorName(author_row_type, r.author_name), actor_type,
+        author_row_type, saves: r.saves, is_restore: r.is_restore, is_baseline: r.is_baseline, restored_from: r.restored_from, elsewhere: r.elsewhere };
+    })
+    : await listEventSessions(workspaceId, nodeId, VERSION_LIMIT + 1);
+  // The query reads one row beyond the list only to describe the list's last
+  // row; that row is never merged away (absorbSameText keeps the oldest), and a
+  // merge above it only makes the list shorter.
+  const merged = absorbSameText(listed);
+  const hasOlder = listed.length > VERSION_LIMIT;
+  const rows = hasOlder ? merged.slice(0, -1) : merged;
+
+  // 發布快照序號 = 這個工作區的快照依建立時間排的第幾個（最舊 = #1）
+  const snaps = await q<{ n: number; at: Date }>(
+    `SELECT n::int AS n, at FROM (
+       SELECT row_number() OVER (ORDER BY created_at, id) AS n, created_at AS at,
+              payload->'nodes' @> jsonb_build_array(jsonb_build_object('id', $2::text)) AS has_note
+         FROM publish_snapshots WHERE workspace_id = $1
+     ) s WHERE has_note ORDER BY n DESC LIMIT 50`,
+    [workspaceId, nodeId],
+  );
+  return describeVersions(rows, hasOlder ? merged[merged.length - 1]!.markdown : null, snaps.rows);
+}
+
+/* ------------------------------------------------------------------ */
+/* 標籤說明與系統筆記：還沒有版本，仍讀事件紀錄                          */
+/* （業主 2026-11-22：它們的歷史清單照今天的樣子，補上版本的那一批再改。） */
+/* 這一段是改讀版本表之前的查詢，原樣；那一批來時刪掉。                    */
+/* ------------------------------------------------------------------ */
+
+type RawEventSave = {
+  id: string;
+  title: string | null;
+  markdown: string;
+  changed_at: Date;
+  actor_type: string;
+};
+
+/** The note's newest `limit` saves as events, unmerged (`?raw=1`). */
+async function listEventSaves(workspaceId: string, nodeId: string, limit: number) {
+  const raw = await q<RawEventSave & { imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
+    `SELECT e.id, (e.payload->>'title') AS title, b.content AS markdown,
+            e.created_at AS changed_at, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, ${versionActorTypeSql("e")} AS actor_type
+       FROM domain_events e
+       JOIN blobs b ON b.hash = e.payload->>'body_hash'
+  LEFT JOIN actors a ON a.id::text = e.actor_id
+      WHERE e.target_id = $1 AND e.workspace_id = $2
+        AND ${bodyEventSql("e")}
+        ORDER BY e.created_at DESC, e.id DESC LIMIT ${sqlInt(limit)}`,
+    [nodeId, workspaceId],
+  );
+  return raw.rows.map(({ imported, import_name, row_name, row_type, ...r }) => {
+    const author = versionAuthor({ imported, import_name, row_name, row_type });
+    return { ...r, actor_name: shownAuthorName(author.rowType, author.name), author_row_type: author.rowType };
+  });
+}
+
+/** The note's saves merged into sessions, newest first, `limit` rows (see noteVersions.ts). `restored_from` is the time of the row holding the version put back. */
+async function listEventSessions(workspaceId: string, nodeId: string, limit: number): Promise<VersionRow[]> {
   const result = await q<Omit<VersionRow, "restored_at" | "actor_name" | "author_row_type"> & { restored_at: Date | null; imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
     `WITH saves AS (
        SELECT e.id, e.actor_id, ${versionActorTypeSql("e")} AS actor_type, e.created_at,
@@ -277,29 +334,13 @@ export async function listNoteVersions(
        JOIN blobs b ON b.hash = c.body_hash
   LEFT JOIN actors a ON a.id::text = c.actor_id
       ORDER BY c.created_at DESC, c.id DESC
-      LIMIT ${VERSION_LIMIT + 1}`,
+      LIMIT ${sqlInt(limit)}`,
     [nodeId, workspaceId],
   );
-  // The query reads one row beyond the list only to describe the list's last
-  // row; that row is never merged away (absorbSameText keeps the oldest), and a
-  // merge above it only makes the list shorter.
   // A session's write is sent as the kind 'session' with no name (services/authorName.ts; describeVersions sets the kind).
-  const listed: VersionRow[] = result.rows.map(({ imported, import_name, row_name, row_type, ...row }) => {
+  return result.rows.map(({ imported, import_name, row_name, row_type, restored_at, ...row }) => {
     const author = versionAuthor({ imported, import_name, row_name, row_type });
-    return { ...row, actor_name: shownAuthorName(author.rowType, author.name), author_row_type: author.rowType };
+    return { ...row, actor_name: shownAuthorName(author.rowType, author.name), author_row_type: author.rowType, restored_from: restored_at ? new Date(restored_at).toISOString() : null, elsewhere: false };
   });
-  const merged = absorbSameText(listed);
-  const hasOlder = listed.length > VERSION_LIMIT;
-  const rows = hasOlder ? merged.slice(0, -1) : merged;
-
-  // 發布快照序號 = 這個工作區的快照依建立時間排的第幾個（最舊 = #1）
-  const snaps = await q<{ n: number; at: Date }>(
-    `SELECT n::int AS n, at FROM (
-       SELECT row_number() OVER (ORDER BY created_at, id) AS n, created_at AS at,
-              payload->'nodes' @> jsonb_build_array(jsonb_build_object('id', $2::text)) AS has_note
-         FROM publish_snapshots WHERE workspace_id = $1
-     ) s WHERE has_note ORDER BY n DESC LIMIT 50`,
-    [workspaceId, nodeId],
-  );
-  return describeVersions(rows, hasOlder ? merged[merged.length - 1]!.markdown : null, snaps.rows);
 }
+

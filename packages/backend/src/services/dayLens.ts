@@ -7,7 +7,7 @@
 //   created  nodes whose content_nodes.created_at falls on the date — the
 //            column is the substrate's authoritative birth time (NODE_CREATED
 //            events only exist for the event-sourced era).
-//   edited   nodes with a save (History's definition, services/history saveOnDaySql) on the date,
+//   edited   nodes with a save (History's definition: a note's versions on that day, services/history saveOnDaySql) on the date,
 //            excluding anything already in `created` and the day node itself —
 //            attribute/tag churn is deliberately NOT "edited" (it would turn
 //            every dispatcher cascade into lens noise).
@@ -34,7 +34,7 @@
 
 import { pool } from "../db.js";
 import { sqlDayStart } from "../localDay.js";
-import { saveOnDaySql } from "./history/index.js";
+import { keepVersionStatisticsCurrent, saveOnDaySql } from "./history/index.js";
 import { readableScopeSql } from "./readPolicy.js";
 import { TASK_COLUMNS_SQL, TASK_JOIN_SQL, taskBucketCaseSql, TASK_HOST_JOIN_SQL, TASK_HOST_LIVE_WHERE } from "./tasksStore.js";
 import type { ActorCtx } from "../types.js";
@@ -98,14 +98,14 @@ export async function dayLens(actor: ActorCtx | null, workspaceId: string, date:
 
   // Edited = saves on the date, deduped against `created` by the
   // same created_at window (a node born and rewritten on the day is "created").
+  keepVersionStatisticsCurrent();
   const editedParams: unknown[] = [workspaceId, date];
   const edited = await pool.query<LensNodeRow>(
     `SELECT n.id, n.title, MAX(e.created_at) AS at
-       FROM domain_events e
+       FROM ${saveOnDaySql("$1", "$2::date")} e
        JOIN content_nodes n ON n.id::text = e.target_id AND n.workspace_id = e.workspace_id
       WHERE e.workspace_id = $1
         AND e.target_type = 'node'
-        AND ${saveOnDaySql("e", "$2::date")}
         AND NOT (${ON_DATE("n.created_at")})
         AND ${LENS_NODE_FILTER}
         AND ${NOT_THE_DAY_NODE}
@@ -119,12 +119,11 @@ export async function dayLens(actor: ActorCtx | null, workspaceId: string, date:
   // the same saves as `edited` (a move or a rename is not one).
   const editEventParams: unknown[] = [workspaceId, date];
   const editEvents = await pool.query<EditEventRow>(
-    `SELECT n.id, n.title, e.created_at AS at, COALESCE(e.actor_id::text, e.actor_type) AS actor_id
-       FROM domain_events e
+    `SELECT n.id, n.title, e.created_at AS at, e.actor_id
+       FROM ${saveOnDaySql("$1", "$2::date", { actors: true })} e
        JOIN content_nodes n ON n.id::text = e.target_id AND n.workspace_id = e.workspace_id
       WHERE e.workspace_id = $1
         AND e.target_type = 'node'
-        AND ${saveOnDaySql("e", "$2::date")}
         AND NOT (${ON_DATE("n.created_at")})
         AND ${LENS_NODE_FILTER}
         AND ${NOT_THE_DAY_NODE}

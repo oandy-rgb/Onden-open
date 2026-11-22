@@ -2839,6 +2839,8 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Release to go back to {when}": "放開就回到 {when}",
   "This is the version you are editing": "這就是現在的版本",
   "Went back to the version of {when}": "已回到 {when} 的版本",
+  "{who} · on another device": "{who}・在另一台裝置上",
+  "The earliest it was kept": "最早留下的樣子",
   "Undo restore": "復原",
   "Undone": "已復原",
   "Saved as a new note": "已另存為新筆記",

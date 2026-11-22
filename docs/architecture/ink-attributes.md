@@ -60,19 +60,20 @@
 ## 歷史
 
 兩份筆跡都進歷史，一份在「手寫改動」、一份在「白板筆跡改動」，不混在一起。`@onden/markdown` 的 `InkKind`（`handwriting`／`board`）與 `INK_KIND_ATTR`
-決定每種筆跡存在哪個屬性；後端 `services/history/bodyEvents.ts` 的 `inkEventSql(alias, kind)` 是「這個事件算哪一種筆跡儲存」的唯一定義，
-`inkChanges.ts`（計數、差異、版本列表、還原）、`activity.ts`（「這天編輯過的筆記」、活動圖）與 `/ink-versions` 都用它。
+決定每種筆跡存在哪個屬性；一則筆記的筆跡歷史（`inkChanges.ts`：計數、差異、版本列表、還原；`nodeReads.ts` 的 `/ink-versions`）讀版本表 `note_versions`（歷史複製第 2 批，
+migration 220；每種筆跡一個 `unit`＝它的屬性鍵，`INK_KIND_ATTR[kind]`），版本的身分是 `version_key`；`activity.ts`（「這天編輯過的筆記」、活動圖）仍讀事件，用
+`services/history/bodyEvents.ts` 的 `inkEventSql(alias, kind)`——「這個事件算哪一種筆跡儲存」的唯一定義。
 
 | 項目 | 做法 |
 | --- | --- |
 | 這天編輯過 | `editEventSql` ＝ 內文儲存 ∪ 任一種筆跡儲存；兩種筆跡一起算進同一個編輯（5 分鐘內同一人連續存） |
 | 當天卡片 | `DayNote.ink`（手寫）與 `DayNote.board_ink`（白板），各自的畫了／擦掉筆數與「看改了哪裡」 |
 | 一則筆記的歷史 | `GET /api/nodes/:id/ink-edits?kind=`、`/ink-change?kind=`、`/ink-versions?kind=`；沒帶 `kind` ＝ `handwriting`，不認得的值 400 |
-| 還原 | `POST /api/nodes/:id/ink-versions/:eventId/restore?kind=`：用目前的寫入權限對**該種筆跡自己的屬性**做一次新的 `setNodeAttribute`（整張取代、不合併），產生新的 ATTRIBUTE_SET，所以還原本身也進歷史、可以再回去。`eventId` 不屬於該 `kind`（例如白板的事件拿來還原手寫）→ 404，不碰另一個屬性 |
+| 還原 | `POST /api/nodes/:id/ink-versions/:id/restore?kind=`（`:id` 是版本的 key；這台事件的編號再收一個版本）：用目前的寫入權限對**該種筆跡自己的屬性**做一次新的 `setNodeAttribute`（整張取代、不合併），產生新的 ATTRIBUTE_SET，所以還原本身也進歷史、可以再回去。那個版本不屬於該 `kind`（例如白板的版本拿來還原手寫）→ 404，不碰另一個屬性 |
 | 差異預覽 | 兩種都用 `inkChangeView`＋`inkThumbnailSvg`；畫布是筆跡外框，所以白板（沒有頁寬邊界）不會被切在頁寬 |
 
 **172 搬過的白板**（`board_ink_moves.action = 'moved'`，且沒被 `restoreBoardInk.sql` 還原）：搬之前的儲存在事件紀錄裡的鍵仍是 `ink_data`
-（`domain_events` 不改寫）。`inkEventSql` 用 `board_ink_moves` 判斷：該筆記 `ink_data` 事件的 `created_at < moved_at` 屬於 `board`，之後的 `ink_data` 事件
+（`domain_events` 不改寫）。**版本表在 migration 220 鑄版本時就照這個判斷把 `unit` 寫死**（之後再復原 172 的搬移，舊版本不會跟著搬回手寫頁）；`inkEventSql`（仍讀事件的讀者）用 `board_ink_moves` 判斷：該筆記 `ink_data` 事件的 `created_at < moved_at` 屬於 `board`，之後的 `ink_data` 事件
 （筆記後來真的變成手寫頁）屬於 `handwriting`。還原搬移前的舊版本時寫進 `board_ink`。
 **模糊的**（`action = 'copied'`）：無法分辨，搬之前的舊儲存維持在手寫歷史，搬之後的白板儲存在白板歷史。
 179 決定為白板的筆記改成 `action = 'moved'`、`moved_at` 是決定的時間，所以它到決定前的儲存都算白板。

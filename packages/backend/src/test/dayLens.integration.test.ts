@@ -28,6 +28,7 @@ import { adminOnlySpace, putInSpace } from "./helpers/spaceFixtures.js";
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { seedQ } from "./helpers/seedQ.js";
+import { seedVersion } from "./helpers/versionFixtures.js";
 
 const DB = process.env.DATABASE_URL ?? "";
 const isTestDb = /onden_test(\?|$)/.test(DB) || /_test\b/.test(DB);
@@ -106,6 +107,11 @@ describe.skipIf(!isTestDb)("day lens (DB)", () => {
       // database holds earlier runs' edits on the same fixed day.
       [WS, actorType, eventType, nodeId, createdAt, JSON.stringify(payload), `dl-actor-${stamp}`],
     );
+    // a save is a version (History reads them): the author is the kind the event says
+    if (eventType.startsWith("NODE_") && "body_hash" in payload) {
+      const title = (await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [nodeId])).rows[0]!.title;
+      await seedVersion({ ws: WS, noteId: nodeId, title, markdown: `${title} at ${createdAt}`, at: createdAt, authorKind: actorType === "ai_agent" ? "ai" : "person", kind: eventType === "NODE_CREATED" ? "created" : "updated" });
+    }
   };
 
   beforeAll(async () => {

@@ -5,7 +5,7 @@
 import { dateIdAt } from "../localDate";
 import { summarizeChange, type ChangeSummary } from "@onden/markdown";
 
-export type HistoryMarker = "before_agent" | "restored" | `published:${number}`;
+export type HistoryMarker = "before_agent" | "restored" | "baseline" | `published:${number}`;
 /** "session": a temporary session of this server (the server sends no name for it; the screen words it). */
 export type AuthorKind = "human" | "agent" | "system" | "session";
 
@@ -21,8 +21,11 @@ export type NoteHistoryVersion = {
   saves?: number;
   summary?: ChangeSummary;
   markers?: string[];
+  /** The key of the list row whose version this one put back (the row's `id`). */
   restored_from?: string | null;
   actor_kind?: AuthorKind;
+  /** Made on another device than this one (the server sends it only when true). */
+  on_another_device?: boolean;
 };
 
 export type TimelinePoint = {
@@ -38,6 +41,8 @@ export type TimelinePoint = {
   changedAt: string | null;
   authorKind: AuthorKind;
   authorName: string | null;
+  /** Made on another device than this one. */
+  onAnotherDevice: boolean;
   summary: ChangeSummary;
   markers: HistoryMarker[];
   restoredFrom: string | null;
@@ -50,7 +55,7 @@ export function authorKindOf(v: Pick<NoteHistoryVersion, "actor_kind" | "actor_t
 }
 
 function knownMarkers(markers: string[] | undefined): HistoryMarker[] {
-  return (markers ?? []).filter((m): m is HistoryMarker => m === "before_agent" || m === "restored" || /^published:\d+$/.test(m));
+  return (markers ?? []).filter((m): m is HistoryMarker => m === "before_agent" || m === "restored" || m === "baseline" || /^published:\d+$/.test(m));
 }
 
 /** Oldest first; the last point is the note as it is now (the newest version
@@ -62,7 +67,7 @@ export function buildTimeline(versionsNewestFirst: NoteHistoryVersion[], current
     const previousBody = oldestFirst[i - 1]?.markdown ?? "";
     return {
       versionId: v.id, title: v.title, previousTitle: oldestFirst[i - 1]?.title ?? null, body: v.markdown, previousBody, changedAt: v.changed_at,
-      authorKind: authorKindOf(v), authorName: v.actor_name,
+      authorKind: authorKindOf(v), authorName: v.actor_name, onAnotherDevice: v.on_another_device === true,
       summary: v.summary ?? summarizeChange(previousBody, v.markdown),
       markers: knownMarkers(v.markers), restoredFrom: v.restored_from ?? null,
     };
@@ -73,7 +78,7 @@ export function buildTimeline(versionsNewestFirst: NoteHistoryVersion[], current
   if (last && last.markdown === currentMarkdown && last.title === currentTitle) return points;
   points.push({
     versionId: null, title: currentTitle, previousTitle: last?.title ?? null, body: currentMarkdown, previousBody: last?.markdown ?? "", changedAt: null,
-    authorKind: "human", authorName: null,
+    authorKind: "human", authorName: null, onAnotherDevice: false,
     summary: summarizeChange(last?.markdown ?? "", currentMarkdown), markers: [], restoredFrom: null,
   });
   return points;

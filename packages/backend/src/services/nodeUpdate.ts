@@ -19,7 +19,7 @@ import { canReadNode } from "./readPolicy.js";
 import { slugForTitle } from "./nodes.js";
 import { makeInversePatch, mergeBody, bodyConflictPayload, type BodyConflict } from "./eventLog/index.js";
 import { putBlob } from "./blobs.js";
-import { recordVersion, versionOfEvent } from "../spine/noteVersions.js";
+import { eventOfVersion, hasVersionList, loadBodyVersion, recordVersion } from "../spine/noteVersions.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { assertTagNameAvailable, assertTagNameShape } from "./tagHierarchy.js";
 import { writeTagIdentity } from "./tagIdentity.js";
@@ -151,7 +151,7 @@ export async function updateNode(
 
 /** Put a saved version's body (and, when `restoreTitle`, its title) back on the note: the same save as
  * an edit (current policy, slug, tag-name check, inverse history, derived
- * state), recorded as NODE_RESTORED { version_id, title, body_hash } so the
+ * state), recorded as NODE_RESTORED { version_id (the number of the event that recorded the version, when this node has one), title, body_hash } so the
  * restore is itself a version and can be undone (eventRestore treats it like
  * NODE_UPDATED). The version is looked up only after the note's write check:
  * a caller who may not edit the note learns nothing about its history.
@@ -163,7 +163,9 @@ export async function updateNode(
  * With false the note keeps its title and slug, and the restore event records
  * the title the note has, not the version's.
  *
- * restoreNodeVersion(ws, nodeId, versionEventId, { actor, restoreTitle? })
+ * restoreNodeVersion(ws, nodeId, versionKeyOrEventId, { actor, restoreTitle? })
+ *   A note's version is named by its key (the `id` of GET /api/nodes/:id/versions); the number of an event of this node still works for one
+ *   release (history-replication proposal §5, owner decision 8) and is looked up through note_version_events.
  */
 export async function restoreNodeVersion(
   workspaceId: string,
@@ -172,18 +174,28 @@ export async function restoreNodeVersion(
   { actor, restoreTitle = true }: { actor: ActorCtx; restoreTitle?: boolean },
 ): Promise<NodeSaveResult> {
   return saveNodeChange(workspaceId, id, { actor, dryRun: false }, async (current) => {
-    // A version is any body_hash-carrying event of this note (the history
-    // list in routes/nodes.ts derives versions the same way).
-    if (!/^\d{1,18}$/.test(versionId)) throw new NodeUpdateError("version not found", 404);
-    const version = (await q<{ title: string; markdown: string }>(
-      `SELECT (e.payload->>'title') AS title, b.content AS markdown
-         FROM domain_events e
-         JOIN blobs b ON b.hash = e.payload->>'body_hash'
-        WHERE e.id = $1::bigint AND e.target_id = $2 AND e.workspace_id = $3
-          AND e.payload ? 'body_hash'`,
-      [versionId, id, workspaceId],
-    )).rows[0];
+    // A version of a note or board is a row of its version list, named by its key (or, from an older client, by the number of an event of
+    // this node: note_version_events says which version it recorded). A tag's description has no version rows yet and still names an
+    // event (any body_hash-carrying event of the note), as before (services/history/noteVersions.ts, the last section).
+    const stored = await hasVersionList(workspaceId, id);
+    let version: { key: string; title: string | null; markdown: string } | null;
+    if (stored) version = await loadBodyVersion(workspaceId, id, versionId);
+    else {
+      if (!/^\d{1,18}$/.test(versionId)) throw new NodeUpdateError("version not found", 404);
+      const saved = (await q<{ title: string; markdown: string }>(
+        `SELECT (e.payload->>'title') AS title, b.content AS markdown
+           FROM domain_events e
+           JOIN blobs b ON b.hash = e.payload->>'body_hash'
+          WHERE e.id = $1::bigint AND e.target_id = $2 AND e.workspace_id = $3
+            AND e.payload ? 'body_hash'`,
+        [versionId, id, workspaceId],
+      )).rows[0];
+      version = saved ? { key: versionId, ...saved } : null;
+    }
     if (!version) throw new NodeUpdateError("version not found", 404);
+    // What the restore event names: the number of the event that recorded the version, when this node has one (a version made on another
+    // device has none; the new version's restored_from still names it).
+    const versionEvent = stored ? await eventOfVersion(id, "body", version.key) : versionId;
     return {
       // An unchanged title is not rewritten, so the slug stays put and the
       // inverse holds only the body (the pre-W35 restore's history shape).
@@ -191,9 +203,9 @@ export async function restoreNodeVersion(
       eventType: "NODE_RESTORED",
       // The title the note ends up with: the version's when it comes back, else the one it has. Stated here because the
       // save's own title is not the new one for a tag (its rename is written apart).
-      payload: { version_id: versionId, title: restoreTitle && version.title ? version.title : current.title },
+      payload: { ...(versionEvent ? { version_id: versionEvent } : {}), title: restoreTitle && version.title ? version.title : current.title },
       txMeta: { ui_context: "node.version.restore" },
-      restoredFrom: await versionOfEvent(versionId),
+      restoredFrom: stored ? version.key : null, // a tag's description has no versions yet
       cascadeLabel: "node.version.restore.cascade",
       backupPrefix: "NODE_RESTORED",
     };

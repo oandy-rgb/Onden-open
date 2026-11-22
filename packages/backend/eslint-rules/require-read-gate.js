@@ -97,6 +97,7 @@ const GATED = {
 // relative path → documented reason the FROM/JOIN content_nodes is NOT a served,
 // actor-facing read (so it's exempt from a read-policy primitive).
 const INTERNAL = {
+  "services/history/bodyEvents.ts": "saveOnDaySql joins content_nodes only to tell a tag's or system note's saves (events) from a note's (versions: spine/noteVersions.ts hasVersionList's rule); the day lens that uses it scopes the notes itself (readableScopeSql); serves nothing",
   "spine/noteVersions.ts": "write path: recordVersion reads the note's node kind (whether it has a version list) inside the write that changes it; serves nothing",
   "spine/stampedMerge/dbRows.ts": "write path of a change bundle (the one taking entry in spine/stampedImport.ts, under the event lock with the stamp triggers standing aside): reads the notes of the bundle's rows to give them their slug; serves nothing",
   "spine/snapshotTables.ts": "the SQL fragments of a stamped snapshot's table list; the reader's scope comes from services/readPolicy.ts snapshotScope (the export gates through it), and the one fragment named here, wholeWorkspace, is a check of a database that is the receiver's own",
@@ -219,10 +220,10 @@ const EVENT_READS = {
   "services/history/agentRuns.ts": /readableNotesSql/,         // agent events grouped into runs, then cut to notes under the read scope; only those notes' events are served
   "services/history/pointInTime.ts": /readableNotesSql/,       // a note's title/body at T: only for notes in the caller's read scope (candidate set in SQL)
   "services/history/rewind.ts": /readableNotesSql/,             // rewind events: cards and undo only for notes the caller can read
+  "services/history/storedVersions.ts": "a note's versions read from note_versions; the events it joins are this node's own map (which event recorded a version, whose actor wrote it, whether it won a body conflict) and are never served; every caller gates the note (canReadNode, readableNotesSql)",
   "services/history/bodyEvents.ts": "SQL fragments and the blob lookup for body-changing events; every caller (activity, agentRuns, pointInTime, rewind, noteVersions) scopes the notes itself; serves no event row",
   "services/history/agentRunUndo.ts": "undo/redo markers: the action of this run's latest undo per note id, looked up only for notes of a run already cut to the caller's read scope; no event row is served",
   "services/history/recentVersions.ts": /readableNotesSql/,    // /recent: events joined to content_nodes under the read scope before LIMIT
-  "services/history/inkChanges.ts": /canReadNode/,             // a note's handwriting edits and drawings: canReadNode before any event query; the day lists take notes activity.ts already cut to the read scope
   "services/history/noteVersions.ts": /canReadNode/,           // one note's versions: canReadNode before any event query (unreadable = null)
   "services/backupHistory.ts": "the backup of the caller's own readable notes: note ids come from vaultIndex (read scope pushed down in SQL), the versions are written to the caller's own archive; the size count is over the same ids and serves numbers",
   "spine/importedHistory.ts": "dedupe probe over the target note's own already-carried versions (tx_meta.history_import); serves nothing",

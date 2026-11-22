@@ -23,6 +23,7 @@
 // SAFETY: skips entirely unless DATABASE_URL points at a *_test database.
 
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { ALIGN_VERSION_TIMES_SQL } from "../helpers/alignVersionTimes.js";
 import { Hono } from "hono";
 import fc from "fast-check";
 
@@ -147,6 +148,7 @@ describe.skipIf(!isTestDatabase())("History numbers (property)", () => {
               await client.query("BEGIN");
               await client.query("SET LOCAL session_replication_role = replica");
               await client.query(`UPDATE domain_events SET created_at = $3 WHERE workspace_id = $1 AND id > $2`, [WS, since, new Date(time)]);
+              await client.query(ALIGN_VERSION_TIMES_SQL);
               await client.query("COMMIT");
             } finally { client.release(); }
           }

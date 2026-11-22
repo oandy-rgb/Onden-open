@@ -69,7 +69,9 @@ export type DayNoteChange = ChangeSummary & {
 export type DayInkChange = { added: number; erased: number; before_event: string | null; after_event: string };
 
 /** One edit of one of a note's drawings (its handwriting page or its whiteboard's pen layer): a run of saves by one actor. */
-export type InkEdit = DayInkChange & { id: string; changed_at: string; actor_name: string | null; actor_kind: "human" | "agent" | "system" | "session"; saves: number };
+export type InkEdit = DayInkChange & { id: string; changed_at: string; actor_name: string | null; actor_kind: "human" | "agent" | "system" | "session"; saves: number;
+  /** The edit's last save was made on another device than this one (sent only when true). */
+  on_another_device?: true };
 
 export type DayNote = {
   id: string;

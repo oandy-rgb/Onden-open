@@ -90,7 +90,7 @@ describe.skipIf(!isTestDb)("version sessions (coalesced history)", () => {
     expect(raw[0]!.markdown).toBe("v4-agent");
   });
 
-  it("a session row's id is a real event id — restore works and starts its own session", async () => {
+  it("a session row's id is the key of its last version — restore works and starts its own session", async () => {
     const versions = (await (await req(`/api/nodes/${nodeId}/versions`)).json()) as V[];
     const mine = versions[1]!; // v3
     const res = await req(`/api/nodes/${nodeId}/versions/${mine.id}/restore`, { method: "POST", json: {} });

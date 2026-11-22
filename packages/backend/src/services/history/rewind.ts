@@ -46,6 +46,8 @@ import { NodeTrashError, trashNode, trashSubtreeIds, undeleteNode } from "../nod
 import { NodeUpdateError, updateNode } from "../nodeUpdate.js";
 import { ScopeError } from "../../spine/toolScope.js";
 import { bodiesByHash, bodyEventSql } from "./bodyEvents.js";
+import { hasVersionList, versionOfEvent } from "../../spine/noteVersions.js";
+import { bodyBefore } from "./storedVersions.js";
 import { REWIND_MAX_NOTES, isUuid } from "@onden/markdown";
 import { readableNotesSql } from "./readableNotes.js";
 import { ancestorIds } from "../nodeTree.js";
@@ -320,13 +322,19 @@ export async function undoRewind(
 
 /** Put back the text a rewind step replaced. true = lines went to the inbox, "missing" = nothing to go back to. */
 async function revertStep(workspaceId: string, actor: ActorCtx, id: string, step: RewindEvent, rewindId: string): Promise<boolean | "missing"> {
-  const before = (await q<{ body_hash: string; title: string | null }>(
-    `SELECT e.payload->>'body_hash' AS body_hash, e.payload->>'title' AS title FROM domain_events e
-      WHERE e.workspace_id = $1 AND e.target_id = $2 AND e.id < $3::bigint
-        AND ${bodyEventSql("e")}
-      ORDER BY e.id DESC LIMIT 1`,
-    [workspaceId, id, step.id],
-  )).rows[0];
+  // The text before the rewind's step: the version before the one that step wrote (a system note has no versions and reads its saves).
+  const stored = await hasVersionList(workspaceId, id);
+  const stepVersion = stored ? await versionOfEvent(step.id, { noteId: id, unit: "body" }) : null;
+  const prior = stored
+    ? (stepVersion ? await bodyBefore(workspaceId, id, stepVersion) : null)
+    : (await q<{ hash: string; title: string | null }>(
+      `SELECT e.payload->>'body_hash' AS hash, e.payload->>'title' AS title FROM domain_events e
+        WHERE e.workspace_id = $1 AND e.target_id = $2 AND e.id < $3::bigint
+          AND ${bodyEventSql("e")}
+        ORDER BY e.id DESC LIMIT 1`,
+      [workspaceId, id, step.id],
+    )).rows[0];
+  const before = prior ? { body_hash: prior.hash, title: prior.title } : undefined;
   if (!before || !step.body_hash) return "missing";
   const bodies = await bodiesByHash([before.body_hash, step.body_hash]);
   const previous = bodies.get(before.body_hash);

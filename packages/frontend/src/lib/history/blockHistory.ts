@@ -19,6 +19,8 @@ export type BlockSourceVersion = {
   actor_type: string | null;
   /** The kind the server worked out ('session' for a temporary session, which has no name); an older server sends none. */
   actor_kind?: AuthorKind;
+  /** Made on another device than this one (the server sends it only when true). */
+  on_another_device?: boolean;
 };
 
 /** The server returns at most this many raw rows; with fewer, the oldest is the first save. */
@@ -33,6 +35,8 @@ export type BlockVersion = {
   actorName: string | null;
   /** Who wrote it, as the history screens word it (historyAuthor). */
   actorKind: AuthorKind;
+  /** Made on another device than this one. */
+  onAnotherDevice: boolean;
   /** The paragraph did not exist before this version. */
   created: boolean;
   /** The wording the note has now: the last entry, always. */
@@ -104,6 +108,7 @@ export function blockHistory(versions: readonly BlockSourceVersion[], target: Bl
       changedAt: author?.changed_at ?? null,
       actorName: author?.actor_name ?? null,
       actorKind: author ? authorKindOf(author) : "human",
+      onAnotherDevice: author?.on_another_device === true,
       created: false,
       current: i === 0,
     });

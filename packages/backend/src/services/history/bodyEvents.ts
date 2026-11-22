@@ -31,11 +31,34 @@ export function bodyEventSql(alias: string): string {
 export const versionActorTypeSql = (alias: string): string =>
   `coalesce(${alias}.tx_meta->'history_import'->>'actor_type', ${alias}.actor_type)`;
 
-/** `alias` is a save made on the workspace-clock day `dateExpr` (a SQL `date` expression, localDay.ts
- *  sqlDayStart): "a note was edited on a day" means this and nothing else — the day lens (services/dayLens.ts)
- *  asks it directly; History's per-day lists cut the same days from their collapsed edits' last save. */
-export function saveOnDaySql(alias: string, dateExpr: string): string {
-  return `${bodyEventSql(alias)} AND ${alias}.created_at >= ${sqlDayStart(dateExpr)} AND ${alias}.created_at < ${sqlDayStart(`${dateExpr} + 1`)}`;
+/** The versions that are a note's own states: its text (or drawing) at a moment, in the order it had them. A `set_aside` version is content the note
+ *  NEVER had (the text a conflict put aside, spine/noteVersions.ts): it takes no part in "the text at T", "the latest version", "the one before" or
+ *  a day's edits. Every reader of note_versions that answers a question about the note's states ANDs this (`v` = note_versions). */
+export { STATE_VERSION_SQL } from "../../spine/noteVersions.js";
+/** The states that are an edit someone made on a day: not a set-aside, and not a baseline (the content a note held when its history began is not that day's edit). */
+export const EDIT_VERSION_SQL = "v.kind NOT IN ('set_aside', 'baseline')";
+
+/** Who wrote the version, to tell two authors of the same kind apart on this node (`v` = note_versions): the person's id, else the actor of the event
+ *  this node recorded the version with (two AI agents, or a session and another, are two authors here, as the event log always said). A version made
+ *  on another device has no event here and is told apart by its kind only: the ids of an AI or a session never leave their node (§2.3). */
+export const AUTHOR_REF_SQL = `coalesce(v.author_id::text, (SELECT e.actor_id FROM note_version_events ve JOIN domain_events e ON e.id = ve.event_id
+    WHERE ve.note_id = v.note_id AND ve.unit = v.unit AND ve.version_key = v.version_key ORDER BY ve.event_id LIMIT 1))`;
+/** The saves made on the workspace-clock day `dateExpr` (a SQL `date` expression), as a derived table to put in FROM:
+ *  "a note was edited on a day" means this and nothing else — the day lens (services/dayLens.ts) asks it directly; History's per-day lists cut
+ *  the same days from their collapsed edits' last save. Columns: workspace_id, target_id (text), target_type, created_at, actor_id (text: the
+ *  person's id, else the actor the event recorded the save with, else the kind of author). A note's or board's saves are its versions (note_versions); a tag's description and a system note
+ *  have none yet and contribute their save events. `workspace` is a SQL expression (`$1`). `actors`: also say who (the lookup per row is not free). */
+export function saveOnDaySql(workspace: string, dateExpr: string, { actors = false }: { actors?: boolean } = {}): string {
+  const onDay = (at: string) => `${at} >= ${sqlDayStart(dateExpr)} AND ${at} < ${sqlDayStart(`${dateExpr} + 1`)}`;
+  return `(SELECT v.workspace_id, v.note_id::text AS target_id, 'node'::text AS target_type, v.at::timestamptz AS created_at,
+                  ${actors ? `coalesce(${AUTHOR_REF_SQL}, v.author_kind)` : "NULL::text"} AS actor_id
+             FROM note_versions v JOIN blobs vb ON vb.hash = v.content_hash
+            WHERE v.workspace_id = ${workspace} AND v.unit = 'body' AND ${EDIT_VERSION_SQL} AND ${onDay("v.at::timestamptz")}
+           UNION ALL
+           SELECT e.workspace_id, e.target_id, e.target_type, e.created_at, ${actors ? "coalesce(e.actor_id::text, e.actor_type)" : "NULL::text"}
+             FROM domain_events e JOIN content_nodes en ON en.id::text = e.target_id AND en.workspace_id = e.workspace_id
+            WHERE e.workspace_id = ${workspace} AND ${bodyEventSql("e")} AND NOT note_version_in_scope(en.node_type, en.source_type)
+              AND ${onDay("e.created_at")})`;
 }
 
 /** `alias` is a save made before migration 172 moved this note's whiteboard pen layer from `ink_data` to
@@ -88,10 +111,6 @@ function lastBeforeSql(pick: string, kind: (alias: string) => string, workspace:
 /** The body_hash of `node`'s last save before a cut (NULL: it has none). */
 export const lastBodyHashBeforeSql = (workspace: string, node: string, cut: { time: string } | { eventId: string }): string =>
   lastBeforeSql("p.payload->>'body_hash'", bodyEventSql, workspace, node, cut);
-
-/** The id (text) of `node`'s last save of one drawing before a cut (NULL: it has none). */
-export const lastInkEventBeforeSql = (kind: InkKind, workspace: string, node: string, cut: { time: string } | { eventId: string }): string =>
-  lastBeforeSql("p.id::text", (alias) => inkEventSql(alias, kind), workspace, node, cut);
 
 /** Body text by hash; a hash whose blob is gone is missing from the map. */
 export async function bodiesByHash(hashes: string[]): Promise<Map<string, string>> {

@@ -37,6 +37,7 @@
   否則保存 value／value_ref、value_type、is_inheritable、source。來源會影響覆蓋優先序，
   不能在復原時改成 ui 或用預設值補上；row id 和 updated_at 不屬於恢復的語意。
   `eventLog/attributeSnapshot.ts` 統一編碼，ink 在正反向都用 blob 參照。
+  復原一個 ink 事件也鑄一個新的版本（`restored`，復原到沒有畫則 `removed`，2026-11-22），契約見 [restore-writes.md](../architecture/restore-writes.md)。
 - **標籤只逆轉該事件實際改動的欄位。** 比較整份 schema CAS 與逐欄 CAS 後選擇後者；
   fields／views／behaviour／policy 各是完整值，不在 policy 內做深層合併。
   同一事件實際改過的 name／slug 成組比對，color 獨立且允許 null；未改的 slug 不加額外守衛。

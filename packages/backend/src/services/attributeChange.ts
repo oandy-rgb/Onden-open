@@ -248,8 +248,7 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
 }
 
 /** The version of a drawing's write: the value_ref its snapshot stored, or a removal. A write that leaves the drawing as it was mints nothing
- *  (compared as text, never hashed again). Not called yet by the undo of a drawing's event (eventRestore/attributes.ts): see the PR of batch 1;
- *  that undo is counted in sync_clock.version_misses until it is. */
+ *  (compared as text, never hashed again). The undo of a drawing's event mints its own (eventRestore/attributes.ts). */
 async function recordDrawingVersion(
   workspaceId: string, nodeId: string, key: VersionUnit, previous: AttributeState | null, row: AttributeState | null, snapshot: AttributeSnapshot | null,
 ): Promise<void> {

@@ -3,7 +3,7 @@
 // database of its own (helpers/stampedWorld.ts openNode), a PGlite or a database of the real server.
 // realPostgresAlso: the commit-time checks read content putBlob committed on its own connection, and the save path spans two connections on a server
 import { afterEach, describe, expect, it } from "vitest";
-import { migrate, q } from "../db.js";
+import { migrate, pool, q } from "../db.js";
 import { listMigrations, useMigrationSource } from "../dbMigrations.js";
 import { mutate } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
@@ -115,6 +115,112 @@ describe.skipIf(!isTestDb)("a local write mints its version (round 2, points 1 a
         apply: async () => { await q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'ink_data', 'x', 'ui')`, [world.ws, id]); },
       }));
       expect(await misses()).toBe(1);
+    });
+  }, 120_000);
+});
+
+describe.skipIf(!isTestDb)("undoing a drawing's event is a version of the drawing (docs/architecture/restore-writes.md)", () => {
+  const small = JSON.stringify({ v: 1, strokes: [{ id: "a", points: [[0, 0], [1, 1]] }] });
+  const other = JSON.stringify({ v: 1, strokes: [{ id: "b", points: [[2, 2], [3, 3]] }] });
+  const inkEvents = async (id: string) => (await q<{ id: string }>(
+    `SELECT id::text FROM domain_events WHERE target_id = $1 AND payload->>'key' = 'ink_data' ORDER BY domain_events.id`, [id])).rows.map((r) => r.id);
+  const screen = async (id: string) => (await q<{ value: string }>(`SELECT value FROM node_attributes WHERE node_id = $1 AND key = 'ink_data'`, [id])).rows[0]?.value ?? null;
+  const applied = (r: object) => { expect("code" in r ? r : null).toBeNull(); };
+
+  it("the undo mints `restored` naming the drawing now on screen and the version the undone event had replaced; redo and undo are two versions with distinct keys", async () => {
+    const n = await node("ink-undo");
+    const world = await buildSourceWorld(n);
+    await onNode(n, async () => {
+      const id = (await world.call("POST", "/api/nodes", { title: "Sketch", markdown: "", space_id: world.spaceA })).id as string;
+      for (const value of [small, other]) await world.call("PUT", `/api/nodes/${id}/attributes/ink_data`, { value });
+      const [, second] = await inkEvents(id);
+      applied(await restoreEvent(second!, { actor: world.owner, workspaceId: world.ws }));
+      expect(await screen(id)).toBe(small);
+      let versions = await versionsOf(id, "ink_data");
+      expect(versions.map((v) => v.kind)).toEqual(["created", "updated", "restored"]);
+      expect(versions[2]!.content_hash).toBe(await sha(small));
+      expect(versions[2]!.restored_from).toBe(versions[0]!.version_key);
+      expect(await misses()).toBe(0);
+      expect(await countVersionMisses(world.ws)).toBe(0);
+      // undo the undo, in its own transaction: the other drawing is back, naming the version the undo replaced
+      const undoEvent = (await inkEvents(id)).at(-1)!;
+      applied(await restoreEvent(undoEvent, { actor: world.owner, workspaceId: world.ws }));
+      expect(await screen(id)).toBe(other);
+      versions = await versionsOf(id, "ink_data");
+      expect(versions.map((v) => v.kind)).toEqual(["created", "updated", "restored", "restored"]);
+      expect(versions[3]!.content_hash).toBe(await sha(other));
+      expect(versions[3]!.restored_from).toBe(versions[1]!.version_key);
+      expect(new Set(versions.map((v) => v.version_key)).size).toBe(4);
+      expect(await countVersionMisses(world.ws)).toBe(0);
+    });
+  }, 120_000);
+
+  it("undoing to no drawing mints `removed` with no content; undoing that removal puts the drawing back, naming its first version", async () => {
+    const n = await node("ink-undo-removed");
+    const world = await buildSourceWorld(n);
+    await onNode(n, async () => {
+      const id = (await world.call("POST", "/api/nodes", { title: "Sketch", markdown: "", space_id: world.spaceA })).id as string;
+      await world.call("PUT", `/api/nodes/${id}/attributes/ink_data`, { value: small });
+      applied(await restoreEvent((await inkEvents(id))[0]!, { actor: world.owner, workspaceId: world.ws }));
+      expect(await screen(id)).toBeNull();
+      let versions = await versionsOf(id, "ink_data");
+      expect(versions.map((v) => [v.kind, v.content_hash, v.restored_from])).toEqual([["created", await sha(small), null], ["removed", null, null]]);
+      applied(await restoreEvent((await inkEvents(id)).at(-1)!, { actor: world.owner, workspaceId: world.ws }));
+      expect(await screen(id)).toBe(small);
+      versions = await versionsOf(id, "ink_data");
+      expect(versions[2]).toMatchObject({ kind: "restored", content_hash: await sha(small), restored_from: versions[0]!.version_key });
+      expect(await countVersionMisses(world.ws)).toBe(0);
+    });
+  }, 120_000);
+
+  it("an older drawing event that holds its values inline (no value_ref) is still undone: the undo writes the drawing by hash, mints its version, and misses stay 0", async () => {
+    const n = await node("ink-undo-inline");
+    const world = await buildSourceWorld(n);
+    await onNode(n, async () => {
+      const id = (await world.call("POST", "/api/nodes", { title: "Sketch", markdown: "", space_id: world.spaceA })).id as string;
+      for (const value of [small, other]) await world.call("PUT", `/api/nodes/${id}/attributes/ink_data`, { value });
+      const [first, second] = await inkEvents(id);
+      // Rewrite both events as the writers before the content-addressed history made them: the value inline in the payload and in
+      // prev_field_values, no value_ref. (domain_events is append-only; a fixture bends that on its own connection only.)
+      // the inline copy says what the row says (type, inheritance, source), as an event of that time did
+      const row = (await q<{ value_type: string; is_inheritable: boolean; source: string }>(
+        `SELECT value_type, is_inheritable, source FROM node_attributes WHERE node_id = $1 AND key = 'ink_data'`, [id])).rows[0]!;
+      const inline = (value: string) => JSON.stringify({ value, ...row });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL session_replication_role = replica");
+        await client.query(`UPDATE domain_events SET payload = jsonb_build_object('key', 'ink_data') || $2::jsonb WHERE id = $1::bigint`, [first, inline(small)]);
+        await client.query(`UPDATE domain_events SET payload = jsonb_build_object('key', 'ink_data') || $2::jsonb,
+                                   tx_meta = jsonb_set(tx_meta, '{prev_field_values}', $3::jsonb) WHERE id = $1::bigint`, [second, inline(other), inline(small)]);
+        await client.query("COMMIT");
+      } finally { client.release(); }
+      expect(await count(`SELECT count(*)::text AS n FROM domain_events WHERE id = ANY($1::bigint[]) AND payload ? 'value' AND NOT payload ? 'value_ref'`, [[first, second]])).toBe(2);
+      applied(await restoreEvent(second!, { actor: world.owner, workspaceId: world.ws }));
+      expect(await screen(id)).toBe(small);
+      const versions = await versionsOf(id, "ink_data");
+      expect(versions.at(-1)).toMatchObject({ kind: "restored", content_hash: await sha(small) });
+      expect(await countVersionMisses(world.ws)).toBe(0);
+    });
+  }, 120_000);
+
+  it("an undo and its redo in one transaction mint two versions of the same sequence number, ordinal 1 and 2", async () => {
+    const n = await node("ink-undo-one-tx");
+    const world = await buildSourceWorld(n);
+    await onNode(n, async () => {
+      const id = (await world.call("POST", "/api/nodes", { title: "Sketch", markdown: "", space_id: world.spaceA })).id as string;
+      for (const value of [small, other]) await world.call("PUT", `/api/nodes/${id}/attributes/ink_data`, { value });
+      const second = (await inkEvents(id))[1]!;
+      await withEventTransaction(world.ws, async () => {
+        applied(await restoreEvent(second, { actor: world.owner, workspaceId: world.ws }));
+        const undoEvent = (await q<{ id: string }>(`SELECT max(id)::text AS id FROM domain_events WHERE target_id = $1 AND payload->>'key' = 'ink_data'`, [id])).rows[0]!.id;
+        applied(await restoreEvent(undoEvent, { actor: world.owner, workspaceId: world.ws }));
+      });
+      expect(await screen(id)).toBe(other);
+      const [, , first, again] = await versionsOf(id, "ink_data");
+      expect(first!.version_key).not.toBe(again!.version_key);
+      expect([first!.ordinal, again!.ordinal]).toEqual([1, 2]);
+      expect(await countVersionMisses(world.ws)).toBe(0);
     });
   }, 120_000);
 });

@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   queries: [] as Array<{ sql: string; params: unknown[] }>,
   blobs: new Map<string, string>(),
   inTransaction: true,
+  versions: [] as Array<{ sql: string; params: unknown[] }>, // the versions an undo of a drawing minted
   field: null as Record<string, unknown> | null, // the schema field governing "score", if any
 }));
 
@@ -51,6 +52,16 @@ vi.mock("../db.js", () => {
       state.current = { value: params[3] as string, value_type: params[4] as string, is_inheritable: params[5] as boolean, source: params[6] as string };
       return { rows: [], rowCount: 1 };
     }
+    // The undo of a drawing mints its version (spine/noteVersions.ts recordVersion; the real rules run in noteVersions.integration.test.ts).
+    if (sql.includes("note_version_before_event")) return { rows: [{ key: null }], rowCount: 1 };
+    if (sql.includes("note_version_in_scope")) return { rows: [{ scoped: true }], rowCount: 1 };
+    if (sql.includes("note_version_exempt")) return { rows: [{ why: null }], rowCount: 1 };
+    if (sql.includes("sync_stamp_current")) {
+      state.versions.push({ sql, params });
+      // minting selects the key and the stamp; the two inserts return nothing
+      return sql.includes("INSERT INTO") ? { rows: [], rowCount: 1 } : { rows: [{ key: "s:o:1:1", origin: "o", seq: "1" }], rowCount: 1 };
+    }
+    if (sql.includes("INSERT INTO note_version_positions")) return { rows: [], rowCount: 1 };
     if (sql.includes("pg_advisory_xact_lock") || sql.includes("lock_timeout")) return { rows: [], rowCount: 1 };
     throw new Error(`unexpected query: ${sql}`);
   };
@@ -101,6 +112,7 @@ beforeEach(() => {
   state.current = { ...after };
   state.events.length = 0;
   state.queries.length = 0;
+  state.versions.length = 0;
   state.blobs.clear();
   state.inTransaction = true;
 });
@@ -272,6 +284,8 @@ describe("ink history and preview", () => {
     expect(state.events[0].payload.value_ref).toEqual(expect.any(String));
     expect(await restoreAttribute(state.events[0])).toMatchObject({ restored: true });
     expect(state.current).toEqual(latest);
+    // each undo of a drawing minted its version (a key select and the row insert)
+    expect(state.versions).toHaveLength(4);
   });
 
   it("does not turn a missing historical blob into an empty value or deletion", async () => {

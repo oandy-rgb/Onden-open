@@ -7,8 +7,13 @@ name: CI
 #   Pass the PR description as `-f pr_body=...` when it carries 「不需要更新說明」.
 # - The full suites below run only when asked (2026-10-29: 「我說要跑才跑」): Actions → CI → Run workflow,
 #   or `gh workflow run ci.yml --ref <branch>`. Private-repo minutes ran out in October when every push
-#   ran everything, so the heavy jobs stay manual and the local suites stay the merge gate.
+#   ran everything, so on the private repo the heavy jobs stay manual.
+# - On the public mirror (oandy-rgb/Onden-open, free minutes) every push runs the guard lane and the full suites by
+#   itself (owner, 2026-11-20): each branch scripts/public-mirror/public-push.sh sends, and main after every merge.
+#   The PR description it cannot see arrives as lines of the pushed commit (public-push.sh carries 「不需要更新說明」,
+#   「文件不需要更新：」 and `ratchet-override:`). Only the full-stack E2E stays manual (slow).
 on:
+  push:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -23,9 +28,10 @@ on:
         default: ""
 
 # Cancel superseded runs on the same ref to save CI minutes.
+# Main is not cancelled: every merge synced to the public main keeps its own result.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   guard:
@@ -33,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     # On a PR, and on a manual run: the public mirror has no PRs, its branches are pushed by scripts/public-mirror/public-push.sh
     # and started by hand, so without the second half this job never ran there and the lane stayed on a laptop.
-    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     timeout-minutes: 20
     steps:
       # The ratchet and change-note checks compare against origin/main, so they need history.
@@ -53,13 +59,13 @@ jobs:
       # so an internal-only PR passes without writing a note users would then be shown.
       - name: Guard lane
         env:
-          PR_BODY: ${{ github.event.pull_request.body || inputs.pr_body }}
+          PR_BODY: ${{ github.event.pull_request.body || inputs.pr_body || github.event.head_commit.message }}
         run: bash scripts/guard-lane.sh
 
   pairing-relay:
     name: Pairing and relay — typecheck · unit
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     steps:
       - uses: actions/checkout@v4
 
@@ -82,7 +88,7 @@ jobs:
   backend:
     name: Backend — lint · typecheck · unit
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     steps:
       - uses: actions/checkout@v4
 
@@ -129,7 +135,7 @@ jobs:
   backend-postgres:
     name: Backend — real Postgres (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     strategy:
       fail-fast: false
       matrix:
@@ -220,7 +226,7 @@ jobs:
   frontend:
     name: Frontend — lint · typecheck · unit · build
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     steps:
       - uses: actions/checkout@v4
 
@@ -269,7 +275,7 @@ jobs:
     # Pinned: this job installs Chromium with the pinned Playwright (e2e/package.json), which refuses an Ubuntu newer than it
     # knows ("Playwright does not support chromium on ubuntu26.04-x64", first hosted run 2026-11-17). Move it with Playwright.
     runs-on: ubuntu-24.04
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -345,7 +351,7 @@ jobs:
   e2e-critical:
     name: Critical-path E2E (PR subset)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

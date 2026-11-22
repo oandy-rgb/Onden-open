@@ -780,6 +780,11 @@ describe("save path under random timing", () => {
   regression("rename during typing, body evicted and loaded again, autosave settles later (seeds 444, 555)", [
     C.type({ kind: "append", k: 0 }), C.remoteRename("a"), C.evict(), C.sync(), C.tick(),
   ], /#4/);
+  // Nightly 2026-11-19, PROPS_SEED=111421 PROPS_RUNS=2000 (found at run 133). Invariant #4: the editor shows what the server holds.
+  // Fixed on main by one of #1794, #1888, #1900 (not bisected): found on e90947b, passes after merging 8bd52cd; kept as an ordinary regression.
+  regression("nightly 2026-11-19: other device edits, typing, body evicted, rename, pagehide: editor misses the merged line (seed 111421)", [
+    C.remoteBody("a", { kind: "append", k: 0 }), C.type({ kind: "append", k: 0 }), C.evict(), C.rename(), C.pagehide(),
+  ], /#4/);
   // Same family (seeds 111, 222, 333): a page-exit save never looked at the row again.
   regression("rename during typing, pagehide flush, the page stays (seeds 111, 222)", [
     C.remoteRename("a"), C.type({ kind: "append", k: 0 }), C.sync(), C.pagehide(), C.deliver(),

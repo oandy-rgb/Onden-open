@@ -56,12 +56,19 @@ fi
 # an addition the owner agreed to.
 # origin/main is fetched first: against a stale one the range reaches back into commits that are already on main, and an override
 # copied from one of those would open the ratchet for this branch without anyone having agreed to it here.
+# The public CI also starts by itself on every push (ci.yml, 2026-11-20), where there is no PR description to pass: the
+# guard lane's two written exemptions — 「不需要更新說明」 (scripts/changesLib.mjs) and 「文件不需要更新：<原因>」
+# (scripts/check-md-links.mjs) — ride along the same way, from the private commits and from the branch's PR description.
 # The lines become public text, and the look above reads only the diff, so they get the same key/token look; keep reasons free of
 # server details and of counts of the owner's data.
 git fetch -q origin main
-overrides=$(git log --format=%B "$(git merge-base origin/main "$sha")..$sha" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]' | sort -u || true)
+pr_body=$(gh pr view "$ref" --repo oandy-rgb/Onden --json body -q .body 2>/dev/null || true)
+said=$( { git log --format=%B "$(git merge-base origin/main "$sha")..$sha"; printf '%s\n' "$pr_body"; } | sed 's/\r$//')
+# changes.mjs accepts the phrase anywhere in the text, so it travels as one line of its own instead of the sentence around it.
+overrides=$( { printf '%s\n' "$said" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]|^[[:space:]]*文件不需要更新：[[:space:]]*[^[:space:]]';
+  printf '%s\n' "$said" | grep -q '不需要更新說明' && echo '不需要更新說明'; } | sort -u || true)
 if printf '%s' "$overrides" | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[bp]-[0-9A-Za-z-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' && [ "${PUBLIC_PUSH_ALLOW:-}" != "1" ]; then
-  echo "NOT pushed. A ratchet-override line that would become public looks like it holds a key or an address:"; printf '%s\n' "$overrides"
+  echo "NOT pushed. A carried line (ratchet-override / exemption) that would become public looks like it holds a key or an address:"; printf '%s\n' "$overrides"
   git reset -q --hard; git checkout -q "$back"; exit 1
 fi
 c=$(git commit-tree "$tree" -p "$parent" -m "同步：私人庫 ${sha:0:9}（$ref）

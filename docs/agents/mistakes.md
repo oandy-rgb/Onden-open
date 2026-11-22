@@ -65,6 +65,14 @@
 
 ## 紀錄
 
+### 2026-11-18　固定種子看不到的兩個紅燈：測試模型停在舊版、已知缺陷沒從隨機序列排除（測試的模型錯了）
+- **發生了什麼**：每輪新種子的第一次完整 CI（公開庫 run 44290112339，真 Postgres）有兩處紅。（1）`viewQuery.property.integration.test.ts`：測試自己的「本機評估」模型仍把內建欄位 `sort_order` 當整數比（`eq 0` 列出排第一的筆記），但自遷移 200 起該欄是排序鍵 `order_key`，`filter/sqlClauses.ts:96` 寫明「依位元組當文字比較」；產品照規則，錯的是模型。最小反例：存好的檢視 `sort_order eq 0`（伺服器列出 0 筆、模型列出 2 筆）與 `onden-query` 的 `where: { sort_order: { op: "gte" } }`（沒有值：伺服器列出全部，模型 0 筆）。（2）`inboxRss.property.integration.test.ts`：同一篇共用訂閱的文章，B 存、A 存、B 再存，B 手上有兩篇活的筆記。這是 2026-11-05 夜間已找到、以 `it.fails` 記下的缺陷（`rss_staging.saved_node_id` 一篇文章只有一個指標，A 的存檔覆蓋了 B 的），隨機序列卻沒把這個情境排除，所以每個新種子都有機會撞上。沒有人的文字遺失：兩個人的筆記都還在。
+- **證據**：`PROPS_SEED=455072009 PROPS_RUNS=25` 與 `PROPS_SEED=104376501 PROPS_RUNS=40`，本機 Postgres 16（無 pgroonga）重現；修後同種子綠。固定案例在兩個測試檔尾端（`regressions: sort_order filter is the order key`、`F1 literal`、`F1: after B, A, B…`）。
+- **發現者**：測試（CI）。
+- **為什麼沒擋到**：預設種子固定（20261023），那組數字從沒抽到 `sort_order` 篩選與「B、A、B」順序；遷移 200 改了欄位意義，但測試模型沒有跟著對照 `sqlClauses.ts` 的規則。已知缺陷用 `it.fails` 記了，但沒像 `viewQuery` 那樣把情境從隨機產生器排除，所以隨機測試等於帶著一個已知紅燈。
+- **類別**：測試的模型錯了。
+- **機制**：〔第 1 層〕每輪新種子（#1881）把這類落差在 CI 當場抓到；固定案例以字面反例留存，與當輪種子無關；RSS 的已知情境用 `leaveOutKnown` 只在隨機屬性內排除（`PROPS_RSS_KNOWN=include` 放回），具名案例照常寫出該情境。
+- **還沒擋住的**：RSS 缺陷（業主 2026-11-18 已決定「存下來的 RSS 文章每人一篇」，修正在 `fix/rss-save-one-note-per-person`；一篇文章的保存指標是每篇一個、不是每人一個）**沒有修**：要改成每人一個指標需要新表與回填（資料遷移），或是第二套「查自己的筆記」判斷與指標並存；兩者都要擁有者決定。修好時 `F1` 兩個 `it.fails` 會變紅，改成 `it`、刪掉 `leaveOutKnown`。
 ### 2026-11-22　`patchWrites` 隨機順序下紅：假的 `storeRejectedWrite` 回 `undefined`，被拒的那一列變成空洞（測試的模型錯了）
 - **發生了什麼**：`patchWrites.test.ts` 用 `vi.resetAllMocks()` 重設假的 localDb，`storeRejectedWrite` 因此回 `undefined`（真的一定回一列）。「other refusals」那則 403 把這個 `undefined` 收進 `writeRecovery` 的模組狀態；#1911 起每次送出都會讀那份清單（`withoutRefusedBase`），讀到空洞就拋錯，那次存檔被當成送不出去。測試順序是隨機的，所以只有 403 先跑時才紅（seed 1、3 重現，seed 2、4、5、6 不紅）。我在合併批次 2c 看到它紅一次、2d 又綠，就當偶發合了，結果 main 之後的三個公開 run 都紅。
 - **證據**：公開 run 44998095520、45006870035、45008330098、45008470647 的 Frontend 工作；本機 `--sequence.seed=3` 紅三則、拿掉 #1911 的 `lib/data/` 改動後同一個 seed 全綠。
@@ -779,6 +787,21 @@
 - **類別**：測試量不到它要擋的東西。
 - **機制**：〔第 2 層〕成本測試的節點握有 `BULK` 則筆記，斷言以它為比例（每則帶來的筆記不超過 `BULK / 10` 列）。「每個成本斷言先跑一次它要擋的變異」：尚無機制，靠每輪的變異清單。
 
+### 2026-11-20　按住手勢與「吞掉下一次點擊」的計時器比擁有它的畫面活得久；上一次只補了 `window` 不見的那一半（隨機紅）
+- **發生了什麼**：公開 CI 在全部測試檔通過後，因未處理錯誤 `host.removeEventListener is not a function`（`touchHold.ts` 的 `swallowNextClick`，來自 `timelineBlockDrag.test.tsx`）失敗。#1852 只處理了「計時器響時 `window` 已不存在」，沒有問「為什麼計時器還在」；這次 `window` 還在，但已是被拆掉的 jsdom 視窗。
+- **證據**：public CI run 44675180019；`swallowNextClick.test.ts` 新增的兩則在修前紅（`cancelClickSwallows` 不存在；按住中的列被移除後仍會舉起）。
+- **發現者**：隨機紅的 CI。
+- **為什麼沒擋到**：測試啟動了計時器卻沒收；產品端的按住也只看 pointerup，不看按住的元素是否還在頁面上。
+- **類別**：隨機紅是發現，不是重試的理由；測試啟動的東西沒有清。
+- **機制**：〔第 1 層〕`swallowNextClick` 的結束不再呼叫 window 的任何方法（監聽綁 AbortSignal，計時到就 abort），`swallowNextClick.test.ts` 把 `removeEventListener` 拿掉後推進計時器釘住；`beginTouchHold` 在舉起前檢查元素是否還在頁面，不在就收掉監聽並 `onAbort`。測試啟動的 `window` 計時器是否都有清理：尚無機制。
+### 2026-11-19　釘住的 `it.fails` 寫著「還沒修」，但問題在連線存檔那條路早就修好（手寫 ink-1）
+- **發生了什麼**：`inkDeepReview.test.ts` 的 ink-1 以 `it.fails` 釘住，說三個入口把「上一次送出的」當存檔 base。實際上入口早已經過同一個 `InkSaver`（base＝伺服器最後收下的），只是那條 `it.fails` 測的是純函式 `mergeInk`，它在 base 是錯的時候本來就該判成刪除，所以永遠不會「變成通過」，釘子拿不掉，註解也一直停在舊說法。
+- **證據**：`frontend/src/test/inkBaseAfterRejection.test.tsx`（走真的存檔管線，在 main 上本來就綠）；`inkBaseIsWhatServerTook.test.tsx` 三個入口各四個情境在未改動的 main 上綠，把 `InkSaver` 改回舊行為則 10 個紅。
+- **發現者**：審查（排程工作重新核對）。
+- **為什麼沒擋到**：`it.fails` 只在「開始通過」時才會叫人拿掉；釘在一個不可能通過的層級上，它就永遠安靜。
+- **類別**：測試釘在錯的層級，之後沒人再核對。
+- **機制**：〔第 1 層〕ink-1 改成兩則一般測試（純函式的合併規則；錯 base 的後果）並指向真路徑測試。「新增 `it.fails` 時寫明要在哪一層才會變綠」：尚無機制。
+- **還沒擋住的**：同樣寫法的其他 `it.fails` 沒有逐一核對。ink-1 只有「連線存檔」結案；「離線佇列送出時第一筆被拒絕、第二筆被收下」同形且仍會丟筆畫（審查 2026-11-20 提出、已重現，釘成 `it.fails`，修法待另案）。
 ### 2026-11-20　門只查一種列的帳，其他四種有帳卻沒人看；兩個 writer 連帳都沒記（#1900 的範圍）
 - **發生了什麼**：#1900（#1794 改過）讓伺服器副本不蓋掉還在等回應的欄位，但 `serverCopyOver` 只查筆記列那本帳（`node:<id>`）。屬性、任務、標籤套用、首頁各自用同一個 `optimisticFields` 記了帳，同步回答、整份 bootstrap、`?nodes=none` 更新卻照樣用伺服器的舊副本蓋掉：連改兩次屬性、勾任務、加標籤，畫面回到第一次的值，下一次同步也不一定修正。`tagWriter.setHidden`、`graphPositionWriter` 連帳都沒記。
 - **證據**：`gateHoldsEveryUnansweredEdit.test.ts` 在修改前 21 則全紅（六種列 × 會帶到它的每一扇門，加上隨機順序的屬性測試，seed 1991221382 縮成「問同步 → 改 → 回答到 → 再問」）；修改後全綠，拿掉「保留後再讀一次」的變異讓「不會永遠擋住」的 6 則紅。

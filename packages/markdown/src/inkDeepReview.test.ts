@@ -3,7 +3,7 @@ import fc from "fast-check";
 import { decodeInk, isInkReadOnly, encodeInk, mergeInk, type InkDocument, type InkStroke } from "./ink.js";
 
 // 深入審查 2026-11-11（手寫）：docs/archive/deep-review-ink-2026-11-11.md。
-// 這裡的 `it.fails` 釘住已重現的問題：測試名稱寫「應該怎樣」，修好後把 `.fails` 拿掉。
+// `it.fails` 釘住已重現而尚未修的問題：測試名稱寫「應該怎樣」，修好後把 `.fails` 拿掉。
 
 const stroke = (id: string, n = 3): InkStroke => ({
   id, points: Array.from({ length: n }, (_, i) => [i * 10, i * 5] as [number, number]), color: "#000", size: 2, toolId: "pen",
@@ -16,16 +16,23 @@ const idsOf = (raw: string): string[] => {
   return d.kind === "page" ? d.doc.strokes.map((s) => s.id) : [];
 };
 
-describe("ink-1：一次沒存成的存檔不能讓後面的存檔把它的筆畫刪掉", () => {
-  // 畫面把「上一次送出的內容」當成下一次存檔的 base（OverviewEditor saveSurfaceInk、CanvasInkLayer persist），
-  // 不管上一次有沒有被伺服器收下。V1 被拒絕（或被丟棄）後，V2 帶著 base=V1 送出：
-  // 伺服器看到「base 有、現存沒有、V2 沒動」，判成「另一邊刪掉了」，V1 獨有的筆畫就不見了。
-  it.fails("V1 沒被收下時，V2（base=V1）存下來的內容仍含 V1 的筆畫", () => {
-    const B0 = page([stroke("a")]);
-    const V1 = page([stroke("a"), stroke("b")]);
-    const V2 = page([stroke("a"), stroke("b"), stroke("c")]);
-    // 伺服器仍是 B0（V1 被拒）；V2 的 base 是 V1。
+describe("ink-1：合併只信 base —— 所以存檔的 base 必須是伺服器收下的內容", () => {
+  // 2026-11-19 連線存檔已結案（離線佇列那條路還沒：見下面「離線佇列送出時第一筆被拒絕」的 it.fails）：畫面不再把「上一次送出的」當 base。三個入口（手寫頁、「手寫」分頁、白板筆層）都經 `InkSaver`
+  // （frontend lib/ink/surfaceSaver.ts），base 是伺服器最後收下的內容，被拒絕的存檔之後會用伺服器現值重存；
+  // 走真的存檔路徑的測試在 frontend/src/test/inkBaseIsWhatServerTook.test.tsx。
+  // 這裡釘的是不能在 mergeInk 修的那一半：伺服器無法知道 V1 曾經存在，所以 base=V1 而現存沒有 V1 時，
+  // 「base 有、現存沒有、V2 沒動」就是對方刪掉的 —— 規則正確，錯的是呼叫端給了一個伺服器沒有的 base。
+  const B0 = page([stroke("a")]);
+  const V1 = page([stroke("a"), stroke("b")]);
+  const V2 = page([stroke("a"), stroke("b"), stroke("c")]);
+
+  it("V1 沒被收下時，base 是 V1 的 V2 會讓 V1 獨有的筆畫被判成已刪除（錯誤的 base 的後果，不是 mergeInk 的錯）", () => {
     const result = mergeInk(enc(V1), enc(B0), enc(V2));
+    expect(idsOf(result.value).sort()).toEqual(["a", "c"]);
+  });
+
+  it("V1 沒被收下時，base 是伺服器有的 B0 的 V2 存下來的內容含 V1 的筆畫", () => {
+    const result = mergeInk(enc(B0), enc(B0), enc(V2));
     expect(idsOf(result.value).sort()).toEqual(["a", "b", "c"]);
   });
 });

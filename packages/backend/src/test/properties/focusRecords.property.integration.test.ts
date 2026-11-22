@@ -277,6 +277,17 @@ describe.skipIf(!isTestDatabase())("focus records under random use (property)", 
       ], { checkEscape: true });
     });
 
+    // Nightly 2026-11-19, PROPS_SEED=111421 PROPS_RUNS=2000 (found at run 897). Invariant F4: the person can always reach "no record running".
+    // Likely cause: an edit may move the start up to a minute past now (F3 slack), and then every end the app sends (no time, or now) is refused focus_ends_before_it_starts.
+    it.fails("nightly 2026-11-19: a start edited one minute into the future cannot be ended (seed 111421)", async () => {
+      await play([
+        { k: "start", dev: "A", offline: false, delay: 0, replay: false, withTask: false },
+        { k: "edit", field: "start", shift: MIN },
+        { k: "reload", dev: "A" },
+        { k: "escape" },
+      ], { checkEscape: true });
+    });
+
     it("named case: an offline start delivered 3 days late is accepted, then cannot be ended", async () => {
       await play([
         { k: "start", dev: "A", offline: true, delay: 3 * DAY, replay: false, withTask: false },

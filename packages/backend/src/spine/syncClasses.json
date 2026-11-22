@@ -177,6 +177,10 @@
   "class": "node-local",
   "note": "each node's own history and undo ledger"
  },
+ "note_version_events": {
+  "class": "node-local",
+  "note": "this node's map from its own events to the versions they record (event ids are this node's); never copied"
+ },
  "idempotency_keys": {
   "class": "node-local",
   "note": "retry de-duplication"
@@ -264,6 +268,14 @@
  "ink_manifests": {
   "class": "separate",
   "note": "which chunks make up each earlier version of a big drawing, keyed by (note, content hash), cannot conflict; as ink_chunks"
+ },
+ "note_versions": {
+  "class": "separate",
+  "note": "a note's versions (body: title and text; a drawing: its attribute key), one row each, keyed by (note, unit, version_key); minted once by the node that wrote it and never changed, so copies cannot conflict (the set is the union). Batch 1 of docs/architecture/proposals/history-replication-2026-11-22.md (migration 220): minted and kept here, not carried yet; the snapshot's history layer and the bundles' versions are batches 3 and 4"
+ },
+ "note_version_positions": {
+  "class": "separate",
+  "note": "where each version travels from: (origin, seq), a set that only grows (proposal §2.5); this node's record, not part of a version's identity. Carried with note_versions from batch 4"
  },
  "media_uploads": {
   "class": "separate",

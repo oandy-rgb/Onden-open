@@ -1495,7 +1495,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（56）
+## 後端（57）
 
 ### 要寫日誌
 
@@ -1943,6 +1943,18 @@ declare const actor: ActorCtx, workspaceId: string, newNoteId: string, backupNot
 await importNoteHistory(actor, workspaceId, newNoteId, () => reader.openHistory(backupNoteId)!);`
 - 取代：自己 INSERT domain_events 補歷史，或在備份格式裡另外塞一份版本表
 - 為什麼：版本歷史就是帶 body_hash 的事件加上 blobs；用原本的時間寫進去只有 spine/importedHistory.ts 一處：驗擁有者、驗雜湊、依來源事件 id 去重、標成不可作為事件復原。格式 3 才有這一段，舊伺服器看到會整份拒絕。設計：docs/architecture/backup-move.md。
+
+### 寫入會改到筆記的標題、內文或手寫（新的寫入路徑），要讓它成為一個版本
+
+- 入口：`backend/src/spine/noteVersions.ts`（`recordVersion`）　項目 `note-version-mint`
+- 寫法：`import { recordVersion } from "./spine/noteVersions.js";
+import { putBlob } from "./services/blobs.js";
+declare const workspaceId: string, noteId: string, markdown: string, title: string;
+// 先存內容（自己的連線），再在同一個 mutate 的 apply 裡鑄版本：
+const contentHash = await putBlob(markdown);
+await recordVersion({ workspaceId, noteId, unit: "body", contentHash, kind: "updated", title });`
+- 取代：在新的寫入路徑直接 UPDATE content_nodes 的 markdown／title 而不鑄版本（提交時會數進 sync_clock.version_misses）
+- 為什麼：版本的身分每台相同、只由寫的那台鑄一次（migration 220，歷史同步提案第 1 批）；提交時資料庫拒收內容不在的版本、數出沒鑄的寫入。清理（maintenance/prune.ts、永久刪除）保留任何版本指到的內容。
 
 ### 要替系統自己建立的東西（收件匣／技能標籤、網站設定的標籤與筆記、系統空間、下一次的重複任務、RSS 文章）取 id
 

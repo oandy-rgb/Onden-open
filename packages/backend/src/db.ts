@@ -400,6 +400,9 @@ export async function migrate({ seedNativeActor = nativeBypassEnabled() }: { see
         await client.query("BEGIN");
         // A backfill over a large table may outlast a request's timeout; LOCAL ends with this transaction.
         await client.query("SET LOCAL statement_timeout = 0");
+        // A migration's data step runs on every node by itself: it mints no version (each node would mint a different `s:`), and the
+        // commit check of migration 220 stands aside (docs/agents/migrations.md rule 8; history-replication proposal §4.4 point 11).
+        await client.query("SELECT set_config('onden.no_versions', 'on', true)");
         await client.query(sql);
         await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [version]);
         await client.query("COMMIT");
@@ -471,6 +474,9 @@ export async function restoreShellPerson(client: ShellClient, person: ShellPerso
 /** The empty workspace a database starts with, made idempotently (nothing is made twice). Every boot runs it, and so does a
  *  cancelled snapshot import, so the person can sign in and try again without a restart. */
 export async function ensureShellWorkspace(client: ShellClient, seedNativeActor: boolean): Promise<void> {
+    // The shell is no one's write: it has no versions (an untouched shell holds no version and no blob, or a join is refused:
+    // spine/snapshotTables.json rows_of_blobs). Its callers run it in their own transaction, which this setting ends with.
+    await client.query("SELECT set_config('onden.no_versions', 'on', true)");
     // Ensure the single-tenant default workspace exists, every boot, idempotently.
     // A fresh deploy initdb-loads the schema-only snapshot (schema.sql), which marks
     // ALL migrations applied but carries no seed rows — so migration 001's workspace

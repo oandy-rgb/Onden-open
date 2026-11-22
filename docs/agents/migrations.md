@@ -1,6 +1,6 @@
 # Migration 與升級規則（給代理）
 
-> 狀態：現行（最後確認 2026-11-16）
+> 狀態：現行（最後確認 2026-11-22）
 > 涵蓋：scripts/upgrade.sh, scripts/rollback.sh, scripts/upgrade-drill.sh
 
 何時讀：新增或修改 `packages/backend/db/migrations/*.sql`、改 `db.ts` 的 `migrate()`、改升級／回退腳本，或準備發布版本前。
@@ -35,6 +35,10 @@ migration 只能往前：回退映像不會讓資料庫退回去。所以安全�
    拒絕時只印白話說明並以結束碼 1 退出，不改任何資料。
 6. 每個 migration 在自己的交易內完成，不用 `CONCURRENTLY` 或自帶 `BEGIN/COMMIT`（`migrate()` 已包交易）。
 7. 長時間回填要能在 `statement_timeout = 0` 下跑完（`migrate()` 已設），並在 PR 說明大資料表的預估時間。
+8. **資料 migration 不鑄筆記版本**（2026-11-22，歷史同步提案 PR #1935 §4.4 第 11 點）：
+   改寫標題或內文的資料步驟在每台各自執行，要是鑄了版本，每台會各有一個不同的 `s:`。`migrate()` 在每個 migration 的交易內設定
+   `onden.no_versions`，migration 220 的提交時檢查跳過它；migration 的 SQL 也不呼叫任何鑄版本的程式（`spine/noteVersions.ts` 的 `recordVersion`）。
+   要讓改寫成為版本（例如真的要讓使用者在版本清單看到），那就不是資料 migration，而是一個由某一台執行的寫入，先問擁有者。
 
 ## 發布前要做
 

@@ -9,6 +9,7 @@
 // tagged content_nodes with node_attributes — the same substrate the table
 // view already renders — with NO parallel write path.
 
+import { recordVersion } from "../../../spine/noteVersions.js";
 import { q } from "../../../db.js";
 import { mutate } from "../../../spine/mutate.js";
 import { putBlob } from "../../../services/blobs.js";
@@ -433,6 +434,9 @@ async function attachBody(
          WHERE workspace_id = $1 AND id = $2`,
         [workspaceId, nodeId, body],
       );
+      if (body !== (current.markdown ?? "")) {
+        await recordVersion({ workspaceId, noteId: nodeId, unit: "body", contentHash: bodyHash, kind: "updated", title: current.title });
+      }
       await applyBodyChange({
         workspaceId, nodeId, title: current.title, markdown: body, previousMarkdown: current.markdown ?? "", eventId, actor,
         cascadeLabel: "import.notion.cascade", backupPrefix: "IMPORT (notion)",

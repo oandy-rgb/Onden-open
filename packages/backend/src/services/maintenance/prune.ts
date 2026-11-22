@@ -15,7 +15,8 @@
 // attribute values), tx_meta.prev_field_values.value_ref (the inverse value
 // the restore path reads back), or a drawing conflict's
 // incoming_/overridden_value_ref (services/purgedContent.ts lists the same
-// five). An unreferenced blob younger than BLOB_GC_GRACE stays: putBlob runs
+// five) — or some version names it (note_versions.content_hash, migration 220;
+// purgedContent.ts asks the same). An unreferenced blob younger than BLOB_GC_GRACE stays: putBlob runs
 // before the event that references it commits (services/blobs.ts).
 
 import { BLOB_GC_GRACE } from "../blobs.js";
@@ -41,6 +42,8 @@ export async function collectOrphanBlobs(): Promise<{ blobs: number; blobBytesFr
              OR e.payload->>'incoming_value_ref' = b.hash
              OR e.payload->>'overridden_value_ref' = b.hash
        )
+         -- and no version names it: a version received from another node, or a root's baseline, has no event here (migration 220)
+         AND NOT EXISTS (SELECT 1 FROM note_versions v WHERE v.content_hash = b.hash)
        RETURNING size_bytes
      )
      SELECT COUNT(*)::text AS count, COALESCE(SUM(size_bytes), 0)::text AS freed_bytes
@@ -56,6 +59,7 @@ export async function collectOrphanBlobs(): Promise<{ blobs: number; blobBytesFr
                            OR e.tx_meta->'prev_field_values'->>'value_ref' = m.hash
                            OR e.payload->>'incoming_value_ref' = m.hash
                            OR e.payload->>'overridden_value_ref' = m.hash)
+       AND NOT EXISTS (SELECT 1 FROM note_versions v WHERE v.note_id = m.node_id AND v.content_hash = m.hash)
     RETURNING m.node_id`.execute(db);
   let inkChunks = 0, inkChunkBytesFreed = 0;
   for (const nodeId of new Set(goneManifests.rows.map((r) => r.node_id))) {

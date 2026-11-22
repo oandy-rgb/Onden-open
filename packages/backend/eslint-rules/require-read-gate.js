@@ -97,6 +97,7 @@ const GATED = {
 // relative path → documented reason the FROM/JOIN content_nodes is NOT a served,
 // actor-facing read (so it's exempt from a read-policy primitive).
 const INTERNAL = {
+  "spine/noteVersions.ts": "write path: recordVersion reads the note's node kind (whether it has a version list) inside the write that changes it; serves nothing",
   "spine/stampedMerge/dbRows.ts": "write path of a change bundle (the one taking entry in spine/stampedImport.ts, under the event lock with the stamp triggers standing aside): reads the notes of the bundle's rows to give them their slug; serves nothing",
   "spine/snapshotTables.ts": "the SQL fragments of a stamped snapshot's table list; the reader's scope comes from services/readPolicy.ts snapshotScope (the export gates through it), and the one fragment named here, wholeWorkspace, is a check of a database that is the receiver's own",
   "services/selectionDelivery.ts": "write path: reads the note body only to splice the model's text into the proposal it hands to createSuggestions, which asserts write_node for the agent under the event lock; nothing is served",

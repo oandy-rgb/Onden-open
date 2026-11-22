@@ -707,6 +707,41 @@ export interface NotePointers {
   workspace_id: string;
 }
 
+export interface NoteVersionEvents {
+  event_id: Int8;
+  note_id: string;
+  unit: string;
+  version_key: string;
+}
+
+export interface NoteVersionPositions {
+  note_id: string;
+  origin: string;
+  seq: Int8;
+  unit: string;
+  version_key: string;
+  workspace_id: string;
+}
+
+export interface NoteVersions {
+  at: string;
+  author_id: string | null;
+  author_kind: string;
+  clock_counter: number | null;
+  clock_wall: Int8 | null;
+  content_hash: string | null;
+  kind: string;
+  note_id: string;
+  ordinal: number;
+  recorded_by: string;
+  restored_from: string | null;
+  source_name: string | null;
+  title: string | null;
+  unit: string;
+  version_key: string;
+  workspace_id: string;
+}
+
 export interface Outbox {
   attempts: Generated<number>;
   created_at: Generated<Timestamp>;
@@ -907,6 +942,7 @@ export interface SyncClock {
   hlc_wall: Generated<Int8>;
   merge_batches: Generated<Int8>;
   next_seq: Generated<Int8>;
+  version_misses: Generated<Int8>;
   workspace_id: string;
   writes_without_mutate: Generated<Int8>;
 }
@@ -1057,6 +1093,9 @@ export interface DB {
   note_block_refs: NoteBlockRefs;
   note_link_index: NoteLinkIndex;
   note_pointers: NotePointers;
+  note_version_events: NoteVersionEvents;
+  note_version_positions: NoteVersionPositions;
+  note_versions: NoteVersions;
   outbox: Outbox;
   owner_member_migration_log: OwnerMemberMigrationLog;
   participant_sessions: ParticipantSessions;

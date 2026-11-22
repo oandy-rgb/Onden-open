@@ -25,6 +25,7 @@ import { isWorkspaceOwner } from "./authority.js";
 import { AuthorityError } from "./authorityError.js";
 import { StatusError } from "../statusError.js";
 import { acquireEventAppendLock } from "./eventLock.js";
+import { legacyVersionKey } from "./noteVersions.js";
 
 export type ImportedVersion = {
   /** The version's event id in the source (text of a bigint): the idempotency key and what a restore points at. */
@@ -61,6 +62,8 @@ export class ImportedHistoryError extends StatusError {
 }
 
 const EVENT_TYPE = { created: "NODE_CREATED", updated: "NODE_UPDATED", restored: "NODE_RESTORED" } as const;
+/** A carried version's author by kind only: its id is another server's and means nothing here (its name rides in source_name). */
+const AUTHOR_KIND = { user: "person", ai_agent: "ai", system: "automatic" } as const;
 
 /** Append `versions` (oldest first) to `noteId`'s history. Must run in the restore's transaction. Returns how many were
  *  written and how many were already there. */
@@ -90,16 +93,28 @@ export async function appendImportedVersions(
   }
 
   const have = new Map<string, string>(); // source event id → event id here
+  const versionOf = new Map<string, string>(); // event id here → its version_key
   let previousHash: string | null = null; // base_hash chain: carries across batches, so seed it from what is already carried
-  for (const row of (await sql<{ source: string; id: string; hash: string | null }>`
-    SELECT tx_meta->'history_import'->>'event' AS source, id::text AS id, body_hash AS hash FROM domain_events
-     WHERE workspace_id = ${workspaceId} AND target_id = ${noteId} AND tx_meta ? 'history_import'
-     ORDER BY created_at, id`.execute(db)).rows) { have.set(row.source, row.id); previousHash = row.hash; }
+  let previousTitle: string | null = null;
+  for (const row of (await sql<{ source: string; id: string; hash: string | null; title: string | null; version_key: string | null }>`
+    SELECT e.tx_meta->'history_import'->>'event' AS source, e.id::text AS id, e.body_hash AS hash, e.payload->>'title' AS title, ve.version_key
+      FROM domain_events e LEFT JOIN note_version_events ve ON ve.event_id = e.id
+     WHERE e.workspace_id = ${workspaceId} AND e.target_id = ${noteId} AND e.tx_meta ? 'history_import'
+     ORDER BY e.created_at, e.id`.execute(db)).rows) {
+    have.set(row.source, row.id); previousHash = row.hash; previousTitle = row.title;
+    if (row.version_key) versionOf.set(row.id, row.version_key);
+  }
+  let lastVersion = [...versionOf.values()].at(-1) ?? null;
 
+  // The versions these saves are, written once for the batch after the loop (one statement per table, not three per save: a note with
+  // thousands of saves is carried in one restore transaction, services/backupRestore.ts).
+  const minted: { version_key: string; kind: ImportedVersion["kind"]; title: string | null; content_hash: string; at: string; ordinal: number;
+                  author_kind: string; restored_from: string | null; source_name: string | null }[] = [];
+  const mapped: { event_id: string; version_key: string }[] = [];
   let appended = 0;
   for (const v of versions) {
     const done = have.get(v.sourceEventId);
-    if (done) { previousHash = v.bodyHash; continue; }
+    if (done) { previousHash = v.bodyHash; previousTitle = v.title; lastVersion = versionOf.get(done) ?? lastVersion; continue; }
     await db.insertInto("blobs").values({ hash: v.bodyHash, content: v.markdown, size_bytes: Buffer.byteLength(v.markdown, "utf8") }).onConflict((c) => c.column("hash").doNothing()).execute();
     const restoredHere = v.restoredFrom ? have.get(v.restoredFrom) : undefined;
     const payload: Record<string, unknown> = { title: v.title, body_hash: v.bodyHash, ...(restoredHere ? { version_id: restoredHere } : {}) };
@@ -110,8 +125,33 @@ export async function appendImportedVersions(
       body_hash: v.bodyHash, base_hash: previousHash, created_at: sql<Date>`${v.at}::timestamptz`, device_id: null,
     }).returning(sql<string>`id::text`.as("id")).executeTakeFirstOrThrow();
     have.set(v.sourceEventId, row.id);
+    // The version this save is (spine/noteVersions.ts `g:`): minted here, where the history comes in; a save that repeats the one before it
+    // (same text, same title) is that version again, as the version list has always shown it. It travels from this restore's transaction.
+    // Its ordinal is the save's rank among the note's carried saves (have.size, this one included): migration 220's rule, the rank of the event.
+    const repeats = lastVersion !== null && previousHash === v.bodyHash && previousTitle === v.title;
+    const key = repeats ? lastVersion! : legacyVersionKey(noteId, "body", v.kind, v.bodyHash, v.title, v.at);
+    if (!repeats) {
+      minted.push({ version_key: key, kind: v.kind, title: v.title, content_hash: v.bodyHash, at: v.at, ordinal: have.size, author_kind: AUTHOR_KIND[v.actorType],
+        restored_from: restoredHere ? versionOf.get(restoredHere) ?? null : null, source_name: v.actorName });
+    }
+    mapped.push({ event_id: row.id, version_key: key });
+    versionOf.set(row.id, key);
+    lastVersion = key;
+    previousTitle = v.title;
     previousHash = v.bodyHash;
     appended++;
+  }
+  if (minted.length > 0) {
+    const where = (await sql<{ node: string; origin: string; seq: string }>`
+      SELECT (SELECT node_id FROM sync_node WHERE singleton) AS node, s->>'origin' AS origin, s->>'seq' AS seq
+        FROM (SELECT sync_stamp_current(${workspaceId}::uuid) AS s) st`.execute(db)).rows[0]!;
+    await db.insertInto("note_versions").values(minted.map((m) => ({ ...m, workspace_id: workspaceId, note_id: noteId, unit: "body", recorded_by: where.node })))
+      .onConflict((c) => c.doNothing()).execute();
+    await db.insertInto("note_version_positions").values(minted.map((m) => ({ workspace_id: workspaceId, note_id: noteId, unit: "body", version_key: m.version_key,
+      origin: where.origin, seq: where.seq }))).onConflict((c) => c.doNothing()).execute();
+  }
+  if (mapped.length > 0) {
+    await db.insertInto("note_version_events").values(mapped.map((m) => ({ ...m, note_id: noteId, unit: "body" }))).execute();
   }
   return { appended, alreadyThere: versions.length - appended };
 }

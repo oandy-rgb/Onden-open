@@ -3,6 +3,9 @@
 // routes/canvases.ts; the route checks the canvas exists first.
 
 import { q } from "../db.js";
+import { db } from "../dbKysely.js";
+import { putBlob } from "./blobs.js";
+import { recordVersion } from "../spine/noteVersions.js";
 import { mutate } from "../spine/mutate.js";
 import { relinkTarget } from "./wikilinkEdges.js";
 import type { ActorCtx } from "../types.js";
@@ -22,11 +25,17 @@ export async function updateCanvas(
     event: { type: "CANVAS_UPDATED", targetType: "canvas", targetId: id, payload: { fields } },
     apply: async () => {
       if (title !== undefined) {
+        const before = await db.selectFrom("content_nodes").select(["title", "markdown"]).where("id", "=", id).where("workspace_id", "=", workspaceId).executeTakeFirst();
         await q(
           `UPDATE content_nodes SET title = $3, updated_at = now()
             WHERE id = $1 AND workspace_id = $2`,
           [id, workspaceId, title],
         );
+        // A rename is a version of the board (spine/noteVersions.ts), with the text the board has: read here, under the event lock, so a body
+        // saved meanwhile is the one named.
+        if (before && before.title !== title) {
+          await recordVersion({ workspaceId, noteId: id, unit: "body", contentHash: await putBlob(before.markdown), kind: "updated", title });
+        }
         // Notes that [[name]] the canvas by its old or new title.
         await relinkTarget(workspaceId, [id]);
       } else {

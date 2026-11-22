@@ -31,6 +31,8 @@
 
 import { mediaRefs, mediaUrl } from "@onden/markdown";
 import { q } from "../db.js";
+import { sql } from "kysely";
+import { db } from "../dbKysely.js";
 import { NODE_TARGET_TYPES } from "./eventTargets.js";
 import { removeMediaFiles } from "./media.js";
 import { presentationText } from "./mediaOwners.js";
@@ -41,7 +43,7 @@ import { modulesSnapshotPurged } from "../spine/nodeHooks.js";
 export const PURGED_MARKER = { purged: true } as const;
 
 /** Every place an event can name a blob (keep in step with
- *  maintenance/prune.ts collectOrphanBlobs). */
+ *  maintenance/prune.ts collectOrphanBlobs; both also keep what a version names, note_versions.content_hash). */
 const BLOB_REFS_SQL = (e: string) => `ARRAY[
   ${e}.payload->>'body_hash',
   ${e}.payload->>'value_ref',
@@ -76,7 +78,10 @@ export async function purgedContent(workspaceId: string, ids: readonly string[])
       WHERE e.workspace_id = $1 AND ${aboutNotesSql("e")} AND r.hash IS NOT NULL`,
     [workspaceId, ids, NODE_TARGET_TYPES],
   );
-  const hashes = [...new Set(refs.rows.map((r) => r.hash))];
+  // and the content of their versions (a baseline has no event): it goes with them unless something else still needs it
+  const versionRefs = await sql<{ hash: string }>`
+    SELECT DISTINCT content_hash AS hash FROM note_versions WHERE workspace_id = ${workspaceId}::uuid AND note_id = ANY(${[...ids]}::uuid[]) AND content_hash IS NOT NULL`.execute(db);
+  const hashes = [...new Set([...refs.rows, ...versionRefs.rows].map((r) => r.hash))];
   const versions = (await q<{ n: string }>(
     `SELECT count(*)::text AS n FROM domain_events
       WHERE workspace_id = $1 AND target_type = ANY($3::text[]) AND target_id = ANY($2::text[])
@@ -186,7 +191,8 @@ export async function deleteUnreferencedBlobs(hashes: readonly string[]): Promis
   if (hashes.length === 0) return [];
   const referenced = await q<{ hash: string }>(
     `SELECT DISTINCT r.hash FROM domain_events e, unnest(${BLOB_REFS_SQL("e")}) AS r(hash)
-      WHERE r.hash = ANY($1::text[])`,
+      WHERE r.hash = ANY($1::text[])
+     UNION SELECT v.content_hash FROM note_versions v WHERE v.content_hash = ANY($1::text[])`,
     [hashes],
   );
   const keep = new Set(referenced.rows.map((row) => row.hash));

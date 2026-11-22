@@ -26,7 +26,8 @@ import { assertAuthority, isPerson, requirePerson, type Authority } from "../spi
 import { PUBLISHED_KEY } from "./systemAttributes.js";
 import { provesNewNote, type NewNoteProof } from "./newNoteProof.js";
 import { incomingWins, PERSON_SOURCE, writableSource, type AttributeSource, type AttributeWriteSource } from "../spine/attributeSource.js";
-import { encodeSnapshot, type AttributeState } from "./eventLog/index.js";
+import { encodeSnapshot, type AttributeSnapshot, type AttributeState } from "./eventLog/index.js";
+import { isVersionedInkKey, recordVersion, type VersionUnit } from "../spine/noteVersions.js";
 import { ATTRIBUTE_KEY_RULE, governingField, isSettableAttributeKey, normalize, normalizeText, type AttributeValueType } from "@onden/markdown";
 import { fieldForKey } from "./schemaValidation.js";
 import { effectiveTagFields, loadTagFieldRows } from "./tagFields.js";
@@ -204,6 +205,8 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
       }
     }
 
+    // A drawing is stored by hash here (encodeSnapshot: putBlob / putInkChunks), once: the event and the drawing's version name the same value_ref.
+    const snapshot = row ? await encodeSnapshot(key, row, { workspaceId, nodeId }) : null;
     // The spine checks authority before apply writes anything.
     const eventId = await mutate<string>({
       actor: change.actor,
@@ -213,7 +216,7 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
         type: attributeEventType(row),
         targetType: "node",
         targetId: nodeId,
-        payload: { key, ...(row ? await encodeSnapshot(key, row, { workspaceId, nodeId }) : {}), ...change.payload },
+        payload: { key, ...(snapshot ?? {}), ...change.payload },
         ...(change.triggeredBy ? { triggeredBy: change.triggeredBy } : {}),
         txMeta: {
           inverse_op: previous ? "attribute.set" : "attribute.deleted",
@@ -223,6 +226,8 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
       },
       apply: async ({ eventId }) => {
         await storeAttributeState(change.actor, workspaceId, nodeId, key, row, { newNote: change.newNote });
+        // A drawing's change is a version of it (spine/noteVersions.ts), checked at commit.
+        if (isVersionedInkKey(key)) await recordDrawingVersion(workspaceId, nodeId, key, previous, row, snapshot);
         if (!row) {
           // The trigger leaves a derived row's removal alone; if the row was stamped at creation, say it is gone.
           if (previous && !STAMPED_SOURCES.includes(previous.source ?? "")) await tombstoneStampedAttribute(workspaceId, nodeId, key);
@@ -240,6 +245,18 @@ export async function recordAttributeChange(change: AttributeChange): Promise<At
     await nodeAttributeCommitted({ workspaceId, nodeId, key, value: row?.value ?? null, actor: change.actor });
     return { written: true, previous, row, eventId };
   });
+}
+
+/** The version of a drawing's write: the value_ref its snapshot stored, or a removal. A write that leaves the drawing as it was mints nothing
+ *  (compared as text, never hashed again). Not called yet by the undo of a drawing's event (eventRestore/attributes.ts): see the PR of batch 1;
+ *  that undo is counted in sync_clock.version_misses until it is. */
+async function recordDrawingVersion(
+  workspaceId: string, nodeId: string, key: VersionUnit, previous: AttributeState | null, row: AttributeState | null, snapshot: AttributeSnapshot | null,
+): Promise<void> {
+  if ((previous?.value ?? null) === (row?.value ?? null)) return;
+  const ref = typeof snapshot?.value_ref === "string" ? snapshot.value_ref : null;
+  if (row !== null && ref === null) throw new Error("a drawing's snapshot names its value by hash");
+  await recordVersion({ workspaceId, noteId: nodeId, unit: key, contentHash: ref, kind: row === null ? "removed" : previous ? "updated" : "created" });
 }
 
 /** D94: bring stored value_types back to the rule after a write that changed

@@ -43,6 +43,8 @@
 // clients. Migration 062 reused the old node_tasks.id as the task node id, so
 // frontend ids stay valid across the migration.
 
+import { putBlob } from "./blobs.js";
+import { recordVersion } from "../spine/noteVersions.js";
 import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import { sql } from "kysely";
@@ -325,11 +327,15 @@ export async function insertTaskNodeTx(opts: TaskFields & {
   bodyFrom?: { eventId: string; actor: ActorCtx; finish: FinishNewNote };
 }): Promise<void> {
   const markdown = opts.markdown && opts.bodyFrom ? opts.markdown : "";
+  // The task's first version (spine/noteVersions.ts), its text stored first as every save does (services/blobs.ts); most tasks have no text,
+  // and the empty text is stored once for every note, so that case takes no second connection.
+  const bodyHash = await storedTaskBody(markdown);
   await q(
     `INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, parent_id, hidden, space_id)
      VALUES ($1, $2, 'manual', 'content', $3, $4, $7, $5, true, $6)`,
     [opts.id, opts.workspaceId, opts.title, `task-${opts.id}`, opts.hostId, opts.hostId ? null : (opts.spaceId ?? null), markdown],
   );
+  await recordVersion({ workspaceId: opts.workspaceId, noteId: opts.id, unit: "body", contentHash: bodyHash, kind: "created", title: opts.title });
   await addTaskRefTx(opts.workspaceId, opts.id);
   const status = opts.status ?? "todo";
   await setTaskAttrTx(opts.workspaceId, opts.id, K.status, status);
@@ -360,9 +366,24 @@ export async function setTaskFieldsTx(workspaceId: string, id: string, fields: O
   for (const [key, on] of flags) if (on !== undefined) await setTaskAttrTx(workspaceId, id, key, on ? "true" : null);
 }
 
-/** Rename a task node (inside the caller's NODE_UPDATED mutate). */
+/** The hash of a task's text, stored (services/blobs.ts putBlob). The empty text, which nearly every task has, is looked up in this transaction
+ *  first: once stored it is never collected while a version or an event names it, so putting it again would only cost a second connection. */
+async function storedTaskBody(markdown: string): Promise<string> {
+  if (markdown === "") {
+    const empty = await db.selectFrom("blobs").select("hash").where("hash", "=", EMPTY_BODY_HASH).executeTakeFirst();
+    if (empty) return empty.hash;
+  }
+  return putBlob(markdown);
+}
+const EMPTY_BODY_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; // sha-256 of the empty text
+
+/** Rename a task node (inside the caller's NODE_UPDATED mutate): a version of the task when the title changes (spine/noteVersions.ts). */
 export async function setTaskTitleTx(id: string, title: string): Promise<void> {
+  const before = await db.selectFrom("content_nodes").select(["workspace_id", "title", "markdown"]).where("id", "=", id).executeTakeFirst();
   await q(`UPDATE content_nodes SET title = $2, updated_at = now() WHERE id = $1`, [id, title]);
+  if (before && before.title !== title) {
+    await recordVersion({ workspaceId: before.workspace_id, noteId: id, unit: "body", contentHash: await storedTaskBody(before.markdown), kind: "updated", title });
+  }
 }
 
 /** Upsert (value) or delete (null) one reserved `_task_*` attribute row.

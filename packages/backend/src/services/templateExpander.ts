@@ -27,6 +27,7 @@
 //     pre-existing nodes or attributes — purely creates new ones with the
 //     `_tpl_origin` reserved marker.
 
+import { recordVersion } from "../spine/noteVersions.js";
 import { randomUUID } from "node:crypto";
 import { q, withSavepoint } from "../db.js";
 import { mutate, runCascade } from "../spine/mutate.js";
@@ -163,6 +164,7 @@ export async function expandTemplate(
                    VALUES ($1, $2, 'manual', 'content', $3, $4, $5, $6, false, $7)`,
                   [childId, workspaceId, title, slug, markdown, parentNodeId, await appendOrderKey("content_nodes", workspaceId, parentNodeId)],
                 );
+                await recordVersion({ workspaceId, noteId: childId, unit: "body", contentHash: childBodyHash, kind: "created", title });
                 // Reserved key — the attribute panel hides `_`-prefixed entries.
                 // source='derived' because the value is computed from the tag/slot
                 // pair rather than typed by a user.

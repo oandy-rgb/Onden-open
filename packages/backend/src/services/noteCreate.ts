@@ -21,6 +21,7 @@
 // System rows (tags, the site config, task rows) are not notes and keep
 // their own inserts; noteCreate.test.ts lists them.
 
+import { recordVersion } from "../spine/noteVersions.js";
 import { withViews } from "./functionRefs.js";
 import type { ServerNodeRow } from "@onden/contract";
 import { assertParentKind } from "./parentKind.js";
@@ -211,6 +212,8 @@ export async function createNote(input: NewNote): Promise<CreatedNote | DryRunNo
             parentId, input.hidden ?? false, orderKey, spaceId],
         )).rows[0]!;
         const newNote = newNoteProof(id); // inserted just above (services/newNoteProof.ts)
+        // The note's first version (spine/noteVersions.ts), the text putBlob stored above.
+        await recordVersion({ workspaceId, noteId: id, unit: "body", contentHash: bodyHash, kind: "created", title });
         await respaceIfTooLong("content_nodes", workspaceId, parentId, orderKey, { actor, nodeId: id });
         if (parentId) {
           await applyChildPrefixAttributes(workspaceId, parentId, id, actor);

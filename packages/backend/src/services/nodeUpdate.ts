@@ -19,6 +19,7 @@ import { canReadNode } from "./readPolicy.js";
 import { slugForTitle } from "./nodes.js";
 import { makeInversePatch, mergeBody, bodyConflictPayload, type BodyConflict } from "./eventLog/index.js";
 import { putBlob } from "./blobs.js";
+import { recordVersion, versionOfEvent } from "../spine/noteVersions.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { assertTagNameAvailable, assertTagNameShape } from "./tagHierarchy.js";
 import { writeTagIdentity } from "./tagIdentity.js";
@@ -192,6 +193,7 @@ export async function restoreNodeVersion(
       // save's own title is not the new one for a tag (its rename is written apart).
       payload: { version_id: versionId, title: restoreTitle && version.title ? version.title : current.title },
       txMeta: { ui_context: "node.version.restore" },
+      restoredFrom: await versionOfEvent(versionId),
       cascadeLabel: "node.version.restore.cascade",
       backupPrefix: "NODE_RESTORED",
     };
@@ -256,6 +258,8 @@ type NodeChangePlan = {
   /** "refuse": a conflicting merge throws BodyConflictError instead of choosing a side. */
   onConflict?: "refuse";
   eventType: "NODE_UPDATED" | "NODE_RESTORED";
+  /** The version_key a restore puts back (spine/noteVersions.ts), when this node knows it. */
+  restoredFrom?: string | null;
   /** Event payload; title (resolved) and body_hash are added. */
   payload: Record<string, unknown>;
   /** Added to the inverse_patch / prev_field_values every save records. */
@@ -465,6 +469,11 @@ async function saveNodeChange(
     // a move, a hidden flag, a page design or a position changes neither.
     const bodyHash = changed.some((k) => k === "markdown" || k === "title")
       ? await putBlob(newBody) : null;
+    // An undo that keeps the note's text where both changed (keepOnConflict "current") leaves out lines of the text it was putting back:
+    // that text is set aside as a version of its own (review of PR #1935 round 1, point 10). When the incoming text wins, what the inbox
+    // offers back is the body this save replaces, which is already a version.
+    const setAsideHash = bodyConflicts.length > 0 && record.keepOnConflict === "current" && typeof nodeInput.markdown === "string"
+      ? await putBlob(nodeInput.markdown) : null;
     // The event (NODE_UPDATED / NODE_RESTORED) + the UPDATE + the in-tx sync are one atomic,
     // attributed unit through the spine. A reparent stays inside the note's
     // space (a parent in another space is refused above), so nobody's readable
@@ -499,6 +508,17 @@ async function saveNodeChange(
           ...("order_key" in nodeInput ? { order_key: nextOrderKey } : {}),
           ...("presentation" in nodeInput ? { presentation: nextPresentation } : {}),
         }, { before: { isTag, parentId: oldRow.parent_id ?? null }, touchUpdatedAt: !(positionOnly || record.keepUpdatedAt), actor }));
+        // The save's version (spine/noteVersions.ts): minted here, checked at commit. The text set aside is a version even when the note's
+        // own text did not change (the merge kept all of it).
+        if (setAsideHash !== null) {
+          await recordVersion({ workspaceId, noteId: id, unit: "body", contentHash: setAsideHash, kind: "set_aside", title: next.title });
+        }
+        if (bodyHash !== null) {
+          await recordVersion({
+            workspaceId, noteId: id, unit: "body", contentHash: bodyHash, kind: record.eventType === "NODE_RESTORED" ? "restored" : "updated",
+            title: updated.title as string, restoredFrom: record.restoredFrom ?? null,
+          });
+        }
         // Overlapping concurrent edits: what each conflict left out, for the
         // inbox (the whole overridden body is also a version in history).
         if (bodyConflicts.length > 0) {

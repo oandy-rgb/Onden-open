@@ -7,6 +7,9 @@
 // left-out migrations' data steps once before the schema was taken back, so they are not exactly what an older app left; the rows that
 // only an older app wrote (read-later, review, capture inbox) are written after the step back and are.
 //   poisoned  an older copy that already holds an object the next migration would collide with, so the upgrade fails.
+//   history   a copy from before migration 220 (note versions) holding history as people make it: saves, a title change, a version restore,
+//             an undo, drawings, a deleted note with its child; plus what only older data has (a save whose text is gone, a note with no
+//             save at all). test/noteVersionsOldCopy.integration.test.ts upgrades it and checks the migration against its preview.
 import { readFile, writeFile } from "node:fs/promises";
 import { setEnvironment } from "../config.js";
 
@@ -22,14 +25,14 @@ setEnvironment({
 
 const out = process.argv[2];
 const mode = process.argv[3] ?? "old";
-if (!out || !["old", "newer", "poisoned"].includes(mode)) throw new Error("usage: makeOldCopy.ts <out.tar.gz> [old|newer|poisoned]");
+if (!out || !["old", "newer", "poisoned", "history"].includes(mode)) throw new Error("usage: makeOldCopy.ts <out.tar.gz> [old|newer|poisoned|history]");
 
 const { useMigrationSource, listMigrations } = await import("../dbMigrations.js");
 const all = await listMigrations();
 // What is left out is a rule, not a count: every migration from 192 on (the upgrade applies what is missing, not a prefix). The read-later
 // part below needs 192 (remove read-later) to be one of them, the review part needs 195 and 196, and leaving 194 out makes the upgrade run its pointer id move on this copy.
 // The number the upgrade should report is printed as `leftOut` and smoke.mjs reads it from there.
-const FIRST_LEFT_OUT = 192;
+const FIRST_LEFT_OUT = mode === "history" ? 220 : 192;
 const leftOut = new Set(all.filter((m) => Number.parseInt(m.version, 10) >= FIRST_LEFT_OUT).map((m) => m.version));
 // A migration can make a table IF NOT EXISTS and then index its columns: a table of that name without those columns
 // fails the index. Found in the SQL, so this keeps working as migrations are added.
@@ -43,6 +46,7 @@ const kept = all.filter((m) => !leftOut.has(m.version));
 const { migrate, pglite, pool, q } = await import("../db.js");
 const { awaitAllDispatchers } = await import("../services/dispatcherQueue.js");
 const { sqlIdentifier } = await import("../sqlText.js");
+const { sha256Hex } = await import("../utils.js");
 const { auth } = await import("../auth.js");
 const { app } = await import("../app.js");
 const { createLocalSession } = await import("./localSession.js");
@@ -128,6 +132,39 @@ if (mode === "old") {
   const tagged = await asLocalUser(`/api/nodes/${capturedId}/tags/${inboxId}`, "PUT", {});
   if (!tagged.ok) throw new Error(`could not tag the note: ${tagged.status} ${await tagged.text()}`);
   afterStepBack.push((await readFile(new URL("./oldCapture.sql", import.meta.url), "utf8")).replaceAll("__TAG__", inboxId));
+}
+
+// History as people make it, written through the app (the versions today's code mints go with the schema step below: the copy holds
+// only events and blobs, as an app before 220 left them).
+if (mode === "history") {
+  const call = async (method: string, path: string, body?: unknown) => {
+    const response = await session.fetchAsLocalUser(new Request(`${session.origin}${path}`, {
+      method, headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }));
+    if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
+    return response.json() as Promise<Record<string, unknown>>;
+  };
+  const made: string[] = [];
+  for (let i = 1; i <= 6; i++) {
+    const id = String((await call("POST", "/api/nodes", { title: `歷史筆記 ${i}`, markdown: `第 ${i} 則的第一版` })).id);
+    made.push(id);
+    for (let k = 2; k <= 4; k++) await call("PATCH", `/api/nodes/${id}`, { markdown: `第 ${i} 則的第 ${k} 版` });
+  }
+  await call("PATCH", `/api/nodes/${made[0]}`, { title: "歷史筆記 1（改名）" });
+  // the version list's oldest version is the note's first save (its id is the event's: the list today)
+  const listed = await call("GET", `/api/nodes/${made[1]}/versions?raw=1`) as unknown as Array<{ id: string }>;
+  const first = listed[listed.length - 1]!.id;
+  await call("POST", `/api/nodes/${made[1]}/versions/${first}/restore`, {});
+  const drawing = JSON.stringify({ v: 1, strokes: [{ id: "a", points: [[0, 0], [4, 4]] }] });
+  await call("PUT", `/api/nodes/${made[2]}/attributes/ink_data`, { value: drawing });
+  await call("PUT", `/api/nodes/${made[2]}/attributes/ink_data`, { value: JSON.stringify({ v: 1, strokes: [{ id: "a", points: [[0, 0], [4, 4]] }, { id: "b", points: [[5, 5], [9, 9]] }] }) });
+  const parent = String((await call("POST", "/api/nodes", { title: "要刪的上層", markdown: "上層" })).id);
+  await call("POST", "/api/nodes", { title: "要刪的下層", markdown: "下層", parent_id: parent });
+  await call("DELETE", `/api/nodes/${parent}`);
+  // what only older data has: a save whose text is gone, and a note that was never saved through an event
+  const lost = sha256Hex("第 4 則的第 2 版"); // the text of that note's second save (a blob is named by the sha-256 of its text)
+  // (the SQL lives in a file of its own, like the other rows only an older app left: no current code writes them)
+  afterStepBack.push((await readFile(new URL("./oldHistory.sql", import.meta.url), "utf8")).replaceAll("__LOST_HASH__", lost));
 }
 
 // The schema goes back to what the kept migrations left, and the record of applied migrations with it.

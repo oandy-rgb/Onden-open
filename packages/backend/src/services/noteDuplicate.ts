@@ -1,4 +1,5 @@
 import { viewRecordsOf, withViews } from "./functionRefs.js";
+import { recordVersion } from "../spine/noteVersions.js";
 import { appendOrderKey } from "./orderKeys.js";
 import { addNoteLayoutTab } from "./boardStore.js";
 import { randomUUID } from "node:crypto";
@@ -149,6 +150,7 @@ export async function duplicateNote(options: DuplicateNoteOptions) {
           [newNodeId, workspaceId, title, slug, markdown, source.parent_id, copySpace, await appendOrderKey("content_nodes", workspaceId, source.parent_id)],
         )).rows[0]!;
         const newNote = newNoteProof(newNodeId); // inserted just above (services/newNoteProof.ts)
+        await recordVersion({ workspaceId, noteId: newNodeId, unit: "body", contentHash: bodyHash, kind: "created", title });
         // Made under the same note as its source: that note's site default applies (siteDefault.ts).
         if (source.parent_id) await applyParentSiteDefault(workspaceId, source.parent_id, newNodeId, actor, undefined, newNote);
         for (const tag of liveTags) await recordCopiedTag(workspaceId, actor, newNodeId, tag);

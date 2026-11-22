@@ -1,6 +1,6 @@
 # 筆記寫入模組
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-22）
 > 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/frontend/src/lib/data/noteWriter.ts
 
 這次局部重構把「畫面想改什麼」與「如何可靠保存」分開。主要入口是
@@ -169,6 +169,15 @@ agent `updateNode` 改正文時必須帶 `base_markdown`（getNode 讀到的原�
 更外層交易失敗也會使記憶體 claim 失效。重試沿用原鍵；若實際已提交但回應遺失，仍由資料庫
 去重而不再寫入。領域入口不自行登記 rollback callback，詳見
 [外層回滾與冪等修復](../archive/idempotency-rollback-fixes-2026-09-13.md)。
+
+### 每次存檔留下一個版本（2026-11-22）
+
+改到標題或內文的存檔，在同一筆交易裡鑄一個版本（migration 220 的 `note_versions`；歷史同步提案 PR #1935 的第 1 批）。
+`saveNodeChange` 照舊先 `putBlob`，再在 `mutate` 的 `apply` 裡呼叫 `spine/noteVersions.ts` 的 `recordVersion`；
+還原舊版的版本記下它還原的是哪一版。一次合併要是保留了目前的內文、沒放回要寫的那幾行（`keepOnConflict: "current"`），
+沒放回的那段字另鑄一個 `set_aside` 版本。只動位置、隱藏或頁面設計的存檔沒有版本。
+提交時資料庫拒收內容不在的版本；改了值卻沒鑄版本的寫入記在 `sync_clock.version_misses`。伺服器開機時把總數寫進紀錄（`countVersionMisses`，大於 0 時是 warn），正式路徑上應該永遠是 0。
+這一批還沒有讀者讀這張表：版本清單仍讀事件。
 
 ## 離線重送遭拒絕（2026-09-13）
 

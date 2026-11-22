@@ -209,9 +209,13 @@ export async function stampUnstampedRowsAsGenesis(): Promise<number> {
 }
 
 /** How many transactions wrote a stamped table without a root above (the trigger made their stamp); one workspace, or all. */
-export async function countWritesWithoutStamp(workspaceId?: string): Promise<number> {
+export const countWritesWithoutStamp = (workspaceId?: string): Promise<number> => countSyncClockExceptions("writes_without_mutate", workspaceId);
+
+/** One of sync_clock's counted exceptions, summed over one workspace or all: writes_without_mutate (above) and version_misses (migration 220,
+ *  spine/noteVersions.ts countVersionMisses). */
+export async function countSyncClockExceptions(column: "writes_without_mutate" | "version_misses", workspaceId?: string): Promise<number> {
   const row = (await sql<{ n: string }>`
-    SELECT COALESCE(sum(writes_without_mutate), 0)::text AS n FROM sync_clock
+    SELECT COALESCE(sum(${sql.ref(column)}), 0)::text AS n FROM sync_clock
      WHERE ${workspaceId ?? null}::uuid IS NULL OR workspace_id = ${workspaceId ?? null}::uuid`.execute(db)).rows[0];
   return Number(row?.n ?? 0);
 }

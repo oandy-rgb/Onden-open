@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { loadWorkspaceClock, startWorkspaceClockReload } from "./services/workspaceTime.js";
 import { DatabaseNewerThanCodeError, getWorkspaceId, migrate, pruneEvents, pool } from "./db.js";
 import { log } from "./logger.js";
+import { countVersionMisses } from "./spine/noteVersions.js";
 import { config, isTest } from "./config.js";
 import { startPeriodicJob } from "./backgroundJobs.js";
 import { startOutboxReconciler } from "./services/outbox.js";
@@ -40,6 +41,11 @@ if (!isTest()) {
       + "請升級回去（scripts/upgrade.sh <較新的版本>），或用 scripts/rollback.sh（內部呼叫 scripts/restore.sh）還原升級前的備份。"
       + "（this version does not know migrations: " + e.unknownVersions.join(", ") + "）");
     process.exit(1);
+  }
+  // Migration 220 counts, not refuses, a local write that changed a note without minting its version: say the count where an operator looks.
+  {
+    const misses = await countVersionMisses();
+    log[misses > 0 ? "warn" : "info"]("versions", `local writes that changed a note without minting its version: ${misses}`);
   }
   // Before anything asks what day it is (the task scheduler, the first request).
   {

@@ -35,6 +35,7 @@
 //   - Events whose target entity no longer exists (e.g., ATTRIBUTE_SET on
 //     a node that was later purged). 410 Gone.
 
+import { recordVersion, versionBeforeEvent } from "../../spine/noteVersions.js";
 import { keyForRestore, respaceIfTooLong, translateLegacySortOrder } from "../orderKeys.js";
 import { recordRestore, requireRestoreTransaction } from "./record.js";
 import { alreadyInState, historyIncomplete, stateConflict } from "./refusals.js";
@@ -854,6 +855,14 @@ async function restoreNodeUpdated(
         touchUpdatedAt: true,
         actor: actorContext,
       });
+      // The undo is a new version of the note (spine/noteVersions.ts), naming the version it puts back when this node knows it. An undo
+      // that writes back what the note already holds still records its event, but no new version (review round 2, point 10).
+      if (bodyHash && (nextBody !== currentBody || nextTitle !== currentTitle)) {
+        await recordVersion({
+          workspaceId: row.workspace_id, noteId: row.target_id, unit: "body", contentHash: bodyHash, kind: "updated", title: nextTitle,
+          restoredFrom: await versionBeforeEvent(row.target_id, "body", String(row.id), bodyHash),
+        });
+      }
       // Undoing a hide or show moves who may see the note (the website).
       if ("hidden" in prevFields) {
         await nodeVisibilityCommitted({ workspaceId: row.workspace_id, actor: actorContext, nodeIds: [row.target_id] });

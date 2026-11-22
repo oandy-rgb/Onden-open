@@ -165,7 +165,6 @@
       "packages/backend/src/services/embedder.ts": ["EmbedRole", "Embedder", "__setEmbedderForTest"],
       "packages/backend/src/services/embeddings.ts": ["LinkSuggestion", "SemanticHit"],
       "packages/backend/src/services/eventChain.ts": ["EventChainEntry"],
-      "packages/backend/src/services/eventLog/attributeSnapshot.ts": ["AttributeSnapshot"],
       "packages/backend/src/services/eventQuery.ts": ["BuiltQuery", "EventQueryInput", "EventReadPolicy", "buildEventQuery"],
       "packages/backend/src/services/exportInk.ts": ["InkSvgFile"],
       "packages/backend/src/services/exportLeftOut.ts": ["LEFT_OUT_FILE", "LeftOut", "leftOutText", "readLeftOut"],

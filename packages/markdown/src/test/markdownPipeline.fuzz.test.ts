@@ -144,6 +144,20 @@ describe("markdown pipeline fuzz", () => {
   });
 });
 
+// Found by the nightly run, FUZZ_SEED=1850956752 (2026-11-20, FUZZ_LONG=1), invariant "never throws".
+// Shrunk: two lone low surrogates inside raw <script> text. parse5's script-data state combines
+// them into an invalid code point (RangeError 1114112) while hast-util-raw re-parses the HTML.
+// One lone surrogate, or surrogates in <style>/<textarea>/<div>, do not throw. Profiles app and
+// appNoMath throw; published (no raw HTML) does not. Likely cause: nothing strips or replaces
+// lone surrogates before the raw-HTML pass (md.prepare).
+describe("raw <script> text with lone surrogates", () => {
+  it.fails("FINDING <script>\\udc00\\udc00</script> throws RangeError in the app profile", () => {
+    for (const name of ["app", "appNoMath"] as const) {
+      expect(() => renderers[name]("<script>\udc00\udc00</script>"), name).not.toThrow();
+    }
+  });
+});
+
 describe("wikilink targets with lone surrogates", () => {
   it("[[\\udc00]] renders in every profile (seed 333612950)", () => {
     for (const name of Object.keys(renderers) as Array<keyof typeof renderers>) {

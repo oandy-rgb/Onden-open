@@ -99,6 +99,15 @@ describe("svg sanitizer fuzz", () => {
     expect(svgHazards(out)).toEqual([]);
   });
 
+  // FINDING 2026-11-21 (nightly, FUZZ_LONG=1 FUZZ_SEED=239673075): an unterminated `<style` followed by `\r` and more
+  // markup comes out as `<style/>` with `url(//tracker.invalid/...)` text right after it. The shared hazard check
+  // (`svgHazards`) reports "<style> with an external reference". Flip to `it` when the sanitizer drops the text (or
+  // the check is judged too strict for text that follows a self-closed, empty <style/>).
+  it.fails("FINDING unterminated <style with CR leaves an external url() after <style/>", () => {
+    const svg = ' <style\rhref=<img &NewLine;[!note]ter="url(//tracker.invalid/f.svg#f)"/></svg>url(//tracker.invalid/f.svg#f)"/></svg>';
+    expect(svgHazards(sanitizeSvg(svg))).toEqual([]);
+  });
+
   it("removing a dangerous element cannot rebuild one: output is a fixed point", () => {
     // `<svg><scr<script>ipt/script>ipt></svg>`: the second regex removes the inner `<script>` and the
     // pieces around it join into `<script/script>ipt>`, a live script start tag. Same shape as the

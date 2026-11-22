@@ -47,7 +47,7 @@ docker run --rm -it --cpus=0.7 -v "$PWD/../../../..":/repo -w /repo/docs/researc
 - `src/analysis.ts`、`src/examples.ts`、`src/runCompare.ts` 合併結果比較與「同一句重疊」偵測。
 - `src/impls.ts` 四個實作的統一轉接；`src/harness.ts` 計時。
 - `src/paraId/` 內文合併「認段落身分」原型與量測（[報告](../../body-merge-measurements-2026-11-15.md) 第 1 部分）：`paraMerge.ts` 原型的外殼（邏輯在產品的 `services/eventLog/bodyMergeMoves.ts`）、`scenarios.ts` 新產生器、
-  `evaluate.ts` 比對與分類、`runA.ts`／`runB.ts`／`runC.ts` 三組資料（整個原型對現行）、`runProduct.ts`／`perfLarge.ts` 產品 `mergeBody` 的前後對照與大文件耗時、`record/` 錄下既有測試的合併呼叫（需先建 `packages/markdown` 的 dist：`npm run build -w packages/markdown`）。
+  `evaluate.ts` 比對與分類、`runA.ts`／`runB.ts`／`runC.ts` 三組資料（整個原型對現行）、`runProduct.ts`／`perfLarge.ts` 產品 `mergeBody` 的前後對照與大文件耗時、`runRules.ts` 合併規則 2 與 3 的對照（`npx tsx src/paraId/runRules.ts 20000`，產生器與性質測試共用 `packages/backend/src/test/helpers/bodyMergeWriters.ts`）、`record/` 錄下既有測試的合併呼叫（需先建 `packages/markdown` 的 dist：`npm run build -w packages/markdown`）。
   （`runProduct.ts`／`perfLarge.ts` 會載入產品的 `blockAnchors`，要先 `npm run build -w packages/contract`。）重跑：`npx tsx src/paraId/runB.ts 300`、`npx tsx src/paraId/runA.ts 20 block|line`；(c) 先用 `record/vitest.record.config.ts` 錄（見報告「怎麼重跑」）再 `runC.ts`；表格 `makeTables.ts`。測試：`npm test`。
 - `src/tiebreak/` 同一點同時插入的先後規則查證（[tiebreak-findings.md](../tiebreak-findings.md)）；`npm run test:tiebreak`。
 - `out/` 本次量到的原始數字（JSON 與 log），報告的表格由它們整理而來。

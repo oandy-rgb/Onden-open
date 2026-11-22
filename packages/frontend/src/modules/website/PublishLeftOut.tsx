@@ -47,7 +47,7 @@ export default function PublishLeftOut({ items, online, busy, onChanged, onClose
           {keptOff.map((n) => <li key={n.node_id}>{displayTitle(n.title)}<span className="publish-review-note"> · {why(n.reason)}</span>
             {n.reason === "kept_off_by_parent" && (
               <Button variant="ghost" data-action="put-back" disabled={!online || busy}
-                onClick={() => void Promise.resolve(putOnSite({ id: n.node_id, attrs: { [PUBLISHED_ATTR]: "false" } })).then(onChanged)}>{t("Put back on the site")}</Button>
+                onClick={() => void putOnSite({ id: n.node_id, attrs: { [PUBLISHED_ATTR]: "false" } }).then((done) => { if (done) onChanged(); })}>{t("Put back on the site")}</Button>
             )}
           </li>)}
         </ul>

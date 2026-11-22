@@ -25,12 +25,30 @@ export function homePublishBody(settings: SiteSettings, homeOverride?: string | 
   };
 }
 
+/** The sentence for the notes 「一起發布」 refused for one reason (the server's `failed[].error`). Unknown
+ *  reasons get the plain sentence: a code is never shown. */
+function includeFailureText(reason: string, n: number): string {
+  if (reason === "hidden") return t("{n} notes could not be published together: they are hidden.", { n });
+  if (reason === "space_not_published") return t("{n} notes could not be published together: their space does not publish.", { n });
+  if (reason === "not_a_page") return t("{n} notes could not be published together: they are in the trash or no longer available.", { n });
+  return t("{n} notes could not be published together.", { n });
+}
+
 /** After 「一起發布」: say plainly when some notes could not be published
- *  (the write itself succeeded for the rest). True when none failed. */
+ *  (the write itself succeeded for the rest), one sentence per reason the
+ *  server gave. True when none failed. */
 export function reportIncluded(result: { failed?: unknown[] } | { deduped: true }): boolean {
-  const failed = "failed" in result && Array.isArray(result.failed) ? result.failed.length : 0;
-  if (failed > 0) addToast(t("{n} notes could not be published together: their space does not publish.", { n: failed }), "error");
-  return failed === 0;
+  const failed = "failed" in result && Array.isArray(result.failed) ? result.failed : [];
+  if (failed.length === 0) return true;
+  const perReason = new Map<string, number>();
+  for (const f of failed) {
+    const reason = typeof (f as { error?: unknown })?.error === "string" ? (f as { error: string }).error : "";
+    // Reasons this screen does not know read the same, so they are one sentence.
+    const key = ["hidden", "space_not_published", "not_a_page"].includes(reason) ? reason : "";
+    perReason.set(key, (perReason.get(key) ?? 0) + 1);
+  }
+  addToast([...perReason].map(([reason, n]) => includeFailureText(reason, n)).join(" "), "error");
+  return false;
 }
 
 type Writer = Pick<ReturnType<typeof makeWebsiteWriter>, "previewPublish" | "publish"> & Partial<Pick<ReturnType<typeof makeWebsiteWriter>, "includeNotes">>;

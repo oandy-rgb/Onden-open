@@ -4,10 +4,14 @@
 // hybrid logical clock. Nodes exchange ops; state is a pure function of the set of valid ops
 // (materialize.ts), so two nodes holding the same valid ops hold the same state.
 
-/** The body merge rule's version: 1 = line merge only, 2 = + moved paragraphs and move/move conflicts (services/eventLog/bodyMergeMoves.ts, `mergeBody`).
- *  Nodes on different versions compute different bodies, so a change to what `mergeBody` returns adds one here and the sync version gate
+import { CURRENT_BODY_MERGE_RULE, type BodyMergeRule } from "../services/eventLog/index.js";
+
+/** The body merge rule's version: 1 = line merge only, 2 = + moved paragraphs and move/move conflicts (services/eventLog/bodyMergeMoves.ts, `mergeBody`),
+ *  3 = characters merged one paired line at a time (bodyMerge.ts `mergeLineByLine`), and a conflict that would hold lines twice is a conflict of
+ *  the whole text. `mergeBody(…, rule)` still computes 1 and 2 as they were.
+ *  Nodes on different versions compute different bodies, so a change to what `mergeBody` returns adds one to CURRENT_BODY_MERGE_RULE (bodyMerge.ts) and the sync version gate
  *  (docs/architecture/proposals/node-sync-channels-2026-11-14.md item 12; not built yet, sync is off) refuses to merge across versions. */
-export const BODY_MERGE_RULE_VERSION = 2;
+export const BODY_MERGE_RULE_VERSION: BodyMergeRule = CURRENT_BODY_MERGE_RULE;
 
 /** A device or server that holds a copy. Stable for the life of its database. */
 export type NodeId = string;

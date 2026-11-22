@@ -3,5 +3,5 @@
 // Files inside import each other directly.
 export { encodeSnapshot, type AttributeSnapshot, type AttributeState, type SnapshotScope } from "./attributeSnapshot.js";
 export { makeInversePatch, NO_INVERSE_PATCH, rebuildPreEventBody, rebuildFromUnchangedBody } from "./bodyPatch.js";
-export { bodyConflictPayload, type BodyConflict } from "./bodyMerge.js";
+export { bodyConflictPayload, CURRENT_BODY_MERGE_RULE, type BodyConflict, type BodyMergeRule } from "./bodyMerge.js";
 export { mergeBody } from "./bodyMergeMoves.js";

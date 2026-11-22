@@ -78,7 +78,7 @@ export async function applyBodyChange(change: BodyChange): Promise<void> {
   await linkBlockNodeAnchors({ workspaceId, noteId: nodeId });
   await syncNoteBlockRefs(workspaceId, nodeId, markdown);
   await enqueueBackup({ workspaceId, nodeId, markdown, message: `${backupPrefix}: ${title}`, triggeredByEventId: eventId });
-  await nodeContentCommitted({ workspaceId, nodeId, text: `${title}\n\n${markdown}`, triggeredByEventId: eventId });
+  await nodeContentCommitted({ workspaceId, nodeId, text: `${title}\n\n${markdown}`, triggeredByEventId: eventId, actor, markdown });
   // A system job (spine/systemJobs.ts) holds no authority to write attributes, and what it changes in a body
   // (block markers, services/blockMarkerRepair.ts) is not read by attribute derivation: no cascade for it.
   if (systemJobOf(actor)) return;

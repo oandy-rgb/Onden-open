@@ -599,11 +599,12 @@
   border-color: color-mix(in srgb, var(--ac-accent) 28%, transparent);
   background: var(--ac-accent-soft);
 }
+/* Centred in the note pane: .obsidian-main is a column flexbox, so a capped child sits at its left edge unless it says otherwise. */
 .obsidian-empty {
   display: grid;
   gap: 14px;
   max-width: 360px;
-  margin-top: 80px;
+  margin: 80px auto 0;
 }
 
 /* Tags under the title (TitleTagRow): applied tags carry a remove button;

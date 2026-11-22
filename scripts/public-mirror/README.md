@@ -14,6 +14,7 @@
   看起來像金鑰或權杖的文字，任何一種都停下來不推（看過清單確定要公開，才用 `PUBLIC_PUSH_ALLOW=1`）。
   那一個提交的訊息會帶上守門要讀的書面聲明：私人提交裡的 `ratchet-override:` 與「文件不需要更新：<原因>」行，
   以及私人提交或這個分支的 PR 說明裡出現「不需要更新說明」時，單獨一行「不需要更新說明」（這些行同樣經過金鑰／位址檢查）。
+- 推一個有 PR 的分支之前，讀 PR 說明的「## 驗收卡」（`scripts/prCardLib.mjs`，AGENTS.md「交付紀律」）：2026-11-21 起開的 PR 缺卡或有空欄就不推；動到觸控／鍵盤／手寫的檔案時，卡裡要提到實機。
 - 公開庫收到推送就自己跑 CI（`.github/workflows/ci.yml`，業主 2026-11-20）：守門與全部完整檢查，只有完整 E2E 仍要手動
   （`gh workflow run ci.yml --repo oandy-rgb/Onden-open --ref <分支> -f fullstack=true`）。push 沒有 PR 說明，守門從上面那個提交訊息讀聲明。
   分支必須含有 main 這版的 `ci.yml`（先併 main），否則推上去不會自己開始。

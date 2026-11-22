@@ -7,11 +7,11 @@
 // reconciler, so it is durable + retried; the small payload ({snapshotId}) is
 // re-resolved at drain time, making it idempotent.
 
-import { expectedPagesUrl, pushToGitHubPages, type BundleFile } from "./githubPages.js";
+import { pushToGitHubPages, type BundleFile } from "./githubPages.js";
 import { loadServedSite } from "./servedSite.js";
 import { bundleFileSizes, readBundleFiles, ensureSiteBundle } from "./siteBundle.js";
 import { retargetStaticSite } from "./staticSite.js";
-import { cnameFile } from "./cname.js";
+import { cnameFile, staticSiteUrl } from "./cname.js";
 import { limitStaticVideos, oversizeVideoIds } from "./videoLimit.js";
 
 export async function performPagesPush(payload: { snapshotId: string; workspaceId: string }): Promise<void> {
@@ -24,7 +24,8 @@ export async function performPagesPush(payload: { snapshotId: string; workspaceI
 
   // No external host configured: nothing to push (the stored copy is made by
   // the site_bundle effect either way).
-  if (!expectedPagesUrl()) return;
+  const siteUrl = await staticSiteUrl(payload.workspaceId);
+  if (!siteUrl) return;
 
   let files: BundleFile[];
   try {
@@ -34,7 +35,7 @@ export async function performPagesPush(payload: { snapshotId: string; workspaceI
     const tooBig = oversizeVideoIds(await bundleFileSizes(bundle));
     const readFiles = await readBundleFiles(bundle, (path) => path.startsWith("media/") && tooBig.has(path.slice(6)));
     files = limitStaticVideos(
-      retargetStaticSite({ files: readFiles, facts: bundle.facts }, expectedPagesUrl()),
+      retargetStaticSite({ files: readFiles, facts: bundle.facts }, siteUrl),
       bundle.facts.liveOrigin, tooBig,
     );
   } catch (e) {

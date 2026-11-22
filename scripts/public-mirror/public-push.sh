@@ -19,6 +19,7 @@ fi
 tools=$(mktemp -d); trap 'rm -rf "$tools"' EXIT
 mkdir -p "$tools/scripts/public-mirror"
 cp "$here/removedPaths.mjs" "$here/removed-paths.json" "$here/strip_links.py" "$tools/scripts/public-mirror/"
+cp "$here/../prCardLib.mjs" "$tools/scripts/"
 removed="$tools/scripts/public-mirror/removedPaths.mjs"
 git checkout -q --detach "$sha"
 # What the mirror leaves out is one piece of data (removed-paths.json): docs images, the scan reports, the deploy log
@@ -62,7 +63,16 @@ fi
 # The lines become public text, and the look above reads only the diff, so they get the same key/token look; keep reasons free of
 # server details and of counts of the owner's data.
 git fetch -q origin main
-pr_body=$(gh pr view "$ref" --repo oandy-rgb/Onden --json body -q .body 2>/dev/null || true)
+# The branch's PR (a ref given as origin/<branch> names the same PR).
+pr_json=$(gh pr view "${ref#origin/}" --repo oandy-rgb/Onden --json body,createdAt 2>/dev/null || true)
+pr_body=$(printf '%s' "$pr_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).body||"")}catch{}})')
+# Every PR is pushed here to be checked, so this is where its 驗收卡 (the five lines the owner reads, scripts/prCardLib.mjs) is
+# required: a PR opened from 2026-11-21 on without a complete card is not pushed (PUBLIC_PUSH_ALLOW=1 overrides, as above).
+if [ -n "$pr_json" ] && ! PR_JSON="$pr_json" node "$tools/scripts/prCardLib.mjs" $(git diff --name-only "$(git merge-base origin/main "$sha")" "$sha") \
+   && [ "${PUBLIC_PUSH_ALLOW:-}" != "1" ]; then
+  echo "NOT pushed: complete the PR's 驗收卡 first."
+  git reset -q --hard; git checkout -q "$back"; exit 1
+fi
 said=$( { git log --format=%B "$(git merge-base origin/main "$sha")..$sha"; printf '%s\n' "$pr_body"; } | sed 's/\r$//')
 # changes.mjs accepts the phrase anywhere in the text, so it travels as one line of its own instead of the sentence around it.
 overrides=$( { printf '%s\n' "$said" | grep -iE '^ratchet-override:[[:space:]]*[^[:space:]]|^[[:space:]]*文件不需要更新：[[:space:]]*[^[:space:]]';

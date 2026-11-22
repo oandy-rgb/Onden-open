@@ -13,6 +13,11 @@ export type NodeContentCommit = {
   /** Title and body as plain text, the way a reader would search them. */
   text: string;
   triggeredByEventId?: string;
+  /** The body alone, when the write has one (a body edit does): what a rule about a blank note reads. */
+  markdown?: string;
+  /** Who made the change, when the write has one (a body edit does; the derived
+   *  writes of a new note or a tag rename do not). */
+  actor?: ActorCtx;
 };
 
 export type NodeAttributeCommit = {
@@ -47,6 +52,14 @@ export type NodeVisibilityCommit = {
   workspaceId: string;
   actor: ActorCtx;
   nodeIds: string[];
+};
+
+/** Site settings (the workspace's Site Config) a committed change moved: the
+ *  keys whose value actually changed. Emitted by updateWorkspaceConfig. */
+type SiteConfigCommit = {
+  workspaceId: string;
+  actor: ActorCtx;
+  changedKeys: string[];
 };
 
 /** An explicit attribute write about to be stored (setNodeAttribute). */
@@ -86,6 +99,9 @@ export type NodeHooks = {
    *  hooks below: record durable work only (an outbox intent); it runs in its
    *  own savepoint, so a failure is logged and the user's write stands. */
   attributeCommitted?: (change: NodeAttributeCommit) => Promise<void>;
+  /** Runs inside the transaction of a site settings change, with the keys that
+   *  changed (a value set to what it already was is not listed). */
+  siteConfigCommitted?: (change: SiteConfigCommit) => Promise<void>;
   /** Runs inside the transaction of a space move or a space switch change. */
   spaceAudienceCommitted?: (change: SpaceAudienceCommit) => Promise<void>;
   /** Runs inside the transaction that trashed notes or brought them back. */
@@ -132,7 +148,7 @@ export async function nodeAttributeWriting(change: NodeAttributeWrite): Promise<
 // therefore cannot lose it, as an after-commit callback could. Each
 // subscriber runs in its own savepoint: one that fails is logged and rolled
 // back alone, never taking the user's write with it.
-async function runEach<K extends "attributeCommitted" | "spaceAudienceCommitted" | "lifecycleCommitted" | "visibilityCommitted">(
+async function runEach<K extends "attributeCommitted" | "siteConfigCommitted" | "spaceAudienceCommitted" | "lifecycleCommitted" | "visibilityCommitted">(
   kind: K, change: Parameters<NonNullable<NodeHooks[K]>>[0], detail: Record<string, unknown> = {},
 ): Promise<void> {
   for (const [moduleId, h] of hooks) {
@@ -146,6 +162,11 @@ async function runEach<K extends "attributeCommitted" | "spaceAudienceCommitted"
       log.warn("nodeHooks", `${kind} hook failed`, { moduleId, ...detail, err: error });
     }
   }
+}
+
+/** Call in the transaction of a site settings change (services/workspaceSettings.ts). Never throws. */
+export async function siteConfigCommitted(change: SiteConfigCommit): Promise<void> {
+  if (change.changedKeys.length > 0) await runEach("siteConfigCommitted", change, { keys: change.changedKeys.length });
 }
 
 /** Call in the transaction that moved notes between spaces, or changed a

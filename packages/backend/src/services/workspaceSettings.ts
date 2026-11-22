@@ -6,6 +6,7 @@ import { q } from "../db.js";
 import type { ActorCtx } from "../types.js";
 import { mutate, requireActor } from "../spine/mutate.js";
 import { isWorkspaceOwner, requirePerson } from "../spine/authority.js";
+import { siteConfigCommitted } from "../spine/nodeHooks.js";
 import { canReadNode } from "./readPolicy.js";
 import { StatusError } from "../statusError.js";
 import { workspaceColumnsSql } from "./syncProjection.js";
@@ -78,7 +79,15 @@ export async function updateWorkspaceConfig(
       payload: { keys: input.config ? Object.keys(input.config) : [], chrome_changed: input.chrome !== undefined },
     },
     apply: async () => {
-      if (input.config !== undefined) await patchSiteConfig(workspaceId, input.config, actor);
+      if (input.config !== undefined) {
+        const before = await getSiteConfig(workspaceId) as Record<string, unknown>;
+        await patchSiteConfig(workspaceId, input.config, actor);
+        const text = (value: unknown) => (value == null ? "" : String(value));
+        await siteConfigCommitted({
+          workspaceId, actor,
+          changedKeys: Object.entries(input.config).filter(([key, value]) => text(value) !== text(before[key])).map(([key]) => key),
+        });
+      }
       if (input.chrome !== undefined) await setChromeBlocks(workspaceId, input.chrome, actor, { base: input.chromeBase });
     },
   });

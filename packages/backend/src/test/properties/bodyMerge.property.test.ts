@@ -206,11 +206,17 @@ describe("threeWayMergeBody properties", () => {
     }));
   });
 
-  // Design limit, not a regression: the merge does not detect moves. When one
+  // Design limit OF THIS INNER FUNCTION, not of the product: the line merge does not detect moves. When one
   // side moves a block and the other side edits inside the lines it vacated,
   // that region is a conflict, ours' text stays there, and the moved copy
-  // lands too, so the moved line appears twice.
-  it.fails("4b. KNOWN: a line moved by theirs while ours edited its old spot appears twice", () => {
+  // lands too, so the moved line appears twice. Users do not see this: writes,
+  // restore and sync call mergeBody (bodyMergeMoves.ts), which since merge rule 3
+  // never returns a body holding a line twice (the paragraphs are merged as units,
+  // or the whole text is the conflict). The product case is a plain test in
+  // bodyMergeMoves.test.ts ("lines moved by one writer while the other edited
+  // their old place are not held twice") and the random property 4 in
+  // bodyMergeProvenance.property.test.ts.
+  it.fails("4b. KNOWN (threeWayMergeBody only): a line moved by theirs while ours edited its old spot appears twice", () => {
     const base = "one\nmoved\ntwo\nthree\nfour\nfive\n";
     const ours = "one\nmoved\nours added\ntwo\nthree\nfour\nfive\n"; // inserts between the two lines theirs vacates
     const theirs = "one\nthree\nfour\nfive\nmoved\ntwo\n";            // moves "moved" and "two" to the end

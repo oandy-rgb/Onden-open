@@ -55,3 +55,13 @@ export function mergeLossProblems(base: string, incoming: string, current: strin
   }
   return out;
 }
+
+/** The lines a merge holds twice (rule 3, bodyMergeMoves.ts): more often than the two sides' changes explain (as
+ *  `mergeLossProblems` "doubled") AND more often than any one of the three texts holds them. The second half leaves out a
+ *  conflict that only kept a line the other side deleted, and two writers each adding the same line once. */
+export function heldTwice(base: string, incoming: string, current: string, merged: string): string[] {
+  const doubled = mergeLossProblems(base, incoming, current, merged).filter((p) => p.kind === "doubled").map((p) => p.line);
+  if (doubled.length === 0) return [];
+  const cB = countOf(lineKeys(base)), cI = countOf(lineKeys(incoming)), cC = countOf(lineKeys(current)), cM = countOf(lineKeys(merged));
+  return doubled.filter((t) => (cM.get(t) ?? 0) > Math.max(cB.get(t) ?? 0, cI.get(t) ?? 0, cC.get(t) ?? 0));
+}

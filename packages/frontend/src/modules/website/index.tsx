@@ -67,7 +67,7 @@ export const websiteModule: FrontendModule = {
       const standing = siteStanding(node, loadedSpaces(), hasChildNote(node.id));
       return isNote(node) && !standing.on && standing.reason !== "hidden" && standing.reason !== "space";
     },
-    run: ({ node }) => import("./putOnSite").then((m) => m.putOnSite(node)),
+    run: async ({ node }) => { await (await import("./putOnSite")).putOnSite(node); },
   }],
   settings: [{
     id: "website.basics",

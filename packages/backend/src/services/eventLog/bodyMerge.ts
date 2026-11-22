@@ -292,7 +292,165 @@ function mergeChars(base: string, incoming: string, current: string): string | n
   return out.join("");
 }
 
-export function threeWayMergeBody(base: string, incoming: string, current: string): BodyMerge {
+/** Which body merge rule to apply. Rules 1 and 2 are kept as they were so a merge made under them can be computed again;
+ *  3 changes how a conflicting region of several lines is merged character by character (`mergeLineByLine`) and what
+ *  mergeBody does with a line held twice (bodyMergeMoves.ts). */
+export type BodyMergeRule = 1 | 2 | 3;
+/** The rule writes, restore and sync use now. distributedSync/types.ts publishes it as BODY_MERGE_RULE_VERSION for the
+ *  sync version gate; changing what mergeBody returns adds one here. */
+export const CURRENT_BODY_MERGE_RULE: BodyMergeRule = 3;
+
+/** Rule 3's character merge of a conflicting region of whole lines. Rules 1–2 diffed the region as one string of
+ *  characters, and that diff may match a base line's characters to a line the other writer newly wrote (the "。" of
+ *  "段落。" to the "。" of a new paragraph "新增。"): the first writer's addition then landed inside the new paragraph,
+ *  a line neither writer wrote. Here the lines are paired first and characters merged only within a pair:
+ *  - each base line is paired with the one line of each side that holds it with characters only added (a
+ *    subsequence), in order; a base line no single line holds, but a run of lines does, was split (Enter typed inside
+ *    it) and pairs with that run; the side's other lines are lines it inserted;
+ *  - when a base line has no such line (deleted, rewritten) or more than one pairing is possible (which line the writer
+ *    edited is unknown), null: the region stays a conflict;
+ *  - the pairs and insertions are merged like any lines (mergeRegions): a base line both writers edited is merged
+ *    character by character with only its own versions (mergeChars, both only added), two insertions at one point by
+ *    mergeInsertions.
+ *  So no writer's addition lands on a line the other writer newly wrote. */
+function mergeLineByLine(base: string[], ours: string[], other: string[], around: LineContext, baseLines: Set<string>): string[] | null {
+  if (base.join("").length + ours.join("").length + other.join("").length > CHAR_MERGE_MAX) return null;
+  const mine = pairedHunks(base, ours, baseLines), theirs = pairedHunks(base, other, baseLines);
+  if (!mine || !theirs) return null;
+  const out: string[] = [];
+  let failed = false;
+  mergeRegions(base, mine, theirs, out, (region, a, b) => {
+    if (region.start === region.end) {
+      return mergeInsertions(a, b, false, {
+        before: region.start > 0 ? base[region.start - 1] : around.before,
+        after: region.start < base.length ? base[region.start] : around.after,
+        eol: around.eol,
+      });
+    }
+    // A pair replaces one base line and insertions never overlap a pair, so this region is one base line both edited.
+    const chars = a.length > 1 || b.length > 1
+      ? mergeSplitLine(base[region.start]!, a.join(""), b.join(""))
+      : mergeChars(base[region.start]!, a.join(""), b.join(""));
+    if (chars === null) { failed = true; return a; }
+    return splitLines(chars);
+  });
+  return failed ? null : out;
+}
+
+/** Where `line`'s characters are in `text` (a subsequence), matched from the start or from the end. */
+function embed(line: string, text: string, forward: boolean): number[] {
+  const at = new Array<number>(line.length);
+  if (forward) for (let k = 0, x = 0; k < line.length; k++, x++) { while (text[x] !== line[k]) x++; at[k] = x; }
+  else for (let k = line.length - 1, x = text.length - 1; k >= 0; k--, x--) { while (text[x] !== line[k]) x--; at[k] = x; }
+  return at;
+}
+
+/** One base line both writers only added characters to, at least one of them also splitting it over several lines.
+ *  Which line a base character went to can be read more than one way ("下週要交報告1。" split into "下週要交報告1",
+ *  "甲0加的一行。", "。": is the "。" the last line, or the end of the inserted one?), and the other writer's
+ *  addition next to it would land on a different line. So the characters are matched both from the start and from
+ *  the end of each side, the merge is done for each reading, and taken only when they all give the same text. Two
+ *  additions at one point keep the same-line rule (mergeInsertions: both, in code-unit order), also when one of them is
+ *  the line break: Enter pressed where the other writer typed. Null: a conflict. */
+function mergeSplitLine(base: string, ours: string, other: string): string | null {
+  if (base.length + ours.length + other.length > CHAR_MERGE_MAX) return null;
+  const mergeWith = (pa: number[], pb: number[]): string | null => {
+    let out = "";
+    for (let k = 0; k <= base.length; k++) {
+      const x = ours.slice(k === 0 ? 0 : pa[k - 1]! + 1, k === base.length ? ours.length : pa[k]);
+      const y = other.slice(k === 0 ? 0 : pb[k - 1]! + 1, k === base.length ? other.length : pb[k]);
+      out += x && y && x !== y ? mergeInsertions(Array.from(x), Array.from(y), true).join("") : x || y;
+      if (k < base.length) out += base[k];
+    }
+    return out;
+  };
+  const results = new Set<string | null>();
+  for (const fa of [true, false]) for (const fb of [true, false]) results.add(mergeWith(embed(base, ours, fa), embed(base, other, fb)));
+  const [only] = results;
+  return results.size === 1 && only !== undefined ? only : null;
+}
+
+/** Whether `line`'s characters appear in order in `text`. */
+function holds(line: string, text: string): boolean {
+  let k = 0;
+  for (let x = 0; x < text.length && k < line.length; x++) if (text[x] === line[k]) k++;
+  return k === line.length;
+}
+
+/** The lines [first, last] of `to` a base line pairs with, searching forward from line `from` (or backward from it):
+ *  the nearest single line that holds it, else the run its characters were split over, matched nearest first. Null: none. */
+function pairOf(line: string, to: string[], from: number, forward: boolean, baseLines: Set<string>): [number, number] | null {
+  const step = forward ? 1 : -1;
+  for (let j = from; j >= 0 && j < to.length; j += step) if (holds(line, to[j]!)) return [j, j];
+  // Split: match the characters greedily, nearest first; the run is the lines the matched characters are on.
+  let k = forward ? 0 : line.length - 1, first = -1, last = -1;
+  for (let j = from; j >= 0 && j < to.length && k >= 0 && k < line.length; j += step) {
+    const text = to[j]!;
+    for (let x = forward ? 0 : text.length - 1; x >= 0 && x < text.length && k >= 0 && k < line.length; x += step) {
+      if (text[x] !== line[k]) continue;
+      if (first < 0) first = j;
+      last = j;
+      k += step;
+    }
+  }
+  if (k >= 0 && k < line.length) return null;
+  const [lo, hi] = forward ? [first, last] : [last, first];
+  // A line of the run that holds base characters is a piece of this line only if it is not another base line (moved
+  // there) and holds at least two letters, digits or ideographs of it: "。", "1" or " " end or fill many lines, and
+  // holding one of those is no sign of a piece (it may be a line the writer newly wrote, and the other writer's
+  // addition next to that "。" would land in it).
+  const run = to.slice(lo, hi + 1), at = embed(line, run.join(""), forward);
+  let start = 0;
+  for (const piece of run) {
+    const end = start + piece.length;
+    const held = at.flatMap((x, c) => (x >= start && x < end ? [line[c]!] : []));
+    if (held.length > 0 && (baseLines.has(piece) || held.filter((ch) => WORD.test(ch)).length < 2)) return null;
+    start = end;
+  }
+  return [lo, hi];
+}
+const WORD = /[\p{L}\p{N}]/u;
+
+/** `side` as hunks over `base` when every base line pairs with one line (or the run it was split into) that holds it
+ *  with characters only added, in order (see mergeLineByLine); null otherwise. Identical lines are paired by the line
+ *  diff, as the line merge pairs them; inside each of its hunks, the base lines it replaced pair by subsequence,
+ *  searched from the start and from the end: a single line must be the same both ways (else it is not unique). */
+function pairedHunks(base: string[], side: string[], baseLines: Set<string>): Hunk[] | null {
+  const out: Hunk[] = [];
+  for (const h of lineHunks(base, side)) {
+    const from = base.slice(h.start, h.end), to = h.lines;
+    const pairs: Array<[number, number]> = [];
+    for (let i = 0, j = 0; i < from.length; i++) {
+      const p = pairOf(from[i]!, to, j, true, baseLines);
+      if (!p) return null;
+      pairs.push(p);
+      j = p[1] + 1;
+    }
+    for (let i = from.length - 1, j = to.length - 1; i >= 0; i--) {
+      const p = pairOf(from[i]!, to, j, false, baseLines);
+      if (!p) return null;
+      const f = pairs[i]!;
+      if (p[0] !== f[0] || p[1] !== f[1]) {
+        // Two single lines: which one the writer edited is unknown. A split: the run is read both ways; the pair is the
+        // lines either reading uses, and mergeSplitLine takes it only if both readings merge to the same text.
+        if (p[0] === p[1] && f[0] === f[1]) return null;
+        pairs[i] = [Math.min(f[0], p[0]), Math.max(f[1], p[1])];
+      }
+      j = p[0] - 1;
+    }
+    for (let i = 1; i < pairs.length; i++) if (pairs[i]![0] <= pairs[i - 1]![1]) return null;
+    let next = 0; // line of `to`
+    pairs.forEach(([first, last], i) => {
+      if (first > next) out.push({ start: h.start + i, end: h.start + i, lines: to.slice(next, first) });
+      if (first !== last || to[first] !== from[i]) out.push({ start: h.start + i, end: h.start + i + 1, lines: to.slice(first, last + 1) });
+      next = last + 1;
+    });
+    if (next < to.length) out.push({ start: h.end, end: h.end, lines: to.slice(next) });
+  }
+  return out;
+}
+
+export function threeWayMergeBody(base: string, incoming: string, current: string, rule: BodyMergeRule = 1): BodyMerge {
   if (incoming === current || current === base) return { merged: incoming, clean: true, conflicts: [] };
   if (incoming === base) return { merged: current, clean: true, conflicts: [] };
   // Every side ends with "\n" while merging, so text added after a last line
@@ -316,12 +474,19 @@ export function threeWayMergeBody(base: string, incoming: string, current: strin
   const theirs = lineHunks(baseLines, splitLines(close(current)));
   const out: string[] = [];
   const conflicts: Array<BodyConflict & { line: number; lines: number }> = [];
+  let allBase: Set<string> | undefined;
   mergeRegions(baseLines, mine, theirs, out, (region, ours, other) => {
     // Both sides only inserted lines at one point: merge whole lines, so the
     // common head/tail is cut at line edges, never inside a line.
     if (region.start === region.end) return mergeInsertions(ours, other, false, { before: baseLines[region.start - 1], after: baseLines[region.start], eol });
-    const chars = mergeChars(baseLines.slice(region.start, region.end).join(""), ours.join(""), other.join(""));
-    if (chars !== null) return splitLines(chars);
+    if (rule >= 3) {
+      allBase ??= new Set(baseLines);
+      const lines = mergeLineByLine(baseLines.slice(region.start, region.end), ours, other, { before: baseLines[region.start - 1], after: baseLines[region.end], eol }, allBase);
+      if (lines !== null) return lines;
+    } else {
+      const chars = mergeChars(baseLines.slice(region.start, region.end).join(""), ours.join(""), other.join(""));
+      if (chars !== null) return splitLines(chars);
+    }
     conflicts.push({
       base: baseLines.slice(region.start, region.end).join(""), incoming: ours.join(""), current: other.join(""),
       before: "", after: "", line: out.length, lines: ours.length,

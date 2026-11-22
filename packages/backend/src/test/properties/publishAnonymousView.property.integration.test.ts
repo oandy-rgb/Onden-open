@@ -34,6 +34,7 @@ import nodesRouter from "../../routes/nodes.js";
 import publishRouter from "../../modules/website/routes.js";
 import { moveToSpace } from "../../services/spaces.js";
 import { canReadMedia } from "../../services/mediaAccess.js";
+import { sitePathFor } from "@onden/markdown";
 import { loadServedSite, publishedUrlFor } from "../../modules/website/publishing/servedSite.js";
 import { publishedNodeIds } from "../../modules/website/publishing/publishedSet.js";
 import { buildCandidate } from "../../modules/website/publishing/snapshot.js";
@@ -198,6 +199,8 @@ async function assertAnonymousView(w: World, history: Op[]): Promise<void> {
   for (let i = 0; i < NOTES; i++) {
     const url = await publishedUrlFor(workspaceId, w.ids[i]!);
     if (url !== null) expect(publicNow.has(w.ids[i]!), `${why}: address handed out for private note ${i}`).toBe(true);
+    // The one-note lookup answers as the full served site does (it used to load all of it).
+    expect(url, `${why}: the address of note ${i} differs from the served site's`).toBe(sitePathFor(w.ids[i]!, nodes));
   }
   // 5
   const candidate = await buildCandidate(workspaceId, { title: "t", actor: currentActor });

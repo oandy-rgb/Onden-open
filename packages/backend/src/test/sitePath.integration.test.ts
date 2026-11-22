@@ -25,7 +25,7 @@ import { persistActor } from "./helpers/persistActor.js";
 import { makeSpace, publishDefaultSpace } from "./helpers/spaceFixtures.js";
 import { loadServedSite } from "../modules/website/publishing/servedSite.js";
 import type { NodeRow } from "../modules/website/publishing/index.js";
-import { servedLinkTarget } from "@onden/markdown";
+import { servedLinkTarget, sitePathFor } from "@onden/markdown";
 import { seedQ } from "./helpers/seedQ.js";
 import { postVia, publishWithPreview } from "./helpers/publishWithPreview.js";
 
@@ -88,6 +88,23 @@ describe.skipIf(!isTestDb)("site addresses come from the served snapshot (DB)", 
     expect(served.find((n) => n.slug === "plan")?.id).toBe(ids.plan);
     // Not on the site: no address, rather than one that 404s.
     expect(await urlOf(randomUUID())).toBeNull();
+  });
+
+  // Review of #1668: a snapshot made before migration 201 names a note by the id it had then (id_rewrites old -> new);
+  // the address lookup must answer as the whole served site does (loadServedSite), under either id.
+  it("a snapshot that names a note by its pre-migration id still gives the address the served site gives", async () => {
+    const oldId = randomUUID();
+    const before = (await q<{ id: string; payload: unknown }>(`SELECT id, payload FROM publish_snapshots WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 1`, [WS])).rows[0]!;
+    try {
+      await seedQ(`UPDATE publish_snapshots SET payload = replace(payload::text, $2, $3)::jsonb WHERE id = $1`, [before.id, ids.target, oldId]);
+      await seedQ(`INSERT INTO id_rewrites (old_id, new_id, workspace_id, purpose) VALUES ($1, $2, $3, 'test')`, [oldId, ids.target, WS]);
+      const pages = ((await loadServedSite(WS)).payload.nodes as NodeRow[]).map((n) => ({ id: n.id, slug: n.slug }));
+      for (const id of [oldId, ids.target!, ids.plan!]) expect(await urlOf(id), id).toBe(sitePathFor(id, pages));
+      expect(await urlOf(oldId), "the old id is still served").toBe("/site/target");
+    } finally {
+      await seedQ(`DELETE FROM id_rewrites WHERE old_id = $1`, [oldId]);
+      await seedQ(`UPDATE publish_snapshots SET payload = $2::jsonb WHERE id = $1`, [before.id, JSON.stringify(before.payload)]);
+    }
   });
 
   it("bugs 1 + 4: [[My Alias]] survives the snapshot and links the aliased page", async () => {

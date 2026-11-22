@@ -171,3 +171,4 @@
 - 兩邊把同一段搬到不同的地方（或行級結果有重複／掉字）改判衝突：內文留 incoming 整份、`BODY_CONFLICT` 帶 current 整份。
 - 前後對照、既有測試輸入重跑與大文件耗時：[量測報告](../../research/body-merge-measurements-2026-11-15.md)第 10 節。測試台的 `paraMerge.ts` 現在只是引用產品實作的外殼。
 - 同步仍關著，所以這是允許現在改的規則變更；開啟後再改要跟協定版本走（第 5 節第 3 項、[節點同步提案](node-sync-channels-2026-11-14.md)第 12 項）。
+- **合併規則版本 3（2026-11-19）**：逐字合併只在配對好的同一行裡做，合併結果不會有一行出現兩次；`mergeBody(…, rule)` 仍算得出 1、2 的結果。見 [decisions-core-sync.md](../../agents/decisions-core-sync.md)「合併規則版本 3」與[規則 3 的量測](../../research/body-merge-rule3-2026-11-19.md)。

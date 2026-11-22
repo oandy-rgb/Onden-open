@@ -15,6 +15,7 @@ const P = {
 };
 const doc = (...paras: string[]) => paras.join("\n\n") + "\n";
 const base = doc(P.a, P.b, P.c, P.d);
+const base4 = base;
 
 describe("mergeBody: a moved paragraph and an edit of it", () => {
   it("lands both when one writer moves a paragraph and the other edits it", () => {
@@ -123,18 +124,119 @@ describe("mergeLossProblems: the line count that guards a rescued merge", () => 
 });
 
 describe("merge rule version", () => {
-  it("is 2: the line merge was version 1, mergeBody's moved-paragraph handling is the change", () => {
-    expect(BODY_MERGE_RULE_VERSION).toBe(2);
+  it("is 3: the line merge was 1, mergeBody's moved paragraphs 2, line-by-line characters and no doubled lines 3", () => {
+    expect(BODY_MERGE_RULE_VERSION).toBe(3);
   });
 });
 
-describe("known line-merge defect (not fixed here)", () => {
-  // threeWayMergeBody, character level: one writer edits a paragraph's last line, the other edits it too and adds a paragraph
-  // after it. The shared "。" ending lets the character merge splice the first writer's edit into the NEW paragraph, text
-  // neither wrote ("新增（我）。"). About 60 in 20000 random merges. mergeBody keeps the line merge's result. Pinned with
-  // it.fails so it is tracked: when the line merge is fixed this starts passing and `it.fails` must become `it`.
-  it.fails("does not splice one writer's edit into a paragraph the other writer added after it", () => {
-    const r = mergeBody("段落。\n", "段落（我）。\n", "段落（他）。\n\n新增。\n");
-    expect(r.merged).not.toContain("新增（我）");
+// Rule 3 (2026-11-19). Each line of a merged body is a line of base or of a writer, or one base line with both writers'
+// additions; no line is held twice. Random check: properties/bodyMergeProvenance.property.test.ts.
+describe("mergeBody rule 3: an edit lands on the line it was made on", () => {
+  // Base "段落。". One writer edits it; the other edits it too and adds a paragraph after it. Rules 1–2 diffed the region
+  // as one string of characters: the "。" of "段落。" matched the "。" of the new paragraph "新增。", and the first
+  // writer's "（我）" landed inside it, "新增（我）。", a line neither wrote. The lines are now paired first.
+  const base = "段落。\n", mine = "段落（我）。\n", theirs = "段落（他）。\n\n新增。\n";
+
+  it("keeps the other writer's new paragraph as written, in either order", () => {
+    const expected = { merged: "段落（他）（我）。\n\n新增。\n", clean: true, conflicts: [] };
+    expect(mergeBody(base, mine, theirs)).toEqual(expected);
+    expect(mergeBody(base, theirs, mine)).toEqual(expected);
+  });
+
+  it("rule 2 still gives what it gave, so a merge made under it can be computed again", () => {
+    expect(mergeBody(base, mine, theirs, 2)).toEqual({ merged: "段落（他）。\n\n新增（我）。\n", clean: true, conflicts: [] });
+    expect(mergeBody(base, mine, theirs, 1)).toEqual(threeWayMergeBody(base, mine, theirs));
+  });
+
+  it("merges a line one writer split (Enter typed inside it) with the other writer's edit of it, in either order", () => {
+    const expected = { merged: "一二\n三四（改）。\n", clean: true, conflicts: [] };
+    expect(mergeBody("一二三四。\n", "一二\n三四。\n", "一二三四（改）。\n")).toEqual(expected);
+    expect(mergeBody("一二三四。\n", "一二三四（改）。\n", "一二\n三四。\n")).toEqual(expected);
+  });
+
+  it("is a conflict when the only piece of the split line left on a line is punctuation: that line may be a new one", () => {
+    // Found by the random property (bodyMergeProvenance 1, seed 1511853495). 乙 split "記得買牛奶1。" before "。" and wrote
+    // a new line ending in "。"; rule 2 put 甲's "甲0很" into 乙's new line.
+    const b = "記得買牛奶1。\n", x = "甲1寫的新段落。\n\n記得買牛奶1甲0很。\n", y = "記得買牛奶1\n乙0改寫的一行。\n";
+    expect(mergeBody(b, x, y, 2).merged).toContain("乙0改寫的一行甲0很。");
+    expect(mergeBody(b, x, y).clean).toBe(false);
+    expect(mergeBody(b, y, x).clean).toBe(false);
+  });
+
+  it("is a conflict when a split line can be read two ways that put the other writer's addition on different lines", () => {
+    // Found by the random property (seed 825746270): 乙 split "記得買牛奶|1。" and put a new line between the halves, which
+    // also holds "1" and "。". Is 甲's "甲0很" before the "。" of the new line or of the last one?
+    const b = "記得買牛奶1。\n", x = "記得\n買牛奶1甲0很。\n", y = "乙0加的一行。\n記得買牛奶\n乙1加的一行。\n1。\n";
+    expect(mergeBody(b, x, y).clean).toBe(false);
+    expect(mergeBody(b, y, x).clean).toBe(false);
+  });
+
+  it("leaves the common cases clean: two writers editing different paragraphs, or each adding one at the same point", () => {
+    const different = mergeBody(base4, doc(P.a.replace("第一句", "第一句（甲）"), P.b, P.c, P.d), doc(P.a, P.b, P.c.replace("第二句", "第二句（乙）"), P.d));
+    expect(different).toEqual({ merged: doc(P.a.replace("第一句", "第一句（甲）"), P.b, P.c.replace("第二句", "第二句（乙）"), P.d), clean: true, conflicts: [] });
+    const samePoint = mergeBody(base4, doc(P.a, P.b, "甲寫的一段。", P.c, P.d), doc(P.a, P.b, "乙寫的一段。", P.c, P.d));
+    expect(samePoint).toEqual({ merged: doc(P.a, P.b, "乙寫的一段。", "甲寫的一段。", P.c, P.d), clean: true, conflicts: [] });
+    // Typing into one line both writers edited keeps both additions (rule F03, unchanged).
+    expect(mergeBody("一行\n", "一行A\n", "一行B\n")).toEqual({ merged: "一行AB\n", clean: true, conflicts: [] });
+  });
+});
+
+describe("mergeBody rule 3: lines moved by one writer while the other edited their old place are not held twice", () => {
+  // The case properties/bodyMerge.property.test.ts 4b pins for the line merge. Under rule 2 mergeBody gave the line
+  // merge's conflict, and its body held "moved" and "two" twice: the incoming writer's text at the old place, the
+  // current writer's move at the new one.
+  const base = "one\nmoved\ntwo\nthree\nfour\nfive\n";
+  const ours = "one\nmoved\nours added\ntwo\nthree\nfour\nfive\n";
+  const theirs = "one\nthree\nfour\nfive\nmoved\ntwo\n";
+  const count = (text: string, line: string) => text.split("\n").filter((l) => l === line).length;
+
+  it("rule 2 held them twice", () => {
+    expect(count(mergeBody(base, ours, theirs, 2).merged, "moved")).toBe(2);
+  });
+
+  it("one paragraph (no unit to follow): the whole text is the conflict, nothing held twice, nothing dropped", () => {
+    expect(mergeBody(base, ours, theirs)).toEqual({ merged: ours, clean: false, conflicts: [{ base, incoming: ours, current: theirs, before: "", after: "" }] });
+    const swapped = mergeBody(base, theirs, ours);
+    expect(swapped.clean).toBe(false);
+    expect(count(swapped.merged, "moved")).toBe(1);
+  });
+
+  it("separate paragraphs: the inserted paragraph follows the moved ones, clean, in either order", () => {
+    const b = "one\n\nmoved\n\ntwo\n\nthree\n\nfour\n";
+    const o = "one\n\nmoved\n\nours added\n\ntwo\n\nthree\n\nfour\n";
+    const t = "one\n\nthree\n\nfour\n\nmoved\n\ntwo\n";
+    const expected = { merged: "one\n\nthree\n\nfour\n\nmoved\n\nours added\n\ntwo\n", clean: true, conflicts: [] };
+    expect(mergeBody(b, o, t)).toEqual(expected);
+    expect(mergeBody(b, t, o)).toEqual(expected);
+  });
+
+  it("both writers move one paragraph to the same place and one edits it: held once (rule 2 held it twice, clean)", () => {
+    // Found by the random property (bodyMergeProvenance 4).
+    const [l1, l2, l3, l4] = ["今天開會討論進度1。", "今天開會討論進度2。", "今天開會討論進度3。", "今天開會討論進度4。"];
+    const b = `${l1}\n\n${l2}\n${l3}\n${l4}\n`;
+    const x = `${l2}\n甲很${l3}\n${l4}\n\n${l1}\n`, y = `${l2}\n${l3}\n乙很${l4}\n\n${l1}\n`;
+    expect(count(mergeBody(b, x, y, 2).merged, l1)).toBe(2);
+    for (const [i, c] of [[x, y], [y, x]]) {
+      expect(mergeBody(b, i!, c!)).toEqual({ merged: `${l2}\n甲很${l3}\n乙很${l4}\n\n${l1}\n`, clean: true, conflicts: [] });
+    }
+    // Too short for the units to recognise the edited paragraph: the whole text is the conflict, still held once.
+    const r = mergeBody("今天1。\n\n今天2。\n今天3。\n今天4。\n", "今天2。\n甲很今天3。\n今天4。\n\n今天1。\n", "今天2。\n今天3。\n乙很今天4。\n\n今天1。\n");
+    expect(r.clean).toBe(false);
+    expect(count(r.merged, "今天1。")).toBe(1);
+  });
+});
+
+describe("known same-line defect (kept: owner 2026-11-22, option A)", () => {
+  // Inside ONE line both writers only added characters (rule F03: both kept). The character diff may read "乙0，然後1。乙1。"
+  // as "乙0，然後1。乙" added before "1。", the same point as the other writer's "甲0!", so "乙1" is cut in two: every
+  // character is still there, but "乙1" is not. Found by bodyMergeProvenance property 2 (1 in 20000 random merges). Whether
+  // two additions at an ambiguous point of one line should be a conflict is the same-line question in
+  // docs/architecture/proposals/body-merge-same-line-2026-11-13.md: the owner decided 2026-11-22 to keep both additions
+  // (option A), so this stays as it is (decisions-core-sync.md, merge rule 3). Pinned so a change to it is seen: if it
+  // ever passes, `it.fails` must become `it`.
+  it.fails("does not cut one writer's addition in two with the other writer's", () => {
+    const b = "下週要交報告1。\n";
+    const r = mergeBody(b, "下週要交報告甲0!1。\n", "下週要交報告乙0，然後1。乙1。\n");
+    expect(r.merged).toContain("乙1");
   });
 });

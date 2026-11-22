@@ -27,10 +27,16 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 
 2026-11-14（業主，「按建議」）三條發布規則：
 
-1. **拿下來的內容不會自己回來。** 筆記離開網站（不發布、刪除、所在空間的發布關掉），之後又符合條件（「放回網站」、還原、重新打開空間開關），**不會**立刻用舊快照的文字重新上線，要等業主下一次按發布。做法：服務出去的是「最近快照 − 下架」，所以在**會讓東西下架的同一個交易**裡（網站模組的 hook 本來就在那裡要求重建，`requestSiteRebuild`）先把「快照裡有、現在已不在發布集合」的筆記 id 記進**那份快照自己的 payload**（`taken_down`，`publishing/takenDown.ts recordTakedowns`）。讀者面的所有出口（`loadServedSite`、媒體閘門 `servedSiteShowsMedia`、筆記的網站狀態 `noteSiteState`）用 `servedNodeIds` ＝ 發布集合 − `taken_down`；新快照與預覽仍用 `publishedNodeIds`，所以下一次發布會把它們（以現在的文字）帶回來，記錄隨舊快照作廢，不需要清除、也**沒有 migration**。發布前預覽的 `diff.returning` 列出這些筆記（不再重複列在 `changed`）；前端在「放回網站」與空間開關旁說明「下次發布時才會回到網站上」。已知限制：筆記被清空變成空白又重新寫字，這條路沒有 hook，不在記錄內（空白期間本來就不在發布集合；之後文字回來時仍照舊快照的版本，需另案決定要不要掛 body hook）。
+1. **拿下來的內容不會自己回來。** 筆記離開網站（不發布、刪除、所在空間的發布關掉），之後又符合條件（「放回網站」、還原、重新打開空間開關），**不會**立刻用舊快照的文字重新上線，要等業主下一次按發布。做法：服務出去的是「最近快照 − 下架」，所以在**會讓東西下架的同一個交易**裡（網站模組的 hook 本來就在那裡要求重建，`requestSiteRebuild`）先把「快照裡有、現在已不在發布集合」的筆記 id 記進**那份快照自己的 payload**（`taken_down`，`publishing/takenDown.ts recordTakedowns`）。讀者面的所有出口（`loadServedSite`、媒體閘門 `servedSiteShowsMedia`、筆記的網站狀態 `noteSiteState`）用 `servedNodeIds` ＝ 發布集合 − `taken_down`；新快照與預覽仍用 `publishedNodeIds`，所以下一次發布會把它們（以現在的文字）帶回來，記錄隨舊快照作廢，不需要清除、也**沒有 migration**。發布前預覽的 `diff.returning` 列出這些筆記（不再重複列在 `changed`）；前端在「放回網站」與空間開關旁說明「下次發布時才會回到網站上」。筆記被清空（2026-11-20 業主「按建議」）：清空正文會讓筆記因空白規則離開發布集合，所以和其他下架一樣：網站模組的 `contentCommitted` hook（`takenDown.ts emptiedOnSite`：正文空白、且最新快照還帶著它、且還沒記為下架）在同一交易要求重建，`requestSiteRebuild` 一併把它記進 `taken_down`，靜態副本不會留著舊頁。清空後再寫字，它仍等下一次發布才回來。
 2. **「不發布這則」遇到底下還有網站上的筆記時問一次**：「底下 N 則要不要一起不發布？」（一起不發布／只有這則）。「一起」走 `POST /api/publish/keep-off-subtree`（`services/siteDefault.ts keepSubtreeOffSite`）：同一個交易裡，根的 `ATTRIBUTE_SET` 是原因，每則底下的 live 筆記各自的 `ATTRIBUTE_SET` 都 `triggered_by` 它，各自用自己的 `set_attribute` 權限判斷（任何一則不行就全部不寫），所以一次 `restoreEvent(根事件, { cascade: true })` 就是一次復原。「只有這則」維持原行為：底下的筆記仍在網站上，`scrubUnpublishedParents` 把它們的上層拿掉（不洩漏不發布的上層）；該筆記的網站列顯示「底下 N 則仍在網站上」。**搬動**筆記到「不發布」的筆記底下：目前沒有相關對話框，維持原樣（搬動不套用此規則）。
 3. **網站是工作區擁有者的。** 非擁有者不能把自己的個人空間打開「發布到網站」（`services/spaces.ts updateSpace` 回 403 `owner_only`；設定 › 空間與成員不顯示該開關）；`spine/spaceScope.ts publishableSpaceNodeIds`（發布集合的共同底線）也**永遠不含**非擁有者個人空間的筆記，即使開關早已是開的，所以不需要 migration。擁有者自己的個人空間照舊可以。
 
+
+2026-11-16（#1668，網站發布掃描 13）幾條細節：
+
+- **「一起發布」只標得上站的筆記。** `POST /api/publish/include` 先問 `publishing/publishedSet.ts blockedFromSite`（`PAGE_SQL` 與 `publiclyReadableNodeIds`，即 `publishedNodeIds` 自己的條件）：`hidden`、`space_not_published`、`not_a_page`（垃圾桶、標籤定義、系統機器；操作者讀不到的筆記一律是這個，不洩漏原因）回在 `failed`，不寫 `_published`。前端 `reportIncluded` 依原因各說一句。
+- **靜態副本的位址跟著現在的設定。** `publishing/cname.ts staticSiteUrl`：設了自訂網域就是 `https://<網域>/`，否則 github.io，沒有外部主機就是 `null`。靜態副本的 canonical／sitemap／feed／robots、發布紀錄的「檢視網站」連結（`listSnapshots` 與 `loadServedSite` 的 `artifact_ref`）都在**讀取時**算，不用發布當下存下的值（欄位仍照寫，沒人當依據）。設定改了 `custom_domain`（設、改、清掉）時，`spine/nodeHooks.ts siteConfigCommitted` 讓網站模組排一次重推（`requestSiteRebuild`），CNAME 與連結同時換。
+- **查單篇網址不載入整站。** `servedSite.publishedUrlFor` 用 `publishing/latestSnapshot.ts storedNote` 取那一篇，並與 `loadServedSite` 一樣認 migration 201 之前以舊 id 存的快照（`withFormerIds`）；`noteSiteState` 用同一個 `storedNote`。讀快照裡筆記的查詢只准寫在 `latestSnapshot.ts` 與列在 `publishSnapshotReads.guard.test.ts` 的整站讀取者。已知還沒收斂：`noteSiteState` 的 `candidateNote` 仍對全部已發布筆記做 slug／alias／標籤整理。
 
 ## 一套 Markdown 管線
 

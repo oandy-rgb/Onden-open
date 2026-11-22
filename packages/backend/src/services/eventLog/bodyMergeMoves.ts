@@ -21,13 +21,13 @@
 //      the merged body keeps the incoming text and the conflict carries the whole current text, the
 //      same way every conflict offers the left-out side back.
 //
-// Changing what this returns is a merge rule version change (BODY_MERGE_RULE_VERSION in distributedSync/types.ts): nodes on
+// Changing what this returns is a merge rule version change (CURRENT_BODY_MERGE_RULE in bodyMerge.ts, published as BODY_MERGE_RULE_VERSION in distributedSync/types.ts): nodes on
 // different versions would compute different bodies. docs/architecture/proposals/node-sync-channels-2026-11-14.md item 12.
 
 import { bigrams, fenceScanner } from "@onden/markdown";
 import { diffRuns } from "./bodyPatch.js";
-import { splitLines, threeWayMergeBody, type BodyConflict, type BodyMerge } from "./bodyMerge.js";
-import { mergeLossProblems } from "./bodyMergeLoss.js";
+import { CURRENT_BODY_MERGE_RULE, splitLines, threeWayMergeBody, type BodyConflict, type BodyMerge, type BodyMergeRule } from "./bodyMerge.js";
+import { heldTwice, mergeLossProblems } from "./bodyMergeLoss.js";
 import { FIND_VALID, KEEP_MOVED } from "../blockAnchors/index.js";
 
 type UnitConflictKind = "edit-edit" | "edit-delete" | "move-delete";
@@ -203,7 +203,7 @@ type UnitMerge = { merged: string; conflicts: BodyConflict[]; kinds: UnitConflic
 type UnitMergeResult = UnitMerge | { order: "move-move" | "cycle"; kinds: UnitConflictKind[] } | null;
 
 /** Three-way merge per unit. incoming is the side being saved, current the one on the server. Null: too many distinct units. */
-export function mergeUnits(base: string, incoming: string, current: string, mode: UnitMode = "block"): UnitMergeResult {
+export function mergeUnits(base: string, incoming: string, current: string, mode: UnitMode = "block", rule: BodyMergeRule = CURRENT_BODY_MERGE_RULE): UnitMergeResult {
   const B = splitUnits(base, mode), M = splitUnits(incoming, mode), T = splitUnits(current, mode);
   const mm = matchUnits(B.units, M.units), tm = matchUnits(B.units, T.units);
   if (!mm || !tm) return null;
@@ -258,7 +258,7 @@ export function mergeUnits(base: string, incoming: string, current: string, mode
       continue;
     }
     if (editedM && editedT && mu!.key !== tu!.key) {
-      const r = threeWayMergeBody(baseText, mu!.text, tu!.text);
+      const r = threeWayMergeBody(baseText, mu!.text, tu!.text, rule);
       if (r.clean) content.set(n, { text: r.merged, gap });
       else { addConflict("edit-edit", baseText, mu!.text, tu!.text); content.set(n, { text: mu!.text, gap }); }
     } else content.set(n, { text: editedM ? mu!.text : editedT ? tu!.text : baseText, gap });
@@ -319,10 +319,16 @@ export function mergeUnits(base: string, incoming: string, current: string, mode
     }
     if (chains.mine.length === 1 && chains.theirs.length === 1) {
       const text = (ch: Node[]) => { const t = ch.map((x) => x.unit.text + x.unit.gap).join(""); return t.endsWith("\n") ? t : `${t}\n`; };
-      const merged = threeWayMergeBody("", text(chains.mine[0]!), text(chains.theirs[0]!)).merged.replace(/(\r?\n)+$/, "");
+      const merged = threeWayMergeBody("", text(chains.mine[0]!), text(chains.theirs[0]!), rule).merged.replace(/(\r?\n)+$/, "");
       for (const x of [...chains.mine[0]!, ...chains.theirs[0]!]) emitted.add(x);
       const first = chains.mine[0]![0]!;
-      kids.push(mk({ text: merged, gap: first.unit.gap, kind: first.unit.kind, key: merged }, -1, "mine"));
+      // Rule 3: the gap after the merged runs is the wider of the two runs' gaps, whichever side is incoming (rule 2 took
+      // the incoming run's, so swapping the writers could join a paragraph to the list after it).
+      const gapOf = (ch: Node[]) => ch[ch.length - 1]!.unit.gap;
+      const breaks = (g: string) => g.split("\n").length;
+      const [gm, gt] = [gapOf(chains.mine[0]!), gapOf(chains.theirs[0]!)];
+      const gap = rule < 3 ? first.unit.gap : breaks(gm) !== breaks(gt) ? (breaks(gm) > breaks(gt) ? gm : gt) : gm < gt ? gm : gt;
+      kids.push(mk({ text: merged, gap, kind: first.unit.kind, key: merged }, -1, "mine"));
     } else for (const list of [...chains.mine, ...chains.theirs]) kids.push(list[0]!);
     for (const kid of order(kids)) emit(kid, depth + 1);
   };
@@ -374,33 +380,74 @@ function movedUnitKeys(baseUnits: Unit[], text: string): Set<string> {
   return new Set(side ? [...side.moved].map((y) => units[y]!.key) : []);
 }
 
-/** The body merge every caller uses: the line merge, plus moved paragraphs (see the top of this file). */
-export function mergeBody(base: string, incoming: string, current: string): BodyMerge {
-  const line = threeWayMergeBody(base, incoming, current);
+/** Rule 3: the base units of a line conflict that a side holds elsewhere. The side's text in the conflict holds the unit
+ *  fewer times than base did there, while the side's whole text holds it at least as often as base: that side moved it out
+ *  of the region. Read from the line merge's own regions, so it agrees with the line diff on which paragraphs moved (two
+ *  paragraphs trading places with two others is the same text either way; the unit diff may pick the other reading). */
+function relocatedOutOf(c: BodyConflict, base: string, incoming: string, current: string): Set<string> {
+  const counts = (text: string) => {
+    const m = new Map<string, number>();
+    for (const u of splitUnits(text).units) m.set(u.key, (m.get(u.key) ?? 0) + 1);
+    return m;
+  };
+  const inBase = counts(base), inRegion = counts(c.base);
+  const out = new Set<string>();
+  for (const [sideText, regionText] of [[incoming, c.incoming], [current, c.current]] as const) {
+    const whole = counts(sideText), region = counts(regionText);
+    for (const [key, n] of inRegion) if ((region.get(key) ?? 0) < n && (whole.get(key) ?? 0) >= (inBase.get(key) ?? 0)) out.add(key);
+  }
+  return out;
+}
+
+const wholeConflict = (base: string, incoming: string, current: string): BodyMerge =>
+  ({ merged: incoming, clean: false, conflicts: [{ base, incoming, current, before: "", after: "" }] });
+
+/** The body merge every caller uses: the line merge, plus moved paragraphs (see the top of this file). `rule` is the merge
+ *  rule (CURRENT_BODY_MERGE_RULE); an older one gives exactly what that rule gave, so a merge made under it can be redone. */
+export function mergeBody(base: string, incoming: string, current: string, rule: BodyMergeRule = CURRENT_BODY_MERGE_RULE): BodyMerge {
+  if (rule === 1) return threeWayMergeBody(base, incoming, current);
+  const line = threeWayMergeBody(base, incoming, current, rule);
   if (incoming === current || current === base || incoming === base) return line;
   const baseUnits = splitUnits(base).units;
   const movedIncoming = movedUnitKeys(baseUnits, incoming), movedCurrent = movedUnitKeys(baseUnits, current);
+  const rescue = (): BodyMerge | null => {
+    const r = mergeUnits(base, incoming, current, "block", rule);
+    if (!r || !("merged" in r) || r.conflicts.length > 0 || mergeLossProblems(base, incoming, current, r.merged).length > 0) return null;
+    // Rule 3: only a text both writers would get, whichever of them is incoming.
+    if (rule >= 3) {
+      const swapped = mergeUnits(base, current, incoming, "block", rule);
+      if (!swapped || !("merged" in swapped) || swapped.merged !== r.merged) return null;
+    }
+    return { merged: r.merged, clean: true, conflicts: [] };
+  };
+  // Rule 3: the line merge holds a line twice. A conflict keeps the incoming text of its region while the current side's
+  // move of those lines lands at the new place too; a clean merge can hold a paragraph both writers moved to one place,
+  // one of them also editing it, at both places. Either is a move the line merge cannot see: the units merge it, or the
+  // whole text is the conflict. A conflict shows the doubled text only with one writer as incoming, so both orders are
+  // looked at: the outcome must not depend on which writer saved last.
+  if (rule >= 3 && (heldTwice(base, incoming, current, line.merged).length > 0
+    || (!line.clean && heldTwice(base, current, incoming, threeWayMergeBody(base, current, incoming, rule).merged).length > 0))) {
+    return rescue() ?? wholeConflict(base, incoming, current);
+  }
   if (!line.clean) {
     // Only conflicts that a verbatim move explains are the units' to resolve: every conflicting base region is made of
     // moved units. Two writers rewriting a short paragraph beyond recognition is no move, and the unit merge would keep
     // both rewrites.
     const moved = [...movedIncoming, ...movedCurrent];
-    if (moved.length === 0 || !line.conflicts.every((c) => moved.reduce((rest, key) => rest.replace(key, ""), c.base).trim() === "")) return line;
-    const rescued = mergeUnits(base, incoming, current);
-    if (rescued && "merged" in rescued && rescued.conflicts.length === 0
-      && mergeLossProblems(base, incoming, current, rescued.merged).length === 0) return { merged: rescued.merged, clean: true, conflicts: [] };
-    return line;
+    const explained = (c: BodyConflict) => {
+      const keys = rule >= 3 ? [...moved, ...relocatedOutOf(c, base, incoming, current)] : moved;
+      return keys.length > 0 && keys.reduce((rest, key) => rest.replace(key, ""), c.base).trim() === "";
+    };
+    return (line.conflicts.every(explained) ? rescue() : null) ?? line;
   }
   // Clean, yet it may have kept one writer's move only, or both: look only when both sides moved a unit. Two moves
   // of one paragraph show as a doubled or missing line in the line merge's text, or as an order the units cannot
   // agree on. (Two adjacent paragraphs swapped is ambiguous: which one moved? The line count catches that.)
   if (movedIncoming.size === 0 || movedCurrent.size === 0) return line;
-  const units = mergeUnits(base, incoming, current);
+  const units = mergeUnits(base, incoming, current, "block", rule);
   // Not when a unit was also deleted by one side and moved by the other: the order is then ambiguous in a way that
   // depends on which side is incoming, and that case is not this rule's to decide.
   const ordering = units !== null && "order" in units && units.kinds.length === 0;
-  if (ordering || mergeLossProblems(base, incoming, current, line.merged).length > 0) {
-    return { merged: incoming, clean: false, conflicts: [{ base, incoming, current, before: "", after: "" }] };
-  }
+  if (ordering || mergeLossProblems(base, incoming, current, line.merged).length > 0) return wholeConflict(base, incoming, current);
   return line;
 }

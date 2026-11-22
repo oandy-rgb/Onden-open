@@ -21,6 +21,7 @@ import {
   listSnapshots,
   buildPublishPreview,
   leftOutNotes,
+  blockedFromSite,
   loadServedSite,
   servedSiteVersion,
   publishedUrlFor,
@@ -103,7 +104,13 @@ router.post("/publish/include", async (c) => {
   const { noteIds } = await parseBody(c, z.object({ noteIds: z.array(z.string().uuid()).min(1).max(100) }), { optional: true });
   const published: string[] = [];
   const failed: Array<{ noteId: string; error: string }> = [];
+  // The attribute write itself does not look at whether the note can reach the
+  // site, so one hidden or in a space that does not publish would be marked yet
+  // never go out: ask the rule the site is built from (publishedSet.blockedFromSite).
+  const blocked = await blockedFromSite(workspaceId, actor, [...new Set(noteIds)]);
   for (const noteId of new Set(noteIds)) {
+    const why = blocked.get(noteId);
+    if (why) { failed.push({ noteId, error: why }); continue; }
     try {
       await setNodeAttribute({
         workspaceId, actor, nodeId: noteId,

@@ -44,7 +44,7 @@
 ## 4. 內文三方合併
 
 兩台裝置改同一篇時，伺服器用「寫入端載入時的基準／寫入端現在送的／伺服器現有的」做逐行 diff3；
-同一行兩邊改得不同才算衝突，不做模糊比對。寫入只送差異（`textPatch`）。
+同一行兩邊改得不同才算衝突，不做模糊比對；兩邊都只加字時逐字合併，但只在配好的同一行裡（合併規則 3）。寫入只送差異（`textPatch`）。
 
 - 位置：`packages/backend/src/services/eventLog/bodyMerge.ts`、`bodyPatch.ts`；`packages/markdown/src/textPatch.ts`
 - 專文：[只送差異的寫入](patch-writes.md)

@@ -568,6 +568,13 @@ describe("what the property found (minimal cases, fixed)", () => {
     expect(await runCommands([BrowserOffline(), Advance(1_000), Write(), SetServer("slow", 3_000), BrowserOnline(), Sync(), Write()], true)).toEqual([]);
   });
 
+  // FINDING 2026-11-21 (nightly, PROPS_SEED=20261121 PROPS_RUNS=5000, found at run 300): `server(slow, 3000ms), save a note, server(down),
+  // save a note, server(up)` ends with "save #2 was made while the server was unreachable and reported as synced".
+  // Plain meaning: a note saved while the server could not be reached must read as waiting to sync, not synced. Flip to `it` when fixed.
+  it.fails("FINDING save made while the server was unreachable reported as synced (slow, save, down, save, up)", async () => {
+    expect(await runCommands([SetServer("slow", 3_000), Write(), SetServer("down", 0), Write(), SetServer("up", 0)], true)).toEqual([]);
+  });
+
   // Found as `browser offline, save a note` right after boot, shrunk 0 times; made exact here: the browser drops
   // between the membership digest and the first membership page of the first check.
   // Expected: wentOffline() lowered the gate and it stays down while the browser is offline ("never left raised forever").

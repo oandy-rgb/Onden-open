@@ -256,6 +256,18 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   **合併規則版本**：`BODY_MERGE_RULE_VERSION`（`distributedSync/types.ts`）= 2（行級合併 = 1）。改變 `mergeBody` 回傳的內文就要加一，並依
   [節點同步提案](../architecture/proposals/node-sync-channels-2026-11-14.md)第 12 項讓同步協定的版本閘門讀它；目前只有常數與測試，閘門本身還沒有（同步關著）。
   數字與限制：[量測報告](../research/body-merge-measurements-2026-11-15.md)。
+- **合併規則版本 3（2026-11-19）：合併出來的每一行都有人寫過，沒有一行出現兩次。** `BODY_MERGE_RULE_VERSION` = 3（數字定在 `bodyMerge.ts` 的 `CURRENT_BODY_MERGE_RULE`，同步這邊只讀它）；`mergeBody(base, incoming, current, rule)` 的
+  `rule` 預設是目前版本，傳 1 或 2 得到當時的結果（`threeWayMergeBody(…, rule)` 同樣只在 3 改變），歷史上的合併可以重算。三件事：
+  ① 行級合併的衝突區兩邊都改時，不再把整區當成一串字逐字比對（那會把舊行的字對到另一邊新寫的行，一邊改的字落進另一邊的新段落）。
+  `bodyMerge.ts` 的 `mergeLineByLine`：相同的行照行 diff 配對，其餘每一行舊的配上每一邊唯一一行「只加了字」的行；配好之後逐行合（兩邊都改的那一行照 F03 逐字合，同一點各加的行照 `mergeInsertions`）。
+  一邊在行中間按了 Enter（拆行）時，那一行舊的配上它被拆成的幾行（`mergeSplitLine`）：每一片都要帶著那一行至少兩個字母／數字／漢字、而且不是另一行舊的（只靠一個「。」或空白不算一片：那正是一邊的字落進另一邊新行的起因），
+  從前面讀與從後面讀兩種讀法合出來的文字一樣才採用。配不起來（刪、改寫、拆出只剩標點的一片）或配法不只一種就是衝突。
+  ② 行級合併的結果（乾淨或衝突）有一行比三份文字的任何一份都多時（`bodyMergeLoss.ts` 的 `heldTwice`；衝突時兩種先後都看，結果不隨誰是 incoming 而變），
+  先試段落層級的合併，否則整份判衝突（內文留 incoming、`BODY_CONFLICT` 帶 current 整份）。這是「一邊搬動、另一邊改原位置，那行出現兩次」（舊的性質測試 4b）在產品入口的修正。
+  ③ 段落層級的補救：衝突區由「某一邊把那些段落搬出去」解釋得了時也試（`relocatedOutOf`，跟行 diff 的讀法一致）；補救結果兩種先後要得到同一份文字才採用；
+  同一點兩邊各加一串段落時，後面接的空行取兩串中較寬的（以前取 incoming 的，交換寫作者會把段落黏到後面的清單）。
+  性質（每次新種子）：`bodyMergeProvenance.property.test.ts`（後端 `src/test/properties/`）；量測：`docs/research/eg-walker-bench/bench/src/paraId/runRules.ts`，數字在[規則 3 的量測](../research/body-merge-rule3-2026-11-19.md)。
+  已知未修：同一行兩邊只加字、加字位置有歧義時，一邊的字可能被另一邊的字從中間切開（`bodyMergeMoves.test.ts` 的 `it.fails`）。業主 2026-11-22 決定：維持現狀（選項 A，同一行兩邊只加字就都留），歧義時不改判衝突；一邊在行中間按 Enter、拆出只剩「。」或一個字的一片、另一邊同時改那一行時判衝突（隨機情境約 1.3%），接受。
 
 ## 重新載入閘（2026-10-26）
 

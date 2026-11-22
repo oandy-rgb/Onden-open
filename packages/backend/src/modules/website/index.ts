@@ -5,6 +5,7 @@ import { PUBLISHED_KEY } from "../../services/systemAttributes.js";
 import publishRouter from "./routes.js";
 import { pagesPushEffect, siteBundleEffect, siteRebuildEffect, requestSiteRebuild } from "./effects.js";
 import { scrubStoredSnapshot, siteShowsMedia, singleNoteExport } from "./publishing/index.js";
+import { emptiedOnSite } from "./publishing/takenDown.js";
 import { liveNodeSql, tagNodeSql } from "../../spine/nodeSql.js";
 
 /** Whether any of these nodes may be something the site serves: a note in a
@@ -54,6 +55,11 @@ export const websiteModule: ModuleDefinition = {
   nodeHooks: {
     // A note deleted for good leaves no title in any stored snapshot.
     snapshotPurged: scrubStoredSnapshot,
+    // Emptying a note the site shows takes it off the live site by the blank rule (publishedSet.ts); the static
+    // copy must be pushed again, or it keeps the old page.
+    contentCommitted: async ({ workspaceId, nodeId, markdown, actor }) => {
+      if (actor && markdown !== undefined && await emptiedOnSite(workspaceId, nodeId, markdown)) await requestSiteRebuild(workspaceId, actor);
+    },
     // A note opted in or out changes what the site serves.
     attributeCommitted: async ({ workspaceId, key, actor }) => {
       if (key === PUBLISHED_KEY) await requestSiteRebuild(workspaceId, actor);
@@ -61,6 +67,11 @@ export const websiteModule: ModuleDefinition = {
     // A served note hidden or shown, a tag shown or hidden.
     visibilityCommitted: async ({ workspaceId, actor, nodeIds }) => {
       if (await touchesSite(nodeIds)) await requestSiteRebuild(workspaceId, actor);
+    },
+    // The address of the static copy follows the custom domain (cname.ts): set or cleared, the copy is pushed again
+    // so the CNAME, canonical links and the publish log's link agree.
+    siteConfigCommitted: async ({ workspaceId, actor, changedKeys }) => {
+      if (changedKeys.includes("custom_domain")) await requestSiteRebuild(workspaceId, actor);
     },
     spaceAudienceCommitted: async ({ workspaceId, actor }) => { await requestSiteRebuild(workspaceId, actor); },
     // A served note or a tag trashed or brought back.

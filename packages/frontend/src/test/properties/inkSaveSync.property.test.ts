@@ -229,6 +229,107 @@ describe.each(KINDS)("兩台裝置、被拒絕的存檔與還原版本之後，�
     ], { finalSave: false });
   });
 
+  // Nightly 2026-11-18 (seed 149272854, PROPS_RUNS=2000, page and pdf). Invariant: after the last refused save is retried,
+  // every stroke the person sees is on the server. Shortest sequence: a save is refused (draw), the erase is accepted, the
+  // unerase (undo) is refused, then the retry is accepted. It lost the stroke because the retry was made against the
+  // surface's old base, so the server's accepted erase read as the other side's (fixed in lib/ink/surfaceSaver.ts: a refused
+  // save's change is applied again from the drawing it was made from).
+  // The steps before the last one behave as the contract says (an ordinary test, so a failure of the it.fails case below
+  // can only be the final invariant): the refused saves leave the server as it was, the accepted erase is stored.
+  it("nightly 2026-11-18 (steps before the failing one): refused saves change nothing on the server, the accepted erase is stored", async () => {
+    const server = new FakeServer();
+    const saver = new InkSaver(undefined, server.send("A"));
+    saver.rebase(NODE, null);
+    const drawn = surface.draw(surface.empty(), "A1", 1);
+    server.refuseNext.add("A"); saver.save(NODE, drawn); await settle();
+    expect(server.stored, "refused draw: nothing stored").toBe("");
+    const erased = surface.erase(drawn, "A1");
+    saver.save(NODE, erased); await settle();
+    expect(surface.strokes(server.stored).get("A1"), "accepted erase: stroke stored as hidden").toBe(false);
+    const stored = server.stored;
+    server.refuseNext.add("A"); saver.save(NODE, surface.unerase(erased, "A1")); await settle();
+    expect(server.stored, "refused undo: server unchanged").toBe(stored);
+  });
+
+  it("nightly 2026-11-18: refused draw, accepted erase, refused undo of the erase, retried: the stroke is back on the server", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "erase", dev: "A" }, { op: "refuse", dev: "A" }, { op: "undo", dev: "A" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  // Neighbours of the nightly case, as fixed sequences (page and pdf). Every edit is followed by its save; the last refused save
+  // of a device is retried at the end (finalSave: false), so only the saver can have repaired the server.
+  it("(a) a refused draw is retried and accepted: the stroke is on the server", async () => {
+    await run(surface, [{ op: "refuse", dev: "A" }, { op: "draw", dev: "A" }], { finalSave: false, autosave: true });
+  });
+
+  it("(b) a refused erase, then undo of it, then the retry: the stroke is still on the server", async () => {
+    await run(surface, [
+      { op: "draw", dev: "A" }, { op: "wait" }, { op: "refuse", dev: "A" }, { op: "erase", dev: "A" }, { op: "undo", dev: "A" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  it("(d) two refusals in a row, then an accepted save: both strokes are on the server", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "wait" }, { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "wait" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  it("(d) two refusals in a row around an accepted erase, then undo of it", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "wait" }, { op: "refuse", dev: "A" }, { op: "erase", dev: "A" }, { op: "wait" },
+      { op: "undo", dev: "A" }, { op: "wait" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  // Nightly 2026-11-18, found while fixing the case above (seed 149272854, run 1680): a stroke whose removal was refused stays
+  // on the server when the next (accepted) save was made from the refused one.
+  it("a refused removal of a stroke, then an accepted erase of another: the removed stroke is gone from the server", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "B" }, { op: "draw", dev: "B" }, { op: "draw", dev: "B" }, { op: "refuse", dev: "B" }, { op: "undo", dev: "B" }, { op: "erase", dev: "B" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  // Found by fresh seeds while fixing the case above: changes the server accepted after a refused one still count when the refused
+  // one is applied again (an accepted undo of a refused draw must not bring the stroke back).
+  it("a refused draw, its undo accepted, then a refused sync: the undone stroke does not come back", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "undo", dev: "A" }, { op: "refuse", dev: "A" }, { op: "sync", dev: "A" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  it("a refused draw, its undo accepted, a refused draw: only the last stroke is on the server", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "A" }, { op: "draw", dev: "A" }, { op: "undo", dev: "A" }, { op: "refuse", dev: "A" }, { op: "draw", dev: "A" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  it("another device's refused sync, then a draw and its undo on it and an undo on this device: nothing comes back", async () => {
+    await run(surface, [
+      { op: "refuse", dev: "B" }, { op: "sync", dev: "A" }, { op: "draw", dev: "B" }, { op: "wait" }, { op: "undo", dev: "B" }, { op: "undo", dev: "A" },
+    ], { finalSave: false, autosave: true });
+  });
+
+  // The list of changes a saver keeps for resending stays short while saves keep being refused (a permission taken away, a drawing
+  // the server rejects as too big): refused changes that follow each other join into one, and a retry of the same drawing adds none.
+  it("many refused saves in a row: the saver keeps one change, and the next accepted save still carries every stroke", async () => {
+    const server = new FakeServer();
+    const saver = new InkSaver(undefined, server.send("A"));
+    saver.rebase(NODE, null);
+    const unsent = () => (saver["nodes"].get(NODE)!.unsent).length;
+    let doc = surface.empty();
+    for (let i = 1; i <= 60; i++) {
+      doc = surface.draw(doc, `A${i}`, i);
+      server.refuseNext.add("A"); saver.save(NODE, doc); await settle();
+    }
+    server.refuseNext.add("A"); saver.save(NODE, doc); await settle();
+    expect(unsent(), "60 refused saves and one refused retry of the same drawing").toBe(1);
+    expect(server.stored, "nothing reached the server").toBe("");
+    saver.save(NODE, doc); await settle();
+    expect([...surface.strokes(server.stored).keys()].length, "all strokes after the first accepted save").toBe(60);
+    expect(unsent(), "accepted: nothing left to send again").toBe(0);
+  });
+
   // M2：合併發生之後，下一次存檔的基底要是伺服器存的那份，不是自己上次送的那份。
   it("M2：另一台存過、這台合併後，下一次存檔的基底是伺服器有的版本（沒有第二個請求）", async () => {
     const server = new FakeServer();

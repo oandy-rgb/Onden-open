@@ -11,6 +11,7 @@
 
 import { cleanCustomDomain, isCustomDomainHost } from "@onden/markdown";
 import { getSiteConfig } from "../../../services/siteConfig.js";
+import { expectedPagesUrl } from "./githubPages.js";
 
 // Only a bare hostname (apex or sub-domain) is written: a malformed value
 // would silently break the binding. A pasted URL is tolerated (scheme and path stripped).
@@ -28,4 +29,15 @@ export async function cnameFile(
   const cfg = await getSiteConfig(workspaceId);
   const host = normalizeCustomDomain(cfg.custom_domain);
   return host ? { path: "CNAME", content: `${host}\n` } : null;
+}
+
+/** The address the static copy is served at: the custom domain once one is
+ *  set (the CNAME this push writes makes GitHub answer there), else the
+ *  github.io address; null when no external host is configured. What the
+ *  copy's canonical links, sitemap, feed and the publish log's link carry. */
+export async function staticSiteUrl(workspaceId: string): Promise<string | null> {
+  const pages = expectedPagesUrl();
+  if (!pages) return null;
+  const host = normalizeCustomDomain((await getSiteConfig(workspaceId)).custom_domain);
+  return host ? `https://${host}/` : pages;
 }

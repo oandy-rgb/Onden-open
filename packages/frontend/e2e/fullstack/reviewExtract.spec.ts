@@ -70,11 +70,18 @@ test("extract Q/A → review card children (their own references); re-run is a n
   // 講義 task+due (front of the flow): extraction drops a study task on the
   // lecture due TODAY, surfaced on the agenda (new cards are due now).
   const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
-  const agenda = await (await page.request.get("/api/tasks/agenda", H)).json();
-  const allTasks = Object.values(agenda.buckets as Record<string, Array<{ title: string; node_id: string; due_date: string | null }>>).flat();
-  const studyTask = allTasks.find((tk) => tk.node_id === lecture.id && tk.title === `Study: Mitosis lecture ${stamp}`);
-  expect(studyTask, "a study task landed on the lecture").toBeTruthy();
-  expect(studyTask!.due_date).toBe(today);
+  // The study task is the LAST step of the extraction (children, then review cards, then this POST), and the checks above are
+  // satisfied as soon as the server holds the cards — so wait for the task itself, as for the children, instead of reading the agenda
+  // once. The agenda lists every open task in some bucket whatever its day (backend taskAgendaClock.integration.test.ts).
+  const studyTitle = `Study: Mitosis lecture ${stamp}`;
+  const findStudyTask = async () => {
+    const agenda = await (await page.request.get("/api/tasks/agenda", H)).json();
+    const allTasks = Object.values(agenda.buckets as Record<string, Array<{ title: string; node_id: string; due_date: string | null }>>).flat();
+    return allTasks.find((tk) => tk.node_id === lecture.id && tk.title === studyTitle);
+  };
+  await expect.poll(async () => Boolean(await findStudyTask()), { message: "a study task landed on the lecture", timeout: 15_000 }).toBe(true);
+  const studyTask = (await findStudyTask())!;
+  expect(studyTask.due_date).toBe(today);
 
   // idempotent: extracting again creates no new cards AND no second study task
   await runExtract(page);

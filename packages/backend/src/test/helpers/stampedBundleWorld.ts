@@ -261,6 +261,11 @@ export async function bundleFor(from: Peer, to: Peer, options: { pageBytes?: num
   return bundleOf(JSON.parse(JSON.stringify(pages)));
 }
 
+/** Everything `from` holds, sent again as if `to` held nothing (`have` empty), through JSON: what a node that exchanged to the end must take without a change or a refusal. */
+export async function resendAll(from: Peer, to: Peer) {
+  return take(to, bundleOf(JSON.parse(JSON.stringify(await onNode(from.node, () => readChangeBundle(from.owner, from.ws, {}))))));
+}
+
 /** Take a bundle at `to`. */
 export const take = (to: Peer, bundle: ChangeBundle) => onNode(to.node, () => applyChangeBundle(to.ws, bundle));
 

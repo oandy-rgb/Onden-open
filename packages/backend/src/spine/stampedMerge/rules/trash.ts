@@ -23,27 +23,33 @@ export function noticesForEditedDeletes(notes: readonly { id: string; deleted: D
   return [...out.values()].sort(byNote);
 }
 
-export type TreeNote = { id: string; parent: string | null; created: Stamp; deleted: Deletion | null };
+/** A note as the 4.9 view reads it: `created` its creation, `placed` the write that put it under `parent` (a move; its creation when it was made there and never moved). */
+export type TreeNote = { id: string; parent: string | null; created: Stamp; placed?: Stamp; deleted: Deletion | null };
 export type TrashFix = { note: string; trashedWith: string };
 /**
- * A note made under a parent that another node deleted before seeing the note: the note stays, goes to the trash with that
- * parent and comes back with it; its creator is told (unless they are the one who deleted). The nearest such ancestor is
- * `trashedWith`. A note the deleter HAD seen is the ordinary cascade's and not this rule's.
+ * A live note under a deleted one: it got there by a write the deleter had not seen (its creation, or a move under that parent: the simulator's R4), or its
+ * deletion would have taken it (the ordinary cascade writes every live note of the subtree it holds; a restore brings its ancestors back with it). So it goes to
+ * the trash with that parent, as a VIEW, and comes back with it. Who is told is decided by `seen`, as everywhere in this file: the person whose write put it there
+ * (its creation, else the move), when the deleter had not seen that write and is not the same person. `seen` names what the deleter held of the DELETED row
+ * only, so it can claim a write the deleter never held (a node can hold a later write of an origin and not an earlier one); it silences a notice at most, it
+ * never keeps a note out of the trash (the first version did, and the simulator found a note left live under a trashed parent: seed 3430408549).
+ * A note further down goes with the nearest deleted ancestor too (`trashedWith`); its author is told on the same terms.
  */
 export function trashOrphanedChildren(notes: readonly TreeNote[]): { fixes: TrashFix[]; notices: Notice[] } {
   const byId = new Map(notes.map((n) => [n.id, n]));
   const fixes: TrashFix[] = [], notices: Notice[] = [];
   for (const n of [...notes].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (n.deleted) continue;
+    // the nearest deleted ancestor (a loop of parents is cut by 4.10 elsewhere: its notes are not followed twice)
     const seen = new Set<string>([n.id]);
-    for (let p = n.parent === null ? undefined : byId.get(n.parent); p && !seen.has(p.id); p = p.parent === null ? undefined : byId.get(p.parent)) {
-      seen.add(p.id);
-      if (!p.deleted || hadSeen(p.deleted, n.created)) continue;
-      fixes.push({ note: n.id, trashedWith: p.id });
-      const who = n.created.author;
-      if (who !== null && who !== p.deleted.stamp.author) notices.push({ to: who, note: n.id, kind: "created-under-deleted-parent" });
-      break;
-    }
+    let p = n.parent === null ? undefined : byId.get(n.parent);
+    while (p && !seen.has(p.id) && !p.deleted) { seen.add(p.id); p = p.parent === null ? undefined : byId.get(p.parent); }
+    if (!p?.deleted || seen.has(p.id)) continue;
+    fixes.push({ note: n.id, trashedWith: p.id });
+    // told: the person whose write (its creation, else the move) put this note there, when the deleter had not seen that write
+    const unseen = !hadSeen(p.deleted, n.created) ? n.created : n.placed && !hadSeen(p.deleted, n.placed) ? n.placed : null;
+    const who = unseen?.author ?? null;
+    if (who !== null && who !== p.deleted.stamp.author) notices.push({ to: who, note: n.id, kind: "created-under-deleted-parent" });
   }
   return { fixes, notices: notices.sort(byNote) };
 }

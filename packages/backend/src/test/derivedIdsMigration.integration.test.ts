@@ -141,6 +141,9 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
 
     preview = (await q<PreviewRow>(previewQuery())).rows;
     await rerunMigration(MIGRATION);
+    // On a real database 201 ran long before 218, whose copy (written_space_id := space_id) then took the rewritten ids. This fixture is built on today's schema,
+    // where the column is filled when a note is made (with the old id, before 201 runs here), so 218's copy is done for the fixture's notes in the same order.
+    await seedQ(`UPDATE content_nodes SET written_space_id = space_id WHERE workspace_id = ANY($1::uuid[]) AND written_space_id IS DISTINCT FROM space_id`, [[wsA, wsB, wsC]]);
   }, 60_000);
   afterAll(async () => { await pool.end(); });
 

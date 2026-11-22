@@ -4,8 +4,12 @@
 //   const pages = await readChangeBundle(actor, workspaceId, { [originA]: 12, [originB]: 3 });   // services/stampedBundle.ts. `have`: per origin, the highest sequence number the receiver holds
 //   const bundle = bundleOf(pages);                                                          // one bundle (all its pages), what applyChangeBundle takes
 //
-// WHAT A BUNDLE SAYS. `base` is the `have` it was read against; `upTo` is what the sender holds at the cut, per origin. The bundle has every write of the scope above `base`
-// up to `upTo` (an overwritten write is not there; the write that overwrote it had seen it): the receiver that held `base` holds `upTo` once it took the bundle. A row that
+// WHAT A BUNDLE SAYS. `base` is the `have` it was read against; `holds` is what the sender holds at the cut, per origin. The bundle has every write of the scope above
+// `base` up to `holds` (an overwritten write is not there; the write that overwrote it had seen it) that the reader may read. `upTo` is what the receiver that held
+// `base` holds once it took the bundle: `holds`, except below the first write of an origin the bundle WITHHELD because its row is outside the reader's scope (a row of a
+// space the reader is not a member of): the receiver's `have` never passes a write it did not get, and the next bundle sends that write again, as soon as the reader
+// may read it (I5; stampedBundleWithheld test in mergeSpaceParent.integration.test.ts). The cost: until then, every bundle sends again what that origin wrote after the
+// withheld write (taking it again stores nothing). A row that
 // has at least one stamp above `base` is sent whole (all its stamps of the scope, saw, meta and the other heads, and every unit's value as text), so the receiver
 // can merge it without asking for more. A row that is gone is a tombstone.
 //
@@ -23,7 +27,8 @@
 import { inTransaction } from "../db.js";
 import { FOREIGN_CLOCK_BOUND_MS } from "./stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
-import { readCarriedRows, readStampsOf, snapshotRows, type BundleItem, type ChangeBundle, type ChangeBundlePage, type ScopeFactory } from "./snapshotSql.js";
+import { carriedKeys, readCarriedRows, readStampsOf, snapshotRows, type BundleItem, type ChangeBundle, type ChangeBundlePage, type ScopeFactory } from "./snapshotSql.js";
+import { wholeWorkspace } from "./snapshotTables.js";
 import { CARRIED_LABELS, GENESIS_STAMP_ORIGIN, UNIT_SOURCES, labelsOf, rowMatchOf, unitTextsSql } from "./stampedMerge/index.js";
 
 /** What a bundle speaks about: every label in CARRIED_LABELS, read at one cut. */
@@ -105,12 +110,15 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     // the receiver holds more of THIS node than it ever made: this node was restored from an older copy and has written the same numbers again with other content. Nothing it sends can be told from news; it must not send (the way out is a new node id, a later batch)
     if ((base[node] ?? 0) > cut) throw bundleRefused("bundle_sender_restored", "the receiver holds writes of this node that this node never made: it was restored from an older copy");
     upTo[node] = cut;
+    const holds = { ...upTo };
+    /** per origin, the first write of it this bundle withholds (its row is outside the reader's scope) */
+    const withheld: Record<string, number> = {};
     await options.afterCut?.();
 
     const pages: ChangeBundlePage[] = [];
     let items: BundleItem[] = [];
     let bytes = 0;
-    const header = { layer: "changes" as const, dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, scope: BUNDLE_SCOPE, sender: node, cut, base, upTo };
+    const header = { layer: "changes" as const, dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, scope: BUNDLE_SCOPE, sender: node, cut, base, upTo: holds, holds };
     const flush = () => { if (items.length) { pages.push({ ...header, pages: 0, page: pages.length + 1, items }); items = []; bytes = 0; } };
     const add = (item: BundleItem) => { items.push(item); bytes += sizeOf(item); if (bytes >= budget) flush(); };
 
@@ -128,6 +136,8 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
         const keys = changed.slice(at, at + CHUNK_ROWS);
         const rows = await readCarriedRows(src.table, workspaceId, rowMatchOf(src, keys), unitTextsSql(src), scopeOf);
         const present = await rowsPresent(src, workspaceId, keys);
+        // the rows a reader of the whole workspace would be sent: one of them this reader is not sent is WITHHELD (a row that never travels is in neither)
+        const carriable = await carriedKeys(src.table, workspaceId, rowMatchOf(src, keys), () => wholeWorkspace());
         const stamps = await readStampsOf(workspaceId, keys.flatMap((rowKey) => labels.map((label) => ({ label, rowKey }))));
         const byRow = new Map<string, typeof stamps>();
         for (const st of stamps) (byRow.get(st.rowKey) ?? byRow.set(st.rowKey, []).get(st.rowKey)!).push(st);
@@ -135,11 +145,18 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
           const own = byRow.get(key) ?? [];
           const row = rows.get(key);
           if (row) add({ kind: "row", table: src.label, values: row.v, stamps: own, texts: row.texts });
-          else if (!present.has(key)) {
+          else if (present.has(key)) {
+            if (!carriable.has(key)) continue;
+            for (const w of own.flatMap((st) => [st, ...st.heads])) {
+              if (w.origin === GENESIS_STAMP_ORIGIN || w.seq <= (base[w.origin] ?? 0)) continue;
+              withheld[w.origin] = Math.min(withheld[w.origin] ?? Infinity, w.seq);
+            }
+          } else {
             // a row that is not in the table: gone for good (its tombstone, and the keys of its JSON columns: the delete trigger leaves theirs), or never made here because it hangs
             // on a note this node does not hold (rule 4.9, dbRows.ts): its stamps travel all the same, so every node holds the same writes. A row that IS in the table and
             // out of the reader's scope sends nothing (as before). This is right for a reader that holds the whole workspace; a per-space bundle (#1769) must NOT send the
-            // stamps of a row outside the reader's scope that is gone: they would tell the reader that the row existed. That batch decides its own rule.
+            // stamps of a row outside the reader's scope that is gone: they would tell the reader that the row existed. That batch decides its own rule. A row in the table
+            // and outside the reader's scope is withheld (above): its stamps are not sent, and `upTo` stops below them.
             for (const st of own) add({ kind: "tombstone", table: st.label, stamp: st });
           }
         }
@@ -147,7 +164,9 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     }
     flush();
     if (pages.length === 0) pages.push({ ...header, pages: 0, page: 1, items: [] });
-    return pages.map((p) => ({ ...p, pages: pages.length }));
+    // what the receiver holds after the bundle: never past a write it withheld (I5)
+    const receiverHolds = Object.fromEntries(Object.entries(holds).map(([o, n]) => [o, withheld[o] === undefined ? n : Math.min(n, withheld[o]! - 1)]));
+    return pages.map((p) => ({ ...p, upTo: receiverHolds, pages: pages.length }));
   }
 }
 

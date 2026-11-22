@@ -205,7 +205,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(lines.length).toBeGreaterThan(2);
       for (const line of lines) expect(line.startsWith('{"kind":"'), line.slice(0, 60)).toBe(true);
       expect(JSON.parse(lines[0]!)).toMatchObject({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION });
-      expect(SYNC_DATA_SHAPE_VERSION).toBe(4); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables): spine/syncDataShape.ts
+      expect(SYNC_DATA_SHAPE_VERSION).toBe(5); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived): spine/syncDataShape.ts
     });
 
     it("an importer refuses a file whose first line has no data shape, or another one, with join_data_shape, before a join starts; the empty database is still ready", () => {

@@ -225,14 +225,16 @@ describe.skipIf(!isTestDb)("a restored and renewed node seen by others (the chan
     const pages = await onNode(restored, () => readChangeBundle(a.owner, a.ws, {}));
     const bundle = bundleOf(JSON.parse(JSON.stringify(pages)));
     expect(bundle.sender).toBe(newId);
-    expect(bundle.upTo[oldId]).toBe(backupClock.get("n")! - 1);
-    expect(bundle.upTo[newId]).toBe(Number((await rows<{ n: string }>(restored, `SELECT next_seq::text AS n FROM sync_clock WHERE workspace_id = $1`, [a.ws]))[0]!.n) - 1);
-    expect(bundle.upTo[newId]).toBeGreaterThan(0);
+    // what the sender holds (`holds`; `upTo`, what the receiver will hold, stops below a write this bundle withholds from its reader: the friend's secret space)
+    expect(bundle.holds[oldId]).toBe(backupClock.get("n")! - 1);
+    expect(bundle.holds[newId]).toBe(Number((await rows<{ n: string }>(restored, `SELECT next_seq::text AS n FROM sync_clock WHERE workspace_id = $1`, [a.ws]))[0]!.n) - 1);
+    expect(bundle.holds[newId]).toBeGreaterThan(0);
+    for (const o of [oldId, newId]) expect(bundle.upTo[o]).toBeLessThanOrEqual(bundle.holds[o]!);
     const stamps = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]));
     const origins = new Set(stamps.map((s) => s.origin));
     expect(origins.has(oldId) && origins.has(newId)).toBe(true);
     for (const s of stamps) {
-      if (s.origin === oldId) expect(s.seq).toBeLessThanOrEqual(bundle.upTo[oldId]!);
+      if (s.origin === oldId) expect(s.seq).toBeLessThanOrEqual(bundle.holds[oldId]!);
       if (s.origin === newId) expect(s.seq).toBeGreaterThanOrEqual(1);
     }
     // the old id's stamps the bundle carries are the backup's (same number, same clock reading)

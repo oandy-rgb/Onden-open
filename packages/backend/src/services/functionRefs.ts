@@ -640,8 +640,9 @@ export async function removeView(workspaceId: string, holderId: string, viewId: 
  *  寫入的回應、事件的節點列都要經過這裡（或用 nodeRowColumnsSql），否則客戶端會用 NULL 蓋掉 store 裡的檢視。 */
 export async function withViews<T extends { id: string; node_type: string }>(workspaceId: string, row: T): Promise<T & { collection_views: ViewRecord[] | null }> {
   const views = await viewRecordsOf(isTag(row) ? "tag" : "note", workspaceId, row.id);
-  // sort_order is the integer order frozen by migration 200: nothing reads it, so it is not sent either.
-  const { sort_order: _frozenSortOrder, ...sent } = row as T & { sort_order?: unknown };
+  // sort_order is the integer order frozen by migration 200: nothing reads it, so it is not sent either. written_space_id (migration 218) is the sync's
+  // bookkeeping: clients do not read it, and it can name a space the reader cannot read.
+  const { sort_order: _frozenSortOrder, written_space_id: _writtenSpace, ...sent } = row as T & { sort_order?: unknown; written_space_id?: unknown };
   return { ...(sent as unknown as T), collection_views: views.length > 0 ? views : null };
 }
 

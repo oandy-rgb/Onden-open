@@ -1,6 +1,7 @@
 // What a copy of a write says it wrote is stored and sent as it is (review of PR #1853, round 8, P1): a stamp kept without its row keeps its value (`sync_stamps.kept_value`,
 // sent as the stamp's `kept`), and a head that came without its value is stored with that mark (`sync_stamp_heads.valueless`, sent as the head's `valueless`), never as a
 // NULL value. storeUnit writes them; readStampsOf (what a bundle and a snapshot send) and readUnit read them back. Both engines.
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { q, withTransaction } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
@@ -101,6 +102,10 @@ describe.skipIf(!isTestDb)("a write's value, or the mark that a copy has none, i
       // kept where none may be kept is refused with the code, not by the database's CHECK
       ["a note's kept parent that is not an id", spoil("content_nodes", (w) => { w.field = "parent"; (w as unknown as Record<string, unknown>).kept = { text: "x" }; })],
       ["a value kept on a table that keeps none", spoil("content_nodes", (w) => { w.field = "title"; (w as unknown as Record<string, unknown>).kept = { text: "a title" }; })],
+      // review of PR #1907, rounds 2 and 3, points 4 / 5: what a stamp knew beyond its `saw` has its form on a snapshot too, for the stamp and for each head
+      ["a meta.from that is not a note id", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).meta = { from: "not-a-note" }; })],
+      ["a meta.from in capitals", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).meta = { from: randomUUID().toUpperCase() }; })],
+      ["a head whose meta.seen is not whole numbers", spoil("content_nodes", (w) => { w.heads = [{ ...(w as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: w.seq + 100, value: "x", meta: { seen: { n: -1 } } } as never]; })],
     ];
     for (const [what, page] of cases) {
       const shell = await openNode(`shell-${cases.findIndex((c) => c[0] === what)}`);

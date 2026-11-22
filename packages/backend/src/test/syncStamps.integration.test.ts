@@ -124,10 +124,12 @@ describe.skipIf(!isTestDb)("write stamps on content_nodes", () => {
     await ok("POST", "/api/spaces/move", { node_id: parent, to_space_id: spaceB, membership_epoch: preview.membership_epoch });
     const parentStamps = await stampsOf(parent);
     expect(parentStamps.get("space")).toMatchObject({ author: owner.id, device: DEVICE });
-    // the move reached the child through the cascade: same transaction, same stamp
+    // a note at the top moved to another space is placed there: its parent (still none) is stamped with the same write (migration 218)
+    expect(parentStamps.get("parent")).toMatchObject({ seq: parentStamps.get("space")!.seq, origin: parentStamps.get("space")!.origin });
+    // the child is in the new space because of where it is, not because anyone wrote a space for it (migration 218): no stamp, and its space is the parent's
     const childStamps = await stampsOf(id);
-    expect(childStamps.get("space")).toBeDefined();
-    expect(childStamps.get("space")).toMatchObject({ seq: parentStamps.get("space")!.seq, origin: parentStamps.get("space")!.origin });
+    expect(childStamps.get("space")).toBeUndefined();
+    expect((await q<{ s: string }>(`SELECT space_id::text AS s FROM content_nodes WHERE id = $1`, [id])).rows[0]!.s).toBe(spaceB);
   });
 
   it("deleting a note and its children shares the root's stamp; restoring stamps the deleted state again", async () => {

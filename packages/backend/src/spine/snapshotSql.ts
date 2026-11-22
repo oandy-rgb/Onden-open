@@ -101,6 +101,14 @@ export async function readCarriedRows(table: string, workspaceId: string, rows: 
   return new Map(r.rows.map((row) => [row.id, { v: row.v, texts: row.texts }]));
 }
 
+/** Which of `rows` of `table` a read under `scope` carries (the snapshot's `where`, without reading the values). */
+export async function carriedKeys(table: string, workspaceId: string, rows: RowMatch, scope: ScopeFactory): Promise<Set<string>> {
+  const spec = snapshotSpecOf(table);
+  const params: unknown[] = [workspaceId];
+  const where = spec.where(scope(params));
+  return new Set((await snapshotRows<{ id: string }>(`SELECT ${rows.idSql("t")} AS id FROM ${quote(table)} t WHERE (${where}) AND ${rows.match("t", params)}`, params)).rows.map((r) => r.id));
+}
+
 /** Write a row a bundle carries that this database does not hold, with the values a snapshot carries, the deferred columns (a parent) empty (the units' write-back sets them once every row is in) and the placeholders of columns a snapshot never carries. A row that is there is left as it is. */
 /** Returns how many rows it made: 0 when a unique key of the table already holds the row (ON CONFLICT DO NOTHING; a bundle decides what that means, dbRows.ts). */
 export async function insertCarriedRow(table: string, workspaceId: string, values: Record<string, unknown>): Promise<number> {
@@ -209,8 +217,12 @@ type ChangeBundleHeader = {
   cut: number;
   /** What the receiver said it holds (the `have` of the request), per origin: the bundle has every write of the scope above these. */
   base: Record<string, number>;
-  /** What the sender holds of the scope, per origin, at the cut: the receiver holds these after taking the bundle. */
+  /** What the receiver holds of the scope, per origin, after taking the bundle: what the sender holds at the cut (`holds`), except that an origin with a write the
+   *  bundle withholds (its row is outside the reader's scope) stops below that write, so the receiver's `have` never passes it and a later bundle sends it once
+   *  the reader may read it (invariant I5, PR "fix/merge-space-follows-parent"). */
   upTo: Record<string, number>;
+  /** What the sender holds of the scope, per origin, at the cut: no stamp of the bundle is beyond it. */
+  holds: Record<string, number>;
   /** How many pages the bundle has. */
   pages: number;
 };

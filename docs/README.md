@@ -70,10 +70,12 @@
 | [site-render-model.md](architecture/site-render-model.md) | 發布網站的呈現模型 |
 | [harness.md](architecture/harness.md) | 技能 harness：技能只組 prompt，模型呼叫只在 API 跑法 |
 | [agent-delegation.md](architecture/agent-delegation.md) | 把終端機、寫程式、看檔案交給 AI 代理 |
+| [proposals/history-replication-2026-11-22.md](architecture/proposals/history-replication-2026-11-22.md) | 版本歷史（內文與手寫）跟著同步走，一台壞掉舊版本還在（提案） |
 | [proposals/block-anchors-2026-11-01.md](architecture/proposals/block-anchors-2026-11-01.md) | 段落錨點：正文不放記號，錨點存在新表（提案；取代「段落記號自成一行」） |
 | [proposals/ai-collaboration-2026-10-27.md](architecture/proposals/ai-collaboration-2026-10-27.md) | AI 協作提案（批 0–2 已動工） |
 | [proposals/publish-redesign-2026-10-24.md](architecture/proposals/publish-redesign-2026-10-24.md) | 發布改版：內容來自筆記，Puck 只管排版（實作中） |
 | [proposals/roles-owner-member-2026-10-22.md](architecture/proposals/roles-owner-member-2026-10-22.md) | 只剩擁有者／成員（後端已實作） |
+| [proposals/own-node-transport-2026-11-22.md](architecture/proposals/own-node-transport-2026-11-22.md) | 自己的裝置之間怎麼交換：VPS 當中心、桌面版打出去、QR 配對、接上傳輸前 31 項的分類（提案） |
 
 ## docs/decisions：產品決定
 

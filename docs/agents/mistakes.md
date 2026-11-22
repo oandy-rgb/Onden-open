@@ -72,6 +72,15 @@
 
 ## 紀錄
 
+### 2026-11-23　把紅燈當偶發合併，main 的真實 Postgres 第 1 段因此紅（未查證就回報）
+- **發生了什麼**：合併批次 7b（含 #1756）的真實 Postgres 第 1 段紅，我看到紀錄裡印出的 RSS 清理計時表（×10 輸入花 ×96 時間），沒找實際失敗的是哪一項，就說是「負載下的計時」，照合。真正的原因是 #1756 新增的 `browserBringNotes.integration.test.ts` 在真實 Postgres 上被跳過、沒有登記，跳過檢查讓整段失敗；所有測試檔其實都通過。合併後 main 的這一段一直紅，之後每一批也都帶著同一個紅。前一天也犯過同類的錯（patchWrites 紅一次就當偶發）。
+- **證據**：公開 run 45045725074、45050762572、45051088634 的 Backend — real Postgres (1/4) 最後一行 `[tests] FAILED: skipped tests in a postgres run … browserBringNotes.integration.test.ts: 1 skipped, none listed`；計時表是那個測試照常印出的紀錄，不是失敗。
+- **發現者**：我（之後兩批同一段都紅，回頭追）。
+- **為什麼沒擋到**：讀紀錄時只抓「看起來像錯誤」的段落，沒有先找 vitest 的失敗摘要（`FAIL`、`❯ … failed`、`Test Files … failed`）；摘要說全部通過時，也沒有去看工作最後一行為什麼退出碼是 1。
+- **類別**：未查證就回報。
+- **機制**：〔第 4 層〕判斷紅燈前先讀三樣：vitest 的失敗摘要、跳過檢查與背景工作報告、工作最後的 `##[error]` 前一行；三樣都對不上一個測試名才算「找不到原因」，不算偶發。〔第 1 層〕這個 PR 把那個檔列進 Postgres 跳過清單。
+- **還沒擋住的**：「工作紅但所有測試檔都綠」沒有任何東西提醒；可以讓跳過檢查的失敗訊息出現在 GitHub 的工作摘要上（之後做）。
+
 ### 2026-11-20　換了套件的安裝位置，瀏覽器版的建置還寫死根目錄的路徑（零件對、組裝錯；#1925）
 - **發生了什麼**：better-auth 升級後，npm 把新版放在 `packages/backend`、`packages/frontend` 底下，根目錄沒有 `@better-auth/core`。`scripts/build-browser.mjs` 的 `@better-auth/core/async_hooks` 寫死 `<root>/node_modules/...`：乾淨安裝後瀏覽器版建置找不到檔；留著舊版的機器則會默默把 1.6 的 core 打包進 1.7 的程式。後端、前端、守門通道都綠，我回報時沒有跑 `npm run build:browser`。
 - **證據**：#1925 審查留言 7033051653；修正後 `npm run build:browser` 通過、`dist-browser/worker.js` 含 1.7 才有的字串、`e2e/browser-app/smoke.mjs` chromium 與 mobile-chrome 各 124/124。

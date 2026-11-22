@@ -49,6 +49,7 @@ export const PGLITE_SKIPS: Readonly<Record<string, number>> = {
 
 // ratchet:list postgres-skips
 export const POSTGRES_SKIPS: Readonly<Record<string, number>> = {
+  "src/test/browserBringNotes.integration.test.ts": 1, // the browser version's own database is PGlite: the file it takes in is only that copy's (#1756)
   "src/test/distributedSyncCapture.integration.test.ts": 3, // PGlite-only by its own condition since 2026-11-06
   "src/test/distributedSyncOff.test.ts": 1,
   "src/test/distributedSyncReal.integration.test.ts": 7, // two in-process PGlite backends; no second real server

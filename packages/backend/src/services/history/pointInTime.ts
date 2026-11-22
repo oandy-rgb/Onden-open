@@ -26,7 +26,8 @@
 
 import { q } from "../../db.js";
 import type { ActorCtx } from "../../types.js";
-import { bodiesByHash, bodyEventSql } from "./bodyEvents.js";
+import { STATE_VERSION_SQL, bodiesByHash, bodyEventSql } from "./bodyEvents.js";
+import { VERSION_ORDER_DESC_SQL, keepVersionStatisticsCurrent } from "./storedVersions.js";
 import { readableNotesSql } from "./readableNotes.js";
 import { summarizeChange, type ChangeSummary } from "@onden/markdown";
 import type { AtNote, NoteAt, NoteStatus, WorkspaceAt } from "@onden/contract";
@@ -63,6 +64,7 @@ export const CHANGE_SUMMARY_LIMIT = 300;
 
 /** The state of every readable note at `at`, one query. */
 export async function noteStatesAt(actor: ActorCtx, workspaceId: string, at: Date, { spaceId }: SpaceScope = {}, onlyId?: string, { includeTrashedNewborn = false, includeTrashedThen = false }: NoteStatesOptions = {}): Promise<NoteAtState[]> {
+  keepVersionStatisticsCurrent();
   const params: unknown[] = [workspaceId, at.toISOString()];
   const readable = await readableNotesSql(actor, workspaceId, "n", params, { spaceId, includeTrashed: true });
   const onlyNote = onlyId ? ` AND n.id::text = $${params.push(onlyId)}` : "";
@@ -71,19 +73,28 @@ export async function noteStatesAt(actor: ActorCtx, workspaceId: string, at: Dat
     title_then: string | null; body_hash: string | null; existed: boolean; born_after: boolean; same_text: boolean;
   }>(
     `WITH cand AS (
-       SELECT n.id, n.title, n.markdown, n.space_id, n.deleted_at
+       SELECT n.id, n.title, n.markdown, n.space_id, n.deleted_at, note_version_in_scope(n.node_type, n.source_type) AS versioned
          FROM content_nodes n
         WHERE n.workspace_id = $1 AND n.node_type = 'content' AND n.hidden = false
           AND ${readable}${onlyNote}
      ),
+     -- a note's text at T: its last version at or before T (the order of storedVersions.ts); a system note has no versions, and reads its saves
      body AS (
+       SELECT DISTINCT ON (v.note_id) v.note_id::text AS target_id, v.title, v.content_hash AS body_hash
+         FROM note_versions v
+        WHERE v.workspace_id = $1 AND v.unit = 'body' AND ${STATE_VERSION_SQL} AND v.at::timestamptz <= $2::timestamptz
+          AND v.note_id IN (SELECT id FROM cand WHERE versioned)
+        ORDER BY v.note_id, ${VERSION_ORDER_DESC_SQL}
+     ),
+     body_events AS (
        SELECT DISTINCT ON (e.target_id) e.target_id, e.payload->>'title' AS title, e.payload->>'body_hash' AS body_hash
          FROM domain_events e
         WHERE e.workspace_id = $1 AND e.created_at <= $2::timestamptz
           AND ${bodyEventSql("e")}
-          AND e.target_id IN (SELECT id::text FROM cand)
+          AND e.target_id IN (SELECT id::text FROM cand WHERE NOT versioned)
         ORDER BY e.target_id, e.created_at DESC, e.id DESC
      ),
+     then_body AS (SELECT * FROM body UNION ALL SELECT * FROM body_events),
      life AS (
        SELECT DISTINCT ON (e.target_id) e.target_id, e.event_type
          FROM domain_events e
@@ -105,7 +116,7 @@ export async function noteStatesAt(actor: ActorCtx, workspaceId: string, at: Dat
             (l.event_type = 'NODE_DELETED') AS deleted_then,
             COALESCE(bl.content = c.markdown, false) AS same_text
        FROM cand c
-       LEFT JOIN body b ON b.target_id = c.id::text
+       LEFT JOIN then_body b ON b.target_id = c.id::text
        LEFT JOIN life l ON l.target_id = c.id::text
        LEFT JOIN born ON born.target_id = c.id::text
        LEFT JOIN blobs bl ON bl.hash = b.body_hash

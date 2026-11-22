@@ -60,6 +60,7 @@ function whenLabel(iso: string | null): string {
 function markerLabel(t: ReturnType<typeof useT>, marker: HistoryMarker): string {
   if (marker === "before_agent") return t("Before AI edit");
   if (marker === "restored") return t("Back to an older version");
+  if (marker === "baseline") return t("The earliest it was kept");
   return t("Published #{n}", { n: marker.slice("published:".length) });
 }
 
@@ -130,11 +131,11 @@ export function NoteHistory({ node, versions: initialVersions = NO_VERSIONS, ini
   const point = view.point;
   const atNow = scrub.index >= points.length - 1;
 
-  const whoIs = (kind: TimelinePoint["authorKind"], name: string | null) => {
-    const who = historyAuthor(kind, name, selfName);
+  const whoIs = (kind: TimelinePoint["authorKind"], name: string | null, onAnotherDevice = false) => {
+    const who = historyAuthor(kind, name, selfName, onAnotherDevice);
     return { text: who.text, cls: who.tone === "agent" || who.tone === "system" ? `nh-author--${who.tone}` : "nh-author--human" };
   };
-  const authorOf = (p: TimelinePoint) => (p.versionId === null ? null : whoIs(p.authorKind, p.authorName));
+  const authorOf = (p: TimelinePoint) => (p.versionId === null ? null : whoIs(p.authorKind, p.authorName, p.onAnotherDevice));
   // What each edit of the note's drawings (its handwriting page, its whiteboard's pen layer) drew and erased
   // (counts); the picture is read when a row is opened. A drawing that cannot be listed is left out.
   const [inkLists, reloadInk] = useLoad(
@@ -335,7 +336,7 @@ export function NoteHistory({ node, versions: initialVersions = NO_VERSIONS, ini
                   <strong>{inkKindHeading(t, kind)}</strong>
                   <ul>
                     {edits.map((e, i) => {
-                      const who = whoIs(e.actor_kind, e.actor_name);
+                      const who = whoIs(e.actor_kind, e.actor_name, e.on_another_device === true);
                       return (
                         <li key={e.id}>
                           <span className="nh-row-top"><b>{whenLabel(e.changed_at)}</b><span className={`nh-author ${who.cls}`}>{who.text}</span></span>

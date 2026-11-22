@@ -28,7 +28,7 @@ import { acquireEventAppendLock } from "./eventLock.js";
 import { legacyVersionKey } from "./noteVersions.js";
 
 export type ImportedVersion = {
-  /** The version's event id in the source (text of a bigint): the idempotency key and what a restore points at. */
+  /** The version's name in the source: its `version_key`, or the number of its event (a file from before the version tables; text of a bigint). The idempotency key and what a restore points at. */
   sourceEventId: string;
   kind: "created" | "updated" | "restored";
   /** UTC time the source recorded, `YYYY-MM-DDTHH:MM:SS.ffffffZ` (IMPORTED_AT). */
@@ -41,6 +41,8 @@ export type ImportedVersion = {
   actorName: string | null;
   /** For kind "restored": the source event id of the version put back (must be an earlier version of the same note). */
   restoredFrom: string | null;
+  /** The source kept this as its baseline (the content the note held when its history began, migration 220): it is stored as one, not as an edit. Sent as `created`. */
+  baseline?: true;
 };
 
 /** The only shape of a version's time: what the export writes (microseconds, UTC). Passed on as text, never through Date. */
@@ -108,7 +110,7 @@ export async function appendImportedVersions(
 
   // The versions these saves are, written once for the batch after the loop (one statement per table, not three per save: a note with
   // thousands of saves is carried in one restore transaction, services/backupRestore.ts).
-  const minted: { version_key: string; kind: ImportedVersion["kind"]; title: string | null; content_hash: string; at: string; ordinal: number;
+  const minted: { version_key: string; kind: ImportedVersion["kind"] | "baseline"; title: string | null; content_hash: string; at: string; ordinal: number;
                   author_kind: string; restored_from: string | null; source_name: string | null }[] = [];
   const mapped: { event_id: string; version_key: string }[] = [];
   let appended = 0;
@@ -131,7 +133,7 @@ export async function appendImportedVersions(
     const repeats = lastVersion !== null && previousHash === v.bodyHash && previousTitle === v.title;
     const key = repeats ? lastVersion! : legacyVersionKey(noteId, "body", v.kind, v.bodyHash, v.title, v.at);
     if (!repeats) {
-      minted.push({ version_key: key, kind: v.kind, title: v.title, content_hash: v.bodyHash, at: v.at, ordinal: have.size, author_kind: AUTHOR_KIND[v.actorType],
+      minted.push({ version_key: key, kind: v.baseline ? "baseline" : v.kind, title: v.title, content_hash: v.bodyHash, at: v.at, ordinal: have.size, author_kind: AUTHOR_KIND[v.actorType],
         restored_from: restoredHere ? versionOf.get(restoredHere) ?? null : null, source_name: v.actorName });
     }
     mapped.push({ event_id: row.id, version_key: key });

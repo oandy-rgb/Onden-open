@@ -18,16 +18,8 @@ vi.mock("../services/workspaceId.js", async (original) => {
 import { countVersionMisses } from "../spine/noteVersions.js";
 import { importNotionDatabases } from "../modules/importers/notion/database.js";
 import { awaitAllDispatchers } from "../services/dispatcherQueue.js";
-import { Hono } from "hono";
-import { apiOnError } from "../httpError.js";
-import backupRouter from "../routes/backup.js";
 import { fullBackup } from "./helpers/roundTripApi.js";
-import { waitForJob } from "./helpers/restoreJob.js";
-import type { RestoreJob } from "@onden/contract";
-import { makeCaller } from "./helpers/stampedWorld.js";
-import { persistActor } from "./helpers/persistActor.js";
-import { setWorkspaceOwner } from "./helpers/setOwner.js";
-import { publishDefaultSpace } from "./helpers/spaceFixtures.js";
+import { moveInto, place, type Place } from "./helpers/backupMoveWorld.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 import { isTestDatabase } from "./helpers/testDatabase.js";
 import type { ActorCtx } from "../types.js";
@@ -41,32 +33,6 @@ const versionsOf = async (noteId: string): Promise<Version[]> => (await q<Versio
     WHERE v.note_id = $1 AND v.unit = 'body' ORDER BY v.clock_wall NULLS FIRST, v.clock_counter, v.at, v.ordinal`, [noteId])).rows;
 const idOf = async (ws: string, title: string) =>
   (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND title = $2 AND deleted_at IS NULL`, [ws, title])).rows[0]!.id;
-
-type Place = { ws: string; owner: ActorCtx; personal: string; call: ReturnType<typeof makeCaller> };
-async function place(name: string): Promise<Place> {
-  const ws = (await q<{ id: string }>(`INSERT INTO workspaces (name, slug) VALUES ($1, $2) RETURNING id::text`, [name, `${name}-${randomUUID()}`])).rows[0]!.id;
-  await publishDefaultSpace(ws);
-  workspaceSwitch.ws = ws;
-  const owner = await persistActor(ws, { id: "", name: `Owner of ${name}`, type: "human", role: "editor" });
-  await setWorkspaceOwner(ws, owner.id);
-  const personal = (await q<{ id: string }>(`SELECT id::text FROM spaces WHERE owner_actor_id = $1 AND kind = 'personal'`, [owner.id])).rows[0]!.id;
-  return { ws, owner, personal, call: makeCaller(owner) };
-}
-
-/** Move `zip` into the new workspace of `to` (mode "workspace": the only restore that carries history, services/backupRestore.ts). */
-async function moveInto(to: Place, zip: Buffer): Promise<RestoreJob> {
-  workspaceSwitch.ws = to.ws;
-  const app = new Hono<{ Variables: { actor: ActorCtx } }>();
-  app.onError(apiOnError);
-  app.use("*", async (c, next) => { c.set("actor", to.owner); await next(); });
-  app.route("/api/backup", backupRouter);
-  const up = await app.request("/api/backup/restore/upload", { method: "POST", headers: { "content-type": "application/zip" }, body: new Uint8Array(zip) });
-  expect(up.status).toBe(200);
-  const { upload_id } = await up.json() as { upload_id: string };
-  const started = await app.request(`/api/backup/restore/${upload_id}/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ space_id: to.personal, mode: "workspace" }) });
-  expect([200, 202]).toContain(started.status);
-  return waitForJob(app, ((await started.json()) as { job: RestoreJob }).job);
-}
 
 describe.skipIf(!isTestDatabase())("the other write paths mint their versions and miss none", () => {
   let here: Place;

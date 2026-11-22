@@ -64,7 +64,7 @@ export default function BlockHistorySheet({ nodeId, markdown, offset, canUse, on
   // The same rule as the note's history (historyAuthor): 「你」 only for the signed-in person, never for an author with no name.
   const author = (v: BlockVersion): { label: string; tone: "agent" | "system" | "member" | "self" } | null => {
     if (!v.changedAt) return null;
-    const who = historyAuthor(v.actorKind, v.actorName, selfName);
+    const who = historyAuthor(v.actorKind, v.actorName, selfName, v.onAnotherDevice);
     return { label: who.text, tone: who.tone === "session" ? "member" : who.tone };
   };
 

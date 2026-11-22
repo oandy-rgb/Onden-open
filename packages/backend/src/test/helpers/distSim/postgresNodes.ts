@@ -31,8 +31,17 @@ let pointedAt = baseUrl;
 export async function pointPoolAt(url: string): Promise<void> {
   if (url === pointedAt) return;
   if (pool.totalCount !== pool.idleCount) throw new Error(`cannot switch databases: ${pool.totalCount - pool.idleCount} connection(s) of the previous node are still in use:\n${describeOutstanding()}`);
-  // release(true) closes the connection instead of returning it to the pool
-  while (pool.idleCount > 0) (await pool.connect()).release(true);
+  // release(true) closes the connection instead of returning it to the pool, but returns before it is closed: pg sends Terminate and the
+  // client's 'end' comes when the server has closed its side, after its session has left pg_stat_activity. Not waiting for it left the old
+  // node's last connection listed for a moment (nodeDatabaseSwitch.integration.test.ts on public CI, 2026-11-22: "a connection to switch-a
+  // is left", an idle client backend whose last SQL was the round before's), and a DROP or a TEMPLATE copy of that database could meet it too.
+  const closed: Promise<void>[] = [];
+  while (pool.idleCount > 0) {
+    const client = await pool.connect();
+    closed.push(new Promise((resolve) => client.once("end", () => resolve())));
+    client.release(true);
+  }
+  await Promise.all(closed);
   pool.options.connectionString = url;
   pointedAt = url;
 }

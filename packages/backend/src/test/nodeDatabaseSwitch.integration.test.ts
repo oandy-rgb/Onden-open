@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { dbDriver, q, withTransaction } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
+import { describeOutstanding } from "./helpers/distSim/connectionLedger.js";
 import { urlOfDatabase } from "./helpers/distSim/nodeDatabaseNames.js";
 import { openNode } from "./helpers/stampedWorld.js";
 import { seedQ } from "./helpers/seedQ.js";
@@ -13,10 +14,19 @@ import { seedQ } from "./helpers/seedQ.js";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const nameHere = async () => (await q<{ name: string }>(`SELECT name FROM workspaces WHERE slug = 'default'`)).rows[0]!.name;
 
-async function sessionsOf(database: string): Promise<number> {
+/** The client sessions the server has on `database`, each as one line (who it is, its state, its last SQL): a failure says which one is left, not only how many.
+ *  Client backends only: the server's own workers visit every database, a node's too, without anybody connecting (under load, an autovacuum worker on
+ *  pg_shdepend or pg_database was the session left in 10 of 200 runs once pointPoolAt waited for its closes; PR fix/sync-test-findings-2026-11-22). They are
+ *  no connection of this process, and DROP DATABASE … WITH (FORCE) ends them. */
+async function sessionsOf(database: string): Promise<string[]> {
   const admin = new pg.Client({ connectionString: urlOfDatabase("postgres") });
   await admin.connect();
-  try { return Number((await admin.query(`SELECT count(*) AS n FROM pg_stat_activity WHERE datname = $1`, [database])).rows[0].n); } finally { await admin.end(); }
+  try {
+    const rows = (await admin.query<{ line: string }>(`SELECT format('pid %s, %s, application %L, client port %s, started %s, state %s, last SQL: %s', pid, backend_type,
+        application_name, client_port, backend_start, coalesce(state, '-'), left(regexp_replace(coalesce(query, ''), '\\s+', ' ', 'g'), 200)) AS line
+      FROM pg_stat_activity WHERE datname = $1 AND backend_type = 'client backend' ORDER BY pid`, [database])).rows;
+    return rows.map((r) => r.line);
+  } finally { await admin.end(); }
 }
 
 describe.skipIf(!isTestDb)("onNode reaches the database of its node", () => {
@@ -37,7 +47,10 @@ describe.skipIf(!isTestDb)("onNode reaches the database of its node", () => {
         expect(await nameHere()).toBe(label);
         if (dbDriver === "postgres") expect((await q<{ d: string }>(`SELECT current_database() AS d`)).rows[0]!.d).toBe(node.database);
       });
-      if (dbDriver === "postgres") expect(await sessionsOf(other.database!), `a connection to ${other.name} is left after leaving it`).toBe(0);
+      if (dbDriver === "postgres") {
+        const left = await sessionsOf(other.database!);
+        expect(left, `a connection to ${other.name} is left after leaving it (round ${i}); the client sessions on it:\n${left.join("\n")}\nstill taken from the pool:\n${describeOutstanding() || "(none)"}`).toEqual([]);
+      }
     }
   }, 120_000);
 

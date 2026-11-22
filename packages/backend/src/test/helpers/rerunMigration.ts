@@ -11,10 +11,12 @@ import { listMigrations } from "../../dbMigrations.js";
 import { seedQ } from "./seedQ.js";
 
 // The body's quote is `$$` or a named one (`$fn$`: sync_genesis_pass, 202 and 209), and the statement ends at the same quote.
-const FUNCTION = /CREATE OR REPLACE FUNCTION[\s\S]*?\n\$(\w*)\$ LANGUAGE [^;]*;/g;
+// Both start at the beginning of a line (the m flag): a migration's comment that spells the statement (migration 226's header did, PR #1946)
+// was read as one, and the rerun failed with a syntax error. Every migration starts these statements at the beginning of a line.
+const FUNCTION = /^CREATE OR REPLACE FUNCTION[\s\S]*?\n\$(\w*)\$ LANGUAGE [^;]*;/gm;
 // "CREATE OR REPLACE TRIGGER <name> AFTER INSERT ON <table> …;": the timing and events sit between the name and ON (the pattern used to
 // expect ON right after the name, matched nothing, and a rerun of 194 left the pointer triggers watching sort_order for every later file).
-const TRIGGER = /CREATE OR REPLACE TRIGGER (\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)\b[^;]*?\bON (\w+)[\s\S]*?;(?:\n|$)/g;
+const TRIGGER = /^CREATE OR REPLACE TRIGGER (\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)\b[^;]*?\bON (\w+)[\s\S]*?;(?:\n|$)/gm;
 const functionName = (statement: string) => /^CREATE OR REPLACE FUNCTION (\w+)/.exec(statement)?.[1];
 
 /** `version` is the file name without `.sql`, e.g. "194_stamps_s2". */

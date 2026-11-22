@@ -186,10 +186,11 @@ export function reached(root, runs = workflowRuns(root)) {
     if (cmd === "node" || cmd === "tsx" || cmd === "bash" || cmd === "sh" || cmd.startsWith("./") || /\.(sh|mjs|js|ts)$/.test(cmd)) {
       const targets = (cmd === "node" || cmd === "tsx" || cmd === "bash" || cmd === "sh" ? args : [cmd, ...args]).filter((a) => !a.startsWith("-") && !a.startsWith("$"));
       const nodeTest = cmd === "node" && args.includes("--test");
-      for (const t of nodeTest ? targets : targets.slice(0, 1)) for (const f of expandGlob(root, file(cwd, t))) script(cwd, f, depth);
+      const rest = targets.length ? args.slice(args.indexOf(targets[0]) + 1) : [];
+      for (const t of nodeTest ? targets : targets.slice(0, 1)) for (const f of expandGlob(root, file(cwd, t))) script(cwd, f, depth, rest);
     }
   };
-  const script = (cwd, f, depth) => {
+  const script = (cwd, f, depth, args = []) => {
     if (!existsSync(join(root, f))) return;
     out.files.add(f);
     // A node script that starts npm or npx as an argument list, the way scripts/desktopCheck.mjs and scripts/bench/run.mjs
@@ -202,7 +203,9 @@ export function reached(root, runs = workflowRuns(root)) {
         run(dir, [m[1], ...words], depth + 1);
       }
     }
-    for (const cfg of INSIDE[f] ?? []) out.playwright.add(cfg);
+    // run.sh hands its arguments to `playwright test` in the e2e folder: `--config X` runs X instead of the default config.
+    const c = args.indexOf("--config");
+    for (const cfg of INSIDE[f] ?? []) out.playwright.add(c >= 0 && args[c + 1] ? rel(root, normalize(join(root, dirname(cfg), args[c + 1]))) : cfg);
     if (f === RUN_ALL) for (const m of readFileSync(join(root, f), "utf8").matchAll(/["']([\w.-]+\.mjs)["']/g)) out.files.add(`${dirname(f)}/${m[1]}`);
     if (/\.sh$/.test(f) && existsSync(join(root, f)) && !seen.has(f)) { seen.add(f); visit(cwd, readFileSync(join(root, f), "utf8"), depth + 1); }
   };
@@ -268,6 +271,9 @@ export function vitestFiles(root, config) {
  *  outside the cloud stack. Read from the config's text because Playwright is not installed where the guards run. */
 export function playwrightFiles(root, config) {
   const text = readFileSync(join(root, config), "utf8");
+  // A config whose testMatch is computed (playwright.webkit-scan.config.ts: a list from e2e/webkitScanSpecs.ts) cannot be read
+  // from its text: it owns nothing here, so running it never counts as running a spec the guard cannot see it select.
+  if (/testMatch\b/.test(text) && !/testMatch:\s*\//.test(text)) return [];
   const dir = /testDir:\s*["']([^"']+)["']/.exec(text)?.[1] ?? ".";
   const base = rel(root, normalize(join(root, dirname(config), dir)));
   const ignore = /const IGNORED_SPECS\s*=.*:\s*(\/.+\/);/.exec(text)?.[1] ?? /testIgnore:\s*(\/.+?\/)[,\s]/.exec(text)?.[1];

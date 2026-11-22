@@ -1,4 +1,6 @@
+import { sql } from "kysely";
 import { q } from "../db.js";
+import { db } from "../dbKysely.js";
 import type { ActorCtx } from "../types.js";
 import { assertAuthority } from "../spine/authority.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
@@ -9,6 +11,7 @@ import { normalizeFieldIdentifiers } from "./tagPacks.js";
 
 import { cutToUnits, derivedIdName } from "@onden/markdown";
 import { newIdFor } from "./derivedIds.js";
+import { isShippedModule } from "./moduleCatalog.js";
 import { StatusError } from "../statusError.js";
 import { liveNodeSql, liveTagNodeSql, tagNodeSql } from "../spine/nodeSql.js";
 /** A module's tag (ModuleDefinition.library.moduleTag). `name` is the default
@@ -123,6 +126,15 @@ export async function workspaceHasModule(workspaceId: string, id: string): Promi
   return isModuleImported(await workspaceModules(workspaceId), id);
 }
 
+/** Whether a module's own functions are in use in the workspace: a built-in module (shipped, no library
+ *  entry, no switch: capture) always; a library module while it is on; an id this build does not ship
+ *  (a removed module's leftovers) never. The rule behind "a module's tag is kept while its module is on"
+ *  (reservedTags.assertTagDefinitionChange). */
+export async function workspaceUsesModule(workspaceId: string, id: string): Promise<boolean> {
+  if (!isShippedModule(id)) return false;
+  return !libraryModules.has(id) || workspaceHasModule(workspaceId, id);
+}
+
 export function isModuleImported(modules: string[] | null | undefined, id: string): boolean {
   return modules == null || modules.includes(id);
 }
@@ -223,15 +235,18 @@ function cleanTagName(name: string | undefined): string {
  *  or a tag at any depth with one of the module's legacy names (those name
  *  the old tag itself, wherever it was put), case-insensitive. `lock` takes
  *  the row lock for an adoption in the caller's transaction. */
-export async function findModuleTag(workspaceId: string, module: string, name?: string, { lock = false } = {}): Promise<
+export async function findModuleTag(workspaceId: string, module: string, name?: string, { lock = false, trashed = false } = {}): Promise<
   { id: string; title: string; tag_schema: Record<string, unknown> | null; marked: boolean } | null
 > {
+  // `trashed`: the marked tag in the trash instead (reviveModuleTag), the one with the most live notes first; no adoption by name.
   const existing = await q<{ id: string; title: string; tag_schema: Record<string, unknown> | null }>(
     `SELECT id, title, tag_schema FROM content_nodes
-      WHERE workspace_id = $1 AND ${liveTagNodeSql()} AND tag_schema->>'module' = $2
-      ORDER BY created_at LIMIT 1`, [workspaceId, module],
+      WHERE workspace_id = $1 AND ${trashed ? `${tagNodeSql()} AND deleted_at IS NOT NULL` : liveTagNodeSql()} AND tag_schema->>'module' = $2
+      ORDER BY ${trashed ? `(SELECT count(*) FROM node_tags nt JOIN content_nodes n ON n.id = nt.node_id AND ${liveNodeSql("n")} WHERE nt.tag_id = content_nodes.id) DESC, ` : ""}created_at, id LIMIT 1`,
+    [workspaceId, module],
   );
   if (existing.rows[0]) return { ...existing.rows[0], marked: true };
+  if (trashed) return null;
   const legacy = (moduleTagSpecs.get(module)?.legacyNames ?? []).map((candidate) => candidate.toLowerCase());
   const names = [...(name ? [name.toLowerCase()] : []), ...legacy];
   if (!names.length) return null;
@@ -243,6 +258,24 @@ export async function findModuleTag(workspaceId: string, module: string, name?: 
       ORDER BY (lower(title) = $3) DESC, (parent_id IS NULL) DESC, created_at LIMIT 1${lock ? " FOR UPDATE" : ""}`, [workspaceId, names, names[0], legacy],
   )).rows[0];
   return named ? { ...named, marked: false } : null;
+}
+
+/** Where the older captures of a deleted inbox are stranded (services/strandedInboxRepair.ts): a live tag of `module` and a trashed
+ *  one in the same workspace, with the live top-level notes still on the trashed one and not on the live one. Read-only. */
+type StrandedModuleTag = { workspaceId: string; trashedTagId: string; liveTagId: string; noteIds: string[] };
+export async function findStrandedModuleTags(module: string, workspaceId?: string): Promise<StrandedModuleTag[]> {
+  const rows = (await sql<{ workspace_id: string; trashed_id: string; live_id: string; notes: string[] }>`
+    SELECT old.workspace_id, old.id AS trashed_id, cur.id AS live_id, array_agg(n.id::text ORDER BY n.created_at, n.id) AS notes
+      FROM content_nodes old
+      JOIN content_nodes cur ON cur.workspace_id = old.workspace_id AND ${sql.raw(liveTagNodeSql("cur"))}
+                            AND jsonb_extract_path_text(cur.tag_schema, 'module') = ${module}
+      JOIN node_tags nt ON nt.tag_id = old.id
+      JOIN content_nodes n ON n.id = nt.node_id AND ${sql.raw(liveNodeSql("n"))} AND n.parent_id IS NULL
+     WHERE ${sql.raw(tagNodeSql("old"))} AND old.deleted_at IS NOT NULL AND jsonb_extract_path_text(old.tag_schema, 'module') = ${module}
+       AND (${workspaceId ?? null}::uuid IS NULL OR old.workspace_id = ${workspaceId ?? null}::uuid)
+       AND NOT EXISTS (SELECT 1 FROM node_tags on2 WHERE on2.node_id = n.id AND on2.tag_id = cur.id)
+     GROUP BY old.workspace_id, old.id, cur.id`.execute(db)).rows;
+  return rows.map((r) => ({ workspaceId: r.workspace_id, trashedTagId: r.trashed_id, liveTagId: r.live_id, noteIds: r.notes }));
 }
 
 /** A module tag a member makes on first use — capture's 收件匣 (modules/capture/inboxTag) —

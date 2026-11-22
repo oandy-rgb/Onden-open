@@ -41,12 +41,15 @@ describe("what the sign-in page statically imports", () => {
     "settings/registry.tsx",
     "lib/localDb.ts",
     "components/KnowledgeWorkspace.tsx",
+    // Only a device that asks to connect to another server needs it; it loads on use (components/BuilderApp).
+    "components/ServerSetup.tsx",
+    "components/InviteClaimGate.tsx",
   ])("does not include %s", (file) => {
     expect(closure).not.toContain(file);
   });
 
   it("does include the gate", () => {
-    expect(closure).toEqual(expect.arrayContaining(["components/LoginGate.tsx", "components/ServerSetup.tsx", "lib/auth-client.ts"]));
+    expect(closure).toEqual(expect.arrayContaining(["components/LoginGate.tsx", "lib/auth-client.ts"]));
   });
 });
 

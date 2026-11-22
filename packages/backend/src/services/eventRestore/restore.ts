@@ -249,7 +249,7 @@ export async function restoreEvent(
     // A domain refusal like the others (and already rolled back): undoing a
     // create or undelete of a reserved tag would trash it. As a RestoreError,
     // a review batch or chain skips this one instead of aborting.
-    if (error instanceof ReservedTagError) return { code: "reserved_tag", status: 409, detail: error.message };
+    if (error instanceof ReservedTagError) return { code: error.body.error, status: 409, detail: error.message };
     throw error;
   }
 }

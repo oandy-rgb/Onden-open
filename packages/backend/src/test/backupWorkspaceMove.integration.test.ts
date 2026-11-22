@@ -28,6 +28,7 @@ import { isTestDatabase } from "./helpers/testDatabase.js";
 import { waitForJob } from "./helpers/restoreJob.js";
 import { setWorkspaceOwner } from "./helpers/setOwner.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
+import { ensureInboxTag } from "../modules/capture/inboxTag.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { noteViewsOf, type NoteView } from "./helpers/noteViews.js";
 import { publishDefaultSpace } from "./helpers/spaceFixtures.js";
@@ -250,6 +251,21 @@ describe.skipIf(!enabled)("moving a whole workspace", () => {
       const live = (await q<{ title: string }>(`SELECT title FROM content_nodes WHERE workspace_id = $1 AND deleted_at IS NULL AND node_type <> 'class_tag' AND NOT hidden`, [trial.ws])).rows.map((r) => r.title);
       expect(live).not.toContain("歡迎來到 Onden 試用版");
       expect(live).toContain("Marked");
+    } finally {
+      await seedQ(`DELETE FROM browser_app_state WHERE key = 'sample-notes'`);
+    }
+  });
+
+  it("clearing the samples leaves a module's tag (the inbox) in place instead of failing the move", async () => {
+    const trial = await newWorkspace("trial-inbox");
+    const inbox = await ensureInboxTag(trial.owner, trial.ws);
+    await seedQ(`CREATE TABLE IF NOT EXISTS browser_app_state (key text PRIMARY KEY, value jsonb NOT NULL)`);
+    await seedQ(`INSERT INTO browser_app_state (key, value) VALUES ('sample-notes', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [JSON.stringify({ notes: [], tags: [inbox] })]);
+    try {
+      const done = await move(trial.owner, trial.personal, zip1);
+      expect(done.status, JSON.stringify(done)).toBe(200);
+      expect(done.job!.result!.moved!.cleared.tags).toBe(0);
+      expect((await q(`SELECT 1 FROM content_nodes WHERE id = $1 AND deleted_at IS NULL`, [inbox])).rowCount).toBe(1);
     } finally {
       await seedQ(`DELETE FROM browser_app_state WHERE key = 'sample-notes'`);
     }

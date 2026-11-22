@@ -253,10 +253,9 @@ REGRESSIONS["whiteboard settings: a queued setting change made offline does not 
     { kind: "view", client: 0, owner: "note", of: 1, how: "settingWhole", pick: 0, n: 5, fate: "deliver" },
   ],
 };
-// KNOWN DEFECTS the review check finds (modules/review/service.ts, state.ts). They run as `it.fails` and the property run leaves the two
-// strict flags off until the server is fixed; then each case goes red (remove knownFailure) and the flags go on in both test files.
-REGRESSIONS["the same card graded from two devices that showed it counts one review (known defect)"] = {
-  knownFailure: true, strictGradeOnce: true,
+// Review on two devices (modules/review/service.ts `assertShownAsIs`, state.ts): both cases are plain tests and the two strict flags are on in the random runs.
+REGRESSIONS["the same card graded from two devices that showed it counts one review"] = {
+  strictGradeOnce: true,
   note: "Devices A and B both show a new card; A grades it, then B grades it from its stale screen: the server advances the schedule a second time (reps 2) for one showing of the card.",
   ops: [
     ...REVIEW_TWO_DEVICES,
@@ -264,7 +263,7 @@ REGRESSIONS["the same card graded from two devices that showed it counts one rev
     { kind: "grade", client: 1, card: 0, rating: 3, fate: "deliver" },
   ],
 };
-REGRESSIONS["an undo right after another device's undo does not delete the schedule of a card that had earlier reviews (known defect)"] = {
+REGRESSIONS["an undo right after another device's undo does not delete the schedule of a card that had earlier reviews"] = {
   strictUndo: true,
   note: "A and B grade the same card (both counted), A undoes its grade (the earlier schedule comes back), then B undoes with a different key: the server steps back again and deletes the card's schedule.",
   ops: [

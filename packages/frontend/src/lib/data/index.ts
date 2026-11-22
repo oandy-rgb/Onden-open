@@ -8,6 +8,7 @@ export { backupRestore } from "./backupRestore";
 export { backupLimits, sizeLabel } from "./backupLimits";
 export type { UploadedBackup } from "./backupRestore";
 export { importCanvasFile } from "./canvasImport";
+export { loadOnlineWriters } from "./onlineWriters";
 export { bindDomainLifecycle, blockChildWriter, blockLinkWriter, canvasWriter, historyWriter, nodeActions, nodeMutations, onlineOperation, graphPositionWriter, noteWriter, propertyWriter, relationWriter, tagConfigWriter, tagSchemaWriter, tagWriter, taskWriter, focusWriter, viewWriter, workspaceWriter, writersFor } from "./domainWriters";
 export type { WriterOptions } from "./domainWriters";
 export type { BlockChildOutcome, UnwritableReferences } from "./blockChildWriter";

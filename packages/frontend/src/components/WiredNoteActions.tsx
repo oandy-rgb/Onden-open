@@ -49,7 +49,7 @@ export function WiredNoteActions({ node, wiring, onVersionHistory, editor }: Pro
     Action ? [<Action key={id} node={node} readOnly={!canEdit} />] : []);
   // The same list the context menu, the ⌘K palette and the sidebar render from (lib/data noteActionList, D112);
   // module commands are in the info panel's 「功能」 tab, not here.
-  const actions = noteActionsFor(node, { canEdit, isOwner: caps.isOwner, online, tags: allTags, hasVersions: !!onVersionHistory });
+  const actions = noteActionsFor(node, { canEdit, isOwner: caps.isOwner, online, tags: allTags, hasVersions: !!onVersionHistory, isImported });
   return (
     <NoteActions
       key={node.id}

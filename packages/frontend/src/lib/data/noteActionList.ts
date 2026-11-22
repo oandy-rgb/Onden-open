@@ -20,7 +20,7 @@
 import type { ContentNode, Tag } from "../api";
 import { isTagShown } from "../nodeTags";
 import { isPinned } from "../noteMarks";
-import { isSystemNode, tagsById } from "../systemNodes";
+import { isSystemNode, isTagDefinitionLocked, tagsById } from "../systemNodes";
 import { TAG_NODE_TYPE, isNote } from "@onden/markdown/contract";
 
 /** A module's note command, as far as availability goes (modules/types
@@ -39,6 +39,8 @@ export type NoteActionContext<C extends NoteActionCommand = NoteActionCommand> =
   online: boolean;
   /** A reserved tag (#task, #page, #workspace-config): never deleted. */
   reserved?: boolean;
+  /** A tag the server will not delete or merge away (systemNodes isTagDefinitionLocked): a module's own tag while it is on. */
+  locked?: boolean;
   /** A system row (lib/systemNodes isSystemNode): nothing destructive. */
   system?: boolean;
   /** The note carries the pin mark (lib/noteMarks isPinned). */
@@ -121,7 +123,7 @@ export function noteActionList<C extends NoteActionCommand>(
     action("display", "Display…", isNote(node)),
     // The font, text size and width of notes (a sheet over the note; Settings › Notes has the same).
     action("text-style", "Text style…", isNote(node)),
-    action("delete", "Delete", edit && !ctx.reserved && !ctx.system),
+    action("delete", "Delete", edit && !ctx.reserved && !ctx.locked && !ctx.system),
   ];
 }
 
@@ -137,6 +139,8 @@ export type NoteActionFacts<C extends NoteActionCommand = NoteActionCommand> = {
   body?: string;
   commands?: readonly C[];
   hasVersions?: boolean;
+  /** Whether a module is on (hooks/useModuleFilter): without it no module tag counts as locked. */
+  isImported?: (moduleId: string) => boolean;
 };
 
 /** A note's actions for this person, from store facts (lib/capabilities,
@@ -149,6 +153,7 @@ export function noteActionsFor<C extends NoteActionCommand>(node: ContentNode, f
     isOwner: facts.isOwner,
     online: facts.online,
     reserved: !!tag?.reserved_key,
+    locked: !!tag && isTagDefinitionLocked(tag, facts.isImported ?? (() => false)),
     system: isSystemNode(node, tagsById(facts.tags)),
     pinned: isPinned(node),
     tagHidden: node.node_type === TAG_NODE_TYPE && !isTagShown(tag ?? node),

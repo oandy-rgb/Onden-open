@@ -41,8 +41,9 @@ describe("the browser app stays out of the normal build", () => {
 
   it("the flag that tells code it runs in the browser app is set by its own build only", () => {
     const users = files.filter((f) => /VITE_BROWSER_APP/.test(f.text) && !f.path.startsWith("test/")).map((f) => f.path);
-    // localDbWorker finds sql.js beside the page's assets there; nothing else may branch on it.
-    expect(users).toEqual(["lib/localDbWorker.ts"]);
+    // localDbWorker finds sql.js beside the page's assets there, and pdfjs asks for its worker next to the page (the browser
+    // version can be served from a sub-folder; the other builds are at the root). Nothing else may branch on it.
+    expect(users).toEqual(["lib/localDbWorker.ts", "lib/pdf/pdfjs.ts"]);
     expect(readFileSync(join(FRONTEND, "vite.browser.config.ts"), "utf8")).toContain('"import.meta.env.VITE_BROWSER_APP"');
   });
 

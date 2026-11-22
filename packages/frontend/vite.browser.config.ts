@@ -11,10 +11,10 @@ import { appHeadPlugin } from "./src/appShell/vitePlugin";
 const outDir = process.env.ONDEN_BROWSER_OUT ?? fileURLToPath(new URL("./dist-browser", import.meta.url));
 
 // public/ holds the web build's offline machinery too (the PDF viewer's worker, the service worker). The browser app
-// has no uploaded PDFs and nothing to cache for offline (the page and its backend are the same files). It takes the
-// icons, the manifest, the faces the styles ask for, and sql.js for the local copy (src/lib/localDb.ts).
+// has nothing to cache for offline (the page and its backend are the same files) but it does show uploaded PDFs, so it takes the
+// PDF worker (without it the viewer and the text read both fail), the icons, the manifest, the faces the styles ask for, and sql.js for the local copy (src/lib/localDb.ts).
 const publicDir = fileURLToPath(new URL("./public", import.meta.url));
-const FROM_PUBLIC = ["favicon.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest", ...readdirSync(`${publicDir}/fonts`).map((f) => `fonts/${f}`), ...readdirSync(`${publicDir}/sql.js`).map((f) => `sql.js/${f}`)];
+const FROM_PUBLIC = ["favicon.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest", "pdf.worker.min.mjs", ...readdirSync(`${publicDir}/fonts`).map((f) => `fonts/${f}`), ...readdirSync(`${publicDir}/sql.js`).map((f) => `sql.js/${f}`)];
 // The Service Worker that shows uploaded files (browser-sw/media-sw.js): a plain file at the page's own level, so its
 // registration folder is wherever the page is served from.
 const mediaServiceWorker = fileURLToPath(new URL("./browser-sw/media-sw.js", import.meta.url));

@@ -480,12 +480,16 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
       </div>
       {splitOn && split.right && (
         <>
-          <SplitDivider ratio={split.ratio || SPLIT_RATIO_DEFAULT} container={() => splitRootRef.current} />
+          <Suspense fallback={null}>
+            <SplitDivider ratio={split.ratio || SPLIT_RATIO_DEFAULT} container={() => splitRootRef.current} />
+          </Suspense>
           <Suspense fallback={<aside className="split-pane" />}>{rightPane}</Suspense>
         </>
       )}
       <SplitDropHint />
-      <QuoteToOther active={!splitView.phone && split.right !== null} otherNote={otherNote} sourceOf={quoteSource} />
+      {!splitView.phone && split.right !== null && (
+        <Suspense fallback={null}><QuoteToOther active otherNote={otherNote} sourceOf={quoteSource} /></Suspense>
+      )}
       </div>
 
       {cardAudienceOpen && <Suspense fallback={null}><BoardCardAudienceConfirm /></Suspense>}

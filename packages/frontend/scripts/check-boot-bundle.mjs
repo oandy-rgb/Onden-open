@@ -71,10 +71,17 @@ const kb = (n) => `${(n / 1024).toFixed(1)} KiB`;
 // load when shown (components/lateShell.ts), and the 21 zh-TW strings only they use went to the late half. The owner's
 // rule would set the budget to measured + 5 KiB (311_385); that is higher than today's, and this round fell short of
 // its 8 KiB goal, so the budget stays at 310_204 (3.8 KiB of room) instead of being raised.
+//
+// Slimming round 2026-11-22 (perf/boot-slim-4): measured 307_494 B, 309_598 B before (-2.1 KiB; well short of the 8 KiB goal:
+// what is left in the boot JS is the data layer, React and screens that are on the first page; see the PR description). The
+// writes that only run after a server answer (version history, part-to-child, part links) are made on their first call
+// (lib/data/loadedOnFirstUse.ts, onlineWriters.ts), the split view's divider and quote button load with the second side,
+// and the server-setup and invite-claim screens load on use. measured + 5 KiB (312_614) would be higher than today's
+// budget, so it stays at 310_204 (2.6 KiB of room) instead of being raised.
 export const BOOT_BUDGET_GZIP = 310_204;
 // The boot JS of main when the budget was last set. Update it with the budget, or when
 // a merge moves the boot JS by more than 1 KiB, so the delta below stays meaningful.
-export const BOOT_MEASURED_GZIP = 306_265;
+export const BOOT_MEASURED_GZIP = 307_494;
 /** Growth over this much (bytes, gzip) needs a reason in the PR description. */
 export const BOOT_GROWTH_NOTE = 1_024;
 // Libraries only a screen needs, which must never be in the boot JS: a value

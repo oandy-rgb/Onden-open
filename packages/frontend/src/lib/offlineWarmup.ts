@@ -18,7 +18,7 @@
 // modules, which costs a phone noticeable main-thread time).
 
 import { serviceWorkerContainer } from "./storagePersist";
-import { isBrowserOnline, prefersSavedData } from "./data";
+import { isBrowserOnline, loadOnlineWriters, prefersSavedData } from "./data";
 import { BUILD_ID, takeUnwarmedScreens } from "./lazyWithReload";
 import { PREFS, getPref, setPref } from "./prefs";
 
@@ -80,6 +80,8 @@ export const OFFLINE_SCREENS: ReadonlyArray<() => Promise<unknown>> = [
   () => import("./noteExportExcerpts"),
   // The note templates (new note from a template works offline).
   () => import("./noteTemplates"),
+  // The writes that need a connection load on their first call (lib/data/onlineWriters.ts).
+  () => loadOnlineWriters(),
   // The shell's dialogs and cards that load when first shown (components/lateShell.ts).
   () => import("../components/lateShell").then((m) => m.loadLateShellScreens()),
   // The Chinese wording of every screen above (lib/i18n.app.ts loads it after boot).

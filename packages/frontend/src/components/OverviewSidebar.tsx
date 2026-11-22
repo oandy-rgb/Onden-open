@@ -108,7 +108,7 @@ function OverviewSidebar({ nav, actions, rename, tree, create, onCreateTag }: Pr
   // a viewer, whose delete the server refuses (403 → rollback).
   const caps = useCapabilities(online);
   const canDeleteRow = useMemo(() => (node: ContentNode) =>
-    noteActionsFor(node, { canEdit: caps.canEdit(node), isOwner: caps.isOwner, online, tags }).has("delete"), [caps, online, tags]);
+    noteActionsFor(node, { canEdit: caps.canEdit(node), isOwner: caps.isOwner, online, tags, isImported }).has("delete"), [caps, online, tags, isImported]);
   const { overviewSearch, overviewSearchResults, overviewSearchOutcome, overviewSearchFailed } = useOverviewSearch();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchExpanded = useAppSelector((s) => s.overviewSearchOpen);

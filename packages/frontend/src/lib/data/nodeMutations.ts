@@ -10,7 +10,7 @@ import { makeNoteWriter } from "./noteWriter";
 import { makeTaskWriter } from "./taskWriter";
 import { makeTagWriter } from "./tagWriter";
 import { makeWorkspaceWriter } from "./workspaceWriter";
-import { makeNoteHistoryWriter } from "./noteHistoryWriter";
+import { historyWriterFor } from "./onlineWriters";
 import { runBackgroundWrite } from "./backgroundWrite";
 import { reservedTagIds } from "../systemNodes";
 import { SERVER_ERROR_MESSAGES } from "../serverErrors";
@@ -27,7 +27,7 @@ export function makeNodeMutations(ctx: DataCtx) {
   const taskWriter = makeTaskWriter(ctx);
   const tags = makeTagWriter(ctx);
   const workspace = makeWorkspaceWriter(ctx);
-  const history = makeNoteHistoryWriter(ctx);
+  const history = historyWriterFor(ctx);
 
   async function createNode(title: string, _kind: "markdown", _nodeCount: number, parentId?: string | null, spaceId?: string | null): Promise<ContentNode | null> {
     // The writer owns error reporting; creation callers use null to keep their UI open.

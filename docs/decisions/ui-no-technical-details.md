@@ -25,3 +25,5 @@
 - `lib/serverErrors.ts`、`writeErrors.message`、`eventTypeLabel`、`effectKindLabel`
 - ESLint 擋 JSX 子節點的 `JSON.stringify`
 - [AGENTS.md](../../AGENTS.md)「使用者介面文字」
+
+> 2026-11-18：新增錯誤碼 `module_tag` 的白話訊息（`lib/serverErrors.ts`；中英文，不含代碼或標籤 id）；標籤頁選單對鎖住的標籤顯示一句白話說明，不顯示技術細節。

@@ -4,6 +4,21 @@
 // 開機 JS 用到的字串不可放這裡：建置時 scripts/bootReportPlugin.mjs 會檢查並指出是哪一條。
 
 export const ZH_TW_LATE: Record<string, string> = {
+  "Version restore needs a connection.": "還原版本需要連線。",
+  "Undoing needs a connection.": "復原需要連線。",
+  "Restoring needs a connection.": "還原需要連線。",
+  "Moving a part into a child note needs a connection.": "搬成子筆記需要連線。",
+  "Pointing a paragraph at a new place needs a connection.": "重新指定段落需要連線。",
+  "Untitled note": "未命名筆記",
+  "Resize the two sides": "調整左右寬度",
+  "Add to the other side: {name}": "放進另一邊：{name}",
+  "Connect to start.": "連接以開始。",
+  "Advanced / connect to a different server": "進階 / 連接到其他伺服器",
+  "Connect": "連接",
+  "Welcome to Onden": "歡迎使用 Onden",
+  "The invite could not be used": "無法使用這個邀請",
+  "Continue without the invite": "不使用邀請，繼續",
+  "Connecting…": "連接中…",
   "The server's copy is older than this device's last save: check your recent notes.": "伺服器上的資料比這台裝置最後存的還舊，請看一下最近改過的筆記。",
   "Connect to see how many notes are ready.": "連上網路才看得到有多少筆記準備好了。",
   "You have no notes to prepare yet.": "你還沒有需要準備的筆記。",

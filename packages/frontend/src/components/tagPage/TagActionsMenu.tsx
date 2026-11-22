@@ -17,7 +17,7 @@ export default function TagActionsMenu({ tag, hide, mergeDisabled, onMove, onMer
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenu = usePopover<HTMLButtonElement>({ open: moreOpen, onClose: () => setMoreOpen(false), placement: "bottom-end" });
-  const { hidden, canHide, reserved, setHidden } = hide;
+  const { hidden, canHide, reserved, locked, setHidden } = hide;
   return (
     <>
       <Pressable
@@ -48,6 +48,8 @@ export default function TagActionsMenu({ tag, hide, mergeDisabled, onMove, onMer
           )}
           {reserved ? (
             <MenuLabel>{t("System tag — it can be renamed but not merged or deleted.")}</MenuLabel>
+          ) : locked ? (
+            <MenuLabel>{t("Built-in function tag — it can be renamed, but not deleted or merged while that function is on.")}</MenuLabel>
           ) : (<>
             <MenuItem disabled={mergeDisabled} title={t("Fold this tag into another — shows what changes first")} onSelect={onMerge}>
               <Merge size={14} aria-hidden="true" /> {t("Merge into…")}

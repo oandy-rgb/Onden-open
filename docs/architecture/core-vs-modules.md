@@ -63,3 +63,5 @@
 - **MCP／API 工具清單列出已關模組的工具（已修）**：`GET /api/mcp/tools`、MCP `tools/list` 與 API 執行階段原本不看工作區的
   模組狀態，關掉的模組工具仍出現（呼叫才被拒）。現在 `AgentTool.available` 由模組閘門提供，清單依工作區過濾；
   測試先失敗再通過（後端 `moduleOffNoTrace.test.ts`）。
+
+> 2026-11-18：核心的標籤刪除／合併檢查（`reservedTags.assertTagDefinitionChange`）現在也保護模組自己的標籤，「模組在用」由 `workspaceModules.workspaceUsesModule` 回答（內建模組一律在用）；分層本身不變，見 [decisions-modules.md](../agents/decisions-modules.md)。

@@ -200,3 +200,5 @@
 
 - 還沒統一的手勢：`NavLayoutEditor`／`MobileNav` 的 `useLongPress`（按住就開選單、滑鼠也算）與 `useDragReorder`（抓握把立即拖）；要統一須先決定這兩個行為。
 - `ESC_ONLY_SURFACES` 與 `ESC_GESTURES`（`dismissStack.guard.test.ts`）只准變少。
+
+> 2026-11-18：標籤頁 ⋯ 選單與筆記動作清單對「在用模組的標籤」不顯示刪除與合併（選單改顯示一句說明），判斷在 `lib/systemNodes.ts` 的 `isTagDefinitionLocked`；命令面板只是多傳一個事實給既有的動作清單。

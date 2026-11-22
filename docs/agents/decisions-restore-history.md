@@ -116,3 +116,5 @@
 
 審核範圍、交易排序及尚未處理的邊界見 [復原審核與契約](../architecture/restore-writes.md)。
 這些決定描述本批的契約，不表示所有舊的直接事件寫入或所有外層交易已完成遷移。
+
+> 2026-11-18：復原的反向操作若會刪掉一個在用模組的標籤，`restoreEvent` 回 `module_tag`（409）而不是 `reserved_tag`（`RestoreError` 型別多一種）；其他復原規則不變。

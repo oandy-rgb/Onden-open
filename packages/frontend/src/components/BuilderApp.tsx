@@ -5,7 +5,6 @@ import { verifiedAccountFor } from "../lib/accountStorage";
 import { captureInviteFromUrl } from "../lib/invite";
 import { rememberLoadedFiles } from "../lib/rememberLoadedFiles";
 import LoginGate from "./LoginGate";
-import ServerSetup from "./ServerSetup";
 import { consumeCaptureArrival } from "../lib/captureArrival";
 import BootScreen from "./BootScreen";
 import { elementById } from "../lib/documentAccess";
@@ -21,6 +20,7 @@ const loadWorkspace = () => import("./BuilderWorkspace").then((chunk) => {
   return chunk;
 });
 const BuilderWorkspace = lazyWithReload(loadWorkspace);
+const ServerSetup = lazyWithReload(() => import("./ServerSetup"));
 
 /** Start downloading the workspace chunk without waiting for the session
  *  check. Only a device that was signed in here before does it (the verified
@@ -68,7 +68,7 @@ export default function BuilderApp() {
   // account that scopes the local store and names every request. No storage
   // question is asked: notes live on this device by default, and a folder
   // copy is opt-in in Settings (lib/localBackup).
-  if (!ready) return <ServerSetup onConnect={() => setReady(true)} />;
+  if (!ready) return <Suspense fallback={<BootScreen />}><ServerSetup onConnect={() => setReady(true)} /></Suspense>;
   return (
     <LoginGate>
       <Suspense fallback={<BootScreen />}>

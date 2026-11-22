@@ -30,7 +30,8 @@ app.route("/api/review", reviewRouter).route("/api/tags", tagsRouter).route("/ap
 const req = (path: string, method = "GET", body?: unknown) => app.request(path, {
   method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
-const grade = (id: string) => req(`/api/review/${id}/grade`, "POST", { rating: 3, now: NOW });
+// A real client names the reps it was showing (`seen_reps`, ReviewPanel); without it the card must be due and not put off.
+const grade = (id: string, seenReps?: number) => req(`/api/review/${id}/grade`, "POST", { rating: 3, now: NOW, ...(seenReps === undefined ? {} : { seen_reps: seenReps }) });
 const queue = async (tagId?: string) => (await req(`/api/review/queue?now=${NOW}${tagId ? `&tag_id=${tagId}` : ""}`)).json() as Promise<{ cards: { node_id: string; state: unknown }[] }>;
 const stats = async (tagId?: string) => (await req(`/api/review/stats?now=${NOW}${tagId ? `&tag_id=${tagId}` : ""}`)).json() as Promise<{ new_available: number }>;
 
@@ -197,8 +198,8 @@ describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("review cards a
     await note();
     await note();
     expect((await queue()).cards).toHaveLength(2);
-    expect((await grade(graded)).status).toBe(200);
-    expect((await grade(graded)).status).toBe(200);
+    expect((await grade(graded, 0)).status).toBe(200);
+    expect((await grade(graded, 1)).status).toBe(200);
     // Graded twice, counted once: one place of the two is left for the two other new cards.
     expect((await queue()).cards.filter(card => card.state === null)).toHaveLength(1);
     expect(await stats()).toMatchObject({ new_available: 1 });

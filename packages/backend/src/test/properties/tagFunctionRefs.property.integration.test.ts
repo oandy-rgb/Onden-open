@@ -28,6 +28,7 @@ import { functionsOf } from "../../services/functionRefs.js";
 import type { ActorCtx } from "../../types.js";
 import { persistActor } from "../helpers/persistActor.js";
 import { registerShippedModules } from "../helpers/registerShippedModules.js";
+import { seedQ } from "../helpers/seedQ.js";
 import { checkAsync } from "../helpers/propsConfig.js";
 
 const database = process.env.DATABASE_URL ?? "";
@@ -92,8 +93,15 @@ class World {
       }
       case "deleteModule": {
         if (!this.moduleTagId) return "deleteModule (no module tag)";
+        // A module's tag cannot be deleted while the module is on (reservedTags.assertTagDefinitionChange, 409 module_tag), so this
+        // builds the legacy state a workspace can still hold — a module on with its tag deleted before that rule — by taking the
+        // module mark off for the one real delete call and putting it back on the trashed row.
+        const refused = await call("DELETE", `/api/nodes/${this.moduleTagId}`);
+        expect(refused.status, `delete while on: ${JSON.stringify(refused.body)}`).toBe(409);
+        await seedQ(`UPDATE content_nodes SET tag_schema = tag_schema - 'module' WHERE id = $1`, [this.moduleTagId]);
         const res = await call("DELETE", `/api/nodes/${this.moduleTagId}`);
         expect(res.status, `delete module tag: ${JSON.stringify(res.body)}`).toBeLessThan(300);
+        await seedQ(`UPDATE content_nodes SET tag_schema = tag_schema || jsonb_build_object('module', $2::text) WHERE id = $1`, [this.moduleTagId, FUNCTION_ID]);
         this.moduleTagId = null;
         if (this.state === "via") this.state = "stale";
         return "deleteModule";

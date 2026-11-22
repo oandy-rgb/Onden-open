@@ -7,11 +7,23 @@ import { forgetVerifiedAccount, rememberVerifiedAccount, verifiedAccountFor } fr
 import { lazyWithReload } from "../lib/lazyWithReload";
 import { Pressable } from "./ui";
 import AccountSessionBoundary from "./AccountSessionBoundary";
-import InviteClaimGate from "./InviteClaimGate";
+import { pendingInviteToken } from "../lib/invite";
 
 // The sign-in form is only for someone who is not signed in: it loads on use,
 // behind the same "Loading…" line the session check shows.
 const LoginForm = lazyWithReload(() => import("./LoginForm"));
+// Claiming an invite is only for someone who arrived with an invite link: everyone else goes straight to
+// the workspace, so the claim screen loads only when a link is pending (decided once per mount, like the gate itself).
+const InviteClaimGate = lazyWithReload(() => import("./InviteClaimGate"));
+function InviteGate({ children }: { children: React.ReactNode }) {
+  const [pending] = useState(() => pendingInviteToken() !== null);
+  if (!pending) return <>{children}</>;
+  return (
+    <Suspense fallback={<div className="login-loading" role="status">{t("Accepting the invite…")}</div>}>
+      <InviteClaimGate>{children}</InviteClaimGate>
+    </Suspense>
+  );
+}
 
 export default function LoginGate({ children }: { children: React.ReactNode }) {
   useT();
@@ -62,7 +74,7 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
   if (verifiedUserId) {
     return (
       <AccountSessionBoundary userId={verifiedUserId}>
-        <InviteClaimGate>{children}</InviteClaimGate>
+        <InviteGate>{children}</InviteGate>
       </AccountSessionBoundary>
     );
   }

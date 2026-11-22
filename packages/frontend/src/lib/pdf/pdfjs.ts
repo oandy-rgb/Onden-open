@@ -21,17 +21,26 @@
 // to public/pdf.worker.min.mjs. pdfjsCompat.test.ts checks that the two files
 // are byte-identical.
 
+import { documentBaseUrl } from "../documentAccess";
+
 export type PdfJsCore = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
-/** The vendored legacy worker (see VERSION LOCK). */
+/** The vendored legacy worker (see VERSION LOCK), as the web and Android builds serve it: at the site root. */
 export const PDF_WORKER_SRC = "/pdf.worker.min.mjs";
+
+/** Where this page finds the worker. The browser version can be served from a sub-folder (a preview address per pull request,
+ *  `base: "./"`), so it asks next to its own page like sql.js does; the other builds are always at the root. */
+function pdfWorkerAddress(): string {
+  const base = import.meta.env.VITE_BROWSER_APP === "true" ? documentBaseUrl() : undefined;
+  return base ? new URL(PDF_WORKER_SRC.slice(1), base).href : PDF_WORKER_SRC;
+}
 
 let corePromise: Promise<PdfJsCore> | null = null;
 
 /** Lazily import the pdf.js core (legacy build) and point it at the worker. */
 export function loadPdfCore(): Promise<PdfJsCore> {
   corePromise ??= import("pdfjs-dist/legacy/build/pdf.mjs").then((core) => {
-    core.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
+    core.GlobalWorkerOptions.workerSrc = pdfWorkerAddress();
     return core;
   });
   return corePromise;

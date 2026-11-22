@@ -206,7 +206,8 @@ describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("review screen 
     await clearCards();
     const id = await noteCard("改評分", { ann: stateOf(at(-1)) });
     await req(`/api/review/${id}/tomorrow`, "POST", { now: NOW });
-    expect((await req(`/api/review/${id}/grade`, "POST", { rating: 3, now: NOW })).status).toBe(200);
+    const shown = await (await req(`/api/review/${id}/state`)).json() as { state: ReviewState | null };
+    expect((await req(`/api/review/${id}/grade`, "POST", { rating: 3, now: NOW, seen_reps: shown.state?.reps ?? 0 })).status).toBe(200);
     expect((await (await req(`/api/review/${id}/state`)).json() as { hold: unknown }).hold).toBeNull();
   });
 

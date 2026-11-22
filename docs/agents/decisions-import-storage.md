@@ -156,3 +156,5 @@
 - 任務的內文／標籤／屬性、各種檢視、報告的略過計數、中途失敗清理不得永久刪除後來的工作：規則見 [backup-move.md](../architecture/backup-move.md)（任務、檢視列），報告與中途失敗的清理見 [restore-writes.md](../architecture/restore-writes.md) 最後一節。
 - 備份格式沒有改（仍是 2；舊備份照樣能還原）：需要的資料本來就在 sidecar 裡。進行中的 `feat/move-backup-history`（格式 3）只動 `moved.history` 與 `FullBackupSetting` 的搬家區塊，這批的契約欄位（`tasks`、`views`、`skipped.*`）與畫面（`RestoreResult`）在不同位置。
 - 新增要搬的種類：先在 `test/helpers/backupInventory.ts` 登記為「帶」或「不在備份裡（理由）」，保真測試才會過。
+
+> 2026-11-18：備份還原「清除內建範例」遇到被保護的標籤（reserved、任務、在用模組的標籤）時，保留該標籤並照常繼續（`ReservedTagError` 算清除的拒絕，`cleared.tags` 不計）；其他還原規則不變。

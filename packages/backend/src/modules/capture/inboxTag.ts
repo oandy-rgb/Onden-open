@@ -2,6 +2,7 @@ import type { ActorCtx } from "../../types.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { resolveCurrentActor } from "../../spine/currentActor.js";
 import { createMemberModuleTag, findModuleTag } from "../../services/workspaceModules.js";
+import { reviveModuleTag } from "../../services/moduleTagRevive.js";
 
 export const CAPTURE_MODULE_ID = "capture";
 
@@ -21,6 +22,9 @@ export async function ensureInboxTag(actor: ActorCtx, workspaceId: string): Prom
     const existing = await findModuleTag(workspaceId, CAPTURE_MODULE_ID);
     if (existing) return existing.id;
     const current = await resolveCurrentActor(actor, workspaceId);
+    // The inbox a person deleted before it was protected comes back with the captures filed in it.
+    const revived = await reviveModuleTag(current, workspaceId, CAPTURE_MODULE_ID, "capture.inbox");
+    if (revived) return revived;
     return createMemberModuleTag(current, workspaceId, { module: CAPTURE_MODULE_ID, names: INBOX_TAG_NAMES, uiContext: "capture.inbox" });
   });
 }

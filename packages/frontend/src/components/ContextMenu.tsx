@@ -126,8 +126,9 @@ function MenuContents({
   const online = useOnline();
   const caps = useCapabilities(online);
   const tags = useTagRows();
+  const moduleFilter = useModuleFilter();
   const edgeKinds = useEdgeKinds();
-  const actionsOf = (node: ContentNode) => noteActionsFor(node, { canEdit: caps.canEdit(node), isOwner: caps.isOwner, online, tags });
+  const actionsOf = (node: ContentNode) => noteActionsFor(node, { canEdit: caps.canEdit(node), isOwner: caps.isOwner, online, tags, isImported: moduleFilter });
   // 「隱藏標籤」 / 「取消隱藏」 (D104): only a tag, never a reserved one, by who
   // may edit tags — noteActionList decides.
   const tagHideItem = (node: ContentNode, actions: ReturnType<typeof actionsOf>) => actions.has("toggle-tag-hidden") ? (

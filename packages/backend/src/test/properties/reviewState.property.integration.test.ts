@@ -33,19 +33,18 @@
 //   decks()[].due                        "study this deck"
 //   reviewQueueTool                      the agent's queue: calls queue(), so it is the same number
 //
+// Two devices (fixed in modules/review/service.ts `assertShownAsIs`): a request made from a screen is accepted only if
+// the card is still as that screen showed it. A grade without `seen_reps` is taken to show the queue (due, not stopped,
+// not put off); "tomorrow" is refused on a card stopped elsewhere.
+//
 // Known defects (each has a named case at the end, marked it.fails; the random run leaves its
-// trigger out so the suite stays green; REVIEW_PROPS_KNOWN=1 puts every trigger back):
-//   second-undo    a second undo (new key) after two grades deletes the row: the history is gone
-//   double-grade   the same card graded from two devices counts twice (no due / version check);
-//                  the same gap lets a card put off until tomorrow be graded from a stale queue
-//                  (found by REVIEW_PROPS_KNOWN=1 PROPS_SEED=20261023: tomorrow, then grade)
-//   tomorrow-stop  "tomorrow" from a stale device silently un-stops a stopped card
+// trigger out so the suite stays green; REVIEW_PROPS_KNOWN=1 puts every trigger back). Both are product
+// decisions the owner has not made (which side is right), so the cases stay expected failures:
 //   status-day     the status page counts by day, the queue by instant
 //   deck-subtree   a deck counts only direct children; a study session covers the subtree
 //
-// When PR #1586 (review cards stored differently) merges, care is needed in: the card-state reads
-// (GET /api/review/:id/state, the shape of `state` / `hold`), what "trashed note" and "uncardRef
-// note" do to a card's stored progress, and the response of an undo on a card with nothing stored.
+// Review cards live on the note or paragraph itself since PR #1586 (merged 2026-11-14); this file still goes only
+// through /api/review/* and /api/nodes/*.
 //
 // Run count and seed: PROPS_RUNS (default 25 here: every run is ~100 requests) and PROPS_SEED.
 //
@@ -215,8 +214,8 @@ const parentsArb = fc.array(fc.nat(DECKS), { minLength: CARDS, maxLength: CARDS 
 // ── One run ──────────────────────────────────────────────────────────────────
 
 type Sent = { method: string; path: string; json?: unknown; key: string };
-type Known = "second-undo" | "double-grade" | "tomorrow-stop" | "status-day" | "deck-subtree";
-const ALL_KNOWN: Known[] = ["second-undo", "double-grade", "tomorrow-stop", "status-day", "deck-subtree"];
+type Known = "status-day" | "deck-subtree";
+const ALL_KNOWN: Known[] = ["status-day", "deck-subtree"];
 
 class Run {
   m: Model;
@@ -271,7 +270,7 @@ class Run {
     if (!n.live) return 404;
     if (!n.cardRef) return 409;
     if (n.hold?.suspended) return 409;
-    if (!inQueue(this.m, i)) return 409; // double-grade: not due (graded from the other device, or put off)
+    if (!inQueue(this.m, i)) return 409; // not due or put off: graded from the other device since (a grade that names no reps is taken to show the queue)
     return 200;
   }
   expectUndo(i: number): 200 | 404 | 409 {
@@ -279,7 +278,7 @@ class Run {
     if (!n.live) return 404;
     if (!n.state) return 409;
     if (n.hold?.suspended) return 409;
-    if (n.undo.k === "none") return 409; // second-undo: nothing to step back
+    if (n.undo.k === "none") return 409; // nothing to step back
     return 200;
   }
   expectHold(kind: "tomorrow" | "suspend" | "resume", i: number): 200 | 404 | 409 {
@@ -287,7 +286,7 @@ class Run {
     if (!n.live) return 404;
     if (kind === "resume") return 200;
     if (!n.cardRef) return 409;
-    if (kind === "tomorrow" && n.hold?.suspended) return 409; // tomorrow-stop: a stop is not undone by a stale device
+    if (kind === "tomorrow" && n.hold?.suspended) return 409; // a stop is not undone by a stale device
     return 200;
   }
 
@@ -298,19 +297,6 @@ class Run {
     if (c.t === "vundo") return m.lastKept[c.dev] === null;
     if (c.t === "grade" && this.gradeTarget(c) === null) return true; // a device that has not fetched a queue has nothing to grade from it
     if (this.known.size === ALL_KNOWN.length) return false;
-    if (c.t === "grade") {
-      const i = this.gradeTarget(c)!;
-      const n = m.notes[i]!;
-      return !this.known.has("double-grade") && enrolled(n, i) && !n.hold?.suspended && !inQueue(m, i);
-    }
-    if (c.t === "undo") {
-      const n = m.notes[this.cardIdx(c.pick)]!;
-      return !this.known.has("second-undo") && n.live && n.state !== null && !n.hold?.suspended && n.undo.k === "none";
-    }
-    if (c.t === "hold") {
-      const n = m.notes[this.cardIdx(c.pick)]!;
-      return c.kind === "tomorrow" && !this.known.has("tomorrow-stop") && n.live && n.cardRef && !!n.hold?.suspended;
-    }
     if (c.t === "move") {
       const i = c.pick % NOTES, n = m.notes[i]!;
       const to = this.moveTarget(c);
@@ -685,11 +671,11 @@ describe.skipIf(!isTestDb)("review progress of one person on two devices (random
     clean(await play(flat, [grade(), later(96), grade(), undo(0), undo(1)], all));
   });
 
-  it.fails("FINDING double-grade: the same due card graded from two devices counts twice (reps 2 after one study round)", async () => {
+  it("FINDING double-grade: the same due card graded from two devices counts twice (reps 2 after one study round)", async () => {
     const problem = await play(flat, [{ t: "fetch", dev: 0 }, { t: "fetch", dev: 1 }, { t: "grade", dev: 0, fromQueue: true, pick: 0, rating: 3, again: false }, { t: "grade", dev: 1, fromQueue: true, pick: 0, rating: 3, again: false }], all);
     clean(problem);
   });
-  it.fails("FINDING tomorrow-stop: 'tomorrow' sent by a stale device un-stops a card stopped on the other device", async () => {
+  it("FINDING tomorrow-stop: 'tomorrow' sent by a stale device un-stops a card stopped on the other device", async () => {
     const problem = await play(flat, [{ t: "hold", kind: "suspend", dev: 0, pick: 0, again: false }, { t: "hold", kind: "tomorrow", dev: 1, pick: 0, again: false }], all);
     clean(problem);
   });

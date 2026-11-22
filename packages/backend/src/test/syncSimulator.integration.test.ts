@@ -17,9 +17,8 @@
 // TASKS, REVIEW, SAVED VIEWS. Devices also tick checkbox lines of a body, add / tick / date tasks that belong to no note, make notes
 // review cards and grade / undo / put off a card (two devices may show the same card), and create / change / delete saved views
 // of a tag or a note. invariants.ts judges them on the requests the server accepted, in the order it handled them. Two review
-// rules are known to fail on the server today (the same card graded from two devices counts twice; an undo right after another
-// device's undo deletes the schedule): `strictGradeOnce` and `strictUndo` are off in the property run and on in the two
-// `knownFailure` cases of regressions.ts; when the server is fixed those cases go red, drop their flag and turn the two on below.
+// rules are checked on every random run and in two named cases of regressions.ts: one showing of a card counts one review
+// (`strictGradeOnce`) and an undo right after another device's undo steps back nothing (`strictUndo`).
 //
 // SAFETY: only runs against a *_test database; skips otherwise. Each run gets a
 // workspace of its own.
@@ -105,7 +104,7 @@ describe.skipIf(!isTestDatabase())("multi-device sync simulator (DB)", () => {
     }
     try {
       await fc.assert(
-        fc.asyncProperty(fc.array(opArbitrary, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true }); }),
+        fc.asyncProperty(fc.array(opArbitrary, { minLength: 6, maxLength: 36, size: "max" }), async (ops) => { await play(ops, { strictRetry: true, strictOccurrences: true, strictGradeOnce: true, strictUndo: true }); }),
         { seed, numRuns, path: process.env.SYNC_SIM_PATH, endOnFailure: false, interruptAfterTimeLimit: 8 * 60_000 },
       );
     } catch (error) {

@@ -504,7 +504,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（113）
+## 共用邏輯（115）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1254,6 +1254,19 @@ const zip: Blob | null = due ? await makeBackupBlob() : null; // 就是設定裡
 - 入口：`frontend/e2e/style-census/run.mjs`；`frontend/e2e/style-census/scale.mjs`；`docs/agents/appearance-rules.md`　項目 `style-census`
 - 取代：自己在各個測試或腳本裡 getComputedStyle 量某一種值，或各自維護一份畫面清單（畫面清單只有 e2e/layout-audit/screens.mjs 一份，普查專用的畫面標 census: true）
 - 為什麼：跑法：根目錄 `npm run build:browser`，再在 packages/frontend 跑 `npm run style:census`（手動，不在測試或 CI；全部約 20 分鐘）。刻度（scale.mjs）與規則文件（appearance-rules.md）是同一份，selftest 檢查兩邊每一種都有。只讀，不改產品程式。
+
+### 要寫一段「一個人用 App 一整段」的端到端走查（某一天、另一種使用者），在真 Chromium 裡連續操作、每步斷言人眼會看的東西
+
+- 入口：`frontend/e2e/browser-app/walk/steps.mjs`（`opensOnSampleNote`、`createPanelIsAnchored`、`createNoteAndType`、`uploadsPdf`、`looksAtTasksPage`、`searchFindsByBodyWord`、`drawsOneStroke`、`enlargesAndRestores`、`reloadKeepsNoteTabAndInk`、`nothingWentWrong`）；`frontend/e2e/browser-app/walk/kit.mjs`（`startWalk`、`makeReport`、`settledRect`、`pollUntil`、`waitStored`）　項目 `e2e-walk`
+- 取代：每個 e2e 腳本各自開瀏覽器、各自重置狀態、只驗一個零件；或在新的走查裡複製別人的步驟
+- 為什麼：一次走查是一份步驟清單（見 e2e/browser-app/dayWalk.mjs）：同一個瀏覽器工作階段、中間不重置，因為要驗的是組裝。新的一天或另一種使用者寫新的清單、重用步驟。等待只靠 App 自己的訊號（元素、停止移動的位置、儲存旗標），不用 sleep、不重試。紅的原因寫在斷言旁：XFAIL＝今天就是紅（變綠時要刪掉）；沒有「時有時無就放行」這一類——偶發的問題要找原因，找到前是會紅的檢查。裝置檔 PROFILES（平板橫向）在 e2e/layout-audit/env.mjs。
+
+### 要確認 App 在執行時用位址載入的檔案（PDF worker、sql.js wasm、字型、圖示、manifest、service worker）每個建置都有
+
+- 入口：`frontend/src/test/guards/runtimeFiles.guard.test.ts`；`frontend/vite.browser.config.ts`　項目 `runtime-files-in-every-build`
+- 取代：在瀏覽器版（vite.browser.config.ts 的 FROM_PUBLIC）手寫一份檔案清單，之後有人在 public/ 加了檔案卻忘了加進去
+- 守門：`guard:runtimeFiles`
+- 為什麼：2026-11-17 PDF worker 不在瀏覽器版的清單上，上線後 PDF 筆記打不開，而網站版（整個 public/ 都複製）沒事。守門測試對每個建置（網站版與桌面版、Android、瀏覽器版）檢查：原始碼用位址提到的 public/ 檔案都被該建置輸出，或寫在 NOT_NEEDED 並附理由。
 
 ### 要在沒有 docker 的環境（雲端、CI 容器）起一整套全端 e2e 堆疊（後端＋前端 SSR＋同源轉發）並跑 Playwright
 

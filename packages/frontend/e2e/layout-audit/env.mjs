@@ -21,6 +21,13 @@ export const VIEWPORTS = [
   { id: "1440-dark", label: "桌面 1440×900 深色", width: 1440, height: 900, dark: true },
 ];
 
+/** Named device profiles for scripts that are not part of the width audit (VIEWPORTS is what `layout:audit` walks, so a
+ *  profile added there would change the audit's baseline). Same shape as a VIEWPORTS row; pass it to openApp().
+ *  `tablet-landscape`: a tablet held sideways — 1280×800, 2 device pixels per CSS pixel, touch (e2e/browser-app/dayWalk.mjs). */
+export const PROFILES = {
+  "tablet-landscape": { id: "tablet-landscape", label: "平板橫向 1280×800 觸控", width: 1280, height: 800, deviceScaleFactor: 2, touch: true },
+};
+
 export const READY_TEXT = "歡迎來到 Onden 試用版";
 
 export async function launch() {
@@ -31,11 +38,11 @@ export function contextOptions(vp) {
   const base = { locale: "zh-TW", timezoneId: "UTC", colorScheme: vp.dark ? "dark" : "light", reducedMotion: vp.motion ?? "reduce" };
   if (vp.mobile) return { ...playwright.devices[vp.device], ...base };
   // `touch`: a touch screen of any width (a tablet): the page sees (pointer: coarse), as on the real device.
-  return { ...base, viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1, ...(vp.touch ? { isMobile: true, hasTouch: true } : {}) };
+  return { ...base, viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.deviceScaleFactor ?? 1, ...(vp.touch ? { isMobile: true, hasTouch: true } : {}) };
 }
 
-export function startSite(dir = "dist-browser") {
-  return serve(resolve(here, "../..", dir));
+export function startSite(dir = "dist-browser", options = {}) {
+  return serve(resolve(here, "../..", dir), options);
 }
 
 /** Open the app in a fresh browser context (its own empty database), put the fixed data in, reload so the app shows it. */

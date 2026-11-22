@@ -1,6 +1,6 @@
 # 模組分類的決定
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-18）
 > 涵蓋：packages/backend/src/modules/index.ts, packages/backend/src/modules/types.ts, packages/frontend/src/modules/index.ts, packages/frontend/src/modules/types.ts, packages/backend/src/modules/importers/**, packages/backend/src/modules/capture/**, packages/backend/src/modules/semantic/**, packages/frontend/src/modules/graph/**, packages/frontend/src/modules/capture/**, packages/backend/src/modules/rss/sources.ts, packages/backend/src/modules/website/index.ts
 
 何時讀：新增或搬動模組、決定一個能力該不該有開關、改 `modules/index.ts` 兩邊的註冊表時。
@@ -130,3 +130,13 @@
   `keepStoredAutomation` 讓已存的舊規則不被任何寫入改動或清掉。備份還原在報告 `skipped.tag_automation` 計數。
 - **舊資料不動**：這批沒有 migration；舊鍵留在 `tag_schema` 裡不動作。之後是否清除由業主決定。
 - **前端**：標籤頁沒有「還在執行自動化」與「移除自動化」；標籤刪除預覽、標籤包審核卡片、移除標籤確認不再提自動化。
+
+## 模組自己的標籤在模組在用時不能刪、不能合併掉（2026-11-18，業主回報「我不應該能刪掉收件夾的」）
+
+- **規則**：`tag_schema.module = <模組 id>` 的標籤，在該模組「在用」時不能刪除、不能被合併掉（409 `module_tag`；當合併目標一律由 `tagMerge.assertMergeTarget` 拒絕）。
+  「在用」只有一個答案：`workspaceModules.workspaceUsesModule`——內建模組（沒有 `library`，例如擷取）一律在用；函式庫模組開著才在用；沒出貨的模組不算。
+  任務標籤維持原本的無條件保護；檢視模組（表格、月曆…）的遺留標籤不在內（沒有東西讀它、模組不能關、合併本來就拒絕）。模組關掉時照舊：設定頁的 `RemovedModuleTags` 可以刪。
+- **唯一入口**：後端 `reservedTags.assertTagDefinitionChange`（`nodeTrash.markTrashed` 與 `tagMerge` 都經過）；前端 `lib/systemNodes.ts` 的 `isTagDefinitionLocked`——標籤頁 ⋯ 選單與筆記動作清單的刪除都用它，鎖住的標籤不顯示刪除與合併。
+- **已刪掉的怎麼辦**：`moduleTagRevive.reviveModuleTag`：擷取的下一次 `ensureInboxTag` 發現沒有活的模組標籤、垃圾桶裡有，就經 `nodeTrash.undeleteNode`（一般的 `NODE_UNDELETED` 事件）救回（挑裡面活筆記最多的、再挑最舊的），筆記的標籤關聯本來就在（`node_tags` 不隨刪除消失），所以舊擷取會回到收件匣；不鑄第二個。只救收件匣：函式庫模組（技能）關掉時刪掉標籤、再開啟，照舊鑄新的（`workspaceModules` 不能 import `nodeTrash`，會成環，`importCycles.test.ts`）。名稱被別的活標籤佔了、或該操作者無權還原標籤（能寫筆記的成員，不是擁有者）時，不救回、照舊鑄新的。沒有 migration。
+- **刪掉後又擷取過的（兩個收件匣並存）**：一次性修復 `services/strandedInboxRepair.ts`，由操作者手動跑 `packages/backend/scripts/repairStrandedInbox.ts`（預設只回報各工作區的數量；`--apply` 才執行），**不在開機時跑**。它把留在垃圾桶舊收件匣上的最上層擷取，用一般的 `TAG_APPLIED` 事件（擁有者身分、逐筆可復原）貼到現在的收件匣；放在筆記底下的擷取不動；舊標籤留在垃圾桶；跑第二次不會再動。執行前須由擁有者同意。
+

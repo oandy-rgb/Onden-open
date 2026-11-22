@@ -116,8 +116,12 @@ describe.skipIf(!isTestDb)("attribute and tag restore through real writers", () 
   it("serializes two grades from the actual preceding review state", async () => {
     const id = await node();
     await seedQ(`INSERT INTO function_refs(workspace_id,function_id,holder_node_id) VALUES($1,'review',$2)`, [workspaceId, id]);
-    const grades = await Promise.all([3, 4].map((rating) => write(`/review/${id}/grade`, "POST", { rating, now: "2026-09-08T00:00:00.000Z" })));
-    expect(grades.map((r) => r.status)).toEqual([200, 200]);
+    // Two devices show the new card (reps 0) and grade at once: the lock lets one in, the other is refused (it showed a card that is no longer new).
+    const now = "2026-09-08T00:00:00.000Z";
+    const grades = await Promise.all([3, 4].map((rating) => write(`/review/${id}/grade`, "POST", { rating, now, seen_reps: 0 })));
+    expect(grades.map((r) => r.status).sort()).toEqual([200, 409]);
+    // A grade made from the state the first one left (it names reps 1) is the second review.
+    expect((await write(`/review/${id}/grade`, "POST", { rating: 3, now, seen_reps: 1 })).status).toBe(200);
     // Personal progress (review_states): the second grade saw the first's state.
     const row = (await q<{ state: string; previous_state: string }>(
       `SELECT state, previous_state FROM review_states WHERE node_id=$1`, [id])).rows;

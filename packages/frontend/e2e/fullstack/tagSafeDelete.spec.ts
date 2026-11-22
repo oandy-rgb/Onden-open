@@ -45,4 +45,11 @@ test("delete-tag flow: impact preview → delete → trash undelete restores mem
   const boot = await (await page.request.get("/api/bootstrap")).json();
   const n = boot.nodes.find((x: { id: string }) => x.id === note.id);
   expect((n.class_tag_ids ?? [])).toContain(tag.id); // membership survived the round-trip
+
+  // A module's own tag (the inbox) is not deletable: the page offers no Delete, and the server refuses it.
+  const { tag_id: inbox } = await (await page.request.post("/api/capture/inbox", { ...H, data: {} })).json();
+  await ready(page, `/?view=notes&node=${inbox}`);
+  await page.getByRole("button", { name: "Tag actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Delete tag" })).toHaveCount(0);
+  expect((await page.request.delete(`/api/nodes/${inbox}`, H)).status()).toBe(409);
 });

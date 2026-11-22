@@ -238,7 +238,8 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
   "POST /api/publish": (_o, r) => ({ json: { title: "Sweep site", home_node_id: r.note } }),
   "POST /api/import/obsidian": () => ({ json: { files: [{ path: "sweep/Imported.md", content: "# Imported\n\nsweep body" }] } }),
   "POST /api/tags/import": (o) => ({ json: { name: `sweepimport${o.canary.toLowerCase()}`, description: "a pack", fields: [] } }),
-  "POST /api/review/blocks/:blockId/grade": (o) => ({ params: { blockId: o.block }, json: { rating: 3 } }),
+  // seen_reps: a real client names the reps it showed; the sweep world graded this card once already (so there is a grade to undo).
+  "POST /api/review/blocks/:blockId/grade": (o) => ({ params: { blockId: o.block }, json: { rating: 3, seen_reps: 1 } }),
   "POST /api/review/blocks/:blockId/undo-grade": (o) => ({ params: { blockId: o.block }, json: {} }),
   "POST /api/review/blocks/:blockId/tomorrow": (o) => ({ params: { blockId: o.block }, json: {} }),
   "POST /api/review/blocks/:blockId/suspend": (o) => ({ params: { blockId: o.block }, json: {} }),

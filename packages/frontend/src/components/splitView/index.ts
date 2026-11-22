@@ -5,6 +5,7 @@ import { lazyWithReload } from "../../lib/lazyWithReload";
 
 /** The right pane loads when a second side opens (it brings the page outlet with it). */
 export const SplitPane = lazyWithReload(() => import("./SplitPane"));
-export { default as SplitDivider } from "./SplitDivider";
+/** The divider and the 「放進另一邊」 button exist only while a second side is open, so they load with it. */
+export const SplitDivider = lazyWithReload(() => import("./SplitDivider"));
+export const QuoteToOther = lazyWithReload(() => import("./QuoteToOther"));
 export { default as SplitDropHint } from "./SplitDropHint";
-export { default as QuoteToOther } from "./QuoteToOther";

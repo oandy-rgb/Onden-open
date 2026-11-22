@@ -58,6 +58,8 @@
 | 合併前（一批 PR 一次） | 筆電 | 只跑後端需要真 Postgres 的部分、`npm run build`、B 類全端 e2e（下表）、WebKit 冒煙 |
 | 每晚 | 雲端 | 完整前端 vitest、完整全端 e2e（`e2e:cloud-stack`）、屬性測試（`test:props:long`）、規模測試、`zz*` 探針 |
 
+**手動、不在任何 CI 工作裡**：`packages/frontend/e2e/browser-app/run-all.mjs`（先 `npm run build:browser`）。它跑瀏覽器版冒煙之後的各個功能腳本，結尾是 `dayWalk.mjs`——一個學生的一天走成**一次連續的操作**（開站、建立面板、打字、傳 PDF、搜尋、手寫、放大、重新整理），桌面 1280 與平板橫向（`layout-audit/env.mjs` 的 `PROFILES`）各一輪；步驟在 `walk/steps.mjs`，新的一天是新的步驟清單。已知會紅的標 `XFAIL`（變綠會失敗）；沒有「時有時無就放行」這一類（見 PR #1830 的審查）。等瀏覽器版冒煙測試回到綠，再決定要不要給它一個 CI 工作。
+
 **新增或修改測試後、合併前**：跑 `npm run test:repeat-changed`（`scripts/repeat-changed-tests.sh [次數]`，預設 5）。它找出相對 `git merge-base HEAD origin/main`
 新增或修改的 `*.test.ts(x)`（backend、frontend、markdown、site、contract），逐檔單獨連跑，任何一次失敗就停下並印出是哪個檔第幾次；沒有改到測試就印一句話、結束碼 0。
 後端沿用 PGlite（`ONDEN_DB_DRIVER` 與 `DATABASE_URL` 未設時用 `pglite` 與 `onden_cloud_test`）。不穩定的測試要找出原因，不是重跑到過。

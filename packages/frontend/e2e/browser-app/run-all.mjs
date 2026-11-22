@@ -82,5 +82,12 @@ for (const [script, ...args] of chromiumRan ? FEATURES : []) {
   const run = spawnSync(process.execPath, [join(dirname(smoke), script), ...args, ...(takesDir ? dirArgs : [])], { stdio: "inherit" });
   summary.push([script.replace(/\.mjs$/, ""), run.status === 0 ? "passed" : "FAILED"]);
 }
+// A student's day as ONE continuous session (dayWalk.mjs; steps in walk/steps.mjs): desktop 1280×800 and the tablet profile
+// (layout-audit/env.mjs PROFILES "tablet-landscape": 1280×800, 2 device pixels, touch). Needs Chromium like the feature scripts.
+// The third run serves the folder from a sub-path (as a preview address does): the PDF worker once asked for the host's root.
+for (const [profile, ...extra] of chromiumRan ? [["1280"], ["tablet-landscape"], ["1280", "--prefix", "/onden/"]] : []) {
+  const run = spawnSync(process.execPath, [join(dirname(smoke), "dayWalk.mjs"), profile, ...extra, ...dirArgs], { stdio: "inherit" });
+  summary.push([`dayWalk ${profile}${extra.length ? ` ${extra.join(" ")}` : ""}`, run.status === 0 ? "passed" : "FAILED"]);
+}
 console.log("\n" + summary.map(([engine, result]) => `${engine.padEnd(14)} ${result}`).join("\n"));
 process.exit(summary.some(([, result]) => result === "FAILED") ? 1 : 0);

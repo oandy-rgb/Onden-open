@@ -330,7 +330,7 @@ export function useCommandPalette({
   // store or permissions change. The body is the open draft when it is this
   // note's (read, not subscribed: a keystroke must not re-render the palette).
   const selectedActions = useMemo(() => selectedNode ? noteActionsFor(selectedNode, {
-    canEdit: capabilities.canEdit(selectedNode), isOwner: capabilities.isOwner, online, tags,
+    canEdit: capabilities.canEdit(selectedNode), isOwner: capabilities.isOwner, online, tags, isImported,
     body: drafts.read(selectedNode.id)?.markdown,
     commands: noteCommandsOf(isImported).map(({ command }) => command),
   }) : null, [selectedNode, capabilities, online, tags, isImported, paletteOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- paletteOpen: re-read the draft on each opening

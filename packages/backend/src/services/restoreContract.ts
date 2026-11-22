@@ -47,7 +47,9 @@ export type RestoreError =
   /** A version carried in from another workspace (spine/importedHistory.ts): the person restores that version instead. */
   | { code: "imported_history"; status: 409; detail: string; force_available: false }
   /** The inverse would trash a reserved tag (services/reservedTags.ts). */
-  | { code: "reserved_tag"; status: 409; detail: string };
+  | { code: "reserved_tag"; status: 409; detail: string }
+  /** The inverse would trash a module's own tag while the module is on (reservedTags.assertTagDefinitionChange). */
+  | { code: "module_tag"; status: 409; detail: string };
 
 export type EventRow = {
   id: string;

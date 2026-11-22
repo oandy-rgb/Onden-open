@@ -9,12 +9,11 @@ import { makeNoteWriter } from "./noteWriter";
 import { makeTagWriter } from "./tagWriter";
 import { makeRelationWriter } from "./relationWriter";
 import { makeWorkspaceWriter } from "./workspaceWriter";
+import { blockChildWriterFor, blockLinkWriterFor, historyWriterFor } from "./onlineWriters";
 import { makeViewWriter } from "./viewWriter";
 import { makeTagSchemaWriter } from "./tagSchemaWriter";
 import { makeTagConfigWriter } from "./tagConfigWriter";
 import { makeOnlineOperation, makeOnlineWrite } from "./onlineWrite";
-import { makeNoteHistoryWriter } from "./noteHistoryWriter";
-import { makeBlockChildWriter } from "./blockChildWriter";
 import { makeNodeMutations } from "./nodeMutations";
 import { makeNodeActions } from "./nodeActions";
 import { isMobileLayout } from "../mediaQuery";
@@ -67,19 +66,12 @@ export const tagConfigWriter = makeTagConfigWriter(context);
  *  itself — note structure, tag packs, pins. */
 export const onlineOperation = makeOnlineOperation(context);
 /** History's writes: a version restore, an agent run's undo and redo, 「還原到這時」 and its undo. */
-export const historyWriter = makeNoteHistoryWriter(context);
+export const historyWriter = historyWriterFor(context);
 /** A block of a note into a child note and back (hooks/useBlockChildNote.ts). */
-export const blockChildWriter = makeBlockChildWriter(context);
+export const blockChildWriter = blockChildWriterFor(context);
 /** Part links `[[筆記/段落]]`: bind a link to its paragraph, confirm a doubtful one, count the links to a paragraph.
  *  The writer itself is loaded the first time one of them is asked (only a note with a part link asks). */
-type BlockLinkWriter = ReturnType<typeof import("./blockLinkWriter").makeBlockLinkWriter>;
-let blockLinkWriterLoaded: Promise<BlockLinkWriter> | null = null;
-const blockLinkWriterOf = () => blockLinkWriterLoaded ??= import("./blockLinkWriter").then((m) => m.makeBlockLinkWriter(context));
-export const blockLinkWriter: BlockLinkWriter = {
-  bind: async (...args) => (await blockLinkWriterOf()).bind(...args),
-  confirm: async (...args) => (await blockLinkWriterOf()).confirm(...args),
-  counts: async (...args) => (await blockLinkWriterOf()).counts(...args),
-};
+export const blockLinkWriter = blockLinkWriterFor(context);
 const mutations = makeNodeMutations(context);
 /** Note creation, the home page, versions and extraction (a body is saved on
  *  its base through `drafts`). A note's lifecycle actions (delete, duplicate,
@@ -137,7 +129,7 @@ export function writersFor(options: WriterOptions = {}) {
     get relation() { return once("relation", () => makeRelationWriter(ctx)); },
     get workspace() { return once("workspace", () => makeWorkspaceWriter(ctx)); },
     /** Restoring a note's earlier version or bringing it back right after a delete (the undo toast). */
-    get history() { return once("history", () => makeNoteHistoryWriter(ctx)); },
+    get history() { return once("history", () => historyWriterFor(ctx)); },
     /** One online write (a decision the server must accept first): resource, path, body, offline message. */
     get online() { return once("online", () => makeOnlineWrite(ctx)); },
   };

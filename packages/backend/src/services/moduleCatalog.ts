@@ -9,6 +9,11 @@ export function registerShippedModule(id: string): void {
   shipped.add(id);
 }
 
+/** Whether this build ships module `id`. */
+export function isShippedModule(id: string): boolean {
+  return shipped.has(id);
+}
+
 const personalTables = new Set<string>();
 
 /** Per-actor progress tables a module declares (ModuleDefinition.personalTables);

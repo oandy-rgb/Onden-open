@@ -5,7 +5,7 @@ import { ApiError, type Tag, type TagMergePreview } from "../lib/api";
 import { fetchTagMergePreview } from "../lib/api";
 import { mergeTag } from "../lib/data/tagMerge";
 import { ensureSentenceWording } from "../lib/serverErrors";
-import { getAppState, resetAppState } from "../lib/appStore";
+import { getAppState, resetAppState, setAppState } from "../lib/appStore";
 
 /** Rare tag actions (export, merge, delete) live in the title's ⋯ menu. */
 function tagAction(name: RegExp) {
@@ -155,6 +155,28 @@ describe("SchemaLens tag merge (P2)", () => {
     expect(screen.queryByRole("menuitem", { name: /Delete tag/ })).toBeNull();
     expect(screen.getByRole("menuitem", { name: /Export tag/ })).toBeInTheDocument();
     expect(screen.getByText(/System tag/)).toBeInTheDocument();
+  });
+
+  it("a module's own tag offers neither Merge nor Delete while the module is on; when it is off, both come back", () => {
+    const inbox: Tag = { id: "00000000-0000-4000-8000-00000000000e", name: "收件匣", schema_module: "capture", color: "", schema_id: null };
+    const skills: Tag = { id: "00000000-0000-4000-8000-00000000000f", name: "skill", schema_module: "skills", color: "", schema_id: null };
+    // Capture is built-in: always on.
+    const first = render(<SchemaLens tag={inbox} online={true} onSaved={vi.fn()} allTags={[inbox, TGT]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Tag actions" }));
+    expect(screen.queryByRole("menuitem", { name: /Merge into…/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Delete tag/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Export tag/ })).toBeInTheDocument();
+    first.unmount();
+    // A library module: on (the workspace lists it) or off.
+    setAppState((s) => ({ data: { ...s.data, workspace: { ...s.data.workspace, modules: ["skills"] } } }));
+    const on = render(<SchemaLens tag={skills} online={true} onSaved={vi.fn()} allTags={[skills, TGT]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Tag actions" }));
+    expect(screen.queryByRole("menuitem", { name: /Delete tag/ })).toBeNull();
+    on.unmount();
+    setAppState((s) => ({ data: { ...s.data, workspace: { ...s.data.workspace, modules: [] } } }));
+    render(<SchemaLens tag={skills} online={true} onSaved={vi.fn()} allTags={[skills, TGT]} />);
+    expect(tagAction(/Delete tag/)).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Merge into…/ })).toBeInTheDocument();
   });
 
   // merge-preview-functions-views (scan 06 M3): the preview says, in words, that the merged-away tag's functions and views stay behind.

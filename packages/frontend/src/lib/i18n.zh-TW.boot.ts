@@ -4,6 +4,9 @@
 // 新字串加在哪一半，建置時由 scripts/bootReportPlugin.mjs 檢查：late 裡的字串若出現在開機 JS 就失敗。
 
 export const ZH_TW_BOOT: Record<string, string> = {
+  "Connect to change modules.": "連線後才能變更功能。",
+  "Connect to change where subscriptions live.": "連上伺服器才能更改訂閱放在哪裡。",
+  "Connect to change the time settings.": "連上線才能更改時間設定。",
   "Content": "內容",
   "List": "列表",
   "Image": "圖片",
@@ -95,9 +98,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "The owner removed your account. This device's copy of the workspace has been deleted.": "擁有者已將你的帳號移出。這台裝置上的工作區副本已刪除。",
   "Check again": "重新檢查",
   "Name": "名稱",
-  "Connect to start.": "連接以開始。",
-  "Advanced / connect to a different server": "進階 / 連接到其他伺服器",
-  "Connect": "連接",
   "Unable to connect. Check URL and network.": "無法連接。請檢查網址與網路。",
 
   // ── Quick capture ──
@@ -184,7 +184,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Purple": "紫",
   "Pink": "粉",
   // ── First-run welcome ──
-  "Welcome to Onden": "歡迎使用 Onden",
   "Added {label} — find it in the tag panel": "已加入 {label} — 可在標籤面板找到",
   "Added {label}. Refresh to see it in the tag panel.": "已加入 {label}，重新整理後會出現在標籤面板",
   // ── Review (spaced repetition) ──
@@ -344,6 +343,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Created “{title}” from a link": "已從連結建立「{title}」",
   "Delete #{name}": "刪除 #{name}",
   "System tag — it can be renamed but not merged or deleted.": "系統標籤：可以改名，但不能合併或刪除。",
+  "This tag belongs to a built-in function. It can be renamed, but not deleted or merged while that function is on.": "這是內建功能的標籤：可以改名，但功能開著的時候不能刪除或合併。",
   "day": "天",
 
   // ── Reading queue (P1) ──
@@ -436,9 +436,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Only notes can be duplicated.": "只有筆記可以複製。",
   "Rejected — it won't run": "已拒絕，不會執行",
   "Review failed": "審查失敗",
-  "Version restore needs a connection.": "還原版本需要連線。",
-  "Undoing needs a connection.": "復原需要連線。",
-  "Restoring needs a connection.": "還原需要連線。",
   "Creating a view needs a connection.": "建立檢視需要連線。",
   "Yesterday": "昨天",
   "DOI": "DOI",
@@ -483,8 +480,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "System (automatic)": "系統（自動）",
   "Event Log": "操作紀錄",
   "Accepting the invite…": "正在接受邀請…",
-  "The invite could not be used": "無法使用這個邀請",
-  "Continue without the invite": "不使用邀請，繼續",
   // 隱藏標籤 (D104: only tags can be hidden)
   "Hide tag": "隱藏標籤",
   "Unhide tag": "取消隱藏標籤",
@@ -603,7 +598,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Find notes by meaning when you search, not just matching words, and suggest links between related notes on a board. Needs the local embedding model on the server, which is heavy to run. Asks once before it starts.": "搜尋時也能用意思找筆記，不只比對字，並在白板上建議相關筆記之間的連結。需要伺服器上的本機嵌入模型，運算很吃資源。啟動前會先問你一次。",
   ", ": "、",
   "review": "複習",
-  "Connect to change modules.": "連線後才能變更功能。",
   "Open the module library": "打開 設定 › 功能",
   "Search tags…": "搜尋標籤…",
   "No tag matches “{query}”.": "沒有符合「{query}」的標籤。",
@@ -662,7 +656,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Where new day notes go": "新日記放在哪裡",
   // RSS: where subscriptions live (modules/rss/RssSourceSpaceWidget)
   "Keep subscriptions in": "訂閱放在",
-  "Connect to change where subscriptions live.": "連上伺服器才能更改訂閱放在哪裡。",
   "Default save destination": "預設存到",
 
   // ── History restore replaces the trash (D111) ──
@@ -726,10 +719,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
 
   // ── @ai mentions (lib/agentMentions.ts) ──
   "Time": "時間",
-  "Connect to change the time settings.": "連上線才能更改時間設定。",
-  "Moving a part into a child note needs a connection.": "搬成子筆記需要連線。",
-  "Pointing a paragraph at a new place needs a connection.": "重新指定段落需要連線。",
-  "Untitled note": "未命名筆記",
   "The text changed since you selected it. Select it again.": "選取之後文字有變動，請重新選取。",
   "This text appears more than once in the note. Select a little more so it is clear which one you mean.": "這段文字在筆記裡出現不只一次。請多選一點，讓人看得出是哪一處。",
   "Some notes that link here can't be edited by you.": "有些連到這裡的筆記你不能編輯。",
@@ -788,10 +777,8 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "under the task": "任務下面",
   " and ": "和",
   "Open on the right": "開在右邊",
-  "Resize the two sides": "調整左右寬度",
   "Drop to open on the right": "放在右邊",
   "Drop to read on the left": "放在左邊",
-  "Add to the other side: {name}": "放進另一邊：{name}",
   "That page is already open on the left.": "這個頁面已經在左邊開著了。",
   "That view is already open on the left.": "左邊已經開著這個視角。",
   "Write a note first, then open it beside.": "先寫一則筆記，才能並排開。",
@@ -831,7 +818,6 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Saving and signing out…": "正在儲存並登出…",
   "Checking connection…": "正在確認連線…",
   "Signing out…": "正在登出…",
-  "Connecting…": "連接中…",
   "Connected": "已連線",
   "This change was rejected": "這筆修改未被接受",
   "Your input is saved on this device and will not be sent again automatically. Copy it before removing this recovery copy.": "輸入已保留在此裝置，不會再自動送出。移除這份復原副本前，請先複製需要的內容。",

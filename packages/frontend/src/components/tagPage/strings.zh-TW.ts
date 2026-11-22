@@ -9,6 +9,7 @@ export const TAG_PAGE_ZH_TW: Record<string, string> = {
   "Move under another tag…": "移到另一個標籤底下…",
   "Move #{name} under": "把 #{name} 移到",
   "Merge into…": "合併到…",
+  "Built-in function tag — it can be renamed, but not deleted or merged while that function is on.": "內建功能的標籤：可以改名，但功能開著的時候不能刪除或合併。",
   "Unfold description": "展開",
   "Fold description": "收起",
   "Tagged notes": "已標記的筆記",

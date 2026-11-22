@@ -89,3 +89,5 @@
   在既有機制內逐步分離這些責任；不能直接把編輯器記憶體內的 undo 範例當作跨裝置持久化協定。
 - 遷移復原流程時，將共用權限、交易、事件機制收回既有邊界，保留領域的衝突判斷。
   `services/eventRestore/restore.ts` 的寫入已經走 `spine/mutate.ts` 的 `runRestore`／`mutateRestore`；不要新增繞過它們的復原旁路。
+
+> 2026-11-18：模組自己的標籤（`tag_schema.module`）在模組在用時不能刪除、不能被合併掉，與 reserved 標籤、任務標籤同一個檢查（`reservedTags.assertTagDefinitionChange`，409 `module_tag`）；「在用」的定義與已刪標籤的處理見 [decisions-modules.md](decisions-modules.md)。

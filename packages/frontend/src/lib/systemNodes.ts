@@ -2,7 +2,7 @@
 // workspace-config tag node and any source_type='system' node (e.g. the Site
 // Config note the backend maintains). They are infrastructure, not notes — a
 // brand-new user's first sidebar/inbox should never ask them to care.
-import { RESERVED_TAGS, type ReservedTagKey } from "@onden/markdown";
+import { RESERVED_TAGS, TASKS_MODULE_ID, type ReservedTagKey } from "@onden/markdown";
 import type { Tag } from "./api";
 import { isTag } from "@onden/markdown/contract";
 
@@ -45,6 +45,20 @@ export function isSystemNode(
   if (!isTag(n)) return false;
   const tag = n.id ? tags?.get(n.id) : undefined;
   return tag ? isSystemTag(tag) : false;
+}
+
+/** Whether the server will refuse to delete or merge `tag` away (409 reserved_tag / module_tag): a reserved tag, the tasks
+ *  module's tag, and the own tag of any other module while that module is on (`isImported`: hooks/useModuleFilter, which
+ *  counts built-in modules like capture as on). A view module's leftover tag is not (nothing reads it). The one rule
+ *  behind every Delete / Merge entry — the tag page ⋯ menu, the sidebar tag tree, a note's action list — mirroring backend
+ *  services/reservedTags.ts assertTagDefinitionChange. Offer neither for a locked tag; renaming stays. */
+export function isTagDefinitionLocked(
+  tag: Pick<Tag, "reserved_key" | "schema_module"> & Partial<Pick<Tag, "view_module">>, isImported: (moduleId: string) => boolean,
+): boolean {
+  if (tag.reserved_key) return true;
+  const module = tag.schema_module;
+  if (!module || tag.view_module) return false;
+  return module === TASKS_MODULE_ID || isImported(module);
 }
 
 /** Ids of the reserved tags (#task, #page, #workspace-config —

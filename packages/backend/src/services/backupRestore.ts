@@ -108,7 +108,7 @@ import { setNodeAttribute, AttributeWriteError } from "./attributeWrites.js";
 import { createTag, liveTagIdByName, TagCreateRefusal, TagNameShapeError, isTagNameConflict } from "./tagHierarchy.js";
 import { changeTagSchema, countAutomation } from "./tagWrites.js";
 import { updateTagIdentity } from "./tagIdentity.js";
-import { reservedTagId } from "./reservedTags.js";
+import { ReservedTagError, reservedTagId } from "./reservedTags.js";
 import type { ReservedTagKey } from "../spine/reservedTagKeys.js";
 import { createTaskNode, K, taskFieldsOfAttributes } from "./tasksStore.js";
 import { recordAttributeChange } from "./attributeChange.js";
@@ -587,7 +587,9 @@ function remapText(text: string, ids: Map<string, string>): string {
 function isRefusal(error: unknown): boolean {
   return error instanceof AuthorityError || error instanceof ScopeError || error instanceof TagMembershipError
     || error instanceof AttributeWriteError || error instanceof TagCreateRefusal || error instanceof TagNameShapeError
-    || error instanceof TaskUpdateRefusal || error instanceof NodeUpdateError || isTagNameConflict(error);
+    || error instanceof TaskUpdateRefusal || error instanceof NodeUpdateError || isTagNameConflict(error)
+    // A system or module tag among the samples to clear stays (services/reservedTags.ts).
+    || error instanceof ReservedTagError;
 }
 async function tryWrite(write: () => Promise<unknown>): Promise<boolean> {
   try { await withSavepoint(write); return true; }

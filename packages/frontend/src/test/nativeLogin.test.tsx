@@ -39,7 +39,7 @@ describe("native entry", () => {
     vi.stubGlobal("fetch", vi.fn());
     const { default: AppRoot } = await import("../AppRoot");
     render(<AppRoot />);
-    expect(screen.getByPlaceholderText("https://your-server.com")).toBeTruthy();
+    expect(await screen.findByPlaceholderText("https://your-server.com")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Advanced / connect to a different server" })).toBeNull();
   }, COLD_IMPORT_MS);

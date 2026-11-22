@@ -1,8 +1,10 @@
 // The scheduled run's report (scripts/ciScheduledReport.mjs) must not say false things: a red night is never silent, a
 // known E2E red is called removable only when the log shows it passing, the skips a kind never starts are not news, and
 // nothing but test names, seeds and the link goes into the comment.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { compose, readJobLog } from "../../../../../scripts/ciScheduledReport.mjs";
+import { compose, postsToIssue, readJobLog } from "../../../../../scripts/ciScheduledReport.mjs";
 
 const known = { "[chromium] › fullstack/a.spec.ts › old red": "known", "[chromium] › fullstack/b.spec.ts › fixed since": "known" };
 const job = (name: string, conclusion: string, databaseId = 1) => ({ name, conclusion, databaseId });
@@ -53,5 +55,43 @@ describe("the scheduled report", () => {
     const many = Array.from({ length: 3000 }, (_, i) => at(`  ${i + 1}) [chromium] › fullstack/x${i}.spec.ts:1:1 › ${"long title ".repeat(10)}${i}`)).join("\n");
     const jobs = Array.from({ length: 40 }, (_, i) => job(`Full-stack E2E (${i})`, "failure", i));
     expect(compose({ ...base, jobs, readLog: () => many }).length).toBeLessThanOrEqual(60_100);
+  });
+
+  it("names the layout audit's new violations, the pages it could not open and a failed selftest case", () => {
+    const log = [
+      at("版面檢查：7 個寬度 × 27 個畫面 × 11 條規則，59 筆違規（基準內 16，基準外 43），耗時 598 秒"),
+      at("審核本身的問題：canvas @ 900：畫面打不開（locator.waitFor: Timeout 60000ms exceeded.）"),
+      at("新違規 R7 note-long @ pixel5"),
+      at("  元素：section.note-meta > button.note-history-link 「剛剛修改，打開這篇筆記的歷史」"),
+      at("新違規 R7 note-long @ pixel5"),
+      at("新違規 R1 split-note-note @ 1920"),
+      at("PASS  R6 沒有橫向捲軸（不該報，報了 0 筆）"),
+      at("FAIL  R11 並排窗格裡的字超出窗格右緣（被切掉）（應該報，報了 0 筆）"),
+    ].join("\n");
+    expect([...readJobLog(log).failed]).toEqual([
+      "layout-audit › 打不開：canvas @ 900",
+      "layout-audit › R7 note-long @ pixel5",
+      "layout-audit › R1 split-note-note @ 1920",
+      "layout-audit selftest › R11 並排窗格裡的字超出窗格右緣（被切掉）",
+    ]);
+    const text = compose({ ...base, jobs: [job("Scheduled — browser version (pages)", "failure")], readLog: () => log });
+    expect(text).not.toContain("沒有讀到測試名稱");
+    expect(text).not.toContain("剛剛修改"); // the element's words stay in the log
+  });
+
+  it("says which branch ran; only main's report goes to the issue", () => {
+    expect(compose({ ...base, branch: "acc-69-webkit", jobs: [], readLog: () => null })).toContain("· acc-69-webkit `0123456789`".slice(0, 26));
+    expect(postsToIssue("main")).toBe(true);
+    expect(postsToIssue("acc-69-webkit")).toBe(false);
+  });
+
+  // The report reads the jobs that have finished when it starts; a job it does not wait for can still be running then
+  // and be left out (restore-scripts was, until 2026-11-23). So it waits for every other job in ci.yml.
+  it("waits for every other job in ci.yml", () => {
+    const yml = readFileSync(join(__dirname, "../../../../../.github/workflows/ci.yml"), "utf8");
+    const jobs = yml.slice(yml.indexOf("\njobs:\n")).match(/^ {2}([a-z0-9-]+):$/gm)!.map((l) => l.trim().slice(0, -1));
+    const needs = /^ {2}scheduled-report:\n(?:.*\n)*? {4}needs: \[([^\]]*)\]/m.exec(yml)![1].split(",").map((s) => s.trim());
+    expect(jobs.length).toBeGreaterThan(10);
+    expect(jobs.filter((j) => j !== "scheduled-report" && !needs.includes(j))).toEqual([]);
   });
 });

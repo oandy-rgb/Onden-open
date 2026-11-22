@@ -3,11 +3,13 @@
 // and the run link — never log text, which could carry a note's words. E2E reds already in
 // packages/frontend/e2e/known-red-baseline.json are counted, not listed; a listed test is called removable only when
 // the log shows it passing (✓), never because it is missing from the log.
+// A run on another branch (a hand-started check of a CI change) goes to the job's summary page, not to the issue: the
+// issue is main's record.
 //   RUN_ID=<id> KIND=daily|weekly GH_TOKEN=… node scripts/ciScheduledReport.mjs [--dry-run]
 // The report job runs inside the run it reports on, so the run is not finished yet: `gh run view --log-failed` refuses
 // then. Each finished job's log is read on its own (actions/jobs/<id>/logs); a log that cannot be read is said, not skipped.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -31,18 +33,25 @@ export function readJobLog(log) {
     else if ((m = /^\s+\d+\) (\[[\w-]+\] › [^ ]+?):\d+:\d+ › (.+?)(?: \(retry #\d+\))?[\s─]*$/.exec(text))) failed.add(`${m[1]} › ${m[2].replace(/[\s─]+$/, "")}`);
     else if ((m = /^\s+✓\s+\d+ (\[[\w-]+\] › [^ ]+?):\d+:\d+ › (.+?)(?: \([\d.]+m?s\))?\s*$/.exec(text))) passed.add(`${m[1]} › ${m[2]}`);
     else if ((m = /^(\S+)\s+FAILED$/.exec(text.trim()))) failed.add(`browser-app › ${m[1]}`);
+    // layout:audit names each violation outside its baseline, and a page it could not open; its selftest a failed case.
+    else if ((m = /^新違規 (R\d+ \S+ @ \S+)\s*$/.exec(text))) failed.add(`layout-audit › ${m[1]}`);
+    else if ((m = /^審核本身的問題：(.+?)：/.exec(text))) failed.add(`layout-audit › 打不開：${m[1]}`);
+    else if ((m = /^FAIL {2}(R\d+ .+?)（(?:應該|不該)報/.exec(text))) failed.add(`layout-audit selftest › ${m[1]}`);
     if ((m = /\b([A-Z_]*SEED)=(\d+)/.exec(text))) seeds.add(`${m[1]}=${m[2]}`);
     else if ((m = /^\[fuzz\] seed=(\d+)/.exec(text))) seeds.add(`FUZZ_SEED=${m[1]}`);
   }
   return { failed, passed, seeds };
 }
 
+/** Only main's runs are posted to the issue; any other branch's report goes to its job summary. */
+export const postsToIssue = (branch) => branch === "main";
+
 /** The comment, from the run's jobs and a reader of one job's log (null when it cannot be read). */
-export function compose({ kind, sha, url, jobs, readLog, known }) {
+export function compose({ kind, branch = "main", sha, url, jobs, readLog, known }) {
   const others = jobs.filter((j) => j.name !== "Scheduled — report");
   const red = others.filter((j) => ["failure", "cancelled", "timed_out"].includes(j.conclusion));
   const skipped = others.filter((j) => j.conclusion === "skipped" && !(NOT_IN[kind] ?? []).some((re) => re.test(j.name))).map((j) => j.name);
-  const lines = [`**${kind === "weekly" ? "每週" : "每天"}的定期檢查** · main \`${sha.slice(0, 9)}\` · [這次的執行](${url})`, ""];
+  const lines = [`**${kind === "weekly" ? "每週" : "每天"}的定期檢查** · ${branch} \`${sha.slice(0, 9)}\` · [這次的執行](${url})`, ""];
   const unread = [];
   const logs = new Map();
   for (const j of others.filter((x) => red.includes(x) || (E2E_JOB.test(x.name) && x.conclusion === "success"))) {
@@ -83,13 +92,18 @@ function main() {
   const runId = process.env.RUN_ID;
   const kind = process.env.KIND ?? "daily";
   const gh = (...args) => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 });
-  const run = JSON.parse(gh("run", "view", runId, "--repo", repo, "--json", "jobs,headSha,url"));
+  const run = JSON.parse(gh("run", "view", runId, "--repo", repo, "--json", "jobs,headSha,headBranch,url"));
   const readLog = (job) => {
     try { return gh("api", `repos/${repo}/actions/jobs/${job.databaseId}/logs`, "--allow-escape-sequences"); } catch { return null; }
   };
   const known = JSON.parse(readFileSync(join(root, "packages/frontend/e2e/known-red-baseline.json"), "utf8")).tests ?? {};
-  const text = compose({ kind, sha: run.headSha, url: run.url, jobs: run.jobs, readLog, known });
+  const text = compose({ kind, branch: run.headBranch, sha: run.headSha, url: run.url, jobs: run.jobs, readLog, known });
   if (process.argv.includes("--dry-run")) { console.log(text); return; }
+  if (!postsToIssue(run.headBranch)) {
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
+    console.log(text);
+    return;
+  }
   const open = JSON.parse(gh("issue", "list", "--repo", repo, "--label", LABEL, "--state", "open", "--json", "number", "--limit", "1"));
   if (open.length) gh("issue", "comment", String(open[0].number), "--repo", repo, "--body", text);
   else {

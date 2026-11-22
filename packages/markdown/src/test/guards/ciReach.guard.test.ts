@@ -113,6 +113,23 @@ describe("the guard reports what no job runs (a repository on disk)", () => {
     lists["packages/a/vitest.config.ts"] = ["packages/a/src/unit.test.ts"];
   });
 
+  it("run.sh --config <other> runs that config, not the default one; a computed testMatch owns nothing", () => {
+    const files = {
+      ...base,
+      "packages/frontend/package.json": JSON.stringify({ scripts: { "e2e:scan": "bash e2e/fullstack/run.sh --config scan.config.ts" } }),
+      "packages/frontend/e2e/playwright.config.ts": 'export default { testDir: "./fullstack", testMatch: /.*\\.spec\\.ts/ };\n',
+      "packages/frontend/e2e/scan.config.ts": "const testMatch = pick();\nexport default { projects: [{ name: 'webkit', testMatch }] };\n",
+      "packages/frontend/e2e/fullstack/run.sh": "docker run playwright test\n",
+      "packages/frontend/e2e/fullstack/a.spec.ts": "",
+    };
+    const onlyDefault = repo({ ...files, ".github/workflows/ci.yml": ci("push", "npx vitest run && npm run test:fuzz && bash ../frontend/e2e/fullstack/run.sh") });
+    expect(gaps(onlyDefault, { baseline: {}, listVitest }).scripts).toEqual(["packages/frontend:e2e:scan"]);
+    const scanToo = repo({ ...files, ".github/workflows/ci.yml": ci("push", "npx vitest run && npm run test:fuzz && bash ../frontend/e2e/fullstack/run.sh && cd ../frontend && npm run e2e:scan") });
+    expect(report(gaps(scanToo, { baseline: {}, listVitest }))).toBe("");
+    const scanOnly = repo({ ...files, ".github/workflows/ci.yml": ci("push", "npx vitest run && npm run test:fuzz && cd ../frontend && npm run e2e:scan") });
+    expect(gaps(scanOnly, { baseline: {}, listVitest }).files.map((g: { file: string }) => g.file)).toEqual(["packages/frontend/e2e/fullstack/a.spec.ts"]);
+  });
+
   it("follows cd, npm -w, and the shell scripts a step starts", () => {
     const root = repo({
       ...base,

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# public-push.sh <private ref> <branch on Onden-open> : the tree of <ref> without the paths in removed-paths.json (docs images, the scan reports, the deploy log),
-# as one commit on top of the public branch (or of public main for a new branch). Run in a clean worktree of the private repo.
+# public-push.sh <private ref> <branch on Onden-open> [--fullstack] : the tree of <ref> without the paths in removed-paths.json (docs images,
+# the scan reports, the deploy log), as one commit. Run in a clean worktree of the private repo.
+# A branch other than main is always one commit on top of public main, replacing what the public branch held (force push): stacked on
+# the branch's old public commit, its base stayed an older main and the guard lane counted everything main gained since as this
+# branch's change (false "docs covered" and ratchet reds, 2026-11-22). So <ref> must contain private main: merge main into it first.
+# --fullstack writes `ci-fullstack: true` into the commit, and the run this push starts includes the full-stack e2e (ci.yml), instead of
+# a second, manual run that cancels it.
 set -euo pipefail
 ref=$1; branch=$2; here=$(dirname "$0")
+fullstack=""; [ "${3:-}" = "--fullstack" ] && fullstack="ci-fullstack: true"
 [ -z "$(git status --porcelain)" ] || { echo "worktree not clean"; exit 1; }
 sha=$(git rev-parse "$ref"); back=$(git rev-parse --abbrev-ref HEAD); [ "$back" != HEAD ] || back=$(git rev-parse HEAD)
 git fetch -q open
@@ -12,6 +18,8 @@ if [ "$branch" != main ]; then
   git fetch -q origin main
   bash "$here/verify.sh" "$(git rev-parse origin/main)" > /dev/null \
     || { echo "NOT pushed: public main is not private main. First: bash scripts/public-mirror/public-push.sh origin/main main"; exit 1; }
+  git merge-base --is-ancestor origin/main "$sha" \
+    || { echo "NOT pushed: $ref does not contain private main. Merge main into it first (the public commit is built on public main)."; exit 1; }
 fi
 # The tools and the list of what the mirror leaves out are taken from THIS checkout (the one the script was started
 # from) before the tree is swapped: after `git checkout` "$here" holds <ref>'s files, and a ref's own, older or absent,
@@ -30,7 +38,8 @@ node scripts/check-md-links.mjs | tail -1
 git add -A
 [ -z "$(git ls-files -z | node "$removed" --filter -z | tr -d '\0')" ] || { echo "strip failed"; exit 1; }
 tree=$(git write-tree)
-parent=$(git rev-parse -q --verify "open/$branch" || git rev-parse open/main)
+# main stacks on public main; every other branch is rebuilt on it (see the top).
+parent=$(git rev-parse open/main)
 # Last look before anything becomes public: what this push ADDS compared with what is already public.
 # Stops on a new binary/media/archive file anywhere, a file over 1 MiB, or added text that looks like a key or token.
 # PUBLIC_PUSH_ALLOW=1 skips it; use only after reading the list yourself.
@@ -86,7 +95,8 @@ ${overrides:+
 $overrides}
 
 Co-Authored-By: Claude <noreply@anthropic.com>
-${PUBLIC_PUSH_TRAILER:-}")
+${fullstack:+$fullstack
+}${PUBLIC_PUSH_TRAILER:-}")
 git reset -q --hard; git checkout -q "$back"
-git push -q open "$c:refs/heads/$branch"
+if [ "$branch" = main ]; then git push -q open "$c:refs/heads/main"; else git push -q --force open "$c:refs/heads/$branch"; fi
 echo "pushed $c to Onden-open/$branch"

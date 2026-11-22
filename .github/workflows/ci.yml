@@ -41,12 +41,32 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !inputs.extended }}
 
 jobs:
+  # Same tree already green? (scripts/ci/sameTreeReceipt.sh) A finished run of this same git tree with every required job green
+  # is this run's receipt: the heavy jobs below skip and the summary names the run. Not for PRs, scheduled runs or the full e2e.
+  receipt:
+    name: Same tree already green?
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      reused: ${{ steps.look.outputs.reused }}
+      from: ${{ steps.look.outputs.from }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ELIGIBLE: ${{ github.repository == 'oandy-rgb/Onden-open' && github.event_name != 'pull_request' && !inputs.extended }}
+        run: bash scripts/ci/sameTreeReceipt.sh
+
   guard:
     name: Guard lane
     runs-on: ubuntu-latest
     # On a PR, and on a manual run: the public mirror has no PRs, its branches are pushed by scripts/public-mirror/public-push.sh
     # and started by hand, so without the second half this job never ran there and the lane stayed on a laptop.
-    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && ((github.event_name == 'pull_request' && !github.event.pull_request.draft) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     timeout-minutes: 20
     steps:
       # The ratchet and change-note checks compare against origin/main, so they need history.
@@ -72,7 +92,8 @@ jobs:
   pairing-relay:
     name: Pairing and relay — typecheck · unit
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     steps:
       - uses: actions/checkout@v4
 
@@ -95,7 +116,8 @@ jobs:
   backend:
     name: Backend — lint · typecheck · unit
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     steps:
       - uses: actions/checkout@v4
 
@@ -142,7 +164,8 @@ jobs:
   backend-postgres:
     name: Backend — real Postgres (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     strategy:
       fail-fast: false
       matrix:
@@ -285,7 +308,8 @@ jobs:
   frontend:
     name: Frontend — lint · typecheck · unit · build
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     steps:
       - uses: actions/checkout@v4
 
@@ -334,7 +358,8 @@ jobs:
     # Pinned: this job installs Chromium with the pinned Playwright (e2e/package.json), which refuses an Ubuntu newer than it
     # knows ("Playwright does not support chromium on ubuntu26.04-x64", first hosted run 2026-11-17). Move it with Playwright.
     runs-on: ubuntu-24.04
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -410,7 +435,8 @@ jobs:
   e2e-critical:
     name: Critical-path E2E (PR subset)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open')
+    needs: receipt
+    if: needs.receipt.outputs.reused != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open'))
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -443,7 +469,10 @@ jobs:
   e2e-fullstack:
     name: Full-stack E2E (${{ matrix.name }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.fullstack
+    # Asked for by a manual run's input, or by the pushed commit (`public-push.sh … --fullstack` writes `ci-fullstack: true`).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.fullstack) ||
+      (github.event_name == 'push' && github.repository == 'oandy-rgb/Onden-open' && contains(github.event.head_commit.message, 'ci-fullstack: true'))
     timeout-minutes: 45
     strategy:
       fail-fast: false

@@ -115,7 +115,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - `readUnit(workspace, address)`：資料庫裡某個單位 → 核心的輸入（`Unit`）。值一律是文字（欄位的文字形式）或 null；`*` 是 `{}` 或墓碑（建立值不存，所以兩個節點對「建立標記說了什麼」不會不同意）；沒有自己標記的欄位帶著所屬列的建立標記、`saw` 為空。
 - `mergeUnitsIntoWorkspace(workspace, units, gate?)`（`spine/stampedImport.ts`，唯一讓觸發器讓開的入口，和快照匯入用同一個開關，`reason: "merge"`，計入 `sync_clock.merge_batches`）→ `storeMergedUnits`：逐單位 `mergeUnit`，有變的寫回（贏的值寫進欄位、標記與 `saw` 寫進 `sync_stamps`、其他頭寫進 `sync_stamp_heads`）；回報 `events`、`rejected`、`deferred`。**時鐘超前（`deferred`）不寫、不推進任何進度**，呼叫端晚點再送。
 - 沒做：新增或移除整列、JSON 單位（`key:…`）、搬動以外的 `meta`、領域副作用（搜尋索引、連結、區塊錨點）、誰可以寫（來源的檢查在呼叫端）。
-- 系統與背景工作的寫入：核心遇到有衝突的單位不寫（`writeUnit(..., "system")`）。**資料庫的觸發器不知道誰在寫**，一個普通寫入（背景工作經 `mutate`）碰到有衝突的單位，目前仍會把它「解決」。在還沒有任何傳輸之前，資料庫裡不會出現多個頭，所以沒有實際影響；接上傳輸之前要在寫入路徑上擋（見 PR 說明「需要決定」）。
+- 系統與背景工作的寫入：核心遇到有衝突的單位不寫（`writeUnit(..., "system")`）。資料庫那一端也一樣（下面「系統寫入不解決衝突」）：系統工作與 AI 的寫入由 `stampTransaction` 在標記上註明 `system`；**不在任何根寫入裡的寫入**（沒有 `mutate`、沒有 `stampTransaction`：它的標記由 `sync_allocate_stamp` 給，沒有作者）自 migration 221 起也註明 `system`，所以也不解決衝突；同一個交易之後的根寫入（`stampTransaction` 補上作者）照它自己說的算（`syncSystemWriteConflict.integration.test.ts`）。
 
 ## 修改包：別的節點的修改怎麼進來（第 2b-1 批，migration 206）
 
@@ -184,7 +184,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 一包在一個交易裡讓表從小長大，查詢規劃器的統計卻還是交易開始前的（交易中不會有 autovacuum，PGlite 根本沒有）：快取的計畫（外鍵檢查、觸發器的查找）一直是整表讀，按鍵找一列的寫入走工作區的索引——每多一列就多讀整張表。
 所以合併的交易內 `plan_cache_mode = force_custom_plan`（`stampedImport.ts` `openMerge`），一包在一張表建了 100 列以上就在交易內 `ANALYZE` 那張表（`dbRows.ts`）；讀包時每張表的變動鍵只找一次、每塊 10,000 列。
-`stampedBundleScale.integration.test.ts` 斷言資料庫讀的列數（`pg_stat_user_tables`），不斷言時間。讀的那一端需要統計是新的：見下一節。
+`stampedBundleScale.integration.test.ts` 斷言資料庫讀的列數（`pg_stat_user_tables`），不斷言時間。讀包的一端（寄件那台）也需要新的統計：`readBundlePages` 在讀之前，對包會讀的每一張表（`sync_stamps`、`sync_stamp_heads` 與每一張帶走的表）照 autovacuum 的預設門檻判斷統計是否過時（從沒分析過、分析後改了超過 50＋10 % 的列，或表在磁碟上的頁數和上次分析看到的差了 8＋10 % 以上：改動數在累計統計裡，PGlite 每次重開都丟掉，PostgreSQL 不乾淨的關機也丟），過時就在讀的那個唯讀快照裡 `ANALYZE`（`spine/senderStatistics.ts`）。伺服器的 autovacuum 讓每張表都在門檻內，所以什麼都不做；桌面版與瀏覽器版（PGlite，沒有 autovacuum）在要讀的時候得到伺服器會有的統計（`stampedBundleScale`「a sender with no statistics at all」，之前同一個設定 5 次有 3 次讀 14.4 倍的列）。
 套用端的 `ANALYZE` 不需要比套用更多的權限，也不會讓套用失敗（本機 Postgres 16.15 實測）：表的擁有者以外的角色執行時只有一個 WARNING（`permission denied to analyze "…", skipping it`），交易照常提交——那時只是統計沒更新、成本回到修之前；
 `ANALYZE` 可以在交易區塊內執行（`VACUUM` 才不行），在唯讀交易裡也可以，之後同一條連線的語句照常。PGlite 以超級使用者執行，沒有權限的問題。
 
@@ -205,6 +205,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 - **擴大範圍時，讀者握有的進度以下、範圍外的舊列不會補送**：I5 只管「包扣下的寫入」（下面「讀者範圍外的寫入」）。一個節點用快照加入時沒拿到的空間（快照就不帶），之後讀者成了那個空間的成員，那個空間裡在它 `have` 以下的列（空間本身、舊筆記）永遠不會送；只有之後的寫入會到，掛在不在的空間上的筆記建不起來。範圍變大時要整份重送那些列（或分空間的 `have`）。
 - **`upTo` 被扣下時，每一包都再送同一段**：被扣下的寫入之後那個來源寫的，每一包都會再送一次（收下不改任何東西），直到讀者讀得到。一個讀者永遠讀不到的空間（別人的個人空間）會讓這段一直長。解法是「已知缺口」清單（`have` 帶著扣下的序號），傳輸那一批決定。
+- **不在任何根寫入裡的寫入，碰到有衝突的單位會 409**（migration 221 之後；PR #1940 第 1 輪第 8 點）：`sync_clock.writes_without_mutate` 數到的那些產品路徑，若一個人的動作經過其中一條、又碰到有衝突的單位，拿到的是 ON001；在 `withEventTransaction` 之外的寫入不會被翻成 `sync_unit_in_conflict`（409），是原始錯誤。交換打開之前要清點這些路徑（每一條改成走根寫入，或接到第 7 批「衝突的最小畫面」）。
 - **大子樹換空間的成本在 slug，不在推導**（PR #1907 第 1 輪第 13 點，量過，PostgreSQL 16）：1,000 則（深約 7 層）搬到別的空間，收到的那台 1.5 秒、3,052 個語句，其中推導 14 個（每層一個向下、一個載入），3,003 個是 `assignSlugs` 每則三個（查、查撞名、寫）；同一棵樹改最深那則的內文 20 毫秒、35 個語句。300 層的一條鏈：每層兩個語句（向下一層、向上一層），收到 0.5 秒。要變快：`assignSlugs` 改成整批（照 id 順序在記憶體裡模擬撞名），祖先改成一個遞迴查詢。
 - **跟著樹換空間的筆記沒有通知**：回報在 `followedSpaces`（誰的筆記因為上層搬走而換了空間、能讀到它的人跟著變），沒有人讀；給 2b-2b／畫面。被留下的空間刪除（`keptSpaces`）一樣。
 - **寫下的空間這台沒有**：推導用預設空間（每台相同）；沒有產品路徑做得出來（空間的列從不刪），所以沒有測試。
@@ -218,22 +219,18 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **4.9 的 `seen` 只能決定通知誰**：刪除帶的 `seen` 是刪的人握有「被刪那一列」的進度，網路不按順序到時會說得比實際多；通知可能因此少發，沒有修。
 
 - **範圍同步的包不能沿用「筆記不在就是刪了」**（`rowsThatGo`、migration 215 第 2c 節）：收件那台沒有那則筆記可能只是不在範圍內；那一批要決定跟著筆記走的列怎麼辦（上面「跟著筆記走的列」）。
-- **送的一方的統計要是新的。** 呼叫 `readChangeBundle` 的一方要保證它的資料庫有新的統計：伺服器由 autovacuum 做；瀏覽器版（PGlite，沒有 autovacuum）由它自己的維護工作定期 `ANALYZE`。這是只屬於這一台的維護，不是複製的狀態（統計不跟著包走、也不進摘要）。
-  統計在節點還小時取過一次就夠（`stampedBundleScale.integration.test.ts`「a sender whose statistics were taken once…」，3.7 倍）。**完全沒有統計**時計畫看運氣：同一個設定跑 5 次，3 次組合鍵的查詢走錯索引（`node_tags` 每個鍵讀同一個標籤的所有列，4 倍的標記讀 14.4 倍的列）、2 次是 0.5 倍；時過時不過的結果不能釘成 `it.fails`，所以沒有釘。傳輸那一批要讓節點在讀包之前至少有過一次統計。
-- **只有錨點、段落列、段落標籤有收件檢查**（下面「錨點與段落列」那節的 `check`）：其他表收到的值只有資料表自己的 CHECK 擋，同一個機制（`RowSource.check`）要補上。
 - **錨點單位有兩個頭時，那則筆記「不是人」的寫入被拒**：單位在寫錨點的語句結束時寫，系統或 AI 的寫入（`stampTransaction` `notAPerson`）對有其他頭的單位丟 `sync_unit_in_conflict`（409），是那個語句失敗（`anchorsReplicated`「round 3, 7」；第四輪前是 COMMIT 才失敗）。人看不到這個衝突（沒有畫面讀 `sync_stamp_heads`）；人的下一次存檔會把那些頭解決掉。給 2b-2b：衝突要有畫面。
-- **收件檢查對每一列新建的列各跑一個查詢**（`checkReceived` 比對帶來的欄位值與單位文字，`sync_logged_value`）：一包新建很多列時是線性但每列一個來回，傳輸那一批要合成一個語句。
+- **一包在一個交易裡收**（第 5 項的後半）：收件檢查是每張表、每一段一個語句（`checkReceived` 的 `columnProblems` 與 `carriedValuesDiffer`；一段至多 4 MB 的 UTF-8 JSON，所以語句數隨包的位元組長，每個語句的大小不隨包長），但一包仍是一個交易，PGlite 上收大包時本機存檔要排隊；分段收（`sync_inbox`）是傳輸提案的第 6 批。
 - **大量刪除仍比 main 慢**（後續，第五輪第 6 點與第六輪第 6 點）：跟著筆記消失的錨點、段落列、單位不寫墓碑，連同它們的標記一起清掉（下面「跟著筆記走的列」），每一列不再各呼叫一次觸發器（語句層級）。刪一個 2,000 則筆記、每則 20 個錨點與 20 個段落列的空間（`anchorBulkCost`），寫的列＝main 的＋那些列原本的標記（82,500，刪掉）＋每則筆記的單位一列（斷言），時間見 PR 說明「測試結果」（和 main 比的倍數在那裡，只有一個數）。產品的寫入有 15 s 的 `statement_timeout`（`PG_STATEMENT_TIMEOUT_MS`），`purgeSpaceDeleted` 是一個語句：大到碰得到的空間要分批刪，這是後續（沒做）。
 - **一則筆記的錨點數沒有上限**：找不到的錨點永遠不刪，寫入端也沒有上限，所以收件端無從定一個（審查第 6 點；沒做）。
-- **兩台同時替同一個新段落各鑄錨點**：兩個錨點、兩列、兩個任務；下一次存檔依錨點的建立時間（鑄造那台的牆上時鐘）留一個、藏另一列、把它的任務丟進垃圾桶（`anchorsReplicated`「9」釘住）。規則（提議）：兩個有效錨點落在同一段時合成一個，任務與卡跟著留下的那個。
-- **任務筆記在收的一方已永久刪除，之後才收到指著它的段落列**：收的一方不建那一列，永久刪除的那一台照外鍵 SET NULL 留著列：兩台不同（`anchorsReplicated`「10」，`it.fails`）。
-- **外鍵清空的欄位，被指的那一列之後以同一個 id 再建**（第十輪第 4 點）：B 離線在筆記 P 下建 K；A 永久刪除 P，送到 B（K 的父層清空，標記留著 P 的 id）；A 以同一個 id 再建 P（日記的 id 由日期算出）；K 這時才到 A，A 把 K 建在 P 下。兩台標記相同，K 在 A 在 P 下、在 B 在最上層，永遠如此（`anchorsReplicated`「round 10, 4」，`it.fails`）。方向：欄位跟著這台握有的頭與列走，之後建出的列把標記留著 id 的欄位補上。`task`／`detached` 是同一類（方向相反）；`spaces.owner` 指的 `actors` 不跟著包走，「不在」可能只是「還沒到」，也是這一類。
+- **兩台同時替同一個新段落各鑄錨點**：兩個錨點、兩列、兩個任務；下一次存檔依錨點的建立時間（鑄造那台的牆上時鐘）留一個、藏另一列、把它的任務丟進垃圾桶（`anchorsReplicated`「9」釘住）。規則（提議）：兩個有效錨點落在同一段時合成一個，任務與卡跟著留下的那個。 **第 1 批沒做**：那條規則要先決定被合掉的那一個任務自己的修改（到期日、完成、複習卡的進度）怎麼辦，每一種選擇都是產品的行為，不是合併的機制；今天的結果每台相同（下一次存檔的寫入內容相同、標記不同，不算衝突），所以照舊釘住，等業主選。 **已決定 (a)，2026-11-22**（業主）：留下的那個任務吸收另一個的欄位，逐單位取較新的，複習卡的進度同一條規則；另一批做（需要 4c 的「任務為準」），在那之前照舊釘住。
+- **外鍵清空的欄位，被指的那一列之後以同一個 id 再建**（第十輪第 4 點）：B 離線在筆記 P 下建 K；A 永久刪除 P，送到 B（K 的父層清空，標記留著 P 的 id）；A 以同一個 id 再建 P（日記的 id 由日期算出）；K 這時才到 A，A 把 K 建在 P 下。兩台標記相同，K 在 A 在 P 下、在 B 在最上層，永遠如此（`anchorsReplicated`「round 10, 4」，`it.fails`）。方向：欄位跟著這台握有的頭與列走，之後建出的列把標記留著 id 的欄位補上。`task`／`detached` 是同一類（方向相反）；`spaces.owner` 指的 `actors` 不跟著包走，「不在」可能只是「還沒到」，也是這一類。 **第 1 批沒做，照舊釘住**：會收斂的規則是「欄位＝勝出的值，那一列在這台時；不在時是 NULL」，所以那一列以同一個 id 出現的每一條路都要把留著它 id 的欄位補上：合併建列做得到（之後推導空間）；但這台**自己**再建（收過永久刪除的那台又打開同一天的日記）時，補 `parent` 等於在一次普通的存檔裡把那則子筆記連同整棵子樹搬進新父層的空間，只做合併那條路就是半條規則（再建的那台不補、收的那台補：又不同）。反方向「清空了就一直空」也不收斂：第四台握有舊的 P 底下的 K、從沒收到刪除，它把 K 送出時帶的是 P，收到的那台有新的 P 就建在 P 下，留著空的那台不動。 業主會碰到的樣子（PR #1940 第 1 輪 C）：一個人、伺服器加桌面版時很少見——離線的桌面版在日記底下建了筆記、伺服器上那天的日記被永久刪除、桌面版同步之前又重開同一天——結果是那則筆記在兩台的位置不同（一台在日記底下、一台在最上層），不丟資料，手動搬一次就一致。
+- **永久刪除後以同一個 id 再建，對上另一台已被結掉的 `deleted` 頭，兩台的頭不同**（PR #1940 第 1 輪 CI 補充，#1937 的 CI 以種子 416864270 找到，main 上就有）：A、B 各自把丟進垃圾桶的 X 取消丟進垃圾桶（交換後兩台都握兩個 `deleted` 的頭）；A 再丟進垃圾桶（人的寫入，結掉兩個頭）、永久刪除、以同一個 id 建回（建立的 `meta.seen` 只有 A 自己的寫入）；兩邊交換兩輪都收下，B 仍握著自己那個取消的頭（值 false），A 沒有，再交換也不變。手寫的決定性情境：`stampedBundlePlanted`「a note purged and made again under its id on A, after A and B each undid its trash」（一則 `it` 斷言前置條件與 B 多出的頭，一則 `it.fails` 斷言兩台相同；PR #1940 第 2 輪第 1 點）。推論、沒追進程式：永久刪除把 X 的標記一起拿掉，建立的 `seen` 沒帶 A 已經看過的 B 的寫入，所以 B 那邊沒有東西丟掉那個頭；A 的 `have` 已經涵蓋它，B 也不會再送。
+- **筆記以外的帶標記的表，`updated_at` 不是標記的函式**（PR #1940 CI 補充，種子 142069）：`content_nodes` 的 `updated_at` 是它算數的標記裡最新的牆上時間（migration 206／209 `sync_touch_updated_at`），別的表（`node_attributes` 等）是寫那一列的時間——寫的那台是自己的時鐘，收的那台把包寫回已有的列時是收的時候。所以握有相同寫入的兩台，`updated_at` 不同（`snapshotBrought`「updated_at of an attribute」，`it.fails`；P2 的比對把這一欄當已知的差異另外比，`stampedBundleWorld.ts` `UPDATED_AT_OF_ATTRIBUTES`）。修法同筆記：每張帶 `updated_at` 的帶標記的表，值＝它算數的標記裡最新的牆上時間，本機寫與收包寫回同一個函式；那會改變單一伺服器上這一欄的寫法，所以不在這一批。
 - **起始（genesis）標記的列，任務跟著建立走，筆記與任務都永久刪除**（第十輪第 5 點）：資料庫先清空任務再刪列的那一台，`sync_keep_emptied_id` 加一列任務的標記（起始建立的複本，留著任務 id）；先刪列的那一台沒有。起始標記不會在任何 `have` 之上，交換不送；整份重送才送，收的一方存下來，兩台不同（`anchorsReplicated`「round 10, 5」，`it.fails`）。今天正式伺服器上每一列都是起始標記；傳輸那一批要定：起始的列不加這一列，或整份重送不帶起始標記。
 - **別的表：收件那台的連鎖清掉欄位標記，刪除的那台留著**（第十輪第 7 點）：B 設了筆記 N 的屬性又改，A 永久刪除 N，B 的寫入之後才到 A。A 不握有那一列，留著那些標記（沒有值，上面「別的表不留值」）；B 收到 A 的刪除時列被連鎖刪掉，刪除觸發器清掉那一列的欄位標記（合併不寫自己的墓碑，`sync_stamp_put_over`），建立的標記留著。所以 A 有 B 的值的標記、B 沒有；交換不再送（在 B 的 `have` 之下），整份重送才送，B 存下（沒有值）。沒有拒收、沒有留下字，兩台的標記不同（`anchorsReplicated`「round 10, 7」，`it.fails`）。第五到十輪的測試裡，整份重送會再存的別張表單位只有這一個（對所有表的標記在 `resendAll` 前後比對）。
-- **`saw` 由清空的欄位算出**（第十輪第 6 點）：審查提出的疑慮；這一批沒找到兩台因此不同的情形，所以沒有釘 `it.fails`。傳輸那一批再看一次。
 - **215 之前各台各自衍生的錨點與段落列**：起始標記假設每台握有相同的列；今天只有快照加入（兩台的列來自同一份），沒有影響。已經各自衍生過的兩台要對齊，傳輸那一批要先定做法。
 - **包的大小**：一次內文寫入帶一則筆記的一個錨點單位：50 個錨點 16.0 KB（gzip 2.7 KB）、200 個 61.9 KB（gzip 9.1 KB），未壓縮時一個錨點約 0.3 KB；快照與包都不壓縮。壓縮或不重複帶文字，傳輸那一批決定。
-- **觸發器不知道誰在寫**：一個普通寫入碰到有衝突的單位會把它解決（上面「系統與背景工作的寫入」）；要在寫入路徑上擋。
 - **`scripts/upgrade.sh rollback` 改成先切版本再還原**，`scripts/restore.sh` 才能在備份缺 `sync_renew_node_id()`（migration 213 之前的版本做的備份）時先補上函式再換號。
   在那之前，213 之前的備份還原到全新的資料庫後**節點編號不變**（`restore.sh` 印 WARNING、結束碼 0；釘住在 `restoreRenewsNodeId.guard.test.ts`「a backup older than migration 213」）。今天沒有任何交換，所以沒有人握有會撞號的號碼；有了傳輸就有。
 
@@ -268,6 +265,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 一列在表裡、整個工作區的讀者會拿到、這個讀者卻不會（不是成員的空間）：它被**扣下**，它的標記不送，`upTo` 停在那個來源第一筆被扣下的寫入之前。
 所以收件那台的 `have` 不會越過它沒拿到的寫入；讀者之後成了成員，下一包就送到（`mergeSpaceParent.integration.test.ts`「I5」）。
 不選「送沒有值的標記」：收件那台的 `have` 照樣越過，那筆寫入的內容永遠到不了；也會把讀者讀不到的列的存在告訴它。代價見「接上傳輸前必須完成」。
+**轉送**：被扣下的寫入之後那個來源的寫入照樣送到（收件那台存下，`have` 停在扣下的之前），所以一台可能握有某個來源超過它 `have` 的寫入；它再送給第三台時，`holds` 是它送出的每個標記與頭的最大號碼（不只是 `have`），`upTo` 仍是沒有缺口的那一段。之前 `holds` 只看 `have`，第三台收到超過 `holds` 的標記就 `bundle_stamp_beyond_cut`，永遠拒收（`stampedSawThreeNodes.integration.test.ts` 的隨機三台找到的，種子 902）。
 
 ### COMMIT 時才檢查的錯誤
 
@@ -347,7 +345,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 - **一則筆記所有錨點的位置是一個單位**（`note_anchor_places`，鍵＝筆記 id，審查第二輪第 2 點）：`places` ＝ 量的那份內文的雜湊 `h`，加每個錨點的位置、狀態、備選、quote 與前後文、待補找；
   錨點自己的 `at_body_hash` 不是 `h` 時（215 之前留下、之後沒被讀過的列）帶第十個元素。有錨點的筆記，每一次內文寫入都寫它（至少 `h` 換新），所以這個單位的標記就是那筆內文寫入的標記，兩個單位同贏同輸（PR #1759 note-cf 第 2 題）；一次存檔寫一列、一個標記，與錨點數無關。沒有錨點的筆記沒有單位，它的內文寫入也不寫。
-  寫的一台：寫錨點的每個語句結束時（語句層級的觸發器，帶轉換表），替那個語句碰到的每一則筆記寫一次單位（`note_anchor_places_follow`；第四輪第 2 點：延後的列觸發器在幾則筆記的列交錯時每一列都重寫一次）。一次存檔的錨點只有一個語句（`store.ts` `moveAnchorsForBodyChange`），所以只寫一次。
+  寫的一台：寫錨點的每個語句結束時（語句層級的觸發器，帶轉換表），替那個語句碰到的每一則筆記寫一次單位（`note_anchor_places_follow`；第四輪第 2 點：延後的列觸發器在幾則筆記的列交錯時每一列都重寫一次）。一次存檔的錨點只有一個語句（`store.ts` `moveAnchorsForBodyChange`），所以只寫一次；一次存檔**新建**的錨點、段落列、段落標籤也各一個語句（`insertAnchors`、`syncBlockNodes`；之前每個一個語句，第一次存下 n 個錨點的筆記把最多 n 個條目的單位重寫 n 次：200 個在 PGlite 上 1.9 秒、讀 110 萬列，現在 0.7 秒、4.5 萬列，`anchorFirstSaveCost.integration.test.ts`）。
   大小：單位的文字（UTF-8 位元組，兩邊都量同一個東西）不超過 16,000,000（`anchor_unit_bytes_max()` ＝ `anchorUnit.ts` `ANCHOR_UNIT_BYTES_MAX`，測試比對兩者）。寫入端不會寫出更大的：每個錨點的前後文最多 400 個 UTF-16 單位（`similarity.ts` `quoteAt` 用 `cutToUnits` 取開頭，比對時也照這樣截），還是超過時依序放棄最舊的 `lost`、`maybe`、`valid` 錨點的字（列也一起改，單位仍等於列）；放棄了字的 `lost` 錨點再也找不回來（段落列一直藏著、任務留在垃圾桶、連結說那段不見了）。
   舊的列：215 之前的程式可能留下量在現在內文上、卻不是寫入端現在會寫的樣子的列（`valid` 帶備選或待補找；非 `valid` 卻有位置；正式站有個位數）。寫單位的那一刻把它們正規化（`note_anchor_places_write`），所以不論是存內文、還是只寫某一個錨點的位置，寫出的單位收的一方都收得下（`anchorUnitIsRows`「an old row …」六則）。
   文字是資料庫自己的 jsonb 寫法（鍵依長度再依位元組、`, ` 與 `: `）；收到的單位文字不是這樣寫的就拒收（`anchorUnit.ts` `parseAnchorUnit`，審查第三輪第 3 點）。
@@ -378,8 +376,8 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **雜湊守門**：`block_anchors_hash_is_body`（語句層級）：寫入 `at_body_hash` 的錨點列（新增，或改了雜湊或筆記；改名 `anchor_id` 不算），雜湊必須是那則筆記此刻的內文；每個交易每個版本的內文只算一次雜湊（以列的 ctid 為鍵）。合併與快照匯入不檢查。`anchorHashGuard.integration.test.ts`。
 - **一列以外的唯一鍵是宣告出來的規則**（`RowSource.naturalKeys`，審查第 1 點）：兩台用兩個 id 建了同一個自然鍵的兩列，每台都留建立標記較早的那一列（再比鍵），另一列不建、它的標記留著，回報 `duplicateRows`；掛在輸的那列上的（段落標籤、複習卡、任務連結）跟著它走（資料庫自己的串聯），也在回報裡。
   宣告的：`block_nodes` 的 `anchor_uq`、`note_ref_uq`、`task_uq`、`detached_uq`，`function_refs` 的 `holder_unique`、`view_instance_unique`（原本 function_refs 專用的 `keepEarlierReference` 換成這條規則）。沒宣告的唯一鍵撞到 → 整包 `bundle_unique_clash`；已在的列寫入時撞到唯一鍵也是。`bundleNaturalKeys.integration.test.ts`。
-- **收件檢查**（`RowSource.check`，審查第 6 點與第三輪第 3、4 點、第七輪第 2 點）：**一個欄位的檢查對它每一個可能的值都跑**——贏家，以及每個單位的每一個其他的頭（頭贏了就會寫進欄位），由跑檢查的那一層（`dbRows.ts` `checkReceived`）逐一放進那個單位的位置再跑一次，所以每張表的檢查只讀 `texts`，新的表不會漏掉頭。包的形狀先查（`stampedImport.ts` `checkBundleShape`）：項目只有帶標記清單的列與帶一個標記的墓碑，每個標記以文字指名它的列與單位、`saw` 是整數的物件（和快照同一個檢查 `isSaw`；第八輪第 4 點：不是物件的 `saw` 存下來，下一次本機寫那個單位時 migration 205 的 `sync_saw_merge` 會失敗）、有頭的清單，頭的值是文字或 null、標了沒有值的頭沒有值，留著的值是文字或 null；列項目的值與文字是物件。列的鍵這張表放不下（uuid 的鍵不是 uuid、兩欄的鍵不是兩段）、欄位的寫入是墓碑，也是 `bundle_malformed`（第八輪第 4 點、第九輪第 5 點 a；之前分別以資料庫的 22P02、一般的 Error 冒出來）。快照的標記與頭用同一個判斷（`stampedImport.ts` `isWireStamp`），留著的值也過那張表的檢查（`join_stamp_shape`，第九輪第 3 點）；快照與包都在門口查（`stampedImport.ts` `keptProblem`，第十輪第 2 點）：只有跟著筆記走的表與外鍵清空的六個單位能留值（其他的是編碼的拒收，不是資料庫 CHECK 的 23514），清空的 id 要是 uuid（被指的鍵都是 uuid，`stampedBundleSources` 守門）。
-  錨點單位（已在這台的單位列也一樣）要能被 `parseAnchorUnit` 讀：文字是資料庫自己的寫法、頂層只有 `h` 與 `a`、沒有 NUL 或落單的代理字元、
+- **收件檢查**（`RowSource.check`，審查第 6 點與第三輪第 3、4 點、第七輪第 2 點；傳輸提案第 1 批起**每一張帶走的表都宣告**，型別上必填）：先是每張表共同的一層（`dbRows.ts` `columnProblems`，每張表每一段一個語句）——每個值（贏家與每一個頭）是它的欄位放得下的：欄位的型別、NOT NULL、表自己**只讀那個單位的欄位**的 CHECK（從資料庫目錄讀，所以不會和 schema 走岔）；`deleted` 是 `true`／`false`；組合欄位是它那幾欄的物件；JSON 鍵的值是 JSON、集合的元素是它自己；新建的列帶來的值要等於單位文字（`carriedValuesDiffer`，也是每張表每一段一個語句，之前只有錨點那三張表、每列一個查詢）。再來是各表自己的規則，**只能和誠實的節點握得住的一樣寬**（審查 PR #1940 第 1 輪第 2 點）：資料庫沒擋的寫入端上限（標題 500、內文 2,000,000、時區的寫法、引文的長度）都不查，因為上限擴到每一條寫入路徑之前（2026-10-17）存下的值，誠實的節點也握著，帶著它的每一包會永遠被拒；查 PostgreSQL 的文字本來就放不下的（NUL、落單的代理字元）。**排序鍵要查**（筆記與指標，`dbUnits.ts` `checkOrderKey`，和寫入端同一個 `isValidOrderKey`；PR #1940 第 2 輪第 2 點）：這一欄從 migration 200 才有，回填的都是合法的，每個寫入者都驗，所以誠實的節點握不住別的；收下一個 `keyBetween` 不收的鍵，那個父層底下之後每一次新建、複製、搬入、加指標都會在 `keyBetween` 丟錯，直到有人去搬那一則。要擋那些上限，得先在資料庫加 CHECK、把既有的夾進去（改資料，業主決定；正式站的數字用 migration 221 檔頭的唯讀預覽）。檢查的語句在一個 savepoint 裡、照位元組分段（每段至多 4 MB 的 UTF-8 JSON；`inParts` 邊建邊送，同時只握一段的 JSON，加上包本身），所以轉型失敗不會讓整包的交易變成 25P02，大的誠實的包不會撞到語句逾時或 jsonb 的上限；`MALFORMED_CODES` 也收 22008（格式對、不是日子的日期）與 54000（大到放不進索引的值），全部欄位型別的掃描在 `bundleReceivedChecks`「a value no column of its type can hold」。`bundleReceivedChecks`「a received value of any carried table」。錨點這三張表原有的：**一個欄位的檢查對它每一個可能的值都跑**——贏家，以及每個單位的每一個其他的頭（頭贏了就會寫進欄位），由跑檢查的那一層（`dbRows.ts` `checkReceived`）逐一放進那個單位的位置再跑一次，所以每張表的檢查只讀 `texts`，新的表不會漏掉頭。包的形狀先查（`stampedImport.ts` `checkBundleShape`）：項目只有帶標記清單的列與帶一個標記的墓碑，每個標記以文字指名它的列與單位、`saw` 是整數的物件（和快照同一個檢查 `isSaw`；第八輪第 4 點：不是物件的 `saw` 存下來，下一次本機寫那個單位時 migration 205 的 `sync_saw_merge` 會失敗）、有頭的清單，頭的值是文字或 null、標了沒有值的頭沒有值，留著的值是文字或 null；列項目的值與文字是物件。列的鍵這張表放不下（uuid 的鍵不是 uuid、兩欄的鍵不是兩段）、欄位的寫入是墓碑，也是 `bundle_malformed`（第八輪第 4 點、第九輪第 5 點 a；之前分別以資料庫的 22P02、一般的 Error 冒出來）。快照的標記與頭用同一個判斷（`stampedImport.ts` `isWireStamp`），留著的值也過那張表的檢查（`join_stamp_shape`，第九輪第 3 點）；快照與包都在門口查（`stampedImport.ts` `keptProblem`，第十輪第 2 點）：只有跟著筆記走的表與外鍵清空的六個單位能留值（其他的是編碼的拒收，不是資料庫 CHECK 的 23514），清空的 id 要是 uuid（被指的鍵都是 uuid，`stampedBundleSources` 守門）。
+  錨點單位（已在這台的單位列也一樣）要能被 `parseAnchorUnit` 讀（引文的長度不另設上限：引文是這台握得住的內文的一段）：文字是資料庫自己的寫法、頂層只有 `h` 與 `a`、沒有 NUL 或落單的代理字元、
   量在單位內文上的條目狀態與位置一致（`valid` 沒有備選、不待補找；其他狀態位置 0..0；帶自己雜湊的舊列不查這條）、不是空的（寫入端沒有錨點時會刪掉單位）、整個單位不超過 16,000,000 位元組（寫入端同一個上限，見上）、位置不超過最長的筆記（帶自己雜湊的條目也一樣）；quote 不長於一則筆記、位置不超過它指名的內文（這台或這包有那份內文時；沒有時，選頭時再查一次）；段落列的 id、錨點 id、`label`／`text_cache` 長度、`detached`（子筆記的 id 與標籤名：每個 1 到 `TAG_NAME_MAX` 字、最多 `NODE_MARKDOWN_MAX / 3` 個，沒有別的鍵）；新建的列，帶來的欄位值要等於包裡的單位文字。不合 → 整包 `bundle_malformed`，什麼都不寫；資料庫不收的值（CHECK、型別、NOT NULL）也是 `bundle_malformed`，不以原始錯誤冒出來。`bundleReceivedChecks.integration.test.ts`。
 - **一個頭的文字整個勝出**：它的錨點原樣採用，收的一方不重算（`resolveBodyAnchors` 的 `single`／`needs-decision`）。留下的另一個版本帶著它自己的錨點（`anchorsOfVersion`：錨點單位的頭裡，`h` 等於那個版本的那一個）。
 - **兩個頭合成一份沒有人寫過的文字**：`mergeAnchors`，一個（基底與它的錨點、每個頭與它的錨點、合成的文字）的純函式，和 `resolveBody` 放在同一個檔，只由 `resolveBodyAnchors` 呼叫。外來的值一律先經 `parseAnchorUnit`／`usableFact`（一處），不合的不算任何版本的錨點、不拋例外。

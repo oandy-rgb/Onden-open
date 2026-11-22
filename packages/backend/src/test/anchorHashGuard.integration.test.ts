@@ -8,6 +8,10 @@ import { seedQ } from "./helpers/seedQ.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, openNode } from "./helpers/stampedWorld.js";
 import { renameAnchor } from "../services/blockAnchors/index.js";
+import { ensureBlockAnchor, restoreBackupAnchors } from "../services/blockAnchors/store.js";
+import { withEventTransaction } from "../spine/eventTransaction.js";
+import { stampTransaction } from "../spine/stamps.js";
+import type { ActorCtx } from "../types.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const BODY = "First paragraph of the note\n\nSecond paragraph of the note\n";
@@ -16,6 +20,7 @@ const refusal = (p: Promise<unknown>) => p.then(() => null, (e: { code?: string 
 describe.skipIf(!isTestDb)("an anchor is written with the hash of its note's body", () => {
   let node: RealNode;
   const context = { workspaceId: "" };
+  let owner!: ActorCtx;
   let space = "";
   // a node with a stamped world (it has a stamp clock, so a merge can be opened on it); each test has its own note (the tests of a file run in a shuffled order)
   beforeAll(async () => {
@@ -23,6 +28,7 @@ describe.skipIf(!isTestDb)("an anchor is written with the hash of its note's bod
     const world = await buildSourceWorld(node);
     context.workspaceId = world.ws;
     space = world.spaceA;
+    owner = world.owner as ActorCtx;
   }, 300_000);
   afterAll(async () => { await node?.close().catch(() => undefined); });
 
@@ -32,6 +38,36 @@ describe.skipIf(!isTestDb)("an anchor is written with the hash of its note's bod
   const insert = (note: string, id: string, hash: string) => seedQ(
     `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote) VALUES ($1, $2, $3, 0, 27, $4, 'First paragraph of the note')`,
     [context.workspaceId, id, note, hash]);
+
+  // Review of PR #1853 after the merge, N4: the anchor of a mention or a block link is measured on the body its caller read. Every caller reads it after the workspace's
+  // write lock (inside mutate or withEventTransaction), so no save can come between; ensureBlockAnchor takes the lock itself and refuses a body that is not the stored
+  // one, so a caller that read it before the lock fails here, every time, with a plain reason, and never as a rare OD215 when a save came between.
+  it("ensureBlockAnchor measures on the stored body only: a body read before a save is refused with a plain reason, not OD215", () => onNode(node, async () => {
+    const note = await newNote();
+    const write = (markdown: string) => withTransaction(() => withEventTransaction(context.workspaceId, async () => {
+      await stampTransaction(context.workspaceId, owner.id);
+      return ensureBlockAnchor(context.workspaceId, note, markdown, 3, { actor: owner });
+    }));
+    const stale = BODY;
+    await seedQ(`UPDATE content_nodes SET markdown = $2 WHERE id = $1`, [note, "A save came between\n\n" + BODY]);
+    await expect(write(stale)).rejects.toThrow(/not the note's stored body/);
+    const id = await write("A save came between\n\n" + BODY);
+    expect(typeof id).toBe("string");
+  }));
+
+  // Review of PR #1940, round 1, point 5: a backup's anchor offsets may cut a surrogate pair in two. Written one anchor per statement as text parameters, the lone half
+  // became U+FFFD on the way (UTF-8 has none); written in one statement through a jsonb parameter it would refuse the whole statement (22P02). The result stays as it was.
+  it("a backup anchor whose offsets cut a surrogate pair: restored, the lone half kept as U+FFFD (as before), the other anchors with it", () => onNode(node, async () => {
+    const body = "Emoji \u{1F600} first paragraph\n\nSecond paragraph of the note\n";
+    const note = (await seedQ<{ id: string }>(
+      `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id) VALUES ($1, 'manual', 'content', 'Pairs', 'pairs-' || gen_random_uuid(), $2, $3) RETURNING id::text`,
+      [context.workspaceId, body, space])).rows[0]!.id;
+    const cut = body.indexOf("\u{1F600}") + 1; // between the two halves of the pair
+    const restored = await withTransaction(() => restoreBackupAnchors(context.workspaceId, note, body, [{ id: "pair-cut", from: 0, to: cut }, { id: "pair-whole", from: body.indexOf("Second"), to: body.length - 1 }]));
+    expect(restored).toBe(2);
+    const q1 = (await seedQ<{ quote: string }>(`SELECT quote FROM block_anchors WHERE anchor_id = 'pair-cut' AND workspace_id = $1`, [context.workspaceId])).rows[0]!.quote;
+    expect(q1.endsWith("\ufffd")).toBe(true);
+  }));
 
   it("the hash of the note's body is taken; any other is refused (OD215), on insert and on an update that writes the hash", () => onNode(node, async () => {
     const note = await newNote();

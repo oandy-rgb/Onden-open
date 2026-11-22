@@ -22,7 +22,8 @@ import { RETIRED_STAMP_LABELS } from "../snapshotTables.js";
 import { type Cell, type Json, type MergeResult, type SkewGate, type Stamp, type Unit, DEFAULT_MAX_SKEW_MS, GENESIS_STAMP_ORIGIN, canonical, genesisName, isGenesis, maximalHeads, mergeUnit } from "./unit.js";
 import { type StoreMerge, type UnitAddress, STAR } from "./store.js";
 import { chooseAnchorHead, parseAnchorUnit } from "./anchorUnit.js";
-import { BLOCK_ID, NODE_MARKDOWN_MAX, TAG_NAME_MAX, isUuid } from "@onden/markdown";
+import { BLOCK_ID, NODE_MARKDOWN_MAX, TAG_NAME_MAX, hasLoneSurrogate, isUuid } from "@onden/markdown";
+import { isValidOrderKey } from "@onden/markdown/contract";
 import { sha256Hex } from "../../utils.js";
 
 /** One column of a row key, in the order `sync_key` (migration 194) joins them with '/'. Every part but the last is a uuid (36 characters), so a key is split without guessing. */
@@ -48,13 +49,18 @@ export type RowSource = {
    *  with one natural key under two ids: the row made first (creation stamp, then key) stays on every node, the other is not made, and the bundle's report names both (`duplicateRows`,
    *  dbRows.ts). A unique key a source does not declare refuses the bundle (`bundle_unique_clash`): a clash nothing was told how to settle never leaves a row out quietly. */
   naturalKeys?: readonly NaturalKey[];
-  /** What a received row of this table must satisfy before anything of the bundle is written (dbRows.ts `checkReceived`): the reason it does not, or null. Given the row's unit texts,
-   *  its carried values when it travels whole, and the bodies the bundle and this node know by their sha-256 (to bound positions). Every value a unit may take is checked: the
-   *  check runs once for the row as its winners say and once more for each other head of each unit, that head's value in its unit's place (review of PR #1853, round 7,
-   *  point 2: a head reaches the column when it wins), so a check reads `texts` alone and cannot forget the heads. Declared per
-   *  source so that every table can use the one mechanism; tables without one are checked only by the database (README, 接上傳輸前必須完成). A row that fails refuses the
-   *  whole bundle (`bundle_malformed`). `bodiesOf: "row"`: the row's key is a note, whose body (as this node holds it) bounds the positions too. `values: true` also requires a new row's carried values to give the same unit texts as the bundle says (sync_logged_value). */
-  check?: { row: (r: ReceivedRow) => string | null; values?: boolean; bodiesOf?: "row" };
+  /** What a received row of this table must satisfy before anything of the bundle is written (dbRows.ts `checkReceived`; the trust line, docs/decisions/sync-trust-line.md:
+   *  what is received is checked, all of it). EVERY source declares one: the one mechanism for every carried table, so a new table cannot forget it (tsc). Two parts run for
+   *  every value a unit may take — the winner, and each other head of each unit in its unit's place (review of PR #1853, round 7, point 2: a head reaches the column when it
+   *  wins) — so a check reads `texts` alone and cannot forget the heads:
+   *   - by checkReceived itself, for every table alike: the value is one its column can hold, as this database says (its type, NOT NULL, and each CHECK of the table over
+   *     that column alone: `columnProblems`); a new row's carried values give the unit texts the bundle says (sync_logged_value); a JSON key's value is JSON;
+   *   - `row`, the table's own rules that the database does not hold but every writer of the table keeps (a note's size caps, an order key keyBetween accepts, an anchor id).
+   *  Given the row's unit texts, its carried values when it travels whole, and the bodies the bundle and this node know by their sha-256 (to bound positions). A row that fails
+   *  refuses the whole bundle (`bundle_malformed`). `bodiesOf: "row"`: the row's key is a note, whose body (as this node holds it) bounds the positions too.
+   *  A rule here must hold for everything an honest node of any version wrote: a refusal between two honest nodes is for ever (so no time-zone name list: two nodes' zone
+   *  data can differ). */
+  check: { row: (r: ReceivedRow) => string | null; bodiesOf?: "row" };
   /** What a row of this source is written into once every table of the bundle is in (dbRows.ts storeMergedRows), for every row of it the bundle bears on: its own rows and
    *  those other sources name (`bearsOn`). The source's key is a note: each row comes with its unit (every head) and the note's stored body. A function of replicated state
    *  only, so every node writes the same thing whatever bundle came first. The anchors unit of a note writes the note's anchor rows (`expandAnchorUnits`). */
@@ -112,14 +118,14 @@ function checkAnchor(r: ReceivedRow): string | null {
   if (note !== undefined && (note === null || !isUuid(note))) return "an anchor's note is not a note id";
   return null;
 }
-/** A note's anchors unit (each head of it in turn, checkReceived): usable (parseAnchorUnit), no text longer than a note may be, and inside the body it names when that body is known here. */
+/** A note's anchors unit (each head of it in turn, checkReceived): usable (parseAnchorUnit), and inside the body it names when that body is known here. */
 function checkAnchorUnit(r: ReceivedRow): string | null {
   for (const text of [r.texts.places]) {
     if (text === undefined) continue;
     const p = parseAnchorUnit(text);
     if (!p.ok) return `a note's anchors are not usable (${p.reason})`;
     for (const f of p.unit.anchors) {
-      if (Math.max(f.quote.length, f.prefix.length, f.suffix.length) > NODE_MARKDOWN_MAX) return "an anchor's quote is longer than a note may be";
+      // (no cap on a quote's length of its own: a quote is a slice of a body this node may hold, and a body is not capped by the database; review of PR #1940, round 1, point 2)
       const length = r.bodyLength(f.ownHash ?? p.unit.hash);
       if (length !== undefined && (f.to > length || (f.candidate !== null && f.candidate.to > length))) return "an anchor stands past the end of the body it names";
     }
@@ -152,6 +158,31 @@ function checkParagraph(r: ReceivedRow): string | null {
   if (v) for (const c of ["label", "text_cache"]) if (v[c] !== undefined && (typeof v[c] !== "string" || (v[c] as string).length > PARAGRAPH_TEXT_MAX)) return `a paragraph row's ${c} is not a text of at most ${PARAGRAPH_TEXT_MAX} characters`;
   return null;
 }
+/** A table whose values the database's own type, NOT NULL and CHECK hold (checkReceived checks those for every table): no writer rule beyond them. */
+const NO_RULES_OF_ITS_OWN: RowSource["check"] = { row: () => null };
+/** A note's title and body, and a space's name: text a database can keep (no NUL, no lone surrogate: PostgreSQL text holds neither, so no honest node holds one).
+ *  NOT the writers' caps (a title of 500, a body of 2,000,000: @onden/markdown noteSizeProblem), nor the form of a time zone: the database does not hold those, and a
+ *  node holds every value its database took, from before a cap reached every write path (2026-10-17) too. A received check is never stricter than what an honest node
+ *  may hold, or a bundle that carries that row is refused for ever (review of PR #1940, round 1, point 2; the read-only preview of how many such values the server
+ *  holds is in migration 221's header). Clamping them, with a CHECK, is a change of data the owner decides. An order key is checked (checkOrderKey below). */
+function textsAreText(...fields: string[]): (r: ReceivedRow) => string | null {
+  return (r) => {
+    for (const f of fields) {
+      const t = r.texts[f];
+      if (typeof t === "string" && (t.includes("\u0000") || hasLoneSurrogate(t))) return `a ${f} that is not text a database can keep`;
+    }
+    return null;
+  };
+}
+/** An order key (notes and pointers): one keyBetween accepts, the rule every writer of the column keeps (assertOrderKey, isValidOrderKey). Unlike a title's cap, an
+ *  honest node holds no other: the column exists since migration 200, which filled it with valid keys, and every write path validates it. A key keyBetween refuses,
+ *  taken, breaks the receiver for good: the next note put after it under that parent throws in keyBetween (services/orderKeys.ts appendOrderKey), every create, copy,
+ *  move and pointer there fails until someone moves that note (review of PR #1940, round 2, point 2). */
+function checkOrderKey(r: ReceivedRow): string | null {
+  const key = r.texts.sort;
+  return key !== undefined && key !== null && !isValidOrderKey(key) ? "an order key that is not one keyBetween accepts" : null;
+}
+const noteRules = textsAreText("title", "body");
 const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
 /**
  * The tables whose units this file reads and writes, in the order a bundle writes them (a row's parents first: a space before its members, a note before what hangs on it).
@@ -159,30 +190,30 @@ const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
  * `stamped` table of spine/syncClasses.json that is wired and has no entry here unless its NOT_CARRIED_YET names it with the reason.
  */
 export const UNIT_SOURCES: readonly RowSource[] = [
-  { label: "workspaces", table: "workspaces", key: uuidKey(), workspace: ws("id"), fields: { time_zone: "time_zone", day_start: "day_start_hour" }, rows: false },
+  { label: "workspaces", table: "workspaces", key: uuidKey(), workspace: ws("id"), fields: { time_zone: "time_zone", day_start: "day_start_hour" }, rows: false, check: NO_RULES_OF_ITS_OWN },
   // `deleted` is the deletion a person WROTE (migration 218); deleted_at, what every read uses, is derived after the write-back (spaces_show_deleted) and is no unit
   { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "written_deleted_at" }, rows: true,
-    clearedOnDelete: { owner: ["owner_actor_id"] } },
-  { label: "space_members", table: "space_members", key: [{ column: "space_id", type: "uuid" }, { column: "actor_id", type: "uuid" }], workspace: { viaSpace: "space_id" }, fields: { permission: "permission" }, rows: true },
+    clearedOnDelete: { owner: ["owner_actor_id"] }, check: { row: textsAreText("name") } },
+  { label: "space_members", table: "space_members", key: [{ column: "space_id", type: "uuid" }, { column: "actor_id", type: "uuid" }], workspace: { viaSpace: "space_id" }, fields: { permission: "permission" }, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "content_nodes", table: "content_nodes", key: uuidKey(), workspace: ws(),
     // `space` is the space a person WROTE (migration 218); space_id, the space the note is in, is derived after the write-back (dbRows.ts deriveNoteSpaces) and is no unit
     fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "written_space_id", deleted: "deleted_at" }, rows: true,
-    bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] } },
+    bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] }, check: { row: (r) => noteRules(r) ?? checkOrderKey(r) } },
   { label: "node_attributes", table: "node_attributes", key: [{ column: "node_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(),
-    fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: "t.source IN ('ui', 'explicit', 'dispatcher')", rows: true },
-  { label: "node_tags", table: "node_tags", key: [{ column: "node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "node_id" }, fields: {}, rows: true },
+    fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: "t.source IN ('ui', 'explicit', 'dispatcher')", rows: true, check: NO_RULES_OF_ITS_OWN },
+  { label: "node_tags", table: "node_tags", key: [{ column: "node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "node_id" }, fields: {}, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "node_edges", table: "node_edges", key: [{ column: "source_node_id", type: "uuid" }, { column: "target_node_id", type: "uuid" }, { column: "edge_type", type: "text" }], workspace: ws(),
-    fields: { status: "status" }, where: "t.origin = 'manual'", rows: true },
-  { label: "note_pointers", table: "note_pointers", key: uuidKey(), workspace: ws(), fields: { sort: "order_key", prefix: "display_prefix" }, rows: true },
+    fields: { status: "status" }, where: "t.origin = 'manual'", rows: true, check: NO_RULES_OF_ITS_OWN },
+  { label: "note_pointers", table: "note_pointers", key: uuidKey(), workspace: ws(), fields: { sort: "order_key", prefix: "display_prefix" }, rows: true, check: { row: checkOrderKey } },
   { label: "node_positions", table: "node_positions", key: [{ column: "node_id", type: "uuid" }, { column: "surface", type: "text" }], workspace: ws(),
-    fields: { position: "x+y", look: "width+height+color+folded", sub_canvas: "sub_canvas_id" }, rows: true },
+    fields: { position: "x+y", look: "width+height+color+folded", sub_canvas: "sub_canvas_id" }, rows: true, check: NO_RULES_OF_ITS_OWN },
   // A body write's anchors and paragraph rows (migration 215): ids minted once by the writer, carried, adopted by the receiver. The places of a note's anchors are ONE
   // unit (note_anchor_places), written by the same transaction as the body, so a head of it is the whole set of anchors of one body; an anchor row's place is its
   // expansion (expandAnchorUnits below, for every note a bundle bears on: `bearsOn`). Before function_refs (a card names its paragraph row) and the paragraph tags.
   { label: "note_anchor_places", table: "note_anchor_places", key: uuidKey("note_id"), workspace: ws(), goesWithNote: "note_id", fields: { places: "places" }, rows: true,
-    check: { row: checkAnchorUnit, values: true, bodiesOf: "row" }, expand: expandAnchorUnits },
+    check: { row: checkAnchorUnit, bodiesOf: "row" }, expand: expandAnchorUnits },
   { label: "block_anchors", table: "block_anchors", key: [{ column: "anchor_id", type: "text" }], workspace: ws(), goesWithNote: "note_id", fields: { note: "note_id" }, rows: true,
-    check: { row: checkAnchor, values: true }, bearsOn: { on: "note_anchor_places", field: "note" } },
+    check: { row: checkAnchor }, bearsOn: { on: "note_anchor_places", field: "note" } },
   { label: "block_nodes", table: "block_nodes", key: uuidKey(), workspace: ws(), goesWithNote: "note_id",
     fields: { note: "note_id", anchor: "anchor_id", ref: "block_ref", task: "task_id", detached: "detached_note_id+detached_tags" }, rows: true,
     clearedOnDelete: { task: ["task_id"], detached: ["detached_note_id"] },
@@ -192,23 +223,23 @@ export const UNIT_SOURCES: readonly RowSource[] = [
       { name: "block_nodes_note_ref_uq", columns: ["{t}.note_id", "{t}.block_ref"] },
       { name: "block_nodes_task_uq", columns: ["{t}.task_id"], where: "{t}.task_id IS NOT NULL" },
       { name: "block_nodes_detached_uq", columns: ["{t}.detached_note_id"], where: "{t}.detached_note_id IS NOT NULL" },
-    ], check: { row: checkParagraph, values: true } },
+    ], check: { row: checkParagraph } },
   { label: "block_node_tags", table: "block_node_tags", key: [{ column: "block_node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: ws(), fields: {}, rows: true,
-    check: { row: () => null, values: true } },
+    check: NO_RULES_OF_ITS_OWN },
   { label: "function_refs", table: "function_refs", key: uuidKey(), workspace: ws(),
     fields: { function: "function_id", instance: "instance", holder: "holder_node_id", space: "holder_space_id" }, rows: true,
     naturalKeys: [
       { name: "function_refs_holder_unique", columns: ["COALESCE({t}.holder_node_id, {t}.holder_space_id, {t}.holder_block_id)", "{t}.function_id", "{t}.instance"] },
       { name: "function_refs_view_instance_unique", columns: ["{t}.holder_node_id", "{t}.instance"], where: "{t}.instance <> '' AND {t}.holder_node_id IS NOT NULL" },
-    ] },
+    ], check: NO_RULES_OF_ITS_OWN },
   { label: "rss_subscriptions", table: "rss_subscriptions", key: uuidKey(), workspace: ws(),
     fields: { title: "title", url: "url", space: "space_id", interval: "fetch_interval_minutes", auto_tag: "auto_tag_id", embed: "embed", dismiss: "auto_dismiss_days", default_tags: "default_tag_ids",
       default_parent: "default_parent_id", fulltext: "always_fulltext", voice: "voice", display: "display_mode" }, rows: true,
-    clearedOnDelete: { auto_tag: ["auto_tag_id"], default_parent: ["default_parent_id"] } },
-  { label: "rss_mutes", table: "rss_mutes", key: uuidKey(), workspace: ws(), fields: { keyword: "keyword", source: "subscription_id", expires: "expires_at" }, rows: true },
-  { label: "external_calendars", table: "external_calendars", key: uuidKey(), workspace: ws(), fields: { name: "name", color: "color", enabled: "enabled" }, rows: true },
+    clearedOnDelete: { auto_tag: ["auto_tag_id"], default_parent: ["default_parent_id"] }, check: NO_RULES_OF_ITS_OWN },
+  { label: "rss_mutes", table: "rss_mutes", key: uuidKey(), workspace: ws(), fields: { keyword: "keyword", source: "subscription_id", expires: "expires_at" }, rows: true, check: NO_RULES_OF_ITS_OWN },
+  { label: "external_calendars", table: "external_calendars", key: uuidKey(), workspace: ws(), fields: { name: "name", color: "color", enabled: "enabled" }, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "actor_module_settings", table: "actor_module_settings", key: [{ column: "actor_id", type: "text" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "tag_id" },
-    fields: { settings: "settings" }, rows: true },
+    fields: { settings: "settings" }, rows: true, check: NO_RULES_OF_ITS_OWN },
 ];
 
 /** The JSON columns whose keys travel one by one with their row: an object (a unit per key, its value the key's value) or a set (an array of strings: a unit per element,

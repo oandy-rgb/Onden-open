@@ -29,7 +29,7 @@ import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { needsSecondConnection } from "./helpers/pgliteSkips.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { buildSourceWorld, capture, fillFrom, openNode, outOfScopeIds, type Capture, type SourceWorld } from "./helpers/stampedWorld.js";
-import { admit, bundleFor, exchange, expectSame, makeRng, markWorld, nodeIdOf, peerOf, resendAll, resetRowTurns, take, withOriginAt, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
+import { UPDATED_AT_OF_ATTRIBUTES, admit, bundleFor, exchange, expectSame, makeRng, markWorld, nodeIdOf, peerOf, resendAll, resetRowTurns, take, withOriginAt, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { PROPS_SEED } from "./helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
@@ -203,7 +203,7 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     expect(fromSource.rejected).toEqual([]);
     expect(changedUnits(cBefore, await everyStamp(c))).toEqual(changedUnits(aBefore, await everyStamp(a)));
     expect(fromSource.stored).toBeGreaterThan(0);
-    await expectSame(a, c, "A and C after one bundle from A");
+    await expectSame(a, c, "A and C after one bundle from A", [UPDATED_AT_OF_ATTRIBUTES]);
     expect((await resendAll(a, c)).stored, "a full re-send from the source stores nothing").toBe(0);
 
     // from a third node: B, which C knew only as an origin A brought, is admitted by C and sends what C lacks of it (and nothing C has)
@@ -219,10 +219,45 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     const fromThird = await exchange(b, c);
     expect(fromThird.rejected).toEqual([]);
     expect(changedUnits(cBefore2, await everyStamp(c))).toEqual(changedUnits(bBefore, await everyStamp(b)));
-    await expectSame(b, c, "B and C after one bundle from B");
+    await expectSame(b, c, "B and C after one bundle from B", [UPDATED_AT_OF_ATTRIBUTES]);
     expect((await resendAll(b, c)).stored, "a full re-send from the third node stores nothing").toBe(0);
     expect((await resendAll(a, c)).stored).toBe(0);
   }, 900_000);
+
+  // Review of PR #1940 (CI, seed 142069): pinned before the transport (README "接上傳輸前必須完成"). The stamped tables other than notes keep `updated_at` as the time
+  // the node wrote the row (the writer's clock, or the receiver's when it took the bundle), not a function of the row's stamps as notes do (migrations 206 and 209,
+  // sync_touch_updated_at): two nodes that hold the same writes hold different `updated_at`. P2 above compares that column apart (expectSame's known difference),
+  // so it does not go red by when each bundle happened to be taken; this is the smallest case: B sets an attribute and A takes it (the same time: the row is made from B's values), B changes it and A takes that (the time A wrote it back).
+  /** B sets an attribute and A takes it, B changes it and A takes that: whether each exchange was taken, the value on A, and updated_at on both. */
+  async function attributeTwice(): Promise<{ refused: number; valueOnA: string | undefined; at: { a: string | undefined; b: string | undefined } }> {
+    const [na, nb] = [await openNode("a"), await openNode("b")];
+    open.push(na, nb);
+    const world = await buildSourceWorld(na);
+    await fillFrom(nb, world, await capture(na, world, 1_000_000));
+    const a = peerOf("A", na, world), b = peerOf("B", nb, world);
+    await admit(a, b); await admit(b, a);
+    const note = await onNode(b.node, async () => (await b.call("POST", "/api/nodes", { title: "Its attribute", markdown: "", space_id: b.space })).id as string);
+    await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/attributes/status`, { value: "set on B" }));
+    const first = await exchange(b, a); // a new row is made from the values B carried: the same updated_at
+    await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/attributes/status`, { value: "changed on B" }));
+    const second = await exchange(b, a); // a row A holds, written back: the time A wrote it
+    const row = (p: Peer) => onNode(p.node, async () => (await q<{ t: string; v: string }>(`SELECT updated_at::text AS t, value::text AS v FROM node_attributes WHERE node_id = $1 AND key = 'status'`, [note])).rows[0]);
+    const [ra, rb] = [await row(a), await row(b)];
+    return { refused: first.rejected.length + second.rejected.length, valueOnA: ra?.v, at: { a: ra?.t, b: rb?.t } };
+  }
+  it("updated_at of an attribute (the finding, named): both exchanges taken, A holds B's last value, and A's updated_at is not B's", async () => {
+    const r = await attributeTwice();
+    expect(r.refused).toBe(0);
+    expect(r.valueOnA).toContain("changed on B");
+    expect(r.at.a, "when A's updated_at is B's, the finding is fixed: turn the it.fails below into an it").not.toBe(r.at.b);
+  }, 300_000);
+  it.fails("updated_at of an attribute: B sets it and changes it, A takes both bundles: both hold the same updated_at", async () => {
+    // only the difference may make this fail: a throw or an unmet precondition returns, and an it.fails that returns is red ("expected to fail")
+    let r: Awaited<ReturnType<typeof attributeTwice>>;
+    try { r = await attributeTwice(); } catch { return; }
+    if (r.refused || !r.valueOnA?.includes("changed on B")) return;
+    expect(r.at.a).toBe(r.at.b);
+  }, 300_000);
 
   it("P3: A→B snapshot, B→C snapshot, then bundles between C and A: the same on both, a full re-send stores 0 both ways", async () => {
     const na = track(await openNode("a")), nb = track(await openNode("b")), nc = track(await openNode("c"));
@@ -260,6 +295,15 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
   it("P4: a source with an unfinished join, with stamps past what it says it holds of an origin, or of an origin it has no row for, refuses with a code", async () => {
     const { world, a, b } = await hub(SEED + 40);
     const bId = await nodeIdOf(b);
+    // B writes an attribute, so A holds a write of B's under a label other than content_nodes whatever the seed drew (seed 896523: B's random writes were all of notes,
+    // and the cut below had nothing past it to refuse)
+    await onNode(b.node, async () => {
+      const note = (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND space_id = $2 AND deleted_at IS NULL AND node_type = 'content' ORDER BY id LIMIT 1`, [b.ws, b.space])).rows[0]!.id;
+      await b.call("PUT", `/api/nodes/${note}/attributes/p4_probe`, { value: "from B" });
+    });
+    await exchange(b, a);
+    const labelsOfB = await onNode(a.node, async () => (await q<{ t: string }>(`SELECT DISTINCT table_name AS t FROM sync_stamps WHERE workspace_id = $1 AND origin = $2`, [a.ws, bId])).rows.map((r) => r.t));
+    expect(labelsOfB.some((t) => t !== "content_nodes"), "A holds a write of B's under another label (the precondition of the cut below)").toBe(true);
     const refusalOfA = () => codeOf(onNode(a.node, () => snapshotSourceNode(a.ws)));
     expect(await refusalOfA()).toBeNull();
     const row = (await originsOfNode(a)).find((o) => o.origin === bId)!;

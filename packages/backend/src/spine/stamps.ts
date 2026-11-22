@@ -102,7 +102,8 @@ export async function stampTransaction(workspaceId: string, authorId: string, op
     // A write earlier in this transaction bypassed the roots and got a stamp with no author: keep that stamp (the rows
     // already written stay as they were) and let the writes from here on name their author. A stamp from another node
     // is never changed.
-    const kept = JSON.parse(node.stamp) as StampSetting;
+    // The stamp a write outside the roots got says `system` (migration 221: nobody who looked at the heads wrote it); from here on it is this root's, which says itself.
+    const { system: _bypassSystem, ...kept } = JSON.parse(node.stamp) as StampSetting;
     if (kept.bypass) await setStamp(workspaceId, { ...kept, author: authorId, device, ...(options.system || options.notAPerson ? { system: true as const } : {}) });
     return;
   }

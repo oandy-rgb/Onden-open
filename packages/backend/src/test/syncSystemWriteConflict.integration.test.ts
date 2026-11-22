@@ -73,7 +73,28 @@ describe.skipIf(!isTestDb)("a system write beside a conflict", () => {
     const t = { access: "write", allowedTools: [], tokenId: "t" } as never;
     expect([writesAsPerson(owner), writesAsPerson({ ...owner, tokenScope: t }), writesAsPerson({ ...owner, type: "agent" }), writesAsPerson({ ...owner, type: "system" })]).toEqual([true, false, false, false]);
 
-    await makeCaller(owner)("PATCH", `/api/nodes/${note}`, { title: "Decided by a person" }); // has seen both heads
+    // a write outside every root (no mutate, no stampTransaction: its stamp is the one sync_allocate_stamp makes, with no author) has not looked at the heads either:
+    // refused the same way (migration 221; before, it settled the conflict as a person's write does: README "接上傳輸前必須完成", the trigger did not know who wrote)
+    const other = (await makeCaller(owner)("POST", "/api/nodes", { id: randomUUID(), title: "Another", markdown: "", space_id: (await q<{ s: string }>(`SELECT space_id::text AS s FROM content_nodes WHERE id = $1`, [note])).rows[0]!.s })).id as string;
+    const outside = () => withTransaction(() => withEventTransaction(WS, async () => { await q(`UPDATE content_nodes SET title = 'written outside the roots' WHERE id = $1`, [note]); }));
+    await expect(outside()).rejects.toMatchObject({ status: 409, code: "sync_unit_in_conflict" });
+    expect(await heads()).toBe(1);
+    expect(conflictsOf((await readUnit(WS, { table: "content_nodes", row: note, field: "title" }))!)).toHaveLength(1);
+    // a write outside the roots to a unit WITHOUT other heads is written as before (the same number allocated, the clock's count of such writes goes up)
+    const count = async () => Number((await q<{ n: string }>(`SELECT writes_without_mutate::text AS n FROM sync_clock WHERE workspace_id = $1`, [WS])).rows[0]!.n);
+    const n0 = await count();
+    await withTransaction(() => withEventTransaction(WS, async () => { await q(`UPDATE content_nodes SET title = 'Another, outside the roots' WHERE id = $1`, [other]); }));
+    expect(await count()).toBe(n0 + 1);
+    expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [other])).rows[0]!.title).toBe("Another, outside the roots");
+    // a person's root later in the transaction of such a write is the person's: from then the stamp is no system's, and the person's write settles the conflict
+    await withTransaction(() => withEventTransaction(WS, async () => {
+      await q(`UPDATE content_nodes SET title = 'Another, again' WHERE id = $1`, [other]);
+      await stampTransaction(WS, owner.id, { system: false, notAPerson: false });
+      await q(`UPDATE content_nodes SET title = 'Decided in the same transaction' WHERE id = $1`, [note]);
+    }));
+    expect(await heads()).toBe(0);
+
+    await makeCaller(owner)("PATCH", `/api/nodes/${note}`, { title: "Decided by a person" }); // a person's ordinary save
     expect(await heads()).toBe(0);
     await systemWrites("recalculated"); // a unit without other heads: as before
     expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [note])).rows[0]!.title).toBe("recalculated");

@@ -1135,6 +1135,31 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     expect(lb).toEqual(la); // the same row stays on both
   }, 600_000);
 
+  // Item 10 of the transport proposal (own-node-transport-2026-11-22 §4.2), with every write stamped and the product's delete for good: A links a paragraph row to task
+  // note T (a person's stamped write of the row's `task`) while B deletes T for good; both orders, then a third node that took neither until the end. The property on
+  // every node: the same stamps give the same rows (the row's task link empty, the id kept on its stamp), one more round stores nothing, a full resend stores nothing,
+  // and nothing is refused (settle). A snapshot-joined late node is not tried: a node that took a bundle cannot be a snapshot's source yet (item 7, batch 2).
+  for (const order of ORDERS) {
+    it(`10 (stamped, product purge; ${order}): a row linked to a task note the other node deletes for good: the same rows and stamps on all three, nothing stored again`, async () => {
+      const { a, b, c } = await threeNodes(49);
+      const note = await newNote(a, "f9a7f9a7-f9a7-4f9a-8f9a-f9a7f9a7f9a7", "Its line");
+      const task = await newNote(a, "f9a8f9a8-f9a8-4f9a-8f9a-f9a8f9a8f9a8", "The task, a note of its own");
+      await write(a, note, "A paragraph that becomes a task line {plan}\n");
+      for (const p of [b, c]) await exchange(a, p);
+      const row = await onNode(a.node, async () => (await q<{ id: string }>(`SELECT id::text FROM block_nodes WHERE note_id = $1`, [note])).rows[0]!.id);
+      await stampedSql(a, `UPDATE block_nodes SET task_id = $2 WHERE id = $1`, [row, task]);
+      expect(await purge(b, task)).toContain(task);
+      await settle(a, b, order);
+      await settle(a, c, order); await settle(b, c, order);
+      const rowsOf3 = await Promise.all([a, b, c].map(async (p) => (await replicated(p, note)).rows));
+      expect(rowsOf3[1]).toEqual(rowsOf3[0]); expect(rowsOf3[2]).toEqual(rowsOf3[0]);
+      expect(rowsOf3[0]!.join()).toContain('"task": null');
+      const stamps3 = await Promise.all([a, b, c].map((p) => keyStamps(p, [row])));
+      expect(stamps3[1]).toEqual(stamps3[0]); expect(stamps3[2]).toEqual(stamps3[0]);
+      expect(stamps3[0]!.join("\n")).toContain(task); // the id stays on the stamp (dbUnits.ts clearedOnDelete)
+    }, 600_000);
+  }
+
   // point 10 (round 9, point 1): a task note deleted for good on B before B receives the paragraph row that names it. B makes the row with its task link empty, as the
   // database leaves it when the task goes (dbUnits.ts clearedOnDelete), and A empties its own when the deletion reaches it: the same rows on both. Pinned as wrong before.
   it("10: a task note deleted for good on the receiver, then the line's row arrives: both nodes hold the same rows", async () => {

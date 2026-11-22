@@ -290,8 +290,9 @@ async function checkDeferredNow(): Promise<void> {
 
 
 /** The database errors that say a received value is not one the table can hold: check_violation, not_null_violation, invalid_text_representation, numeric_value_out_of_range,
- *  invalid_datetime_format, datatype_mismatch, undefined_column, invalid_parameter_value, string_data_right_truncation, untranslatable_character (a \u0000 in JSON). */
-const MALFORMED_CODES: ReadonlySet<string> = new Set(["23514", "23502", "22P02", "22003", "22007", "42804", "42703", "22023", "22001", "22P05"]);
+ *  invalid_datetime_format, datetime_field_overflow (a date of the right form that is no day: 2026-02-30), datatype_mismatch, undefined_column, invalid_parameter_value,
+ *  string_data_right_truncation, untranslatable_character (a \u0000 in JSON), program_limit_exceeded (a value too large for an index row). Review of PR #1940, round 1, point 3. */
+const MALFORMED_CODES: ReadonlySet<string> = new Set(["23514", "23502", "22P02", "22003", "22007", "22008", "42804", "42703", "22023", "22001", "22P05", "54000"]);
 
 /** Each field's unit of a row as this node holds it: its own stamps and heads, or, for a field that has none, the value it was made with under the row's creation stamp
  *  (a field follows its row's creation until a write of its own: dbUnits.ts readUnit reads it the same way). */
@@ -329,12 +330,15 @@ async function expandTouched(workspaceId: string, plans: readonly { src: RowSour
 }
 
 /**
- * The declared checks of the received rows (`RowSource.check`), before anything is written: each row's unit texts and every head's value, and for a row this node does not
- * hold, that its carried values give the texts the bundle says. Positions are bounded by the length of the body they name when the bundle or this node has that body.
+ * The checks of the received rows (`RowSource.check`, every table), before anything is written: for each row, every value a unit may take (the winner, the row's text or
+ * what the stamp of a row the sender does not hold kept, and every other head, each in its unit's place: review of PR #1853, round 7, point 2) is one its column can hold
+ * (`columnProblems`) and keeps the table's own rules (`check.row`); a row this node does not hold must have carried values that give the texts the bundle says. Positions
+ * are bounded by the length of the body they name when the bundle or this node has that body. A copy that says no value (unit.ts `valueless`) is no value: nothing is
+ * checked, shown or written from it (round 8). The database's part is one statement per table and per part of at most CHECK_PART_BYTES (inParts), so a few for a large table.
  */
 async function checkReceived(workspaceId: string, items: readonly BundleItem[], plans: readonly { src: RowSource; merged: Merged[] }[]): Promise<RowsReport["rejected"]> {
   const out: RowsReport["rejected"] = [];
-  if (!plans.some((p) => p.src.check && p.merged.length)) return out;
+  if (!plans.some((p) => p.merged.length)) return out;
   const lengths = new Map<string, number>();
   const known = (text: unknown) => { if (typeof text === "string") lengths.set(sha256Hex(text), text.length); };
   for (const item of items) {
@@ -344,18 +348,20 @@ async function checkReceived(workspaceId: string, items: readonly BundleItem[], 
   }
   const notes = new Set<string>();
   for (const { src, merged } of plans) {
-    if (src.check?.bodiesOf === "row") for (const { i } of merged) if (isUuid(i.row)) notes.add(i.row);
+    if (src.check.bodiesOf === "row") for (const { i } of merged) if (isUuid(i.row)) notes.add(i.row);
   }
   if (notes.size) {
     for (const r of (await snapshotRows<{ markdown: string | null }>(`SELECT markdown FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, [...notes]])).rows) known(r.markdown ?? "");
   }
+  const bodyLength = (h: string) => lengths.get(h);
+  // each row item by its table and row key, once (a search of the whole bundle per new row was quadratic: review of PR #1940, round 1, point 1)
+  const rowItems = new Map<string, Extract<BundleItem, { kind: "row" }>>();
+  for (const x of items) if (x.kind === "row") for (const st of x.stamps) if (st.label === x.table) rowItems.set(`${x.table}\u0000${st.rowKey}`, x);
   for (const { src, merged } of plans) {
-    if (!src.check) continue;
+    const values: { row: string; name: string; value: string | null }[] = [];
+    const carried: { row: string; values: Record<string, unknown>; wire: Record<string, string | null> }[] = [];
     for (const { i, l } of merged) {
       const texts: Record<string, string | null> = {};
-      // EVERY value the bundle gives may end up shown and sent on: each unit's winner (the row's text, or what the stamp of a row the sender does not hold kept) and every
-      // other head, each checked in its unit's place (review of PR #1853, round 7, point 2). A copy that says no value (unit.ts `valueless`) is no value: nothing is checked,
-      // shown or written from it (round 8).
       const heads: { name: string; value: string | null }[] = [];
       for (const [name, cells] of i.state.own) {
         const [win, ...rest] = cells;
@@ -363,21 +369,139 @@ async function checkReceived(workspaceId: string, items: readonly BundleItem[], 
         for (const c of rest) if (!c.deleted && !c.valueless) heads.push({ name, value: (c.value ?? null) as string | null });
       }
       if (i.values) for (const [name, v] of i.state.creation) if (!(name in texts)) texts[name] = v;
-      const bodyLength = (h: string) => lengths.get(h);
       let reason = src.check.row({ texts, values: i.values, bodyLength });
       for (const h of heads) if (!reason) reason = src.check.row({ texts: { [h.name]: h.value }, values: undefined, bodyLength });
       if (reason) { out.push({ row: i.row, reason: "malformed", table: src.label, unit: reason }); continue; }
-      if (src.check.values && i.values && !l.exists) {
-        const said = (await snapshotRows<{ t: Record<string, string | null> }>(`SELECT ${unitTextsSql(src, "r")} AS t FROM jsonb_populate_record(NULL::${quote(src.table)}, $1::jsonb) r`, [JSON.stringify(i.values)])
-          .catch(() => ({ rows: [] as { t: Record<string, string | null> }[] }))).rows[0]?.t;
-        const rowItem = items.find((x): x is Extract<BundleItem, { kind: "row" }> => x.kind === "row" && x.table === src.table && x.stamps.some((s) => s.label === src.label && s.rowKey === i.row));
-        const wire = rowItem?.texts ?? {};
-        const differs = !said || Object.keys(src.fields).some((f) => Object.hasOwn(wire, f) && (said[f] ?? null) !== (wire[f] ?? null));
-        if (differs) out.push({ row: i.row, reason: "malformed", table: src.label, unit: "the row's values are not the units the bundle says" });
+      for (const [name, value] of Object.entries(texts)) values.push({ row: i.row, name, value });
+      for (const h of heads) values.push({ row: i.row, ...h });
+      if (i.values && !l.exists) {
+        const rowItem = rowItems.get(`${src.table}\u0000${i.row}`);
+        carried.push({ row: i.row, values: i.values, wire: rowItem?.texts ?? {} });
       }
     }
+    const problem = await columnProblems(src, values);
+    if (problem) { out.push({ row: problem.row, reason: "malformed", table: src.label, unit: problem.why }); continue; }
+    const differs = await carriedValuesDiffer(src, carried);
+    if (differs) out.push({ row: differs, reason: "malformed", table: src.label, unit: "the row's values are not the units the bundle says" });
   }
   return out;
+}
+
+/** A new row's carried values give the texts the bundle says, unit by unit (sync_logged_value over the row they make): the row that does not, or null. One statement per part (inParts). */
+async function carriedValuesDiffer(src: RowSource, carried: readonly { row: string; values: Record<string, unknown>; wire: Record<string, string | null> }[]): Promise<string | null> {
+  for (const part of inParts(carried, (c) => c.values)) {
+    // in a savepoint: a value that fails its cast must not leave the bundle's transaction aborted (the next statement would fail with 25P02, a raw error: review of PR #1940, round 1, point 3)
+    const said = await withSavepoint(() => snapshotRows<{ n: number; t: Record<string, string | null> }>(
+      `SELECT e.n::int AS n, ${unitTextsSql(src, "r")} AS t FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS e(v, n), LATERAL jsonb_populate_record(NULL::${quote(src.table)}, e.v) r`,
+      [part.json])).catch((e: unknown) => { if (MALFORMED_CODES.has((e as { code?: string })?.code ?? "")) return null; throw e; });
+    // values the table cannot hold (a text that is not of its column's type): the first row is named, the whole bundle is refused either way
+    if (!said) return part.items[0]!.row;
+    const byN = new Map(said.rows.map((r) => [r.n, r.t] as const));
+    for (const [k, c] of part.items.entries()) {
+      const t = byN.get(k + 1);
+      if (!t || Object.keys(src.fields).some((f) => Object.hasOwn(c.wire, f) && (t[f] ?? null) !== (c.wire[f] ?? null))) return c.row;
+    }
+  }
+  return null;
+}
+
+/** How many bytes of JSON (UTF-8, as the statement sends it) one statement of the checks takes at most: a large honest bundle (an offline import of thousands of notes with
+ *  their bodies) is checked in parts, so no statement comes near the statement timeout, jsonb's size limit or a PGlite's memory (review of PR #1940, round 1, point 1).
+ *  One item larger than this is a part of its own. */
+const CHECK_PART_BYTES = 4_000_000;
+/** `xs` in consecutive parts of at most CHECK_PART_BYTES of UTF-8 JSON each (by `json(x)`), each with the JSON array of its items: the order is kept, so a part's ordinal
+ *  names its item. Made one at a time, as the caller asks for the next, so only one part's JSON is held beside the bundle (review of PR #1940, round 2: the count was in
+ *  UTF-16 units, 4 M of them up to 12 MB of Chinese, and every part was built before the first was sent). */
+function* inParts<T>(xs: readonly T[], json: (x: T) => unknown): Generator<{ items: T[]; json: string }> {
+  let items: T[] = [], texts: string[] = [], bytes = 0;
+  for (const x of xs) {
+    const t = JSON.stringify(json(x));
+    const size = Buffer.byteLength(t, "utf8");
+    if (items.length && bytes + size > CHECK_PART_BYTES) { yield { items, json: `[${texts.join(",")}]` }; items = []; texts = []; bytes = 0; }
+    items.push(x); texts.push(t); bytes += size + 1;
+  }
+  if (items.length) yield { items, json: `[${texts.join(",")}]` };
+}
+
+type ColumnRules = { notNull: ReadonlySet<string>; jsonb: ReadonlySet<string>; checks: readonly { columns: readonly string[]; expr: string }[] };
+const columnRulesCache = new Map<string, ColumnRules>();
+/** What the database itself requires of the columns of `table`: which are NOT NULL, which are jsonb, and each CHECK constraint with the columns it reads. */
+async function columnRulesOf(table: string): Promise<ColumnRules> {
+  const hit = columnRulesCache.get(table);
+  if (hit) return hit;
+  const cols = (await snapshotRows<{ name: string; not_null: boolean; jsonb: boolean }>(
+    `SELECT attname::text AS name, attnotnull AS not_null, atttypid = 'jsonb'::regtype AS jsonb FROM pg_attribute WHERE attrelid = $1::regclass AND attnum > 0 AND NOT attisdropped`, [quote(table)])).rows;
+  const checks = (await snapshotRows<{ columns: string[]; def: string }>(
+    `SELECT array(SELECT a.attname::text FROM pg_attribute a WHERE a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)) AS columns, pg_get_constraintdef(c.oid) AS def
+       FROM pg_constraint c WHERE c.conrelid = $1::regclass AND c.contype = 'c' ORDER BY c.conname`, [quote(table)])).rows;
+  const rules: ColumnRules = {
+    notNull: new Set(cols.filter((c) => c.not_null).map((c) => c.name)), jsonb: new Set(cols.filter((c) => c.jsonb).map((c) => c.name)),
+    checks: checks.map((c) => ({ columns: c.columns, expr: c.def.replace(/^CHECK /, "").replace(/ NOT VALID$/, "") })),
+  };
+  columnRulesCache.set(table, rules);
+  return rules;
+}
+
+/**
+ * Whether each value is one its unit's column can hold, as THIS database says (so the rule cannot drift from the schema): of the column's type, not NULL where the column
+ * is NOT NULL, and true (or unknown) for each CHECK of the table that reads only that unit's columns (a CHECK over other columns too, such as a reference's one holder, is
+ * the row's, which the write itself meets). A `deleted` unit is the text 'true' or 'false' (its column is the time, set by the merge); a composite's text is the JSON object
+ * of its columns, no other key; a JSON key's value is JSON, an element of a set the JSON string of the element. One statement per part (inParts).
+ * The values a winner of an existing row brings were checked by the database at its write; a head's never were, until it won.
+ */
+async function columnProblems(src: RowSource, values: readonly { row: string; name: string; value: string | null }[]): Promise<{ row: string; why: string } | null> {
+  if (!values.length) return null;
+  const rules = await columnRulesOf(src.table);
+  const records: { row: string; record: Record<string, unknown>; columns: string[] }[] = [];
+  for (const { row, name, value } of values) {
+    const json = jsonSourcesOf(src).find((j) => name.startsWith(`${j.label}:`));
+    if (json) {
+      if (value === null) continue; // a key that is not there
+      let v: unknown;
+      try { v = JSON.parse(value); } catch { return { row, why: `a key of ${json.label} whose value is not JSON` }; }
+      if (json.shape === "set" && v !== name.slice(json.label.length + 1 + json.prefix.length)) return { row, why: `an element of ${json.label} that is not the element it names` };
+      continue;
+    }
+    const column = src.fields[name];
+    if (!column) continue;
+    if (name === "deleted") {
+      if (value !== "true" && value !== "false") return { row, why: `a ${src.label} deleted state that is neither true nor false` };
+      continue;
+    }
+    const columns = column.split("+");
+    let record: Record<string, unknown>;
+    if (columns.length > 1) {
+      if (value === null) return { row, why: `a ${src.label} ${name} that is not an object of its columns` };
+      let o: unknown;
+      try { o = JSON.parse(value); } catch { return { row, why: `a ${src.label} ${name} that is not JSON` }; }
+      if (typeof o !== "object" || o === null || Array.isArray(o) || Object.keys(o).some((k) => !columns.includes(k))) return { row, why: `a ${src.label} ${name} that is not an object of its columns` };
+      record = o as Record<string, unknown>;
+    } else if (value === null) record = { [column]: null };
+    else if (rules.jsonb.has(column)) {
+      try { record = { [column]: JSON.parse(value) as unknown }; } catch { return { row, why: `a ${src.label} ${name} that is not JSON` }; }
+    } else record = { [column]: value };
+    for (const c of columns) if (rules.notNull.has(c) && (record[c] === null || record[c] === undefined)) return { row, why: `a ${src.label} ${name} that is empty where its column is never empty` };
+    records.push({ row, record, columns });
+  }
+  if (!records.length) return null;
+  // each CHECK whose columns are all among the record's: evaluated over the record, the alias the table's own name so that the constraint's bare columns name its fields
+  const alias = quote(src.table);
+  // (the item's own names are ones no table has, so a CHECK's bare column always names the record's field)
+  const columnsOf = (c: { columns: readonly string[] }) => `ARRAY[${c.columns.map((x) => `'${x.replaceAll("'", "''")}'`).join(", ")}]::text[]`;
+  const tests = rules.checks.map((c) => `(NOT ($2::jsonb -> (onden_item.onden_n::int - 1)) ?& ${columnsOf(c)} OR (${c.expr}) IS NOT FALSE)`);
+  for (const part of inParts(records, (r) => r.record)) {
+    const failed = await withSavepoint(() => snapshotRows<{ n: number }>(
+      `SELECT onden_item.onden_n::int AS n FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS onden_item(onden_v, onden_n), LATERAL jsonb_populate_record(NULL::${alias}, onden_item.onden_v) AS ${alias}
+        WHERE NOT (${tests.length ? tests.join(" AND ") : "true"}) ORDER BY onden_item.onden_n LIMIT 1`,
+      [part.json, JSON.stringify(part.items.map((r) => r.columns))])).catch((e: unknown) => {
+      if (MALFORMED_CODES.has((e as { code?: string })?.code ?? "")) return "cast" as const;
+      throw e;
+    });
+    if (failed === "cast") return { row: part.items[0]!.row, why: `a value of ${src.label} that is not of its column's type` };
+    const n = failed.rows[0]?.n;
+    if (n !== undefined) return { row: part.items[n - 1]!.row, why: `a value of ${src.label} that a check of the table refuses` };
+  }
+  return null;
 }
 
 /**

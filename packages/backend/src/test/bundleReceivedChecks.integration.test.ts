@@ -3,11 +3,11 @@
 // raw database error. Each case changes one thing in a real bundle between the sender and the receiver. Both engines.
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
-import { NODE_MARKDOWN_MAX } from "@onden/markdown";
 import type { ChangeBundle } from "../spine/snapshotSql.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
-import { admit, bundleFor, exchange, peerOf, take, type Peer } from "./helpers/stampedBundleWorld.js";
+import { ALL_TABLES, admit, bundleFor, exchange, makeRng, peerOf, take, writeEachRowKind, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
+import { UNIT_SOURCES } from "../spine/stampedMerge/index.js";
 import { anchorUnitJson } from "./helpers/anchorUnitText.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
@@ -30,6 +30,17 @@ async function pending(): Promise<{ a: Peer; b: Peer; bundle: ChangeBundle }> {
 type Row = Extract<ChangeBundle["items"][number], { kind: "row" }>;
 const rowsOf = (bundle: ChangeBundle, table: string): Row[] => bundle.items.filter((i): i is Row => i.kind === "row" && i.table === table);
 /** Change the note's anchors unit: its first anchor's entry, or the unit itself (its text and its column value together, so only the named rule can catch it). */
+type Stamp = Row["stamps"][number];
+/** Another head on the unit `field` of `row`, written by a number the sender used for another write (no clash). */
+function withHead(row: Row, field: string, value: string | null): void {
+  const star = row.stamps.find((s) => s.field === "*")!;
+  const newest = row.stamps.reduce((m, s) => (s.seq > m.seq ? s : m), star);
+  const own = row.stamps.find((s) => s.field === field);
+  // a number the sender used, and not the unit's own winner's (one write with two contents is another refusal)
+  const head = { origin: newest.origin, seq: (own?.seq ?? newest.seq) - 1, contentHash: "", wall: newest.wall - 1, counter: 0, author: newest.author, device: newest.device, deleted: false, saw: {}, meta: null, value };
+  if (own) own.heads = [...own.heads, head as never];
+  else row.stamps.push({ ...star, field, saw: {}, meta: null, heads: [head as never] } as Stamp);
+}
 type Entry = unknown[];
 function spoilUnit(bundle: ChangeBundle, change: (u: { h: string; a: Record<string, Entry> }, first: Entry) => void): void {
   const row = rowsOf(bundle, "note_anchor_places")[0]!;
@@ -46,7 +57,6 @@ const CASES: Array<{ name: string; says: string; spoil: (bundle: ChangeBundle) =
   { name: "an anchor that stands past the end of the body it names", says: "past the end", spoil: (x) => spoilUnit(x, (_u, e) => { e[1] = BODY.length + 10; }) },
   { name: "an anchor whose candidate ends before it starts", says: "(candidate)", spoil: (x) => spoilUnit(x, (_u, e) => { e[2] = "maybe"; e[0] = 0; e[1] = 0; e[3] = 9; e[4] = 3; }) },
   { name: "a note's anchors whose body hash is not a sha-256", says: "(body hash)", spoil: (x) => spoilUnit(x, (u) => { u.h = "not-a-hash"; }) },
-  { name: "an anchor whose quote is longer than a note may be", says: "longer than a note", spoil: (x) => spoilUnit(x, (_u, e) => { e[6] = "x".repeat(NODE_MARKDOWN_MAX + 1); }) },
   { name: "an anchor whose status is not one of valid / maybe / lost", says: "(status)", spoil: (x) => spoilUnit(x, (_u, e) => { e[2] = "found"; }) },
   { name: "a paragraph row whose label is longer than a writer writes", says: "label is not a text", spoil: (x) => { rowsOf(x, "block_nodes")[0]!.values.label = "y".repeat(5000); } },
   { name: "a paragraph row whose anchor is not an anchor id", says: "anchor is not an anchor id", spoil: (x) => { const r = rowsOf(x, "block_nodes")[0]!; r.texts.anchor = "no spaces allowed"; r.values.anchor_id = "no spaces allowed"; } },
@@ -290,4 +300,213 @@ describe.skipIf(!isTestDb)("received anchors and paragraph rows are checked befo
       expect(await unitOn(b)).toEqual(before);
     }, 600_000);
   }
+});
+
+// Every carried table, through the one mechanism (proposal own-node-transport-2026-11-22 §4.2 item 3; dbUnits.ts RowSource.check, now declared by every source): a value the
+// column cannot hold, a value a writer never writes, or carried values that are not the units the bundle says, in the winner OR in another head, refuse the bundle whole, with
+// a code and a plain reason, and nothing is written. Before, only the anchors' tables were checked; a head of any other table was stored unchecked (it reaches the column
+// only when it wins, and then the bundle that made it win is refused for ever: two nodes stall).
+describe.skipIf(!isTestDb)("a received value of any carried table is checked, every head of it too", () => {
+  /** A and B hold note N; A then writes N again (title, order key, hidden) and turns a module off, so the bundle carries rows of content_nodes and workspaces that B holds. */
+  async function updated(): Promise<{ a: Peer; b: Peer; bundle: ChangeBundle; note: string }> {
+    const [na, nb] = [await openNode("a"), await openNode("b")];
+    open.push(na, nb);
+    const world = await buildSourceWorld(na);
+    await fillFrom(nb, world, await capture(na, world, 1_000_000));
+    const a = peerOf("A", na, world), b = peerOf("B", nb, world);
+    await admit(a, b);
+    const note = await onNode(a.node, async () => (await a.call("POST", "/api/nodes", { title: "Checked", markdown: "", space_id: a.space })).id as string);
+    await exchange(a, b);
+    await onNode(a.node, () => a.call("PATCH", `/api/nodes/${note}`, { title: "Checked again" }));
+    await onNode(a.node, () => q(`UPDATE workspaces SET modules_off = '["calendar"]'::jsonb WHERE id = $1`, [a.ws]).catch(() => undefined));
+    return { a, b, bundle: await bundleFor(a, b), note };
+  }
+  const noteRow = (x: ChangeBundle, id: string) => rowsOf(x, "content_nodes").find((r) => r.stamps.some((s) => s.rowKey === id))!;
+  const notesOn = (b: Peer) => onNode(b.node, async () => (await q<{ r: string }>(`SELECT string_agg(id::text || ' ' || title || ' ' || order_key || ' ' || hidden::text, ', ' ORDER BY id) AS r FROM content_nodes WHERE workspace_id = $1`, [b.ws])).rows[0]!.r);
+  const headsOn = (b: Peer) => onNode(b.node, async () => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM sync_stamp_heads WHERE workspace_id = $1`, [b.ws])).rows[0]!.n));
+
+  const HEADS: Array<{ name: string; field: string; value: string | null; says: string }> = [
+    { name: "a title with a NUL in it", field: "title", value: "a\u0000b", says: "not text a database can keep" },
+    { name: "an empty title (the column is never empty)", field: "title", value: null, says: "never empty" },
+    { name: "a hidden state that is not a boolean", field: "hidden", value: "perhaps", says: "not of its column's type" },
+    { name: "a deleted state that is neither true nor false", field: "deleted", value: "2026-11-22", says: "neither true nor false" },
+    { name: "a parent that is not an id", field: "parent", value: "not-an-id", says: "not of its column's type" },
+    // review of PR #1940, round 2, point 2: an order key keyBetween refuses breaks every later insert under that parent; no honest node holds one
+    { name: "an order key keyBetween does not accept (\"~\")", field: "sort", value: "~", says: "not one keyBetween accepts" },
+    { name: "an order key keyBetween does not accept (\"a00\": the fraction ends in 0)", field: "sort", value: "a00", says: "not one keyBetween accepts" },
+  ];
+  for (const c of HEADS) {
+    it(`another head of a note's ${c.field}: ${c.name}: bundle_malformed, nothing written`, async () => {
+      const { b, bundle, note } = await updated();
+      withHead(noteRow(bundle, note), c.field, c.value);
+      const before = [await notesOn(b), await headsOn(b)];
+      const r = await refusalOf(b, bundle);
+      expect(r?.code).toBe("bundle_malformed");
+      expect(r?.message).toContain(c.says);
+      expect([await notesOn(b), await headsOn(b)]).toEqual(before);
+    }, 600_000);
+  }
+
+  // Review of PR #1940, round 1, point 2: a received check is never stricter than what an honest node may hold. A writer's cap the database does not hold (a title of 500
+  // characters) may be exceeded by a row from before the cap reached every write path: such a value is taken, winner or head. Not an order key (round 2, point 2: below).
+  it("a value beyond a writer's cap that the database holds (a title of 501 characters), winner or head: taken, and taking it again stores nothing", async () => {
+    const { b, bundle, note } = await updated();
+    const row = noteRow(bundle, note);
+    row.texts.title = "w".repeat(501); row.values.title = row.texts.title;
+    withHead(row, "title", "t".repeat(501));
+    expect(await refusalOf(b, bundle)).toBeNull();
+    // the long title is on B, as the column or as a head
+    const long = await onNode(b.node, async () => Number((await q<{ n: string }>(
+      `SELECT ((SELECT count(*) FROM content_nodes WHERE id = $1 AND length(title) = 501) + (SELECT count(*) FROM sync_stamp_heads WHERE row_key = $1::text AND field = 'title' AND length(value) = 501))::text AS n`, [note])).rows[0]!.n));
+    expect(long).toBeGreaterThan(0);
+    expect((await take(b, bundle)).stored).toBe(0);
+  }, 600_000);
+
+  // Review of PR #1940, round 2, point 2: every writer of order_key keeps keyBetween's rule (assertOrderKey, isValidOrderKey) and migration 200 filled the column with
+  // valid keys, so no honest node holds another; one taken would make keyBetween throw at the next note put after it under that parent (appendOrderKey), for good.
+  it("a note's order key that keyBetween does not accept (\"a00\"), as the winner: bundle_malformed, nothing written", async () => {
+    const { b, bundle, note } = await updated();
+    const row = noteRow(bundle, note);
+    row.texts.sort = "a00"; row.values.order_key = "a00";
+    const before = [await notesOn(b), await headsOn(b)];
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("not one keyBetween accepts");
+    expect([await notesOn(b), await headsOn(b)]).toEqual(before);
+  }, 600_000);
+
+  it("a new pointer whose order key keyBetween does not accept (\"~\"): bundle_malformed, no pointer written", async () => {
+    const { a, b } = await updated();
+    await take(b, await bundleFor(a, b));
+    const pointer = await onNode(a.node, async () => {
+      const parent = (await a.call("POST", "/api/nodes", { title: "Pointer parent", markdown: "", space_id: a.space })).id as string;
+      const target = (await a.call("POST", "/api/nodes", { title: "Pointer target", markdown: "", space_id: a.space })).id as string;
+      return (await a.call("POST", "/api/pointers", { target_id: target, parent_id: parent, display_prefix: "see" })).id as string;
+    });
+    const bundle = await bundleFor(a, b);
+    const row = rowsOf(bundle, "note_pointers").find((r) => r.stamps.some((s) => s.rowKey === pointer));
+    expect(row, "the bundle carries the new pointer").toBeTruthy();
+    row!.texts.sort = "~"; row!.values.order_key = "~";
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("not one keyBetween accepts");
+    expect(await onNode(b.node, async () => Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_pointers WHERE id = $1`, [pointer])).rows[0]!.n))).toBe(0);
+  }, 600_000);
+
+  it("a new note whose carried values are not the units the bundle says: bundle_malformed (before, only the anchors' tables compared them)", async () => {
+    const { a, b } = await updated();
+    await take(b, await bundleFor(a, b));
+    await onNode(a.node, () => a.call("POST", "/api/nodes", { title: "Brand new", markdown: "", space_id: a.space }));
+    const bundle = await bundleFor(a, b);
+    const row = rowsOf(bundle, "content_nodes").find((r) => r.texts.title === "Brand new")!;
+    row.values.title = "Something else";
+    const before = await notesOn(b);
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("not the units the bundle says");
+    expect(await notesOn(b)).toBe(before);
+  }, 600_000);
+
+  it("an element of a set (the module switches) whose value is not the element it names, as a head: bundle_malformed", async () => {
+    const { b, bundle } = await updated();
+    const row = rowsOf(bundle, "workspaces")[0];
+    expect(row, "the bundle carries the workspace's switches").toBeTruthy();
+    const off = row!.stamps.find((s) => s.label === "workspaces.modules_off")!;
+    off.heads = [...off.heads, { origin: off.origin, seq: off.seq, contentHash: "", wall: off.wall - 1, counter: 0, author: off.author, device: off.device, deleted: false, saw: {}, meta: null, value: `"tasks"` } as never];
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("not the element it names");
+  }, 600_000);
+
+  it("a head of the workspace's day start that the table's own CHECK refuses (0 to 6): bundle_malformed, the CHECK read from the database", async () => {
+    const { b, bundle } = await updated();
+    const row = rowsOf(bundle, "workspaces")[0]!;
+    withHead(row, "day_start", "9");
+    const r = await refusalOf(b, bundle);
+    expect(r?.code).toBe("bundle_malformed");
+    expect(r?.message).toContain("a check of the table refuses");
+  }, 600_000);
+
+  it("the same bundle unspoiled is taken, and taking it again stores nothing (the checks refuse nothing an honest writer wrote)", async () => {
+    const { b, bundle } = await updated();
+    expect((await take(b, bundle)).stored).toBeGreaterThan(0);
+    expect((await take(b, bundle)).stored).toBe(0);
+  }, 600_000);
+});
+
+// Review of PR #1940, round 1, point 3: a value of the right form that no column of its type can hold (a date that is no day, an integer out of range, a text too large
+// for an index row…) is refused with a code like every other refusal, never with the database's own error. Not listed one by one: every unit of every carried table
+// the bundle brings is given the impossible value of its column's type, in each of the three places a value is checked (round 2: the first sweep took only the first):
+// the winner of a row B holds (columnProblems), another head of that row (columnProblems, as the head's unit), and a row B does not hold yet, its carried values and its
+// unit texts both (carriedValuesDiffer, which casts them: the same 25P02 when a failed cast was caught outside a savepoint). Taken or refused with a `bundle_` code.
+describe.skipIf(!isTestDb)("a value no column of its type can hold, for every unit of every carried table: a coded refusal, never a raw database error", () => {
+  it("each type: a date that is no day, a number out of range, a boolean that is none, an id that is none, an incompressible text of 300,000 characters; as a winner, a head and a new row", async () => {
+    const [na, nb, nc] = [await openNode("a"), await openNode("b"), await openNode("c")];
+    open.push(na, nb, nc);
+    const world = await buildSourceWorld(na);
+    const snapshot = await capture(na, world, 1_000_000);
+    await fillFrom(nb, world, snapshot);
+    await fillFrom(nc, world, snapshot);
+    // B takes A's writes and is given values for rows it holds; C never takes any, so A's new rows stay new to it
+    const a = peerOf("A", na, world), b = peerOf("B", nb, world), c = peerOf("C", nc, world);
+    await admit(a, b); await admit(a, c);
+    const rng = makeRng(31);
+    await writeFor(a, rng, 20, { weights: ALL_TABLES });
+    expect(await writeEachRowKind(a, rng)).toEqual([]);
+    // the bundle to C carries rows C does not hold (new rows: carriedValuesDiffer); which ones, C's own stamps say
+    const first = await bundleFor(a, c);
+    const held = await onNode(c.node, async () => new Set((await q<{ k: string }>(
+      `SELECT split_part(table_name, '.', 1) || ' ' || row_key AS k FROM sync_stamps WHERE workspace_id = $1 AND field = '*'`, [c.ws])).rows.map((r) => r.k)));
+    const rowKeyOf = (r: Row) => r.stamps.find((s) => s.field === "*")?.rowKey ?? r.stamps[0]!.rowKey;
+    await exchange(a, b);
+    // the same rows written again on A, so the bundle carries rows B holds (the winner of an existing row is written into its column)
+    await writeFor(a, rng, 20, { weights: ALL_TABLES });
+    expect(await writeEachRowKind(a, rng)).toEqual([]);
+    const bundle = await bundleFor(a, b);
+    const types = await onNode(b.node, async () => new Map((await q<{ t: string; c: string; ty: string }>(
+      `SELECT c.relname::text AS t, a.attname::text AS c, format_type(a.atttypid, a.atttypmod) AS ty FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+        WHERE c.relnamespace = 'public'::regnamespace AND a.attnum > 0 AND NOT a.attisdropped`)).rows.map((r) => [`${r.t}.${r.c}`, r.ty] as const)));
+    const noise = Array.from({ length: 300_000 }, (_, i) => String.fromCharCode(0x4e00 + ((i * 7919 + i * i) % 20000))).join("");
+    const impossible = (ty: string): string | null =>
+      /^timestamp|^date/.test(ty) ? "2026-02-30T00:00:00Z" : /^(integer|smallint|bigint)/.test(ty) ? "99999999999999999999" : /^(double|real|numeric)/.test(ty) ? "1e999"
+        : ty === "boolean" ? "maybe" : ty === "uuid" ? "00000000-0000-4000-8000-00000000000g" : ty === "jsonb" ? null : noise;
+    const tried: Record<"winner" | "head" | "new row", string[]> = { winner: [], head: [], "new row": [] };
+    const raw: string[] = [];
+    for (const src of UNIT_SOURCES) {
+      const existing = bundle.items.find((i): i is Row => i.kind === "row" && i.table === src.table);
+      const fresh = first.items.find((i): i is Row => i.kind === "row" && i.table === src.table && !held.has(`${src.table} ${rowKeyOf(i)}`) && Object.keys(i.values ?? {}).length > 0);
+      for (const [field, column] of Object.entries(src.fields)) {
+        if (field === "deleted") continue;
+        const columns = column.split("+");
+        const values = columns.map((c) => impossible(types.get(`${src.table}.${c}`) ?? "text"));
+        if (values.every((v) => v === null)) continue;
+        const text = columns.length > 1 ? JSON.stringify(Object.fromEntries(columns.map((c, k) => [c, values[k] ?? null]))) : values[0]!;
+        const places: Array<["winner" | "head" | "new row", ChangeBundle, Row | undefined, (r: Row) => void]> = [
+          ["winner", bundle, existing, (r) => {
+            r.texts[field] = text;
+            columns.forEach((c, k) => { if (values[k] !== null) r.values[c] = values[k]; });
+            if (!r.stamps.some((s) => s.field === field)) { const star = r.stamps.find((s) => s.field === "*")!; r.stamps.push({ ...star, field, saw: {}, meta: null, heads: [] }); }
+          }],
+          ["head", bundle, existing, (r) => withHead(r, field, text)],
+          // a new row: its carried values and the unit text the bundle says, both the impossible value (so only the cast can refuse it)
+          ["new row", first, fresh, (r) => { r.texts[field] = text; columns.forEach((c, k) => { if (values[k] !== null) r.values[c] = values[k]; }); }],
+        ];
+        for (const [place, from, row, spoil] of places) {
+          if (!row) continue;
+          // on a new row only a value whose cast fails (C must take nothing, or A's rows would no longer be new to it): a text that is merely large is a winner's and a head's case
+          if (place === "new row" && values.some((v) => v === noise)) continue;
+          const copy = JSON.parse(JSON.stringify(from)) as ChangeBundle;
+          spoil(copy.items.find((i): i is Row => i.kind === "row" && i.table === src.table && rowKeyOf(i) === rowKeyOf(row))!);
+          tried[place].push(`${src.label}.${field}`);
+          const code = await take(place === "new row" ? c : b, copy).then(() => "taken", (e: { code?: string; message?: string }) => e.code ?? `no code: ${String(e.message).slice(0, 120)}`);
+          if (place === "new row" ? code !== "bundle_malformed" : code !== "taken" && !code.startsWith("bundle_")) raw.push(`${place} ${src.label}.${field}: ${code}`);
+        }
+      }
+    }
+    console.log(`[impossible values] ${Object.entries(tried).map(([p, u]) => `${p}: ${u.length} units`).join("; ")}`);
+    expect(tried.winner.length).toBeGreaterThan(15);
+    expect(tried.head.length).toBeGreaterThan(15);
+    expect(tried["new row"].length).toBeGreaterThan(5);
+    expect(raw).toEqual([]);
+  }, 1_800_000);
 });

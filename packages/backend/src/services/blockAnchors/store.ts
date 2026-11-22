@@ -8,6 +8,7 @@ import { cutToUnits, newBlockId, parseBlocks, blockSpans, excerptBlockSpans, typ
 import { q, event } from "../../db.js";
 import { sql } from "kysely";
 import { db } from "../../dbKysely.js";
+import { lockEventAppend } from "../../spine/eventTransaction.js";
 import { eventActorType, type ActorCtx } from "../../types.js";
 import { sha256Hex } from "../../utils.js";
 import { lineAlign, quoteAt, type Span } from "./similarity.js";
@@ -237,14 +238,20 @@ export async function renameAnchor(workspaceId: string, noteId: string, from: st
 
 /**
  * Anchors the block at `at` (any offset inside it) of `markdown`, the note's current body.
- * Returns the existing anchor id when that block already has one. Call inside the transaction that
- * holds the note's body fixed (the body hash it records must be the committed one). A new anchor is
+ * Returns the existing anchor id when that block already has one. A new anchor is
  * recorded as BLOCK_ANCHOR_CREATED, attributed to `cause.actor` (whose operation made it).
+ * Call inside a write transaction. The body hash it records must be the stored body's (the database checks it, OD215:
+ * migration 215 block_anchors_hash_is_body), so it takes the workspace's write lock (a save takes it before it writes
+ * the body; held already by every caller, then nothing waits) and refuses a `markdown` that is not the stored body: a
+ * caller that read the body before the lock would race a save (review of PR #1853, after the merge, N4).
  */
 export async function ensureBlockAnchor(
   workspaceId: string, noteId: string, markdown: string, at: number,
   cause: { actor: ActorCtx; eventId?: string; device?: string | null },
 ): Promise<string | null> {
+  await lockEventAppend(workspaceId);
+  const stored = await db.selectFrom("content_nodes").select("markdown").where("workspace_id", "=", workspaceId).where("id", "=", noteId).executeTakeFirst();
+  if (stored?.markdown !== markdown) throw new Error("ensureBlockAnchor: the body given is not the note's stored body (read it after the workspace's write lock)");
   const span = partSpanAt(markdown, at);
   if (span === null) return null;
   const existing = (await listNoteAnchors(workspaceId, noteId)).find(
@@ -256,30 +263,58 @@ export async function ensureBlockAnchor(
 
 /** Records a new anchor for `span` of `markdown` (the note's committed body). An id is never reused, lost
  *  ones included: the primary key refuses a taken one and we draw again. */
-export async function insertAnchor(
+async function insertAnchor(
   workspaceId: string, noteId: string, markdown: string, span: Span,
   cause: { actor: ActorCtx; eventId?: string; device?: string | null },
   /** An id the caller already told others about (a task placed as a line knows its block before the note is saved):
    *  taken as it is, and refused when another anchor has it. */
   fixedId?: string,
 ): Promise<string> {
+  return (await insertAnchors(workspaceId, noteId, markdown, [span], cause, fixedId))[0]!;
+}
+
+/** A quote as the database stores it: a lone surrogate (a span cut between the two halves of a pair, as a backup's offsets may be) is U+FFFD. Sent as a text parameter
+ *  it became that on the way (UTF-8 has no lone surrogate); inside a jsonb parameter it refuses the whole statement (22P02), so it is made so first (review of PR #1940,
+ *  round 1, point 5: the result stays what it was before the anchors were written in one statement). */
+const wellFormed = (text: string): string => text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
+
+/** Records a new anchor for each of `spans` of `markdown` (the note's committed body), in ONE statement: the note's anchors unit is
+ *  written once and checked once at commit whatever their number (migration 215: once per statement; one statement per anchor made a
+ *  first save with n anchors rewrite a unit of up to n entries n times, review of PR #1853 after the merge, N2). Ids are drawn as
+ *  insertAnchor's; a drawn id another anchor has is drawn again (a further statement, rare). Returns the ids in the order of `spans`. */
+export async function insertAnchors(
+  workspaceId: string, noteId: string, markdown: string, spans: readonly Span[],
+  cause: { actor: ActorCtx; eventId?: string; device?: string | null }, fixedId?: string,
+): Promise<string[]> {
+  if (fixedId !== undefined && spans.length !== 1) throw new Error("a fixed anchor id names one anchor");
   const hash = sha256Hex(markdown);
-  const quote = quoteAt(markdown, span);
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const id = fixedId ?? newBlockId();
-    const r = await q(
-      `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote, quote_prefix, quote_suffix)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
-      [workspaceId, id, noteId, span.from, span.to, hash, quote.text, quote.prefix, quote.suffix],
-    );
-    if (r.rowCount === 1) {
-      await recordAnchorEvent(workspaceId, noteId, ANCHOR_EVENTS.created, id, cause,
-        { parentVersion: hash, device: cause.device ?? null, how: "created" });
-      return id;
+  const quotes = spans.map((span) => quoteAt(markdown, span));
+  const ids: Array<string | null> = spans.map(() => null);
+  for (let attempt = 0; attempt < 8 && ids.includes(null); attempt++) {
+    const todo = ids.flatMap((id, i) => (id === null ? [i] : []));
+    const drawn = new Map<number, string>();
+    const taken = new Set<string>();
+    for (const i of todo) {
+      let id = fixedId ?? newBlockId();
+      while (taken.has(id)) id = newBlockId(); // two of one batch never share an id
+      taken.add(id); drawn.set(i, id);
     }
-    if (fixedId) throw new Error("anchor id already in use");
+    const r = await q<{ anchor_id: string }>(
+      `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote, quote_prefix, quote_suffix)
+       SELECT $1, x.id, $2, x.f, x.t, $3, x.q, x.p, x.s FROM jsonb_to_recordset($4::jsonb) AS x(id text, f int, t int, q text, p text, s text, n int)
+        ORDER BY x.n ON CONFLICT DO NOTHING RETURNING anchor_id`,
+      [workspaceId, noteId, hash, JSON.stringify(todo.map((i, n) => ({ n, id: drawn.get(i), f: spans[i]!.from, t: spans[i]!.to, q: wellFormed(quotes[i]!.text), p: wellFormed(quotes[i]!.prefix), s: wellFormed(quotes[i]!.suffix) })))],
+    );
+    const made = new Set(r.rows.map((x) => x.anchor_id));
+    for (const i of todo) if (made.has(drawn.get(i)!)) ids[i] = drawn.get(i)!;
+    if (fixedId && ids[0] === null) throw new Error("anchor id already in use");
   }
-  throw new Error("could not draw a free anchor id");
+  if (ids.includes(null)) throw new Error("could not draw a free anchor id");
+  for (const id of ids) {
+    await recordAnchorEvent(workspaceId, noteId, ANCHOR_EVENTS.created, id!, cause,
+      { parentVersion: hash, device: cause.device ?? null, how: "created" });
+  }
+  return ids as string[];
 }
 
 /**
@@ -571,16 +606,14 @@ export async function restoreBackupAnchors(
   workspaceId: string, noteId: string, markdown: string, rows: readonly AnchorBackupRow[],
 ): Promise<number> {
   const hash = sha256Hex(markdown);
-  let restored = 0;
-  for (const a of rows) {
-    if (!(a.from >= 0 && a.from < a.to && a.to <= markdown.length)) continue;
-    const quote = quoteAt(markdown, { from: a.from, to: a.to });
-    const r = await q(
-      `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote, quote_prefix, quote_suffix)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
-      [workspaceId, a.id, noteId, a.from, a.to, hash, quote.text, quote.prefix, quote.suffix],
-    );
-    restored += r.rowCount ?? 0;
-  }
-  return restored;
+  const fit = rows.filter((a) => a.from >= 0 && a.from < a.to && a.to <= markdown.length);
+  if (!fit.length) return 0;
+  // one statement for the note's anchors (insertAnchors: the unit is written once)
+  const r = await q(
+    `INSERT INTO block_anchors (workspace_id, anchor_id, note_id, from_utf16, to_utf16, at_body_hash, quote, quote_prefix, quote_suffix)
+     SELECT $1, x.id, $2, x.f, x.t, $3, x.q, x.p, x.s FROM jsonb_to_recordset($4::jsonb) AS x(id text, f int, t int, q text, p text, s text, n int)
+      ORDER BY x.n ON CONFLICT DO NOTHING`,
+    [workspaceId, noteId, hash, JSON.stringify(fit.map((a, n) => { const quote = quoteAt(markdown, { from: a.from, to: a.to }); return { n, id: a.id, f: a.from, t: a.to, q: wellFormed(quote.text), p: wellFormed(quote.prefix), s: wellFormed(quote.suffix) }; }))],
+  );
+  return r.rowCount ?? 0;
 }

@@ -3927,6 +3927,7 @@ INSERT INTO schema_migrations (version) VALUES ('215_block_anchors_replicated') 
 INSERT INTO schema_migrations (version) VALUES ('217_keep_session_actor_rows') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('218_space_follows_tree') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('220_note_versions') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('221_merge_core_before_transport') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('222_sync_join_source_brought') ON CONFLICT (version) DO NOTHING;
 
 --
@@ -7218,5 +7219,22 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 221: the merge core before the transport, batch 1 (db/migrations/221_merge_core_before_transport.sql)
+CREATE OR REPLACE FUNCTION sync_allocate_stamp(p_ws uuid) RETURNS jsonb AS $$
+DECLARE
+  c record;
+  now_ms bigint := floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint;
+  new_wall bigint;
+  new_counter integer;
+BEGIN
+  SELECT * INTO c FROM sync_lock_clock(p_ws);
+  IF now_ms > c.hlc_wall THEN new_wall := now_ms; new_counter := 0;
+  ELSE new_wall := c.hlc_wall; new_counter := c.hlc_counter + 1; END IF;
+  UPDATE sync_clock SET next_seq = c.next_seq + 1, hlc_wall = new_wall, hlc_counter = new_counter,
+                        writes_without_mutate = writes_without_mutate + 1 WHERE workspace_id = p_ws;
+  -- `system`: nobody who looked at a unit's heads wrote this (migration 206 sync_stamp_put_over refuses it on a unit in conflict)
+  RETURN jsonb_build_object('origin', c.node_id, 'seq', c.next_seq, 'wall', new_wall, 'counter', new_counter, 'bypass', true, 'system', true);
+END;
+$$ LANGUAGE plpgsql;
 -- 222: a snapshot names the other origins its source holds, per label; the join remembers them (db/migrations/222_sync_join_source_brought.sql)
 ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_brought jsonb NOT NULL DEFAULT '{}'::jsonb;

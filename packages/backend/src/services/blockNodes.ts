@@ -33,7 +33,7 @@ import { TASK_TAG_NAME } from "../spine/taskIdentity.js";
 import { systemJobOf } from "../spine/systemJobs.js";
 import { taskSeam, type TaskLine } from "./taskSeam.js";
 import { reviewSeam } from "./reviewSeam.js";
-import { insertAnchor, listNoteAnchors, takeBackStrandedAnchors } from "./blockAnchors/index.js";
+import { insertAnchors, listNoteAnchors, takeBackStrandedAnchors } from "./blockAnchors/index.js";
 import { liveNodeSql } from "../spine/nodeSql.js";
 import { derivedId } from "./derivedIds.js";
 
@@ -86,10 +86,10 @@ export async function syncBlockNodes(change: {
       .where("workspace_id", "=", workspaceId).where("note_id", "<>", noteId).where("anchor_id", "in", refs).execute()).map((r) => r.anchor_id));
     for (const b of all) if (b.ref && elsewhere.has(b.ref)) b.ref = null;
   }
-  for (const b of all) {
-    if (b.ref || candidateStarts.has(b.start)) continue;
-    b.ref = await insertAnchor(workspaceId, noteId, markdown, { from: b.start, to: b.end }, { actor, eventId });
-  }
+  // every block that needs an anchor gets it in one statement (insertAnchors: the note's anchors unit is written once, not once per anchor)
+  const unanchored = all.filter((b) => !b.ref && !candidateStarts.has(b.start));
+  const minted = await insertAnchors(workspaceId, noteId, markdown, unanchored.map((b) => ({ from: b.start, to: b.end })), { actor, eventId });
+  unanchored.forEach((b, i) => { b.ref = minted[i]!; });
   const seen = new Set<string>();
   const parsed = all.map((b, index) => ({ b, index })).filter(({ b }) => {
     if (!b.ref || seen.has(b.ref)) return false;
@@ -122,7 +122,28 @@ export async function syncBlockNodes(change: {
   const record = (type: string, blockId: string, payload: Record<string, unknown>) =>
     event(workspaceId, type, "node", noteId, { block_node_id: blockId, ...payload }, eventActorType(actor.type), actor.id, { triggeredBy: eventId });
 
-  // Document order: a parent's row exists before its children's.
+  // The new rows first, in ONE statement (their tags in one more): each statement that writes paragraph rows runs migration 215's statement-level triggers
+  // once, so one statement per row made a first save with n tagged paragraphs cost n passes over the stamps (review of PR #1853 after the merge, N2). Their
+  // ids are known before (derived from the anchor), so a row's parent, new or not, is named in document order; the foreign key is checked at the end of the statement.
+  const fresh = new Map<number, { id: string; parentId: string | null; tags: string[]; text: string }>();
+  for (const { b, index } of parsed) {
+    const existing = byRef.get(b.ref!);
+    const id = existing ? existing.id : await blockRowIdFor(workspaceId, b.ref!);
+    if (!existing) fresh.set(index, { id, parentId: parentRowId(all, b, idOfIndex), tags: [...new Set(b.tags.flatMap((t) => tagIds.get(t) ?? []))].sort(), text: cutToUnits(markdown.slice(b.start, b.end), TEXT_CACHE_MAX) });
+    idOfIndex.set(index, id);
+  }
+  if (fresh.size) {
+    const newRows = parsed.filter(({ index }) => fresh.has(index)).map(({ b, index }) => {
+      const f = fresh.get(index)!;
+      return { id: f.id, workspace_id: workspaceId, note_id: noteId, block_ref: b.ref!, anchor_id: b.ref!, parent_block_id: f.parentId, kind: b.kind, label: b.label, text_cache: f.text };
+    });
+    // in parts of INSERT_PART_ROWS: one statement takes at most 65,535 parameters (9 a row; review of PR #1940, round 1, point 5). A part's parent is in an earlier part or its own.
+    for (let at = 0; at < newRows.length; at += INSERT_PART_ROWS) await db.insertInto("block_nodes").values(newRows.slice(at, at + INSERT_PART_ROWS)).execute();
+    const tagRows = [...fresh.values()].flatMap((f) => f.tags.map((tag) => ({ block_node_id: f.id, tag_id: tag, workspace_id: workspaceId })));
+    for (let at = 0; at < tagRows.length; at += INSERT_PART_ROWS) await db.insertInto("block_node_tags").values(tagRows.slice(at, at + INSERT_PART_ROWS)).onConflict((oc) => oc.doNothing()).execute();
+  }
+
+  // Document order: what each row's write records, in the order of the note's blocks.
   for (const { b, index } of parsed) {
     const parentId = parentRowId(all, b, idOfIndex);
     const wantTags = [...new Set(b.tags.flatMap((t) => tagIds.get(t) ?? []))].sort();
@@ -133,14 +154,8 @@ export async function syncBlockNodes(change: {
       ? (blockId: string) => taskLines.push({ blockId, ref: b.ref!, title: taskLineTitle(markdown, b), checked: b.checkbox!.checked }) : null;
     if (!existing) {
       // The row's id is derived from its anchor's (services/derivedIds.ts): two nodes that each make the row for the same anchor make the same row, so a merge sees one.
-      const id = (await q<{ id: string }>(
-        `INSERT INTO block_nodes (id, workspace_id, note_id, block_ref, anchor_id, parent_block_id, kind, label, text_cache)
-         VALUES ($8, $1, $2, $3, $3, $4, $5, $6, $7) RETURNING id::text`,
-        [workspaceId, noteId, b.ref, parentId, b.kind, b.label, text, await blockRowIdFor(workspaceId, b.ref!)],
-      )).rows[0]!.id;
-      await setTags(workspaceId, id, wantTags);
+      const id = fresh.get(index)!.id;
       await record("BLOCK_NODE_CREATED", id, { block_ref: b.ref, kind: b.kind, label: b.label, parent_block_id: parentId, tag_ids: wantTags });
-      idOfIndex.set(index, id);
       taskLine?.(id);
       if (cardWord) cardBlockIds.push(id);
       continue;
@@ -191,6 +206,9 @@ export async function syncBlockNodes(change: {
   if (review && cardBlockIds.length > 0) await review.markCards({ workspaceId, holders: cardBlockIds.map((id) => ({ kind: "block" as const, id })), actor, via: "word" });
   if (review && wordlessBlockIds.length > 0) await review.unmarkCardsWord({ holders: wordlessBlockIds.map((id) => ({ kind: "block" as const, id })) });
 }
+
+/** How many new rows one INSERT of a save writes at most (9 parameters a row, under the 65,535 one statement takes). */
+const INSERT_PART_ROWS = 5000;
 
 /** The id a new paragraph row of anchor `anchorId` gets: derived from the anchor's (derivedIdName.blockNode), so two nodes that each make the row for one anchor make the same
  *  row; a random one when a row already has that id (a row whose anchor was renamed keeps the id it was made with), so making the row never fails on the derivation. */

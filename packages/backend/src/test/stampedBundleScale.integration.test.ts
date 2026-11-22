@@ -11,6 +11,11 @@ import { stampTransaction } from "../spine/stamps.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
 import { admit, bundleFor, peerOf, take } from "./helpers/stampedBundleWorld.js";
+import { refreshSenderStatistics } from "../spine/senderStatistics.js";
+import { UNIT_SOURCES } from "../spine/stampedMerge/index.js";
+
+/** The tables a bundle reads (spine/stampedBundle.ts BUNDLE_READ_TABLES). */
+const BUNDLE_READ_TABLES = ["sync_stamps", "sync_stamp_heads", ...new Set(UNIT_SOURCES.map((s) => s.table))];
 import { cpuMs } from "../../../markdown/src/linearTiming.testing.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
@@ -35,14 +40,15 @@ type Cost = { stamps: number; readMs: number; readRows: number; applyMs: number;
 /** `senderAnalyzed`: the sender's statistics are current when it reads (ANALYZE just before, as autovacuum keeps a server); false: taken once, right after its world was made, never again. */
 /** `withAnchors`: each note also has an anchor on its body, its anchors unit (note_anchor_places, made at commit) and a paragraph row (migration 215: they travel), so a sixth
  *  each of notes, attributes, tags, anchors, anchors units and paragraph rows. */
-async function cost(stamps: number, senderAnalyzed = true, withAnchors = false): Promise<Cost> {
+/** `"never"`: the sender has no statistics at all when it reads (every table it reads as if never analyzed: a desktop or browser node, which has no autovacuum). */
+async function cost(stamps: number, senderAnalyzed: boolean | "never" = true, withAnchors = false): Promise<Cost> {
   const per = withAnchors ? 6 : 3;
   const notes = Math.ceil(stamps / per);
   const na = await openNode("a"), nb = await openNode("b");
   open.push(na, nb);
   const world = await buildSourceWorld(na);
   // a node whose statistics were taken once, when it was small, and never again (a browser node without its own maintenance): the plans then are those of a small table
-  if (!senderAnalyzed) await onNode(na, () => q(`ANALYZE`));
+  if (senderAnalyzed === false) await onNode(na, () => q(`ANALYZE`));
   await fillFrom(nb, world, await capture(na, world, 1_000_000));
   const a = peerOf("A", na, world), b = peerOf("B", nb, world);
   await admit(a, b);
@@ -71,7 +77,8 @@ async function cost(stamps: number, senderAnalyzed = true, withAnchors = false):
     }
   });
   // the sender's statistics are current, as autovacuum keeps them on a server (PGlite has no autovacuum: PR, 需要決定). The receiver needs nothing: a merge brings its own up to date (dbRows.ts)
-  if (senderAnalyzed) await onNode(na, () => q(`ANALYZE`));
+  if (senderAnalyzed === true) await onNode(na, () => q(`ANALYZE`));
+  if (senderAnalyzed === "never") await onNode(na, () => forgetStatistics());
   const readStart = await rowsRead(na);
   let t = performance.now();
   const bundle = await bundleFor(a, b);
@@ -90,6 +97,13 @@ async function cost(stamps: number, senderAnalyzed = true, withAnchors = false):
   const applyRows = (await rowsRead(nb)) - applyStart;
   expect(report.created).toBe(notes * per + 1);
   return { stamps: notes * per + 1, readMs, readRows, applyMs, applyCpuMs, applyRows, peakMb: Math.round((peak - base) / 1e6) };
+}
+
+/** The sender's tables as if never analyzed: no statistics rows, and the planner's row count unknown (`reltuples = -1`, what a new table has). The test role owns the catalog
+ *  (PGlite is a superuser; the real Postgres of the tests is the database's owner and a superuser). */
+async function forgetStatistics(): Promise<void> {
+  await q(`DELETE FROM pg_statistic WHERE starelid = ANY(SELECT oid FROM pg_class WHERE relname = ANY($1::text[]) AND relnamespace = 'public'::regnamespace)`, [BUNDLE_READ_TABLES]);
+  await q(`UPDATE pg_class SET reltuples = -1, relpages = 0 WHERE relname = ANY($1::text[]) AND relnamespace = 'public'::regnamespace AND relkind = 'r'`, [BUNDLE_READ_TABLES]);
 }
 
 // The bound: four times the stamps read at most 4 × 1.15 times the rows (linear, with room for the fixed part of a run). Time is printed, never asserted: on a shared
@@ -120,14 +134,71 @@ describe.skipIf(!isTestDb)("the cost of reading and taking a bundle grows in pro
     expect(large.applyRows / small.applyRows, `taking: ${show(small)}; ${show(large)}`).toBeLessThanOrEqual(MAX_ROWS_RATIO);
   }, 900_000);
 
-  // The sender that READS a bundle needs statistics (README, 接上傳輸前必須完成): a browser node (PGlite, no autovacuum) has them only when its own maintenance runs ANALYZE.
-  // Taken ONCE, while the node was small, they are enough: this test. With NONE at all the plan is chance, not pinned: in 5 runs of this setup without the ANALYZE below,
-  // three read 14.4 times the rows for four times the stamps (node_tags through the tag's index: every key reads all rows of the same tag) and two read 0.5 times (PR #1778,
-  // round 2). An `it.fails` of that would fail or pass by chance, so it is not here; the transport batch gives the node its maintenance.
+  // The sender that READS a bundle needs statistics: a desktop or browser node (PGlite, no autovacuum) has none of its own. Before the sender made them current itself
+  // (spine/senderStatistics.ts), a sender with NONE planned on chance: in 5 runs of the test below without that, three read 14.4 times the rows for four times the stamps
+  // (node_tags through the tag's index: every key reads all rows of the same tag) and two read 0.5 times (PR #1778, round 2).
+  it("a sender with no statistics at all: the read analyzes the tables it reads first, four times the stamps read at most 4.6 times the rows, and none is stale after", async () => {
+    const small = await cost(1000, "never");
+    const large = await cost(4000, "never");
+    console.log(`[bundle cost, sender never analyzed] read ${small.readRows} → ${large.readRows} rows (${(large.readRows / small.readRows).toFixed(1)}×)`);
+    expect(large.readRows / small.readRows).toBeLessThanOrEqual(MAX_ROWS_RATIO);
+    expect(await onNode(open.at(-2)!, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]); // nothing left to analyze
+  }, 900_000);
+
+  // Taken ONCE, while the node was small, and never again: the rows changed since then pass autovacuum's line, so the read analyzes them again (the same bound).
   it("a sender whose statistics were taken once, while it was small, and never again: four times the stamps read at most 4.6 times the rows", async () => {
     const small = await cost(1000, false);
     const large = await cost(4000, false);
     console.log(`[bundle cost, sender analyzed once while small] read ${small.readRows} → ${large.readRows} rows (${(large.readRows / small.readRows).toFixed(1)}×)`);
     expect(large.readRows / small.readRows).toBeLessThanOrEqual(MAX_ROWS_RATIO);
+  }, 900_000);
+
+  // Statistics a server keeps current (autovacuum's line not passed): the read analyzes nothing, so a server's read costs what it did before.
+  it("a sender whose statistics are current analyzes nothing before it reads", async () => {
+    const na = await openNode("a");
+    open.push(na);
+    await buildSourceWorld(na);
+    await onNode(na, () => q(`ANALYZE`));
+    expect(await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]);
+  }, 900_000);
+
+  // Review of PR #1940, round 1, point 4: the change count is in the cumulative statistics, which PGlite drops on every reopen (measured: 5,100 changes before a clean close,
+  // 0 after, and the same after a killed process) and PostgreSQL after an unclean shutdown. Analyzed once while small, then grown, then the counts lost (pg_stat_reset: what
+  // a reopen leaves): the table's size against the pages of its last analysis still says it changed, and the read analyzes it.
+  it("a sender analyzed while small that grew, after its change counts were lost (a reopen): the tables that grew are analyzed before the read", async () => {
+    const na = await openNode("a");
+    open.push(na);
+    const world = await buildSourceWorld(na);
+    await onNode(na, () => q(`ANALYZE`));
+    await onNode(na, () => withRequestDevice(randomUUID(), () => withTransaction(() => withEventTransaction(world.ws, async () => {
+      await stampTransaction(world.ws, world.owner.id);
+      await q(`INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id)
+               SELECT $1, 'manual', 'content', 'grown ' || g, 'grown-' || g, 'a body long enough to fill pages ' || repeat('x', 200) || g, $2 FROM generate_series(1, 3000) g`, [world.ws, world.spaceA]);
+    }))));
+    await onNode(na, async () => { await q(`SELECT pg_stat_reset()`); await q(`SELECT pg_stat_clear_snapshot()`); });
+    const analyzed = await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)));
+    expect(analyzed).toEqual(expect.arrayContaining(["content_nodes", "sync_stamps"]));
+    expect(await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]); // and then nothing is stale
+  }, 900_000);
+  // Review of PR #1940, round 1, point 1: an offline import of 5,000 notes on a desktop node, some with long bodies, reaches the server as one bundle. The received checks
+  // read it in parts (dbRows.ts inParts, at most 4 MB of JSON a statement) and find each row once (no search of the whole bundle per row): it is taken. Time printed.
+  it("a bundle of 5,000 new notes, twenty of them with bodies of 400,000 characters: taken, every note made (time printed)", async () => {
+    const na = await openNode("a"), nb = await openNode("b");
+    open.push(na, nb);
+    const world = await buildSourceWorld(na);
+    await fillFrom(nb, world, await capture(na, world, 1_000_000));
+    const a = peerOf("A", na, world), b = peerOf("B", nb, world);
+    await admit(a, b);
+    await onNode(na, () => withRequestDevice(randomUUID(), () => withTransaction(() => withEventTransaction(world.ws, async () => {
+      await stampTransaction(world.ws, world.owner.id);
+      await q(`INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id)
+               SELECT $1, 'manual', 'content', 'imported ' || g, 'imported-' || g, CASE WHEN g <= 20 THEN repeat('a long imported body ', 19048) ELSE 'an imported body ' || repeat('words ', 300) || g END, $2
+                 FROM generate_series(1, 5000) g`, [world.ws, world.spaceA]);
+    }))));
+    const bundle = await bundleFor(a, b);
+    const t = performance.now();
+    const report = await take(b, bundle);
+    console.log(`[bundle cost, import of 5,000 notes] ${Math.round(JSON.stringify(bundle).length / 1e6)} MB taken in ${Math.round(performance.now() - t)} ms`);
+    expect(report.created).toBe(5000);
   }, 900_000);
 });

@@ -103,6 +103,9 @@ describe.skipIf(!isTestDb)("the receive side catches a planted bug", () => {
     expect(await writeAndExchange(BASE)).toBeNull();
   }, 300_000);
 
+  // Seed 416864270 (the CI of #1937) found a difference that is pinned by hand at the end of this file ("a note purged and made again"), not by its seed: a seed of
+  // writeAndExchange draws from ROW_TURNS, which is global, so what it writes depends on the tests before it, and an it.fails of it passed on ANY failure (review of
+  // PR #1940, round 2, point 1).
   it("PLANTED fresh road (PR #1853 round 7, item 1): the write-back skips clearing the heads this node already holds; an exchange fails or the nodes differ", async () => {
     plant.freshRoad = true;
     const what = await writeAndExchange(BASE + 1);
@@ -112,8 +115,10 @@ describe.skipIf(!isTestDb)("the receive side catches a planted bug", () => {
 });
 
 describe.skipIf(!isTestDb)("trust line layer 1 on the receive side (docs/decisions/sync-trust-line.md: what arrives is checked, refused whole if wrong, nothing written)", () => {
-  // FINDING (real code): a head is accepted and stored whatever its value says. README "一個包說什麼": a row is sent with "every unit's value as text"; the trust line:
-  // "進資料庫之前檢查格式、範圍、數量上限……不合就整份拒收". A title no write can make (longer than NODE_TITLE_MAX) rides in as a conflict and is kept and sent on.
+  // FINDING (#1903), kept pinned on purpose: a title longer than NODE_TITLE_MAX rides in as a conflict and is kept and sent on. The database does not hold that cap, and a
+  // node may hold such a title from before the cap reached every write path (2026-10-17); a received check stricter than what an honest node holds would refuse its
+  // bundles for ever (review of PR #1940, round 1, point 2). Refusing it needs the cap in the database first (clamping existing titles: the owner's decision; the
+  // read-only count is in migration 221's header).
   it.fails("FINDING: a head whose value no write could have made (a title longer than the limit) is refused whole, and nothing is written", async () => {
     const { b, bundle, item, sender, note } = await titleBundle(BASE + 2);
     const s = item.stamps.find((x) => x.field === "title" && x.origin === sender)!;
@@ -138,5 +143,66 @@ describe.skipIf(!isTestDb)("trust line layer 1 on the receive side (docs/decisio
     console.info(`[stampedBundlePlanted] a row item without the text of its winning parent: ${r ? `refused (${r.code})` : `taken; on B the note is now ${parent === ids.p ? "under the new parent" : parent === ids.q ? "still under the old parent" : parent === null ? "at the top (parent NULL)" : "somewhere else"}`}`);
     expect(r?.code ?? "taken, not refused").toMatch(/^bundle_/);
     expect(parent).toBe(ids.q);
+  }, 300_000);
+});
+
+// Review of PR #1940, round 2, point 1: the finding of seed 416864270, by hand (the steps the seed took on that note, traced with every route call logged). A and B hold X,
+// trashed; each takes it out of the trash without having seen the other's (two heads of `deleted`, on both after an exchange both ways); A trashes it again (a person's
+// write: it settles both heads), purges it and makes it again under the same id; they exchange both ways, twice. Every write goes through the routes, nothing is random.
+// Inference, not traced into the code: A's trash saw B's undo and settled it, the purge took X's stamps with it, and the creation's `meta.seen` names A's writes only, so
+// on B nothing drops B's head; B does not send it again, A's `have` already covers it. Main and this branch, both engines.
+describe.skipIf(!isTestDb)("a note purged and made again under its id on A, after A and B each undid its trash", () => {
+  type Scene = { a: Peer; b: Peer; x: string; refused: string[]; conflictBefore: number; deletedHeads: { a: string[]; b: string[] } };
+  /** The scene, and what each node holds of X's `deleted` unit beside its winner (origin:seq/value of each other head). Throws if a route or an exchange throws. */
+  async function scene(): Promise<Scene> {
+    const [na, nb] = [await openNode("a"), await openNode("b")];
+    open.push(na, nb);
+    const world = await buildSourceWorld(na);
+    const a = peerOf("A", na, world);
+    await markWorld(a);
+    await fillFrom(nb, world, await capture(na, world, 12_000));
+    const b = peerOf("B", nb, world);
+    await admit(a, b);
+    const x = randomUUID();
+    const refused: string[] = [];
+    const swap = async (from: Peer, to: Peer, step: string) => { const r = await exchange(from, to); if (r.rejected.length) refused.push(`${step}: ${r.rejected.length}`); };
+    await onNode(a.node, () => a.call("POST", "/api/nodes", { id: x, title: "X", markdown: "first", space_id: a.space }));
+    await swap(a, b, "X made");
+    await onNode(a.node, () => a.call("DELETE", `/api/nodes/${x}`));
+    await swap(a, b, "X trashed");
+    await onNode(a.node, () => a.call("POST", `/api/nodes/${x}/undelete`));
+    await onNode(b.node, () => b.call("POST", `/api/nodes/${x}/undelete`));
+    await swap(a, b, "both undid"); await swap(b, a, "both undid, back");
+    conflictBefore = (await deletedHeadsOf(a, x)).length;
+    await onNode(a.node, async () => {
+      await a.call("DELETE", `/api/nodes/${x}`);
+      const preview = await a.call("GET", `/api/nodes/${x}/purge-preview`);
+      await a.call("POST", `/api/nodes/${x}/purge`, { expected_ids: (preview.ids ?? preview.notes?.map((n: { id: string }) => n.id) ?? [x]) as string[] });
+      await a.call("POST", "/api/nodes", { id: x, title: "X again", markdown: "again", space_id: a.space });
+    });
+    for (let round = 0; round < 2; round++) { await swap(a, b, `round ${round} A to B`); await swap(b, a, `round ${round} B to A`); }
+    return { a, b, x, refused, conflictBefore, deletedHeads: { a: await deletedHeadsOf(a, x), b: await deletedHeadsOf(b, x) } };
+  }
+  let conflictBefore = 0;
+  /** The other heads of X's `deleted` unit this peer holds, as origin:seq/value. */
+  const deletedHeadsOf = (p: Peer, x: string) => onNode(p.node, async () => (await q<{ h: string }>(
+    `SELECT origin || ':' || seq || '/' || coalesce(value, 'null') AS h FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = 'deleted' ORDER BY 1`,
+    [p.ws, x])).rows.map((r) => r.h));
+
+  it("what the two nodes hold now (the finding, named): every exchange taken, none refused, and B keeps its undo as a head of X's `deleted` that A does not hold", async () => {
+    const s = await scene();
+    expect(s.refused, "an exchange was refused").toEqual([]);
+    expect(s.conflictBefore, "before A trashes X again, A holds the two undos as two heads of X's deleted").toBeGreaterThan(0);
+    const onlyB = s.deletedHeads.b.filter((h) => !s.deletedHeads.a.includes(h));
+    console.info(`[purged and made again] deleted heads: A ${JSON.stringify(s.deletedHeads.a)}, B ${JSON.stringify(s.deletedHeads.b)}`);
+    expect(onlyB.length, "B holds a head of X's deleted unit that A does not (when this is 0, the finding is fixed: turn the it.fails below into an it)").toBeGreaterThan(0);
+  }, 300_000);
+
+  it.fails("PINNED (README 接上傳輸前必須完成): after the exchanges both nodes hold the same rows, stamps and heads", async () => {
+    // only the difference may make this fail: a throw of the scene or a refused exchange returns, and an it.fails that returns is red ("expected to fail")
+    let s: Scene;
+    try { s = await scene(); } catch { return; }
+    if (s.refused.length || s.conflictBefore === 0) return;
+    await expectSame(s.a, s.b, "after two rounds");
   }, 300_000);
 });

@@ -40,6 +40,10 @@ const PAGE_BYTES = 4 * 1024 * 1024;
 const CHUNK_ROWS = 10_000;
 
 import { bundleRefused } from "./bundleRefusal.js";
+import { refreshSenderStatistics } from "./senderStatistics.js";
+
+/** Every table a bundle reads: the stamps, the other heads, and each carried table (their statistics are made current before the read: senderStatistics.ts). */
+const BUNDLE_READ_TABLES: readonly string[] = ["sync_stamps", "sync_stamp_heads", ...new Set(UNIT_SOURCES.map((s) => s.table))];
 export { bundleRefused };
 
 /**
@@ -146,6 +150,7 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
   const base = normalizeHave(have);
   const budget = options.pageBytes ?? PAGE_BYTES;
   if (!inTransaction()) throw new Error("a bundle is read inside one read snapshot that the caller opened (services/stampedBundle.ts)");
+  await refreshSenderStatistics(BUNDLE_READ_TABLES); // a node without autovacuum plans this read on statistics a server would have (spine/senderStatistics.ts)
   {
     await snapshotRows(`SELECT set_config('TimeZone', 'UTC', true)`);
     const node = (await snapshotRows<{ node_id: string }>(`SELECT node_id FROM sync_node WHERE singleton`)).rows[0]?.node_id;
@@ -168,7 +173,18 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     let bytes = 0;
     const header = { layer: "changes" as const, dataShape: SYNC_DATA_SHAPE_VERSION, workspaceId, scope: BUNDLE_SCOPE, sender: node, cut, base, upTo: holds, holds };
     const flush = () => { if (items.length) { pages.push({ ...header, pages: 0, page: pages.length + 1, items }); items = []; bytes = 0; } };
-    const add = (item: BundleItem) => { items.push(item); bytes += sizeOf(item); if (bytes >= budget) flush(); };
+    /** per label and origin, the largest number among the stamps and heads the bundle sends: a node can hold writes of an origin past its `have` of it (a bundle it took stopped
+     *  its `upTo` below a write it withheld, I5, and still carried the later ones), and it sends what it holds, so `holds` covers them (or the next node refuses its
+     *  bundle for ever: bundle_stamp_beyond_cut; found by stampedSawThreeNodes.integration.test.ts, three nodes relaying). `upTo` stays what is held without a gap. */
+    const sent: MutableHave = {};
+    const add = (item: BundleItem) => {
+      for (const st of item.kind === "row" ? item.stamps : [item.stamp]) for (const w of [st, ...st.heads]) {
+        if (w.origin === GENESIS_STAMP_ORIGIN) continue;
+        const of = (sent[st.label] ??= {});
+        of[w.origin] = Math.max(of[w.origin] ?? 0, w.seq);
+      }
+      items.push(item); bytes += sizeOf(item); if (bytes >= budget) flush();
+    };
 
     for (const src of UNIT_SOURCES) {
       const labels = labelsOf(src);
@@ -216,7 +232,10 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     // what the receiver holds after the bundle: never past a write it withheld (I5), label by label (a write withheld in one table does not hold the others back)
     const receiverHolds = Object.fromEntries(Object.entries(holds).map(([label, of]) => [label,
       Object.fromEntries(Object.entries(of).map(([o, n]) => { const w = haveAt(withheld, label, o); return [o, w === undefined ? n : Math.min(n, w - 1)]; }))]));
-    return pages.map((p) => ({ ...p, upTo: receiverHolds, pages: pages.length }));
+    // what the sender holds covers every stamp it sends (`sent`, above), label by label; its own origin stays at the cut
+    const held: MutableHave = Object.fromEntries(Object.entries(holds).map(([label, of]) => [label, { ...of }]));
+    for (const [label, of] of Object.entries(sent)) for (const [o, n] of Object.entries(of)) if (o !== node) { const h = (held[label] ??= {}); h[o] = Math.max(h[o] ?? 0, n); }
+    return pages.map((p) => ({ ...p, holds: held, upTo: receiverHolds, pages: pages.length }));
   }
 }
 

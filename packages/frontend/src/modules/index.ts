@@ -45,7 +45,7 @@ export { GraphScreen } from "./graph";
 export { TasksMode, loadTasksMode, QuickAddTask, openQuickAddTask, TaskSheetHost, openTaskSheet, FocusHost, FocusTopMark } from "./tasks";
 // The day's timeline with 規劃今天 / 收工 sits on the Tasks page and on the Journal page: modules do
 // not import each other, they meet here.
-export { DayPlanner, TodayScreen } from "./daily"; // the lazy day/DayPane and today/TodayScreen
+export { DayPlanner } from "./daily"; // the lazy day/DayPane
 // Quick capture: the box the shell mounts and opens, and the rule that keeps
 // unfiled captures out of the note tree (lib/sidebarTidy).
 export { QuickCapture, openQuickCapture, isPendingCapture, pendingCaptures, capturesOnDay } from "./capture";

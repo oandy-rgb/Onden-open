@@ -1,6 +1,6 @@
 // The note of one day, and what hangs under it (its captures), from the local copy; a slim bootstrap
-// leaves bodies to the server, so the ones on show are fetched. The Journal page (DayPage) and the
-// 今天 page's journal column read a day through this.
+// leaves bodies to the server, so the ones on show are fetched. The Journal page (DayPage) reads a day
+// through this.
 
 import { useEffect, useMemo } from "react";
 import { nodeNeedsBody } from "../../../lib/api";

@@ -93,7 +93,7 @@ describe("MobileNav (wave-2 mobile shell)", () => {
     const groups = within(menu).getAllByRole("group");
     expect(groups.map(group => group.getAttribute("aria-label"))).toEqual(["Time", "Organize", "Features"]);
     expect(groups.map(group => within(group).getAllByRole("button").map(button => button.textContent)))
-      .toEqual([["Today", "Daily notes", "Workspace changes"], ["Graph"], ["Review", "Reading", "Website"]]);
+      .toEqual([["Daily notes", "Workspace changes"], ["Graph"], ["Review", "Reading", "Website"]]);
     // Tasks is in the bar, not repeated here; Tags is Notes home's 標籤 tab on the phone.
     expect(within(menu).queryByRole("button", { name: "Tasks" })).toBeNull();
   });
@@ -203,7 +203,7 @@ describe("MobileNav and the 日記 module", () => {
     expect(within(dialog.getByRole("group", { name: "Features" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["Reading"]);
     // 日記 is under 時間, ahead of 歷史.
     const time = dialog.getByRole("group", { name: "Time" });
-    expect(within(time).getAllByRole("button").map((b) => b.textContent)).toEqual(["Today", "Daily notes", "Workspace changes"]);
+    expect(within(time).getAllByRole("button").map((b) => b.textContent)).toEqual(["Daily notes", "Workspace changes"]);
     // One entry: no core Today's note row beside it.
     expect(sheetRows()).not.toContain("Today's note");
     fireEvent.click(within(time).getByText("Daily notes"));

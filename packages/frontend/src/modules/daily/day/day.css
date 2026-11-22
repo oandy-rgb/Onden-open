@@ -146,10 +146,3 @@
 /* Above the lanes, which cover the whole day and are drawn after it: a tap must reach the fold, not the empty lane over it. */
 .day-fold { position: absolute; top: var(--top); height: var(--h); left: var(--day-gutter); right: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-muted); cursor: pointer; font-variant-numeric: tabular-nums; z-index: var(--z-local-1); }
 .day-fold:hover, .day-fold:focus-visible { color: var(--ac-ink); border-style: solid; }
-
-/* The focus lane (DayTimeline focusLane): what was really focused on, a slim column at the right edge beside what was planned. */
-.day-timeline-body.has-focus-lane .day-lanes { right: 36px; }
-.day-focus-lane { position: absolute; top: 0; bottom: 0; right: 4px; width: 26px; border-inline-start: 1px dashed color-mix(in srgb, var(--ac-muted) 40%, transparent); }
-.day-focus-block { position: absolute; top: var(--top); height: var(--h); left: 4px; right: 0; padding: 0; border: 0; border-radius: var(--ac-radius-sm); background: var(--ac-accent-soft); border: 1px solid var(--ac-accent-border); box-sizing: border-box; cursor: pointer; }
-.day-focus-block:disabled { cursor: default; }
-.day-focus-block.is-live { background: var(--ac-accent); border-color: var(--ac-accent); }

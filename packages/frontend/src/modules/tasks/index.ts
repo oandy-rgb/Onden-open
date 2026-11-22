@@ -16,9 +16,6 @@ import { taskDayItems } from "../../lib/tasks";
 // The Tasks page, the shared row, the settings sheet, the quick-add sheet, the
 // journal's task list and their words: everything outside this directory
 // reaches the task UI through here (eslint onden/module-entry).
-export { default as TaskRow } from "./TaskRow";
-export { default as TaskSheet } from "./TaskSheet";
-export type { NoteChoice, TaskActions } from "./TaskSheet";
 export { default as ReminderToggle } from "./ReminderToggle";
 export { dayLabel } from "./taskLabels";
 export { default as QuickAddTask } from "./QuickAddTaskHost";
@@ -34,12 +31,6 @@ export { quickTaskFromReading } from "./quickAddTask";
 export { createQuickTask } from "./createQuickTask";
 export type { QuickTaskResult, QuickTaskSaved } from "./createQuickTask";
 export { default as JournalTasksRow } from "./JournalTasksRow";
-// For the 今天 page (reached through taskParts, so none of it is in the boot JS): the board hook, the agenda, the focus bar.
-export { useTaskBoard } from "./useTaskBoard";
-export type { TaskBoard } from "./useTaskBoard";
-export { default as UpcomingAgenda } from "./UpcomingAgenda";
-export { TAB_EMPTY, TAB_LABEL, TaskSection, agendaTasksOf } from "./taskTabs";
-export { default as FocusPageBar } from "./focus/FocusPageBar";
 // The focus timer: its bar, sheets and full screen (the shell mounts these two).
 export { default as FocusHost, FocusTopMark } from "./focus/FocusHost";
 

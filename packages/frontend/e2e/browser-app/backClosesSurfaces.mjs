@@ -4,9 +4,8 @@
 // For each surface: open it, ask the browser to close it the way Android's Back does (a close request, see below),
 // and check that only that surface went, the address is unchanged, and no history entry was added by opening it.
 //  1. a note's ⋯ menu (a sheet on the phone, a popover on the desktop)
-//  2. a date picker inside the task sheet inside 「全部的事」: three requests close picker, sheet, panel, one each
-//  3. the phone's Info screen of a note (history Back: page.goBack(); back to the note)
-//  4. the notes sidebar's search box (on the phone, on the list)
+//  2. the phone's Info screen of a note (history Back: page.goBack(); back to the note)
+//  3. the notes sidebar's search box (on the phone, on the list)
 //
 // What this is not: Android's Back. A close request is what the system Back button and gesture send to a page that has
 // a CloseWatcher or an open <dialog>; Playwright cannot press that button, but Esc with nothing focused makes the same
@@ -61,20 +60,20 @@ try {
     check("1. the note and its address stay", (await noteShown()) && (await address()) === before.address);
   }
 
-  // ── 3. The phone's Info screen ──────────────────────────────────────────────
+  // ── 2. The phone's Info screen ──────────────────────────────────────────────
   if (phone) {
     const before = await address();
     await page.getByRole("button", { name: "資訊" }).first().click();
     await page.waitForTimeout(800);
     const onInfo = !(await noteShown());
-    check("3. the Info screen replaces the note", onInfo);
+    check("2. the Info screen replaces the note", onInfo);
     // Info is a page-sized screen with a history entry of its own (hooks/usePhoneInfoScreen), so its Back is history.
     await page.goBack();
     await page.waitForTimeout(800);
-    check("3. Back returns from Info to the note", (await noteShown()) && (await address()) === before);
+    check("2. Back returns from Info to the note", (await noteShown()) && (await address()) === before);
   }
 
-  // ── 4. The sidebar's search ─────────────────────────────────────────────────
+  // ── 3. The sidebar's search ─────────────────────────────────────────────────
   {
     if (phone) {
       await page.goto(`${site.base}?view=notes`);
@@ -89,38 +88,12 @@ try {
     await page.getByRole("button", { name: "搜尋筆記" }).first().click();
     await page.waitForTimeout(500);
     const field = '.search-field input, input[type="search"]';
-    check("4. the search box opens", await visible(field));
+    check("3. the search box opens", await visible(field));
     await closeRequest();
-    check("4. Back closes the search box", !(await visible(field)));
-    check("4. the list stays where it was", (await address()) === before.address && (await historyLength()) === before.length);
+    check("3. Back closes the search box", !(await visible(field)));
+    check("3. the list stays where it was", (await address()) === before.address && (await historyLength()) === before.length);
   }
 
-  // ── 2. 「全部的事」 › task sheet › date picker ───────────────────────────────
-  {
-    await page.goto(`${site.base}?view=today`);
-    await page.getByRole("button", { name: /全部的事/ }).first().waitFor({ state: "visible", timeout: 30_000 });
-    const before = { length: await historyLength(), address: await address() };
-    await page.getByRole("button", { name: /全部的事/ }).first().click();
-    await page.waitForTimeout(600);
-    const panel = 'section[aria-label="全部的事"]';
-    check("2. 「全部的事」 opens", await visible(panel));
-    await page.getByRole("tab", { name: /^隨時/ }).click(); // the sample tasks have no date: they are listed here
-    await page.getByRole("button", { name: /^編輯 / }).first().click();
-    await page.waitForTimeout(800);
-    const sheet = "dialog[open]";
-    check("2. a task's sheet opens over it", await visible(sheet));
-    await page.locator("dialog[open]").getByRole("button", { name: "選日期…" }).first().click();
-    await page.waitForTimeout(600);
-    const picker = "dialog[open] .ui-datepicker";
-    check("2. the date picker opens in the sheet", await visible(picker));
-    check("2. none of this added a history entry", (await historyLength()) === before.length);
-    await closeRequest();
-    check("2. Back closes the date picker only", !(await visible(picker)) && (await visible(sheet)) && (await visible(panel)));
-    await closeRequest();
-    check("2. the next Back closes the sheet only", !(await visible(sheet)) && (await visible(panel)));
-    await closeRequest();
-    check("2. the next closes 「全部的事」, still on the same page", !(await visible(panel)) && (await address()) === before.address);
-  }
   check("no page errors", errors.length === 0, errors.join(" | "));
 } catch (error) {
   check("ran to the end", false, String(error).slice(0, 300));

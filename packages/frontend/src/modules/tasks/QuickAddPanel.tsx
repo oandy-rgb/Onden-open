@@ -51,8 +51,6 @@ export type QuickAddPanelProps = {
   into?: QuickAddTarget | null;
   /** In a timeline slot: its day, start and end. The task starts there unless the words say otherwise. */
   slot?: SlotStart;
-  /** A day the task starts on unless the words name another ("明天"); left out, the words alone decide (a day of 今天 on a page that shows one). */
-  day?: string;
   /** Slot only: plans an existing task into the slot (with its 復原); true when it was written. */
   onSchedule?: (taskId: string, date: string, times: SlotTimes) => Promise<boolean>;
   /** Slot only: a task was added or planned, so the slot is done. */
@@ -62,7 +60,7 @@ export type QuickAddPanelProps = {
   onBusyChange?: (busy: boolean) => void;
 };
 
-export default function QuickAddPanel({ into = null, slot, day, onSchedule, onDone, onClose, onBusyChange }: QuickAddPanelProps) {
+export default function QuickAddPanel({ into = null, slot, onSchedule, onDone, onClose, onBusyChange }: QuickAddPanelProps) {
   const online = useOnline();
   const nodes = useAllNodes();
   const tasks = useTaskRows();
@@ -155,12 +153,6 @@ export default function QuickAddPanel({ into = null, slot, day, onSchedule, onDo
     [slot, tasks, parsed.title, placed?.date, today],
   );
 
-  /** The reading with the page's day put in, when the words name no day of their own. */
-  const dayReading = (reading: typeof parsed) => {
-    // Words that name a day, 「某天」 or 「隨時」 are the person's: the page's day only fills in when none was said.
-    const said = reading.when_stated || reading.spans.some((span) => span.kind === "someday" || span.kind === "anytime");
-    return day && !slot && !said ? { ...reading, when_date: day, someday: false, anytime: false } : reading;
-  };
   const submit = useCallback(async () => {
     if (sending.current || !parsed.title || parsed.doubtful.length > 0) return;
     sending.current = true;
@@ -176,11 +168,10 @@ export default function QuickAddPanel({ into = null, slot, day, onSchedule, onDo
         if (!note) { setMissing({ name: mention.name }); return; }
       }
       // @ names the note; else the 放在 note, else the chosen space's default note.
-      const reading = dayReading(parsed);
-      const base = slotNow ? quickTaskInSlot(parsed, slotNow, note ?? pickedNote) : quickTaskFromReading(reading, note ?? pickedNote);
+      const base = slotNow ? quickTaskInSlot(parsed, slotNow, note ?? pickedNote) : quickTaskFromReading(parsed, note ?? pickedNote);
       const { saved, noteTitle } = await createQuickTask({ ...base, ...(space ? { spaceId: space.id } : {}) });
       if (space) rememberTaskSpace(space.id);
-      const place = placementLabel(dayReading(parsed), today, noteTitle);
+      const place = placementLabel(parsed, today, noteTitle);
       setAdded((rows) => [{ id: ++counter.current, title: parsed.title, place: space && !note ? `${place} · ${spaceLabel(space)}` : place, saved }, ...rows].slice(0, keepAdded));
       if (slot) { onDone?.(); return; }
       // keep anything typed while the request ran
@@ -193,7 +184,7 @@ export default function QuickAddPanel({ into = null, slot, day, onSchedule, onDo
       inputRef.current?.focus();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsed, text, today, day, mention, mentioned, pickedNote, space, into, slotNow?.date, slotNow?.time, slotNow?.until]);
+  }, [parsed, text, today, mention, mentioned, pickedNote, space, into, slotNow?.date, slotNow?.time, slotNow?.until]);
 
   const planExisting = async ({ task }: SlotTaskChoice) => {
     if (!placed || !onSchedule || sending.current) return;
@@ -239,7 +230,6 @@ export default function QuickAddPanel({ into = null, slot, day, onSchedule, onDo
     <>
       <SheetHeader title={slot ? t("Plan a time") : t("Add a task")} onClose={onClose} />
 
-      {day && !slot && !parsed.when_stated && <p className="quick-add-slot-when">{dayLabel(day, today)}</p>}
       {placed && <p className="quick-add-slot-when">{dayLabel(placed.date, today)} · {formatLineTime(placed.time, placed.until)}</p>}
 
       <div className="quick-add-row">

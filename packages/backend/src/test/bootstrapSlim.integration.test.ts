@@ -214,14 +214,19 @@ describe.skipIf(!isTestDb)("slim bootstrap + lazy-body door (P0-3)", () => {
     // need not run first).
     expect((await req(`/api/nodes/${nodeId}/attributes/score`, { method: "PUT", json: { value: "7", value_type: "number", is_inheritable: true } })).status).toBe(200);
     expect((await req(`/api/nodes/${nodeId}/attributes/ink_data`, { method: "PUT", json: { value: JSON.stringify({ version: 1, strokes: [] }) } })).status).toBe(200);
+    // A note's list of pages is small and is in the lean payload; its PDF text is left out (the offline search does not find it).
+    expect((await req(`/api/nodes/${nodeId}/attributes/note_pages`, { method: "PUT", json: { value: JSON.stringify({ version: 1, runs: [{ id: "b1", kind: "blank" }] }) } })).status).toBe(200);
+    expect((await req(`/api/nodes/${nodeId}/attributes/pdf_text`, { method: "PUT", json: { value: JSON.stringify({ "r1:1": "page text" }) } })).status).toBe(200);
     for (const path of ["/api/bootstrap", "/api/bootstrap?bodies=none"]) {
       const lean = (await (await req(path, { headers: { "x-onden-bootstrap": "lean" } })).json()) as { attrs_omitted?: boolean; deferred_attribute_keys?: string[]; nodes: BootNode[]; attributes: Array<{ node_id: string; key: string }> };
       expect(lean.attrs_omitted, path).toBe(true);
-      expect(lean.deferred_attribute_keys).toEqual(["ink_data", "board_ink", "note_ink", "pdf_annotations"]);
+      expect(lean.deferred_attribute_keys).toEqual(["ink_data", "board_ink", "note_ink", "pdf_annotations", "pdf_text"]);
       expect(lean.nodes.every((n) => n.attrs === undefined), path).toBe(true);
       const own = lean.attributes.filter((a) => a.node_id === nodeId).map((a) => a.key);
       expect(own, path).toContain("score");
       expect(own, path).not.toContain("ink_data");
+      expect(own, path).toContain("note_pages");
+      expect(own, path).not.toContain("pdf_text");
       // The old shape is unchanged for a client that does not ask.
       const old = (await (await req(path)).json()) as { nodes: BootNode[]; attributes: Array<{ node_id: string; key: string }> };
       expect(old.nodes.find((n) => n.id === nodeId)?.attrs?.ink_data, path).toBeTruthy();

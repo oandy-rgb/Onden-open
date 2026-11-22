@@ -66,7 +66,7 @@ describe("navigation follows the modules that are on and in use", () => {
     render(<AppNavigation mode="notes" setMode={vi.fn()} onOpenModule={vi.fn()} onOpenFeature={vi.fn()} />);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getAllByRole("button").map((b) => b.textContent))
-      .toEqual(["Notes", "Tasks", "Graph", "Reading", "Today", "More"]);
+      .toEqual(["Notes", "Tasks", "Graph", "Reading", "More"]);
   });
 });
 

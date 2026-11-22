@@ -264,7 +264,6 @@ export function useCommandPalette({
       kind: "action", id: `a-dialog-${id}`, label: t(dialogEntry.label), hint: "action", group: "Actions", keywords: dialogEntry.keywords,
       run: () => cbRef.current.openDialogEntry?.(id),
     }] : []),
-    ...(tasksOn || dailyOn ? [{ kind: "action" as const, id: "a-today",     label: t("Go to Today"),              hint: "place",  group: "Navigate", keywords: ["today", "day", "journal", "plan", "今天", "日記", "規劃", "時間軸"], run: () => cbRef.current.setMode("today") }] : []),
     ...(tasksOn ? [{ kind: "action" as const, id: "a-tasks",     label: t("Go to Tasks"),              hint: "place",  group: "Navigate", keywords: ["tasks", "todo", "todos", "checklist", "任務", "待辦", "清單"], run: () => cbRef.current.setMode("tasks") }] : []),
     { kind: "action", id: "a-graph",     label: t("Go to Graph"),              hint: "place",  group: "Navigate", keywords: ["graph", "network", "links", "map", "關係圖", "連結", "圖譜", "網路"], run: () => cbRef.current.setMode("graph") },
     { kind: "action", id: "a-tags",      label: t("Go to Tags"),               hint: "place",  group: "Navigate", keywords: ["tags", "modules", "library", "import", "標籤", "功能", "模組", "匯入", "分類"], run: () => cbRef.current.showTags() },

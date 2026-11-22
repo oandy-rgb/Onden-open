@@ -5,7 +5,7 @@ import type { AppView } from "../hooks/useUrlLocation";
 import type { useDueSoonNotifications } from "../hooks/useDueSoonNotifications";
 import { useModuleFilter, useTasksEnabled } from "../hooks/useModuleFilter";
 import { shellFeatureModule } from "../lib/shellFeatures";
-import { GraphScreen, MODULE_SCREENS, READING_SECTIONS, TasksMode, TodayScreen, readingSectionsFor, type ModuleTarget } from "../modules";
+import { GraphScreen, MODULE_SCREENS, READING_SECTIONS, TasksMode, readingSectionsFor, type ModuleTarget } from "../modules";
 import ModuleNotImported from "./ModuleNotImported";
 import RegionErrorBoundary from "./RegionErrorBoundary";
 
@@ -44,12 +44,6 @@ export default function SecondaryLensOutlet({
   // The same components/props as the old `mode === X ? … :` chain, data-driven
   // and sharing the lens list with the strip.
   const lenses: Partial<Record<AppView, () => ReactNode>> = {
-    // 今天: the journal, the things and the timeline of one day; it asks which of them are on itself.
-    today: () => (
-      <Suspense fallback={<div className="lazy-loading-pane" />}>
-        <TodayScreen online={online} onOpenNode={onOpenNoteFromAgenda} onRefresh={refresh} />
-      </Suspense>
-    ),
     tasks: () => !tasksOn ? (
       <ModuleNotImported moduleId={tasksModuleId} />
     ) : (

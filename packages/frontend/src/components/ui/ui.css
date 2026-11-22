@@ -341,8 +341,6 @@ body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui
  * the scrollbar stays the scrollbar, and its line falls on the column's border. */
 .pane-resizer--column { right: -6px; }
 .pane-resizer--column::after { left: 0; transform: none; }
-.pane-resizer--column-start { left: -6px; }
-.pane-resizer--column-start::after { left: auto; right: 0; transform: none; }
 .pane-resizer::after {
   content: "";
   position: absolute;

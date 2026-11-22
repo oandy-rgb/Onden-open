@@ -11,9 +11,6 @@ export type QuickAddTarget = { id: string; title: string; spaceId?: string | nul
 
 /** Open the quick-add task sheet (focused, ready to type). `into`: the note the
  *  tasks are written into (the info panel's 「＋ 任務」); left out, today's diary. */
-export function openQuickAddTask(into?: QuickAddTarget, options?: QuickAddOptions): void {
-  emitWindowEvent(OPEN_QUICK_ADD_TASK_EVENT, { into: into ?? null, ...options });
+export function openQuickAddTask(into?: QuickAddTarget): void {
+  emitWindowEvent(OPEN_QUICK_ADD_TASK_EVENT, { into: into ?? null });
 }
-
-/** `day`: the day the task starts on unless the words name another (the 今天 page adds to the day it shows). */
-export type QuickAddOptions = { day?: string };

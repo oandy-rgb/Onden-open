@@ -1,4 +1,4 @@
-// The end button of a focus bar: 「結束專注」, or 「今天到此為止」 while a break runs. Shared by the phone's bar and the 今天 page's.
+// The end button of a focus bar: 「結束專注」, or 「今天到此為止」 while a break runs. The phone's bar uses it.
 
 import { Button } from "../../../components/ui";
 import { useT } from "../../../lib/i18n";

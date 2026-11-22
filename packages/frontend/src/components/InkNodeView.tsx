@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PageImagesDoc } from "@onden/markdown/page-images";
 import type { PageTextDoc } from "@onden/markdown/page-text";
-import { INK_PAGE_UNITS, INK_NOTE_MIN_HEIGHT, emptyInkPages, withPageAppended, withPageDoc, type InkPageRecord, type InkPages } from "@onden/markdown/ink";
+import { INK_PAGE_UNITS, INK_NOTE_MIN_HEIGHT, emptyInkPages, withPageAppended, withPageDoc, type InkPageRecord, type InkPages, type InkPageSize } from "@onden/markdown/ink";
+import { mintPageId } from "@onden/markdown/note-pages";
 import { emptyInkDocument, InkPageSession, usePenShortcutTool, type InkActiveTool } from "../lib/ink";
 import type { InkSaveOptions } from "../lib/data";
 import InkToolbar, { INK_COLORS } from "./InkToolbar";
@@ -26,11 +27,12 @@ import ExpandPaneButton from "./ExpandPaneButton";
 import { useAppSchemeMode } from "../hooks/useAppSchemeMode";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { classNames } from "../lib/utils";
-import { randomUUID } from "../lib/uuid";
 import "./InkNodeView.css";
 import { onPageHide } from "../lib/pageHide";
 import { layerClass } from "./ui";
-import { PageBook, type PageBookApi } from "../pagebook";
+import { PageBook, type PageBookApi, type PageBookProps } from "../pagebook";
+
+export type { PageBookApi };
 
 // Handwriting surface for a node that opted in via the `ink_data` attribute — a notebook: a thin
 // shell over the page book (src/pagebook). The parent (OverviewEditor) owns persistence; this
@@ -67,6 +69,15 @@ type Props = {
   pageImages?: PageImagesSource;
   /** What the 「引用」 tool names the note by (its title, and whether another note has the same one). Absent: no 「引用」 tool. */
   quoteAs?: { title: string; nodes: readonly WikilinkNode[] };
+  /** What is behind each page (a PDF page's picture): the page book's `background` slot. */
+  background?: PageBookProps["background"];
+  /** The size a page's background decides (a PDF page is as tall as its file says), by page key; shown instead of the stored one. */
+  pageSizes?: Readonly<Record<string, InkPageSize>>;
+  /** A notebook whose pages are listed elsewhere (`note_pages`) is asked for the key of the blank page "+ Add page" adds, after it has
+   *  written the list; null adds nothing. Without it the page is added here, under a key minted for this notebook. */
+  newPageKey?: (pages: InkPages) => string | null;
+  /** The page book's camera, once it is there (to scroll to a page a link names). */
+  onBookReady?: (api: PageBookApi) => void;
 };
 
 /** The toolbar's tools: the ink engine's, Text (boxes on the page) and Quote (a frame over an area to
@@ -99,7 +110,19 @@ function pagesFittingLayers(pages: InkPages, textDoc: PageTextDoc | null, picDoc
   return next;
 }
 
-export default function InkNodeView({ initialPages, onPagesChange, readOnly = false, readOnlyNotice, pageText, pageImages, nodeId, quoteAs }: Props) {
+/** The pages with the sizes a background decided (a PDF page's shape) in place of the stored ones. */
+function withSizes(pages: InkPages, sizes: Readonly<Record<string, InkPageSize>> | undefined): InkPages {
+  if (!sizes) return pages;
+  let next = pages;
+  for (const [key, size] of Object.entries(sizes)) {
+    const record = pages.pages[key];
+    if (!record || (record.size.width === size.width && record.size.height === size.height)) continue;
+    next = { ...next, pages: { ...next.pages, [key]: { ...record, size } } };
+  }
+  return next;
+}
+
+export default function InkNodeView({ initialPages, onPagesChange, readOnly = false, readOnlyNotice, pageText, pageImages, nodeId, quoteAs, background, pageSizes, newPageKey, onBookReady }: Props) {
   const t = useT();
   const pane = useExpandedPane(nodeId);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -123,7 +146,7 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
   const dark = useAppSchemeMode() === "dark";
 
   const input = useInkInputPrefs();
-  const shownPages = useMemo(() => pagesFittingLayers(pages, textDoc, picDoc), [pages, textDoc, picDoc]);
+  const shownPages = useMemo(() => withSizes(pagesFittingLayers(pages, textDoc, picDoc), pageSizes), [pages, textDoc, picDoc, pageSizes]);
 
   const setTool = useCallback((next: NoteTool) => setToolState(next), []);
 
@@ -215,7 +238,8 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
   const toolbarHistory = stack ? { canUndo: stack.canUndo, canRedo: stack.canRedo } : history;
 
   const addPage = () => {
-    const key = randomUUID();
+    const key = newPageKey ? newPageKey(pagesRef.current) : mintPageId(Object.keys(pagesRef.current.pages));
+    if (!key) return;
     commit((current) => withPageAppended(current, key));
     bookRef.current?.scrollToPage(key);
   };
@@ -315,8 +339,9 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
         onPenSeen={input.onPenSeen}
         onPenShortcut={onPenShortcut}
         onAddPage={readOnly ? undefined : addPage}
-        onReady={(api) => { bookRef.current = api; }}
+        onReady={(api) => { bookRef.current = api; onBookReady?.(api); }}
         t={t}
+        background={background}
         layers={(page, host) => (
           <>
             {pics && picDoc && (

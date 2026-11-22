@@ -90,7 +90,7 @@
 ## 手寫與 PDF：頁面本子與存法
 
 - **一種頁面。** PDF 筆記與手寫筆記都是 `pagebook/PageBook`：它只認頁面信封 `InkPages`（`@onden/markdown/ink`，`inkPages.ts`），背景是 `(page) => ReactNode` 插槽，不認得 PDF；
-  不要在頁面元件寫死「是不是 PDF」。頁 key：`pdf:<n>`、手寫第一頁 `page`、其餘空白頁用 uuid、投影片保留 `slide:<id>`（尚未畫）。頁寬固定 1000 單位，筆跡與縮放無關。
+  不要在頁面元件寫死「是不是 PDF」。頁 key：`pdf:<n>`（舊 PDF 筆記）、頁面清單（`note_pages`）裡 PDF 段的頁 `<段的前綴>:<n>`、手寫第一頁 `page`、其餘空白頁用 uuid（只由 `@onden/markdown/note-pages` 的 `mintPageId` 產生，不重複使用）、投影片保留 `slide:<id>`（尚未畫）。頁寬固定 1000 單位，筆跡與縮放無關。
 - **鏡頭**：一個原生捲動容器；縮放是頁的 CSS 寬度（`PAGE_ZOOM_MIN`–`PAGE_ZOOM_MAX`＝0.5–4）；兩指縮放用 `touchSplit` 預覽，甩動用 `lib/ink/glide.ts`。
   每頁一個引擎，只有畫面附近的頁才有（`PageInkSurface`），其他頁畫 `PageInkSvg`；引擎收掉前先把內容交回 `InkPageSession`（`lib/ink/pageSession.ts`）。
   `tool` 為 `null` 時不掛 `PageInkSurface`（PDF 的選取與文字工具、唯讀手寫），讓文字層收得到指標。頁是固定高度的紙，不會因筆跡往下長。
@@ -102,6 +102,8 @@
   **寫舊格式的唯一入口是 `lib/pdf/pageUnits.ts` 的 `setPdfPageDoc`**（`guards/ink.guard.test.ts` 鎖住）；停寫舊格式要先問業主。
   手寫筆記的 `ink_data` 本身就是第一頁，其餘頁在 `morePages`（`notePages`／`noteDoc`），不另存第二份；沒有 `toolId` 的舊筆跡讀成 `toolId: "uniform"`（等寬）。
   不需要 `requires`：舊前端原樣保留 `units`／`unitsFrom`，`mergeEnvelope` 只在三方都相符時才重算 `unitsFrom`。
+  例外是頁面清單的本子（`note_pages`，2026-11-17）：第一頁可能是 PDF 的頁，沒有自己的 `page`，`noteDoc` 存一張空的載體頁並在 `morePages` 標 `carrier`
+  （`inkPageOrder` 不把它當一頁），同時寫 `requires: ["note-pages"]`（`INK_KNOWN_FEATURES` 從這版起認得），所以舊前端只能唯讀開啟，不會把載體頁存成真的一頁。
 - **三個屬性、一種視角一份筆跡**：`ink_data`（內容是手寫頁或 PDF）、`board_ink`（白板筆層）、`note_ink`（手寫分頁）；鍵的清單 `INK_PAGE_ATTRS` 在 `@onden/markdown` 的 `sharedContract.ts`，前後端都從那裡來，
   同一個 codec、`saveInk(nodeId, doc, base, { attr })`、同一條 `PUT /attributes/:key` 合併與離線佇列。
 - **離開頁面不掉筆跡**：`pagehide`／分頁隱藏時 PDF（`commitDrawSession`）與 `InkNodeView` 立刻以 `keepalive` 存出還沒存的筆跡。
@@ -148,5 +150,9 @@
 - 分頁是 `function_refs` 的一列，layout `"handwriting"`（`HANDWRITING_LAYOUT`），不需要 migration。後端 `modules/handwriting`（`noteViewLayout: true`），前端 `modules/handwriting` 的 `noteView`；
   handwriting 仍是內建模組（筆的設定頁在設定›功能›手寫），`NOTE_VIEW_MODULES` 把內建模組與 library 模組合成同一個清單。每則筆記最多一個，已有就開啟它（`useAddView` 的 `firstTabOf`）。
 - **刪分頁不刪筆畫**：`deleteNoteView` 只移除那一列，筆畫是另一個屬性，再加回分頁就看得到。內容已是手寫頁（`ink_data`）或 PDF（`pdf_url`）的筆記，「＋」不列「手寫」（`useHasPageSurface`）。
-- 畫面與 `OverviewEditor` 共用 `InkNodeView` 與 `useInkSurfaceSaver(attr)`；沒有編輯權限的成員看得到分頁，顯示唯讀提示。`getNode` 的屬性不含筆跡屬性（`isInkPageAttr`）。
+- 畫面與 `OverviewEditor` 共用 `InkNodeView` 與 `useInkSurfaceSaver(attr)`；沒有編輯權限的成員看得到分頁，顯示唯讀提示。`getNode` 的屬性不含筆跡屬性（`isInkPageAttr`），也不含 `note_pages`／`pdf_text` 的原值（`pdf_text` 只給有文字的頁數）。
+- **頁面清單（`note_pages`，2026-11-17，[提案](../architecture/proposals/pdf-pages-in-note-2026-11-16.md) 第 1 步）**：筆記有 `note_pages`（空白頁與 PDF 檔的頁段，`@onden/markdown/note-pages`）時，
+  `HandwritingPane` 改載 `NotePagesBook`（延後載入，一般手寫分頁不載 pdf.js），畫面仍是同一個 `InkNodeView`。筆畫仍在 `note_ink`，以頁 key 為鍵。
+  清單由伺服器以 `mergeNotePages` 合併（`MERGED_KEYS`）；比這版新的清單不能寫（409 `pages_version`）。沒有 `note_pages` 的筆記與以前完全相同；
+  **目前沒有建立這種筆記的入口，也沒有 migration**（那是提案的第 2 步以後）。
   同步、歷史（`inkEventSql(…, "note")`）、備份、複製筆記都跟著屬性走；匯出只在筆記還有手寫分頁時把 `note_ink` 接在內容後面成為 SVG。

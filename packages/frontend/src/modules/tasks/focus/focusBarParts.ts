@@ -1,5 +1,5 @@
-// The words of the running-focus bar (the phone's bar above the navigation, the 今天 page's bar): what is being
-// done, how much is left, or the break's title and time. One place, so both bars say the same thing.
+// The words of the running-focus bar (the phone's bar above the navigation): what is being
+// done, how much is left, or the break's title and time.
 
 import { t } from "../../../lib/i18n";
 import { formatFocusClock, focusClockText, type FocusRun } from "../../../lib/focus";

@@ -61,9 +61,3 @@
 .focus-sheet--break, .focus-full--break .focus-full-clock { background: var(--ac-accent-soft); }
 .focus-mark--break { background: var(--ac-accent-soft); border-style: dashed; border-color: var(--ac-accent-border); }
 .focus-sheet--break { border-style: dashed; border-color: var(--ac-accent-border); }
-
-/* The focus bar under a page's header (FocusPageBar, the 今天 page): one quiet row, a dashed edge during a break. */
-.focus-page-bar { display: flex; align-items: center; gap: var(--ac-space-2); min-width: 0; padding: var(--ac-space-1) var(--ac-space-3); border: 1px solid var(--ac-accent-border); border-radius: var(--ac-radius-md); background: var(--ac-accent-soft); color: var(--ac-ink); }
-.focus-page-bar--break { border-style: dashed; }
-.focus-page-bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.focus-page-bar-round, .focus-page-bar-time { flex: none; color: var(--ac-muted); font-variant-numeric: tabular-nums; }

@@ -25,15 +25,15 @@ describe("the default layout is the navigation from before pins", () => {
     const nav = arrangeNavigation({ mode: "notes" }, actions, features(["review", "rss", "website", "canvas", "daily"]), null);
     // The whiteboard is on and has no destination: boards are notes.
     expect(nav.notes.id).toBe("notes");
-    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "review", "reading", "website", "daily", "today"]);
+    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "review", "reading", "website", "daily"]);
     // 歷史 is the one core page left to 更多.
     expect(nav.unpinned.map((d) => d.id)).toEqual(["timeline"]);
     expect(nav.phoneBar.map((d) => d.id)).toEqual(["tasks"]);
   });
 
   it("follows what is imported until it is edited", () => {
-    expect(arrangeNavigation({ mode: "notes" }, actions, features([]), null).pinned.map((d) => d.id)).toEqual(["tasks", "graph", "today"]);
-    expect(arrangeNavigation({ mode: "notes" }, actions, features(["website"]), null).pinned.map((d) => d.id)).toEqual(["tasks", "graph", "website", "today"]);
+    expect(arrangeNavigation({ mode: "notes" }, actions, features([]), null).pinned.map((d) => d.id)).toEqual(["tasks", "graph"]);
+    expect(arrangeNavigation({ mode: "notes" }, actions, features(["website"]), null).pinned.map((d) => d.id)).toEqual(["tasks", "graph", "website"]);
   });
 
   it("the phone's 更多: 日記, 任務, 歷史 under 時間, Graph under 整理, every other feature under 功能; a pinned one leaves it", () => {
@@ -41,20 +41,20 @@ describe("the default layout is the navigation from before pins", () => {
       const nav = arrangeNavigation({ mode: "notes" }, actions, features(["rss", "daily"]), stored);
       return getMoreNavigationGroups({}, nav.phoneMore).map((g) => g.items.map((i) => i.id));
     };
-    expect(more(null)).toEqual([["today", "daily", "timeline"], ["graph"], ["reading"]]);
-    expect(more(layout(["tasks", "reading"], 2))).toEqual([["today", "daily", "timeline"], ["graph"]]);
+    expect(more(null)).toEqual([["daily", "timeline"], ["graph"], ["reading"]]);
+    expect(more(layout(["tasks", "reading"], 2))).toEqual([["daily", "timeline"], ["graph"]]);
     // 任務 sits between 日記 and 歷史 when it is not pinned.
-    expect(more(layout(["graph", "reading"], 2))).toEqual([["today", "daily", "tasks", "timeline"]]);
+    expect(more(layout(["graph", "reading"], 2))).toEqual([["daily", "tasks", "timeline"]]);
   });
 
   it("empty groups are not shown; a disabled feature is not in 時間", () => {
     const only = (modules: string[], stored: NavLayout | null, featureOn?: (f: string) => boolean) =>
       getMoreNavigationGroups({}, arrangeNavigation({ mode: "notes" }, actions, features(modules), stored, featureOn as never).phoneMore).map((g) => [g.id, g.items.map((i) => i.id)]);
     // Everything pinned except 歷史: only 時間 remains.
-    expect(only([], layout(["tasks", "graph"], 2))).toEqual([["time", ["today", "timeline"]]]);
-    expect(only(["daily"], layout(["tasks", "graph"], 2))).toEqual([["time", ["today", "daily", "timeline"]]]);
+    expect(only([], layout(["tasks", "graph"], 2))).toEqual([["time", ["timeline"]]]);
+    expect(only(["daily"], layout(["tasks", "graph"], 2))).toEqual([["time", ["daily", "timeline"]]]);
     // Daily notes off: not in 時間. Tasks off (feature off): not in 時間 either.
-    expect(only([], null, (f) => f !== "tasks")).toEqual([["time", ["today", "timeline"]], ["organize", ["graph"]]]);
+    expect(only([], null, (f) => f !== "tasks")).toEqual([["time", ["timeline"]], ["organize", ["graph"]]]);
   });
 
   it("the editor's grouping of 「在「更多」裡」 is the 更多 grouping", () => {
@@ -62,13 +62,13 @@ describe("the default layout is the navigation from before pins", () => {
     const editor = groupDestinations(nav.unpinned).map((g) => [g.id, g.label, g.destinations.map((d) => d.id)]);
     const more = getMoreNavigationGroups({}, nav.unpinned).map((g) => [g.id, g.label, g.items.map((i) => i.id)]);
     expect(editor).toEqual(more);
-    expect(editor[0]).toEqual(["time", "Time", ["today", "daily", "tasks", "timeline"]]);
+    expect(editor[0]).toEqual(["time", "Time", ["daily", "tasks", "timeline"]]);
   });
 
   it("every 時間 destination carries the group itself (no id list in the grouping)", () => {
     const nav = arrangeNavigation({ mode: "notes" }, actions, features(["daily"]), null);
     const withGroup = nav.candidates.filter((d) => d.group?.id === "time").map((d) => d.id).sort();
-    expect(withGroup).toEqual(["daily", "tasks", "timeline", "today"]);
+    expect(withGroup).toEqual(["daily", "tasks", "timeline"]);
   });
 });
 
@@ -84,7 +84,7 @@ describe("更多 and the nav editor's 「在「更多」裡」 are one list", ()
 
   it("default layout: an unused feature is in 更多, not in a bar; a used one is in the bar", () => {
     const nav = arrangeNavigation({ mode: "notes" }, actions, featuresUsed(), null);
-    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "reading", "today"]);
+    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "reading"]);
     expect(nav.unpinned.map((d) => d.id)).toEqual(["timeline", "review", "daily"]);
     expect(nav.phoneBar.map((d) => d.id)).toEqual(["tasks"]);
   });
@@ -188,7 +188,16 @@ describe("a removed module", () => {
     const nav = arrangeNavigation({ mode: "notes" }, actions, features(["website"]), stored);
     expect(nav.phoneBar.map((d) => d.id)).toEqual(["tasks", "timeline"]);
     expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "timeline", "graph", "website"]);
-    expect(nav.unpinned.map((d) => d.id)).toEqual(["today"]);
+    expect(nav.unpinned.map((d) => d.id)).toEqual([]);
+  });
+
+  it("a stored 今天 pin (the page was a trial until 2026-11-18) is dropped when read; the stored layout is left as it was", () => {
+    const stored = layout(["tasks", "today", "graph", "website"], 2);
+    const before = JSON.stringify(stored);
+    expect(resolveNavLayout(stored, ["tasks", "graph", "timeline", "website"])).toEqual(layout(["tasks", "graph", "website"], 1));
+    const nav = arrangeNavigation({ mode: "notes" }, actions, features(["website"]), stored);
+    expect([...nav.pinned, ...nav.unpinned].map((d) => d.id)).not.toContain("today");
+    expect(JSON.stringify(stored)).toBe(before);
   });
 
   it("a pinned whiteboard (saved while it had a destination) is ignored, leaving no gap", () => {
@@ -203,7 +212,7 @@ describe("a removed module", () => {
   it("an edited layout does not take in modules imported later", () => {
     const nav = arrangeNavigation({ mode: "notes" }, actions, features(["website", "review"]), layout(["tasks", "website"], 1));
     expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "website"]);
-    expect(nav.unpinned.map((d) => d.id)).toEqual(["graph", "timeline", "review", "today"]);
+    expect(nav.unpinned.map((d) => d.id)).toEqual(["graph", "timeline", "review"]);
   });
 
   it("a stored 標籤 pin (an old layout) drops out: tags are no destination", () => {

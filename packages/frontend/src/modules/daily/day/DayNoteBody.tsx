@@ -1,6 +1,5 @@
 // The day's note drawn in full, read-only: a tap on the words opens the note to write in it (onOpenNode),
-// links in it go where they point. A day with no text (or no note) shows `empty` instead. One piece for the
-// Journal page (DayPage) and the 今天 page's journal column.
+// links in it go where they point. A day with no text (or no note) shows `empty` instead. The Journal page (DayPage) draws it.
 
 import type { MouseEvent, ReactNode } from "react";
 import { ExternalLink } from "lucide-react";

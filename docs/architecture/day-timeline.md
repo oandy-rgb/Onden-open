@@ -1,7 +1,7 @@
 # 日子時間線：資料與任務
 
 > 狀態：現行
-> 涵蓋：packages/markdown/src/taskTime.ts, packages/markdown/src/dayItems.ts, packages/markdown/src/taskReminder.ts, packages/backend/src/modules/tasks/focus.ts, packages/backend/src/modules/tasks/pushReminders.ts, packages/backend/src/modules/tasks/blockTasks.ts, packages/backend/db/migrations/147_tasks_into_notes.sql, packages/backend/db/migrations/148_focus_sessions.sql, packages/frontend/src/modules/daily/day/**, packages/frontend/src/modules/daily/today/**, packages/frontend/src/modules/daily/JournalScreen.tsx, packages/frontend/src/lib/dueSoonNotify.ts, packages/frontend/src/lib/webPush.ts
+> 涵蓋：packages/markdown/src/taskTime.ts, packages/markdown/src/dayItems.ts, packages/markdown/src/taskReminder.ts, packages/backend/src/modules/tasks/focus.ts, packages/backend/src/modules/tasks/pushReminders.ts, packages/backend/src/modules/tasks/blockTasks.ts, packages/backend/db/migrations/147_tasks_into_notes.sql, packages/backend/db/migrations/148_focus_sessions.sql, packages/frontend/src/modules/daily/day/**, packages/frontend/src/modules/daily/JournalScreen.tsx, packages/frontend/src/lib/dueSoonNotify.ts, packages/frontend/src/lib/webPush.ts
 
 被取代的設計（日記頁曾有時間軸與右欄、收工、2026-10-31 改版前後的畫面分工、當時的參考與待辦）在 [day-timeline-history.md](day-timeline-history.md)。
 業主 2026-10-30：「時間線直接開始好了，反正之後還會改。」
@@ -9,9 +9,9 @@
 ## 1. 方向
 
 - **日記頁是單天頁**（「往回看」：寫和記）；**任務頁是往後看**（排和做）：時間軸、不限時間、1 天／3 天／週都在任務頁的「今天」分頁（`DayPane`）。
-  另有試用中的「今天」頁（本文最後一節）把日記、任務與時間軸放在同一頁。
+  曾試過把三者放在同一頁的「今天」頁，已拿掉（本文最後一節）。
 - **時間軸只留「要做／做了的事」＝任務（有時間的，完成的也留）與專注**（業主 2026-10-31）。修改、建立、快速記錄、AI 執行不上時間軸，到「歷史」看。
-  篩選只寫一份：`@onden/markdown` 的 `onTimeline`／`TIMELINE_KINDS`，`DayPane`、`WeekBoard` 與今天頁在畫面層套用；
+  篩選只寫一份：`@onden/markdown` 的 `onTimeline`／`TIMELINE_KINDS`，`DayPane`、`WeekBoard` 在畫面層套用；
   `useDayItems`、後端 lens 照舊交出全部來源（日記頁「這天發生的」用）。
 - **範圍**：電腦可切 1 天／3 天／週；手機只有 1 天（3 天／週太擠，2026-11-09）。
 - **專注**：任務可以「專注」（番茄鐘）。結束時問「做了什麼」，那句話可以寫進日記，也可以記在任務底下。
@@ -267,22 +267,24 @@ daily 模組關掉時任務頁照常（只是看不到快速記錄那類項目�
 - 快速新增有日期的任務（例如「明天」）仍寫進**今天**的日記（依業主指示；`createQuickTask.ts` 的 `defaultNote`）；時間軸以 `_task_when` 為準，不受影響。
 - 3 天／週（`WeekBoard`）沒有小時格，不能在欄內改時間；時間軸上重疊的方塊並排，不自動推開。
 
-## 「今天」頁（試用，業主 2026-11-13）
+## 「今天」頁：2026-11-13 試用、2026-11-18 拿掉
 
-`?view=today`（核心頁，`modules/daily/today/`，整頁 `lazyWithReload`；導覽只登記一筆）。**多出來的一頁**：日記頁、任務頁、歷史頁不動；試用滿意後才決定拿掉舊的。
-全部沿用現有零件，只加參數：
+業主 2026-11-18：「今天頁面前端先拿掉」。試用頁（`?view=today`，PR #1561）把日記、任務清單與小時時間軸放在同一屏；業主用了之後覺得它同時帶著兩頁的弱點。
+方向改成：**任務、日記維持兩頁，寬螢幕時用現有的並排（split view）同時看**（那是之後的工作，不在拿掉這一批）。只動前端：沒有後端、migration、資料的變動；日記頁、任務頁（含它的「今天」分頁）、專注、「可以排進今天的」、捕捉的「今天的日記」、「打開今天的筆記」都不變。
 
-- **功能開關**：日記關 → 沒有中間欄；任務關 → 沒有左欄、時間軸 `TimelinePlanner enabled=false`（純時間軸）；兩個都關 → 導覽不出現（`TODAY_PAGE.anyFeature`，`hooks/shellNavigation.ts`），直接開網址顯示說明。
-- **桌面三欄**：左＝事情（`TasksColumn`：`TaskRow`、`TaskSheet`，規則 `todayLists` 疊在 `lib/tasks`：還沒做完／今天要做的／還沒排的）；
-  中＝日記；右＝時間軸（`TimelinePlanner`，**不折疊空白時段**，`foldEmpty` 不開）。分隔線用 `ColumnResizer`（新增 `edge="start"`、`keepBeside`），寬度、收起的日記欄、天數範圍、手機的視圖記在這台裝置（`PREFS.today*`）。
-  寬度不到 1280px 沒有中欄：右欄用「時間軸｜日記」切換。3 天／週＝`WeekBoard`，月＝`DayStrip` 的月曆（點一天回 1 天）；`CalendarLayout` 沒動。
-- **共用抽出**：`useTaskBoard`（任務頁與今天頁同一份「勾選、排到今天、丟掉、某天、開表單」）、`useDayNote`／`DayNoteBody`（日記頁與今天頁讀同一天的筆記）、`useWriteDay`、`useDayMarks`。
-- **中欄可寫，但不嵌編輯器**：筆記編輯器是 shell 裡綁定「開著的那則筆記」的單一實例，兩個編輯器不能同時握同一則（decisions-ui 並排）。所以中欄＝唯讀呈現＋一個輸入框，
-  送出走 `appendToNote`（和並排右窗格的「記一下」同一條寫入：樂觀、離線排隊、與別處編輯合併）；Ctrl／⌘＋Enter 或按鈕才送，組字中不送。
-  那天沒有筆記時，**按下加入才經 `dayNotes.openDay` 建立**（不預先建空筆記）；未來的日子不從這裡開筆記。完整編輯用「開啟筆記」。
-- **專注**：`FocusPageBar`（桌面標題列下一條：哪件事、第幾輪、剩多久、全螢幕、結束專注）。頁面根元素標 `data-focus-stays`：從它裡面開始的專注，`StartSheet` 不自動展開全螢幕（別處照舊，並排時另一邊的任務頁也照舊）。
-  `DayTimeline` 新增 `focusLane`：專注紀錄畫在右緣窄窄一道（排的／實際並排），進行中的跟著時間長；手機不分兩道。`TaskRow` 新增 `focusedMinutes`。
-  過去的日子在時間軸下多一張 `TimeSpent`（排了／專注／合計、超過標出來；沒有專注紀錄不顯示）。
-- **快速新增**：`openQuickAddTask(into, { day })`——預填這一天，字裡有日期仍以字為準。
-- 沒做：「全部的事」只有任務頁現有的分頁（接下來／隨時／某天）；任務頁沒有「等別人」「做完的」分頁，所以這裡也沒有。
-  導覽的「今天」排在模組頁之後，不是核心頁，窄的桌面列先把它收進「更多」（`TODAY_PAGE`）。
+這一頁有、別處沒有的（拿掉時逐項對過程式；要不要搬到任務頁由業主之後決定，這一批沒有搬）：
+
+- 專注：標題列下的專注條（哪件事、第幾輪、剩多久）——別處沒有；現在桌面只有頂端的小標記與全螢幕（`FocusTopMark`、`FocusScreens`），手機有導覽上方的條。
+  時間軸上「排的／實際」兩道並排、事情列上的「專注 N 分」、標題列的「今天專注 N 分」、過去日子的「那天的時間花在哪」表（排了／專注／合計）——別處沒有；任務頁的時間軸把專注紀錄和排的方塊畫在同一欄。
+- 一頁切 天｜3 天｜週｜月：任務頁「今天」分頁有 1 天／3 天／週；月曆在日記頁（`DayStrip`）與月曆檢視。任務頁沒有月。
+- 前一天／後一天翻任何一天的事情清單（含過去那天的「到現在還沒做」）：任務頁只能從 3 天／週點進某天；日記頁的「這天發生的」列當天完成的任務。
+- 「全部的事」蓋在清單上、時間軸仍在：任務頁有同樣三個分頁（接下來／隨時／某天），但切過去時時間軸不在同一屏。
+- 日記欄與事情、時間軸同屏、可在日記欄直接寫一行：沒有同一頁；現有的並排右窗格有「記一下」。
+- 「加一件事…」預填目前看的那一天（`openQuickAddTask(into, { day })`）：任務頁的「＋」不預填；在時間軸點空檔排任務仍會帶那一天。
+
+拿掉時一併刪掉只有這一頁在用的東西：`modules/daily/today/`、`FocusPageBar`、`data-focus-stays`（`requestFocus` 的 `stay`）、`DayTimeline` 的 `focusLane`、`useDayItems` 的 `known`、`TaskRow` 的 `focusedMinutes`、
+`openQuickAddTask` 的 `day` 選項、`ColumnResizer` 的 `edge`／`keepBeside`、`PREFS.today*`、`WIDE_QUERY`、`CORE_PAGES.anyFeature`、`modules/taskParts` 裡只為這頁開的出口。
+`useTaskBoard`、`useDayNote`／`DayNoteBody`、`useWriteDay`、`useDayMarks` 原本是為這頁抽出的，現在仍各有任務頁／日記頁在用，留著。
+
+已經有這一頁的人：存過的導覽版型裡的 `today` 讀取時略過（存著的版型不改、不寫回）；舊網址、歷史紀錄、記住的位置裡的 `view=today` 開任務頁，任務關著開日記頁，兩個都關開筆記
+（唯一的規則是 `lib/retiredViews` 的 `viewOfRetiredToday`，`parseLocation` 與並排右窗格的 `right=page:today`／存著的窗格都用它；右窗格在兩個都關時保持關閉）。兩種情況都不顯示訊息。

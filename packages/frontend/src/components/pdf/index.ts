@@ -6,4 +6,4 @@
 
 export { PdfPageBackground, type PdfPageBackgroundProps } from "./PdfPageBackground";
 export { PdfPageHighlights } from "./PdfHighlights";
-export { usePdfDocument, usePdfPageShapes, type PdfPageShapes } from "./usePdfDocument";
+export { usePdfDocument, usePdfPageShapes, type LoadedPdf, type PdfPageShapes } from "./usePdfDocument";

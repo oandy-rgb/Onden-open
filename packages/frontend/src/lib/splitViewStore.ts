@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { createAccountPref } from "./accountPrefStore";
 import { isMobileLayout } from "./mediaQuery";
 import { PREFS } from "./prefs";
+import { viewOfRetiredToday } from "./retiredViews";
 import {
   SPLIT_RATIO_DEFAULT, clampRatio, decodePane, dropSideAt, encodePane, panesConflict, samePane,
   type PaneTarget, type Side,
@@ -15,6 +16,14 @@ import {
 // a note. The drag controller at the bottom is the one place a drop is decided.
 
 type Saved = { right: string | null; ratio: number };
+
+/** A right pane named by the address or the saved pane. 「今天」 (a page until 2026-11-18) opens where `view=today` does;
+ *  with neither 任務 nor 日記 on that is 筆記, which is no pane: the right side stays closed. */
+function decodeRight(text: string | null | undefined): PaneTarget | null {
+  if (text !== "page:today") return decodePane(text);
+  const view = viewOfRetiredToday();
+  return view === "notes" ? null : { kind: "page", mode: view };
+}
 
 const splitPanePref = createAccountPref<Saved>({
   serverKey: "splitPane",
@@ -73,14 +82,16 @@ export const addressNamedRight = (): boolean => urlNamedRight;
 export function applyUrlRight(value: string | null, initial = false): void {
   // A phone shows only the left note: `right=` is ignored there, and never written.
   if (!canSplit()) return;
-  const right = decodePane(value);
+  const right = decodeRight(value);
   if (initial) urlNamedRight = right !== null;
   if (!samePane(right, state.right)) set({ right });
 }
 /** The account's saved pane, once, when the URL named none. */
 export function applySavedSplit(saved: Saved | null): void {
   if (!saved || !canSplit()) return;
-  set({ right: decodePane(saved.right), ratio: clampRatio(saved.ratio) });
+  set({ right: decodeRight(saved.right), ratio: clampRatio(saved.ratio) });
+  // The retired 今天 pane is saved over with where it opened, so that it is not read (and resolved) again at every start.
+  if (saved.right === "page:today") remember();
 }
 export function useSavedSplit(): { value: Saved | null; settled: boolean } {
   const { value, settled } = splitPanePref.useValue();

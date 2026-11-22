@@ -41,10 +41,11 @@ import { snippetAround, queryTerms, type Snippet } from "@onden/markdown/snippet
 import { pageTextPlain } from "@onden/markdown/page-text";
 import { INK_PAGE_ATTRS } from "@onden/markdown/ink";
 import type { CanvasMembership } from "@onden/contract";
-import { isTag } from "@onden/markdown/contract";
+import { isTag, PDF_TEXT_ATTR } from "@onden/markdown/contract";
 
 // Drawings stay out of the in-memory attribute map (their readers load them on open); the keys of bootstrap.ts's lean bootstrap.
-const DRAWING_KEYS_SQL = [...INK_PAGE_ATTRS, "pdf_annotations"].map((k) => `'${k}'`).join(", ");
+// `pdf_text` (the text of a PDF's pages, up to ~60,000 characters a note) stays out for the same reason; the server's search reads it, this device's does not.
+const DRAWING_KEYS_SQL = [...INK_PAGE_ATTRS, "pdf_annotations", PDF_TEXT_ATTR].map((k) => `'${k}'`).join(", ");
 
 // A Worker has its own `crypto` realm separate from the main thread, so the
 // secure-context randomUUID fallback (insecure LAN-IP HTTP self-host) must be

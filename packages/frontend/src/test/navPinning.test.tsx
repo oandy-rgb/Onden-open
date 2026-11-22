@@ -80,7 +80,7 @@ describe("pinning on the phone", () => {
     // The slot opens the reading hub on its section.
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Reading" }));
     expect(props.onOpenModule).toHaveBeenCalledWith("rss");
-    await waitFor(() => expect(serverValue).toEqual({ order: ["tasks", "reading", "graph", "review", "website", "today"], phone: 2 }));
+    await waitFor(() => expect(serverValue).toEqual({ order: ["tasks", "reading", "graph", "review", "website"], phone: 2 }));
   });
 
   it("a held touch opens the same menu, and the click that ends it does not open the row", () => {
@@ -145,7 +145,7 @@ describe("the desktop bar and a removed module", () => {
     expect(labels()).toEqual(["Notes", "Reading", "Tasks", "More"]);
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     expect(within(screen.getByRole("menu", { name: "More" })).getAllByRole("menuitem").map((i) => i.textContent))
-      .toEqual(["Graph", "Workspace changes", "Review", "Website", "Today", "Customize navigation bar…"]);
+      .toEqual(["Graph", "Workspace changes", "Review", "Website", "Customize navigation bar…"]);
   });
 
   it("a removed module leaves the bar without a gap, and importing it again does not restore the pin", async () => {
@@ -165,7 +165,7 @@ describe("the desktop bar and a removed module", () => {
     renderDesktop();
     fireEvent.contextMenu(screen.getByRole("button", { name: "Graph" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Remove from navigation bar" }));
-    expect(labels()).toEqual(["Notes", "Tasks", "Review", "Reading", "Website", "Today", "More"]);
+    expect(labels()).toEqual(["Notes", "Tasks", "Review", "Reading", "Website", "More"]);
   });
 });
 
@@ -224,19 +224,19 @@ describe("Settings › 導覽列", () => {
     // The locked 更多 row follows the phone's share; the reorder checks look at the entries alone.
     const entries = () => rows().filter((id) => id !== "more");
     render(<NavigationSetting />);
-    expect(rows()).toEqual(["notes", "tasks", "more", "graph", "review", "reading", "website", "today"]);
-    expect(marked()).toEqual(["graph", "review", "reading", "website", "today"]);
+    expect(rows()).toEqual(["notes", "tasks", "more", "graph", "review", "reading", "website"]);
+    expect(marked()).toEqual(["graph", "review", "reading", "website"]);
     expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
     // An arrow key on a handle moves it; Graph, first after the cut, crosses it into the phone's bar.
     fireEvent.keyDown(screen.getByRole("button", { name: "Reorder “Graph”" }), { key: "ArrowUp" });
-    expect(marked()).toEqual(["review", "reading", "website", "today"]);
+    expect(marked()).toEqual(["review", "reading", "website"]);
     fireEvent.keyDown(screen.getByRole("button", { name: "Reorder “Tasks”" }), { key: "ArrowDown" });
     expect(entries().slice(0, 4)).toEqual(["notes", "graph", "tasks", "review"]);
     // Tapping a handle shows the buttons for that row alone.
     expect(screen.queryByRole("button", { name: /^Move /})).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Reorder “Website”" }));
     fireEvent.click(screen.getByRole("button", { name: "Move “Website” up" }));
-    expect(entries().slice(-3)).toEqual(["website", "reading", "today"]);
+    expect(entries().slice(-3)).toEqual(["review", "website", "reading"]);
     // ⊖ takes an entry out to 「更多」, ⊕ puts it back (the phone's bar has room: it joins it).
     fireEvent.click(screen.getByRole("button", { name: "Remove “Review” from the navigation bar" }));
     expect(rows()).not.toContain("review");
@@ -244,9 +244,9 @@ describe("Settings › 導覽列", () => {
     expect(entries().indexOf("review")).toBe(3);
     expect(rows().indexOf("more")).toBe(4);
     expect(marked()).not.toContain("review");
-    await waitFor(() => expect(serverValue).toEqual({ order: ["graph", "tasks", "review", "website", "reading", "today"], phone: 3 }));
+    await waitFor(() => expect(serverValue).toEqual({ order: ["graph", "tasks", "review", "website", "reading"], phone: 3 }));
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect(rows()).toEqual(["notes", "tasks", "more", "graph", "review", "reading", "website", "today"]);
+    expect(rows()).toEqual(["notes", "tasks", "more", "graph", "review", "reading", "website"]);
     await waitFor(() => expect(serverValue).toBeNull());
   });
 
@@ -376,7 +376,7 @@ describe("Settings › 導覽列 follows the shell", () => {
 
   it("with room for everything and nothing left out, the bar has no 更多 and neither does the list", async () => {
     setShell("desktop");
-    await storeLayout({ order: ["tasks", "today", "graph", "timeline", "review", "reading", "website"], phone: 1 });
+    await storeLayout({ order: ["tasks", "graph", "timeline", "review", "reading", "website"], phone: 1 });
     render(<NavigationSetting />);
     expect(desktopBar()!.querySelector(".topbar-more-btn")).toBeNull();
     expect(rowOf("more")).toBeNull();

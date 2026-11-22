@@ -1,6 +1,6 @@
 // 「寫點什麼…」 on a day: open that day's note to write in, starting it first when there is none
-// (dayNotes.openDay, the single entry that makes a day note; lib/data/dayNotes.ts). The Journal page and
-// the 今天 page's phone row start a day this way.
+// (dayNotes.openDay, the single entry that makes a day note; lib/data/dayNotes.ts). The Journal page starts
+// a day this way.
 
 import { useState } from "react";
 import { addToast } from "../../lib/appStore";

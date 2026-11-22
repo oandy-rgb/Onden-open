@@ -38,7 +38,7 @@ describe("desktop primary navigation", () => {
   it("shows the core pages in order, then the imported modules' pages", () => {
     renderNavigation();
     // The whiteboard is in use too, and still has no entry: boards are notes.
-    expect(labels()).toEqual([...CORE, "Review", "Reading", "Website", "Daily notes", "Today"]);
+    expect(labels()).toEqual([...CORE, "Review", "Reading", "Website", "Daily notes"]);
     // Everything pinned fits (no layout in jsdom): 更多 ▾ holds only what is not pinned.
     expect(labels()).not.toContain("Workspace changes");
     fireEvent.click(screen.getByRole("button", { name: "More" }));
@@ -49,19 +49,19 @@ describe("desktop primary navigation", () => {
   it("core pages are there with no module imported", () => {
     withModules([]);
     renderNavigation();
-    expect(labels()).toEqual([...CORE, "Today"]);
+    expect(labels()).toEqual([...CORE]);
   });
 
   it("a module's entry appears when it is imported and goes when it is removed", () => {
     withModules(["review"]);
     const { props, view } = renderNavigation();
-    expect(labels()).toEqual([...CORE, "Review", "Today"]);
+    expect(labels()).toEqual([...CORE, "Review"]);
     act(() => withModules([]));
     view.rerender(<AppNavigation {...props} />);
-    expect(labels()).toEqual([...CORE, "Today"]);
+    expect(labels()).toEqual([...CORE]);
     act(() => withModules(["rss", "canvas"]));
     view.rerender(<AppNavigation {...props} />);
-    expect(labels()).toEqual([...CORE, "Reading", "Today"]);
+    expect(labels()).toEqual([...CORE, "Reading"]);
   });
 
   it("features with only a tag (Skills) have no entry", () => {
@@ -70,13 +70,13 @@ describe("desktop primary navigation", () => {
     ] as unknown as Tag[];
     withModules(["skills"], tags);
     renderNavigation();
-    expect(labels()).toEqual([...CORE, "Today"]);
+    expect(labels()).toEqual([...CORE]);
   });
 
   it("日記 (daily notes) is a module entry: listed only while imported, opens the Journal page, lit there", () => {
     withModules(["daily"]);
     const { props, view } = renderNavigation();
-    expect(labels()).toEqual([...CORE, "Daily notes", "Today"]);
+    expect(labels()).toEqual([...CORE, "Daily notes"]);
     // No Today button beside it: the journal page is the one entry.
     expect(screen.queryByRole("button", { name: /Today's note/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Daily notes" }));
@@ -85,7 +85,7 @@ describe("desktop primary navigation", () => {
     expect(screen.getByRole("button", { name: "Daily notes" })).toHaveAttribute("aria-current", "page");
     act(() => withModules([]));
     view.rerender(<AppNavigation {...props} />);
-    expect(labels()).toEqual([...CORE, "Today"]);
+    expect(labels()).toEqual([...CORE]);
   });
 
   it("opens each destination through the shell's callbacks", () => {
@@ -175,7 +175,7 @@ describe("desktop overflow", () => {
     const menu = screen.getByRole("menu", { name: "More" });
     const folded = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
     // The folded entries in order, then the way to change what is pinned.
-    expect([...shown.filter((label) => label !== "More"), ...folded]).toEqual([...CORE, "Review", "Reading", "Website", "Daily notes", "Today", "Workspace changes", "Customize navigation bar…"]);
+    expect([...shown.filter((label) => label !== "More"), ...folded]).toEqual([...CORE, "Review", "Reading", "Website", "Daily notes", "Workspace changes", "Customize navigation bar…"]);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Daily notes" }));
     expect(props.onOpenFeature).toHaveBeenCalledWith("daily");
     expect(screen.queryByRole("menu")).toBeNull();

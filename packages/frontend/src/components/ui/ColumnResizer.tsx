@@ -7,21 +7,16 @@ type Props = {
   width: number | null;
   onResize: (px: number | null) => void;
   label: string;
-  /** Which edge of the column the handle sits on: "end" (default) for a column on the left, "start" for one on the right
-   *  (dragging left widens it). */
-  edge?: "end" | "start";
-  /** Room left for the columns beside this one; default MIN_CENTER_WIDTH (a page whose columns are narrower says so). */
-  keepBeside?: number;
 };
 
 /** The drag handle on the right edge of a list column inside a page (the
  *  reader's), the same handle as the shell's side panes. It cannot fold the
  *  column, and the column beside it keeps MIN_CENTER_WIDTH. Desktop only. */
-export default function ColumnResizer({ column, width, onResize, label, edge = "end", keepBeside = MIN_CENTER_WIDTH }: Props) {
+export default function ColumnResizer({ column, width, onResize, label }: Props) {
   const { desktop } = usePaneWidthState();
   if (!desktop) return null;
   return (
-    <PaneHandle className={edge === "end" ? "pane-resizer--column" : "pane-resizer--column-start"} label={label} width={width} min={column.min} max={column.max} fallback={column.fallback}
-      grows={edge === "end" ? 1 : -1} keepBeside={keepBeside} onResize={onResize} onReset={() => onResize(null)} />
+    <PaneHandle className="pane-resizer--column" label={label} width={width} min={column.min} max={column.max} fallback={column.fallback}
+      grows={1} keepBeside={MIN_CENTER_WIDTH} onResize={onResize} onReset={() => onResize(null)} />
   );
 }

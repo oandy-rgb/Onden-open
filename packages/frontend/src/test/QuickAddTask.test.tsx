@@ -140,21 +140,4 @@ describe("QuickAddTask", () => {
     const { remind_at } = createQuickTask.mock.calls[0]![0] as { remind_at: string };
     expect(new Date(remind_at).getTime()).toBe(new Date(2026, 9, 25, 9, 0).getTime());
   });
-
-  it("with a day given (the 今天 page), words that say 某天 or 隨時 are kept; no such words start on that day", async () => {
-    render(<QuickAddTask />);
-    const add = async (text: string) => {
-      act(() => openQuickAddTask(undefined, { day: "2026-11-20" }));
-      const box = await screen.findByRole("combobox", { name: "Task" });
-      await userEvent.type(box, `${text}{Enter}`);
-      await waitFor(() => expect(createQuickTask).toHaveBeenCalled());
-      const call = createQuickTask.mock.calls.at(-1)![0];
-      createQuickTask.mockClear();
-      await userEvent.click(screen.getAllByRole("button", { name: /Close|Cancel/ }).at(-1)!).catch(() => {});
-      return call;
-    };
-    expect(await add("tidy the shelf")).toMatchObject({ when_date: "2026-11-20" });
-    expect(await add("someday tidy the shelf")).toMatchObject({ someday: true });
-    expect((await add("anytime tidy the shelf")).when_date ?? null).toBeNull();
-  });
 });

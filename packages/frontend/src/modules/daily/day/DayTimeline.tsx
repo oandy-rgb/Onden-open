@@ -58,9 +58,6 @@ type Props = {
   autoScroll?: boolean;
   /** Fold empty stretches of two hours or more into one line each. */
   foldEmpty?: boolean;
-  /** The focus records (what was really done) go in a narrow lane of their own at the right edge, beside
-   *  what was planned and the calendar's events, instead of among them. */
-  focusLane?: boolean;
   /** Absent: the timeline only shows. Present: an empty stretch can be tapped (or, on a phone,
    *  held and drawn) to plan something there, and an untimed task can be dropped on an hour. */
   plan?: {
@@ -82,14 +79,10 @@ type Props = {
 /** Presses and taps on these are the block's own, not an empty stretch's. */
 const BLOCK_SELECTOR = ".day-block, .day-block-focus, .day-block-grip, .ext-block, .day-fold, .day-focus-block";
 
-export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = true, foldEmpty = false, focusLane = false, plan, draft, draftRef, external = [], onOpenExternal }: Props) {
+export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = true, foldEmpty = false, plan, draft, draftRef, external = [], onOpenExternal }: Props) {
   const t = useT();
   const window = useMemo(() => dayWindow(date), [date]);
-  // In the focus lane the records are laid out on their own (they never overlap each other the way plans do).
-  const laneItems = useMemo(() => (focusLane ? items.filter((item) => item.kind === "focus") : []), [focusLane, items]);
-  const mainItems = useMemo(() => (focusLane ? items.filter((item) => item.kind !== "focus") : items), [focusLane, items]);
-  const { placed } = useMemo(() => layoutDayItems(mainItems, window, undefined, MIN_BLOCK_MINUTES), [mainItems, window]);
-  const { placed: lanePlaced } = useMemo(() => layoutDayItems(laneItems, window, undefined, MIN_BLOCK_MINUTES), [laneItems, window]);
+  const { placed } = useMemo(() => layoutDayItems(items, window, undefined, MIN_BLOCK_MINUTES), [items, window]);
   const allDay = useMemo(() => external.filter((e) => e.all_day), [external]);
   const timedExternal = useMemo(() => external.filter((e) => !e.all_day), [external]);
   const openExternal = onOpenExternal ?? (() => {});
@@ -131,7 +124,7 @@ export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = t
   const unfolded = dragging || dragId !== null;
   const folds = useMemo(() => {
     if (!foldEmpty || unfolded) return [];
-    const spans: BlockSpan[] = [...placed, ...lanePlaced].map((p) => ({ startMinutes: p.topMinutes, endMinutes: p.topMinutes + p.heightMinutes }));
+    const spans: BlockSpan[] = placed.map((p) => ({ startMinutes: p.topMinutes, endMinutes: p.topMinutes + p.heightMinutes }));
     for (const event of timedExternal) {
       const startMinutes = (Date.parse(event.starts_at) - window.startMs) / 60_000;
       spans.push({ startMinutes, endMinutes: Math.max((Date.parse(event.ends_at) - window.startMs) / 60_000, startMinutes + MIN_BLOCK_MINUTES) });
@@ -139,7 +132,7 @@ export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = t
     if (draft) spans.push(draft);
     spans.push(...held);
     return foldEmptyHours(spans, { hours: wholeHours, nowHour: showNow ? Math.floor(nowMinutes / 60) : null, open: openHours });
-  }, [foldEmpty, unfolded, placed, lanePlaced, timedExternal, window, draft, held, wholeHours, showNow, nowMinutes, openHours]);
+  }, [foldEmpty, unfolded, placed, timedExternal, window, draft, held, wholeHours, showNow, nowMinutes, openHours]);
   const layout = useMemo(() => foldLayout(folds, lengthMinutes, HOUR_PX, FOLD_PX), [folds, lengthMinutes]);
   layoutRef.current = layout;
   const y = layout.y;
@@ -248,7 +241,7 @@ export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = t
       onPointerDown={(event) => { markUserScrolled(); if (!(event.target as Element).closest(BLOCK_SELECTOR + ", .day-block-grip")) blocks.deselect(); }}>
       <p className="day-live" role="status" aria-live="polite">{said}</p>
       <AllDayStrip events={allDay} onOpen={openExternal} />
-      <div ref={(el) => { body.current = el; press.ref.current = el; }} className={classNames("day-timeline-body", plan && "is-plannable", focusLane && "has-focus-lane")} style={{ "--h": `${layout.height}px` } as CSSProperties}
+      <div ref={(el) => { body.current = el; press.ref.current = el; }} className={classNames("day-timeline-body", plan && "is-plannable")} style={{ "--h": `${layout.height}px` } as CSSProperties}
         data-testid="day-timeline-body" {...press.handlers} onClick={tap}
         onDragOver={dragOver} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setPreview(null); setDragging(false); } }} onDrop={drop}>
         {hours.filter((h) => !folds.some((f) => h >= f.fromHour && h < f.toHour)).map((h) => (
@@ -322,19 +315,6 @@ export default function DayTimeline({ date, items, nowMs, onOpen, autoScroll = t
             <div className="day-now" role="separator" aria-label={t("Now")} style={{ "--top": `${y(nowMinutes)}px` } as CSSProperties}><span>{clockLabel(new Date(nowMs).toISOString())}</span></div>
           )}
         </div>
-        {focusLane && (
-          <div className="day-focus-lane" role="group" aria-label={t("Time actually focused")}>
-            {lanePlaced.map(({ item, topMinutes, heightMinutes }, index) => {
-              const title = itemTitle(item, t);
-              const text = `${itemTimeText(item)} ${title}`.trim();
-              return (
-                <Pressable key={`${item.at}-${index}`} type="button" className={classNames("day-focus-block", item.live && "is-live")} title={text} aria-label={text}
-                  style={{ "--top": `${y(topMinutes)}px`, "--h": `${Math.max(px(heightMinutes) - 2, MIN_BLOCK_PX / 2)}px` } as CSSProperties}
-                  disabled={!item.ref} onClick={() => onOpen(item)} />
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

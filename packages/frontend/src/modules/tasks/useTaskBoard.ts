@@ -1,8 +1,7 @@
-// What the Tasks page and the 今天 page share: the task list as TaskItems (standalone tasks, checkbox
+// The Tasks page's task list as TaskItems (standalone tasks, checkbox
 // lines) and every action a row or the settings sheet can ask for — tick,
-// reopen, plan for today, drop, park, open. One place decides what a tick says and how it is undone,
-// so a task ticked on 今天 reads the same as one ticked on the Tasks page. The pages only choose
-// which rows to draw (TasksMode: its tabs; modules/daily/today: its three lists).
+// reopen, plan for today, drop, park, open. One place decides what a tick says and how it is undone;
+// the page (TasksMode) only chooses which rows to draw (its tabs).
 
 import { useCallback, useMemo, useState } from "react";
 import { nextOccurrenceDate } from "@onden/markdown";
@@ -145,6 +144,3 @@ export function useTaskBoard({ online, onSelectNode, onRefresh, onError, spaceId
     today, items, justDone, clearJustDone, sheetTask, setSheetId, notes, actions, toggle, planToday, parkSomeday, spaceOfTask,
   };
 }
-
-/** What useTaskBoard hands a page. */
-export type TaskBoard = ReturnType<typeof useTaskBoard>;

@@ -35,9 +35,8 @@ export type RunningFocus = FocusSession & { synced: boolean };
 
 export type FocusState = {
   running: RunningFocus | null;
-  /** The person asked to begin one (a task, or null: nothing in particular). `stay`: it was asked from a page that
-   *  shows the running focus itself (the 今天 page's bar), so starting it does not cover that page with the full screen. */
-  request: { taskId: string | null; stay: boolean } | null;
+  /** The person asked to begin one (a task, or null: nothing in particular). */
+  request: { taskId: string | null } | null;
   /** The 「做了什麼？」 step is open; `endedAt` is when 結束 was pressed. */
   ending: { endedAt: string } | null;
   /** Desktop: the full screen is up (false: tucked into the little mark). */
@@ -94,9 +93,7 @@ export async function refreshFocus(): Promise<void> {
 /** Ask to begin a focus on `taskId` (null: nothing in particular). The screen
  *  that answers (modules/tasks/focus) asks the length, or whether to end the one running. */
 export function requestFocus(taskId: string | null = null): void {
-  // Where the press was: inside an element marked `data-focus-stays` (not a page that merely sits beside it in a split).
-  const target = (typeof window !== "undefined" ? (window.event?.target ?? document.activeElement) : null) as Element | null;
-  set({ request: { taskId, stay: !!target?.closest?.("[data-focus-stays]") } });
+  set({ request: { taskId } });
 }
 export function dismissFocusRequest(): void { set({ request: null }); }
 export function setFocusExpanded(expanded: boolean): void { set({ expanded }); }

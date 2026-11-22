@@ -6,7 +6,7 @@ import type { FocusSession } from "@onden/contract";
 import { reads } from "../../../lib/data";
 import { useFocusState } from "../../../lib/focus";
 
-export type FocusOfDay = { date: string; sessions: FocusSession[]; running: FocusSession | null };
+type FocusOfDay = { date: string; sessions: FocusSession[]; running: FocusSession | null };
 
 export function useFocusOfDay(date: string, enabled: boolean): FocusOfDay | null {
   const runningId = useFocusState().running?.id ?? null;

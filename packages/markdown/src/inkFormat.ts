@@ -131,7 +131,7 @@ export const INK_DEFAULT_PAGE_WIDTH = 1000;
 /** Feature names this version can edit without damaging a drawing (Format
  *  evolution, rule 2). Empty: it writes no `features` yet. A feature joins this
  *  list in the same change that teaches the editor to handle it. */
-export const INK_KNOWN_FEATURES: readonly string[] = [];
+export const INK_KNOWN_FEATURES: readonly string[] = ["note-pages"];
 
 /** The names a drawing `requires` that this version does not know — what makes
  *  it read-only. For an envelope: its own and every page's. Sorted, unique. */

@@ -76,7 +76,7 @@ export default function FocusScreens({ onOpenNote }: { onOpenNote: (id: string) 
       {running && phone && showFull && <FocusPhoneSheet running={running} task={task} minutes={minutes} now={now} run={run} />}
       {running && !phone && showFull && <FocusFullscreen running={running} task={task} minutes={minutes} now={now} run={run} onOpenNote={onOpenNote} />}
       {run && asking && !ending && !request && <AfterBreakSheet run={run} roundMinutes={minutes} />}
-      {request && !ending && (running ? <EndFirstSheet task={task} run={run} /> : <StartSheet taskId={request.taskId} expandOnStart={!phone && !request.stay} />)}
+      {request && !ending && (running ? <EndFirstSheet task={task} run={run} /> : <StartSheet taskId={request.taskId} expandOnStart={!phone} />)}
       {running && ending && <EndSheet running={running} task={task} endedAt={ending.endedAt} run={run} />}
     </>
   );

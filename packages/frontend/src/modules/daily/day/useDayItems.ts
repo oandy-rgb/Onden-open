@@ -8,7 +8,7 @@ import { isDayItemPast, sortDayItems, type DayItem } from "@onden/markdown";
 import { useTagRows, useTaskRows, useAllNodes } from "../../../lib/appStore";
 import { useModuleFilter, useTasksEnabled } from "../../../hooks/useModuleFilter";
 import { focusDayItems } from "../../../lib/focus";
-import { useFocusOfDay, type FocusOfDay } from "./useFocusOfDay";
+import { useFocusOfDay } from "./useFocusOfDay";
 import { useNowMs } from "../../../hooks/useNowMs";
 import { collectDayItems } from "../../index";
 import { useDayLens, type DayLens } from "./useDayLens";
@@ -20,8 +20,7 @@ export function joinDayItems(local: readonly DayItem[], remote: readonly DayItem
   return sortDayItems([...local, ...extra]).map((item) => ({ ...item, past: isDayItemPast(item, nowMs) }));
 }
 
-/** `known`: the day's focus records when the page already read them (one read, not two); left out, they are read here. */
-export function useDayItems(date: string, today: string, known?: FocusOfDay | null): { items: DayItem[]; nowMs: number; serverMissing: boolean; lens: DayLens | null } {
+export function useDayItems(date: string, today: string): { items: DayItem[]; nowMs: number; serverMissing: boolean; lens: DayLens | null } {
   const nodes = useAllNodes();
   const tasks = useTaskRows();
   const tags = useTagRows();
@@ -30,8 +29,7 @@ export function useDayItems(date: string, today: string, known?: FocusOfDay | nu
   const { lens, failed } = useDayLens(date);
   const tasksOn = useTasksEnabled();
   // The person's focus records are not in the day lens; a failure to read them only leaves them out.
-  const own = useFocusOfDay(date, tasksOn && known === undefined);
-  const focus = known === undefined ? own : known;
+  const focus = useFocusOfDay(date, tasksOn);
 
   // Minute precision is enough for what modules compute from the clock.
   const minute = Math.floor(nowMs / 60_000) * 60_000;

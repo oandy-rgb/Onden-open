@@ -1,6 +1,6 @@
 // The dots under the days of the week row and the month (DayStrip): solid = a day with writing (a note whose
 // body is still loading counts until it says otherwise), hollow = a day with a task scheduled on it.
-// The Journal page and the 今天 page draw the same dots from this.
+// The Journal page draws them from this.
 
 import { useMemo } from "react";
 import { nodeNeedsBody } from "../../lib/api";

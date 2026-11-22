@@ -14,7 +14,7 @@ import { reads } from "../data";
 import { t } from "../i18n";
 import type { InkDocument } from "./types";
 
-export type InkAttributeKey = "ink_data" | "board_ink" | "note_ink" | "page_text" | "page_images" | "pdf_annotations" | "pdf_url";
+export type InkAttributeKey = "ink_data" | "board_ink" | "note_ink" | "note_pages" | "page_text" | "page_images" | "pdf_annotations" | "pdf_url";
 
 export async function loadInkAttributes<K extends InkAttributeKey>(nodeId: string, keys: readonly K[]): Promise<Record<K, string | null>> {
   return reads.notes.attributeValues(nodeId, keys);

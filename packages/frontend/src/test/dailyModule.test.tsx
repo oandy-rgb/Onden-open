@@ -361,10 +361,10 @@ describe("callers with the module off", () => {
       const nav = arrangeNavigation({ mode: "notes" }, { setMode: vi.fn(), onOpenModule: vi.fn(), onOpenFeature: vi.fn() }, features, null);
       return getMoreNavigationGroups({}, nav.phoneMore).flatMap((g) => g.items.map((i) => i.id));
     };
-    // 今天 is its own page (a core entry waiting in 更多), not today's note: only the 日記 row follows the module.
-    expect(ids([])).toContain("today");
+    // There is no core Today row (the 今天 page is gone, 2026-11-18): only the 日記 row follows the module.
+    expect(ids([])).not.toContain("today");
     expect(ids([])).not.toContain(DAILY_MODULE);
-    expect(ids([DAILY_MODULE])).toContain("today");
+    expect(ids([DAILY_MODULE])).not.toContain("today");
     expect(ids([DAILY_MODULE])).toContain(DAILY_MODULE);
   });
 });

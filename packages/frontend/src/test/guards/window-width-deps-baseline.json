@@ -32,9 +32,9 @@
       "fixedLayer": 0
     },
     "journal-today": {
-      "mediaWidth": 2,
-      "viewportUnit": 7,
-      "widthCheck": 4,
+      "mediaWidth": 1,
+      "viewportUnit": 4,
+      "widthCheck": 2,
       "fixedLayer": 0
     },
     "keyboard-insets": {

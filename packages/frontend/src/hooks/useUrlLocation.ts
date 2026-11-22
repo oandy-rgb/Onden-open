@@ -76,6 +76,7 @@ import type { NodeLens } from "../lib/nodeLens";
 import { markHistoryStep } from "../lib/pageScrollRestore";
 import { markHistoryArrival, navigate, takeHistoryIntent, type HistoryIntent } from "../lib/historyIntent";
 import { isNoteGone } from "../lib/appStore";
+import { viewOfRetiredToday } from "../lib/retiredViews";
 import { PREFS, setPref } from "../lib/prefs";
 import { activeTabKey, locationOfTab } from "../lib/viewTabs";
 import type { PaneTarget } from "../lib/splitView";
@@ -342,7 +343,7 @@ export function reopenDestination(destination: string, current: boolean, atTop?:
   return true;
 }
 
-const CORE_VIEWS: readonly CoreMode[] = ["notes", "today", "tasks", "timeline", "graph"];
+const CORE_VIEWS: readonly CoreMode[] = ["notes", "tasks", "timeline", "graph"];
 // Valid URL lens ids. editor/canvas are live strip tabs (canvas is gated
 // per-node, but its lens id is always a valid deep link).
 // local-graph left NODE_LENSES — its this-note half lives in the inspector and
@@ -383,7 +384,7 @@ export function parseLocation(search: string, fallback: AppLocation): AppLocatio
     // "timeline" is no longer a lens-strip Place but remains a valid view, so
     // `?view=timeline` deep links keep resolving (the merged TimelineLens at
     // all-scope) rather than 404-ing back to the fallback.
-    view: isView(view) ? view : fallback.view,
+    view: view === "today" ? viewOfRetiredToday() : isView(view) ? view : fallback.view,
     nodeId: node && node.length > 0 ? node : null,
     // canvas is a live lens again (gated per-node, but always a valid deep
     // link). Only local-graph is aliased to editor — its this-note half moved

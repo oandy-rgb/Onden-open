@@ -34,6 +34,7 @@
 import { anchorBackupRowsByNote, type AnchorBackupRow } from "./blockAnchors/index.js";
 import { bindingBackupRowsByNote, type BindingBackupRow } from "./blockLinks.js";
 import { INK_PAGE_ATTRS, TASK_ATTR, isInkPageAttr } from "@onden/markdown";
+import { NOTE_PAGES_ATTR } from "@onden/markdown/contract";
 import type archiver from "archiver";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -469,7 +470,8 @@ async function readBackupFiles(actor: ActorCtx, workspaceId: string, scratch: st
 async function selectedIndex(index: Awaited<ReturnType<typeof vaultIndex>>, workspaceId: string, selection: BackupSelection): Promise<typeof index> {
   const readable = index.filter((n) => !isTag(n) && !n.deleted).map((n) => n.id);
   const chosen = new Set<string>();
-  const drawingKeys = [...INK_PAGE_ATTRS, "page_text", "page_images"];
+  // A note of PDF pages counts as written even with no title or text (its pages are its content).
+  const drawingKeys = [...INK_PAGE_ATTRS, "page_text", "page_images", NOTE_PAGES_ATTR];
   for (let at = 0; at < readable.length; at += ID_CHUNK) {
     const rows = await db.selectFrom("content_nodes as cn").select("cn.id")
       .where("cn.workspace_id", "=", workspaceId).where("cn.id", "in", readable.slice(at, at + ID_CHUNK))

@@ -59,10 +59,10 @@ describe("what the nav lists", () => {
 
   it("the default layout bars the used functions only; the rest wait in 更多", () => {
     const nav = arrangeNavigation({ mode: "notes" }, noActions, importedFeatures(everyModuleOn, [], usedFixture(["review"])), null);
-    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "review", "today"]);
+    expect(nav.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "review"]);
     expect(nav.unpinned.map((d) => d.id)).toContain("website");
     const bare = arrangeNavigation({ mode: "notes" }, noActions, importedFeatures(everyModuleOn, [], none), null);
-    expect(bare.pinned.map((d) => d.id)).toEqual(["tasks", "graph", "today"]);
+    expect(bare.pinned.map((d) => d.id)).toEqual(["tasks", "graph"]);
   });
 
   it("an edited layout keeps what the person pinned although nothing uses it", () => {

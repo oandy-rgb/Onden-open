@@ -7,7 +7,8 @@ import type { NodeAttribute } from "../api";
 
 // The layers of a page that are saved as their own attribute — the text boxes
 // (`page_text`) and the pictures (`page_images`) — share this one write; each
-// has a thin entry (pageTextWriter, pageImagesWriter) naming its key.
+// has a thin entry (pageTextWriter, pageImagesWriter) naming its key. So does a note's list of
+// pages (`note_pages`, notePagesWriter, written by the 「手寫」 tab when a page is added): a small value saved from a base the server merges into.
 
 const commit = makeWriteLifecycle(domainContext);
 

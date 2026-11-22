@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  CalendarCheck,
   History,
   LayoutDashboard,
   ListChecks,
@@ -78,8 +77,6 @@ type CorePage = {
   id: CoreMode; label: string; Icon: LucideIcon; layout: PageLayout;
   /** The page exists only while a module supplies this feature (lib/shellFeatures). */
   feature?: ShellFeature;
-  /** The page exists while at least one of these features is on (今天 needs the journal or the tasks). */
-  anyFeature?: readonly ShellFeature[];
   group?: NavGroupPlacement;
   /** Whether the page is at its top (tapping its tab again goes there); absent = always (a page with nothing opened inside it). */
   top?: TabTop;
@@ -105,18 +102,12 @@ export const CORE_PAGES: readonly CorePage[] = [
   { id: "timeline", label: "Workspace changes", Icon: History, layout: "full", group: { id: "time", order: 3 } },
 ];
 
-/** 今天: the day's journal, things and timeline on one page (a trial beside 日記 and 任務, which stay). It is an
- *  optional destination: last in the default order and not a core page, so a narrow desktop bar folds it into
- *  「更多 ▾」 before anything else and it never takes a place from another entry; a layout someone saved is never
- *  changed (it starts in 更多). The page needs the journal or the tasks to be on. */
-export const TODAY_PAGE: CorePage = { id: "today", label: "Today", Icon: CalendarCheck, layout: "full", anyFeature: ["day-notes", "tasks"], group: { id: "time", order: 0 } };
-
 /** The layout of the page `mode` names: a core page says it on CORE_PAGES; a
  *  module screen or reading section (日記, 複習, 網站, 閱讀…) is always a full page.
  *  The one answer for whether the workspace shows the note sidebar and the
  *  info panel. Narrow screens hide the sidebar outside 筆記 regardless (CSS). */
 export function pageLayout(mode: AppMode): PageLayout {
-  return [...CORE_PAGES, TODAY_PAGE].find((page) => page.id === mode)?.layout ?? "full";
+  return CORE_PAGES.find((page) => page.id === mode)?.layout ?? "full";
 }
 
 /** What tapping a destination does: on a phone its tab returns to where it was left, or to its top when it is the
@@ -130,7 +121,7 @@ const READING_ID = "reading";
 /** The name (i18n key) of the page a view shows: a pane's header for a
  *  function page. Core pages, module screens and reading sections. */
 export function viewLabel(view: string): string {
-  const core = [...CORE_PAGES, TODAY_PAGE].find((page) => page.id === view);
+  const core = CORE_PAGES.find((page) => page.id === view);
   if (core) return core.label;
   if (READING_SECTIONS.some((section) => section.id === view)) return "Reading";
   const mod = MODULES.find((m) => m.id === view);
@@ -195,7 +186,7 @@ export function getNavDestinations(at: NavLocation, actions: NavActions, feature
     else modules.push(destination);
   }
   const moduleCurrent = modules.some((d) => d.current);
-  const core = CORE_PAGES.filter((page) => (!page.feature || featureOn(page.feature)) && (!page.anyFeature || page.anyFeature.some(featureOn))).map(({ id, label, Icon, group, top }) => {
+  const core = CORE_PAGES.filter((page) => (!page.feature || featureOn(page.feature))).map(({ id, label, Icon, group, top }) => {
     const current = at.mode === id && !at.activePanel && !moduleCurrent;
     return {
       id, label, Icon, group,
@@ -206,12 +197,7 @@ export function getNavDestinations(at: NavLocation, actions: NavActions, feature
       view: id,
     };
   });
-  // 今天 comes last, after the module pages, and is not core: it folds first when the bar is short.
-  const today = (!TODAY_PAGE.anyFeature || TODAY_PAGE.anyFeature.some(featureOn))
-    ? [{ id: TODAY_PAGE.id, label: TODAY_PAGE.label, Icon: TODAY_PAGE.Icon, group: TODAY_PAGE.group, open: tapped(TODAY_PAGE.id, at.mode === TODAY_PAGE.id && !at.activePanel && !moduleCurrent, () => actions.setMode(TODAY_PAGE.id)),
-      current: at.mode === TODAY_PAGE.id && !at.activePanel && !moduleCurrent, indicators: [], view: TODAY_PAGE.id } satisfies NavDestination]
-    : [];
-  return { core, modules: [...modules, ...today] };
+  return { core, modules };
 }
 
 /** The nav as the person arranged it (lib/navLayout): 筆記, then the pinned
@@ -240,7 +226,7 @@ export function arrangeNavigation(at: NavLocation, actions: NavActions, features
   const candidates = [...core.filter((d) => d.id !== "notes"), ...modules];
   // Only the default layout leaves a feature that is on but unused out of the bars.
   const usedIds = new Set(features.filter((feature) => feature.inUse).map(featureDestinationId));
-  const unused = modules.filter((d) => d.id !== TODAY_PAGE.id && !usedIds.has(d.id)).map((d) => d.id);
+  const unused = modules.filter((d) => !usedIds.has(d.id)).map((d) => d.id);
   const layout = resolveNavLayout(stored, candidates.map((d) => d.id), unused);
   const byId = new Map(candidates.map((d) => [d.id, d]));
   const pinned = layout.order.map((id) => byId.get(id)!);

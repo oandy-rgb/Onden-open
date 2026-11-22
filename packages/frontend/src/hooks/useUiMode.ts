@@ -15,7 +15,7 @@ import { navigate, phoneStacks } from "./useUrlLocation";
 
 // Tags are no destination: tag NODES open in notes (schema lens) and the
 // sidebar lists them (components/SidebarTagTree); packs live in Settings.
-export type CoreMode = "notes" | "today" | "tasks" | "timeline" | "graph";
+export type CoreMode = "notes" | "tasks" | "timeline" | "graph";
 /** A core mode, or the id of a module screen (modules/index MODULE_SCREENS). */
 export type AppMode = CoreMode | (string & {});
 export type NotesView = NodeLens;

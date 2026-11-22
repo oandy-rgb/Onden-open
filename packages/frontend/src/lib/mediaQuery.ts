@@ -34,5 +34,3 @@ export function mediaQueryList(query: string): MediaQueryList | null {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(query) : null;
 }
 
-/** A page wide enough for three columns (the 今天 page): at least the wide breakpoint. */
-export const WIDE_QUERY = `(min-width: ${BREAKPOINT_PX.wide}px)`;

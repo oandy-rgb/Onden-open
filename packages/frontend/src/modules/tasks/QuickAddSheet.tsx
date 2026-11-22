@@ -7,11 +7,11 @@ import { t } from "../../lib/i18n";
 import QuickAddPanel from "./QuickAddPanel";
 import type { QuickAddTarget } from "./openQuickAddTask";
 
-export default function QuickAddSheet({ into = null, day, onClose }: { into?: QuickAddTarget | null; day?: string; onClose: () => void }) {
+export default function QuickAddSheet({ into = null, onClose }: { into?: QuickAddTarget | null; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
     <Sheet label={t("Add a task")} className="quick-add-overlay" busy={busy} onClose={onClose} cardClassName="quick-add-sheet">
-      <QuickAddPanel into={into} day={day} onClose={onClose} onBusyChange={setBusy} />
+      <QuickAddPanel into={into} onClose={onClose} onBusyChange={setBusy} />
     </Sheet>
   );
 }

@@ -52,6 +52,9 @@ function app(actor: ActorCtx) {
 const send = (a: ActorCtx, url: string, method: string, body: unknown = {}) =>
   app(a).request(url, method === "GET" ? { method } : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+const PAGES_VALUE = JSON.stringify({ version: 1, runs: [{ id: "b1", kind: "blank" }, { id: "r1", kind: "pdf", file: "/api/media/paged-fidelity.pdf", from: 1, to: null }] });
+const PDF_TEXT_VALUE = JSON.stringify({ "r1:1": "第一頁的文字" });
+
 describe.skipIf(!enabled)("a restored backup keeps what a person would notice", () => {
   let ws = "";
   let solo: ActorCtx;
@@ -100,6 +103,12 @@ describe.skipIf(!enabled)("a restored backup keeps what a person would notice", 
       await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source) VALUES ($1, $2, $3, $4, 'text', 'ui')`, [ws, marked, key, value]);
     }
 
+    // A note of PDF pages: its list of pages and the text of its pages are data attributes, carried like its strokes.
+    const paged = await create("Paged", "內文。\n");
+    for (const [key, value] of [["note_pages", PAGES_VALUE], ["pdf_text", PDF_TEXT_VALUE]]) {
+      await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source) VALUES ($1, $2, $3, $4, 'text', 'ui')`, [ws, paged, key, value]);
+    }
+
     source = await noteViewsOf(ws);
     const zip = Buffer.from(await (await app(solo).request("/api/backup/full.zip")).arrayBuffer());
     const up = await app(solo).request("/api/backup/restore/upload", { method: "POST", headers: { "content-type": "application/zip" }, body: new Uint8Array(zip) });
@@ -129,6 +138,12 @@ describe.skipIf(!enabled)("a restored backup keeps what a person would notice", 
     expect(before.length).toBeGreaterThanOrEqual(3);
     expect(tasks(restored, `B ${stamp}`)).toEqual(before);
     expect(JSON.stringify(before)).toContain("07:30");
+  });
+
+  it("brings back a note's list of pages and the text of its PDF pages", () => {
+    const attrs = (views: Map<string, NoteView>, name: string) => inSpace(views, name).find((n) => n.title === "Paged")!.attributes;
+    expect(attrs(source, `A ${stamp}`)).toMatchObject({ note_pages: PAGES_VALUE, pdf_text: PDF_TEXT_VALUE });
+    expect(attrs(restored, `B ${stamp}`)).toMatchObject({ note_pages: PAGES_VALUE, pdf_text: PDF_TEXT_VALUE });
   });
 
   it("brings back the system attributes that belong to a note", () => {

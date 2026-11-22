@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { resetAppState, setData } from "../lib/appStore";
 import { parseLocation, locationToSearch, type AppLocation } from "./useUrlLocation";
 
 const FALLBACK: AppLocation = { view: "notes", nodeId: null, lens: "editor" };
@@ -92,5 +93,36 @@ describe("locationToSearch", () => {
   it("url-encodes node ids that need it", () => {
     const loc: AppLocation = { view: "notes", nodeId: "a b/c", lens: "editor" };
     expect(parseLocation(locationToSearch(loc), FALLBACK)).toEqual(loc);
+  });
+});
+
+// 「今天」 was a page from 2026-11-13 to 11-18. Every way into the app (an address, a history entry, the remembered
+// place) reads its place through parseLocation, so the one rule lives there.
+describe("an old view=today address", () => {
+  const withModules = (modules: string[] | null) => setData((data) => ({ ...data, workspace: { ...data.workspace, modules } as typeof data.workspace }));
+  beforeEach(() => resetAppState());
+
+  it("opens 任務 when tasks are on", () => {
+    withModules(["tasks", "daily"]);
+    expect(parseLocation("?view=today", FALLBACK).view).toBe("tasks");
+  });
+
+  it("opens 日記 when only the journal is on", () => {
+    withModules(["daily"]);
+    expect(parseLocation("?view=today", FALLBACK).view).toBe("daily");
+  });
+
+  it("opens 筆記 when neither is on", () => {
+    withModules([]);
+    expect(parseLocation("?view=today", FALLBACK).view).toBe("notes");
+  });
+
+  it("opens 任務 before the workspace has said which modules are on (every module counts as on)", () => {
+    expect(parseLocation("?view=today", FALLBACK).view).toBe("tasks");
+  });
+
+  it("keeps the rest of the address and is the same for a remembered place", () => {
+    withModules(["tasks"]);
+    expect(parseLocation("?view=today&node=n1", FALLBACK)).toEqual({ view: "tasks", nodeId: "n1", lens: "editor" });
   });
 });

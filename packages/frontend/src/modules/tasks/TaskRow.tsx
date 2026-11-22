@@ -3,7 +3,7 @@
 // The row only draws; the page owns what ticking and tapping do.
 
 import { Check, Repeat, Timer } from "lucide-react";
-import { Button, Chip, Pressable } from "../../components/ui";
+import { Button, Pressable } from "../../components/ui";
 import { formatLineTime } from "@onden/markdown";
 import { classNames } from "../../lib/utils";
 import { useT } from "../../lib/i18n";
@@ -29,13 +29,11 @@ type Props = {
   planDrag?: boolean;
   /** A visible 「排到今天」 button (day becomes today); absent: no button. */
   onPlanToday?: (task: TaskItem) => void;
-  /** Minutes already spent in focus on this task today; shown as a chip when above zero. */
-  focusedMinutes?: number;
   /** A late task gets a visible 「某天」 button that parks it; absent: no button. */
   onSomeday?: (task: TaskItem) => void;
 };
 
-export default function TaskRow({ task, today, showWhen, justDone = false, disabled = false, onToggle, onOpen, onFocus, planDrag = false, focusedMinutes = 0, onPlanToday, onSomeday }: Props) {
+export default function TaskRow({ task, today, showWhen, justDone = false, disabled = false, onToggle, onOpen, onFocus, planDrag = false, onPlanToday, onSomeday }: Props) {
   const t = useT();
   const done = !isOpen(task.status) || justDone;
   const whenText = showWhen && task.whenDate && !done ? dayLabel(describeDay(task.whenDate, today), t) : null;
@@ -59,7 +57,7 @@ export default function TaskRow({ task, today, showWhen, justDone = false, disab
       </Pressable>
       <Pressable type="button" className="tk-main" onClick={() => onOpen(task)} aria-label={t("Edit {title}", { title: task.title })}>
         <span className="tk-title">{displayTitle(task.title)}</span>
-        {(whenText || late || task.time || task.deadline || task.recur || task.evening || focusedMinutes > 0) && (
+        {(whenText || late || task.time || task.deadline || task.recur || task.evening) && (
           <span className="tk-chips">
             {late && <span className="tk-chip tk-chip--overdue">{late}</span>}
             {whenText && !late && <span className="tk-chip">{whenText}</span>}
@@ -70,7 +68,6 @@ export default function TaskRow({ task, today, showWhen, justDone = false, disab
                 {deadlineLabel(task.deadline, today, t)}
               </span>
             )}
-            {focusedMinutes > 0 && <Chip tone="accent" className="tk-focused"><Timer size={11} aria-hidden /> {t("Focused {n} min", { n: focusedMinutes })}</Chip>}
             {task.recur && (
               <span className="tk-chip tk-chip--recur">
                 <Repeat size={11} aria-hidden /> {recurChipText(task, t)}

@@ -1,5 +1,5 @@
-// What the Tasks page's tabs and sections are made of, shared with the 今天 page's 「全部的事」 so the two read
-// alike and follow one rule: the tab names, the empty sentences, what the agenda lists, and a titled section.
+// What the Tasks page's tabs and sections are made of, the tab names, the empty
+// sentences, what the agenda lists, and a titled section.
 
 import type { ReactNode } from "react";
 import { classNames } from "../../lib/utils";

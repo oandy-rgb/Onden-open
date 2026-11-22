@@ -19,8 +19,6 @@ const DayNoteParentSetting = lazyWithReload(() => import("./DayNoteParentSetting
 const WeekPreview = lazyWithReload(() => import("./WeekPreview"));
 /** The timeline with 規劃今天 / 收工: the Tasks page's 今天 plan, and this module's right column. */
 export const DayPlanner = lazyWithReload(() => import("./day/DayPane"));
-/** The 今天 page: the day's journal, things and timeline together (a core page; modules/index hands it to the shell). */
-export const TodayScreen = lazyWithReload(() => import("./today/TodayScreen"));
 
 export const dailyModule: FrontendModule = {
   id: "daily",

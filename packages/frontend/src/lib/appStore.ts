@@ -117,6 +117,9 @@ const listeners = new Set<() => void>();
 /** The board open on the whiteboard right now (null when none). A narrow reader so board code does not reach for the whole store. */
 export const getActiveCanvas = (): Canvas | null => getAppState().activeCanvas;
 
+/** The modules the workspace has on (null/absent: every module, an older server). A narrow reader for code outside React that only asks which modules are on. */
+export const getWorkspaceModules = (): readonly string[] | null | undefined => getAppState().data.workspace?.modules;
+
 export function getAppState(): AppState {
   return state;
 }

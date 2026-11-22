@@ -23,6 +23,10 @@
       "types": "./src/ink.ts",
       "default": "./dist/ink.js"
     },
+    "./note-pages": {
+      "types": "./src/notePages.ts",
+      "default": "./dist/notePages.js"
+    },
     "./page-text": {
       "types": "./src/pageText.ts",
       "default": "./dist/pageText.js"

@@ -46,12 +46,6 @@ export const PREFS = {
   inspectorWidth: { key: "onden.inspectorWidth", scope: "device" },
   /** The reader's list column in px (lib/paneWidths useColumnWidth); absent = the stylesheet's width. */
   readerListWidth: { key: "onden.readerListWidth", scope: "device" },
-  /** The 今天 page's layout on this screen: its widths, the folded journal column, the span of days and the phone's view. */
-  todayTasksWidth: { key: "onden.todayTasksWidth", scope: "device" },
-  todayTimelineWidth: { key: "onden.todayTimelineWidth", scope: "device" },
-  todayJournalFolded: { key: "onden.todayJournalFolded", scope: "device" },
-  todayRange: { key: "onden.todayRange", scope: "device" },
-  todayPhoneView: { key: "onden.todayPhoneView", scope: "device" },
   noteWide: { key: "onden.noteWide", scope: "device" },
   /** The phone Notes home's last chosen tab (tags | nodes | inbox). */
   sidebarPane: { key: "onden.sidebar.pane", scope: "device" },

@@ -31,7 +31,6 @@
 .tk-chip--overdue { border-color: var(--task-orange); color: var(--task-orange); }
 .tk-chip--deadline-soon { background: var(--task-orange-solid); border-color: var(--task-orange-solid); color: var(--task-orange-on); }
 .tk-chip--recur { border-color: var(--task-blue); color: var(--task-blue); }
-.tk-focused { display: inline-flex; align-items: center; gap: 3px; }
 .tk-chip--evening { border-color: var(--task-purple); color: var(--task-purple); }
 .tk-note { font-size: var(--ac-fs-xs); color: var(--ac-muted); }
 

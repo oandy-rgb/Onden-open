@@ -38,6 +38,7 @@ import {
   type PdfHighlightRecord,
 } from "../lib/pdf/coords";
 import { pdfPageOfKey, pdfPageRecord, type InkPages } from "@onden/markdown/ink";
+import { expandNotePages, pagesFromPdfUrl } from "@onden/markdown/note-pages";
 import {
   areaRecord,
   clientRectsToPageRects,
@@ -445,13 +446,17 @@ export default function PdfNodeView({
   // ── The book's pages ──────────────────────────────────────────────────────
 
   // One book page per PDF page, laid out at its real shape before it is drawn (usePdfPageShapes).
+  // A note made before `note_pages` is shown through the same page list a note with one is (its `pdf_url` is one run, every page of
+  // the file): the keys are the `pdf:<n>` its strokes, text boxes and pictures are stored under.
+  const pageList = useMemo(() => pagesFromPdfUrl(pdfUrl), [pdfUrl]);
   const pages = useMemo<InkPages>(() => {
     const records: InkPages["pages"] = {};
-    for (let n = 1; shapes && n <= shapes.count; n++) {
-      records[pdfPageKey(n)] = pdfPageRecord(n, pagesView[pdfPageKey(n)]?.doc ?? EMPTY_PAGE_DOC, shapes.ratio(n));
+    if (!shapes) return { version: 1, pages: records };
+    for (const entry of expandNotePages(pageList, () => shapes.count).entries) {
+      records[entry.key] = pdfPageRecord(entry.pdf!.page, pagesView[entry.key]?.doc ?? EMPTY_PAGE_DOC, shapes.ratio(entry.pdf!.page), entry.key);
     }
     return { version: 1, pages: records };
-  }, [shapes, pagesView]);
+  }, [shapes, pagesView, pageList]);
 
   const goToPage = useCallback((pageNumber: number) => book?.scrollToPage(pdfPageKey(pageNumber)), [book]);
 

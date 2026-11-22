@@ -46,6 +46,7 @@
   每一頁要和第一行相同、節點編號只收小寫、不得含來源自己、舊編號或 genesis（含這台自己：`join_origin_is_this_node`）、舊的「每個來源一個數字」形狀不被讀成標籤（`join_bad_brought`、`join_wrong_brought`），帶來的來源的標記不得超過它那個標籤報的號碼（`join_stamp_beyond_brought`），
   來源自己的標記不得超過切點（`join_stamp_beyond_cut`）；來源那一端在讀之前先確認自己擔保得了握有的每一個標記（`snapshot_foreign_origin`、`snapshot_source_unsettled`、`snapshot_source_joining`、`snapshot_too_many_origins`）。
   `have` 與包頭的 `base`／`upTo`／`holds` 改成每個標籤一個，舊形狀以 `bundle_have_per_origin` 拒收。每一種拒絕在 `snapshotBrought.integration.test.ts` 有測試，拒絕後資料庫沒有變。
+  同步 4a 批（2026-11-22）起：收下的列寫完之後、同一個交易裡，由 `spine/receivedDerivation.ts` 這個插槽（`services/receivedDerivation.ts` 填）算出衍生資料（連結、段落列的顯示欄位、永久刪除的清理、空間與 slug、型別、網站重建、成員 epoch），它不寫任何單位；插槽是空的就整包拒收（`bundle_no_derivation`），所以收包永遠不會只寫了列、沒有衍生。
 - 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）。「工作階段的任何東西不離開這一台」（PR #1856）現在檢查的：
   工作階段的 `actors` 與 `space_members` 列、它們的標記與墓碑不進快照、修改包與摘要（`snapshotTables.ts` `stampMayLeaveSql`；兩節點測試 `sessionsStayOnTheirNode.integration.test.ts`）；
   判斷所靠的工作階段 `actors` 列，在它的工作區還在時，**資料庫**拒絕刪除與改 id、工作區、種類（migration 217 的觸發器；`sessionActorKept.integration.test.ts`），`removeActor` 也拒絕；

@@ -178,8 +178,8 @@
   "order": [
    "t.id::text"
   ],
-  "where": "t.workspace_id = $1 AND t.source IN ('ui', 'explicit', 'dispatcher') AND {node:t.node_id}",
-  "note": "only what a person or an automation wrote; what the note text produces is worked out again by the receiver",
+  "where": "t.workspace_id = $1 AND t.source IN ('ui', 'explicit', 'dispatcher', 'markdown', 'frontmatter') AND {node:t.node_id}",
+  "note": "what a person, an automation or the dispatcher from a note's text wrote (migration 223); `derived` rows are worked out on each node",
   "stamps": [
    {
     "label": "node_attributes",

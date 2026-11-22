@@ -965,6 +965,13 @@
 - **類別**：未查證就回報；只驗自己要的出口、沒驗同一份輸入的其他讀者。
 - **機制**：守門通道本身（它擋下了）；改回設定、指令改用 `--quiet`。改共用設定檔前列出它的讀者：尚無機制。
 
+### 2026-11-22　改了合併的 slug 規則，只跑了新寫的測試就推上去；既有的收斂測試在併入 main 後才紅（PR #1941 第 1 輪後）
+- **發生了什麼**：回應審查第 1 點時把 `spine/noteSlugs.ts` `settleSlugs` 改成「較晚佔的讓位，拿第一個空的（`-2`）」，取代合併原本的「id 較大的拿 `-<id 前八碼>`」。新寫的三則 slug 測試在真 Postgres 通過就提交並推上去。兩台同時新建多則同名筆記時，「第一個空的」看的是各台自己的狀態，兩台的後綴不同。
+- **證據**：`stampedBundle.integration.test.ts`「two nodes colliding on titles, bundles in either order and a second round」固定種子 31，`expected [ …(27) ] to deeply equal [ …(27) ]`（PGlite，併入 main `2c5636804` 之後跑的那一組）。
+- **發現者**：我（併入 main 後跑的既有測試）。
+- **為什麼沒擋到**：改的是一條收斂規則，卻只跑了為這次改動寫的測試；釘著舊性質（多則同時新建也收斂）的測試在另一個檔，沒有在提交前跑。PR 說明還把這種情況寫成「沒解決的」，等於把既有測試保住的性質當成新的限制。
+- **類別**：改規則時沒有找出釘著那條規則的既有測試。
+- **機制**：〔第 1 層〕那則既有測試本來就在；規則改成「看佔的是名字還是位置」後它與新的三則都通過。「改了合併規則，提交前跑 `grep` 得到的所有呼叫者的測試」：尚無機制，靠完整套件（這次是在完整套件之前就推了）。
 ### 2026-11-22　交回前只跑改到的測試；本機有 git 身分、CI 沒有，新 CI job 第一次跑就紅（PR #1937 第 2 輪後）
 - **發生了什麼**：第 2 輪加了 migration 224 與一個會建／刪資料庫的真 Postgres 測試，交回 `b6a0d2023` 時只跑了改到的測試檔。公開 CI 紅了五個 job：`backupFidelity`（新表有 `node_id` 欄但沒進 `NODE_TABLES`）、`crossWorkspaceReadSweep`（新表沒有工作區欄）、`testDatabaseGate` 加上 unit lane 載不進檔（`restoreScript.postgres` 沒有 `isTestDatabase()` 關卡，沒有 `DATABASE_URL` 時 `new URL(undefined)` 在收集階段就丟錯），還有新的 restore-scripts job 裡演練自我測試的 8 個 `--commit` 案例：`fake_commit` 用 `git commit-tree`，runner 上沒有 git 身分，做出的 ref 是空的。
 - **證據**：CI run 44975964641；本機用 `HOME=/nonexistent GIT_CONFIG_GLOBAL=/dev/null` 跑 `restore-drill-selftest.sh` 重現，加上身分之後 14/14。

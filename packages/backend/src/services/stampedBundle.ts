@@ -10,6 +10,8 @@ import type { ChangeBundlePage } from "../spine/snapshotSql.js";
 import type { ActorCtx } from "../types.js";
 import { withActorReadSnapshot } from "./actorReadSnapshot.js";
 import { bundleScopeFor } from "./readPolicy.js";
+// The receiving half needs what follows from received rows: loading the bundle's service fills spine/receivedDerivation.ts (applyChangeBundle refuses without it).
+import "./receivedDerivation.js";
 
 class BundleOwnerOnly extends CodedStatusError {
   constructor() { super(403, "bundle_owner_only", "only the owner of the workspace reads a change bundle (a bundle for a limited reader is not done)"); }

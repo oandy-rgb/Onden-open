@@ -224,7 +224,7 @@ ALTER TABLE outbox ADD COLUMN space_id uuid;  -- 核准清單與執行時檢查�
 
 | 現在 | 改為 |
 |---|---|
-| `uniqueSlug` 全工作區 | `(space_id, slug)`；URL 用 id 或帶空間 |
+| `uniqueSlug` 全工作區 | `(space_id, slug)`；URL 用 id 或帶空間。把筆記搬到另一個空間：被搬的那則與底下跟著搬的筆記撞名時拿新空間第一個空的 slug（`-2`、`-3`…），原本在那裡的筆記不變；規則是 `spine/noteSlugs.ts` `settleSlugs`（比較晚佔這個名字的那則讓位，看複製的標記），收到這次搬動的那一台跑同一個函式，所以兩台的 slug 相同（2026-11-22，同步 4a 批） |
 | `^block-id` `(workspace_id, block_id)` 後寫者勝 | `(node_id, block_id)`；衝突時拒絕，不改指向 |
 | 每日筆記以日期標題全域比對 | 以（主人, 日期）找，建在主人的私人空間 |
 | RSS 來源 URL 全域去重回 409 + id | 在同一空間內去重 |

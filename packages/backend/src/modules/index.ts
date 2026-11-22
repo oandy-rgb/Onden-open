@@ -106,7 +106,7 @@ export function registerModuleEffects(mod: ModuleDefinition): void {
   if (mod.retrievalSource) registerRetrievalSource(retrievalWhenImported(mod));
   if (mod.publicSite) registerPublicSite(mod.publicSite);
   for (const id of moduleTagFunctionIds(mod)) registerFunctionId(id);
-  if (mod.nodeHooks) registerNodeHooks(mod.id, hooksWhenImported(mod));
+  if (mod.nodeHooks) registerNodeHooks(mod.id, hooksWhenImported(mod), { onReceived: mod.nodeHooksOnReceive === true });
   if (mod.gatesCoreAgentTools) gateCoreAgentTools((workspaceId) => imported(mod, workspaceId));
   if (mod.library) registerLibraryModule(mod.id, mod.library.moduleTag, { confirmOnce: mod.library.confirmOnce, alwaysOn: Boolean(mod.viewLayout) || mod.library.alwaysOn === true, requires: mod.library.requires, whenTurnedOn: mod.library.whenTurnedOn });
 }

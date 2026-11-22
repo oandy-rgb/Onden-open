@@ -19,6 +19,7 @@ import { sha256Hex } from "../../utils.js";
 import { isUuid } from "@onden/markdown";
 import { bundleRefused } from "../bundleRefusal.js";
 import { liveNodeSql, tagNodeSql } from "../nodeSql.js";
+import { settleSlugs, slugFor } from "../noteSlugs.js";
 import { followCarriedColumns, insertCarriedRow, overwriteCarriedColumns, snapshotRows, type BundleItem, type WireStamp } from "../snapshotSql.js";
 import { type Deletion, type FieldWrite, type Hanging, type HangingRow, type Notice, type RecoveryCopy, type TrashFix, type TreeNote, noticesForEditedDeletes, recoverLateEdits, rowsOnDeletedNotes, trashOrphanedChildren } from "./rules/trash.js";
 import { type RowState, mergeRow } from "./rows.js";
@@ -33,8 +34,8 @@ import {
 import { STAR, type StoreEvent } from "./store.js";
 
 const NOTES = "content_nodes";
-/** The space a note without one counts as in the unique slug index (migration 099 content_nodes_space_slug_uq). */
-const NO_SPACE = "00000000-0000-0000-0000-000000000000";
+// A note's slug follows the write that set it (a title); a restore wants the one its title gives, a move the one it had; two live notes of a space that want one
+// are settled by one rule on every node (spine/noteSlugs.ts settleSlugs: the later claim gives way). Batch 4a, own-node-transport §2.12.6.
 /** Columns the write path sets from a unit (a note's slug from its title) follow that unit's winner. `updated_at` of a note is a function of the counting stamps (migration 206), or the carried value of a creation. */
 const DERIVED_WITH: Readonly<Record<string, Readonly<Record<string, string[]>>>> = { content_nodes: { title: ["slug"], deleted: ["deleted_at"] }, spaces: { deleted: ["written_deleted_at"] } };
 /** How many rows a bundle makes in one table before the table's statistics are brought up to date (`ANALYZE`, storeTable). */
@@ -256,7 +257,7 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
   await writeStructureLines(workspaceId, derived.lines);
   report.structureLines += derived.lines.length;
   report.followedSpaces = derived.followed;
-  await assignSlugs(workspaceId, [...tree.slugs].map(([id, slug]) => ({ id, slug })));
+  await settleSlugs(workspaceId, [...tree.slugs].map(([id, slug]) => ({ id, slug })));
   // and then whether each space whose deletion is written is shown deleted (no live note in it) or kept (migration 218 spaces_show_deleted: one definition)
   report.keptSpaces = await showSpaceDeletions(workspaceId, plans.some((p) => p.src.label === NOTES || p.src.label === "spaces"));
   // what a source's rows are written into, after every table is in: for every row the bundle bears on (a note's anchors unit writes its anchor rows, for every note whose
@@ -671,12 +672,20 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
   }
   await writeStructureLines(workspaceId, lines);
   if (notes) {
+    const restoredNames = new Map((await snapshotRows<{ id: string; title: string; node_type: string; slug: string; reserved_key: string | null }>(
+      `SELECT id::text, title, node_type, slug, reserved_key FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, slugRows.filter((x) => x.l.exists).map((x) => x.i.row)])).rows
+      .map((r) => [r.id, { ...r, slug: originalSlug.get(r.id) ?? r.slug }] as const));
     const views = await orphansOf(workspaceId, merged);
     report.orphaned = views.fixes; report.notices = views.notices;
     // the slugs are given after the notes' spaces are derived (storeMergedRows): a slug is unique among the live notes of a space
     for (const x of slugRows) {
       const c = carriedFrom(src, x);
-      tree.slugs.set(x.i.row, !x.l.exists || c.overwrite || c.copy.includes("slug") ? String(x.i.values?.slug) : originalSlug.get(x.i.row)!);
+      if (!x.l.exists || c.overwrite || c.copy.includes("slug")) { tree.slugs.set(x.i.row, String(x.i.values?.slug)); continue; }
+      // a restore wants the slug its title gives (services/nodeTrash.ts markLive), as where it was written; settleSlugs gives way where that is taken (batch 4a)
+      const wrote = (f: string) => x.m.events.some((e) => e.field === f && e.result.write);
+      const restored = wrote("deleted") && textOf(x.m.before.get("deleted")) === "true" && textOf(x.m.fields.get("deleted")) === "false";
+      const named = restored ? restoredNames.get(x.i.row) : undefined;
+      tree.slugs.set(x.i.row, named ? slugFor(named, named.title) : originalSlug.get(x.i.row)!);
     }
     for (const x of merged) if (x.m.exists && !went.has(x.i.row) && (x.l.exists || madeHere.has(x.i.row))) tree.seeds.push(x.i.row);
     for (const id of madeHere) tree.made.add(id);
@@ -755,30 +764,6 @@ async function deletionsOf(workspaceId: string, notes: string[]): Promise<Map<st
   return dead;
 }
 
-/**
- * Give the notes of a bundle their slugs (they hold `~id` until now). Two live notes of a space cannot have one slug: when that would happen the note with the LARGER id takes
- * `slug-<first eight of its id>`, whichever of the two it is, the same on every node that sees both. (A slug is derived from a title by the write path of the node that wrote it; it is not a
- * unit. This keeps the database's index true without choosing between the two titles; PR "需要決定".)
- */
-async function assignSlugs(workspaceId: string, wanted: { id: string; slug: string }[]): Promise<void> {
-  for (const { id, slug } of [...wanted].sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    const row = (await snapshotRows<{ live: boolean; space: string | null }>(`SELECT (${liveNodeSql()}) AS live, space_id::text AS space FROM content_nodes WHERE workspace_id = $1 AND id = $2::uuid`, [workspaceId, id])).rows[0];
-    if (!row) continue;
-    let final = slug;
-    if (row.live) {
-      // in the exact form of the unique index content_nodes_space_slug_uq (workspace_id, COALESCE(space_id, zero uuid), slug) WHERE deleted_at IS NULL, so it is one index lookup.
-      // Without the space term only the workspace prefix of the index applies: on a real Postgres with current statistics every lookup read the workspace's notes (one scan per note)
-      const other = (await snapshotRows<{ id: string }>(
-        `SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND COALESCE(space_id, '${NO_SPACE}'::uuid) = $4::uuid AND slug = $2 AND ${liveNodeSql()} AND id <> $3::uuid`,
-        [workspaceId, slug, id, row.space ?? NO_SPACE])).rows[0];
-      if (other) {
-        if (other.id < id) final = `${slug}-${id.split("-")[0]}`;
-        else await snapshotRows(`UPDATE content_nodes SET slug = $3 WHERE workspace_id = $1 AND id = $2::uuid`, [workspaceId, other.id, `${slug}-${other.id.split("-")[0]}`]);
-      }
-    }
-    await snapshotRows(`UPDATE content_nodes SET slug = $3 WHERE workspace_id = $1 AND id = $2::uuid`, [workspaceId, id, final]);
-  }
-}
 
 
 /**

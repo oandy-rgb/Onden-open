@@ -7,7 +7,8 @@ import { assertAuthority } from "../spine/authority.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { runCascade } from "../spine/mutate.js";
 import { recordAttributeChange } from "./attributeChange.js";
-import { TAG_NODE_TYPE, isTag, isCanvas } from "@onden/markdown/contract";
+import { TAG_NODE_TYPE, isTag } from "@onden/markdown/contract";
+import { freeSlug, slugFor, type SlugNode } from "../spine/noteSlugs.js";
 
 import { liveNodeSql } from "../spine/nodeSql.js";
 // Wikilink edges live in a leaf module (nodeHooks re-links on an `aliases`
@@ -54,17 +55,7 @@ export async function uniqueSlug(workspaceId: string, base: string, scope: strin
     const self = (await q<{ space_id: string | null }>(`SELECT space_id::text FROM content_nodes WHERE id = $1`, [opts.excludeId])).rows[0];
     if (self) spaceId = self.space_id;
   }
-  let slug = base;
-  let i = 2;
-  for (;;) {
-    const params: unknown[] = [workspaceId, slug];
-    let where = `workspace_id = $1 AND slug = $2 AND ${liveNodeSql()}`;
-    if (opts.excludeId) where += ` AND id <> $${params.push(opts.excludeId)}`;
-    if (spaceId !== undefined) where += ` AND space_id IS NOT DISTINCT FROM $${params.push(spaceId)}::uuid`;
-    const existing = await q(`SELECT id FROM content_nodes WHERE ${where}`, params);
-    if (existing.rows.length === 0) return slug;
-    slug = `${base}-${i++}`;
-  }
+  return freeSlug(workspaceId, base, { excludeId: opts.excludeId, spaceId });
 }
 
 /** Tag-node slug (MB3): 'tag-' + the Unicode-preserving slugify, suffixed
@@ -76,20 +67,9 @@ export async function uniqueTagSlug(workspaceId: string, name: string, excludeId
   return uniqueSlug(workspaceId, slugFor({ node_type: TAG_NODE_TYPE }, name), { excludeId, spaceId: null });
 }
 
-/** What slugFor needs to know about a node: its kind and, for the kinds whose
- *  slug does not follow the title, the slug it was given. */
-export type SlugNode = { id?: string; node_type: string; slug?: string; reserved_key?: string | null };
-
-/** The slug a title gives a node, before uniqueSlug's -2/-3 suffix (D55: the
- *  one rule). A note's is slugify(title); a tag's is `tag-` + slugify(name).
- *  Some slugs name the row, not its title, and never change: a task's
- *  `task-<uuid>`, a canvas's `canvas-<uuid>`, a reserved tag's
- *  `tag-<key>-<id6>` and a system row's `_name` (the Site Config note). */
-export function slugFor(node: SlugNode, title: string): string {
-  if (node.slug && (node.reserved_key || node.slug.startsWith("_") || (node.id && node.slug === `task-${node.id}`))) return node.slug;
-  if (isCanvas(node) && node.id) return `canvas-${node.id}`;
-  return isTag(node) ? `tag-${slugify(title)}` : slugify(title);
-}
+// The slug a title gives a node, and the next free one (D55: the one rule), are in spine/noteSlugs.ts: a node that takes a restore or a move by change bundle
+// works the slug out by the same functions (batch 4a, own-node-transport §2.12.6).
+export { slugFor, type SlugNode } from "../spine/noteSlugs.js";
 
 /** The free slug node `node.id` gets when it carries `title`: slugFor, unique
  *  in the node's space (its own current slug does not count as taken). For a

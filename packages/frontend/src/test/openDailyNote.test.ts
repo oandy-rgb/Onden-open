@@ -21,6 +21,7 @@ import { useNodeCreation } from "../hooks/useNodeCreation";
 import { ApiError, type Bootstrap, type ContentNode } from "../lib/api";
 import { getAppState, resetAppState, setData } from "../lib/appStore";
 import { todayId } from "../lib/localDate";
+import { knowPersonalSpace } from "./helpers/knownSpaces";
 
 function makeParams() {
   return {
@@ -38,8 +39,9 @@ function makeParams() {
 
 describe("openDailyNote", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
-  beforeEach(() => {
+  beforeEach(async () => {
     resetAppState();
+    await knowPersonalSpace();
     submit.mockReset().mockResolvedValue(undefined);
     fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);

@@ -70,6 +70,7 @@
 | 實機操作碰到真實資料 | 在業主的裝置上量測或驗收時，模擬的點擊、按鍵落在真實筆記上（打了字、改了東西），而不是在測試空間 |
 | 同時進行太多、整合落後 | 開著的 PR 累積到審不完；修正卡在沒合併的 PR 裡，業主以為修好了的問題在正式站上還在 |
 | 只在一台裝置上驗過觸控 | 觸控、螢幕鍵盤的修正只在一台裝置（或一次瞬間的模擬鍵盤）上驗過，業主的另一台裝置照樣壞 |
+| 未載入被當成一個答案 | 一份還沒拿到的資料（清單、設定、身分）在程式裡是 `null`／空陣列，被下游當成「沒有」「最上層」「任何一個都算」來做事，而不是「還不知道、先別做」 |
 | 沒有被收下的東西被當成伺服器有的 | 只在這台的記憶體、佇列或投影裡、伺服器沒有確認（甚至拒絕）的值，被當成「伺服器現在存著的」來用：當合併的 base、當成已存好而丟掉救回副本 |
 
 ## 紀錄
@@ -123,6 +124,19 @@
 - **類別**：零件對、組裝錯。
 - **機制**：〔程式本身〕alias 改成從後端實際載入的 better-auth 出發解析 core（`build-browser.mjs` 的 `betterAuthCoreDir`），不管 npm 放在哪一層都拿到同一份。〔第 4 層〕換依賴的 PR 跑 `npm run build:browser` 與瀏覽器版冒煙。
 - **還沒擋住的**：`build:browser` 裡其他 `nm(...)` 寫死根目錄的 alias（`path-browserify`、`events`、`buffer`…）同樣依賴提升位置；往上一層是讓 `build-browser.mjs` 在 alias 指到不存在的檔或和使用者解析到的版本不同時直接失敗，並把 `build:browser` 放進換依賴時必跑的檢查。
+### 2026-11-22　空間清單只在記憶體，離線冷開機時「個人空間不知道」被當成「放最上層、用隨機 id、任何空間都算」（未載入被當成一個答案）
+- **發生了什麼**：正式站 2026-11-21 的日記（手機 Brave PWA，台灣清晨 4:08 建立）落在個人空間最上層、id 是隨機的，其他天都在設定的上層底下、id 由（個人空間、日期）算出；11-15 也是隨機 id。`lib/spaces.ts` 的清單只在記憶體，冷開機到 `/api/spaces` 回答前、離線開機整段，`personalSpaceId()` 都是 null；`dayNotes.openDay` 因此用隨機 id、`usableDayNoteParent` 回最上層。同一個 null 還讓任務進了「任務」筆記而不是今天的日記（`createQuickTask` 把個人空間當成共用空間）、`openTasksNote` 可能建出第二篇、`findDayNode` 把任何空間同日期的筆記當今天的、`canEdit` 把「只能看」當可編輯。
+- **證據**：分支 `fix/spaces-known-at-boot`；修正前 `spacesKnownAtBoot.test.tsx` 13 則全紅（例：`expected { saved: 'queued', noteTitle: '任務' } to match object { … noteTitle: <今天> }`、`expected { id: 'team-day', … } to be undefined`）。
+- **發現者**：上線後（擁有者使用）。
+- **為什麼沒擋到**：`dayNotes` 的註解把「空間未載入時用隨機 id、最上層」寫成刻意的後退，測試也釘住它（`uses the caller's fallback id before the personal space is known`、`is skipped while the personal space is unknown: top level`）；沒有測試走「離線冷開機、本機有副本」這條真路徑。
+- **類別**：未載入被當成一個答案（新增）。
+- **機制**：
+  - 〔第 1 層〕清單存進本機副本（`sync_state` 的 `spaces`，`MIRROR_SCHEMA_VERSION` 5 起一變就作廢），開機在第一次畫面前讀回（`lib/spaces.ts` `restoreSpaces`、`syncEngine.runBoot`）；「不知道」只剩從沒聽過伺服器的裝置。
+  - 〔第 1 層〕會寫入的入口在「不知道」時拒絕而不猜：`dayNotes.openDay`／`openTasksNote`／`openTaskHome` 丟 `PersonalSpaceUnknownError`（一句白話、輸入保留）；`findDayNode` 不知道就找不到。`fallbackId` 選項刪除。
+  - 〔第 2 層〕`spacesKnownAtBoot.test.tsx`（只假 `lib/api`、`lib/localDb`）：離線冷開機、新裝置離線、伺服器換 id、共用空間同日期筆記（含隨機種子）、換帳號；`spacesKeptInCopy.test.ts` 用真的 worker；`mirrorSchemaVersion.test.ts` 驗作廢。
+- **還沒擋住的**：其他「未載入就是 null」的清單（偏好、標籤目錄等）沒有逐一盤點；這一類尚無通用守門，只能靠審查看到 `?? null` 之後的預設動作。
+
+
 ### 2026-11-18　模組自己的標籤在模組開著時能被刪掉，只有任務標籤受保護（只擋了一個案例、沒擋整類）
 - **發生了什麼**：擁有者回報「我不應該能刪掉收件夾的」。`reservedTags.assertTagDefinitionChange`（所有刪除、合併都經過）只認 `reserved_key` 與任務模組的標籤；擷取模組的 `收件匣`（`tag_schema.module = 'capture'`）與其他模組自己的標籤都能被刪或合併掉。刪掉之後下一次擷取：`createMemberModuleTag` 用 `newIdFor` 在衍生 id 被垃圾桶裡那一列佔用時改用隨機 id，於是**鑄出第二個收件匣**，舊的擷取筆記留在垃圾桶那一列上（node_tags 還在，但收件匣頁看不到）。
 - **證據**：`packages/backend/src/test/moduleTagNotDeletable.integration.test.ts`（修正前：刪除回 200、合併來源回 200、刪掉後再擷取回傳新 id，共 3 項紅；修正後 6 項綠）。

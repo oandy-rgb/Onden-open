@@ -80,6 +80,9 @@ export const localCopy = {
   get importFile() { return local.importDatabase; },
   /** Write the pending snapshot to disk now. */
   get flush() { return local.flushLocalDbSync; },
+  /** The caller's spaces as last heard from the server, kept with this account's copy (lib/spaces.ts). */
+  get spaces() { return local.loadSpaces; },
+  get keepSpaces() { return local.storeSpaces; },
 };
 
 export const recovery = {

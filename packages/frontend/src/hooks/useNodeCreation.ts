@@ -1,7 +1,7 @@
 import { randomUUID } from "../lib/uuid";
 import { boardSpaceId } from "../lib/boardLayout";
 import { markdownExportUrl, nodeNeedsBody, type Bootstrap, type Canvas, type ContentNode } from "../lib/api";
-import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, captureWriter, writeErrors, pins } from "../lib/data";
+import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, captureWriter, writeErrors, pins, PersonalSpaceUnknownError } from "../lib/data";
 import type { CreateNote, DayNoteSeed } from "../lib/data";
 import { addToast, getAppState, getNode } from "../lib/appStore";
 import { t } from "../lib/i18n";
@@ -147,7 +147,12 @@ export function useNodeCreation({
   // so a 「已建立」 note would be noise. Anything they pressed announces.
   async function openDailyNote(options?: { announce?: boolean }): Promise<string | null> {
     if (!dailyNotesEnabled()) return null;
-    const opened = await dayNotes.openToday().catch(() => null);
+    // A refusal was already reported by the note writer; a device that does not know the person's own
+    // space yet says so here (even on the app's own landing): nothing was started.
+    const opened = await dayNotes.openToday().catch((error: unknown) => {
+      if (error instanceof PersonalSpaceUnknownError) writeErrors.report(error, addToast);
+      return null;
+    });
     if (!opened) return null;
     if (opened.created && options?.announce !== false) {
       const title = opened.node.title;

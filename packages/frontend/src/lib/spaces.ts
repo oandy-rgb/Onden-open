@@ -3,11 +3,20 @@
 // Every note lives in one space; the space's members decide who can read and
 // write it. This module fetches the caller's spaces once (and again after a
 // change), and wraps the space and move endpoints.
+//
+// The list is also kept in this account's local copy (lib/data localCopy.spaces,
+// the same database as the notes' offline copy): every server answer is written
+// there, and a start reads it back first (restoreSpaces, from the boot), so the
+// personal space is known offline and before the server answers. "Not known"
+// is left only for a device that has never heard the server (new device,
+// cleared data, a copy whose schema version changed). Callers that would
+// write somewhere on the strength of the personal space — today's note, the
+// 任務 note, quick-add — refuse then instead of guessing (lib/data/dayNotes.ts).
 
 import { useEffect, useSyncExternalStore } from "react";
 
 import { t } from "./i18n";
-import { reads, spaceWriter } from "./data";
+import { localCopy, reads, spaceWriter } from "./data";
 import type { MovePreview, SpaceCapability, SpaceDeletePreview, SpaceKind, SpaceOverview, SpacePermission } from "@onden/contract";
 
 /** 可看 / 可編輯 (backend spine/spaceAccess.ts SPACE_PERMISSIONS). No row = not in the space. */
@@ -30,23 +39,54 @@ export type MovePreviewNumericEpoch = Omit<MovePreview, "membership_epoch"> & { 
 
 // The owner flag is not kept here: lib/capabilities.ts reads it from the
 // bootstrap (actor_is_owner), the one source.
+/** `loaded`: the list is known — the server's answer, or the copy of it this
+ *  device kept (restoreSpaces). False only before either is in. */
 type State = { spaces: Space[]; loaded: boolean };
 let state: State = { spaces: [], loaded: false };
 const listeners = new Set<() => void>();
 let inFlight: Promise<void> | null = null;
+/** The server answered the spaces request on this page (not only the kept copy). */
+let heardServer = false;
 
 function publish(next: State): void {
   state = next;
   for (const l of listeners) l();
 }
 
-/** (Re)load the caller's spaces. Failures keep the last list. */
+/** (Re)load the caller's spaces and keep the answer in the local copy.
+ *  Failures keep the last list. */
 export function refreshSpaces(): Promise<void> {
   inFlight ??= reads.people.spaces<Space>()
-    .then((r) => { if (Array.isArray(r?.spaces)) publish({ spaces: r.spaces, loaded: true }); })
+    .then((r) => {
+      if (!Array.isArray(r?.spaces)) return;
+      heardServer = true;
+      publish({ spaces: r.spaces, loaded: true });
+      // No local copy (memory-only device) or a failed save: the next start asks the server again.
+      void localCopy.keepSpaces(r.spaces).catch(() => {});
+    })
     .catch(() => { /* offline or older server: keep what we have */ })
     .finally(() => { inFlight = null; });
   return inFlight;
+}
+
+const isSpaceRow = (row: unknown): row is Space => typeof row === "object" && row !== null
+  && typeof (row as Space).id === "string" && typeof (row as Space).kind === "string";
+
+/** Take the list this device kept with its local copy, unless the server has
+ *  already answered on this page. The boot awaits it before the first paint
+ *  (lib/data/syncEngine runBoot). Nothing kept, or no local copy: stays unknown. */
+export async function restoreSpaces(): Promise<void> {
+  if (state.loaded) return;
+  let kept: unknown[] | null = null;
+  try { kept = await localCopy.spaces(); } catch { /* no copy, or it cannot be read: unknown, as on a new device */ }
+  if (state.loaded || !Array.isArray(kept) || !kept.every(isSpaceRow)) return;
+  publish({ spaces: kept, loaded: true });
+}
+
+/** Whether the server has answered the spaces request on this page (the list
+ *  may still be known from the kept copy without it). */
+export function spacesHeardFromServer(): boolean {
+  return heardServer;
 }
 
 let seenEpoch: number | undefined;
@@ -60,12 +100,13 @@ export function noteMembershipEpoch(epoch: number | undefined): void {
   if (!first && state.loaded) void refreshSpaces();
 }
 
-/** The caller's personal space id, once the spaces have loaded (else null). */
+/** The caller's personal space id, once the spaces are known — from the server
+ *  or this device's kept copy (else null: a device that never heard the server). */
 export function personalSpaceId(): string | null {
   return state.spaces.find((space) => space.kind === "personal")?.id ?? null;
 }
 
-/** The caller's spaces as last loaded (empty until refreshSpaces resolves). */
+/** The caller's spaces as last known (empty until restoreSpaces or refreshSpaces fills them). */
 export function loadedSpaces(): readonly Space[] {
   return state.spaces;
 }
@@ -75,6 +116,7 @@ export function resetSpacesForTest(): void {
   state = { spaces: [], loaded: false };
   inFlight = null;
   seenEpoch = undefined;
+  heardServer = false;
 }
 
 /** The caller's spaces; loads them the first time, and when `online` turns on. */

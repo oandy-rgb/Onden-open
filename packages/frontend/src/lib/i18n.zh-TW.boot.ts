@@ -4,6 +4,8 @@
 // 新字串加在哪一半，建置時由 scripts/bootReportPlugin.mjs 檢查：late 裡的字串若出現在開機 JS 就失敗。
 
 export const ZH_TW_BOOT: Record<string, string> = {
+  "Today's diary is started once this device has connected to the internet.": "連上網路後才會建今天的日記。",
+  "Tasks without a note can be saved once this device has connected to the internet.": "連上網路後才能存沒有指定筆記的任務。",
   "Connect to change modules.": "連線後才能變更功能。",
   "Connect to change where subscriptions live.": "連上伺服器才能更改訂閱放在哪裡。",
   "Connect to change the time settings.": "連上線才能更改時間設定。",

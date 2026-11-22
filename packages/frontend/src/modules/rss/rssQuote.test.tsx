@@ -38,6 +38,7 @@ import { bindAccountStorage } from "../../lib/accountStorage";
 import { noWorkspaceData, type ContentNode } from "../../lib/api";
 import { getAppState, resetAppState } from "../../lib/appStore";
 import "../../modules"; // the module registry (the 日記 switch reads it)
+import { knowPersonalSpace } from "../../test/helpers/knownSpaces";
 
 bindAccountStorage("unit-test-account", "");
 
@@ -61,7 +62,8 @@ const writes = () => vi.mocked(addPendingWrite).mock.calls.map((c) => ({ method:
 const sent = () => apiMock.mock.calls.filter((c) => c[1]?.method && c[1].method !== "GET")
   .map((c) => ({ method: c[1].method as string, path: c[0] as string, body: JSON.parse(String(c[1].body)) }));
 
-beforeEach(() => {
+beforeEach(async () => {
+  await knowPersonalSpace(); // today's note is started in the personal space
   localStorage.clear();
   online = true;
   resetAppState({ data: { ...noWorkspaceData, nodes: [note("reading-notes", "Reading notes", "# Reading notes\n\nEarlier thoughts.\n"), note("other", "Other note", "")] }, online: true });

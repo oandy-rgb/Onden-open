@@ -38,6 +38,7 @@
     "changes:check": "node scripts/changes.mjs",
     "docs:covered": "node scripts/check-md-links.mjs --covered",
     "allowlist:baseline": "node scripts/allowlist.mjs",
+    "appearance:tokens": "node packages/frontend/scripts/appearanceTokens.mjs --doc",
     "surface:baseline": "node scripts/surface.mjs",
     "catalog": "node scripts/catalog.mjs",
     "ratchet:check": "node scripts/ratchet.mjs",

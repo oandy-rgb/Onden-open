@@ -116,6 +116,25 @@
   --ac-list-max:     720px;  /* lists read as one column: 全部標籤 */
   --ac-phone-gutter: 20px;
 
+  /* ── Look scale: levels the css-* guards name (docs/agents/appearance-rules.md §七) ──
+     Defined so a rule has a token to point at; nothing reads them yet, so no computed style changes.
+     The batch that moves a kind of value onto its scale starts using them. ── */
+  --ac-fw-semibold: 600;
+  --ac-border-thin: 1px;
+  --ac-border-medium: 2px;
+  --ac-border-thick: 3px;
+  --ac-opacity-disabled: 0.5;
+  --ac-opacity-dim: 0.7;
+  --ac-duration-panel: 200ms;
+  --ac-width-sm: 320px;
+  --ac-width-md: 400px;
+  --ac-width-lg: 560px;
+  --ac-icon-xs: 12px;
+  --ac-icon-sm: 16px;
+  --ac-icon-md: 20px;
+  --ac-icon-lg: 24px;
+  --ac-icon-stroke: 1.5;
+
   /* ── Layers: who paints over whom (z-index). Every z-index in a stylesheet is one
      of these; a modal is a top-layer <dialog> and needs no number (ui/TopLayerPortal).
      local-N = order inside one component; the rest are page-level, lowest first. ── */

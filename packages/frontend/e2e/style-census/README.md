@@ -11,6 +11,8 @@ npm run style:census                          # 全部：4 個寬度 × 2 個主
 npm run style:census -- --sizes 390,1440 --themes light --screens note-long,daily --jobs 2
 npm run style:census -- --sheets <資料夾>      # 另外輸出每個畫面×寬度×主題一張 PNG、index.md、每個寬度×主題一張拼貼圖
 npm run style:census:selftest                 # 工具自己的測試（假頁面；不需要建置；也檢查規則文件有每一種的列）
+npm run style:census -- --compare <舊的 report.json>                 # 量完後比對：任何一種「不在刻度上」變多就結束碼 1
+npm run style:census -- --compare <舊的 report.json> --against <新的 report.json>   # 只比兩份檔案，不開瀏覽器
 ```
 
 輸出：`e2e/style-census/report.json`（完整；每次重跑整檔改寫，已在 `.gitignore`，不進版本庫）與 `docs/research/style-census-<日期>.md`（可讀；不含圖片）。
@@ -28,7 +30,8 @@ Chromium 全部程序合計峰值約 1.2–3 GB（3 個並行時）。機器小�
 | `run.mjs` | 進入點：每個寬度×主題開一個瀏覽器環境，逐畫面量測、判定、彙整、寫報告與（選用）聯絡表 |
 | `scale.mjs` | A 方向的刻度（機器可讀）與 `classify`；人讀版是 appearance-rules.md |
 | `collect.mjs` | 在頁面裡跑：走過畫面上的元素，收集每一種算出來的值、次數、三個例子，以及它宣告在哪條 CSS 規則 |
-| `static.mjs` | 原始碼的靜態數字（.css 宣告、.tsx 的 `size={n}`）與「選擇器 → 原始檔:行」索引 |
+| `static.mjs` | 原始碼的靜態數字（.css 宣告、.tsx 的 `size={n}`）與「選擇器 → 原始檔:行」索引；有守門規則的種類用守門的偵測函式（`../../scripts/appearanceLook.mjs`） |
+| `compare.mjs` | 報告的機器可讀摘要（`summary`）與兩份報告的比對（`--compare`） |
 | `report.mjs` | report.json → 可讀的 Markdown |
 | `sheets.mjs` | index.md 與每個寬度×主題一張拼貼圖（用瀏覽器排版，不需要圖片函式庫） |
 | `viewports.mjs` | 寬度：手機 390、平板橫 1280×800、平板直 800×1280、桌面 1440；觸控裝置是觸控模擬 |

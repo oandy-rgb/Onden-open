@@ -702,6 +702,253 @@
       "useLang": "css"
     },
     {
+      "id": "css-spacing-token",
+      "need": "要設內距、外距或間距（padding／margin／gap）",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "padding: var(--ac-space-4);",
+      "replaces": "寫死的 padding、margin、gap 數值（6px、10px…）",
+      "rules": [
+        "fe-css-spacing"
+      ],
+      "why": "間距只有 2／4／8／12／16／24／32／48 八級（--ac-space-*）；各處自己寫 6px、10px，畫面就會有五十種不同的留白，看起來不整齊。0 與 auto 不用 token。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-line-height-token",
+      "need": "要設行高",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        },
+        {
+          "file": "packages/frontend/src/styles/theme-tokens.css"
+        }
+      ],
+      "use": "line-height: var(--ac-lh-ui);",
+      "replaces": "寫死的 line-height 數字（1.45、1.65…）",
+      "rules": [
+        "fe-css-line-height"
+      ],
+      "why": "行高用 --ac-lh-*，同一種文字在每個畫面疏密一致；寫死的數字會讓換行位置各畫面不同。normal 與 inherit 可以直接寫。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-font-weight-token",
+      "need": "要設字重",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        },
+        {
+          "file": "packages/frontend/src/styles/theme-tokens.css"
+        }
+      ],
+      "use": "font-weight: var(--ac-fw-bold);",
+      "replaces": "寫死的 font-weight（500、600、700、bold）",
+      "rules": [
+        "fe-css-font-weight"
+      ],
+      "why": "字重用 --ac-fw-*（regular／semibold／bold）；只有 @font-face 裡宣告可變字重範圍可以寫數字。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-letter-spacing-token",
+      "need": "要設字距",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/theme-tokens.css"
+        }
+      ],
+      "use": "letter-spacing: var(--onden-tracking-tight);",
+      "replaces": "寫死的 letter-spacing（0.02em、0.5px…）",
+      "rules": [
+        "fe-css-letter-spacing"
+      ],
+      "why": "字距用 --onden-tracking-*；中文介面幾乎不需要字距，需要時只在標題與全大寫小標籤用。0 與 normal 可以直接寫。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-font-family-token",
+      "need": "要設字體",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "font-family: var(--ac-font-ui);",
+      "replaces": "寫死的 font-family 名稱（ui-monospace、system-ui…）",
+      "rules": [
+        "fe-css-font-family"
+      ],
+      "why": "字體用 --ac-font-ui／prose／mono／kai；使用者換字體時才會一起變。@font-face 裡宣告字體名稱不算。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-border-width-token",
+      "need": "要設邊框粗細",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "border: var(--ac-border-thin) solid var(--ac-line);",
+      "replaces": "寫死的邊框粗細（1px、1.5px、2px、thin）",
+      "rules": [
+        "fe-css-border-width"
+      ],
+      "why": "邊框粗細只有 1／2／3 三級（--ac-border-thin／medium／thick）。方向 A 幾乎不用框線，先想能不能用淡色底或留白取代。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-opacity-token",
+      "need": "要讓東西變淡（opacity）",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "opacity: var(--ac-opacity-disabled);",
+      "replaces": "寫死的 opacity（0.4、0.65、0.85…）",
+      "rules": [
+        "fe-css-opacity"
+      ],
+      "why": "透明度只有停用（0.5）與淡化（0.7）兩級；淡入淡出的 0 與 1 可以直接寫。能用顏色 token 表達層次時不要靠透明度。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-duration-token",
+      "need": "要設動畫或過場的時間",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        },
+        {
+          "file": "packages/frontend/src/styles/theme-tokens.css"
+        }
+      ],
+      "use": "transition: opacity var(--onden-motion-fast);",
+      "replaces": "寫死的 transition／animation 時間（0.2s、150ms…）",
+      "rules": [
+        "fe-css-duration"
+      ],
+      "why": "動畫時間只有 120ms（--onden-motion-fast）與 200ms（--ac-duration-panel）；使用者開「減少動態」時這些 token 一起歸零。永遠循環的載入動畫（infinite）不受限。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-easing-token",
+      "need": "要設動畫的緩動",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/theme-tokens.css"
+        }
+      ],
+      "use": "transition: transform var(--onden-motion-fast) var(--onden-motion-ease);",
+      "replaces": "寫死的緩動（ease、ease-out、cubic-bezier(…)）",
+      "rules": [
+        "fe-css-easing"
+      ],
+      "why": "緩動只有 --onden-motion-ease（進）與 --onden-ease-leave（出），動起來才像同一個 app。永遠循環的動畫（infinite）不受限。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-control-height-token",
+      "need": "要設按鈕或輸入欄的高度",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "min-height: var(--ac-control-md);",
+      "replaces": "寫死的按鈕／輸入欄高度（26px、30px、36px、40px…）",
+      "rules": [
+        "fe-css-control-height"
+      ],
+      "why": "控制項高度桌面 28／32（--ac-control-sm／md）、觸控 44（--ac-tap）。規則只看「選擇器長得像控制項」的 height／min-height（button、input、含 btn／field／chip… 的 class），看不到的由外觀普查量。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-max-width-token",
+      "need": "要限制欄寬或對話框寬度（max-width）",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "max-width: var(--ac-prose-max);",
+      "replaces": "寫死的 max-width（px、rem、ch）",
+      "rules": [
+        "fe-css-max-width"
+      ],
+      "why": "欄寬只有文字欄 640、頁面欄 720、對話框 560／400、側欄與選單 320（--ac-prose-max、--ac-list-max、--ac-width-*）。% 與 vw 不受限。",
+      "useLang": "css"
+    },
+    {
+      "id": "css-focus-ring-token",
+      "need": "要設鍵盤焦點的外框",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/styles/tokens.css"
+        }
+      ],
+      "use": "outline: var(--ac-focus-outline);\noutline-offset: var(--ac-focus-offset);",
+      "replaces": "自己寫的 outline、outline-offset，以及在 :focus 規則裡用非焦點 token 的 box-shadow",
+      "rules": [
+        "fe-css-focus-ring"
+      ],
+      "why": "焦點框只有一種：2px 實線、焦點色、外距 2px（會被裁切的列用 --ac-focus-inset）。每個畫面長得一樣，鍵盤使用者才找得到焦點。",
+      "useLang": "css"
+    },
+    {
+      "id": "icon-size-scale",
+      "need": "要設圖示尺寸（lucide 圖示的 size）",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "docs/agents/appearance-rules.md"
+        }
+      ],
+      "use": "",
+      "replaces": "size={14}、size={18} 這類不在 12／16／20／24 的數字",
+      "rules": [
+        "fe-icon-size"
+      ],
+      "why": "圖示只有 12（小標籤）、16（預設）、20（頂列與工具列）、24（底部列）四種。共用常數（lib/iconSize.ts）會跟第一批搬圖示的改動一起建立；在那之前，規則只擋不在這四個數字上的尺寸。",
+      "useLang": "none"
+    },
+    {
+      "id": "icon-stroke-scale",
+      "need": "要設圖示線寬（lucide 圖示的 strokeWidth）",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "docs/agents/appearance-rules.md"
+        }
+      ],
+      "use": "",
+      "replaces": "strokeWidth={2}、strokeWidth={3} 這類不是 1.5 的數字",
+      "rules": [
+        "fe-icon-stroke"
+      ],
+      "why": "圖示線寬只有 1.5 一種，整個 app 的圖示粗細才一致。",
+      "useLang": "none"
+    },
+    {
       "id": "breakpoints",
       "need": "要依螢幕寬度切換版面（手機／平板／桌面）",
       "area": "介面零件",

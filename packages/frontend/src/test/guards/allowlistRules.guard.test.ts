@@ -8,10 +8,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compareToBaseline, lowerBaseline, RATCHET_RULES, readBaseline } from "../../../../../scripts/allowlistLib.mjs";
 import { cssViolations, definedProperties, legacyTokenUses, offStandardMediaWidths } from "./allowlist/css";
+import { isControlSelector } from "../../../scripts/appearanceLook.mjs";
+import { compareGroups, jsonGroups } from "../../../../../scripts/ratchetLib.mjs";
 import { appStoreInlineSelectorUses, appStoreReachUses, appStoreWriteUses, editorScrollMarginUses, literalApiWriteUses, windowEventNames, focusStealUses, intrinsicElementUses, keyboardStateUses, platformGlobalUses, searchInputSites, storeNodeFindUses, viewportClampUses } from "./allowlist/detect";
 import { ownerCovered } from "../../../../../scripts/entrypointsCatalog.mjs";
 import { COLOR_DATA_OWNERS, CSS_EXEMPT, ELEMENT_OWNERS, FIXED_POSITION_OWNERS, FLOATING_PLACEMENT_OWNERS, inOwners, PLATFORM_OWNERS, SEARCH_FIELD_OWNERS, TOKEN_DEFINITION_EXEMPT, TOKEN_PREFIX_OWNERS } from "./allowlist/owners";
-import { CSS_RULES } from "./allowlist/css";
+import { CSS_RULES, SHARED_LOOK_CSS_RULES } from "./allowlist/css";
+import { TSX_LOOK_RULES } from "../../../scripts/appearanceLook.mjs";
 import { frontendViolations } from "./allowlist/fileRules";
 import { PLATFORM_GLOBALS } from "./allowlist/detect";
 
@@ -136,7 +139,7 @@ describe("css", () => {
   it("catches literals the tokens exist for", () => {
     expect(rules(`a { color: #fff; }`)).toEqual(["css-color"]);
     expect(rules(`a { background: rgba(0,0,0,.4); }`)).toEqual(["css-color"]);
-    expect(rules(`a { border: 1px solid red; }`)).toEqual(["css-color"]);
+    expect(rules(`a { border: 1px solid red; }`)).toEqual(["css-color", "css-border-width"]);
     expect(rules(`a { --brand: #123456; }`)).toEqual(["css-color"]);
     expect(rules(`a { color: var(--fg, #fff); }`)).toEqual(["css-color"]);
     expect(rules(`a { border-radius: 4px; }`)).toEqual(["css-radius"]);
@@ -147,12 +150,12 @@ describe("css", () => {
     expect(rules(`a { position: fixed; }`)).toEqual(["css-position-fixed"]);
   });
   it("lets token references and neutral values through", () => {
-    expect(rules(`a { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); fill: currentColor; }`)).toEqual([]);
+    expect(rules(`a { color: var(--fg); background: var(--bg-2); border: var(--ac-border-thin) solid var(--border); fill: currentColor; }`)).toEqual([]);
     expect(rules(`a { border-radius: var(--radius-md); box-shadow: var(--shadow-1); z-index: var(--z-modal); font-size: var(--text-sm); }`)).toEqual([]);
     expect(rules(`a { border-radius: 0; box-shadow: none; z-index: 0; font-size: inherit; border-radius: var(--r) var(--r) 0 0; position: sticky; }`)).toEqual([]);
     expect(rules(`a { font-size: 0.85em; } b { font-size: 120%; }`)).toEqual([]);
     expect(rules(`a { font-size: 0.85rem; } b { font-size: 0.9em 1px; }`)).toEqual(["css-font-size", "css-font-size"]);
-    expect(rules(`a { font-family: Georgia, serif; width: 600px; content: "red"; }`)).toEqual([]);
+    expect(rules(`a { width: 600px; content: "red"; }`)).toEqual([]);
   });
   it("allows only the three breakpoints in @media widths", () => {
     expect(offStandardMediaWidths("(max-width: 600px)")).toEqual([]);
@@ -165,6 +168,103 @@ describe("css", () => {
     expect(offStandardMediaWidths("(600px <= width <= 800px)")).toEqual(["800px"]);
     expect(rules(`@media (max-width: 700px) { a { color: var(--fg); } }`)).toEqual(["css-media-width"]);
     expect(rules(`@media (max-width: 600px) { a { color: var(--fg); } }`)).toEqual([]);
+  });
+});
+
+// The look kinds (docs/agents/appearance-rules.md): each rule gets a sample that must fail and one that must pass, run through
+// frontendViolations (the same entry the guard and the edit hook use), so a detector that stops matching cannot stay green.
+describe("look kinds: spacing, type, border, opacity, motion, control height, width, focus, icons", () => {
+  const css = (code: string) => frontendViolations("components/X.css", code).map((v) => v.rule);
+  const tsx = (code: string) => frontendViolations("components/X.tsx", code).map((v) => v.rule);
+  const FAIL: [string, string][] = [
+    ["fe-css-spacing", `a { padding: 6px 10px; }`],
+    ["fe-css-spacing", `a { margin-inline-start: -4px; }`],
+    ["fe-css-spacing", `a { gap: 12px; }`],
+    ["fe-css-line-height", `a { line-height: 1.45; }`],
+    ["fe-css-font-weight", `a { font-weight: 600; }`],
+    ["fe-css-font-weight", `a { font-weight: bold; }`],
+    ["fe-css-letter-spacing", `a { letter-spacing: 0.02em; }`],
+    ["fe-css-font-family", `a { font-family: "Fraunces", serif; }`],
+    ["fe-css-border-width", `a { border: 1px solid var(--ac-line); }`],
+    ["fe-css-border-width", `a { border-bottom-width: 2px; }`],
+    ["fe-css-opacity", `a { opacity: 0.65; }`],
+    ["fe-css-duration", `a { transition: opacity 0.2s var(--onden-motion-ease); }`],
+    ["fe-css-duration", `a { animation-duration: 150ms; }`],
+    ["fe-css-easing", `a { transition: opacity var(--onden-motion-fast) ease-out; }`],
+    ["fe-css-easing", `a { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }`],
+    ["fe-css-control-height", `.ui-btn { height: 36px; }`],
+    ["fe-css-control-height", `input[type="text"] { min-height: 2.5rem; }`],
+    ["fe-css-max-width", `a { max-width: 560px; }`],
+    ["fe-css-max-width", `a { max-width: 65ch; }`],
+    ["fe-css-focus-ring", `a:focus-visible { outline: 2px solid var(--ac-focus); }`],
+    ["fe-css-focus-ring", `a { outline-offset: 3px; }`],
+    ["fe-css-focus-ring", `a:focus { box-shadow: 0 0 0 3px var(--ac-ring); }`],
+  ];
+  const PASS: string[] = [
+    `a { padding: var(--ac-space-4) var(--ac-space-5); margin: 0 auto; gap: 0; margin-top: auto; }`,
+    `a { line-height: var(--ac-lh-ui); } b { line-height: normal; } c { line-height: inherit; }`,
+    `a { font-weight: var(--ac-fw-bold); } @font-face { font-family: "X"; font-weight: 100 900; }`,
+    `a { letter-spacing: var(--onden-tracking-tight); } b { letter-spacing: 0; } c { letter-spacing: normal; }`,
+    `a { font-family: var(--ac-font-ui); } b { font-family: inherit; }`,
+    `a { border: var(--ac-border-thin) solid var(--ac-line); } b { border: 0; } c { border-bottom: none; } d { border-radius: var(--ac-radius-md); }`,
+    `a { opacity: 0; } b { opacity: 1; } c { opacity: var(--ac-opacity-disabled); }`,
+    `a { transition: opacity var(--onden-motion-fast) var(--onden-motion-ease); } b { animation: spin 1s linear infinite; } c { transition: none; }`,
+    `.ui-btn { height: var(--ac-control-md); min-height: var(--ac-tap); } .card { height: 36px; } .ui-btn::after { height: 3px; } .toolbar-row { height: 30px; }`,
+    `a { max-width: var(--ac-prose-max); } b { max-width: 100%; } c { max-width: 90vw; } d { max-width: none; }`,
+    `a:focus-visible { outline: var(--ac-focus-outline); outline-offset: var(--ac-focus-offset); } b:focus { box-shadow: var(--ac-focus-ring); } c:focus { outline: none; } d { box-shadow: var(--ac-ring); }`,
+  ];
+  it.each(FAIL)("%s catches a raw literal: %s", (rule, code) => {
+    expect(css(code)).toContain(rule);
+  });
+  it("lets tokens, keywords and the cases each rule leaves out through", () => {
+    for (const code of PASS) expect(css(code), code).toEqual([]);
+  });
+  it("counts one violation per declaration, whatever number of raw values it holds", () => {
+    expect(css(`a { padding: 6px 10px 3px 1px; }`)).toEqual(["fe-css-spacing"]);
+  });
+  it("what counts as a control for the height rule: elements, roles and class words, not their containers or pseudo-elements", () => {
+    for (const yes of ["button", "input.big", ".ui-btn", ".view-tab", ".tag-chip:hover", "[role=\"tab\"]", ".panel .search-field", ".x-toggle, .y"]) expect(isControlSelector(yes), yes).toBe(true);
+    for (const no of [".card", ".toolbar-row", ".btn-group", ".tab-bar", ".ui-btn::before", ".modal-header", "div.title"]) expect(isControlSelector(no), no).toBe(false);
+  });
+  it("known misjudgements of the control heuristic, and the one way to excuse a declaration (with a reason)", () => {
+    // a container whose name looks like a control is counted; a control with a plain name is missed (documented in appearance-rules.md §4.11)
+    expect(css(`.chip-cloud { height: 120px; }`)).toEqual(["fe-css-control-height"]);
+    expect(css(`.cta { height: 40px; }`)).toEqual([]);
+    expect(css(`.chip-cloud {\n  /* appearance-ok css-control-height: a cloud of chips, not a control */\n  height: 120px;\n}`)).toEqual([]);
+    // the excuse is for one rule on the declaration after it; without a reason, or for another rule, it excuses nothing
+    expect(css(`.chip-cloud {\n  /* appearance-ok css-control-height */\n  height: 120px;\n}`)).toEqual(["fe-css-control-height"]);
+    expect(css(`.chip-cloud {\n  /* appearance-ok css-control-height: a cloud of chips, not a control */\n  height: 120px;\n  min-height: 100px;\n}`)).toEqual(["fe-css-control-height"]);
+    expect(css(`a {\n  /* appearance-ok css-opacity: dimmed by design */\n  padding: 6px;\n}`)).toEqual(["fe-css-spacing"]);
+  });
+  it("icons: a size that is not 12/16/20/24 and a stroke that is not 1.5 fail, the levels do not", () => {
+    const import_ = `import { Plus } from "lucide-react";\n`;
+    expect(tsx(import_ + `const a = <Plus size={18} />;`)).toEqual(["fe-icon-size"]);
+    expect(tsx(import_ + `const a = <Plus size="14" strokeWidth={2} />;`)).toEqual(["fe-icon-size", "fe-icon-stroke"]);
+    expect(tsx(import_ + `const a = <Plus size={16} strokeWidth={1.5} />; const b = <Plus size={n} strokeWidth={w} />;`)).toEqual([]);
+    expect(tsx(`const a = <Widget size={18} strokeWidth={2} />;`)).toEqual([]); // not an icon from lucide-react
+  });
+  it("every rule of the shared detector is a rule of the guard, has a baseline slot, and a catalog entry that says what to use", () => {
+    for (const rule of SHARED_LOOK_CSS_RULES) expect(CSS_RULES as readonly string[]).toContain(rule);
+    const rules = [...SHARED_LOOK_CSS_RULES, ...TSX_LOOK_RULES].map((r) => `fe-${r}`);
+    for (const rule of rules) {
+      expect(RATCHET_RULES.has(rule), `${rule} in RATCHET_RULES`).toBe(true);
+      const result = compareToBaseline(rule, { "x.css": 1 }, { what: "x" }, { [rule]: {} });
+      expect(result.errors[0], rule).toContain("請用：");
+    }
+  });
+  it("a grown count or a new file is refused, a smaller one is allowed (the ratchet of every new rule)", () => {
+    const meta = { what: "a literal padding" };
+    const base = { "fe-css-spacing": { "a.css": 3 } };
+    expect(compareToBaseline("fe-css-spacing", { "a.css": 4 }, meta, base).ok).toBe(false);
+    expect(compareToBaseline("fe-css-spacing", { "a.css": 3, "b.css": 1 }, meta, base).ok).toBe(false);
+    expect(compareToBaseline("fe-css-spacing", { "a.css": 2 }, meta, base).ok).toBe(true);
+  });
+  it("the ratchet refuses a new name in a token list, and a bigger count in the baseline file, but not a new rule", () => {
+    const groups = (value: unknown) => jsonGroups("scripts/x-baseline.json", JSON.stringify(value));
+    const before = groups({ "fe-css-spacing": { "a.css": 3 }, colour: ["--a"] });
+    expect(compareGroups(before, groups({ "fe-css-spacing": { "a.css": 4 }, colour: ["--a"] }))[0]).toContain("計數變大");
+    expect(compareGroups(before, groups({ "fe-css-spacing": { "a.css": 3 }, colour: ["--a", "--b"] }))[0]).toContain("新增項目");
+    expect(compareGroups(before, groups({ "fe-css-spacing": { "a.css": 3 }, colour: ["--a"], "fe-css-opacity": { "c.css": 9 } }))).toEqual([]);
   });
 });
 

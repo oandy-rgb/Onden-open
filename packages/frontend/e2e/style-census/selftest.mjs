@@ -8,10 +8,23 @@ import { launch } from "../layout-audit/env.mjs";
 import { INPAGE_SOURCE } from "../layout-audit/inpage.mjs";
 import { CENSUS_SOURCE } from "./collect.mjs";
 import { KINDS, classify } from "./scale.mjs";
+import { compareReports, summarize } from "./compare.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 let failed = 0;
 const check = (name, ok, detail = "") => { if (!ok) failed++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`); };
+
+// The comparison of two reports (no browser): a grown off-scale count fails, a shrunk one passes, different scopes cannot be compared.
+const report = (off, combos = ["390__light"], screens = { a: off, b: 5 }) => ({
+  date: "2026-11-17", combos,
+  byScreen: Object.fromEntries(Object.entries(screens).map(([s, n]) => [s, { spacing: { total: 100, off: n }, opacity: { total: 10, off: 1 } }])),
+  kinds: { spacing: { total: 200, off: 0, offDistinct: 0 }, opacity: { total: 20, off: 2, offDistinct: 1 } },
+});
+check("a grown off-scale count fails the comparison", !compareReports(report(10), report(11)).ok);
+check("an equal or smaller one passes", compareReports(report(10), report(10)).ok && compareReports(report(10), report(3)).ok);
+check("different width × theme sets are not comparable", !compareReports(report(10), report(10, ["1440__light"])).comparable);
+check("only screens measured in both are compared", compareReports(report(10), report(10, ["390__light"], { a: 10 })).ok);
+check("the summary says what was measured", summarize(report(10)).scope.screens.join() === "a,b" && summarize(report(10)).kinds.opacity.off === 2);
 
 const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -40,4 +53,5 @@ await browser.close();
 
 const doc = readFileSync(resolve(here, "../../../../docs/agents/appearance-rules.md"), "utf8");
 for (const k of KINDS) check(`rules document has a row for 「${k.label}」 (${k.id})`, doc.includes(`\`${k.id}\``));
+for (const k of KINDS) for (const rule of k.guard?.match(/fe-[\w-]+/g) ?? []) check(`rules document names the rule ${rule} of 「${k.label}」`, doc.includes(`\`${rule}\``));
 process.exit(failed ? 1 : 0);

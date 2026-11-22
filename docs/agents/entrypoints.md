@@ -12,7 +12,7 @@
 - 「這件事該用哪個元件、函式、模組接口」：查 [entrypoints-catalog.md](entrypoints-catalog.md)（依需求分類；由 `scripts/entrypoints.catalog.json` 產生，以資料檔為準，不在這裡重複列）。
 - 前端讀全域 store（`lib/appStore.ts`）：新程式用 appStore 匯出的**具名** hook／selector／動作（`useNode(id)`、`getNode(id)`、`addToast`、`setSelectedId`…）。
   寬入口 `getAppState`、`useAppSelector`、`setAppState`、`setData`、`subscribeApp` 由規則 `fe-app-store-reach` 管：`lib/appStore.ts` 與 `lib/data/**`（資料寫入層，擁有 store 的寫入）以外，
-  既有檔案記在 `scripts/allowlist-baseline.json`（逐檔計數，只准減不准增，與 `be-raw-sql` 同為 `RATCHET_RULES`），新檔案不能出現。
+  既有檔案記在 `scripts/allowlist-baseline.json`（逐檔計數，只准減不准增，與 `be-raw-sql` 同為 `RATCHET_RULES`；外觀的 14 條規則也在其中，見 [appearance-rules.md](appearance-rules.md)），新檔案不能出現。
   需要的讀法沒有具名入口時，在 appStore 加一個**具名**窄 hook（如 `useSelectedId()`），不要在新檔案寫 `useAppSelector((s) => …)`。
   目的：之後 `data.nodes` 的形狀（例如改成 `{ byId, order }`）只改 appStore 一處。降基準：改完後跑 `npm run allowlist:baseline`。
 - 同步路由：`packages/backend/src/routes/sync.ts`（寫入、讀取政策、復原、前端領域寫入的入口在清單的「後端」「共用邏輯」）。

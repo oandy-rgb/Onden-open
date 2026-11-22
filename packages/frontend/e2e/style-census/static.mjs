@@ -5,6 +5,8 @@ import { createRequire } from "node:module";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// Every kind that has a guard rule since 2026-11-17 is read by the guard's own detector, not a second one here.
+import { declarationContext, declarationLooks, iconLooks } from "../../scripts/appearanceLook.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -26,47 +28,30 @@ const NUM = /(-?\d*\.?\d+)(px|rem|em|%|ms|s|vw|vh)?/g;
 const COLOR_LITERAL = /(^|[^-\w])(#[0-9a-f]{3,8}\b|(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\()/i;
 const NAMED = /\b(white|black|red|green|blue|gray|grey|silver|yellow|orange|purple|pink|brown|cyan|magenta|navy|teal|lime|maroon|olive|aqua|fuchsia|gold|coral|crimson|indigo|violet|tomato|salmon|khaki|ivory|beige|tan|plum)\b/i;
 
-/** property → kind. A property that belongs to two kinds (border: width and colour) lists both. */
+/** property → kind, for the kinds the census reads itself. The kinds with a guard rule since 2026-11-17 (spacing, line-height,
+ *  font-weight, letter-spacing, font-family, border-width, opacity, transition-ms, easing, control-height, max-width,
+ *  focus-ring) come from declarationLooks() — the guard's detector. */
 const PROP_KINDS = [
   [/^(color|background|background-color|border(-(top|right|bottom|left|block|inline)(-\w+)?)?(-color)?|outline(-color)?|fill|stroke|text-decoration(-color)?|caret-color|accent-color|column-rule(-color)?|-webkit-tap-highlight-color)$/, "colour"],
   [/^font-size$/, "font-size"],
-  [/^font-weight$/, "font-weight"],
-  [/^line-height$/, "line-height"],
-  [/^letter-spacing$/, "letter-spacing"],
-  [/^font-family$/, "font-family"],
-  [/^(padding|margin)(-(top|right|bottom|left|inline|block)(-(start|end))?)?$|^(gap|row-gap|column-gap)$/, "spacing"],
   [/^border(-(top|right|bottom|left|start|end|[a-z-]+))?-radius$/, "radius"],
-  [/^border(-(top|right|bottom|left|inline|block)(-\w+)?)?(-width)?$|^outline-width$/, "border-width"],
-  [/^border(-(top|right|bottom|left))?-style$|^outline-style$/, "border-style"],
+  [/^border(-(top|right|bottom|left))?-style$/, "border-style"],
   [/^box-shadow$/, "shadow"],
-  [/^(height|min-height|block-size|min-block-size)$/, "control-height"],
   [/^z-index$/, "z-index"],
-  [/^(max-width|max-inline-size)$/, "max-width"],
-  [/^opacity$/, "opacity"],
-  [/^(transition|transition-duration|animation|animation-duration)$/, "transition-ms"],
-  [/^(outline|outline-offset)$/, "focus-ring"],
 ];
 
 function rawNumbers(kind, prop, value) {
   const v = value.replace(/!important/i, "").replace(VAR, " ");
   if (kind === "colour") return COLOR_LITERAL.test(v) || (!prop.startsWith("--") && NAMED.test(v)) ? [v.trim().slice(0, 40)] : [];
-  if (kind === "font-family") return v.trim() && !/^(inherit|initial|unset|revert)$/.test(v.trim()) ? [v.trim().split(",")[0].replace(/["']/g, "").trim()] : [];
   if (kind === "border-style") return /\b(solid|dashed|dotted|double|groove|ridge|inset|outset)\b/.test(value) && !VAR.test(value) ? [value.match(/\b(solid|dashed|dotted|double|groove|ridge|inset|outset)\b/)[0]] : [];
   if (kind === "shadow") return v.trim() && v.trim() !== "none" ? [v.trim().replace(/\s+/g, " ").slice(0, 60)] : [];
   const out = [];
-  let body = v;
-  if (kind === "border-width") { // `1px solid` → 1px; colours and styles are not widths
-    body = body.replace(/#[0-9a-f]{3,8}\b/gi, " ").replace(/(rgb|rgba|hsl|hsla)\([^)]*\)/gi, " ").replace(/color-mix\([^)]*\)/gi, " ");
-  }
-  if (kind === "transition-ms") body = body.replace(/cubic-bezier\([^)]*\)/g, " ");
-  for (const m of body.matchAll(NUM)) {
-    const n = Number(m[1]); const unit = m[2] ?? "";
+  for (const m of v.matchAll(NUM)) {
+    const n = Number(m[1]);
     if (n === 0) continue;
-    if (kind === "font-weight" || kind === "z-index" || kind === "opacity" || kind === "line-height") { out.push(String(n) + unit); continue; }
-    if (kind === "transition-ms" && !/^(ms|s)$/.test(unit)) continue;
-    if (kind === "transition-ms") { out.push(`${unit === "s" ? n * 1000 : n}ms`); continue; }
-    if (unit === "") continue;
-    out.push(n + unit);
+    if (kind === "z-index") { out.push(String(n) + (m[2] ?? "")); continue; }
+    if (!m[2]) continue;
+    out.push(n + m[2]);
   }
   return out;
 }
@@ -102,22 +87,24 @@ export function scanCss() {
     });
     root.walkDecls((d) => {
       declarations++;
-      const prop = d.prop.toLowerCase();
-      if (prop.startsWith("--")) return;
-      for (const [re, kind] of PROP_KINDS) {
-        if (!re.test(prop)) continue;
-        // `border: 1px solid var(--ac-line)` is a width, a style AND a colour: each kind reads the parts it owns.
-        if ((kind === "border-width" || kind === "border-style") && prop === "outline") continue;
-        if (kind === "focus-ring" && prop !== "outline" && prop !== "outline-offset") continue;
+      const count = (kind, raws, value) => {
         const k = slot(kind);
-        const raws = rawNumbers(kind, prop, d.value);
-        const usesToken = VAR.test(d.value); VAR.lastIndex = 0;
+        const usesToken = VAR.test(value); VAR.lastIndex = 0;
         if (raws.length) {
           k.rawDecls++;
           k.byFile[f] = (k.byFile[f] || 0) + 1;
           for (const r of raws) k.raw[r] = (k.raw[r] || 0) + 1;
         } else if (usesToken) k.tokenDecls++;
+      };
+      const prop = d.prop.toLowerCase();
+      if (prop.startsWith("--")) return;
+      for (const [re, kind] of PROP_KINDS) {
+        if (!re.test(prop)) continue;
+        // `border: 1px solid var(--ac-line)` is a width, a style AND a colour: each kind reads the parts it owns.
+        if (kind === "border-style" && prop === "outline") continue;
+        count(kind, rawNumbers(kind, prop, d.value), d.value);
       }
+      for (const look of declarationLooks(prop, d.value, declarationContext(d))) count(look.kind, look.raw, d.value);
     });
   }
   return { kinds, media, mediaOther, declarations, index, byClass };
@@ -130,12 +117,10 @@ export function scanTsx() {
   for (const file of tsxFiles()) {
     const text = readFileSync(file, "utf8");
     files++;
-    for (const m of text.matchAll(/<([A-Z][A-Za-z0-9]*)\b[^<>]*?\bsize=\{(\d+)\}/g)) {
-      // Only icon components: Lucide-style names; skip other components that take a `size`.
-      if (/^(Button|Avatar|Spinner|Text|Heading|Badge|Chip|Switch|Select|Input)$/.test(m[1])) continue;
-      iconSize[m[2] + "px"] = (iconSize[m[2] + "px"] || 0) + 1; sizeUses++;
+    for (const look of iconLooks(file, text)) {
+      if (look.rule === "icon-size") { iconSize[look.raw[0] + "px"] = (iconSize[look.raw[0] + "px"] || 0) + 1; sizeUses++; }
+      else stroke[look.raw[0]] = (stroke[look.raw[0]] || 0) + 1;
     }
-    for (const m of text.matchAll(/\bstrokeWidth=\{([\d.]+)\}/g)) stroke[m[1]] = (stroke[m[1]] || 0) + 1;
     // `style={{ ... }}`: a line that only sets custom properties (`"--x": v`) is a data hook for CSS; a look property is a look written in TSX.
     for (const m of text.matchAll(/style=\{\{([^\n]*)/g)) {
       inline.total = (inline.total || 0) + 1;

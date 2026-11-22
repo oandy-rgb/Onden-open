@@ -1,0 +1,13 @@
+export type TokenSets = Record<string, string[]>;
+export const TOKEN_FILES: string[];
+export const TOKEN_BASELINE_FILE: string;
+export const RULES_DOC_FILE: string;
+export const DOC_BEGIN: string;
+export const DOC_END: string;
+export function definedTokens(sources: { file: string; text: string }[]): Record<string, string[]>;
+export function tokenSets(defined: Record<string, string[]>): TokenSets;
+export function unlistedTokens(sets: TokenSets, frozen: TokenSets): { name: string; kind: string }[];
+export function readTokenSources(repo?: string): { file: string; text: string }[];
+export function readFrozenTokens(file?: string): TokenSets;
+export function renderTokenList(frozen: TokenSets): string;
+export function withTokenList(doc: string, frozen: TokenSets): string;

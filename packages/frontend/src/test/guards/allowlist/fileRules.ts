@@ -2,6 +2,7 @@
 // what to tell the author. allowlist.guard.test.ts (every file, against the baseline) and
 // scripts/checkEditedFile.mjs (the file an agent just wrote) both call frontendViolations, so a rule added
 // here is enforced in both places.
+import { iconLooks } from "../../../../scripts/appearanceLook.mjs";
 import { CSS_RULES, cssViolations, type CssRule } from "./css";
 import { appStoreInlineSelectorLines, appStoreReachLines, appStoreWriteLines, editorScrollMarginLines, focusStealLines, keyboardStateLines, intrinsicElementSites, literalApiWriteLines, PLATFORM_GLOBALS, platformGlobalSites, searchInputSites, storeNodeFindLines, UI_ELEMENTS, viewportClampLines } from "./detect";
 import { COLOR_DATA_OWNERS, CSS_EXEMPT, ELEMENT_OWNERS, FIXED_POSITION_OWNERS, FLOATING_PLACEMENT_OWNERS, inOwners, PLATFORM_OWNERS, SEARCH_FIELD_OWNERS } from "./owners";
@@ -22,6 +23,23 @@ const CSS_META: Record<CssRule, RuleMeta> = {
   "css-font-size": { what: "a literal font-size", owner: "an --ac-fs-* token, an em/% size, or inherit" },
   "css-media-width": { what: "a @media width other than 600 / 900 / 1280px", owner: "one of the three breakpoints (600, 900, 1280px)" },
   "css-position-fixed": { what: "position: fixed", owner: "an overlay from components/ui (Modal, Sheet, Popover, Toast)" },
+  "css-spacing": { what: "a literal padding / margin / gap", owner: "a --ac-space-* token, or 0 / auto" },
+  "css-line-height": { what: "a literal line-height", owner: "an --ac-lh-* token, or normal / inherit" },
+  "css-font-weight": { what: "a literal font-weight", owner: "an --ac-fw-* token (outside @font-face)" },
+  "css-letter-spacing": { what: "a literal letter-spacing", owner: "an --onden-tracking-* token, or 0 / normal" },
+  "css-font-family": { what: "a literal font-family", owner: "an --ac-font-* token (outside @font-face)" },
+  "css-border-width": { what: "a literal border width", owner: "an --ac-border-* token, or 0 / none" },
+  "css-opacity": { what: "a literal opacity other than 0 and 1", owner: "an --ac-opacity-* token" },
+  "css-duration": { what: "a literal transition / animation duration", owner: "a motion token (--onden-motion-*, --ac-duration-*); a looping animation is exempt" },
+  "css-easing": { what: "a literal transition / animation easing", owner: "--onden-motion-ease or --onden-ease-leave; a looping animation is exempt" },
+  "css-control-height": { what: "a literal height / min-height on a button, input or other control", owner: "an --ac-control-* / --ac-tap / --ac-row* token" },
+  "css-max-width": { what: "a literal max-width (px / rem / ch)", owner: "an --ac-prose-max / --ac-list-max / --ac-width-* token, or a % / vw size" },
+  "css-focus-ring": { what: "a literal outline, or a box-shadow that is not the focus token used as a focus ring", owner: "outline: var(--ac-focus-outline) with --ac-focus-offset / --ac-focus-inset" },
+};
+
+const ICON_META: Record<string, RuleMeta> = {
+  "fe-icon-size": { what: "an icon size={n} that is not 12, 16, 20 or 24", owner: "one of the four icon sizes in docs/agents/appearance-rules.md (12, 16, 20, 24)" },
+  "fe-icon-stroke": { what: "an icon strokeWidth={n} that is not 1.5", owner: "strokeWidth 1.5, the one icon line weight in docs/agents/appearance-rules.md" },
 };
 
 /** Every rule id with its message, in the order the guard reports them (a rule with no violation still gets a test). */
@@ -39,6 +57,7 @@ export const RULE_META: Record<string, RuleMeta> = {
   "fe-focus-steal-guard": { what: "a hand-written onMouseDown/onPointerDown that only calls preventDefault() to keep the editor's focus", owner: "keepFocus from components/ui (onMouseDown={keepFocus}); a popover opened beside text is useInlinePopover, which does it for its whole surface" },
   "fe-editor-scroll-margin": { what: "EditorView.scrollMargins (how far the caret stays from the edges while writing)", owner: "lib/editorKeyboard (the one owner of \"the caret stays above the keyboard and the bar\")" },
   ...Object.fromEntries(CSS_RULES.map((r) => [`fe-${r}`, CSS_META[r]])),
+  ...ICON_META,
 };
 
 /** Whether the allowlist guards look at this file at all (`rel` is the path under src/). Tests and test helpers are not app code. */
@@ -58,9 +77,12 @@ export function frontendViolations(rel: string, source: string): Violation[] {
       .filter(({ rule }) => !(rule === "css-position-fixed" && inOwners(rel, FIXED_POSITION_OWNERS)) && !(rule === "css-color" && inOwners(rel, Object.keys(COLOR_DATA_OWNERS))))
       .map(({ rule, line }) => make(`fe-${rule}`, line));
   }
-  const out = platformGlobalSites(rel, source)
+  const out = rel.endsWith(".tsx") && !inOwners(rel, Object.keys(CSS_EXEMPT))
+    ? iconLooks(rel, source).filter((look) => look.off).map((look) => make(`fe-${look.rule}`, look.line))
+    : [];
+  out.push(...platformGlobalSites(rel, source)
     .filter(({ name }) => !inOwners(rel, PLATFORM_OWNERS[name]!.owners))
-    .map(({ name, line }) => make(`fe-platform-global:${name}`, line));
+    .map(({ name, line }) => make(`fe-platform-global:${name}`, line)));
   if (rel.endsWith(".tsx") && !inOwners(rel, ELEMENT_OWNERS)) {
     for (const { name, line } of intrinsicElementSites(rel, source)) out.push(make(`fe-native-element:${name}`, line));
   }

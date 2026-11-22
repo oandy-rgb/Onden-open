@@ -6,7 +6,7 @@
 //   npm run style:census -- --sizes 390,1440 --themes light --screens note-long,daily --jobs 2
 //   npm run style:census -- --sheets <dir>          # also one PNG per screen × size × theme, an index.md and one montage per size × theme
 // Writes e2e/style-census/report.json and docs/research/style-census-<date>.md (--date, default today).
-import { writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,7 @@ import { KIND_IDS, classify, A_TOKENS_KEPT } from "./scale.mjs";
 import { scanCss, scanTsx, sourceOfRule } from "./static.mjs";
 import { renderReport } from "./report.mjs";
 import { writeSheets } from "./sheets.mjs";
+import { compareReports, renderComparison, summarize } from "./compare.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
@@ -27,6 +28,15 @@ const list = (name) => arg(name)?.split(",").filter(Boolean) ?? null;
 const combos = COMBOS.filter((c) => (!list("--sizes") || list("--sizes").includes(c.size)) && (!list("--themes") || list("--themes").includes(c.theme)));
 const screens = SCREENS.filter((s) => !list("--screens") || list("--screens").includes(s.id));
 const jobs = Number(arg("--jobs") ?? 3);
+// --compare <older report.json>: fail when an off-scale count grew. With --against <newer report.json> it only compares the two files.
+const compareWith = arg("--compare");
+const readReport = (file) => JSON.parse(readFileSync(resolve(file), "utf8"));
+const finishCompare = (newer) => {
+  const result = compareReports(readReport(compareWith), newer);
+  console.log(renderComparison(result));
+  return result.ok ? 0 : 1;
+};
+if (compareWith && arg("--against")) process.exit(finishCompare(readReport(arg("--against"))));
 const sheetsDir = arg("--sheets");
 const date = arg("--date") ?? new Date().toISOString().slice(0, 10);
 const t0 = Date.now();
@@ -202,8 +212,10 @@ const report = {
   tapSmallest: Object.fromEntries(Object.entries(tapSmall).map(([size, l]) => { const g = new Map(); for (const x of l) { const k = x.sel; const e = g.get(k) ?? { ...x, n: 0, screens: new Set() }; e.n++; e.screens.add(x.screen); g.set(k, e); } return [size, [...g.values()].sort((a, b) => a.min - b.min || b.n - a.n).slice(0, 25).map((e) => ({ sel: e.sel, drawn: e.drawn, hit: e.hit, min: e.min, n: e.n, screens: [...e.screens].slice(0, 5) }))]; })),
   places: [...places.entries()].map(([key, p]) => ({ key, sel: p.sel, kindsOff: [...p.off], offN: p.offN, screens: [...p.screens], sources: [...p.sources], values: p.values }))
     .sort((a, b) => b.kindsOff.length - a.kindsOff.length || b.offN - a.offN).slice(0, 20),
+  summary: null,
   static: { css: { declarations: css.declarations, kinds: css.kinds, media: css.media, mediaOther: css.mediaOther }, tsx },
 };
+report.summary = summarize(report);
 writeFileSync(join(here, "report.json"), JSON.stringify(report, null, 1));
 const docDir = resolve(here, "../../../../docs/research");
 writeFileSync(join(docDir, `style-census-${date}.md`), renderReport(report));
@@ -212,4 +224,5 @@ if (sheetsDir) await writeSheets(sheetsDir, shots, status, combos);
 const bad = status.filter((r) => r.state === "error").length, skipped = status.filter((r) => r.state === "skip").length;
 console.log(`\n普查完成：${combos.length} 個寬度×主題 × ${screens.length} 個畫面；量到 ${status.filter((r) => r.state === "ok").length} 個，略過 ${skipped}，出錯 ${bad}；耗時 ${elapsedSec} 秒`);
 for (const f of failures.slice(0, 40)) console.log("  " + f);
-process.exit(failures.length && !arg("--allow-failures") ? 1 : 0);
+const compared = compareWith ? finishCompare(report) : 0;
+process.exit(compared || (failures.length && !arg("--allow-failures") ? 1 : 0));

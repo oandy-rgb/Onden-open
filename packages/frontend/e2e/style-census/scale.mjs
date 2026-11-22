@@ -4,6 +4,8 @@
 //
 //   classify(kind, value, ctx) → { on: boolean, why?: string, to?: string }
 //   ctx = { coarse: boolean (touch screen), tokens: { colour|shadow|z: reverse maps from the page } }
+import { ICON_SIZE_LEVELS, ICON_STROKE_LEVELS } from "../../scripts/appearanceLook.mjs"; // the guard's levels: one list
+
 export const A_TOKENS_KEPT = {
   colour: ["--ac-bg", "--ac-surface", "--ac-elevated", "--ac-hover", "--ac-selected", "--ac-line", "--ac-ink", "--ac-muted",
     "--ac-accent", "--ac-accent-ink", "--ac-accent-soft", "--ac-focus", "--ac-link", "--ac-selection",
@@ -30,8 +32,8 @@ export const LEVELS = {
   spacing: { levels: [2, 4, 8, 12, 16, 24, 32, 48], tol: 0.01, unit: "px" },
   radius: { levels: [4, 8, 12], tol: 0.01, unit: "px" },                    // 0 is ignored, pill = ≥ 99px or 50%
   "border-width": { levels: [1, 2, 3], tol: 0.01, unit: "px" },
-  "icon-size": { levels: [12, 16, 20, 24], tol: 0.1, unit: "px" },
-  "icon-stroke": { levels: [1.5], tol: 0.01, unit: "" },
+  "icon-size": { levels: ICON_SIZE_LEVELS, tol: 0.1, unit: "px" },
+  "icon-stroke": { levels: ICON_STROKE_LEVELS, tol: 0.01, unit: "" },
   "control-height": { levels: [28, 32], tol: 0.5, unit: "px", coarse: [44] },
   "max-width": { levels: [320, 400, 560, 640, 720], tol: 0.5, unit: "px" },
   opacity: { levels: [0, 0.5, 0.7], tol: 0.02, unit: "" },                  // 1 is ignored
@@ -41,25 +43,25 @@ export const LEVELS = {
 export const KINDS = [
   { id: "colour", label: "顏色", guard: "fe-css-color（只擋寫死的顏色，不擋用哪個 token）" },
   { id: "font-size", label: "字級", guard: "fe-css-font-size（只擋寫死的數字，不擋 token 的個數）" },
-  { id: "font-weight", label: "字重", guard: null },
-  { id: "line-height", label: "行高", guard: null },
-  { id: "letter-spacing", label: "字距", guard: null },
-  { id: "font-family", label: "字體", guard: null },
-  { id: "spacing", label: "間距（padding／margin／gap）", guard: null },
+  { id: "font-weight", label: "字重", guard: "fe-css-font-weight（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "line-height", label: "行高", guard: "fe-css-line-height（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "letter-spacing", label: "字距", guard: "fe-css-letter-spacing（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "font-family", label: "字體", guard: "fe-css-font-family（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "spacing", label: "間距（padding／margin／gap）", guard: "fe-css-spacing（只擋數量變多的基準，見規則文件 §三）" },
   { id: "radius", label: "圓角", guard: "fe-css-radius" },
-  { id: "border-width", label: "邊框粗細", guard: null },
+  { id: "border-width", label: "邊框粗細", guard: "fe-css-border-width（只擋數量變多的基準，見規則文件 §三）" },
   { id: "border-style", label: "邊框樣式", guard: null },
   { id: "border-where", label: "邊框出現的位置", guard: null },
   { id: "shadow", label: "陰影", guard: "fe-css-shadow" },
-  { id: "control-height", label: "控制項高度（畫出來的）", guard: null },
+  { id: "control-height", label: "控制項高度（畫出來的）", guard: "fe-css-control-height（只擋數量變多的基準，見規則文件 §三）" },
   { id: "tap-target", label: "觸控目標（實際可點的大小，只在觸控螢幕量）", guard: null },
-  { id: "icon-size", label: "圖示尺寸", guard: null },
-  { id: "icon-stroke", label: "圖示線寬", guard: null },
+  { id: "icon-size", label: "圖示尺寸", guard: "fe-icon-size（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "icon-stroke", label: "圖示線寬", guard: "fe-icon-stroke（只擋數量變多的基準，見規則文件 §三）" },
   { id: "z-index", label: "層級", guard: "fe-css-z-index" },
-  { id: "max-width", label: "最大寬度（文字欄與容器）", guard: null },
-  { id: "opacity", label: "透明度", guard: null },
-  { id: "transition-ms", label: "動畫時間", guard: null },
-  { id: "focus-ring", label: "焦點框", guard: null },
+  { id: "max-width", label: "最大寬度（文字欄與容器）", guard: "fe-css-max-width（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "opacity", label: "透明度", guard: "fe-css-opacity（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "transition-ms", label: "動畫時間", guard: "fe-css-duration、fe-css-easing（只擋數量變多的基準，見規則文件 §三）" },
+  { id: "focus-ring", label: "焦點框", guard: "fe-css-focus-ring（只擋數量變多的基準，見規則文件 §三）" },
 ];
 export const KIND_IDS = KINDS.map((k) => k.id);
 

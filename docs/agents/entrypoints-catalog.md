@@ -11,7 +11,7 @@
 - 「守門」：`fe-`／`be-` 開頭是白名單規則（現況違規次數記在 `scripts/allowlist-baseline.json`，只准減少）；`guard:名稱` 是 `src/test/guards/名稱.guard.test.ts`。
 - 「為什麼」只在有人寫了才顯示：為什麼只能有一個、什麼時候用。
 
-## 介面零件（48）
+## 介面零件（62）
 
 ### 要讓使用者從一串選項裡選一個換成它，並在原位看到結果再決定存不存（換版型、換區塊樣式）
 
@@ -264,6 +264,117 @@ export const searchBox = SearchField; // <SearchField label={t("Search notes…"
 - 取代：寫死的 font-size 數值
 - 守門：`fe-css-font-size`
 - 為什麼：字級用 token，使用者調字體大小時才會一起變；寫死的數字會留下一塊不跟著變的字。
+
+### 要設內距、外距或間距（padding／margin／gap）
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-spacing-token`
+- 寫法：`padding: var(--ac-space-4);`
+- 取代：寫死的 padding、margin、gap 數值（6px、10px…）
+- 守門：`fe-css-spacing`
+- 為什麼：間距只有 2／4／8／12／16／24／32／48 八級（--ac-space-*）；各處自己寫 6px、10px，畫面就會有五十種不同的留白，看起來不整齊。0 與 auto 不用 token。
+
+### 要設行高
+
+- 入口：`frontend/src/styles/tokens.css`；`frontend/src/styles/theme-tokens.css`　項目 `css-line-height-token`
+- 寫法：`line-height: var(--ac-lh-ui);`
+- 取代：寫死的 line-height 數字（1.45、1.65…）
+- 守門：`fe-css-line-height`
+- 為什麼：行高用 --ac-lh-*，同一種文字在每個畫面疏密一致；寫死的數字會讓換行位置各畫面不同。normal 與 inherit 可以直接寫。
+
+### 要設字重
+
+- 入口：`frontend/src/styles/tokens.css`；`frontend/src/styles/theme-tokens.css`　項目 `css-font-weight-token`
+- 寫法：`font-weight: var(--ac-fw-bold);`
+- 取代：寫死的 font-weight（500、600、700、bold）
+- 守門：`fe-css-font-weight`
+- 為什麼：字重用 --ac-fw-*（regular／semibold／bold）；只有 @font-face 裡宣告可變字重範圍可以寫數字。
+
+### 要設字距
+
+- 入口：`frontend/src/styles/theme-tokens.css`　項目 `css-letter-spacing-token`
+- 寫法：`letter-spacing: var(--onden-tracking-tight);`
+- 取代：寫死的 letter-spacing（0.02em、0.5px…）
+- 守門：`fe-css-letter-spacing`
+- 為什麼：字距用 --onden-tracking-*；中文介面幾乎不需要字距，需要時只在標題與全大寫小標籤用。0 與 normal 可以直接寫。
+
+### 要設字體
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-font-family-token`
+- 寫法：`font-family: var(--ac-font-ui);`
+- 取代：寫死的 font-family 名稱（ui-monospace、system-ui…）
+- 守門：`fe-css-font-family`
+- 為什麼：字體用 --ac-font-ui／prose／mono／kai；使用者換字體時才會一起變。@font-face 裡宣告字體名稱不算。
+
+### 要設邊框粗細
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-border-width-token`
+- 寫法：`border: var(--ac-border-thin) solid var(--ac-line);`
+- 取代：寫死的邊框粗細（1px、1.5px、2px、thin）
+- 守門：`fe-css-border-width`
+- 為什麼：邊框粗細只有 1／2／3 三級（--ac-border-thin／medium／thick）。方向 A 幾乎不用框線，先想能不能用淡色底或留白取代。
+
+### 要讓東西變淡（opacity）
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-opacity-token`
+- 寫法：`opacity: var(--ac-opacity-disabled);`
+- 取代：寫死的 opacity（0.4、0.65、0.85…）
+- 守門：`fe-css-opacity`
+- 為什麼：透明度只有停用（0.5）與淡化（0.7）兩級；淡入淡出的 0 與 1 可以直接寫。能用顏色 token 表達層次時不要靠透明度。
+
+### 要設動畫或過場的時間
+
+- 入口：`frontend/src/styles/tokens.css`；`frontend/src/styles/theme-tokens.css`　項目 `css-duration-token`
+- 寫法：`transition: opacity var(--onden-motion-fast);`
+- 取代：寫死的 transition／animation 時間（0.2s、150ms…）
+- 守門：`fe-css-duration`
+- 為什麼：動畫時間只有 120ms（--onden-motion-fast）與 200ms（--ac-duration-panel）；使用者開「減少動態」時這些 token 一起歸零。永遠循環的載入動畫（infinite）不受限。
+
+### 要設動畫的緩動
+
+- 入口：`frontend/src/styles/theme-tokens.css`　項目 `css-easing-token`
+- 寫法：`transition: transform var(--onden-motion-fast) var(--onden-motion-ease);`
+- 取代：寫死的緩動（ease、ease-out、cubic-bezier(…)）
+- 守門：`fe-css-easing`
+- 為什麼：緩動只有 --onden-motion-ease（進）與 --onden-ease-leave（出），動起來才像同一個 app。永遠循環的動畫（infinite）不受限。
+
+### 要設按鈕或輸入欄的高度
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-control-height-token`
+- 寫法：`min-height: var(--ac-control-md);`
+- 取代：寫死的按鈕／輸入欄高度（26px、30px、36px、40px…）
+- 守門：`fe-css-control-height`
+- 為什麼：控制項高度桌面 28／32（--ac-control-sm／md）、觸控 44（--ac-tap）。規則只看「選擇器長得像控制項」的 height／min-height（button、input、含 btn／field／chip… 的 class），看不到的由外觀普查量。
+
+### 要限制欄寬或對話框寬度（max-width）
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-max-width-token`
+- 寫法：`max-width: var(--ac-prose-max);`
+- 取代：寫死的 max-width（px、rem、ch）
+- 守門：`fe-css-max-width`
+- 為什麼：欄寬只有文字欄 640、頁面欄 720、對話框 560／400、側欄與選單 320（--ac-prose-max、--ac-list-max、--ac-width-*）。% 與 vw 不受限。
+
+### 要設鍵盤焦點的外框
+
+- 入口：`frontend/src/styles/tokens.css`　項目 `css-focus-ring-token`
+- 寫法：`outline: var(--ac-focus-outline);
+outline-offset: var(--ac-focus-offset);`
+- 取代：自己寫的 outline、outline-offset，以及在 :focus 規則裡用非焦點 token 的 box-shadow
+- 守門：`fe-css-focus-ring`
+- 為什麼：焦點框只有一種：2px 實線、焦點色、外距 2px（會被裁切的列用 --ac-focus-inset）。每個畫面長得一樣，鍵盤使用者才找得到焦點。
+
+### 要設圖示尺寸（lucide 圖示的 size）
+
+- 入口：`docs/agents/appearance-rules.md`　項目 `icon-size-scale`
+- 取代：size={14}、size={18} 這類不在 12／16／20／24 的數字
+- 守門：`fe-icon-size`
+- 為什麼：圖示只有 12（小標籤）、16（預設）、20（頂列與工具列）、24（底部列）四種。共用常數（lib/iconSize.ts）會跟第一批搬圖示的改動一起建立；在那之前，規則只擋不在這四個數字上的尺寸。
+
+### 要設圖示線寬（lucide 圖示的 strokeWidth）
+
+- 入口：`docs/agents/appearance-rules.md`　項目 `icon-stroke-scale`
+- 取代：strokeWidth={2}、strokeWidth={3} 這類不是 1.5 的數字
+- 守門：`fe-icon-stroke`
+- 為什麼：圖示線寬只有 1.5 一種，整個 app 的圖示粗細才一致。
 
 ### 要依螢幕寬度切換版面（手機／平板／桌面）
 

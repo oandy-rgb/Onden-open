@@ -3,9 +3,17 @@
 // depends on it); there is no stylelint because the rules here are per-file owners plus a
 // ratchet, which stylelint cannot express without a second baseline mechanism.
 import postcss, { type AtRule, type Declaration } from "postcss";
+// The detector for the look kinds added 2026-11-17 (spacing … focus ring) is shared with the style census (e2e/style-census/static.mjs).
+import { CSS_LOOK_RULES, declarationContext, declarationLooks, exemptedRules } from "../../../../scripts/appearanceLook.mjs";
 
-export const CSS_RULES = ["css-color", "css-radius", "css-shadow", "css-z-index", "css-font-size", "css-media-width", "css-position-fixed"] as const;
+export const CSS_RULES = [
+  "css-color", "css-radius", "css-shadow", "css-z-index", "css-font-size", "css-media-width", "css-position-fixed",
+  "css-spacing", "css-line-height", "css-font-weight", "css-letter-spacing", "css-font-family", "css-border-width", "css-opacity",
+  "css-duration", "css-easing", "css-control-height", "css-max-width", "css-focus-ring",
+] as const;
 export type CssRule = (typeof CSS_RULES)[number];
+/** Look rules of the shared detector that must all be listed in CSS_RULES (checked by allowlistRules.guard.test.ts). */
+export const SHARED_LOOK_CSS_RULES: readonly string[] = CSS_LOOK_RULES;
 
 /** The widths a layout may switch at (owner decision): phone / tablet / desktop. */
 export const MEDIA_WIDTHS_PX = [600, 900, 1280] as const;
@@ -63,6 +71,11 @@ export function cssViolations(source: string, from = "style.css"): { rule: CssRu
   root.walkDecls((decl) => {
     const rule = declarationRule(decl);
     if (rule) out.push({ rule, line: decl.source?.start?.line ?? 0 });
+    // One violation per declaration and rule, however many raw values it holds (`padding: 6px 10px` is one).
+    const excused = exemptedRules(decl);
+    for (const look of declarationLooks(decl.prop, decl.value, declarationContext(decl))) {
+      if (look.raw.length && !excused.has(look.rule)) out.push({ rule: look.rule as CssRule, line: decl.source?.start?.line ?? 0 });
+    }
   });
   root.walkAtRules("media", (at: AtRule) => {
     for (const _ of offStandardMediaWidths(at.params)) out.push({ rule: "css-media-width", line: at.source?.start?.line ?? 0 });

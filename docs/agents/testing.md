@@ -54,7 +54,7 @@
 
 | 層 | 在哪 | 跑什麼 |
 | --- | --- | --- |
-| 每個 PR | 雲端 | 相關測試、`npx tsc --noEmit`、`npm run lint`、守門（前端完整 vitest 內的 `*.guard.test.ts`、`npm run dup:check`、`npm run changes:check`）；後端 PGlite 完整套；瀏覽器版（`dist-browser`）冒煙 `e2e/browser-app/smoke.mjs`（`run-all.mjs` 跑完各引擎後接著跑 `handwritingTab.mjs`：筆記的「手寫」分頁——新增、畫、新增一頁、切回內容打字、重新整理、拿掉分頁再加回，筆畫都在；桌面淺色／深色與手機）；改 UI 時 `layout:audit`（`test/layout-audit` 合併後）；改到下表「桌面版與三宿主對照」所列路徑的 PR 加 `npm run desktop:check` 與 `npm run parity`（每個 PR 的 CI 只跑守門；這兩個在本機跑，或手動觸發 CI 的 `parity` 工作） |
+| 每個 PR | 雲端 | 相關測試、`npx tsc --noEmit`、`npm run lint`、守門（前端完整 vitest 內的 `*.guard.test.ts`、`npm run dup:check`、`npm run changes:check`）；後端 PGlite 完整套；瀏覽器版（`dist-browser`）冒煙 `e2e/browser-app/smoke.mjs`（`run-all.mjs` 跑完各引擎後接著跑 `addDeviceFile.mjs`（帶到另一台裝置：兩個全新瀏覽器副本、2,000 則筆記的檔案、帶入中途被關掉，Chromium 與 390×844 手機視窗；會印檔案大小、時間與分頁記憶體）與 `handwritingTab.mjs`：筆記的「手寫」分頁——新增、畫、新增一頁、切回內容打字、重新整理、拿掉分頁再加回，筆畫都在；桌面淺色／深色與手機）；改 UI 時 `layout:audit`（`test/layout-audit` 合併後）；改到下表「桌面版與三宿主對照」所列路徑的 PR 加 `npm run desktop:check` 與 `npm run parity`（每個 PR 的 CI 只跑守門；這兩個在本機跑，或手動觸發 CI 的 `parity` 工作） |
 | 合併前（一批 PR 一次） | 筆電 | 只跑後端需要真 Postgres 的部分、`npm run build`、B 類全端 e2e（下表）、WebKit 冒煙 |
 | 每天、每週 | 公開庫的 GitHub CI（`.github/workflows/scheduled.yml` 啟動 `ci.yml`，`extended=daily`／`weekly`；擁有者 2026-11-22：只排每天與每週，不跟推送跑） | 每天：完整全端 e2e、模糊測試（`test:fuzz`，種子每次不同）、`test:astro`、`parity:test`、瀏覽器版 `run-all.mjs`（含全部功能腳本）、`e2e:slides`、`e2e:touch-hold`、`layout:audit` 與兩個工具的自我測試、圖表檢查；每週：三個套件的變異測試、`test:props:long`、`style:census`、`bench` + `bench:check`。結果在公開庫標籤 `scheduled-checks` 的同一個 issue 留言（工作、測試名稱、種子、執行連結，不貼紀錄原文）；全端 e2e 只列 `packages/frontend/e2e/known-red-baseline.json` 以外的新紅，那份清單只准減少 |
 

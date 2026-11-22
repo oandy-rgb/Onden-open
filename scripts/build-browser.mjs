@@ -7,6 +7,7 @@
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -16,6 +17,12 @@ const backend = join(root, "packages/backend");
 const frontend = join(root, "packages/frontend");
 const outDir = join(frontend, "dist-browser");
 const nm = (name) => join(root, "node_modules", name);
+// The @better-auth/core that the backend's better-auth itself loads: npm may keep better-auth (and so its core) under
+// packages/backend/node_modules rather than at the root, and a root-relative path would then find nothing, or an older core.
+const betterAuthCoreDir = (() => {
+  const betterAuth = createRequire(join(backend, "package.json")).resolve("better-auth");
+  return dirname(dirname(createRequire(betterAuth).resolve("@better-auth/core"))); // <core>/dist/index.mjs → <core>
+})();
 const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
 // Build parameters (docs/architecture/browser-app.md §13): --tag=<label> names the version in the help page's report;
 // --report-url=<address> adds a "where to report" link there (absent: nothing is shown).
@@ -49,7 +56,7 @@ const ALIASES = {
   "decode-named-character-reference": nm("decode-named-character-reference/index.js"),
   "hast-util-from-html-isomorphic": nm("hast-util-from-html-isomorphic/lib/index.js"),
   // better-auth's browser build keeps one global where Node keeps one per request.
-  "@better-auth/core/async_hooks": nm("@better-auth/core/dist/async_hooks/index.mjs"),
+  "@better-auth/core/async_hooks": join(betterAuthCoreDir, "dist/async_hooks/index.mjs"),
 };
 
 /** esbuild's own alias matches by path prefix ("util" would also take "util/types"); these are whole specifiers. */

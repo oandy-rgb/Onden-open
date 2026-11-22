@@ -3,9 +3,10 @@ import type { Tag } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import { onFieldEditorRequest } from "../../lib/tagFieldRequest";
 import { confirmFieldRemoval } from "../confirmFieldRemoval";
-import { FieldEditor, type FieldDef } from "../TagsPanel";
+import { FIELD_TYPES, FieldEditor, newFieldFrom, type FieldDef, type FieldType } from "../TagsPanel";
 import type { useFieldUsage } from "../../hooks/useFieldUsage";
-import { Pressable, Popover, usePopover } from "../ui";
+import { Pressable, Popover, Select, TextField, usePopover } from "../ui";
+import { isEnterKey, isImeComposing } from "../../lib/keys";
 import type { FieldModel } from "./fieldModel";
 import type { useSchemaDraft } from "./structure/useSchemaDraft";
 
@@ -25,19 +26,15 @@ export default function FieldPopover({ tag, draft, fieldModel, fieldUsage, canMa
   fieldUsage: ReturnType<typeof useFieldUsage>;
   canManage: boolean;
 }) {
-  const [open, setOpen] = useState<{ index: number; at: { x: number; y: number } } | null>(null);
+  // `index: null` is a field that does not exist yet: it is made when the person confirms a name (NewFieldBody).
+  const [open, setOpen] = useState<{ index: number | null; at: { x: number; y: number } } | null>(null);
   const latest = useRef({ draft, canManage });
   latest.current = { draft, canManage };
 
   useEffect(() => onFieldEditorRequest(tag.id, ({ field, at }) => {
     const { draft: current, canManage: allowed } = latest.current;
     if (!allowed) return;
-    if (field === null) {
-      // A new field starts unnamed and is not saved until it has a name.
-      current.setFields([...current.fields, { name: "", type: "text" }]);
-      setOpen({ index: current.fields.length, at });
-      return;
-    }
+    if (field === null) { setOpen({ index: null, at }); return; }
     const index = typeof field === "number" ? field : current.fields.findIndex((f) => keyOf(f) === field);
     if (index >= 0 && index < current.fields.length) setOpen({ index, at });
   }), [tag.id]);
@@ -45,9 +42,49 @@ export default function FieldPopover({ tag, draft, fieldModel, fieldUsage, canMa
   // Another tag's page must not keep this one open.
   useEffect(() => () => setOpen(null), [tag.id]);
 
-  if (!open || !draft.fields[open.index]) return null;
+  const close = () => { setOpen(null); void draft.flush(); };
+  if (open && open.index === null) return <NewFieldBody at={open.at} draft={draft} fieldModel={fieldModel} onClose={close} />;
+  if (!open || open.index === null || !draft.fields[open.index]) return null;
   return <FieldPopoverBody key={open.index} index={open.index} at={open.at} draft={draft} fieldModel={fieldModel}
-    fieldUsage={fieldUsage} onClose={() => { setOpen(null); void draft.flush(); }} />;
+    fieldUsage={fieldUsage} onClose={close} />;
+}
+
+/** 「新增欄位」: a name and a kind first; nothing exists until 「確定」, and closing any other way leaves nothing behind. */
+function NewFieldBody({ at, draft, fieldModel, onClose }: {
+  at: { x: number; y: number };
+  draft: Pick<ReturnType<typeof useSchemaDraft>, "fields" | "setFields" | "save">;
+  fieldModel: Pick<FieldModel, "clashesOf" | "takenNames">;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const popover = usePopover<HTMLElement>({ open: true, onClose, at });
+  const [name, setName] = useState("");
+  const [type, setType] = useState<FieldType>("text");
+  const ready = name.trim() !== "";
+  const create = () => {
+    if (!ready) return;
+    const next = [...draft.fields, newFieldFrom(name, type, draft.fields, fieldModel.takenNames)];
+    draft.setFields(next);
+    const held = fieldModel.clashesOf(next);
+    draft.save({ fields: next.filter((f) => !held.has(keyOf(f))) });
+    onClose();
+  };
+  return (
+    <Popover popover={popover} label={t("Add field")} className="tag-field-popover">
+      <div className="schema-field-grid">
+        <TextField className="actors-input" aria-label={t("Field name (e.g. Due date)")} placeholder={t("Field name (e.g. Due date)")}
+          value={name} autoFocus onChange={(e) => setName(e.target.value)} enterKeyHint="done" autoComplete="off"
+          onKeyDown={(e) => { if (isEnterKey(e) && !isImeComposing(e)) { e.preventDefault(); create(); } }} />
+        <Select className="actors-input" aria-label={t("Type")} value={type} onChange={(e) => setType(e.target.value as FieldType)}>
+          {FIELD_TYPES.map((ft) => <option key={ft} value={ft}>{t(ft)}</option>)}
+        </Select>
+      </div>
+      <div className="tag-field-popover-actions">
+        <Pressable type="button" onClick={onClose}>{t("Cancel")}</Pressable>
+        <Pressable type="button" className="tag-field-popover-done" disabled={!ready} onClick={create}>{t("OK")}</Pressable>
+      </div>
+    </Popover>
+  );
 }
 
 function FieldPopoverBody({ index, at, draft, fieldModel, fieldUsage, onClose }: {

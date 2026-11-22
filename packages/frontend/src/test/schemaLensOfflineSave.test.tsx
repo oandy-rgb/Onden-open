@@ -43,11 +43,11 @@ describe("SchemaLens offline schema edit (offline parity)", () => {
     render(<SchemaLens tag={TAG} online={false} onSaved={vi.fn()} allTags={[TAG]} canManage />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); }); // flush mount fetches
 
-    // Add a field and name it — the popover is NOT disabled offline; onChange fires the save.
+    // Add a field and name it — the form is NOT disabled offline; 「確定」 fires the save.
     fireEvent.click(screen.getByRole("button", { name: /Add field/i }));
-    const input = within(screen.getByRole("dialog", { name: "Field settings" })).getByPlaceholderText(/Field name/);
-    fireEvent.change(input, { target: { value: "Pages" } });
-    fireEvent.blur(input);
+    const form = within(screen.getByRole("dialog", { name: "Add field" }));
+    fireEvent.change(form.getByPlaceholderText(/Field name/), { target: { value: "Pages" } });
+    fireEvent.click(form.getByRole("button", { name: "OK" }));
     // Past the 600ms debounce → sendOrQueue queues the PATCH offline.
     await act(async () => { await vi.advanceTimersByTimeAsync(700); });
 

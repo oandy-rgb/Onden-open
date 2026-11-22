@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { BROWSER_APP_LANG_PARAM, BROWSER_APP_LOCK, BROWSER_APP_TEMP_PARAM } from "@onden/markdown";
+import { DEVICE_FILE_EMPTY_PARAM } from "@onden/markdown/contract";
 import { systemLanguageTag } from "../lib/i18n";
 import { Button } from "../components/ui";
 import { lazyWithReload } from "../lib/lazyWithReload";
@@ -8,6 +9,7 @@ import { onPageHide } from "../lib/pageHide";
 import { isTemporarySession } from "../lib/temporarySession";
 import { readUrlParams, reopenWithQuery } from "../lib/pageUrl";
 import { needsStartChoice } from "./startChoice";
+import { readBringState, writeBringState } from "./bringNotes";
 import { reloadPage } from "../lib/api";
 import { holdTabLock } from "../lib/webLock";
 import { beginFirstRunLanding, finishFirstRunLanding, markSampleNotesMade } from "../lib/firstRunLanding";
@@ -28,12 +30,16 @@ const AppRoot = lazyWithReload(() => import("../AppRoot"));
 const TrialNotice = lazyWithReload(() => import("./TrialNotice"));
 const TemporaryNotice = lazyWithReload(() => import("./TemporaryNotice"));
 const StartChoice = lazyWithReload(() => import("./StartChoice"));
+// Taking a file from another device: loaded only when the person chose it (browserApp/bringNotes.ts).
+const BringNotes = lazyWithReload(() => import("./BringNotes"));
 /** Built with `--start-choice` (scripts/build-browser.mjs): a first visit starts on a choice (browserApp/startChoice.ts). */
 const START_CHOICE = import.meta.env.VITE_BROWSER_START_CHOICE === "true";
 
 type Phase =
   | { kind: "starting"; replay: { done: number; total: number } | null }
-  | { kind: "choose"; use: () => void; temporary: () => void }
+  | { kind: "choose"; use: () => void; temporary: () => void; bring: () => void }
+  /** An empty copy waiting for a file from another device; the app is not mounted (nothing writes) until the person leaves this. */
+  | { kind: "bring"; client: WorkerClient; interrupted: boolean; leave: () => void }
   | { kind: "other-tab" }
   | { kind: "failed"; reason: "newer-copy" | "upgrade-failed" | "other"; client: WorkerClient }
   | { kind: "ready"; client: WorkerClient; recovered: number; upgraded: number; media: MediaServing; notesLost: boolean };
@@ -49,7 +55,7 @@ export default function BrowserAppShell() {
       const temporary = isTemporarySession();
       if (needsStartChoice({ enabled: START_CHOICE, temporary, askedForApp: readUrlParams().get("app") === "1", hadNotes: START_CHOICE && !temporary && await notesWereLost() })) {
         await new Promise<void>((proceed) => {
-          if (!cancelled) setPhase({ kind: "choose", use: proceed, temporary: () => reopenWithQuery(`?${BROWSER_APP_TEMP_PARAM}=1`) });
+          if (!cancelled) setPhase({ kind: "choose", use: proceed, temporary: () => reopenWithQuery(`?${BROWSER_APP_TEMP_PARAM}=1`), bring: () => { writeBringState("pending"); proceed(); } });
         });
         if (cancelled) return;
         setPhase({ kind: "starting", replay: null });
@@ -57,7 +63,10 @@ export default function BrowserAppShell() {
       // A temporary session shares nothing with an ordinary one (no saved copy, no journal), so it neither needs the
       // one-tab lock nor may be kept out by an ordinary tab holding it.
       if (!temporary && !(await holdTabLock(BROWSER_APP_LOCK))) { if (!cancelled) setPhase({ kind: "other-tab" }); return; }
+      // Waiting for (or half way through) a file from another device: this start is on an empty copy, without the samples.
+      const bringState = temporary ? null : readBringState();
       const workerUrl = new URL("worker.js", documentBaseUrl());
+      if (bringState) workerUrl.searchParams.set(DEVICE_FILE_EMPTY_PARAM, "1");
       const store = readUrlParams().get("store");
       if (temporary) { workerUrl.searchParams.set(BROWSER_APP_TEMP_PARAM, "1"); workerUrl.searchParams.set(BROWSER_APP_LANG_PARAM, systemLanguageTag()); }
       else if (store) workerUrl.searchParams.set("store", store); // ?store=indexeddb: take the Safari path on any browser (e2e)
@@ -86,11 +95,13 @@ export default function BrowserAppShell() {
       // Nothing is kept in a temporary session: no request to keep it, no reload for a newer build (it would lose the writing).
       if (!temporary) {
         void requestPersistentStorage();
-        stopWatching = watchNewBuild();
+        // Not while a file is being taken in: a reload for a newer build would cut it off.
+        if (!bringState) stopWatching = watchNewBuild();
         // Save before the page goes away or is hidden (a phone may kill the page without a second chance).
         onPageHide(() => { void client.flush(); });
       }
-      if (!cancelled) setPhase({ kind: "ready", client, recovered: info.recovered, upgraded: info.upgraded, media, notesLost });
+      const ready: Phase = { kind: "ready", client, recovered: info.recovered, upgraded: info.upgraded, media, notesLost };
+      if (!cancelled) setPhase(bringState ? { kind: "bring", client, interrupted: bringState === "joining", leave: () => { stopWatching = watchNewBuild(); setPhase(ready); } } : ready);
     })();
     return () => { cancelled = true; stopWatching?.(); stopAnswering?.(); };
   }, []);
@@ -109,8 +120,9 @@ export default function BrowserAppShell() {
   }
   return (
     <>
-    {phase.kind === "choose" && <Suspense fallback={null}><StartChoice onUse={phase.use} onTemporary={phase.temporary} /></Suspense>}
-    {phase.kind !== "choose" && <main className="browser-app-status">
+    {phase.kind === "choose" && <Suspense fallback={null}><StartChoice onUse={phase.use} onTemporary={phase.temporary} onBring={phase.bring} /></Suspense>}
+    {phase.kind === "bring" && <Suspense fallback={null}><BringNotes client={phase.client} interrupted={phase.interrupted} onLeave={phase.leave} /></Suspense>}
+    {phase.kind !== "choose" && phase.kind !== "bring" && <main className="browser-app-status">
       {phase.kind === "starting" && <p>{startingText(phase.replay)}</p>}
       {phase.kind === "other-tab" && (
         <>

@@ -17,6 +17,7 @@
 import { sql } from "kysely";
 import { withTransaction } from "../db.js";
 import { db } from "../dbKysely.js";
+import { sha256Hex } from "../utils.js";
 import { clearAppState, readAppState, writeAppState } from "./appState.js";
 
 const STATE_KEY = "own-node-id";
@@ -62,4 +63,11 @@ export async function stampPackagedRowsAsGenesis(): Promise<void> {
     const again = (await sql<{ stamps_added: string; baseline_lines_added: string }>`SELECT stamps_added::text, baseline_lines_added::text FROM sync_genesis_pass()`.execute(db)).rows[0]!;
     if (again.stamps_added !== "0" || again.baseline_lines_added !== "0") throw new Error("the genesis pass is not complete on the packaged database");
   });
+}
+
+/** A one-way name (SHA-256) for this copy's node id, for the page's diagnostics and tests ("is this copy a node of its own, and not the one
+ *  it was filled from?"). The id itself never leaves the worker: it is the origin of every stamp this copy makes. */
+export async function ownNodeFingerprint(): Promise<string | null> {
+  const row = (await sql<{ node_id: string }>`SELECT node_id FROM sync_node WHERE singleton`.execute(db)).rows[0];
+  return row ? sha256Hex(row.node_id) : null;
 }

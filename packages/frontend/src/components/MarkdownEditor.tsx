@@ -87,6 +87,7 @@ import { useBlockChildNote } from "../hooks/useBlockChildNote";
 import { activeFormats, formatKeyBindings, insertLink, listIndentWidth, toggleHeading, toggleLinePrefix, toggleWrap } from "../lib/editorFormat";
 import { afterPause } from "../lib/afterPause";
 import { INSERT_MEDIA_ACCEPT, pastedMediaFiles, splitDroppedFiles } from "../lib/mediaInsert";
+import { PDF_NOTE_ACCEPT } from "../lib/fileIntake";
 import { setTaskLine, taskAtLine, type TaskLine } from "../lib/taskLines";
 import { activeElement, createElement } from "../lib/documentAccess";
 import { onWindow } from "../lib/globalEvents";
@@ -784,7 +785,7 @@ function MarkdownEditor({
           if (snippet) insertAt(snippet);
           return;
         }
-        const file = next.insert === "pdf" ? await pickFile("application/pdf,.pdf") : undefined;
+        const file = next.insert === "pdf" ? await pickFile(PDF_NOTE_ACCEPT) : undefined;
         if (next.insert === "pdf" && !file) return;
         const title = await onInsertPageRef.current?.(next.insert, file ?? undefined);
         if (title) insertAt(`[[${title}]]`);

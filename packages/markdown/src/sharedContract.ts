@@ -307,6 +307,16 @@ export { reminderAfterMove, type ReminderPlacement } from "./taskReminder.js";
 // Same-level order keys (migration 200): the one place they are made and compared, shared by the app and the server.
 export { keyBetween, keysBetween, evenOrderKey, evenOrderKeys, isValidOrderKey, orderKeyNeedsRespace, compareOrdered, ORDER_KEY_RESPACE_LENGTH, ORDER_KEY_MAX_LENGTH } from "./orderKey.js";
 
+
+// ── "Take my notes to another device" through one file (backend routes/stampedSnapshot.ts, frontend lib/deviceFile.ts and browserApp/BringNotes.tsx) ──
+
+/** GET answers the file (lines of JSON, `DEVICE_FILE_NAME`); POST takes the same lines into an EMPTY database. */
+export const DEVICE_FILE_PATH = "/api/snapshot";
+
+/** The page is opened to take a file from another device (`?empty=1` on the worker's address): a first open then makes NO sample notes,
+ *  because a copy with notes of its own cannot take the file (backend services/stampedJoin.ts). */
+export const DEVICE_FILE_EMPTY_PARAM = "empty";
+
 // ── The tag-name shape ──────────────────────────────────────────────────────
 // A tag name must be writable as a tag in a note, and what is written as a tag must not be mistaken for anything else.
 // A note names a tag three ways: `#name` (letters, digits, `_`, `-` only: text.ts HASHTAG_RE), `{a, b}` at the end of a block

@@ -1,0 +1,17 @@
+.reconfirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-5);
+  box-sizing: border-box;
+  width: 460px;
+  max-width: 100%;
+  padding: var(--ac-space-7);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+}
+.reconfirm-dialog p { margin: 0; line-height: var(--ac-lh-ui); }
+.reconfirm-title { margin: 0; font-size: var(--ac-fs-lg); }
+.reconfirm-actions { display: flex; flex-wrap: wrap; gap: var(--ac-space-4); }
+.reconfirm-field { display: flex; flex-direction: column; gap: var(--ac-space-2); }

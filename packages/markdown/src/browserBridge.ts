@@ -55,7 +55,9 @@ export type ToWorker =
   /** Throw the saved copy away and start from the packaged snapshot (「重新開始」). */
   | { t: "reset"; id: number }
   /** The saved copy as it is stored (a database image, not notes): the way out when it cannot be opened. Works after a failed start. */
-  | { t: "export-copy"; id: number };
+  | { t: "export-copy"; id: number }
+  /** Take the file another device made into this (empty) copy. The File itself crosses (a Blob is not copied into memory); the answer is one `join-result`. */
+  | { t: "join-file"; id: number; file: Blob };
 
 export type FromWorker =
   | ({ t: "ready"; firstOpen: boolean; bootMs: number; store: BridgeSaveState["store"]; seeded: boolean;
@@ -72,7 +74,12 @@ export type FromWorker =
   | { t: "end"; id: number }
   | { t: "failed"; id: number; message: string }
   | { t: "done"; id: number }
-  | { t: "save-state"; state: BridgeSaveState };
+  | { t: "save-state"; state: BridgeSaveState }
+  /** While a file is being taken in: how much of it has been read. */
+  | { t: "join-progress"; id: number; readBytes: number; totalBytes: number }
+  /** The end of a `join-file`: taken in and saved here, or refused (`error` is the backend's code, null when it gave none). */
+  | { t: "join-result"; id: number; ok: true; pages: number; rows: number }
+  | { t: "join-result"; id: number; ok: false; status: number; error: string | null; detail: string | null };
 
 /** Temporary mode: the page is opened with `?temp=1` and hands the same parameter to the worker. Nothing of the session
  *  is kept in this browser (docs/architecture/browser-app.md §17). */
@@ -81,6 +88,7 @@ export const BROWSER_APP_TEMP_PARAM = "temp";
 /** The page's language (a BCP 47 tag), handed to the worker of a temporary session: a worker is not reliably told the
  *  browser's language, and the blank first note is stored with the placeholder title of that language. */
 export const BROWSER_APP_LANG_PARAM = "lang";
+
 
 /** What a temporary session may hold in uploaded files (they live in memory). Past it a new file is refused with a plain
  *  sentence; the notes themselves are not limited. */
@@ -97,4 +105,10 @@ export const BROWSER_APP_CLEAR_SAMPLES_PATH = "/api/browser-app/clear-samples";
 export type BrowserAppMedia = { files: number; bytes: number; store: BridgeSaveState["store"] };
 
 /** Answer of BROWSER_APP_STATE_PATH: the save state, how many sample notes are still there, and the uploaded files. */
-export type BrowserAppState = BridgeSaveState & { sampleNotes: number; media: BrowserAppMedia; temporary: boolean };
+export type BrowserAppState = BridgeSaveState & {
+  sampleNotes: number;
+  /** A one-way name (SHA-256) of this copy's own node id (never the id): two copies are different nodes when these differ. Only answered to `?node=1`; null otherwise. */
+  ownNode: string | null;
+  media: BrowserAppMedia;
+  temporary: boolean;
+};

@@ -1,7 +1,7 @@
 # 邊界決定：介面（側欄與頂欄、指令面板、匯出、選位置、視角分頁、設定、編輯器）
 
 > 狀態：現行（最後確認 2026-11-18）
-> 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts
+> 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts, packages/frontend/src/components/ui/initialFocus.ts, packages/frontend/src/components/tagPage/FieldPopover.tsx
 
 何時讀：改側欄與頂欄、寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置、筆記與標籤頁的視角分頁、並排、設定頁、編輯器的輸入與鍵盤行為之前。
 這份只留今天成立的規則。當時的比較、理由、分批進度與已被取代的做法（原文一字未改）在 [decisions-ui-history.md](decisions-ui-history.md)；
@@ -172,6 +172,7 @@
 ## 設定改版
 
 - 手機與電腦同一份清單（`settings/registry.tsx` 的 `TABS`／`LIST_SECTIONS`），每列右邊顯示目前的值（`settings/listValues.ts`，只讀這台裝置）；舊分頁 id 經 `resolveSettingsTab`。
+- 設定 › 你的資料有兩列只給擁有者（`ownerOnly`）、都延後載入：「帶到另一台裝置」（`DeviceFileSetting`，製作整個工作區的檔案；要先經 `ReconfirmDialog` 換一次性憑證）與只在瀏覽器版出現的「從另一台裝置帶過來」（`BringSetting`，經 `lib/localOnlyStatus` 的 `bringNotes` 才有）；說明與流程見 [browser-app.md §18](../architecture/browser-app.md)。
   **每個設定只有一個家**：功能自己的設定只在 `module:<id>` 那一頁（`ModuleSettingsPage`）；刪除與重設放在所屬頁最底、紅字（`SettingDef.danger`）；擁有者才能改的控制項對別人停用並顯示鎖頭（`OwnerLock`）。
 - 通則：好的預設優先、系統已有的不重做；在用的地方改（筆記字體、大小、寬度在筆記 ⋯ › 文字樣式 `NoteTextStyleSheet`）；一頁約 10–15 項、少用的收進「更多」（`SettingDef.advanced`）；
   選項用看得到結果的方式呈現（`components/ui/Choice` 的 `ChoiceCards`、`Segmented`、`PreviewBlock`，每頁一個預覽，下拉只給長清單）。新設定照這份放，不另開第二套。
@@ -195,6 +196,15 @@
 - 沒有「題組」物件：一組就是一個標籤、或一則筆記與它底下的筆記。選卡規則只有 `modules/review/service.ts` 的 `planSession`；範圍由 `cardsInScope`（`root`／`tag_id`／`untagged`，一次一種）選，
   `GET /api/review/groups?by=tag|note` 每列的到期／新卡數就是 `planSession` 的長度；每日上限仍是全域。AI 的 `reviewQueue` 工具收同樣三種範圍。
 - 頁裡的位置是網址的 `m=`（`lib/moduleAddress.ts`，意義由 `modules/review/reviewPlace.ts` 定）；「按標籤｜按筆記」記在 `PREFS.reviewGroupBy`。
+
+## 對話框的初始焦點
+
+- 有主要文字欄的 `Modal`／`Sheet`，打開時焦點就在那一欄（觸控裝置也一樣，鍵盤會升起：打開表單就是要打字）；只有按鈕的落在第一個**不是 ×** 的控制項；`initialFocus` 仍優先。規則只有一處：`components/ui/initialFocus.ts`，由 `Modal` 在 `showModal()` 之後套用。
+- 原因：關閉中的 `<dialog>` 是 `display:none`，`autoFocus` 聚焦不到，`showModal()` 才把焦點給第一個控制項（標題列的 ×）。所以 Modal／Sheet 裡的欄位不必再寫 `autoFocus`（`dialogFocus.guard.test.ts` 擋：開 Modal／Sheet 的檔案不准寫，例外要列理由）。手寫的標題列 ✕ 要展開 `DISMISS_PROPS`（或用 `SheetHeader`），否則焦點會落在它上面。可見性用 `checkVisibility`，CSS `display:none` 的欄位會被跳過。
+- **搜尋框在觸控螢幕（`pointer: coarse`）不自動聚焦**，不分底部面板或整頁 Modal（移動到…、放在、選位置、加入既有筆記、設定視窗的「搜尋設定…」）：鍵盤會蓋住一半清單。焦點落在對話框本身（`Modal` 的 `<dialog>` 有 `tabIndex=-1`），點搜尋框才升鍵盤（業主 2026-11-19）。「這個對話框就是要你輸入」的（新增欄位、命名、任務、網址）是一般文字欄，照常聚焦；滑鼠裝置也照常聚焦搜尋框。判斷只在 `initialFocus.ts` 一處，各面板不自己關，也不傳 `initialFocus` 指向搜尋框（`CanvasNotePicker` 已拿掉，改走同一條規則）。打開是為了「看」而不是「填」的對話框（編輯任務 `TaskSheet`），傳 `initialFocus="dialog"`：焦點在對話框本身，不論有沒有欄位、什麼裝置。
+- `Popover` 不是對話框，不套用（色盤這類工具面板跳進色碼欄會彈鍵盤）；表單型 Popover 自己在欄位寫 `autoFocus`（它開啟時已顯示，有效）。
+- Enter：欄位有內容＝送出；沒有內容＝不做事、不關閉。「新增欄位」先輸入名稱與種類，按「確定」才建立（`tagPage/FieldPopover` 的 `NewFieldBody`），取消不留任何東西。
+- 守門：`dialogFocus.guard.test.ts`；行為：`dialogInitialFocus.test.tsx`；`test/setup.ts` 讓測試環境的 `showModal`／`focus()` 像瀏覽器。
 
 ## 設計例外與尚未做
 

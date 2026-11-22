@@ -58,6 +58,11 @@ for (const engine of ["chromium", "mobile-chrome"]) {
   const run = spawnSync(process.execPath, [join(dirname(smoke), "standaloneTaskLink.mjs"), engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
   summary.push([`task link ${engine}`, run.status === 0 ? "passed" : "FAILED"]);
 }
+// Taking my notes to another device through one file: two fresh browser copies, a 2,000-note file, a page killed half way (addDeviceFile.mjs).
+for (const engine of ["chromium", "mobile-chrome"]) {
+  const run = spawnSync(process.execPath, [join(dirname(smoke), "addDeviceFile.mjs"), engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
+  summary.push([`add device ${engine}`, run.status === 0 ? "passed" : run.status === 2 ? "SKIPPED (browser not available)" : "FAILED"]);
+}
 const chromiumRan = !summary.some(([engine, result]) => engine === "chromium" && result.startsWith("SKIPPED"));
 for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
   const run = spawnSync(process.execPath, [join(dirname(smoke), script), ...passthrough], { stdio: "inherit" });
@@ -73,7 +78,7 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 const FEATURES = [
   ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
-  ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
+  ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["pdfNoteText.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
   ["bigInk.mjs"], ["contentTabRemovable.mjs"], ["phoneAiPanel.mjs"], ["reviewCardFront.mjs"], ["reviewGroups.mjs"], ["splitNoteWraps.mjs"], ["phoneViewTabs.mjs"],
 ];

@@ -119,7 +119,8 @@
         {
           "file": "packages/frontend/src/components/ui/index.ts",
           "exports": [
-            "CloseButton"
+            "CloseButton",
+            "DISMISS_PROPS"
           ]
         }
       ],
@@ -1292,6 +1293,31 @@
         "guard:shared-helpers"
       ],
       "why": "位元組轉 hex 或算 SHA-256 用它；手寫的轉換常出錯（補零、大小寫），導致前後端雜湊對不上。"
+    },
+    {
+      "id": "file-intake",
+      "need": "要用一個檔案做出筆記，或把檔案放進筆記（拖放、「＋ → 上傳檔案」、/ 選單、手機的檔案選擇）",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/fileIntake.ts",
+          "exports": [
+            "makeNoteFromFile",
+            "NEW_NOTE_ACCEPT",
+            "INTO_NOTE_ACCEPT"
+          ]
+        },
+        {
+          "file": "packages/frontend/src/lib/pdf/pdfNote.ts",
+          "exports": [
+            "createPdfNote"
+          ]
+        }
+      ],
+      "use": "import { makeNoteFromFile } from \"./lib/fileIntake\";\nexport const makeNote = (file: File, upload: () => Promise<string>, notify: (message: string) => void) =>\n  makeNoteFromFile(file, { upload, notify, create: async (input) => input.title });",
+      "replaces": "在各入口自己列「哪種檔案做成什麼」、自己寫 accept、自己寫 pdf_url 屬性建立筆記（漏了抽字，搜尋與 AI 就讀不到）",
+      "rules": [],
+      "why": "「這種檔案 → 做出什麼」只在 fileIntake 一份；拖放、建立選單、/ 選單、手機檔案選擇都讀它，選擇器的 accept 也由它算出，同一個意圖不論從哪個入口進來結果都相同。PDF 的筆記帶抽出的文字（現在放內文，只在 pdfNote 的一行）。守門：fileIntake.guard.test.ts。"
     },
     {
       "id": "local-prefs",
@@ -5492,6 +5518,50 @@
       "why": "快照要保留每列的標記，標記的 trigger 只在欄位值改變時才蓋章，所以不能用一般寫入重放；匯入只有 spine/stampedImport.ts 這一個受保護入口（只在空工作區的加入中狀態、trigger 讓開、本機序號不動），帶哪些表只讀 syncClasses.json 的 snapshot 欄位與 snapshotTables.json。"
     },
     {
+      "id": "device-file",
+      "need": "要把整個工作區存成一個檔案帶到另一台全新裝置，或在瀏覽器版接收這個檔案",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/deviceFile.ts",
+          "exports": [
+            "makeDeviceFile",
+            "deviceFileRefusal",
+            "holdsSummary",
+            "isNotEmpty"
+          ]
+        },
+        {
+          "file": "packages/markdown/src/sharedContract.ts",
+          "exports": [
+            "DEVICE_FILE_PATH",
+            "DEVICE_FILE_EMPTY_PARAM"
+          ]
+        }
+      ],
+      "use": "import { makeDeviceFile } from \"./lib/deviceFile\";\nexport const save = (ticket: string) => makeDeviceFile(ticket, () => {});",
+      "replaces": "另寫一個匯出整個工作區的下載流程，或自己拼 /api/snapshot 的請求與錯誤文字",
+      "rules": [],
+      "why": "檔案由後端 routes/stampedSnapshot.ts 串流做出；這裡一頁一頁寫成檔（有檔案選擇器時直接寫到磁碟，否則交給瀏覽器下載），最後一行不是結尾就不交出。拒絕只顯示 serverErrors 的白話，不顯示後端的英文 detail。接收端是瀏覽器版的 browserApp/BringNotes.tsx。 拿檔案要帶「剛剛確認過是本人」的憑證（ReconfirmDialog 換來的），這台收不收與會清掉什麼只問後端的 readiness。"
+    },
+    {
+      "id": "keep-screen-awake",
+      "need": "長時間執行時（做檔案、帶入筆記）要讓手機螢幕保持亮著",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/webLock.ts",
+          "exports": [
+            "keepScreenAwake"
+          ]
+        }
+      ],
+      "use": "import { keepScreenAwake } from \"./lib/webLock\";\nexport const release = keepScreenAwake();",
+      "replaces": "直接用 navigator.wakeLock",
+      "rules": [],
+      "why": "沒有 Wake Lock 的瀏覽器照常往下做；頁面被藏起來時瀏覽器會放掉，回來時用 appResume 再要一次。"
+    },
+    {
       "id": "note-pages",
       "need": "要知道一則筆記有哪些頁（空白頁、PDF 檔的幾頁）、頁的鍵、加一頁、合併兩台裝置的加頁",
       "area": "共用邏輯",
@@ -5541,6 +5611,23 @@
         "guard:freshProof"
       ],
       "why": "票限時 2 分鐘、只能用一次、綁人與用途；伺服器只存雜湊、不寫入日誌。新的受保護路由在 FRESH_PROOF_PURPOSES 加一行用途即可。"
+    },
+    {
+      "id": "reconfirm-dialog",
+      "need": "做之前要再確認是本人（再輸入一次密碼；瀏覽器版按一下確認），並拿到給後端的一次性憑證",
+      "area": "介面零件",
+      "entry": [
+        {
+          "file": "packages/frontend/src/components/ReconfirmDialog.tsx",
+          "exports": [
+            "ReconfirmDialog"
+          ]
+        }
+      ],
+      "use": "import { ReconfirmDialog } from \"./components/ReconfirmDialog\";\nexport const dialog = ReconfirmDialog;",
+      "replaces": "用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框",
+      "rules": [],
+      "why": "給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。"
     },
     {
       "id": "be-participant-sessions",

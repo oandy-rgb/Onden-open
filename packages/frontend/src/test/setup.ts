@@ -57,6 +57,26 @@ if (typeof HTMLDialogElement !== "undefined" && typeof HTMLDialogElement.prototy
   };
 }
 
+// What a browser does that happy-dom does not (confirmed in Chromium, 2026-11-17): a closed <dialog> is
+// display:none, so focus() on a field inside it does nothing (React's autoFocus runs while it is closed); and
+// showModal() then runs the dialog focusing steps — focus goes to the [autofocus] control, else the first
+// focusable one (the ✕ of a header). Without this a test passes on a dialog whose field has no focus on a device.
+if (typeof HTMLDialogElement !== "undefined") {
+  const focus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (this: HTMLElement, ...args: Parameters<HTMLElement["focus"]>) {
+    const dialog = this.closest("dialog");
+    if (dialog && dialog !== this && !dialog.open) return;
+    focus.apply(this, args);
+  };
+  const showModal = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    showModal.call(this);
+    const first = this.querySelector<HTMLElement>("[autofocus]")
+      ?? Array.from(this.querySelectorAll<HTMLElement>("*")).find((el) => el.matches("button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])"));
+    first?.focus();
+  };
+}
+
 // A test never reaches the network (helpers/noRealNetwork.ts): a request nobody stubbed fails the test that made it.
 forbidRealNetwork();
 

@@ -502,3 +502,19 @@ interface MediaFiles {
 - **合併進去**：`POST /api/backup/restore/:id/apply` 與 `GET …/preview` 多兩個選項（只能合併模式，其他模式回 400 `bad_request`）：`parent_title`＝全部落在一則新建的父筆記底下（保留這包內部的父子關係；上層不在這包裡的筆記與另存的副本直接放在父筆記底下；工作任務仍跟著它的筆記）；`parent_id`＝同一個工作階段再匯入時用同一個編號，找得到就沿用，找不到就用這個編號建。預覽多 `new_parent: { title, exists }` 與 `counts.notes_updated`；報告多 `parent_note_id` 與 `superseded`。沒給選項時行為完全不變。走原本的 `BACKUP_RESTORED` 事件與 `manage` 權限檢查，整批復原時父筆記一起回去。
 - **重複匯入與新版本**（`services/backupRestore.ts` 檔頭「parent note」）：同編號同內容＝跳過（原本就有）；同編號不同內容，原規則是另存一份「（備份 日期）」的副本，**不適合**「同一則筆記後來又多寫了幾行」（每次都多一份）。有給 `parent_id` 時多一條規則：這則筆記在該父筆記底下、且自從匯入後沒有人存過或畫過（只有還原自己的事件），就**就地更新標題與內文**（一般的更新，History 留得住舊的）；有人改過就維持原規則另存副本，**絕不蓋掉手機上的修改**。限制：就地更新只更新標題與內文，不重做標籤與手寫（第一次匯入時才帶）。
 - **測試**：`backend/src/test/backupPartial.integration.test.ts`（來源與目標是兩個工作區；PGlite 上跑過，沒有真 Postgres 專屬項目）、`e2e/browser-app/smoke.mjs` 第 11 段（瀏覽器版臨時模式的包合併進一般模式的工作區）。
+
+## 18. 帶到另一台裝置：一個檔案（2026-11-16；提案 `proposals/add-device-snapshot-2026-11-15.md` 的 1a）
+
+已在用的裝置把整個工作區存成**一個檔案**，帶到另一台**全新、空的**瀏覽器版打開，新裝置就有一樣的筆記、每一列的來源標記原樣保留。
+沒有配對、沒有網路、沒有任何東西上傳；畫面不叫它「同步」，並明講兩台之後不會互相更新。後端是 `routes/stampedSnapshot.ts`（`GET`／`POST /api/snapshot`），線上型別在 `@onden/contract` 的 `deviceFile.ts`。
+
+| 端 | 在哪 | 做什麼 |
+| --- | --- | --- |
+| 有筆記的裝置（瀏覽器版、桌面版、自架伺服器的網頁） | `settings/DeviceFileSetting.tsx`、`lib/deviceFile.ts` | 設定 › 你的資料 › 帶到另一台裝置，只有擁有者看得到。確認由**伺服器把關**：共用元件 `components/ReconfirmDialog.tsx`（說明句＋成功時拿到憑證）用 `POST /api/fresh-proof` 換一張 2 分鐘、一次性的憑證（自架伺服器＝重新輸入密碼；瀏覽器版＝一個「我確認」），`GET /api/snapshot` 帶 `X-Onden-Fresh-Proof` 才給檔案；失敗只顯示伺服器的代碼對應的白話。串流寫成檔案（有 File System Access 時直接寫到使用者選的位置，否則瀏覽器下載，每 8 MiB 封成一個 Blob 交給瀏覽器）；最後一行不是檔案的結尾就不交出檔案 |
+| 新裝置（瀏覽器版） | `browserApp/BringNotes.tsx`、`BringEntry.tsx`、`bringNotes.ts`；worker 的 `join-file` | 第一次開啟的選擇畫面與設定 › 你的資料都能進；進去時這份副本**整份重建為空的**（不留範例筆記），畫面取代 App，所以接收期間沒有任何寫入（後端同時用 `workspace_joining` 拒絕一般寫入）。檔案以串流交給 worker（`File` 直接傳，不複製進記憶體），進度是「檔案已讀多少」（後端 POST 到結束才回答，沒有逐頁進度）；保持螢幕亮著（有 Wake Lock 時）、離開前瀏覽器會問 |
+
+- **新裝置必須是空的**：`services/stampedJoin.ts` 的標頭說「瀏覽器副本有任何自己的筆記（垃圾桶也算）就拒絕」。範例筆記會留下「某人寫的」事件與標記，**永久刪除不夠**，所以走和「重新開始」同一個清除（`lib/browserAppBridge.ts` 的 `eraseBrowserCopy`），再用 `?empty=1` 開出沒有範例筆記的新副本（`BROWSER_APP_EMPTY_PARAM`，worker 在第一次開啟時不做範例並立刻存下這份空副本）。「這台收不收、會清掉什麼」只有一個來源：後端的 `GET /api/snapshot/readiness`（和開始帶入時是同一個判斷，回依種類的數量），頁面據此照實寫確認文字；有東西就先問一次（`confirmEraseEverything`，兩個入口共用），再整份清除。
+- **中斷**：頁面被關掉或殺掉，後端保證留下可用的空副本（`cancelJoin`／`migrate()` 的補救）；頁面在 localStorage 記著 `pending`／`joining`（`bringNotes.ts`），下次開啟看到 `joining` 就說「上次沒有帶完，什麼都沒有留下」。成功後才存進瀏覽器的儲存空間；存不進去（滿了、被擋）就當失敗（`join_not_kept`），不說「帶過來了」。
+- **檔案裡有什麼（今天）**：筆記、標籤、屬性、連結、任務、檢視、手寫、白板位置、各表的來源標記（後端的 `rows` 層，`spine/snapshotTables.json`）。**還沒有**：加在筆記裡的圖片與檔案、版本歷史、操作紀錄（`stampedSnapshot.ts` 的 `history`／`blobs` 層尚未做）。兩端的畫面都這樣說。
+- **驗證**：`src/test/deviceFile.test.ts`、`DeviceFileSetting.test.tsx`、`BringNotes.test.tsx`（元件）、`backend/src/test/browserBringNotes.integration.test.ts`（PGlite）、`e2e/browser-app/addDeviceFile.mjs`（Chromium 與 390×844 手機視窗：A 存、B 開、重新整理、節點身分不同；2,000 則筆記的檔案；頁面在帶入中途被關掉）。沒有真手機、沒有數 GB 的工作區。
+- **說明要照實（2026-11-18 審查）**：製作端對話框說檔案**沒有加密**，並在有其他人的伺服器上說明檔案也含擁有者讀得到的共用空間內容（含別人放的筆記）與成員名字（瀏覽器版是單人，不說這句）。接收端的 worker 若在回答前結束（被系統收掉），`joinFile` 以 `WorkerLost` 結束等待、頁面重新載入，走同一條「上次沒有帶完」路徑；偵測不到的「worker 靜默凍結」沒有處理。製作端選檔視窗在換憑證**之後**才開（網路慢時瀏覽器可能拒絕，退回把整份檔案以 Blob 片段交給下載；大檔的記憶體用量沒量過，只試過 3.5 MB），大工作區建議在電腦上做。

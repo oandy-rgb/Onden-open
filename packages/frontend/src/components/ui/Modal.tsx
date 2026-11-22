@@ -4,6 +4,7 @@ import { classNames } from "../../lib/utils";
 import { isImeComposing } from "../../lib/keys";
 import { matchShortcut } from "../../lib/shortcuts";
 import { surfaceHost, trackModalLayer } from "./surfaceHost";
+import { focusInitial } from "./initialFocus";
 import "./ui.css";
 
 // Every modal: a native <dialog> opened with showModal(), so the page behind it
@@ -79,8 +80,9 @@ type Props = {
   /** Holds the modal open (no Esc, no press outside) and marks it aria-busy. */
   busy?: boolean;
   onClose: () => void;
-  /** Focused on open; otherwise the browser focuses the first control. */
-  initialFocus?: RefObject<HTMLElement | null>;
+  /** Focused on open: a control, or "dialog" for the dialog itself (nothing inside, so no keyboard comes up);
+   *  otherwise the main text field, else the first control that is not the ✕ (ui/initialFocus). */
+  initialFocus?: RefObject<HTMLElement | null> | "dialog";
   children: ReactNode;
 };
 
@@ -147,7 +149,9 @@ export function Modal({ label, role = "dialog", className, busy = false, onClose
     dialog.showModal();
     pushModal(dialog);
     const untrack = trackModalLayer(dialog);
-    initialFocus?.current?.focus();
+    if (initialFocus === "dialog") dialog.focus({ preventScroll: true });
+    else if (initialFocus?.current) initialFocus.current.focus();
+    else focusInitial(dialog);
     return () => {
       untrack();
       unmounting = true;
@@ -159,7 +163,7 @@ export function Modal({ label, role = "dialog", className, busy = false, onClose
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- opens once per mount; initialFocus is read on open only
 
   const dialog = (
-    <dialog ref={ref} className={classNames("ui-modal", className)} role={role === "alertdialog" ? "alertdialog" : undefined}
+    <dialog ref={ref} tabIndex={-1} className={classNames("ui-modal", className)} role={role === "alertdialog" ? "alertdialog" : undefined}
       aria-label={label} aria-modal="true" aria-busy={busy || undefined}
       // React bubbles a nested modal's cancel up through the portal: only our own Esc closes us.
       onCancel={(e) => { if (e.target !== e.currentTarget) return; e.preventDefault(); if (!busy) onClose(); }}

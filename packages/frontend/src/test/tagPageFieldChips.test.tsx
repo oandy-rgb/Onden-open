@@ -115,6 +115,67 @@ describe("field chips and the field popover", () => {
     expect(within(popover()).getByPlaceholderText(/Field name/)).toHaveProperty("value", "Rating");
   });
 
+  describe("新增欄位", () => {
+    const form = () => within(screen.getByRole("dialog", { name: "Add field" }));
+    const nameBox = () => form().getByPlaceholderText(/Field name/);
+
+    it("opens on the name box, and nothing exists yet: no chip, no save", async () => {
+      await open(book(FIELDS));
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      expect(nameBox()).toHaveFocus();
+      expect(screen.queryByRole("button", { name: /New field/ })).toBeNull();
+      await settle();
+      expect(savedFields()).toBeUndefined();
+    });
+
+    it("on a touch screen the name box still has the cursor: this form exists to be filled in", async () => {
+      vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({ matches: query.includes("pointer: coarse"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as unknown as MediaQueryList);
+      await open(book(FIELDS));
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      expect(nameBox()).toHaveFocus();
+    });
+
+    it("closing it any way but 「確定」 leaves nothing behind", async () => {
+      await open(book(FIELDS));
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      fireEvent.change(nameBox(), { target: { value: "Pages" } });
+      fireEvent.click(form().getByRole("button", { name: "Cancel" }));
+      await settle();
+      expect(screen.queryByRole("dialog", { name: "Add field" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Pages$/ })).toBeNull();
+      expect(savedFields()).toBeUndefined();
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      fireEvent.keyDown(nameBox(), { key: "Escape" });
+      await settle();
+      expect(screen.queryByRole("dialog", { name: "Add field" })).toBeNull();
+      expect(within(screen.getByRole("group", { name: "Fields" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["textAuthor", "numberRating", "Add field"]);
+    });
+
+    it("「確定」 stays off until there is a name; Enter on an empty name does nothing and does not close", async () => {
+      await open(book(FIELDS));
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      expect(form().getByRole("button", { name: "OK" })).toBeDisabled();
+      fireEvent.keyDown(nameBox(), { key: "Enter" });
+      fireEvent.change(nameBox(), { target: { value: "   " } });
+      fireEvent.keyDown(nameBox(), { key: "Enter" });
+      await settle();
+      expect(screen.getByRole("dialog", { name: "Add field" })).toBeInTheDocument();
+      expect(savedFields()).toBeUndefined();
+    });
+
+    it("a name and a kind, then Enter: the field is made with that kind and saved", async () => {
+      await open(book(FIELDS));
+      fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+      fireEvent.change(form().getByRole("combobox"), { target: { value: "date" } });
+      fireEvent.change(nameBox(), { target: { value: "Due date" } });
+      fireEvent.keyDown(nameBox(), { key: "Enter" });
+      await settle();
+      expect(screen.queryByRole("dialog", { name: "Add field" })).toBeNull();
+      expect(savedFields()?.at(-1)).toMatchObject({ name: "due_date", label: "Due date", type: "date" });
+      expect(chip("Due date")).toBeInTheDocument();
+    });
+  });
+
   it("a member sees the chips but cannot open, drag or add", async () => {
     await open(book(FIELDS), false);
     expect(screen.queryByRole("button", { name: /Author$/ })).toBeNull();

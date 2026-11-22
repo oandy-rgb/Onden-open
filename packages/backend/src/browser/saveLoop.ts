@@ -54,6 +54,12 @@ export type SaveLoop = {
   stop(): Promise<void>;
 };
 
+/** Whether the copy is really in the browser's storage now: written without failing and nothing changed since. A store of kind "none" (a private window, no
+ *  usable storage) never writes and never says "failed", so "not failed" alone would call a copy kept that is gone at the next load. */
+export function copyIsStored(state: BridgeSaveState): boolean {
+  return state.store !== "none" && !state.failed && !state.unsaved && state.lastSavedAt !== null;
+}
+
 export function createSaveLoop(deps: SaveLoopDeps): SaveLoop {
   const state: BridgeSaveState = { store: deps.store.kind, lastSavedAt: null, lastCopyMs: null, lastCopyBytes: null, unsaved: false, changes: 0, failed: false, journal: false, journalSkipped: 0 };
   let lastMark: string | null = null;

@@ -20,7 +20,7 @@ describe("the choice", () => {
   it("offers both ways in, each saying what it means, and calls the one pressed (zh-TW)", () => {
     const onUse = vi.fn(); const onTemporary = vi.fn();
     vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-TW");
-    render(<StartChoice onUse={onUse} onTemporary={onTemporary} />);
+    render(<StartChoice onUse={onUse} onTemporary={onTemporary} onBring={() => {}} />);
     expect(screen.getByText("借用別人的電腦時用：這裡寫的東西不會留在這台電腦，關掉分頁前要先下載。")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "在這台電腦上暫時使用" }));
     expect(onTemporary).toHaveBeenCalledTimes(1);
@@ -31,7 +31,7 @@ describe("the choice", () => {
 
   it("is in English for an English browser", () => {
     vi.spyOn(window.navigator, "language", "get").mockReturnValue("en-US");
-    render(<StartChoice onUse={() => {}} onTemporary={() => {}} />);
+    render(<StartChoice onUse={() => {}} onTemporary={() => {}} onBring={() => {}} />);
     expect(screen.getByRole("button", { name: "Use it temporarily on this computer" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start using it" })).toBeTruthy();
   });

@@ -1,0 +1,9 @@
+.bring-notes { gap: var(--ac-space-5); }
+.bring-notes .bring-notes-card { display: flex; flex-direction: column; gap: var(--ac-space-5); align-items: center; max-width: var(--ac-width-lg); }
+.bring-notes .bring-notes-card p { max-width: none; }
+.bring-notes .bring-notes-fine { color: var(--ac-ink-2); font-size: var(--ac-fs-small); }
+.bring-notes .bring-notes-bad { color: var(--ac-danger); }
+.bring-notes progress { width: min(320px, 100%); appearance: none; display: block; height: 8px; border-radius: var(--ac-radius-sm); overflow: hidden; background: var(--ac-raised); }
+.bring-notes progress::-webkit-progress-bar { background: var(--ac-raised); border-radius: var(--ac-radius-sm); }
+.bring-notes progress::-webkit-progress-value { background: var(--ac-accent); border-radius: var(--ac-radius-sm); }
+.bring-notes progress::-moz-progress-bar { background: var(--ac-accent); border-radius: var(--ac-radius-sm); }

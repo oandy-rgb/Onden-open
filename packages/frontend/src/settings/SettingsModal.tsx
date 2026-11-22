@@ -12,7 +12,7 @@ import { resolveSettingsTab, type SettingsTab } from "../lib/settingsTab";
 import { MODULE_SETTINGS } from "../modules";
 import ModuleSettingsPage, { featureTitleOf, useSettingsModules } from "./ModuleSettingsPage";
 import "./SettingsModal.css";
-import { Button, Chip, Modal, Pressable, SearchField } from "../components/ui";
+import { Button, Chip, DISMISS_PROPS, Modal, Pressable, SearchField } from "../components/ui";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 interface Props {
@@ -205,7 +205,7 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
 
   if (phone) {
     const closeButton = (
-      <Pressable type="button" className="settings-header-icon" aria-label={t("Close")} onClick={onClose}><X size={22} aria-hidden="true" /></Pressable>
+      <Pressable type="button" className="settings-header-icon" aria-label={t("Close")} onClick={onClose} {...DISMISS_PROPS}><X size={22} aria-hidden="true" /></Pressable>
     );
     const moduleTitle = moduleId ? featureTitleOf(moduleId) : null;
     const returnSpec = returnTab ? TABS.find((s) => s.id === returnTab) ?? null : null;
@@ -272,7 +272,7 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
       <div className="settings-modal">
         <div className="settings-header">
           <span className="settings-title">{t("Settings")}</span>
-          <Button variant="icon" size="sm" aria-label={t("Close")} onClick={onClose}><X size={15} /></Button>
+          <Button variant="icon" size="sm" aria-label={t("Close")} onClick={onClose} {...DISMISS_PROPS}><X size={15} /></Button>
         </div>
 
         <div className="settings-body">

@@ -138,3 +138,19 @@ describe("Settings → Your Data tab", () => {
 });
 
 beforeEach(() => { bindAccountStorage("unit-test-account", ""); });
+
+describe("where focus starts in the settings window", () => {
+  it("on a touch screen the keyboard stays down: the search box has no cursor", () => {
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query.includes("pointer: coarse"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false,
+    }) as unknown as MediaQueryList);
+    renderModal();
+    expect(screen.getByRole("searchbox")).not.toHaveFocus();
+    vi.restoreAllMocks();
+  });
+
+  it("with a mouse the search box has the cursor", () => {
+    renderModal();
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+  });
+});

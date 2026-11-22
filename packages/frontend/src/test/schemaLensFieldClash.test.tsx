@@ -50,11 +50,11 @@ async function open(tag: Tag, allTags: Tag[]) {
 const chip = (name: string) => screen.getByRole("button", { name: new RegExp(`${name}$`) });
 /** The open field popover. */
 const popover = () => screen.getByRole("dialog", { name: "Field settings" });
-/** Type a label into the open (new) field and leave it, which commits its key. */
-function nameNewField(label: string) {
-  const input = within(popover()).getByPlaceholderText(/Field name/);
-  fireEvent.change(input, { target: { value: label } });
-  fireEvent.blur(input);
+const newFieldForm = () => within(screen.getByRole("dialog", { name: "Add field" }));
+/** Types a name into the 「新增欄位」 form and presses 「確定」. */
+function confirmNewField(label: string) {
+  fireEvent.change(newFieldForm().getByPlaceholderText(/Field name/), { target: { value: label } });
+  fireEvent.click(newFieldForm().getByRole("button", { name: "OK" }));
 }
 
 async function settle() { await act(async () => { await vi.advanceTimersByTimeAsync(700); }); }
@@ -63,23 +63,26 @@ beforeEach(() => { resetAppState(); vi.clearAllMocks(); vi.useFakeTimers(); });
 afterEach(() => vi.useRealTimers());
 
 describe("tag page and same-name fields (D93)", () => {
-  it("a field labelled like an inherited one (another name) is no clash: the edit saves", async () => {
+  it("a field labelled like an inherited one (another name) is no clash: the new field saves", async () => {
     const parent = book([{ name: "author", label: "作者", type: "text" }]);
     const child = novel([{ name: "writer", label: "作者", type: "text" }]);
     await open(child, [parent, child]);
     fireEvent.click(screen.getByRole("button", { name: /Add field/i }));
     await settle();
-    // The new field starts unnamed and an unnamed field is not saved: nothing is written yet.
-    expect(within(popover()).getByPlaceholderText(/Field name/)).toHaveProperty("value", "");
-    expect(within(popover()).queryByRole("alert")).toBeNull();
+    // Nothing exists until 「確定」: the form is open, the list and the save are untouched.
+    expect(newFieldForm().getByPlaceholderText(/Field name/)).toHaveProperty("value", "");
+    expect(newFieldForm().queryByRole("alert")).toBeNull();
     expect(savedFields()).toBeUndefined();
+    confirmNewField("作者");
+    await settle();
+    expect(savedFields()?.map((f) => f.name)).toEqual(["writer", "作者"]);
   });
 
-  it("a new field is saved once its label gives it a name", async () => {
+  it("a new field is saved once it is confirmed with a name", async () => {
     const child = novel([{ name: "writer", label: "作者", type: "text" }]);
     await open(child, [child]);
     fireEvent.click(screen.getByRole("button", { name: /Add field/i }));
-    nameNewField("Pages");
+    confirmNewField("Pages");
     await settle();
     expect(savedFields()?.map((f) => f.name)).toEqual(["writer", "pages"]);
   });

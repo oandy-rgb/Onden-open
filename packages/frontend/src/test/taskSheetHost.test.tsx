@@ -35,6 +35,14 @@ describe("TaskSheetHost", () => {
     expect(getAppState().toasts ?? []).toHaveLength(0);
   });
 
+  it("opening a task to look at it does not put the cursor in its title (no keyboard over the sheet)", async () => {
+    mount();
+    act(() => openTaskSheet("solo"));
+    const title = await screen.findByDisplayValue("Pay rent");
+    expect(title).not.toHaveFocus();
+    expect(screen.getByRole("dialog")).toHaveFocus();
+  });
+
   it("opens the sheet of a task in another space (a link reaches it, so the sheet does)", async () => {
     setAppState({ data: { ...noWorkspaceData, tasks: [{ id: "far", node_id: null, title: "Club dues", status: "todo", space_id: "sp-other" }] as never } });
     mount();

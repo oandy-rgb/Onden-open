@@ -3926,6 +3926,7 @@ INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') O
 INSERT INTO schema_migrations (version) VALUES ('215_block_anchors_replicated') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('217_keep_session_actor_rows') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('218_space_follows_tree') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('219_sign_in_rows_for_better_auth_1_7') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('220_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('221_merge_core_before_transport') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('222_sync_join_source_brought') ON CONFLICT (version) DO NOTHING;

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { ready, requireAdmin, openFieldEditor, tagFieldLine, H } from "./helpers";
+import { ready, requireAdmin, addTagField, tagFieldLine, H } from "./helpers";
 
 // Screenshots for a design pass on the TAG / SUPERTAG-SCHEMA surface (where
 // memory surface-no-programmer-ui says the design is weakest — "feels like
@@ -55,12 +55,8 @@ test("schema: a new field's key is auto-derived from its name", async ({ page })
   const chips = tagFieldLine(page).locator(".tag-field-item");
   await expect(chips.first()).toBeVisible();
   const before = await chips.count();
-  const popover = await openFieldEditor(page);
-  await expect(chips).toHaveCount(before + 1); // the new (blank) field's chip rendered
-  const nameInput = popover.locator("input.actors-input").first();
-  await nameInput.click();
-  await nameInput.pressSequentially("Estimate hours", { delay: 25 });
-  await popover.getByRole("button", { name: "OK", exact: true }).click(); // blurs the name → commits the key, closes the popover
+  await addTagField(page, "Estimate hours");
+  await expect(chips).toHaveCount(before + 1); // the field exists once 「確定」 is pressed, not before
 
   type F = { name?: string; key?: string; label?: string };
   // Poll the API past the debounced (600ms) schema PATCH instead of sleeping.

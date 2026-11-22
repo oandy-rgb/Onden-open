@@ -3,6 +3,7 @@
 
 export { Button, buttonClass } from "./Button";
 export { CloseButton } from "./CloseButton";
+export { DISMISS_PROPS } from "./initialFocus";
 export { Chip, type ChipTone } from "./Chip";
 export { DatePicker, type DatePickerProps } from "./DatePicker";
 export { MonthGrid, MonthDayCell, MONDAY_FIRST_WEEKDAYS, type MonthGridProps } from "./MonthGrid";

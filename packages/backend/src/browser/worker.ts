@@ -8,6 +8,7 @@
 import "./env.js";
 import { workerQueue as queue } from "./hostSetup.js";
 import type { BridgeRequest, FromWorker, ToWorker } from "@onden/markdown";
+import { DEVICE_FILE_EMPTY_PARAM, DEVICE_FILE_PATH } from "@onden/markdown/contract";
 import { BROWSER_APP_CLEAR_SAMPLES_PATH, BROWSER_APP_STATE_PATH, BROWSER_APP_TEMP_PARAM, BROWSER_APP_LANG_PARAM, TEMP_SESSION_MEDIA_LIMIT_BYTES } from "@onden/markdown";
 import { app } from "../app.js";
 import { auth } from "../auth.js";
@@ -23,13 +24,13 @@ import { unavailableInBrowserApp } from "./unavailable.js";
 import { openSnapshotStore, type SnapshotStore } from "./snapshotStore.js";
 import { isJournaled, MAX_BODY_BYTES, openJournal, type Journal } from "./journal.js";
 import { bootFailure, bootFailureKind, judgeSchema } from "./schemaCheck.js";
-import { createSaveLoop, type SaveLoop } from "./saveLoop.js";
+import { copyIsStored, createSaveLoop, type SaveLoop } from "./saveLoop.js";
 import { useMediaFiles, type MediaFiles } from "../services/mediaFiles.js";
 import { useImageCodec } from "../services/imageCodec.js";
 import { canvasImageCodec } from "./imageCodec.js";
 import { memoryMediaFiles, openMediaFiles } from "./mediaStorage.js";
 import { startTemporarySession } from "./temporarySession.js";
-import { ensureOwnNodeId } from "./nodeIdentity.js";
+import { ensureOwnNodeId, ownNodeFingerprint } from "./nodeIdentity.js";
 import { clearSampleNotes, sampleNoteCount, sampleNotesState, seedSampleNotes, welcomeNoteId } from "./sampleNotes.js";
 
 const post = (message: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer);
@@ -52,6 +53,10 @@ const forceIndexedDb = workerParams.get("store") === "indexeddb";
 // A temporary session keeps nothing in this browser and touches nothing an ordinary session keeps: no saved copy (the
 // "none" store never looks at OPFS or IndexedDB), no journal, files in memory only.
 const temporary = workerParams.get(BROWSER_APP_TEMP_PARAM) === "1";
+// `?empty=1`: this page is opened to take a file from another device. A first open then makes no sample notes (a copy with
+// notes of its own is refused by services/stampedJoin.ts) and saves its empty copy at once, so a page that is killed
+// half way reopens as that empty copy and not as a first open.
+const startEmpty = workerParams.get(DEVICE_FILE_EMPTY_PARAM) === "1" && !temporary;
 const storeReady = openSnapshotStore(temporary ? "none" : forceIndexedDb ? "indexeddb" : undefined);
 // Uploaded files live in the same kind of place as the saved copy (mediaStorage.ts); the backend reaches them only
 // through services/mediaFiles.ts, which boot() points at this.
@@ -133,7 +138,7 @@ async function boot() {
   let welcome: string | null = null;
   if (temporary) {
     welcome = await startTemporarySession((request) => session.fetchAsLocalUser(request), session.origin, workerParams.get(BROWSER_APP_LANG_PARAM) ?? "");
-  } else if (firstOpen && !seeded) {
+  } else if (firstOpen && !seeded && !startEmpty) {
     await seedSampleNotes((request) => session.fetchAsLocalUser(request), session.origin);
     seeded = true;
     welcome = await welcomeNoteId();
@@ -178,7 +183,7 @@ async function boot() {
   // A first open, an upgrade and a recovery each leave something that is in no copy yet: save it before the page starts.
   if (firstOpen || ownNodeIdMade || upgraded > 0 || report.recovered + report.recoveryFailed > 0) {
     saveLoop.markUnsaved();
-    if (upgraded > 0 || report.recovered > 0) await saveLoop.flush();
+    if (upgraded > 0 || report.recovered > 0 || startEmpty) await saveLoop.flush();
   }
   log.info("browser", `ready in ${Math.round(performance.now() - t0)} ms (${firstOpen ? "first open" : "saved copy"})`);
   return { session, saveLoop, store, media, journal, progress, firstOpen, seeded, welcome, report, temporary };
@@ -252,8 +257,10 @@ async function answer(running: Running, message: BridgeRequest): Promise<void> {
   // The person is always signed in here; signing out would only lock them out of their own notes.
   if (path === "/api/auth/sign-out") return respond(id, 200, { success: true });
   if (path === BROWSER_APP_STATE_PATH) {
+    // `?node=1`: also say a one-way name of this copy's node id (hashed on each ask, so only the tests that compare two copies ask).
+    const withNode = new URL(message.path, "http://localhost").searchParams.get("node") === "1";
     const usage = await running.media.files.usage().catch(() => ({ files: 0, bytes: 0 }));
-    return respond(id, 200, { ...running.saveLoop.state(), sampleNotes: await queue.run(() => sampleNoteCount()), media: { ...usage, store: running.media.kind }, temporary: running.temporary });
+    return respond(id, 200, { ...running.saveLoop.state(), sampleNotes: await queue.run(() => sampleNoteCount()), ownNode: withNode ? await queue.run(() => ownNodeFingerprint()) : null, media: { ...usage, store: running.media.kind }, temporary: running.temporary });
   }
   if (path === BROWSER_APP_CLEAR_SAMPLES_PATH) {
     const cleared = await queue.run(async () => {
@@ -288,6 +295,27 @@ async function answer(running: Running, message: BridgeRequest): Promise<void> {
       // A stream stays open for the life of the page: read it outside the queue (it only relays in-memory ticks).
       post({ t: "head", id, status: response.status, statusText: response.statusText, headers });
       streaming = response;
+      return;
+    }
+    if (response.headers.get("content-type")?.startsWith("application/x-ndjson") && response.body) {
+      // The file for another device (GET /api/snapshot) can be hundreds of MB: relayed a piece at a time while the queue is held
+      // (it reads the database as it goes), never gathered here. The page writes it to a file as it arrives.
+      post({ t: "head", id, status: response.status, statusText: response.statusText, headers });
+      const reader = response.body.getReader();
+      readers.set(id, reader);
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const piece = value.slice().buffer;
+          post({ t: "chunk", id, data: piece }, [piece]);
+        }
+        post({ t: "end", id });
+      } catch {
+        post({ t: "failed", id, message: "the file could not be made" });
+      } finally {
+        readers.delete(id);
+      }
       return;
     }
     const data = await response.arrayBuffer();
@@ -334,6 +362,49 @@ async function answer(running: Running, message: BridgeRequest): Promise<void> {
   }
 }
 
+/** Take the file another device made into this copy: POST /api/snapshot with the file read as a stream (a piece at a time; the
+ *  bridge's ordinary request would gather the whole body first). Holds the queue until it ends, so nothing else writes during it
+ *  (the backend refuses ordinary writes meanwhile too: workspace_joining). A taken file is saved to the browser's storage before
+ *  "done" is said; a refused or cut-off one leaves the empty copy the backend guarantees. */
+async function joinFile(running: Running, id: number, file: Blob): Promise<void> {
+  let readBytes = 0;
+  let saidAt = 0;
+  const counted = file.stream().pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(piece, controller) {
+      readBytes += piece.byteLength;
+      controller.enqueue(piece);
+      if (performance.now() - saidAt > 200) { saidAt = performance.now(); post({ t: "join-progress", id, readBytes, totalBytes: file.size }); }
+    },
+    flush() { post({ t: "join-progress", id, readBytes: file.size, totalBytes: file.size }); },
+  }));
+  let result: FromWorker = { t: "join-result", id, ok: false, status: 0, error: null, detail: null };
+  await queue.run(async () => {
+    try {
+      const request = new Request(new URL(DEVICE_FILE_PATH, running.session.origin).href, {
+        method: "POST", headers: { "content-type": "application/x-ndjson" }, body: counted, duplex: "half",
+      } as RequestInit);
+      const response = await running.session.fetchAsLocalUser(request);
+      const body = (await response.json().catch(() => ({}))) as { error?: string; detail?: string; pages?: number; rows?: number };
+      if (response.ok) {
+        await running.saveLoop.afterJob();
+        await running.saveLoop.flushInJob();
+        // The notes are in memory only if the browser did not store the copy (full, blocked, or no storage at all: store "none"
+        // never writes and never says "failed"): that is not "brought over". Only a copy that was written counts.
+        // The page starts again from what is stored, which is the empty copy.
+        result = !copyIsStored(running.saveLoop.state())
+          ? { t: "join-result", id, ok: false, status: 507, error: "join_not_kept", detail: null }
+          : { t: "join-result", id, ok: true, pages: body.pages ?? 0, rows: body.rows ?? 0 };
+      } else {
+        await running.saveLoop.afterJob();
+        result = { t: "join-result", id, ok: false, status: response.status, error: body.error ?? null, detail: body.detail ?? null };
+      }
+    } catch (error) {
+      log.warn("browser", `taking in a file failed: ${String(error)}`);
+    }
+  });
+  post(result);
+}
+
 self.onmessage = async (event: MessageEvent<ToWorker>) => {
   const message = event.data;
   if (message.t === "cancel") { void readers.get(message.id)?.cancel().catch(() => {}); return; }
@@ -358,6 +429,8 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
   try { running = await ready; } catch { return; }
   if (message.t === "request") {
     answer(running, message).catch((error) => post({ t: "failed", id: message.id, message: error instanceof Error ? error.message : String(error) }));
+  } else if (message.t === "join-file") {
+    void joinFile(running, message.id, message.file);
   } else if (message.t === "flush") {
     await running.saveLoop.flush();
     post({ t: "done", id: message.id });

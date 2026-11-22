@@ -16,6 +16,13 @@ const INVALID = "The request wasn't valid.";
  *  the backend sends is in one of the two tables, and in neither twice. */
 const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   owner_only: "Only the workspace owner can do that.",
+  join_incomplete: "The file is cut short, so nothing was kept. Make it again on the other device.",
+  join_source_failed: "The other device stopped before the file was finished, so nothing was kept. Make it again.",
+  join_bad_line: "This is not a file Onden made, or it is damaged. Nothing was kept.",
+  join_line_too_long: "This is not a file Onden made, or it is damaged. Nothing was kept.",
+  join_no_body: "No file was sent. Nothing was kept.",
+  join_not_kept: "This browser had no room to keep the notes, so nothing was kept. Free some space and try again.",
+  snapshot_failed: "The file could not be made. Nothing usable was saved.",
   task_line_not_found: "This task's line is no longer in its note, so nothing was deleted. Reopen the note and try again.",
   browser_app_unavailable: "The trial version doesn't have this feature.",
   view_layout_not_for_tags: "Only notes can have this view.",

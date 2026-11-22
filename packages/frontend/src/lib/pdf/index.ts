@@ -7,6 +7,7 @@
 //   pageUnits   — a PDF note's drawing as pages in page units (what each page's ink engine
 //                 loads and saves), converted from / written to the older fields
 
+export { createPdfNote, PDF_TEXT_FAILED_MESSAGE } from "./pdfNote";
 export { loadPdfCore, PDF_WORKER_SRC, type PdfJsCore } from "./pdfjs";
 export type { PageViewportLike } from "./coords";
 export { emptyPageDoc, pagesFromLegacy, pdfPageDoc, readPdfInk, recordFrame, setPdfPageDoc, withUnits } from "./pageUnits";

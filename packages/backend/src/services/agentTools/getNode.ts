@@ -7,6 +7,7 @@ import { NOTE_PAGES_ATTR, PDF_TEXT_ATTR } from "@onden/markdown/contract";
 import { notePagesOf, summarizeNotePages } from "@onden/markdown/note-pages";
 import { pdfTextPageCount } from "../pdfText.js";
 import type { AgentTool } from "./types.js";
+import { pdfNoteSummary } from "./pdfNoteSummary.js";
 import { liveTagNodeSql } from "../../spine/nodeSql.js";
 
 // Read-only fetch by id OR slug. Includes attributes + tags so an agent can
@@ -34,6 +35,8 @@ type GetNodeResult = {
   attributes: Array<{ key: string; value: string; value_type: string }>;
   /** Files the body references; fetch one with getAttachment({ nodeId, ref }). */
   attachments: NoteAttachment[];
+  /** Set only for a PDF note: whether its body holds the file's text (see pdfNoteSummary). */
+  pdf_note?: string;
 } | null;
 
 export const getNodeTool: AgentTool<z.infer<typeof Args>, GetNodeResult> = {
@@ -69,8 +72,10 @@ export const getNodeTool: AgentTool<z.infer<typeof Args>, GetNodeResult> = {
       ),
     ]);
 
+    const pdfNote = pdfNoteSummary(attrsRes.rows, node.markdown);
     return {
       ...node,
+      ...(pdfNote ? { pdf_note: pdfNote } : {}),
       tags: tagsRes.rows,
       // Drawing data (handwriting, the board's pen layer, a note's 手寫 tab, a PDF's older marks) is megabytes of stroke JSON an agent can
       // neither read nor edit through this tool; any note may carry it now, so it never goes into the tool output.

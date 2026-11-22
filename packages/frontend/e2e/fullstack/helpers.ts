@@ -505,18 +505,29 @@ export async function openSavedViewTab(page: Page, name?: RegExp): Promise<void>
   await (name ? page.getByRole("tab", { name }) : page.locator(".view-tabs [role=tab]").nth(1)).click();
 }
 
-/** On a tag's page, open a field's settings (FieldPopover: name, type,
- *  required, default, 「刪除欄位」, 「確定」): the chip of the field named
- *  `field`, or 「＋ 新增欄位」 when left out (a new field, unnamed until a name
- *  is typed). Needs the owner. Returns the popover. */
-export async function openFieldEditor(page: Page, field?: string): Promise<Locator> {
-  const fields = tagFieldLine(page);
-  await (field === undefined
-    ? fields.getByRole("button", { name: /^(Add field|新增欄位)$/ })
-    : fields.locator(`.tag-field-item[data-field="${field}"]`)).click();
+/** On a tag's page, open an existing field's settings (FieldPopover: name, type,
+ *  required, default, 「刪除欄位」, 「確定」): the chip of the field named `field`.
+ *  Needs the owner. Returns the popover. A new field is made by `addTagField`. */
+export async function openFieldEditor(page: Page, field: string): Promise<Locator> {
+  await tagFieldLine(page).locator(`.tag-field-item[data-field="${field}"]`).click();
   const popover = page.getByRole("dialog", { name: /^(Field settings|欄位設定)$/ });
   await expect(popover).toBeVisible();
   return popover;
+}
+
+/** On a tag's page, add a field the way a person does: 「＋ 新增欄位」 asks for a name and a kind and makes
+ *  nothing until 「確定」 (FieldPopover's NewFieldBody). `type` is the option's value ("text", "date"…).
+ *  Needs the owner. */
+export async function addTagField(page: Page, name: string, type?: string): Promise<void> {
+  await tagFieldLine(page).getByRole("button", { name: /^(Add field|新增欄位)$/ }).click();
+  const form = page.getByRole("dialog", { name: /^(Add field|新增欄位)$/ });
+  await expect(form).toBeVisible();
+  const box = form.locator("input.actors-input").first();
+  await expect(box).toBeFocused(); // the name box has the cursor: typing needs no click first
+  if (type) await form.getByRole("combobox").selectOption(type);
+  await box.pressSequentially(name, { delay: 25 });
+  await form.getByRole("button", { name: /^(OK|確定)$/ }).click();
+  await expect(form).toHaveCount(0);
 }
 
 /** True when the workspace holds nothing but day notes and tags: the only

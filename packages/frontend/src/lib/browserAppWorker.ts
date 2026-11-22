@@ -3,7 +3,14 @@
 
 import type { BootFailureKind, BridgeSaveState, FromWorker, ToWorker } from "@onden/markdown";
 
+export type JoinFileResult = { ok: true; pages: number; rows: number } | { ok: false; status: number; error: string | null; detail: string | null };
 export type ReadyInfo = Extract<FromWorker, { t: "ready" }>;
+
+/** The worker ended while a file was being taken in (it crashed or the system took it): no answer will come. The screen goes through the same
+ *  "it was cut off" path as a closed page (reload; the marker in browserApp/bringNotes.ts says the join was running). */
+class WorkerLost extends Error {
+  constructor() { super("the worker ended"); }
+}
 
 /** The worker could not start; `kind` says which way out to offer (browserApp/BrowserAppShell). */
 export class WorkerStartFailure extends Error {
@@ -22,6 +29,9 @@ export type WorkerClient = {
   reset(): Promise<void>;
   /** The saved copy as stored (a database image, not notes), or null when there is none. Works after a failed start. */
   exportCopy(): Promise<Blob | null>;
+  /** Take the file another device made into this (empty) copy. Resolves once it is taken in and saved here, or refused; `onProgress`
+   *  hears how much of the file has been read. While it runs the worker answers nothing else (it holds its queue). Rejects with `WorkerLost` when the worker ends first. */
+  joinFile(file: Blob, onProgress: (readBytes: number, totalBytes: number) => void): Promise<JoinFileResult>;
   onSaveState(listener: (state: BridgeSaveState) => void): () => void;
   lastSaveState(): BridgeSaveState | null;
 };
@@ -41,6 +51,7 @@ export function startWorkerClient(workerUrl: URL, onReplayProgress?: (done: numb
   const pending = new Map<number, Pending>();
   const done = new Map<number, () => void>();
   const copies = new Map<number, (data: ArrayBuffer | null) => void>();
+  const joins = new Map<number, { progress: (readBytes: number, totalBytes: number) => void; finish: (result: JoinFileResult) => void; lost: (error: Error) => void }>();
   const listeners = new Set<(state: BridgeSaveState) => void>();
   let saveState: BridgeSaveState | null = null;
   let resolveReady!: (info: ReadyInfo) => void;
@@ -60,6 +71,13 @@ export function startWorkerClient(workerUrl: URL, onReplayProgress?: (done: numb
         saveState = message.state;
         for (const listener of listeners) listener(message.state);
         return;
+      case "join-progress": joins.get(message.id)?.progress(message.readBytes, message.totalBytes); return;
+      case "join-result": {
+        const { t: _kind, id: _id, ...result } = message;
+        joins.get(message.id)?.finish(result);
+        joins.delete(message.id);
+        return;
+      }
       case "done": done.get(message.id)?.(); done.delete(message.id); return;
       case "head": {
         const entry = pending.get(message.id);
@@ -79,7 +97,9 @@ export function startWorkerClient(workerUrl: URL, onReplayProgress?: (done: numb
       }
     }
   };
-  worker.onerror = () => { rejectReady(new WorkerStartFailure("other", "the worker could not be loaded")); };
+  const workerLost = () => { for (const join of joins.values()) join.lost(new WorkerLost()); joins.clear(); };
+  worker.onerror = () => { rejectReady(new WorkerStartFailure("other", "the worker could not be loaded")); workerLost(); };
+  worker.onmessageerror = workerLost;
 
   async function request(request: Request): Promise<Response> {
     const id = nextId++;
@@ -114,6 +134,11 @@ export function startWorkerClient(workerUrl: URL, onReplayProgress?: (done: numb
       const id = nextId++;
       copies.set(id, (data) => resolve(data ? new Blob([data], { type: "application/x-tar" }) : null));
       send({ t: "export-copy", id });
+    }),
+    joinFile: (file, progress) => new Promise<JoinFileResult>((finish, lost) => {
+      const id = nextId++;
+      joins.set(id, { progress, finish, lost });
+      send({ t: "join-file", id, file });
     }),
     onSaveState(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     lastSaveState: () => saveState,

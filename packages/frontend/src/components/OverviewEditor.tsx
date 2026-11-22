@@ -35,7 +35,7 @@ import { noteDoc, notePages, type InkPages, decodeInk } from "@onden/markdown/in
 import { useInkSurfaceSaver } from "../lib/ink";
 import { useDrawingRestoreSerial } from "../hooks/useDrawingRestoreSerial";
 import { readPdfInk, type InkMultiPageDoc } from "../lib/pdf";
-import { extractPdfText } from "../lib/pdf/extractText";
+import { makeNoteFromFile, embedMarkdown, goesIntoNote, newNoteResult } from "../lib/fileIntake";
 import { useAiEnabled, useModuleFilter, useModuleStatus } from "../hooks/useModuleFilter";
 import { blockFunctions } from "../lib/tagFunctions";
 import { moduleLineWord, slashInsertsOf } from "../modules";
@@ -539,7 +539,7 @@ export default function OverviewEditor({
       const base = getApiBase();
       const src = url.startsWith("/") && base ? `${base}${url}` : url;
       const alt = file.name.replace(/\.[^.]+$/, "");
-      return `\n![${alt}](${src})\n`;
+      return `\n${embedMarkdown(alt, src)}\n`;
     } catch (err) {
       setUploadError(writeErrors.message(err));
       setTimeout(() => setUploadError(null), 4000);
@@ -549,35 +549,23 @@ export default function OverviewEditor({
     }
   }, [online]);
 
-  // Drag a PDF onto the editor → POST /api/media, create a node with the
-  // pdf_url attribute set, refresh the sidebar, and jump to the new node.
-  // The editor will detect pdf_url on its next render and swap MarkdownEditor
-  // for the PdfNodeView. Replaces the curl-required onboarding for new PDFs.
-  const uploadPdfAsNode = useCallback(async (file: File, parentId: string | null = null): Promise<{ id: string; title: string } | null> => {
+  // A file that becomes a new note (a dropped PDF or document, "＋ → 上傳檔案", the `/` menu's PDF page): uploaded,
+  // then made into the note lib/fileIntake says. A PDF's note shows the PDF view on its next render.
+  const uploadFileAsNode = useCallback(async (file: File, parentId: string | null = null): Promise<{ id: string; title: string } | null> => {
     if (!online) {
-      setUploadError(t("Can't upload PDFs while offline"));
+      setUploadError(t("Can't upload files while offline. Connect to the internet and try again."));
       setTimeout(() => setUploadError(null), 4000);
       return null;
     }
     setUploadCount((n) => n + 1);
     setUploadError(null);
     try {
-      // 1. media upload
-      const url = await uploadMedia(file);
-
-      // 2. node create — title from filename, no extension. Extract the PDF's
-      // full text into the body so the paper is embedded (embeddings run on
-      // title+markdown) and therefore retrievable by RAG Ask — without it the
-      // node body is '' and the corpus is invisible to search. Best-effort:
-      // extractPdfText returns '' on encrypted/scanned/corrupt PDFs so the
-      // upload still succeeds (the file just won't be searchable).
-      const title = file.name.replace(/\.pdf$/i, "");
-      const markdown = await extractPdfText(file);
-      // 3. the note WITH its pdf_url attribute (what makes OverviewEditor branch
-      //    to PdfNodeView) — one request, so it never exists as a plain note.
-      const newNode = (await noteWriter.create({ id: randomUUID(), title, markdown, parent_id: parentId, attributes: [{ key: "pdf_url", value: url }] })).node;
-
-      return { id: newNode.id, title: newNode.title };
+      // lib/fileIntake: what this kind of file becomes (a PDF: its text is read first, one request).
+      const made = await makeNoteFromFile(file, {
+        upload: () => uploadMedia(file), parentId, notify: (message) => addToast(message, "info"),
+        create: async (input) => (await noteWriter.create({ id: randomUUID(), ...input })).node,
+      });
+      return { id: made.id, title: made.title };
     } catch (err) {
       setUploadError(writeErrors.message(err));
       setTimeout(() => setUploadError(null), 4000);
@@ -588,36 +576,36 @@ export default function OverviewEditor({
   }, [online]);
 
   const handleUnsupportedDrop = useCallback(async (files: File[]) => {
-    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    // Files the text does not take inline become notes (lib/fileIntake); what is neither is refused below.
+    const pdfs = files.filter((f) => newNoteResult(f) !== null && !goesIntoNote(f));
     const others = files.filter((f) => !pdfs.includes(f));
 
     let lastNewNodeId: string | null = null;
     for (const pdf of pdfs) {
-      const created = await uploadPdfAsNode(pdf);
+      const created = await uploadFileAsNode(pdf);
       if (created) lastNewNodeId = created.id;
     }
 
     if (others.length > 0) {
       const name = others[0]?.name ?? "";
       setUploadError(others.length > 1
-        ? t("Only images, audio, video and PDFs can be dropped here: {name} and {n} more", { name, n: others.length - 1 })
-        : t("Only images, audio, video and PDFs can be dropped here: {name}", { name }));
+        ? t("Only images, audio, video, PDFs and documents can be dropped here: {name} and {n} more", { name, n: others.length - 1 })
+        : t("Only images, audio, video, PDFs and documents can be dropped here: {name}", { name }));
       setTimeout(() => setUploadError(null), 4000);
     }
 
     if (lastNewNodeId) {
-      // The note writer already put the PDF note (with pdf_url) in the store;
-      // jump to it and the editor swaps to PdfNodeView on the next render.
+      // The note writer already put the new note in the store; jump to it.
       onSelectNode(lastNewNodeId);
     }
-  }, [uploadPdfAsNode, onSelectNode]);
+  }, [uploadFileAsNode, onSelectNode]);
 
   // Slash → PDF / handwriting page: a page under this note, linked
   // where `/` was typed. A handwriting page opens right after, once
   // the editor has inserted the link (switching notes saves the draft).
   const insertPage = useCallback(async (kind: InsertPageKind, file?: File): Promise<string | null> => {
     if (!node) return null;
-    if (kind === "pdf") return file ? (await uploadPdfAsNode(file, node.id))?.title ?? null : null;
+    if (kind === "pdf") return file ? (await uploadFileAsNode(file, node.id))?.title ?? null : null;
     const stamp = dateTimeId();
     const attribute = { key: "ink_data", value: JSON.stringify({ version: 1, strokes: [], erased: {}, page: { width: 1000 } }) };
     const title = `${t("Handwriting page")} ${stamp}`;
@@ -628,7 +616,7 @@ export default function OverviewEditor({
     } catch {
       return null; // the note writer reported it
     }
-  }, [node, uploadPdfAsNode, onSelectNode]);
+  }, [node, uploadFileAsNode, onSelectNode]);
 
   const breadcrumb = node ? noteAncestors(node, nodes) : [];
 

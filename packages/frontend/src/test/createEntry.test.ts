@@ -235,13 +235,13 @@ describe("create: cancelled file picker", () => {
 });
 
 describe("create file pickers", () => {
-  it("the upload picker offers exactly the extensions /api/media takes for PDF, image, audio and video", () => {
+  it("the upload picker offers what lib/fileIntake takes: every kind /api/media takes (PDF, image, audio, video, documents)", () => {
     const offered: string[] = [];
     const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (this: HTMLInputElement) { offered.push(this.accept); });
     try {
       void useNodeCreation(params()).create("upload");
-      expect(offered).toEqual([acceptFor("pdf", "image", "audio", "video")]);
-      expect(offered[0]!.split(",")).toEqual(expect.arrayContaining(["application/pdf", "video/mp4", ".mp4", ".webm", "audio/mpeg", "image/jpeg", ".ico"]));
+      expect(offered).toEqual([acceptFor("pdf", "image", "audio", "video", "document")]);
+      expect(offered[0]!.split(",")).toEqual(expect.arrayContaining(["application/pdf", "video/mp4", ".mp4", ".webm", "audio/mpeg", "image/jpeg", ".ico", ".docx", ".txt"]));
       expect(offered[0]).not.toMatch(/\/\*/);
     } finally {
       click.mockRestore();

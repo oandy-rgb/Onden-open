@@ -1,0 +1,22 @@
+/* Settings › 你的資料 › 帶到另一台裝置 (DeviceFileSetting.tsx). */
+.device-file-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-5);
+  box-sizing: border-box;
+  width: 460px;
+  max-width: 100%;
+  padding: var(--ac-space-7);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-float);
+}
+.device-file-dialog p { margin: 0; line-height: var(--ac-lh-ui); }
+.device-file-title { margin: 0; font-size: var(--ac-fs-lg); }
+.device-file-fine { font-size: var(--ac-fs-small); color: var(--ac-ink-2); }
+.device-file-actions { display: flex; flex-wrap: wrap; gap: var(--ac-space-4); }
+.device-file-dialog progress { width: 100%; appearance: none; display: block; height: 8px; border-radius: var(--ac-radius-sm); overflow: hidden; background: var(--ac-raised); }
+.device-file-dialog progress::-webkit-progress-bar { background: var(--ac-raised); border-radius: var(--ac-radius-sm); }
+.device-file-dialog progress::-webkit-progress-value { background: var(--ac-accent); border-radius: var(--ac-radius-sm); }
+.device-file-dialog progress::-moz-progress-bar { background: var(--ac-accent); border-radius: var(--ac-radius-sm); }

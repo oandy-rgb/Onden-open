@@ -72,6 +72,14 @@
 
 ## 紀錄
 
+### 2026-11-20　換了套件的安裝位置，瀏覽器版的建置還寫死根目錄的路徑（零件對、組裝錯；#1925）
+- **發生了什麼**：better-auth 升級後，npm 把新版放在 `packages/backend`、`packages/frontend` 底下，根目錄沒有 `@better-auth/core`。`scripts/build-browser.mjs` 的 `@better-auth/core/async_hooks` 寫死 `<root>/node_modules/...`：乾淨安裝後瀏覽器版建置找不到檔；留著舊版的機器則會默默把 1.6 的 core 打包進 1.7 的程式。後端、前端、守門通道都綠，我回報時沒有跑 `npm run build:browser`。
+- **證據**：#1925 審查留言 7033051653；修正後 `npm run build:browser` 通過、`dist-browser/worker.js` 含 1.7 才有的字串、`e2e/browser-app/smoke.mjs` chromium 與 mobile-chrome 各 124/124。
+- **發現者**：審查。
+- **為什麼沒擋到**：每個套件的測試只用自己的 `node_modules` 解析；把三個套件接成瀏覽器版的那一步只有 `build:browser` 會走，而它不在守門通道裡，換套件的 PR 也沒有規定要跑。
+- **類別**：零件對、組裝錯。
+- **機制**：〔程式本身〕alias 改成從後端實際載入的 better-auth 出發解析 core（`build-browser.mjs` 的 `betterAuthCoreDir`），不管 npm 放在哪一層都拿到同一份。〔第 4 層〕換依賴的 PR 跑 `npm run build:browser` 與瀏覽器版冒煙。
+- **還沒擋住的**：`build:browser` 裡其他 `nm(...)` 寫死根目錄的 alias（`path-browserify`、`events`、`buffer`…）同樣依賴提升位置；往上一層是讓 `build-browser.mjs` 在 alias 指到不存在的檔或和使用者解析到的版本不同時直接失敗，並把 `build:browser` 放進換依賴時必跑的檢查。
 ### 2026-11-18　模組自己的標籤在模組開著時能被刪掉，只有任務標籤受保護（只擋了一個案例、沒擋整類）
 - **發生了什麼**：擁有者回報「我不應該能刪掉收件夾的」。`reservedTags.assertTagDefinitionChange`（所有刪除、合併都經過）只認 `reserved_key` 與任務模組的標籤；擷取模組的 `收件匣`（`tag_schema.module = 'capture'`）與其他模組自己的標籤都能被刪或合併掉。刪掉之後下一次擷取：`createMemberModuleTag` 用 `newIdFor` 在衍生 id 被垃圾桶裡那一列佔用時改用隨機 id，於是**鑄出第二個收件匣**，舊的擷取筆記留在垃圾桶那一列上（node_tags 還在，但收件匣頁看不到）。
 - **證據**：`packages/backend/src/test/moduleTagNotDeletable.integration.test.ts`（修正前：刪除回 200、合併來源回 200、刪掉後再擷取回傳新 id，共 3 項紅；修正後 6 項綠）。
@@ -290,6 +298,7 @@
 - 再次出現：2026-11-16，擁有者在同一天的討論中指出自己也有三次（只看了一部分就下結論）。**這一類一天內出現三次以上，是目前最該往上一層做的。**
 - 再次出現：2026-11-17，note-cf 對擁有者說即時通道「連設計都還沒寫」，並建議他去另一個工作階段開口；其實 note-ee 前一晚 22:09 UTC 已開了設計 PR #1798，擁有者也已同意過方向。說之前沒有 `gh pr list` 找過（發現者：審查，note-ee 的回覆）。擁有者為此多回了一次「同意」。
 - 再次出現：2026-11-17，note-cf 看到公開庫 run 44045598011 的一個紅燈（`participantSessionsConcurrent`：`expected 'written before the end' to be 'locked note'`），就對擁有者說「工作階段結束後，排隊中的寫入還是寫進去了，是真的安全缺陷」，並在 PR #1800 上要求作者找原因。作者指出那個標題是同檔另一個測試寫的（兩個測試共用一則筆記、順序打亂）；改成各用各的筆記後，公開庫 run 44054237049 在真 Postgres 上通過（4 個測試）。沒有讀測試檔就把失敗訊息解讀成產品缺陷（發現者：審查，PR 作者的答覆）。往上一層：把紅燈轉述給擁有者之前，先讀失敗那一行所在的測試與它的 `beforeAll`，並寫出「這個值是誰寫的」；做不到就說「原因還不知道」。
+- 再次出現：2026-11-20，better-auth 1.7 升級的任務說明寫「`account.accountId` 改名 `providerAccountId`、`account.issuer` 變成必填」。那是 1.7.0 RC 到 1.7.2 的內容，1.7.3 已收回（官方升級指南 "The account schema is unchanged from 1.6"）；照字面寫 migration 會把 1.7.26 要讀的欄位改掉，讓所有人登不進去。實際讀了升級指南、CHANGELOG，並在 PGlite 上比對 1.6.18 與 1.7.26 的 `runMigrations()` 產出（完全相同）才發現（發現者：審查，接手的工作階段自己查）。〔第 1 層〕`betterAuth17Upgrade.integration.test.ts` 的「1.7 asks for the same tables and columns 1.6.18 made」：登入表的欄位一變就失敗。往上一層：任務說明裡關於外部套件的主張，動手前以套件本身（`npm pack` 的程式、官方文件原文）核對，並在 PR 寫出核對結果。
 
 ### 2026-11-16　釘住現況的測試走的是一個什麼都不寫的路由（測試的模型錯了）
 - **發生了什麼**：2b-1 的「哪些寫入會動筆記的 `updated_at`」那張表裡，「標籤 schema 的 PATCH 不動 `updated_at`」一項，送的是 `PATCH /api/nodes/:id { tag_schema }`；這個路由不收 `tag_schema`，欄位從來沒有被寫進去，所以那一項什麼都沒有釘住。2b-1 的隨機產生器若用同一個路由寫 schema，也會是空轉。
@@ -505,6 +514,14 @@
 - **類別**：時過時不過的測試。
 - **機制**：〔第 4 層〕改成釘確定的事（統計取過一次就線性，`it` 通過），沒有統計的情形寫在 README，不釘。新的預期失敗在交出前連跑 5 次——尚無機制擋。
 
+### 2026-11-17　對話框打開後焦點在 ×，不在輸入欄（測試的模型錯了）
+- **發生了什麼**：平板上打開「新增任務」，焦點在關閉鈕：直接打字沒有反應，Enter 把對話框關掉；「新增欄位」的名稱框、其他有輸入欄的浮層也有同類問題。輸入欄都寫了 `autoFocus`，測試也都「開啟後焦點在輸入欄」——但真的瀏覽器裡，關閉中的 `<dialog>` 是 `display:none`，`autoFocus` 當下聚焦不到，接著 `showModal()` 把焦點給第一個可聚焦元素（標題列的 ×）。
+- **證據**：Chromium 實測 `input.focus()` 在關閉的 dialog 裡沒有效果、`showModal()` 後 `activeElement` 是第一個按鈕；`test/dialogInitialFocus.test.tsx` 的「新增任務」在修之前失敗；`test/setup.ts` 的 `showModal` 包裝。
+- **發現者**：實機（業主的 Galaxy Tab S9）。
+- **為什麼沒擋到**：測試環境（happy-dom）的 `showModal` 不跑「對話框焦點規則」，關閉中的 dialog 也能聚焦，所以 `autoFocus` 在測試裡永遠成功；沒有任何測試比對真瀏覽器的順序。
+- **類別**：測試的模型錯了。
+- **機制**：〔第 1 層〕初始焦點由 `components/ui/initialFocus.ts` 在 `Modal` 開啟後統一套用（主要文字欄，否則第一個非 × 的控制項），不靠每個對話框各自 `autoFocus`；`test/setup.ts` 讓 `showModal`／`focus()` 的行為像瀏覽器；`test/guards/dialogFocus.guard.test.ts` 擋 `Modal` 以外呼叫 `showModal()`，並確認規則與測試環境的模擬都在。
+- **還沒擋住的**：`Popover`（不是對話框）不套用規則，要靠 `autoFocus`（開啟時已顯示，有效）；沒有守門檢查「新的 Popover 表單有沒有寫 `autoFocus`」。真機的軟鍵盤是否升起，只有 Chromium 的焦點行為被驗證，Samsung Internet 尚待業主實測。
 ### 2026-11-17　「不離開這台」只判斷還在表裡的列，墓碑沒人判斷（#1800 的缺口，第二批發現）
 - **發生了什麼**：#1800 把工作階段的 `actors` 與 `space_members` 列從快照排除（`snapshotTables.json` 的 `where`），並以「快照不含它」回答「修改包不含它」。但列被刪掉後留下的**墓碑標記**（key `<空間>/<工作階段 id>`）不經過那個判斷，快照的墓碑、修改包與摘要都送出去；摘要還讓兩台的數字對不起來。
 - **證據**：第二批的 `sessionsStayOnTheirNode.integration.test.ts` 修之前 3 項紅（`stampsNamingIt: expected 0, got 1`）；`docs/architecture/proposals/sessions-reads-own-2026-11-17.md` 第 2 節。
@@ -822,6 +839,14 @@
   本批清掉 19 個檔案，RSS-06（已被「引用到筆記」取代的引用卡探針，原本 `test.skip`）刪除。
 - **還沒擋住的**：尚無機制掃描 `console.log` 的量測沒有 `expect`；`packages/frontend/e2e/fullstack/` 裡其餘 `zz*` 探針（本批未涵蓋的檔案）若仍有 `out` 物件，沒有任何東西擋它們再出現。
 
+
+### 2026-11-18　「帶到另一台裝置」的 PR 內文與畫面說得比實際少（PR #1756）
+- **發生了什麼**：PR 內文寫「後端介面沒動」，其實 `routes/stampedSnapshot.ts` 被我加了常數與型別（審查者讀 diff 發現，已還原）；對話框只說「你的全部筆記」，沒有講伺服器上擁有者讀得到的共用空間內容（含別人的筆記）與成員名字都會進檔案，也沒有說檔案沒有加密；接收畫面在 worker 被系統收掉時會永遠停在「正在整理」。
+- **證據**：審查者（note-ee、派工者）的留言；`git diff` 顯示被禁止的後端檔有改動。
+- **發現者**：審查。
+- **為什麼沒擋到**：PR 內文的「沒動 X」是憑記憶寫的，沒有用 `git diff --stat origin/main -- <那些檔>` 核對；畫面文字只對照了我自己做的單人瀏覽器版情境；e2e 只測了 worker 活著的路。
+- **類別**：未查證就回報；說明文字只涵蓋最簡單的使用情境。
+- **機制**：尚無機制——PR 內文宣稱「沒改某些檔」沒有檢查；畫面文字是否涵蓋多人伺服器情境沒有檢查。這次補了：元件測試釘住兩種情境的文字；worker 結束的測試。
 
 ### 2026-11-16　PR 留言寫了不存在的 commit 代號；只跑一部分守門就推（未查證就回報／驗證的不是要上線的那一版）
 - **發生了什麼**：#1668 第二輪的回覆留言寫「最後一個 commit `f2` 之後」，`f2` 不是任何 commit，是我沒查就寫的占位；寫完才用 `git rev-parse` 查，把留言改成實際的 head。另外，同一個 PR 的 `blockedFromSite` 新增了手寫 SQL，我只跑了相關測試就推，完整 `scripts/guard-lane.sh` 在 CI 以 `be-raw-sql` 失敗。

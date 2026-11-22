@@ -3,21 +3,19 @@
 // /api/media takes and the renderers draw inline (@onden/markdown mediaTypes).
 // The upload itself is OverviewEditor's uploadMediaFile, so every entry —
 // picker, paste, drop — shares one path, one size/type check and one message.
-import { acceptFor, mediaTypeOf } from "@onden/markdown";
+import { goesIntoNote, INTO_NOTE_ACCEPT } from "./fileIntake";
 
 /** The `accept` of the insert-file picker: concrete MIME types so a phone
  *  offers the photo library as well as the file browser. */
-export const INSERT_MEDIA_ACCEPT = acceptFor("image", "audio", "video");
+export const INSERT_MEDIA_ACCEPT = INTO_NOTE_ACCEPT;
 
-const INSERT_KINDS: readonly string[] = ["image", "audio", "video"];
 const INSERT_MIMES = new Set(INSERT_MEDIA_ACCEPT.split(",").filter((a) => !a.startsWith(".")));
 
 /** Whether the editor takes this file as media: its name ends in an image, audio or video extension on the
  *  table, or (a pasted screenshot may have no useful name) its MIME type is one the picker offers. Any `image/*`
  *  goes to the upload too, so a format the server refuses (.heic) is told so instead of being dropped silently. */
 function isInsertableMedia(file: { name: string; type: string }): boolean {
-  const kind = mediaTypeOf(file.name)?.kind;
-  return (kind !== undefined && INSERT_KINDS.includes(kind)) || INSERT_MIMES.has(file.type) || file.type.startsWith("image/");
+  return goesIntoNote(file) || INSERT_MIMES.has(file.type) || file.type.startsWith("image/");
 }
 
 /** The files a paste inserts as media. A clipboard with text on it is a text paste even when it carries a picture

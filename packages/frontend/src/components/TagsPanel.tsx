@@ -21,9 +21,9 @@ export type { FieldDef } from "../lib/api";
 
 export type Behaviour = Record<string, unknown>;
 
-type FieldType = FieldDef["type"];
+export type FieldType = FieldDef["type"];
 
-const FIELD_TYPES: FieldType[] = ["text", "textarea", "richtext", "number", "rating", "boolean", "date", "select", "media", "relation"];
+export const FIELD_TYPES: FieldType[] = ["text", "textarea", "richtext", "number", "rating", "boolean", "date", "select", "media", "relation"];
 
 // Rollup is a SchemaField extension (not a base wire `type`), but in the editor
 // it reads as just another field "kind" — pick "rollup" and you get the op/attr
@@ -72,6 +72,12 @@ function uniqueKey(base: string, fields: FieldDef[], selfIdx: number, alsoTaken:
   let k = base, n = 2;
   while (taken.has(k)) k = `${base}_${n++}`;
   return k;
+}
+/** A new field from what the person typed: the key is derived from the name, and differs from every
+ *  field already there and every name taken above or below (`takenNames`). */
+export function newFieldFrom(name: string, type: FieldType, fields: FieldDef[], takenNames: readonly string[] = []): FieldDef {
+  const label = name.trim();
+  return { name: uniqueKey(fieldKeyFrom(label), fields, -1, takenNames), label, type };
 }
 // A field's key is still "auto" (safe to (re)derive) until a real one is
 // committed — under EITHER identifier (`name` or the imported `key`).

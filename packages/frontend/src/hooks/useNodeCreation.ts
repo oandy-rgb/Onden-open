@@ -92,6 +92,7 @@ export function useNodeCreation({
       createPlainNote: () => createNodeRaw(untitledTitle(), "markdown", data.nodes.length, parentId, spaceId),
       createNote: (input) => createNote(parentId ? { ...input, parent_id: parentId } : spaceId ? { ...input, space_id: spaceId } : input),
       pickAndUpload,
+      notify: (message) => addToast(message, "info"),
       placeUnderParent: async (id) => {
         if (!parentId) return;
         await refresh();
@@ -176,7 +177,7 @@ export function useNodeCreation({
   // Resolves the id `afterUpload` made, or null.
   function pickAndUpload(
     accept: string,
-    afterUpload: (file: File, url: string) => Promise<string>,
+    afterUpload: (file: File, upload: () => Promise<string>) => Promise<string>,
   ): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
       const input = document.createElement("input");
@@ -190,7 +191,7 @@ export function useNodeCreation({
         const file = input.files?.[0];
         if (!file) { done(null); return; }
         try {
-          done(await afterUpload(file, await uploadMedia(file)));
+          done(await afterUpload(file, () => uploadMedia(file)));
         } catch (error) {
           reportFailure(error);
           done(null);

@@ -7,14 +7,14 @@ import { Button, Modal } from "../components/ui";
 import { addToast } from "../lib/appStore";
 import { reloadPage } from "../lib/api";
 import { t } from "../lib/i18n";
-import { announceDownload, deletePageDatabases, readBrowserAppState, removeSampleNotes } from "../lib/browserAppBridge";
+import { announceDownload, eraseBrowserCopy, readBrowserAppState, removeSampleNotes } from "../lib/browserAppBridge";
 import {
   backupDue, trialBackupFileName, backupFolderName, canBackupToFolder, chooseBackupFolder, makeBackupBlob, noteBackupMade,
   noteFirstSeen, noteSave, readBackupHabit, writeBackupToFolder, type BackupHabit,
 } from "../lib/browserAppBackup";
 import { recordIssue } from "../lib/browserAppDiagnostics";
 import { downloadBlob } from "../lib/download";
-import { forgetNotesMark, markNotesKept } from "../lib/browserAppDataMark";
+import { markNotesKept } from "../lib/browserAppDataMark";
 import { openSettings } from "../lib/settingsRequest";
 import { requestPersistentStorage, storageStatus, type StorageStatus } from "../lib/storagePersist";
 import type { WorkerClient } from "../lib/browserAppWorker";
@@ -24,6 +24,7 @@ import { setLocalOnlyStatus } from "../lib/localOnlyStatus";
 import "./TrialNotice.css";
 
 const TrialHelp = lazyWithReload(() => import("./TrialHelp"));
+const BringEntry = lazyWithReload(() => import("./BringEntry"));
 
 /** "Saved a moment ago" in the person's words; the exact seconds do not matter to them. */
 function savedLine(state: BridgeSaveState | null): string {
@@ -64,6 +65,7 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
   const [samples, setSamples] = useState(0);
   const [busy, setBusy] = useState(false);
   const [help, setHelp] = useState(false);
+  const [bringOpen, setBringOpen] = useState(false);
   const [habit, setHabit] = useState<BackupHabit>(readBackupHabit);
   const [storage, setStorage] = useState<StorageStatus>({ persistent: null, usedBytes: null, quotaBytes: null });
   const [folder, setFolder] = useState<string | null>(null);
@@ -188,11 +190,7 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
     const ok = await confirmDialog(t("Erase all notes in this browser and start again with the sample notes? This cannot be undone."), { confirmLabel: t("Erase and start over"), danger: true });
     if (!ok) return;
     setBusy(true);
-    await client.reset();
-    // The page's own copy of the notes (the offline mirror) goes too, or it would show what was erased. Settings such as
-    // the theme stay.
-    try { await deletePageDatabases(); } catch { /* a browser that will not list its databases: the reload still starts from the packaged notes */ }
-    await forgetNotesMark(); // the person's own choice: the next start is not "the notes went missing"
+    await eraseBrowserCopy(client);
     reloadPage();
   }
 
@@ -203,7 +201,7 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
   const line = statusLine(save);
   const trouble = troubleLine(save, due);
   useEffect(() => {
-    setLocalOnlyStatus({ label: line, trouble, open: () => setOpen(true) });
+    setLocalOnlyStatus({ label: line, trouble, open: () => setOpen(true), bringNotes: () => setBringOpen(true), signsInWithoutPassword: true });
   }, [line, trouble]);
   useEffect(() => () => setLocalOnlyStatus(null), []);
   return (
@@ -253,6 +251,7 @@ export default function TrialNotice({ client, recovered, upgraded, media, notesL
           </div>
         </Modal>
       )}
+      {bringOpen && <Suspense fallback={null}><BringEntry client={client} onClose={() => setBringOpen(false)} /></Suspense>}
       {help && <Suspense fallback={null}><TrialHelp client={client} save={save} media={media} onClose={() => setHelp(false)} /></Suspense>}
     </>
   );

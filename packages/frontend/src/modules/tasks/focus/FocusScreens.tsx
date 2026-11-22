@@ -221,7 +221,7 @@ function StartSheet({ taskId, expandOnStart }: { taskId: string | null; expandOn
       {(typing || minutes > 0) && <CycleRow value={cycle} onChange={setCycle} />}
       {typing && (
         <label className="focus-own">{t("How many minutes?")}
-          <TextField type="number" inputMode="numeric" min={1} max={MAX_FOCUS_MINUTES} autoFocus value={typed}
+          <TextField type="number" inputMode="numeric" min={1} max={MAX_FOCUS_MINUTES} value={typed}
             onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => { if (isEnterKey(e) && ready) { e.preventDefault(); void start(); } }} />
         </label>
       )}

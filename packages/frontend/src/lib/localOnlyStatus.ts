@@ -11,6 +11,10 @@ export type LocalOnlyStatus = {
   /** Something the person should act on (not saved, no storage, a backup due), or null. */
   trouble: string | null;
   open: () => void;
+  /** Open the screen that takes a file from another device into this one (browserApp/BringEntry); only the trial version has it. */
+  bringNotes?: () => void;
+  /** This copy has one local person and no password (the browser version): confirming a file of all the notes is a timed press, not a password. */
+  signsInWithoutPassword?: boolean;
 };
 
 let status: LocalOnlyStatus | null = null;

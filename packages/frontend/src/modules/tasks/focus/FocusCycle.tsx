@@ -112,7 +112,7 @@ export function CycleRow({ value, onChange }: { value: FocusCycleSetting | null;
           </div>
           {typing && (
             <label className="focus-own">{t("How many minutes of break?")}
-              <TextField type="number" inputMode="numeric" min={1} max={MAX_REST_MINUTES} autoFocus value={typed}
+              <TextField type="number" inputMode="numeric" min={1} max={MAX_REST_MINUTES} value={typed}
                 onChange={(e) => { setTyped(e.target.value); const rest = parseFocusCycle({ rest: Number(e.target.value), longEvery: 0 })?.rest; if (rest) set({ rest }); }}
                 onKeyDown={(e) => { if (isEnterKey(e)) e.preventDefault(); }} />
               {typed.trim() !== "" && typedRest === null && <FieldError>{t("Between 1 and {n} minutes.", { n: MAX_REST_MINUTES })}</FieldError>}

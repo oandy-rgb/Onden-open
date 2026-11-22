@@ -51,7 +51,7 @@ Onden 的 AI 只有兩條路，共用同一組工具、權限、寫入與紀錄�
 工具以 `services/agentTools/registry.ts` 的 registry 為準（模組的工具由模組登記）。讀取類：`searchNodes`、`getNode`、`getAttachment`、`queryView`、`listChildren`、`listSpaces`、`listSuggestions`（建議每一處的結果）、`loadSkill`、`listMySessions`／`getSessionLog`（自己過去的工作階段）、`getSlides`（簡報模組）、`semanticSearch`／`suggestLinks`（語意模組）；寫入類：`updateNode`、`createNode`、`applyTag`、`removeTag`、`suggestEdit`、`commentOnNote`、`setSlideLayout`、`proposeTagPack`。
 `read` 等級的 token 含所有讀取工具，包括 `getAttachment`；已發出的 token 帶的是當時展開的清單，不會自動增加，要讀附件須重發或編輯 token 的工具清單。
 
-`getAttachment({ nodeId, ref })` 讓代理看到筆記裡貼的圖（例如手機截圖的錯誤回報）。`getNode` 回傳的 `attachments` 列出正文引用的檔案（`ref`、種類、MIME、大小）。規則：
+`getAttachment({ nodeId, ref })` 讓代理看到筆記裡貼的圖（例如手機截圖的錯誤回報）。`getNode` 回傳的 `attachments` 列出正文引用的檔案（`ref`、種類、MIME、大小）。PDF 筆記另有一句 `pdf_note`：內文有幾個字元的抽出文字，或抽不出文字（掃描檔）；代理沒有取得 PDF 檔本身的方式。規則：
 
 - 代理須能讀該筆記（和 `getNode` 同一套空間／token 範圍；讀不到回 `null`，與不存在無法區分）。
 - 檔案須被**這則筆記的正文**引用（`/api/media/<id>`、`![[<id>]]` 或裸 id），且媒體擁有者規則（`canReadMedia`）也允許；不能憑媒體 id 任意取檔，也不能把別處私有圖的網址貼進可讀筆記來取得。

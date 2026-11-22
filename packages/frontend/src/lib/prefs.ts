@@ -68,6 +68,8 @@ export const PREFS = {
   trialFirstSeenAt: { key: "onden.trial.firstSeenAt", scope: "device" },
   /** The trial version: this browser has kept a saved copy of the notes before (lib/browserAppDataMark, with a twin in IndexedDB). */
   trialHadNotes: { key: "onden.trial.hadNotes", scope: "device" },
+  /** The browser version is waiting for a file from another device ("pending") or was taking one in ("joining"): browserApp/bringNotes.ts. */
+  bringNotes: { key: "onden.trial.bringNotes", scope: "device" },
   /** "off" disables the first-run example notes (set by hand or automation). */
   exampleSeedOptOut: { key: "onden.exampleSeed", scope: "device" },
   locale: { key: "onden.locale", scope: "device" },

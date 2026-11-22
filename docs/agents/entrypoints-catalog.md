@@ -11,7 +11,7 @@
 - 「守門」：`fe-`／`be-` 開頭是白名單規則（現況違規次數記在 `scripts/allowlist-baseline.json`，只准減少）；`guard:名稱` 是 `src/test/guards/名稱.guard.test.ts`。
 - 「為什麼」只在有人寫了才顯示：為什麼只能有一個、什麼時候用。
 
-## 介面零件（62）
+## 介面零件（63）
 
 ### 要讓使用者從一串選項裡選一個換成它，並在原位看到結果再決定存不存（換版型、換區塊樣式）
 
@@ -30,7 +30,7 @@
 
 ### 要放關閉（×）按鈕
 
-- 入口：`frontend/src/components/ui/index.ts`（`CloseButton`）　項目 `ui-close-button`
+- 入口：`frontend/src/components/ui/index.ts`（`CloseButton`、`DISMISS_PROPS`）　項目 `ui-close-button`
 - 寫法：`import { CloseButton } from "./components/ui";`
 - 取代：各處手寫的關閉按鈕
 - 守門：`guard:dup-b2-ui`、`guard:sheetHeader`
@@ -504,7 +504,15 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（115）
+### 做之前要再確認是本人（再輸入一次密碼；瀏覽器版按一下確認），並拿到給後端的一次性憑證
+
+- 入口：`frontend/src/components/ReconfirmDialog.tsx`（`ReconfirmDialog`）　項目 `reconfirm-dialog`
+- 寫法：`import { ReconfirmDialog } from "./components/ReconfirmDialog";
+export const dialog = ReconfirmDialog;`
+- 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
+- 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
+
+## 共用邏輯（118）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -610,6 +618,15 @@ import { isBrowserOnline } from "./lib/browserNetwork";`
 - 取代：手寫的 toString(16) 迴圈、crypto.subtle.digest
 - 守門：`fe-platform-global:crypto`、`guard:shared-helpers`
 - 為什麼：位元組轉 hex 或算 SHA-256 用它；手寫的轉換常出錯（補零、大小寫），導致前後端雜湊對不上。
+
+### 要用一個檔案做出筆記，或把檔案放進筆記（拖放、「＋ → 上傳檔案」、/ 選單、手機的檔案選擇）
+
+- 入口：`frontend/src/lib/fileIntake.ts`（`makeNoteFromFile`、`NEW_NOTE_ACCEPT`、`INTO_NOTE_ACCEPT`）；`frontend/src/lib/pdf/pdfNote.ts`（`createPdfNote`）　項目 `file-intake`
+- 寫法：`import { makeNoteFromFile } from "./lib/fileIntake";
+export const makeNote = (file: File, upload: () => Promise<string>, notify: (message: string) => void) =>
+  makeNoteFromFile(file, { upload, notify, create: async (input) => input.title });`
+- 取代：在各入口自己列「哪種檔案做成什麼」、自己寫 accept、自己寫 pdf_url 屬性建立筆記（漏了抽字，搜尋與 AI 就讀不到）
+- 為什麼：「這種檔案 → 做出什麼」只在 fileIntake 一份；拖放、建立選單、/ 選單、手機檔案選擇都讀它，選擇器的 accept 也由它算出，同一個意圖不論從哪個入口進來結果都相同。PDF 的筆記帶抽出的文字（現在放內文，只在 pdfNote 的一行）。守門：fileIntake.guard.test.ts。
 
 ### 要記住一個本機偏好設定（帳號分區）
 
@@ -1434,6 +1451,22 @@ import { navigate } from "./lib/historyIntent";
 navigate(() => setModuleAddress("tag.<id>"), { history: "push" });`
 - 取代：在模組畫面用 useState 記頁裡的位置（重新載入就掉）、自己 pushState、為這個位置另加一個網址參數
 - 為什麼：網址的 `m=` 由 useUrlLocation 寫入與還原，意義由該頁（lazy chunk）自己定義，開機程式不認識任何模組的頁。換位置要不要新增一筆歷史，由呼叫處用 navigate 說明（進入某一組＝push，Back 回上一頁）。
+
+### 要把整個工作區存成一個檔案帶到另一台全新裝置，或在瀏覽器版接收這個檔案
+
+- 入口：`frontend/src/lib/deviceFile.ts`（`makeDeviceFile`、`deviceFileRefusal`、`holdsSummary`、`isNotEmpty`）；`markdown/src/sharedContract.ts`（`DEVICE_FILE_PATH`、`DEVICE_FILE_EMPTY_PARAM`）　項目 `device-file`
+- 寫法：`import { makeDeviceFile } from "./lib/deviceFile";
+export const save = (ticket: string) => makeDeviceFile(ticket, () => {});`
+- 取代：另寫一個匯出整個工作區的下載流程，或自己拼 /api/snapshot 的請求與錯誤文字
+- 為什麼：檔案由後端 routes/stampedSnapshot.ts 串流做出；這裡一頁一頁寫成檔（有檔案選擇器時直接寫到磁碟，否則交給瀏覽器下載），最後一行不是結尾就不交出。拒絕只顯示 serverErrors 的白話，不顯示後端的英文 detail。接收端是瀏覽器版的 browserApp/BringNotes.tsx。 拿檔案要帶「剛剛確認過是本人」的憑證（ReconfirmDialog 換來的），這台收不收與會清掉什麼只問後端的 readiness。
+
+### 長時間執行時（做檔案、帶入筆記）要讓手機螢幕保持亮著
+
+- 入口：`frontend/src/lib/webLock.ts`（`keepScreenAwake`）　項目 `keep-screen-awake`
+- 寫法：`import { keepScreenAwake } from "./lib/webLock";
+export const release = keepScreenAwake();`
+- 取代：直接用 navigator.wakeLock
+- 為什麼：沒有 Wake Lock 的瀏覽器照常往下做；頁面被藏起來時瀏覽器會放掉，回來時用 appResume 再要一次。
 
 ### 要知道一則筆記有哪些頁（空白頁、PDF 檔的幾頁）、頁的鍵、加一頁、合併兩台裝置的加頁
 

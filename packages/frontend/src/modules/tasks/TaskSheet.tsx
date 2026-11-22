@@ -129,7 +129,7 @@ export default function TaskSheet({ task, today, notes, actions, onClose }: Prop
   };
 
   return (
-    <Sheet label={t("Edit {title}", { title: task.title })} className="tk-sheet-layer" onClose={onClose} cardClassName="tk-sheet">
+    <Sheet label={t("Edit {title}", { title: task.title })} className="tk-sheet-layer" onClose={onClose} cardClassName="tk-sheet" initialFocus="dialog">
       <div className="tk-sheet-top">
         <Pressable type="button" className="tk-box" aria-label={t("Complete")} onClick={() => { actions.complete(task); onClose(); }}>
           <span className="tk-box-mark" aria-hidden />

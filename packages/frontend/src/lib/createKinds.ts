@@ -8,7 +8,7 @@
 // and is listed only while that module is imported. A `named` kind (a tag) needs
 // its name before it exists, goes under a tag, and is the owner's; only the
 // create sheet (components/CreateSheet) lists it.
-import { acceptFor, mediaTypeOf } from "@onden/markdown";
+import { makeNoteFromFile, NEW_NOTE_ACCEPT } from "./fileIntake";
 import { Bookmark, FileText, LayoutDashboard, Hash, ListChecks, Pencil, Upload, type LucideIcon } from "lucide-react";
 import type { ContentNode } from "./api";
 import type { CreateNote } from "./data";
@@ -26,7 +26,9 @@ export type CreateEnv = {
   createPlainNote: () => Promise<ContentNode | null>;
   createNote: (input: CreateNote) => Promise<string>;
   /** Null when the person cancels the picker: nothing is uploaded or created. */
-  pickAndUpload: (accept: string, afterUpload: (file: File, url: string) => Promise<string>) => Promise<string | null>;
+  pickAndUpload: (accept: string, afterUpload: (file: File, upload: () => Promise<string>) => Promise<string>) => Promise<string | null>;
+  /** A plain message to the person (a toast). */
+  notify: (message: string) => void;
   /** For a note the server made on its own: file it under `parentId`. */
   placeUnderParent: (id: string) => Promise<void>;
   /** Bookmark URL prompt; null when cancelled. */
@@ -92,13 +94,9 @@ export const BUILTIN_CREATE_KINDS: readonly CreateKind[] = [
     // body is the media address (the renderers draw it inline, as a player for
     // audio/video), to annotate below.
     id: "upload", label: "Upload a file", Icon: Upload, needsServer: true, placeable: true,
-    run: (env) => env.pickAndUpload(acceptFor("pdf", "image", "audio", "video"), (file, url) => {
-      if (mediaTypeOf(file.name)?.kind === "pdf") {
-        return env.createNote({ title: file.name.replace(/\.pdf$/i, ""), markdown: "", attributes: [{ key: "pdf_url", value: url }] });
-      }
-      const title = file.name.replace(/\.[^.]+$/, "");
-      return env.createNote({ title, markdown: mediaTypeOf(file.name)?.kind === "document" ? `[${title}](${url})\n` : `![${title}](${url})\n` });
-    }),
+    run: (env) => env.pickAndUpload(NEW_NOTE_ACCEPT, (file, upload) =>
+      // lib/fileIntake: what each kind of file becomes is defined there, for every entry.
+      makeNoteFromFile(file, { upload, create: env.createNote, notify: env.notify })),
   },
   {
     // The server fetches the page for its title / description / image.

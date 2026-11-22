@@ -6,6 +6,8 @@ export type { AutosaveStatus } from "./autosave";
 export { backgroundWrite, runBackgroundWrite } from "./backgroundWrite";
 export { backupRestore } from "./backupRestore";
 export { backupLimits, sizeLabel } from "./backupLimits";
+export { freshProof } from "./freshProof";
+export type { FreshProofPurpose } from "./freshProof";
 export type { UploadedBackup } from "./backupRestore";
 export { importCanvasFile } from "./canvasImport";
 export { loadOnlineWriters } from "./onlineWriters";

@@ -1,3 +1,5 @@
+import { onAppResume } from "./appResume";
+
 /** Run `operation` while holding the named cross-tab lock (Web Locks), so two tabs never run it at once.
  *  Where the browser has no Web Locks the operation just runs: one tab at a time is then the best we can do. */
 export async function withTabLock<T>(name: string, operation: () => Promise<T>): Promise<T> {
@@ -17,6 +19,25 @@ export function holdTabLock(name: string): Promise<boolean> {
       return lock ? new Promise<void>(() => {}) : undefined;
     });
   });
+}
+
+/** Ask the browser to keep the screen on while something long runs (a file being made or taken in); a phone that sleeps pauses the page.
+ *  Best effort: a browser without the API, or one that refuses (low battery), just goes on without it. Returns the release.
+ *  The browser drops the hold when the page is hidden, so it is asked for again when the page comes back. */
+export function keepScreenAwake(): () => void {
+  const wakeLock = typeof navigator !== "undefined" ? (navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<{ release(): Promise<void> }> } }).wakeLock : undefined;
+  if (!wakeLock) return () => {};
+  let held: { release(): Promise<void> } | null = null;
+  let stopped = false;
+  const take = () => { void wakeLock.request("screen").then((lock) => { if (stopped) void lock.release().catch(() => {}); else held = lock; }, () => {}); };
+  take();
+  const stopWatching = onAppResume(() => { if (!held) take(); }, ["visible"]);
+  return () => {
+    stopped = true;
+    stopWatching();
+    void held?.release().catch(() => {});
+    held = null;
+  };
 }
 
 /** Take the named lock and keep it until the returned release is called (or the page dies, which releases every lock

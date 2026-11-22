@@ -542,6 +542,27 @@ export const SETTINGS: SettingDef[] = [
     component: FullBackupRestore,
   },
   {
+    // Only the owner: the file holds every note. The browser version also lists the other half (BringSetting) while it is still empty.
+    id: "data.device_file",
+    tab: "data",
+    section: "Backup and export",
+    label: "",
+    keywords: ["another device", "new device", "另一台裝置", "新裝置"],
+    ownerOnly: true,
+    type: "custom",
+    component: lazyWithReload(() => import("./DeviceFileSetting").then((m) => ({ default: m.DeviceFileSetting }))),
+  },
+  {
+    id: "data.bring_notes",
+    tab: "data",
+    section: "Backup and export",
+    label: "",
+    keywords: ["bring notes", "another device", "從另一台裝置帶過來"],
+    ownerOnly: true,
+    type: "custom",
+    component: lazyWithReload(() => import("./BringSetting").then((m) => ({ default: m.BringSetting }))),
+  },
+  {
     id: "data.export",
     tab: "data",
     section: "Backup and export",

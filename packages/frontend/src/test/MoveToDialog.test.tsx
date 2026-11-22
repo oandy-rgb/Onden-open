@@ -48,6 +48,27 @@ const headings = (dialog: HTMLElement) => [...dialog.querySelectorAll(".place-pi
 beforeEach(() => { setLocalePref("en"); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); resetSpacesForTest(); });
 
+describe("where focus starts", () => {
+  const touchScreen = (coarse: boolean) => vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    matches: coarse && query.includes("pointer: coarse"), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false,
+  }) as unknown as MediaQueryList);
+
+  it("on a touch screen the search box is not focused (the keyboard would cover the list)", async () => {
+    touchScreen(true);
+    const { dialog } = await setup([PERSONAL, SHARED]);
+    const box = dialog.querySelector("input[type='search']")!;
+    expect(box).not.toBeNull();
+    expect(box).not.toHaveFocus();
+    expect(dialog).toHaveFocus();
+  });
+
+  it("with a mouse it is", async () => {
+    touchScreen(false);
+    const { dialog } = await setup([PERSONAL, SHARED]);
+    expect(dialog.querySelector("input[type='search']")).toHaveFocus();
+  });
+});
+
 describe("the picker's list", () => {
   it("groups by space, 最上層 first in each, and leaves out what cannot hold the note", async () => {
     const { dialog } = await setup([PERSONAL, SHARED, READ_ONLY]);

@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes } from "react";
 import { X } from "lucide-react";
 import { useT } from "../../lib/i18n";
 import { Button, type ButtonSize } from "./Button";
+import { DISMISS_PROPS } from "./initialFocus";
 
 type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   /** Names what it closes when "Close" is not enough ("Leave the slides"). */
@@ -14,7 +15,7 @@ type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
 export function CloseButton({ label, size = "md", ...rest }: Props) {
   const t = useT();
   return (
-    <Button variant="icon" size={size} aria-label={label ?? t("Close")} {...rest}>
+    <Button variant="icon" size={size} aria-label={label ?? t("Close")} {...DISMISS_PROPS} {...rest}>
       <X size={size === "sm" ? 16 : 18} aria-hidden="true" />
     </Button>
   );

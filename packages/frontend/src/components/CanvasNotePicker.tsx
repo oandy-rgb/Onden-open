@@ -21,7 +21,6 @@ export default function CanvasNotePicker({ canvasId, onAdd, onAdded, onClose }: 
   const canvas = useAppSelector((s) => s.activeCanvas);
   const [query, setQuery] = useState("");
   const [working, setWorking] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -49,10 +48,10 @@ export default function CanvasNotePicker({ canvasId, onAdd, onAdded, onClose }: 
     }
   }
 
-  return <Modal label={t("Add existing note")} className="canvas-add-overlay" busy={working} onClose={onClose} initialFocus={searchRef}>
+  return <Modal label={t("Add existing note")} className="canvas-add-overlay" busy={working} onClose={onClose}>
     <div className="canvas-add-popover">
     <SheetHeader title={t("Add existing note")} onClose={onClose} />
-    <SearchField ref={searchRef} value={query} onValueChange={setQuery} label={t("Search notes to add…")} />
+    <SearchField value={query} onValueChange={setQuery} label={t("Search notes to add…")} />
     {working && <div className="canvas-add-status" role="status">{t("Adding…")}</div>}
     <div className="canvas-add-results" aria-busy={working}>
       {matches.length === 0 && !working && <EmptyState size="inline" as="div" title={t("No notes match")} />}

@@ -3,7 +3,7 @@
 // confirm), rejected saves, 503/offline, and drafts vs. refreshes (slow initial
 // load, another tab editing the same schema). 1280 + 390px.
 import { test, expect, type Page } from "@playwright/test";
-import { ready, openFieldEditor, tagFieldLine, BASE, H } from "./helpers";
+import { ready, openFieldEditor, addTagField, tagFieldLine, BASE, H } from "./helpers";
 
 
 // 2026-11-18 (owner: 「都改成檢查」): every value this probe used to record is now a check. Each `expect` names the written
@@ -134,12 +134,11 @@ test("TAG-03: field edits with existing values, rejected saves, drafts vs refres
   await expect.poll(async () => (await schema()).map((f) => f.name)).toEqual(["f_num", "f_sel"]);
   expect((await attrs(N)).f_txt, "the values stay as plain properties").toBe("hello|text");
   // Add a field back with the same key: the stored values count again.
-  const added = await openFieldEditor(page);
-  await nameInput().fill("f_txt");
-  await nameInput().blur();
+  await addTagField(page, "f_txt");
   await expect.poll(async () => (await schema()).map((f) => f.name)).toEqual(["f_num", "f_sel", "f_txt"]);
   // pinned: today's behaviour, no written rule (a field added by name gets that name as its label)
   expect((await schema()).find((f) => f.name === "f_txt")?.label).toBe("f_txt");
+  const added = await openFieldEditor(page, "f_txt");
   await expect(added.locator(".schema-field-usage")).toHaveText("1 in use");
   await closePopover();
 

@@ -36,7 +36,7 @@ type Props = {
   /** Where the card sits above the phone breakpoint. */
   desktop?: "center" | "bottom";
   onClose: () => void;
-  initialFocus?: RefObject<HTMLElement | null>;
+  initialFocus?: RefObject<HTMLElement | null> | "dialog";
   children: ReactNode;
 };
 

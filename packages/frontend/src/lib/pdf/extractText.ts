@@ -18,6 +18,7 @@ export interface PdfTextItemLike {
   str?: string;
   /** pdfjs sets this when the item ends a line (so the next item is a new line). */
   hasEOL?: boolean;
+  [other: string]: unknown;
 }
 
 /** Collapse one page's getTextContent items into a text string: join runs on a
@@ -69,6 +70,18 @@ interface PdfDocumentLike {
 
 type GetDocument = (args: { data: ArrayBuffer }) => { promise: Promise<PdfDocumentLike> };
 
+async function textOfPages(doc: PdfDocumentLike): Promise<string> {
+  const pages: string[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const content = await page.getTextContent();
+    pages.push(pageItemsToText(content.items));
+    // Only the first PDF_TEXT_CHAR_LIMIT characters are kept: stop reading pages once there is enough.
+    if (pages.reduce((total, text) => total + text.length, 0) >= PDF_TEXT_CHAR_LIMIT) break;
+  }
+  return clampForEmbedding(joinPages(pages));
+}
+
 /** Walk every page, concatenate text. Exposed (with an injectable getDocument)
  *  for tests; production callers use extractPdfText below. */
 export async function extractTextFromDocument(
@@ -77,28 +90,27 @@ export async function extractTextFromDocument(
 ): Promise<string> {
   const doc = await getDocument({ data: buffer }).promise;
   try {
-    const pages: string[] = [];
-    for (let n = 1; n <= doc.numPages; n++) {
-      const page = await doc.getPage(n);
-      const content = await page.getTextContent();
-      pages.push(pageItemsToText(content.items));
-    }
-    return clampForEmbedding(joinPages(pages));
+    return await textOfPages(doc);
   } finally {
     await doc.destroy?.().catch(() => undefined);
   }
 }
 
-/** Extract the full text of an uploaded PDF File. Returns "" on any pdfjs
- *  failure (encrypted, corrupt, image-only) so the upload still succeeds —
- *  the paper just won't be searchable, same as before this fix. */
-export async function extractPdfText(file: File | Blob): Promise<string> {
+/** What extraction found. "none": the PDF opened and has no text layer (a scan, or only pictures).
+ *  "failed": the file could not be read at all (encrypted, damaged, the pdf.js worker did not start). */
+export type PdfTextResult = { status: "text" | "none" | "failed"; text: string };
+
+const resultOf = (text: string): PdfTextResult => ({ status: text ? "text" : "none", text });
+
+/** Extract the full text of a PDF File. Never throws, so an upload still succeeds; the status
+ *  tells a scan ("none") from a file that could not be read ("failed"). */
+export async function extractPdfText(file: File | Blob): Promise<PdfTextResult> {
   try {
     const buffer = await file.arrayBuffer();
     const core = await loadPdfCore();
     const getDocument = core.getDocument as unknown as GetDocument;
-    return await extractTextFromDocument(buffer, getDocument);
+    return resultOf(await extractTextFromDocument(buffer, getDocument));
   } catch {
-    return "";
+    return { status: "failed", text: "" };
   }
 }

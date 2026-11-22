@@ -8,6 +8,8 @@
 // those reads take it as a type parameter. Shapes shared across the app come
 // from lib/api or lib/data.
 
+import { DEVICE_FILE_PATH } from "@onden/markdown/contract";
+import type { SnapshotReadiness } from "../deviceFile";
 import {
   api, apiFetch, nodeNeedsBody, postRead, postReadResponse,
   type Bootstrap, type ContentNode, type InboxEvent, type InboxFacets, type InboxGroup,
@@ -168,6 +170,10 @@ const workspace = {
   edgeManifest: <T>() => apiFetch("/api/edges/manifest")
     .then((r) => r.ok ? r.json() as Promise<T[]> : [])
     .then((m) => Array.isArray(m) ? m : []),
+  /** The file for another device (lib/deviceFile.ts): the raw response, whose body is read a piece at a time and never gathered. */
+  deviceFile: (freshProofTicket: string, signal?: AbortSignal) => apiFetch(DEVICE_FILE_PATH, { signal, headers: { "X-Onden-Fresh-Proof": freshProofTicket } }),
+  /** Whether this device would take a file from another one now, and what that would erase (counts by kind; backend GET /api/snapshot/readiness). */
+  snapshotReadiness: () => api<SnapshotReadiness>(`${DEVICE_FILE_PATH}/readiness`),
   /** A structured query block's rows; the raw response, so the caller can
    *  show the server's error text. */
   query: (spec: unknown) => postReadResponse("/api/query", spec),

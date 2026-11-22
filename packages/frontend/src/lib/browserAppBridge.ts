@@ -14,6 +14,7 @@ import { documentBaseUrl } from "../lib/documentAccess";
 import { addToast } from "../lib/appStore";
 import { downloadBlob } from "../lib/download";
 import { t } from "../lib/i18n";
+import { forgetNotesMark } from "./browserAppDataMark";
 import type { WorkerClient } from "./browserAppWorker";
 
 const BRIDGED_PATH = /^\/(api\/|health$)/;
@@ -140,4 +141,13 @@ export async function removeSampleNotes(): Promise<boolean> {
 /** Delete the page's own databases (the offline mirror of the notes), so that nothing of the erased notes is shown again. */
 export async function deletePageDatabases(): Promise<void> {
   for (const db of (await indexedDB.databases?.()) ?? []) if (db.name) indexedDB.deleteDatabase(db.name);
+}
+
+/** Erase this browser's copy of the notes: the saved copy, its log and files (the worker), and the page's own offline mirror, so
+ *  nothing of the erased notes is shown again. Settings such as the theme stay. The one place "start over" and "make room for a
+ *  file from another device" do it; the page is reloaded by the caller. */
+export async function eraseBrowserCopy(client: WorkerClient): Promise<void> {
+  await client.reset();
+  try { await deletePageDatabases(); } catch { /* a browser that will not list its databases: the reload still starts from the packaged notes */ }
+  await forgetNotesMark(); // the person's own choice: the next start is not "the notes went missing"
 }

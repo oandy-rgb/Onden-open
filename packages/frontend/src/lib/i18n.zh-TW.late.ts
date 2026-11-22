@@ -4,6 +4,15 @@
 // 開機 JS 用到的字串不可放這裡：建置時 scripts/bootReportPlugin.mjs 會檢查並指出是哪一條。
 
 export const ZH_TW_LATE: Record<string, string> = {
+  "These cards are already connected.": "這兩張卡片已經相連。",
+  "Image": "圖片",
+  "Go back to the board's own centre to change it.": "先回到白板原本的中心，才能修改。",
+  "{n} connections to groups were not imported.": "有 {n} 條連到分組的連線沒有匯入。",
+  "This section is no longer on the canvas.": "這個分組已不在白板上。",
+  "New group": "新分組",
+  "This card follows a sub-note. To take it off, turn off “Follow sub-notes” in Display.": "這張卡是跟著子筆記排出來的。要拿掉它，請到「顯示」關閉「跟著子筆記」。",
+  "Opening a nested board needs a connection.": "開啟巢狀白板需要連線。",
+  "These cards are already linked: the note's [[link]] draws this arrow.": "這兩張卡片已經相連：筆記裡的 [[連結]] 已畫出這條箭頭。",
   "The file is not encrypted: anyone who has it can read everything in it. Keep it like a backup, and delete it when you are done.": "檔案沒有加密：拿到它的人可以讀到裡面的全部內容。請像備份一樣保管，用完就刪掉。",
   "On a server with other people it also holds what you can read in shared spaces, including notes other people put there, and the members' names.": "在有其他人的伺服器上，檔案也包含你在共用空間讀得到的內容（含別人放在那裡的筆記）與成員的名字。",
   "Notes are already being brought to this device.": "這台裝置正在帶入筆記。",
@@ -2260,7 +2269,6 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Target recall (%)": "目標記憶率（%）",
   "Use 0–500 new cards, 70–97% recall and 1–36500 days.": "新卡 0–500 張、記憶率 70–97%、間隔 1–36500 天。",
   "Module tag": "標籤",
-  "Could not load this tag's settings. Reopen this tag to retry.": "無法載入這個標籤的設定，請重新開啟這個標籤再試一次。",
   "Abilities": "能力",
   "from #{name}": "來自 #{name}",
   "Includes notes of its child tags: {names}": "也包含子標籤的筆記：{names}",

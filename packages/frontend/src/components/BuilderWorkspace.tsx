@@ -1,5 +1,5 @@
 import { confirmDialog } from "./ConfirmDialog";
-import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useRef, useState, type ComponentProps, type CSSProperties } from "react";
 import { nodeOf } from "../lib/nodeIndex";
 import { openNoteColorDialog } from "./NoteColorDialog";
 import { lazyWithReload } from "../lib/lazyWithReload";
@@ -19,7 +19,8 @@ import { classNames } from "../lib/utils";
 import { FocusTopMark, isModuleScreen, openQuickCapture } from "../modules";
 import { pageLayout } from "../hooks/shellNavigation";
 import { usePaneWidthVars } from "../lib/paneWidths";
-import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
+import { useGraphViewState } from "../hooks/useGraphViewState";
+import { boardController, useBoardControllerReady } from "../hooks/boardController";
 import { useCreateDialog } from "../hooks/useCreateDialog";
 import { useCreateTag } from "../hooks/useCreateTag";
 import { useDayNoteWrites } from "../hooks/useDayNoteWrites";
@@ -67,10 +68,18 @@ import { isNote } from "@onden/markdown/contract";
 
 const BoardCardAudienceConfirm = lazyWithReload(() => import("./BoardCardAudienceConfirm"));
 const KnowledgeWorkspace = lazyWithReload(() => import("./KnowledgeWorkspace"));
+// The board's hooks (hooks/boardController): loaded right after the first paint, not in the boot JS.
+const BoardController = lazyWithReload(() => import("./BoardController"));
 const WorkspaceContextMenu = lazyWithReload(() => loadWorkspaceContextMenu());
 
 // The signed-in workspace. BuilderApp (the sign-in gate) loads this module
 // lazily, so the login page does not download any of it.
+/** The board screen: waits (the surrounding Suspense shows its fallback) until the board's hooks have published. */
+function BoardScreen(props: Omit<ComponentProps<typeof KnowledgeWorkspace>, "board" | "actions">) {
+  const { board, actions } = useBoardControllerReady();
+  return <KnowledgeWorkspace board={board} actions={actions} {...props} />;
+}
+
 export default function BuilderWorkspace({ sharedDraft = null, openCapture = false }: { sharedDraft?: RawShare | null; openCapture?: boolean }) {
   // Surface S2a: seed the top-level location ({view, nodeId}) from the URL once,
   // so a reload / deep link / shared URL lands in the right place. client:only,
@@ -212,7 +221,14 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
     && split.right?.kind === "note" && split.right.tab === "content" && split.right.id === selectedId;
   const panes = useWorkspacePanes(mode, { boardTab: mode === "notes" && (notesView === "canvas" || (notesView === "editor" && !!focus.openBoardId)), sideBySide });
   const cardAudienceOpen = useCardAudienceReview() !== null;
-  const board = useBoardWorkspace({ ui: uiMode, focus, menus, createNodeRaw: _createNode, assignToGroup: nodeActions.assignToGroup, refresh });
+  const graphView = useGraphViewState();
+  // What the commands ask of the board: a call made before the board's code has loaded waits for it.
+  const board = {
+    canvasSearch: graphView.canvasSearch,
+    setCanvasSearch: graphView.setCanvasSearch,
+    tidyActiveCanvas: async () => (await boardController.whenReady()).tidyActiveCanvas(),
+    autoArrangeCanvasAsTree: async () => (await boardController.whenReady()).autoArrangeCanvasAsTree(),
+  };
 
   // A1: node-creation / quick-create / upload / pointer handlers live in
   // useNodeCreation, with a placement callback bound to the originating board.
@@ -225,7 +241,7 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
     activeCanvas,
     // Creation may finish after navigating elsewhere. Capture its starting
     // board here; the writer will append to that board's latest local layout.
-    addToActiveCanvas: (nodeId) => activeCanvas ? board.placeBoardNode(activeCanvas.id, nodeId) : Promise.resolve(),
+    addToActiveCanvas: (nodeId) => activeCanvas ? boardController.whenReady().then((ready) => ready.placeBoardNode(activeCanvas.id, nodeId)) : Promise.resolve(),
     setSelectedId,
     setMode,
     openNote,
@@ -313,9 +329,7 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
   );
 
   const boardEl = (
-    <KnowledgeWorkspace
-      board={board.board}
-      actions={board.actions}
+    <BoardScreen
       mobileView={mobileView}
       onScreen={mobileView === "graph" && displayedMobileTab === "edit"}
       onClickWikilink={(label, fromId) => void overview.openWikilink(label, null, fromId)}
@@ -492,6 +506,9 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
       )}
       </div>
 
+      <Suspense fallback={null}>
+        <BoardController ui={uiMode} focus={focus} menus={menus} createNodeRaw={_createNode} assignToGroup={nodeActions.assignToGroup} refresh={refresh} graphView={graphView} />
+      </Suspense>
       {cardAudienceOpen && <Suspense fallback={null}><BoardCardAudienceConfirm /></Suspense>}
 
       {ctxMenu && (
@@ -502,7 +519,6 @@ export default function BuilderWorkspace({ sharedDraft = null, openCapture = fal
             openNote={openNote}
             rename={menus}
             creation={creation}
-            board={board}
           />
         </Suspense>
       )}

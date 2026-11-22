@@ -3,7 +3,6 @@ import { canvasWriter, drafts } from "../lib/data";
 import { useCapabilities } from "../lib/capabilities";
 import type { useAppData } from "../lib/useAppData";
 import type { UseCommandPaletteOptions } from "./useCommandPalette";
-import type { useBoardWorkspace } from "./useBoardWorkspace";
 import { usePaletteState } from "./usePaletteState";
 import type { useCreateDialog } from "./useCreateDialog";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
@@ -21,7 +20,13 @@ type Options = {
   focus: Pick<ReturnType<typeof useWorkspaceFocus>, "selectedNode" | "openNote" | "openBoardId" | "goBack" | "canGoBack" | "goForward" | "canGoForward">;
   createDialog: Pick<ReturnType<typeof useCreateDialog>, "createOpen" | "setCreateOpen">;
   creation: Pick<ReturnType<typeof useNodeCreation>, "create" | "openDailyNote" | "exportMarkdown">;
-  board: Pick<ReturnType<typeof useBoardWorkspace>, "tidyActiveCanvas" | "autoArrangeCanvasAsTree" | "canvasSearch" | "setCanvasSearch">;
+  /** The board's commands wait for its code to load (hooks/boardController); the search box is the shell's. */
+  board: {
+    tidyActiveCanvas: () => Promise<void>;
+    autoArrangeCanvasAsTree: () => Promise<void>;
+    canvasSearch: string;
+    setCanvasSearch: React.Dispatch<React.SetStateAction<string>>;
+  };
   modules: Pick<ReturnType<typeof useWorkspaceModules>, "openModule" | "runNoteCommand" | "openDialogEntry">;
   panes: Pick<ReturnType<typeof useWorkspacePanes>, "setFocusMode" | "toggleSidebar" | "toggleInspector" | "toggleFocus">;
   createNodeRaw: ReturnType<typeof useAppData>["createNode"];

@@ -17,7 +17,7 @@ import { useBoardTree } from "./useBoardTree";
 import { useCanvasActions } from "./useCanvasActions";
 import type { SaveCardBody } from "./useCardDraft";
 import { useGraphLayout } from "./useGraphLayout";
-import { useGraphViewState } from "./useGraphViewState";
+import type { useGraphViewState } from "./useGraphViewState";
 import { useLinkSuggestionsShown } from "./useModuleFilter";
 import type { useNodeSelection } from "./useNodeSelection";
 import { useStableCallback, useStableHandlers } from "./useStableCallback";
@@ -37,7 +37,12 @@ type Options = {
   createNodeRaw: ReturnType<typeof useAppData>["createNode"];
   assignToGroup: typeof nodeActions.assignToGroup;
   refresh: () => Promise<void>;
+  /** The board's view switches; they live in the shell because the keyboard shortcuts read the search box. */
+  graphView: ReturnType<typeof useGraphViewState>;
 };
+
+/** What the shell's commands, shortcuts and context menu ask of the board (lib/boardController). */
+export type BoardWorkspace = ReturnType<typeof useBoardWorkspace>;
 
 /**
  * Everything the board (canvas / graph) view does: its view state, layout,
@@ -47,7 +52,7 @@ type Options = {
  * note on it tags the note, taking a card off untags it. Ordinary canvases
  * keep their own card lists.
  */
-export function useBoardWorkspace({ ui, focus, menus, createNodeRaw, assignToGroup, refresh }: Options) {
+export function useBoardWorkspace({ ui, focus, menus, createNodeRaw, assignToGroup, refresh, graphView }: Options) {
   const { mode, notesView, setNotesView } = ui;
   const { selectedNode, openBoardId, selectInWorkspace, settleCardRemoval, openNote } = focus;
   const { canvasNavStack, setCanvasNavStack, setCtxMenu } = menus;
@@ -57,7 +62,6 @@ export function useBoardWorkspace({ ui, focus, menus, createNodeRaw, assignToGro
   const canvases = useAppSelector(selectCanvases);
   const activeCanvas = useAppSelector((s) => s.activeCanvas);
   const selectedId = useSelectedId();
-  const graphView = useGraphViewState();
   // Related-note suggestions show only with semantic search imported.
   const linkSuggestions = useLinkSuggestionsShown();
 
@@ -453,9 +457,6 @@ export function useBoardWorkspace({ ui, focus, menus, createNodeRaw, assignToGro
   return {
     board,
     actions: boardActions,
-    /** The board's search box, for the global find shortcut. */
-    canvasSearch: graphView.canvasSearch,
-    setCanvasSearch: graphView.setCanvasSearch,
     /** Place a note on a board (tagging it, on a tag's board). */
     placeBoardNode,
     /** 以此為中心: the board's tree from this card down; absent where the board has no tree. */

@@ -1683,7 +1683,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（58）
+## 後端（61）
 
 ### 要寫日誌
 
@@ -1772,6 +1772,27 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 取代：沿用等待前的 role／scope 快照
 - 守門：`guard:systemActor`
 - 為什麼：在鎖裡面要用目前的操作者時用它；用鎖之前拿到的權限快照，可能已經被改過了。
+
+### 不經 mutate、以請求的操作者名義寫一筆事件（例如 agent 工具呼叫的稽核紀錄）
+
+- 入口：`backend/src/spine/currentActor.ts`（`appendEventAsCurrentActor`）　項目 `be-event-as-current-actor`
+- 寫法：`import { appendEventAsCurrentActor } from "./spine/currentActor.js";`
+- 取代：拿驗證時的 ctx.actor.id 直接呼叫 db.ts 的 event()
+- 為什麼：和 mutate 同樣的順序：事件鎖 → 重讀操作者 → 寫入。驗證之後操作者被移除或 token 被撤，回 401（和從沒發出過的憑證相同），不會變成資料庫拒絕的 500。 用法：appendEventAsCurrentActor(ctx.actor, ctx.workspaceId, "AGENT_TOOL_CALLED", "tool", name, { ok: true }, { txMeta })。
+
+### 一個已登入的請求失敗了，要判斷是不是它的身分（操作者、權杖、臨時工作階段）在執行中不見了，好答成 401
+
+- 入口：`backend/src/spine/currentActor.ts`（`actorGoneDuring`）　項目 `be-actor-gone-during`
+- 寫法：`import { actorGoneDuring } from "./spine/currentActor.js";`
+- 取代：在個別路由或工具裡捕捉資料庫對不存在操作者的拒絕（migration 071）、或把它答成 500／包在 200 裡的工具錯誤
+- 為什麼：每個 HTTP 入口同一個判斷：看身分現在還解不解得開（重讀），不看錯誤形狀；身分還在的同一個錯誤照樣是 500。apiOnError 與 MCP 協定端點已經在用，新路由不必自己捕捉。 用法：if (await actorGoneDuring(c.get("actor"), err)) return 401。
+
+### 背景工作（outbox 執行、派生工作）以排進佇列時抓到的操作者名義寫事件，而那個操作者可能已被移除
+
+- 入口：`backend/src/spine/currentActor.ts`（`signatureForCapturedActor`）　項目 `be-event-for-captured-actor`
+- 寫法：`import { signatureForCapturedActor } from "./spine/currentActor.js";`
+- 取代：拿排進佇列時存下的 actor id 直接當 event() 的簽名
+- 為什麼：在事件鎖的交易裡決定簽名：操作者還在就照舊；被移除了就簽系統（REMOVED_ACTOR_REF），原 id 放 payload 的 removed_actor_id。工作照樣完成，不會被資料庫拒絕後重試一天埋掉，也不會讓補跑每次重來。 用法：const sig = await signatureForCapturedActor(ws, actorId, "system"); await event(ws, type, "node", id, { ...payload, ...sig.payloadExtra }, sig.actorType, sig.actorId)。
 
 ### 要在交易提交後或回滾後做事
 

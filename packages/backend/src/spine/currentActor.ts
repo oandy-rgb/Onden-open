@@ -1,6 +1,9 @@
-import { q } from "../db.js";
-import { UnauthorizedError } from "./actor.js";
-import type { ActorCtx, ActorType, TokenAccess, WriteMode } from "../types.js";
+import { isUuid } from "@onden/markdown";
+import { event, getWorkspaceId, q, type EventOptions } from "../db.js";
+import { db } from "../dbKysely.js";
+import { ActorGoneError, UnauthorizedError } from "./actor.js";
+import { eventActorType, type ActorCtx, type ActorType, type TokenAccess, type WriteMode } from "../types.js";
+import { withEventTransaction } from "./eventTransaction.js";
 import { assertCurrentToolAllowed } from "./toolScope.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
 
@@ -46,7 +49,7 @@ export async function resolveCurrentActor(
     [identity.id, workspaceId, tokenId],
   );
   const row = result.rows[0];
-  if (!row) throw new UnauthorizedError();
+  if (!row) throw new ActorGoneError();
   const current: ActorCtx = {
     id: row.id, name: row.name, type: row.type,
     ...(row.token_id ? { tokenScope: {
@@ -60,4 +63,67 @@ export async function resolveCurrentActor(
   };
   assertCurrentToolAllowed(current);
   return current;
+}
+
+/** The ONE answer to "the identity this request signed in as is gone": every HTTP boundary (httpError.ts apiOnError, the MCP protocol
+ *  endpoint routes/mcpProtocol.ts) asks this before it answers an unexpected failure, so a request whose actor was removed — or whose
+ *  token was revoked or expired, or whose temporary session ended — while it ran is refused 401 like a credential that never existed,
+ *  whichever step tripped over the missing identity (the database's own actor check on an event, migration 071; a foreign key; a
+ *  re-read), and no entry needs its own try. The decision is the credential's current state, never the error's shape: a failure of a
+ *  request whose identity still resolves stays the failure it is (a 500 stays a 500).
+ *  `err` is the failure; ActorGoneError (a re-read that found nothing) is true without a query. Pass only failures the boundary would
+ *  otherwise answer as unexpected: a deliberate refusal (403, 404, 409…) is already the right answer.
+ *  Example: if (await actorGoneDuring(c.get("actor"), err)) return 401. */
+export async function actorGoneDuring(actor: ActorCtx | null | undefined, err: unknown): Promise<boolean> {
+  if (err instanceof ActorGoneError) return true;
+  if (!actor) return false;
+  try {
+    await resolveCurrentActor(actor, await getWorkspaceId());
+    return false;
+  } catch (recheck) {
+    // Anything but "no current row" (the database is down, a tool no longer granted) is not this case: the boundary keeps its own answer.
+    return recheck instanceof ActorGoneError;
+  }
+}
+
+/** Append one event attributed to an authenticated request's actor OUTSIDE mutate(): an agent tool call's audit record (allowed, failed or
+ *  refused; services/agentTools/registry.ts). The same order as mutate(): the workspace event lock, then resolveCurrentActor, then the insert,
+ *  in one transaction (a savepoint when the caller is already in one).
+ *  An actor removed — or a token revoked or expired — after authentication but before this write is UnauthorizedError: the request is
+ *  answered 401 `{ error: "unauthorized" }` by httpError.ts, the answer a credential that never existed gets at authentication (app.ts), and
+ *  nothing is written. Without the re-read the database's own check on domain_events.actor_id (migration 071) refused the insert and the
+ *  request answered 500 (PR #1875). The event is attributed to the actor as re-read, never to the request's captured copy.
+ *  Example: appendEventAsCurrentActor(ctx.actor, ctx.workspaceId, "AGENT_TOOL_CALLED", "tool", name, { ok: true }, { txMeta }). */
+export function appendEventAsCurrentActor(
+  actor: ActorCtx, workspaceId: string, eventType: string, targetType: string, targetId: string,
+  payload: Record<string, unknown>, options: EventOptions = {},
+): Promise<string> {
+  return withEventTransaction(workspaceId, async () => {
+    const current = await resolveCurrentActor(actor, workspaceId);
+    return event(workspaceId, eventType, targetType, targetId, payload, eventActorType(current.type), current.id, options);
+  });
+}
+
+/** actor_id of a record about work queued by an actor who has since been removed (see signatureForCapturedActor). Not uuid-shaped, so the
+ *  database's actor check (migration 071) lets it through, like the other non-actor signatures ("admin-cli"). */
+const REMOVED_ACTOR_REF = "removed-actor";
+
+/** Who signs an event that background work writes in the name of an actor id captured when the work was QUEUED — an outbox effect
+ *  (an approved tag pack's TAG_IMPORTED), a dispatcher cascade's DISPATCHER_FAILED. Unlike appendEventAsCurrentActor this does not refuse:
+ *  the work was authorized when it was queued (or approved), and a job that must still complete must not be lost, crash its runner or be
+ *  retried forever because that actor was removed in between. So: an actor that still exists signs as captured; a removed one is replaced
+ *  by the system (`actor_type` 'system', REMOVED_ACTOR_REF), and `payloadExtra` carries `removed_actor_id` so the record still ties to that
+ *  actor's earlier events. A non-uuid signature ("admin-cli", "system-task-scheduler") is never an actor row and passes as given.
+ *  Call it INSIDE the transaction that holds the workspace event lock (withEventTransaction) and write the event in it: removing an actor
+ *  takes the same lock (services/actors.ts removeActor → mutate), so the actor cannot vanish between this read and the insert.
+ *  Example: const sig = await signatureForCapturedActor(ws, intent.actor_id, "system");
+ *           await event(ws, "DISPATCHER_FAILED", "node", id, { ...payload, ...sig.payloadExtra }, sig.actorType, sig.actorId); */
+export async function signatureForCapturedActor<T extends string>(workspaceId: string, actorId: string, actorType: T): Promise<{
+  actorType: T | "system"; actorId: string; payloadExtra: { removed_actor_id?: string };
+}> {
+  if (!isUuid(actorId)) return { actorType, actorId, payloadExtra: {} };
+  const exists = await db.selectFrom("actors").select("id").where("id", "=", actorId).where("workspace_id", "=", workspaceId).executeTakeFirst();
+  return exists
+    ? { actorType, actorId, payloadExtra: {} }
+    : { actorType: "system", actorId: REMOVED_ACTOR_REF, payloadExtra: { removed_actor_id: actorId } };
 }

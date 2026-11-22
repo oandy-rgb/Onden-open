@@ -87,8 +87,13 @@ export function makeTagWriter(ctx: DataCtx) {
    *  working; lists, chips and suggestions leave it out (lib/nodeTags.ts
    *  isTagShown). A refusal puts the flag back and throws. */
   async function setHidden(tagId: string, hidden: boolean): Promise<{ queued: boolean }> {
-    const before = (ctx.data.tags ?? []).find((tag) => tag.id === tagId)?.hidden
-      ?? nodeOf(ctx.data, tagId)?.hidden ?? false;
+    // The flag as shown: the tag list's row when the tag is in it (a tag can be there and not in the loaded notes),
+    // else the tag's note row. The same reading decides, on a refusal, whether this save is still what is shown.
+    const shownHidden = () => {
+      const row = ctx.data.tags?.find((tag) => tag.id === tagId);
+      return row ? row.hidden === true : nodeOf(ctx.data, tagId)?.hidden ?? false;
+    };
+    const before = shownHidden();
     const settle = optimisticFields<ContentNode>(`node:${tagId}`, { hidden: before } as ContentNode, { hidden });
     ctx.setData((state) => patchNode(state, tagId, { hidden }));
     const result = await commit(`node:${tagId}`, { method: "PATCH", path: `/api/nodes/${tagId}`, body: JSON.stringify({ hidden }) }, {
@@ -100,7 +105,7 @@ export function makeTagWriter(ctx: DataCtx) {
       unconfirmed: () => { settle(true); },
       rejected: () => {
         const { expected, replacement } = settle(false);
-        if (Object.hasOwn(replacement, "hidden") && (nodeOf(ctx.data, tagId)?.hidden ?? false) === expected.hidden) ctx.setData((state) => patchNode(state, tagId, { hidden: replacement.hidden }));
+        if (Object.hasOwn(replacement, "hidden") && shownHidden() === expected.hidden) ctx.setData((state) => patchNode(state, tagId, { hidden: replacement.hidden }));
       },
     });
     return { queued: result.status === "queued" };

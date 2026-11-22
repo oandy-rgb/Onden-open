@@ -8,5 +8,5 @@ export type { AgentTool, ToolAccess } from "./types.js";
 export { TOKEN_ACCESS_LEVELS, isTokenAccess, toolsForAccess } from "./templates.js";
 export { RateLimitError, PgRateLimiter, setRateLimiter, checkRateLimit } from "./rateLimit.js";
 export { READ_ONLY_TOOL_NAMES } from "./readOnlyTools.js";
-export { mcpSafeError } from "./safeError.js";
+export { mcpSafeError, isCallerFacingFailure } from "./safeError.js";
 export { readableNote, type ReadableNote } from "./readableNote.js";

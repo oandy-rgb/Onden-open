@@ -37,7 +37,7 @@ import { ownerData } from "./ownerData";
 import { getAppState, resetAppState, setData } from "../lib/appStore";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { _resetLocalCopyForTests } from "../lib/localCopyState";
-import { dataSync, graphPositionWriter, propertyWriter, tagWriter, taskWriter, workspaceWriter } from "../lib/data";
+import { dataSync, graphPositionWriter, propertyWriter, tagSchemaWriter, tagWriter, taskWriter, workspaceWriter } from "../lib/data";
 import { __resetSyncEngineForTests, refreshMeta } from "../lib/data/syncEngine";
 import { readAgain } from "../lib/data/serverTruthLoad";
 import { forgetWatermark, startWatermarkFrom, syncPassEnded, takeAnswer } from "../lib/data/writePositions";
@@ -130,6 +130,16 @@ const KINDS: Kind[] = [
     shown: () => `${note(TAG_ID).hidden === true}/${data().tags?.find((t) => t.id === TAG_ID)?.hidden === true}`,
     firstValue: "true/true", secondValue: "false/false",
     remote: () => { world.remote((w) => { w.notes.get(TAG_ID)!.hidden = true; }); return "true/true"; },
+  },
+  {
+    // A tag's fields are only in the tag list (no note row carries them): a sync answer, the ?nodes=none refresh and a
+    // whole bootstrap all bring the list over the store's (storeOps.sharedRowsOver, the tag's row journal `node:<tag>`).
+    name: "a tag's fields (node:<tag>, in the tag list)", answers: ["sync", "meta", "whole"],
+    first: () => quiet(tagSchemaWriter.update(TAG_ID, { fields: [{ name: "Pages", type: "text" }] })),
+    second: () => quiet(tagSchemaWriter.update(TAG_ID, { fields: [{ name: "Pages", type: "text" }, { name: "Author", type: "text" }] })),
+    shown: () => ((data().tags?.find((t) => t.id === TAG_ID)?.schema_fields ?? []) as Array<{ name: string }>).map((f) => f.name).join("+"),
+    firstValue: "Pages", secondValue: "Pages+Author",
+    remote: () => { world.remote((w) => { w.notes.get(TAG_ID)!.fields = [{ name: "Elsewhere", type: "text" }]; }); return "Elsewhere"; },
   },
   {
     name: "the home page (workspace:<workspace>)", answers: ["sync", "meta", "whole"],
@@ -261,7 +271,7 @@ describe("random order: changes, answers, late and repeated sync answers, whole 
   });
 });
 
-// The writers that now keep a journal (setHidden, graphPositionWriter) and the one whose journal changed shape
+// The writers that now keep a journal (setHidden, tagSchemaWriter, graphPositionWriter) and the one whose journal changed shape
 // (tagWriter's membership, one journal per note): a refusal still puts back what was there, and two refused in a row put
 // back the value before both, not the first refused one (optimisticFields).
 describe("a refusal puts back what was there before (journals added or reshaped here)", { timeout: 30_000 }, () => {

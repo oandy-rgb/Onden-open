@@ -378,6 +378,14 @@ body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui
 }
 /* The handle starts 2px inside the pane's padding edge (margin above): the line goes back against the border. */
 .pane-resizer--inspector::after { height: calc(100dvh - 48px); bottom: auto; left: -2px; transform: none; }
+/* A finger is not a pointer: the line stays 2px, the strip a finger can catch it in is --ac-space-8 (24px) wide.
+ * It lies inside the pane (the panes clip at their border), over the pane's own padding first. */
+@media (pointer: coarse) {
+  /* Only the two shell panes (sidebar, info pane) get the wide strip. A page's list column (--column) keeps its 6px one:
+     a wider one would lie over the column's content or over the first 24px of the pane beside it. */
+  .pane-resizer--sidebar, .pane-resizer--inspector { width: var(--ac-space-8); }
+  .pane-resizer--inspector::before { width: var(--ac-space-8); }
+}
 body.onden-pane-dragging,
 body.onden-pane-dragging * { user-select: none !important; cursor: col-resize !important; }
 body.onden-zen .pane-resizer { display: none; }

@@ -208,3 +208,16 @@
   position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; box-sizing: content-box;
   border-radius: var(--ac-radius-full); border: 2px solid var(--ac-surface); background: var(--ac-accent);
 }
+
+/* Touch screen (a tablet in landscape is wider than the phone bar): the controls in the bar are 44px cells, as on the
+ * phone, instead of the 28–34px ones drawn for a mouse; the bar keeps its 52px. The ones that exist only in the wide bar
+ * are hidden on the phone, so no width test is needed. The avatar's phone rules (28px circle, min-size 0) are heavier
+ * than the :where() selector below, so only the wide bar's avatar becomes a 44px cell. */
+@media (pointer: coarse) {
+  .app-topbar .topbar-pane-switch .ui-btn--icon.ui-btn--sm,
+  .app-topbar .topbar-settings.ui-btn--icon.ui-btn--sm { width: var(--onden-tap); height: var(--onden-tap); }
+  .app-topbar .palette-trigger { height: var(--onden-tap); min-width: var(--onden-tap); }
+  .app-topbar .topbar-mode-btn { height: var(--onden-tap); }
+  .app-topbar .topbar-next-up { min-height: var(--onden-tap); }
+  :where(.app-topbar) .user-chip { min-width: var(--onden-tap); min-height: var(--onden-tap); justify-content: center; }
+}

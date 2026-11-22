@@ -39,6 +39,7 @@ const finishCompare = (newer) => {
 if (compareWith && arg("--against")) process.exit(finishCompare(readReport(arg("--against"))));
 const sheetsDir = arg("--sheets");
 const date = arg("--date") ?? new Date().toISOString().slice(0, 10);
+const checkTaps = process.argv.includes("--check-taps"), writeTaps = process.argv.includes("--write-taps");
 const t0 = Date.now();
 process.env.AUDIT_CLICK_TIMEOUT_MS ??= "6000"; // a button that is not there after 6 s is not coming: the screen is reported as unreachable
 
@@ -209,16 +210,28 @@ const report = {
     return [kind, { total: vals.reduce((a, v) => a + v.n, 0), distinct: vals.length, off: vals.reduce((a, v) => a + v.nOff, 0), offDistinct: vals.filter((v) => v.nOff > 0).length, values: vals }];
   })),
   byScreen, bySource, taps,
-  tapSmallest: Object.fromEntries(Object.entries(tapSmall).map(([size, l]) => { const g = new Map(); for (const x of l) { const k = x.sel; const e = g.get(k) ?? { ...x, n: 0, screens: new Set() }; e.n++; e.screens.add(x.screen); g.set(k, e); } return [size, [...g.values()].sort((a, b) => a.min - b.min || b.n - a.n).slice(0, 25).map((e) => ({ sel: e.sel, drawn: e.drawn, hit: e.hit, min: e.min, n: e.n, screens: [...e.screens].slice(0, 5) }))]; })),
+  tapSmallest: Object.fromEntries(Object.entries(tapSmall).map(([size, l]) => { const g = new Map(); for (const x of l) { const k = x.sel; const e = g.get(k) ?? { ...x, n: 0, screens: new Set() }; e.n++; e.screens.add(x.screen); g.set(k, e); } return [size, [...g.values()].sort((a, b) => a.min - b.min || b.n - a.n).slice(0, Number(process.env.CENSUS_TAP_TOP ?? 25)).map((e) => ({ sel: e.sel, drawn: e.drawn, hit: e.hit, min: e.min, n: e.n, screens: [...e.screens].slice(0, 5) }))]; })),
   places: [...places.entries()].map(([key, p]) => ({ key, sel: p.sel, kindsOff: [...p.off], offN: p.offN, screens: [...p.screens], sources: [...p.sources], values: p.values }))
     .sort((a, b) => b.kindsOff.length - a.kindsOff.length || b.offN - a.offN).slice(0, 20),
   summary: null,
   static: { css: { declarations: css.declarations, kinds: css.kinds, media: css.media, mediaOther: css.mediaOther }, tsx },
 };
 report.summary = summarize(report);
-writeFileSync(join(here, "report.json"), JSON.stringify(report, null, 1));
-const docDir = resolve(here, "../../../../docs/research");
-writeFileSync(join(docDir, `style-census-${date}.md`), renderReport(report));
+// Tap-target ratchet (scripts/tap-target-baseline.json): a `--check-taps` / `--write-taps` run is a quick look at the touch targets,
+// so it leaves the full report and the research page alone.
+if (!checkTaps && !writeTaps) {
+  writeFileSync(join(here, "report.json"), JSON.stringify(report, null, 1));
+  const docDir = resolve(here, "../../../../docs/research");
+  writeFileSync(join(docDir, `style-census-${date}.md`), renderReport(report));
+}
+let tapFailed = false;
+if (checkTaps || writeTaps) {
+  const { readTapBaseline, writeTapBaseline, compareTaps, renderTapComparison } = await import("./tapBaseline.mjs");
+  const base = readTapBaseline();
+  if (writeTaps) { const next = writeTapBaseline(base, taps); console.log(`\n基準已寫入 scripts/tap-target-baseline.json（只准往下：${next.lowered} 個畫面變少、${next.added} 個新增、${next.kept} 個維持）`); }
+  for (const [size, l] of Object.entries(report.tapSmallest)) { console.log(`\n${size} 最小的可點範圍（畫出來的 → 可點的；出現次數）：`); for (const e of l) console.log(`  ${e.hit}（畫 ${e.drawn}）×${e.n}  ${e.sel.slice(-90)}`); }
+  if (!writeTaps) { const r = compareTaps(base, taps); console.log("\n" + renderTapComparison(r)); tapFailed = !r.ok; }
+}
 if (sheetsDir) await writeSheets(sheetsDir, shots, status, combos);
 
 const bad = status.filter((r) => r.state === "error").length, skipped = status.filter((r) => r.state === "skip").length;

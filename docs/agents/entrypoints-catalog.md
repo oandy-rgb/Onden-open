@@ -116,9 +116,9 @@
 
 ### 要控制浮出選單開在哪、何時關
 
-- 入口：`frontend/src/components/ui/index.ts`（`usePopover`）　項目 `ui-popover-state`
+- 入口：`frontend/src/components/ui/index.ts`（`usePopover`、`TOP_BAR_ATTR`）　項目 `ui-popover-state`
 - 寫法：`import { usePopover } from "./components/ui";`
-- 為什麼：要控制 Popover 開在哪、何時關時用它，跟 Popover 配對使用；不要自己存座標。
+- 為什麼：要控制 Popover 開在哪、何時關時用它，跟 Popover 配對使用；不要自己存座標。 釘在視窗頂端的列（頂列）標上 TOP_BAR_ATTR，浮出的東西就停在它下面、不蓋住導覽。
 
 ### 要放分頁列（tab bar）
 

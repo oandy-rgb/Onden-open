@@ -59,7 +59,7 @@
 | 邊框出現的位置 `border-where` | 見 §4.8 | **沒有規則，也不能有**：要知道元素是按鈕還是輸入欄、有幾邊有框，靜態掃描做不到，只能由普查看到 | — |
 | 陰影 `shadow` | 無、float、modal、sheet ＋ 狀態標記 | `fe-css-shadow`（只擋寫死，基準 0） | 33 個陰影／光圈／邊條 token |
 | 控制項高度 `control-height`（畫出來的） | 桌面 28、32；觸控 44 | `fe-css-control-height`：**160 條／66 檔**（只看「選擇器像控制項」的 height／min-height，見 §五） | 24、26、28、30、32、34、36、40、44、48… 都有 |
-| 觸控目標 `tap-target`（實際可點的大小） | 觸控螢幕（`pointer: coarse`）：可點的範圍寬與高**都** ≥ 44 | **沒有規則，也不能有**：實際可點的大小（含看不見的擴大範圍）要在觸控螢幕上量，靜態掃描看不到，只能由普查看到 | 真機（業主的平板）：每個畫面 60–90% 的控制項不到 44 |
+| 觸控目標 `tap-target`（實際可點的大小） | 觸控螢幕（`pointer: coarse`）：可點的範圍寬與高**都** ≥ 44 | `scripts/tap-target-baseline.json`：只減不增（`npm run style:census -- --check-taps`，手動，需要瀏覽器） | 真機（業主的平板）：每個畫面 60–90% 的控制項不到 44 |
 | 圖示尺寸 `icon-size` | 12、16、20、24 | `fe-icon-size`：**345 處／133 檔**（lucide 圖示的 `size={n}`；**暫時只擋不在這四個數字上的**，見 §五） | `size={n}` 15 種（13、14、15、16 就占約 380 處） |
 | 圖示線寬 `icon-stroke` | 1.5 | `fe-icon-stroke`：**1 處／1 檔**（lucide 圖示的 `strokeWidth={n}`，不是 1.5 的）；沒寫 `strokeWidth` 的預設 2 只能由普查看到 | 預設 2＋少數 1.5、3 |
 | 層級 `z-index` | 15 個命名層（§4.13） | `fe-css-z-index`（只擋寫死，基準 0） | 28 個 `--z-*` 名字（含 `--z-local-1..7`；2026-11-19 對過 main） |
@@ -207,6 +207,8 @@ A 幾乎沒有陰影：層次靠留白與細線。
 ### 4.11 控制項高度 `control-height` 與觸控目標 `tap-target`
 
 **觸控目標用「實際量到的可點大小」判定**（業主 2026-11-17 的要求）：在 `pointer: coarse` 的裝置上，每個 button、連結、tab、輸入框、可點的列，**可點的範圍寬與高都要 ≥ 44 CSS px**；不必把畫出來的框變高，可以用看不見的擴大點擊範圍（`.tap-target` 的偽元素、外包的可點容器）達成。普查在觸控模擬下用 `elementFromPoint` 從四邊往外量，擴大的範圍算進去，所以第一批改完可以用同一個數字比前後（`tap-target`）。判斷依 `(pointer: coarse)`，不依寬度：1280×800 的平板橫放是桌面版面，仍然是手指在點。
+
+**第一批（觸控目標）已做的**：共用零件在 `pointer: coarse` 下改——`global.css` 的擴大點擊範圍清單、`.ui-btn--icon.ui-btn--sm` 與 `.ui-segment` 的 44、側欄的列與展開箭頭（`OverviewSidebar.css`）、頂列的控制項（`AppTopbar.css`）、設定清單與搜尋框；面板拖曳邊（`.pane-resizer`）在觸控裝置上可抓範圍 24px（線仍是 2px）。守門：`scripts/tap-target-baseline.json`（Tab S9 尺寸 1204×714 與手機 390 的各畫面「不到 44」數量，只減不增；`npm run style:census -- --check-taps`，手動）。普查的量法用二分逼近邊界，所以剛好 44 的擴大範圍讀作 44，不是 43。還沒到 44 的：麵包屑、標題旁的標籤與「＋」、筆記邊緣的標題刻度、資訊欄的小標題按鈕、日記時間軸的收合列、行內連結（WCAG 行內例外）。
 
 真機基準（業主的 Galaxy Tab S9，`pointer: coarse`，視窗 1204×714，寬或高任一邊 <44 算不到）：
 

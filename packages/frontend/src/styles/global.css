@@ -873,7 +873,10 @@ body.onden-zen .obsidian-tiptap-wrap .md-editor-cm .cm-content {
   .task-editor-close,
   .quick-capture-place,
   .quick-capture-kind,
-  .quick-capture-more { position: relative; }
+  .quick-capture-more,
+  .sb-tagtree-section-toggle,
+  .sidebar-tag-new,
+  .topbar-next-up { position: relative; }
   .tap-target::after,
   .ui-btn--sm::after,
   .sb-bar-btn::after,
@@ -885,7 +888,10 @@ body.onden-zen .obsidian-tiptap-wrap .md-editor-cm .cm-content {
   .task-editor-close::after,
   .quick-capture-place::after,
   .quick-capture-kind::after,
-  .quick-capture-more::after {
+  .quick-capture-more::after,
+  .sb-tagtree-section-toggle::after,
+  .sidebar-tag-new::after,
+  .topbar-next-up::after {
     content: "";
     position: absolute;
     left: 50%;

@@ -14,7 +14,7 @@ import { fittingModuleCount, viewLabel, type NavDestination } from "../hooks/she
 import { usePhoneTopbarActionList } from "../lib/phoneTopbarActions";
 import { openSettings } from "../lib/settingsRequest";
 import { useKbdHint } from "../hooks/useKbdHint";
-import { Button, SheetHeader, Menu, MenuItem, MenuSeparator, Pressable, usePopover, layerClass } from "./ui";
+import { Button, SheetHeader, Menu, MenuItem, MenuSeparator, Pressable, usePopover, layerClass, TOP_BAR_ATTR } from "./ui";
 import { MOBILE_QUERY, useIsMobile, useMediaQuery } from "../hooks/useIsMobile";
 import NavMarks from "./NavMarks";
 import { observeSize } from "../lib/observeSize";
@@ -303,7 +303,7 @@ function AppTopbar({ mode, setMode, activePanel, onOpenModule, onOpenFeature, on
     </div>
   );
   return (
-    <header className={`${layerClass.fixed} app-topbar`}>
+    <header className={`${layerClass.fixed} app-topbar`} {...{ [TOP_BAR_ATTR]: "" }}>
       <div className="app-topbar-left">
         {/* A phone names the page here (the nav's own name for it); a computer keeps the wordmark. */}
         {phone

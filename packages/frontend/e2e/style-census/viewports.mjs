@@ -5,6 +5,8 @@ const BASE = { motion: "no-preference", touch: true };
 export const SIZES = [
   { size: "390", label: "手機 390×844", width: 390, height: 844, ...BASE },
   { size: "1280x800", label: "平板橫放 1280×800", width: 1280, height: 800, ...BASE },
+  // Galaxy Tab S9 as the owner measured it on the real device (pointer: coarse, 1204×714 CSS px): the numbers of the tap-target ratchet.
+  { size: "1204x714", label: "Tab S9 1204×714", width: 1204, height: 714, ...BASE },
   { size: "800x1280", label: "平板直放 800×1280", width: 800, height: 1280, ...BASE },
   { size: "1440", label: "桌面 1440×900", width: 1440, height: 900, motion: "no-preference" },
 ];

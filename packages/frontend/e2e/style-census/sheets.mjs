@@ -6,7 +6,7 @@ import { launch } from "../layout-audit/env.mjs";
 import { SIZES } from "./viewports.mjs";
 
 const MAX = 1024 * 1024;
-const TILE = { "390": 150, "800x1280": 150, "1280x800": 300, "1440": 300 };
+const TILE = { "390": 150, "800x1280": 150, "1280x800": 300, "1204x714": 300, "1440": 300 };
 
 export async function writeSheets(dir, shots, status, combos) {
   const lines = ["# 外觀聯絡表", "", "> 產生的資料；每張圖是一個畫面在一個寬度與主題下的樣子（裝置像素比 1）。每個寬度與主題另有一張拼貼圖（`montage__<寬度>__<主題>.png`）。", ""];

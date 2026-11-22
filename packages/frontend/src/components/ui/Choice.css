@@ -27,4 +27,5 @@
   position: relative; padding: 16px; overflow: hidden;
   border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-bg); color: var(--ac-ink);
 }
-@media (max-width: 600px) { .ui-segment { min-height: 44px; } }
+@media (max-width: 600px), (pointer: coarse) { .ui-segment { min-height: var(--onden-tap); } }
+@media (pointer: coarse) { .ui-segment { min-width: var(--onden-tap); } .ui-segment--icon { height: var(--onden-tap); } }

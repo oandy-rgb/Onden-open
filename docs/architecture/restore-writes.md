@@ -408,5 +408,7 @@ writer 已回報的錯誤不再增加第二次 toast；拒絕回傳共用錯誤�
 復原一個內文事件是一筆新的寫入，所以也鑄一個新的版本（migration 220；`services/eventRestore/restore.ts` 呼叫 `spine/noteVersions.ts` 的
 `recordVersion`）。版本記下它放回的是哪一版：被復原的事件之前、這台最後記下的那個版本，前提是內容相同；不同就留空。
 寫回的內容和現在一樣時不鑄版本，事件照舊。契約不變：依目前權限執行、保留原歷史、衝突照舊拒絕。
-復原一個手寫事件（`attributes.ts`）在第 1 批還**不**鑄版本，提交時記在 `sync_clock.version_misses`：既有的單元測試
-`attributeRestore.test.ts` 用模擬的資料庫，不認得多出的查詢，而這一批不改既有測試（PR 說明）。
+復原一個手寫事件（`eventRestore/attributes.ts`）也鑄一個新的版本，單位是該屬性鍵（`ink_data`／`board_ink`／`note_ink`），內容雜湊是寫回那張畫的
+`value_ref`；復原到「沒有畫」鑄 `removed`（沒有內容），其餘是 `restored`。`restored_from` 記被復原的事件當初取代的那一版（`versionBeforeEvent`，
+和內文復原同一條規則：內容相同才記）。同一交易裡復原再重做，鑄兩個版本、序號 1 和 2。這是 2026-11-22 業主「都按建議」的決定；
+先前這條路徑只記在 `sync_clock.version_misses`，現在正式路徑應為 0（`noteVersions.integration.test.ts`）。

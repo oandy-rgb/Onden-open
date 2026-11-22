@@ -10,6 +10,7 @@ import { readInkValue } from "../inkChunks.js";
 import type { EventRow, RestoreError, RestoreResult } from "../restoreContract.js";
 import { recordRestore, requireRestoreTransaction } from "./record.js";
 import { historyIncomplete } from "./refusals.js";
+import { isVersionedInkKey, recordVersion, versionBeforeEvent } from "../../spine/noteVersions.js";
 
 export type AttributeRestorePreview = {
   kind: "attribute_change";
@@ -177,6 +178,18 @@ export async function restoreAttribute(row: EventRow, actorContext: ActorCtx): P
 
   // the one writer of an attribute row (services/attributeChange.ts): it asks whether this actor may write the key (the publish mark is a person's)
   await storeAttributeState(actorContext, row.workspace_id, row.target_id, key, previous);
+  // Undoing a drawing's event is a new version of that drawing (spine/noteVersions.ts), as undoing a body event is. The value changed (an
+  // unchanged one was refused as already_in_state), so there is always one to mint. restoredFrom is the version the undone event had
+  // replaced, when its content is what is back on screen (versionBeforeEvent's rule, the same as the body undo in restore.ts).
+  if (isVersionedInkKey(key)) {
+    const hash = typeof restoredSnapshot?.value_ref === "string" ? restoredSnapshot.value_ref : null;
+    if (previous !== null && hash === null) throw new Error("a drawing's snapshot names its value by hash");
+    await recordVersion({
+      workspaceId: row.workspace_id, noteId: row.target_id, unit: key, contentHash: hash,
+      kind: previous === null ? "removed" : "restored",
+      restoredFrom: previous === null ? null : await versionBeforeEvent(row.target_id, key, String(row.id), hash),
+    });
+  }
   // Modules hear about it once the undo commits, as for any attribute change
   // (undoing `_published` takes the page off the website).
   await nodeAttributeCommitted({ workspaceId: row.workspace_id, nodeId: row.target_id, key, value: previous?.value ?? null, actor: actorContext });

@@ -19,6 +19,7 @@ import nodesRouter from "../routes/nodes.js";
 import eventsRouter from "../routes/events.js";
 import publishRouter from "../modules/website/routes.js";
 import type { ActorCtx } from "../types.js";
+import { eventOfVersionKey } from "./helpers/versionFixtures.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
@@ -113,13 +114,13 @@ describe.skipIf(!isTestDb)("note versions: summary / markers / restored_from / a
     expect(created!.markers).toEqual([]);
   });
 
-  it("還原產生新的一列：restored、restored_from 指向被還原那一列的 changed_at，並在還原後另成一列", async () => {
+  it("還原產生新的一列：restored、restored_from 指向被還原那一列（它的 version_key），並在還原後另成一列", async () => {
     const before = await list();
     const target = before[2]!; // 建立的那一版
     expect((await send(`/api/nodes/${nodeId}/versions/${target.id}/restore`, "POST")).status).toBeLessThan(300);
     const after = await list();
     expect(after).toHaveLength(4);
-    expect(after[0]).toMatchObject({ markdown: V0, actor_kind: "human", restored_from: target.changed_at });
+    expect(after[0]).toMatchObject({ markdown: V0, actor_kind: "human", restored_from: target.id });
     expect(after[0]!.markers).toContain("restored");
     // 還原那一步與 V3（agent 的版本）相比：拿掉「繳電費」與「附註」兩段，想法那段改回
     expect(after[0]!.summary).toEqual({ added: 0, changed: 1, removed: 3, sections: expect.any(Array) });
@@ -133,7 +134,8 @@ describe.skipIf(!isTestDb)("note versions: summary / markers / restored_from / a
     // agent 的那次儲存 → 還原它（回到 V2）
     const raw = (await (await send(`/api/nodes/${nodeId}/versions?raw=1`)).json()) as Array<{ id: string; actor_kind: string }>;
     const agentSave = raw.find((r) => r.actor_kind === "agent")!;
-    const res = await send(`/api/events/${agentSave.id}/restore`, "POST");
+    // the version list names a version by its key; the event undo is by the number of the event that recorded it
+    const res = await send(`/api/events/${await eventOfVersionKey(nodeId, agentSave.id)}/restore`, "POST");
     expect(res.status).toBe(200);
     const after = await list();
     expect(after).toHaveLength(4);

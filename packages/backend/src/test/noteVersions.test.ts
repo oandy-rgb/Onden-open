@@ -110,11 +110,11 @@ describe("actorKindOf", () => {
 describe("describeVersions", () => {
   const row = (id: string, at: string, markdown: string, over: Partial<VersionRow> = {}): VersionRow => ({
     id, title: "T", markdown, changed_at: new Date(at), actor_name: "me", actor_type: "user", saves: 1,
-    is_restore: false, restored_at: null, ...over,
+    is_restore: false, restored_from: null, ...over,
   });
   // 新 → 舊
   const rows = [
-    row("4", "2026-10-24T04:00:00Z", "# A\n\nv1", { is_restore: true, restored_at: new Date("2026-10-24T01:00:00Z") }),
+    row("4", "2026-10-24T04:00:00Z", "# A\n\nv1", { is_restore: true, restored_from: "2026-10-24T01:00:00.000Z" }),
     row("3", "2026-10-24T03:00:00Z", "# A\n\nv3 agent", { actor_type: "ai_agent", actor_name: "bot" }),
     row("2", "2026-10-24T02:00:00Z", "# A\n\nv2"),
     row("1", "2026-10-24T01:00:00Z", "# A\n\nv1"),
@@ -170,7 +170,7 @@ describe("describeVersions", () => {
 describe("absorbSameText", () => {
   const row = (id: string, markdown: string, over: Partial<VersionRow> = {}): VersionRow => ({
     id, title: "T", markdown, changed_at: new Date(`2026-10-24T0${id}:00:00Z`), actor_name: "me", actor_type: "user", saves: 1,
-    is_restore: false, restored_at: null, ...over,
+    is_restore: false, restored_from: null, ...over,
   });
 
   it("只差空白：較舊的併進較新的一列，saves 相加", () => {

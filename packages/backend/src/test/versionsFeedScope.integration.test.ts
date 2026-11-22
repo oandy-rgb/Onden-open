@@ -11,6 +11,7 @@ import { adminOnlySpace, putInSpace } from "./helpers/spaceFixtures.js";
 import { persistActor } from "./helpers/persistActor.js";
 import type { ActorCtx } from "../types.js";
 import { seedQ } from "./helpers/seedQ.js";
+import { seedVersion } from "./helpers/versionFixtures.js";
 
 let ws: string;
 vi.mock("../db.js", async (original) => ({ ...await original<typeof import("../db.js")>(), getWorkspaceId: async () => ws }));
@@ -47,6 +48,7 @@ describe.skipIf(!/_test\b/.test(process.env.DATABASE_URL ?? ""))("recent version
     for (let i = 0; i < 8; i++) restricted.push(await note(secret));
     for (const id of [...open, ...restricted]) {
       await db.event(ws, "NODE_UPDATED", "node", id, { body_hash: "h" }, "user", admin.id);
+      await seedVersion({ ws, noteId: id, title: "n", markdown: `text of ${id}` }); // History reads versions
     }
   });
   afterAll(async () => { await seedQ("DELETE FROM content_nodes WHERE workspace_id=$1", [ws]); });

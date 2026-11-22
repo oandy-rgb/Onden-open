@@ -211,7 +211,8 @@ describe.skipIf(!enabled)("version history in a backup and a move", () => {
     expect(carried.length).toBe(before.length);
     expect(carried.map((s) => [s.kind, s.title, s.markdown, s.who, s.at])).toEqual(before.map((s) => [s.kind, s.title, s.markdown, s.who, s.at]));
     const raw = await listNoteVersions(target.ws, target.owner, there, { raw: true });
-    expect(raw!.map((v) => v.markdown).slice(0, 5)).toEqual([bodies[0], bodies[0], bodies[3], bodies[2], bodies[1]]);
+    // one row per time point: the restore's own first save repeats the last carried version (same title, same text), so it is that row, not one more
+    expect(raw!.map((v) => v.markdown).slice(0, 5)).toEqual([bodies[0], bodies[3], bodies[2], bodies[1], bodies[0]]);
     const list = await listNoteVersions(target.ws, target.owner, there, { raw: false });
     const sourceList = await listNoteVersions(source.ws, source.owner, noteId, { raw: false });
     expect(list!.map((v) => [v.markdown, v.title, v.actor_name, v.markers])).toEqual(sourceList!.map((v) => [v.markdown, v.title, v.actor_name, v.markers]));

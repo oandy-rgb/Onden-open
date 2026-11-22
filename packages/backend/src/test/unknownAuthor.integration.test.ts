@@ -131,6 +131,8 @@ describe.skipIf(!isTestDatabase())("an operator this node does not know", () => 
         await client.query("BEGIN");
         await client.query("SET LOCAL session_replication_role = replica");
         await client.query(`UPDATE domain_events SET actor_id = $3, actor_type = 'ai_agent' WHERE target_id = ANY($1::text[]) AND actor_id = $2`, [notes, fromId, agentId]);
+        // History reads the versions those saves recorded: an AI's version names its kind and no person (migration 220: only a person's id is kept)
+        await client.query(`UPDATE note_versions SET author_kind = 'ai', author_id = NULL WHERE note_id = ANY($1::uuid[]) AND author_id = $2::uuid`, [notes, fromId]);
         await client.query("COMMIT");
       } finally { client.release(); }
     }

@@ -29,6 +29,7 @@
 // SAFETY: skips entirely unless DATABASE_URL points at a *_test database.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { ALIGN_VERSION_TIMES_SQL } from "../helpers/alignVersionTimes.js";
 import { Hono } from "hono";
 import fc from "fast-check";
 
@@ -110,6 +111,7 @@ describe.skipIf(!isTestDb)("history rewind → undo (property)", () => {
       await client.query("BEGIN");
       await client.query("SET LOCAL session_replication_role = replica");
       await client.query(`UPDATE domain_events SET created_at = $3 WHERE workspace_id = $1 AND id > $2`, [WS, afterId, at]);
+      await client.query(ALIGN_VERSION_TIMES_SQL);
       await client.query("COMMIT");
     } finally { client.release(); }
   }
@@ -130,6 +132,7 @@ describe.skipIf(!isTestDb)("history rewind → undo (property)", () => {
       await client.query("BEGIN");
       await client.query("SET LOCAL session_replication_role = replica");
       await client.query(`UPDATE domain_events SET created_at = $2 WHERE target_id = $1`, [parent, new Date(T.getTime() - 5 * MINUTE)]);
+      await client.query(ALIGN_VERSION_TIMES_SQL);
       await client.query("COMMIT");
     } finally { client.release(); }
     const child = (await createNote({ actor: w.owner, workspaceId: w.ws, title: "child", markdown: "born later\n", spaceId: space, parentId: parent, event: { uiContext: "test" } })).node.id as string;

@@ -1,6 +1,6 @@
 # 整個工作區的「歷史」API
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-22）
 > 涵蓋：packages/backend/src/services/history/**, packages/backend/src/routes/history.ts
 
 何時讀：改 `routes/history.ts`、`services/history/*`，或前端「歷史」畫面（`components/history/`）時。
@@ -136,6 +136,31 @@ Migration `136` 只加兩個 partial index（`tx_meta ? 'rewind_id'`／`'undoes_
 - 「T 之後新增」只認 `NODE_CREATED`；其他種建立的筆記不會被刪。
 - 同一個交易內的事件共用 `created_at`，切點落在同一個交易中間時以事件 id 的順序為準。
 - `changed` 的段落數字只算前 300 篇。
+
+## 版本清單與時間點讀版本表（歷史複製第 2 批，2026-11-22）
+
+筆記與白板的內文、標題、手寫歷史讀版本表（`note_versions`，migration 220；規格：歷史跟著同步走的提案（PR #1935）第 5 節），不再讀 `domain_events`。
+**讀者**：版本清單與 `?raw=1`（含段落歷史）、`GET /api/nodes/:id/history`、還原一版、回到某一天（`noteStatesAt`）與倒回的「回到倒回之前」（`revertStep`）、
+「近期變動」（`recentVersions`）、日記視角的「這天改過」（`saveOnDaySql`）、手寫的版本／修改／當天變化（`inkChanges.ts`、`nodeReads.ts`）、備份的版本歷史（[備份搬家](backup-move.md)）。
+一個入口 `services/history/storedVersions.ts`：順序、身分、作者都在那裡，各讀者不各寫一份。
+
+- **身分**：回應的 `id`（清單、`?raw=1`、手寫的 `id`／`before_event`／`after_event`）是 `version_key`，只在一篇筆記（一個手寫單位）內有意義。
+  **舊的數字網址再留一個版本**（業主 2026-11-22 決定 8）：`POST /api/nodes/:id/versions/:id/restore`、`/ink-versions/:id/restore`、`/ink-change?before=&after=` 收 key，也收這台事件的編號
+  （查 `note_version_events`：那個事件記下的版本）；不是這篇的版本一律 404。過渡期過後刪掉（`spine/noteVersions.ts` 的 `resolveVersionKey`）。
+  `restored_from` 是被還原那一版**所在那一列**的 key（以前是那一列的時間，畫面用 id 找列，所以對不上）。
+- **順序**（第 5 節）：版本的時間（邏輯時鐘的牆上部分，沒有時鐘的舊版本用寫下的時間，毫秒）、時鐘計數、`ordinal`、key。舊版本就是以前的（`created_at`, `id`）。
+  **切時間點**（回到某一天、倒回）與「這天」用 `at`，也就是畫面上顯示的那個時間（微秒）。
+- **合併成一列**：規則不變（同一作者、5 分鐘內；建立、還原、贏了內文衝突的存檔各自一列）。「同一作者」＝（`author_kind`、`author_id`、`recorded_by`），這台再加上記下那個版本的事件的行動者
+  （兩個 AI、兩個臨時工作階段在這台仍是兩位作者；別台來的版本沒有事件，只分到種類）。與前一版標題和內文都相同的版本不算一個時間點，併進前一個（備份帶進來的筆記，建立那次與最後一次帶來的存檔就是這樣）。
+- **別台的版本**：`recorded_by` 不是這台時，回應的列多一個 `on_another_device: true`（只有為真時才有），畫面在作者後面寫「・在另一台裝置上」（沒有裝置名稱，等裝置清單那一批）。今天沒有東西從別台來；測試用手放進去的版本驗證。
+- **只有筆記真的有過的版本算狀態**（審查 #1948 A1）：`set_aside`（衝突時被放到一邊的字、舊衝突事件鑄的畫）是筆記從來沒有過的內容，**不參與**清單、「那時的字」、最新版本、前一版、近期變動、這天改過與備份；
+  所有讀 `note_versions` 的地方（含用 key 取一版的 `resolveVersionKey`）都用 `spine/noteVersions.ts` 的 `STATE_VERSION_SQL`（`bodyEvents.ts` 轉出；`historyReadersSetAside.integration.test.ts` 把同一份放到一邊的字餵給每個讀者）（近期變動、這天改過、手寫的修改與當天變化再加 `EDIT_VERSION_SQL`：基準不是那天的修改）。基準版本只有在它是最早的一個狀態時，清單上才帶標記 `baseline`，畫面寫「最早留下的樣子」（migration 220 也會為「沒有任何版本指到的現況」鑄基準，那可能晚於舊版本：就是普通的一列）。備份的歷史檔在基準那行多 `baseline: true`（舊讀取者當作建立），匯入時存回基準。
+- **統計**：migration 225 在升級時 `ANALYZE` 三張版本表；沒有 autovacuum 的節點（PGlite）由 `keepVersionStatisticsCurrent` 維持：讀取只**觸發**（十分鐘一次、不等、失敗只記一行，不進請求），分析用寄件統計的同一條規則 `spine/senderStatistics.ts`。
+- **標籤說明與系統筆記還沒有版本**（業主 2026-11-22）：它們的歷史清單、還原、近期變動、這天改過、備份的歷史，**繼續讀事件，和以前一模一樣**（`hasVersionList` 決定，`noteVersions.ts` 最後一段是原來的查詢）。補上版本的那一批再改。
+- **仍讀事件的**（本機的帳，不是版本）：AI 的工作與審閱（`agentRuns`、`agentRunUndo`）、一天的修改次數與「誰改了」（`activity.ts`，要看 `ui_context` 的系統整理）、倒回的事件列（`rewindEvents`）、
+  事件復原（`eventRestore`）、贏了內文衝突的標記（`BODY_CONFLICT`，只用來斷列）。
+- **證明**：`historyReadersMatchEvents.integration.test.ts`——同一份資料庫（舊版拷貝 `makeOldCopy history`，加上遷移後的新存檔），舊的事件讀法（`helpers/legacyHistoryReaders.ts`，只在測試裡）與新讀法
+  的清單逐列、最新版、每天與每個版本時間點的「當時的樣子」、每個版本的還原內容、手寫逐列相同；不同的只有測試裡 `INTENDED` 列出的幾種，PR 說明逐一列出。
 
 ## 怎麼分辨「一次執行」
 

@@ -11,6 +11,7 @@
 // SAFETY: only runs against a *_test database; skips otherwise.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { ALIGN_VERSION_TIMES_SQL } from "./helpers/alignVersionTimes.js";
 import { Hono } from "hono";
 import { apiOnError } from "../httpError.js";
 import { pool, q } from "../db.js";
@@ -216,6 +217,7 @@ describe.skipIf(!isTestDb)("workspace time (DB)", () => {
         await client.query("BEGIN");
         await client.query("SET LOCAL session_replication_role = replica"); // domain_events is append-only
         await client.query(`UPDATE domain_events SET created_at = '2026-03-10T20:00:00Z' WHERE workspace_id = $1 AND target_id = $2`, [WS, note.node.id]);
+        await client.query(ALIGN_VERSION_TIMES_SQL);
         await client.query("COMMIT");
       } finally {
         client.release();

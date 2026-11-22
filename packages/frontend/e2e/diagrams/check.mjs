@@ -12,7 +12,8 @@ import assert from "node:assert/strict";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(here, "../../../../package.json"));
-const { chromium } = require("playwright");
+// Playwright is the e2e package's own dependency (packages/frontend/e2e/package.json), not the root's.
+const { chromium } = createRequire(path.join(here, "../package.json"))("playwright");
 const esbuild = require("esbuild");
 const mermaidDir = path.dirname(require.resolve("mermaid/dist/mermaid.esm.min.mjs"));
 

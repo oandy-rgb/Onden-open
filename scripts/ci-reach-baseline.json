@@ -1,0 +1,33 @@
+{
+  "//": "刻意不在 CI 跑的測試檔與檢查指令，每項寫理由（scripts/ciReachLib.mjs 讀，packages/markdown/src/test/guards/ciReach.guard.test.ts 守）。只准減少：修好或刪掉就刪一行。covered＝同一個檢查在 CI 會跑的那個測試檔裡跑，守門會查那個測試真的有 CI 在跑、而且用到同一個模組。",
+  "covered": {
+    ".:dup:check": "packages/frontend/src/test/guards/dup.guard.test.ts",
+    ".:dup:names": "packages/frontend/src/test/guards/dup.guard.test.ts",
+    ".:dup:near:check": "packages/frontend/src/test/guards/dup.guard.test.ts"
+  },
+  "files": {
+    "docs/research/eg-walker-bench/**": "研究時留下的別人的基準測試副本（不是 Onden 的程式，沒有安裝它的依賴）",
+    "packages/frontend/e2e/probes/**": "探針：只印數值、沒有斷言，跑完綠的也不代表有保護（e2e/probes/README.md）",
+    "packages/frontend/e2e/browser-app/serve.mjs": "給其他腳本用的靜態伺服器模組，不是測試",
+    "packages/frontend/e2e/browser-app/measure.mjs": "只量數字、不判通過與否（run-all.mjs 註解）",
+    "packages/frontend/e2e/browser-app/profileWorker.mjs": "只量數字、不判通過與否（run-all.mjs 註解）",
+    "packages/frontend/e2e/browser-app/saveUnderWrites.mjs": "只量數字、不判通過與否（run-all.mjs 註解）",
+    "packages/frontend/e2e/browser-app/paragraphs.mjs": "壞了：「收回原文」的請求現在要 child_id，腳本沒跟上（2026-11-14 記下，2026-11-22 重跑仍是 4/9）；要修或刪",
+    "packages/frontend/e2e/browser-app/timelineDrag.mjs": "壞了：時間軸頁跟「今天」一起改版後腳本找不到元素（2026-11-14 記下，2026-11-22 重跑仍逾時）；要修或刪",
+    "packages/frontend/e2e/fullstack/officialSite.spec.ts": "產生官方網站截圖的工具，不是測試；匯入 ../../src，在 e2e 容器裡載入會讓整套停掉（playwright.config.ts 註解）"
+  },
+  "scripts": {
+    ".:bench:seed": "建 _bench 資料庫的工具；npm run bench 第一次用到時自己會跑",
+    ".:dup": "印重複報告的工具；檢查是 dup:check（covered）",
+    ".:dup:near": "印近似重複報告的工具；檢查是 dup:near:check（covered）",
+    ".:test:repeat-changed": "在自己電腦上重複跑改過的測試、找不穩定的工具",
+    ".:check": "本機一次跑完幾項檢查的捷徑；裡面每一項 CI 都另外在跑",
+    ".:desktop:smoke": "開發模式的桌面版冒煙測試；CI 跑的是打包後的版本（desktop:check 裡的 smoke.mjs --app）",
+    "packages/desktop:test:smoke": "同上：開發模式的冒煙測試，CI 跑打包後的版本",
+    "packages/backend:test:real-pg": "筆電上挑「真 Postgres 才抓得到」的檔案來跑；CI 的 backend-postgres 工作在真 Postgres 上跑整套",
+    "packages/backend:test:isolated": "一檔一程序地跑、找互相影響的工具",
+    "packages/contract:test": "這個套件還沒有任何測試檔",
+    "packages/frontend:e2e:cloud-stack": "在雲端沙盒裡起整套服務的啟動器，不是測試本身",
+    "packages/frontend:e2e:probes": "探針（見 files 的 probes）"
+  }
+}

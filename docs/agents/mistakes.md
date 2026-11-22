@@ -909,6 +909,13 @@
 - **為什麼沒擋到**：寫觸發器時只想到「哪一欄改了」，沒有想到「是誰改的」；4.9 照提案的句子做，沒有先問 `seen` 能不能當成那個判斷的依據（檔頭本來就寫它只決定通知誰）。
 - **類別**：機制的前提沒有驗證。
 - **機制**：〔第 1 層〕兩則測試各自釘住（第一則兩種先後都跑，第二則是隨機種子與固定種子 2 的 R4）；觸發器改成不帶欄位清單、用 WHEN 判斷。BEFORE 觸發器改的欄位被 `UPDATE OF` 依賴：尚無機制擋。
+### 2026-11-22　改 lint:boundaries 的設定只跑了它自己，沒跑讀同一份設定的守門；對擁有者說「規則一樣有效」
+- **發生了什麼**：為了消掉 136 個「行內註解無效」警告，我把 `eslint.boundaries.config.js` 的 `noInlineConfig` 搬到指令列的 `--no-inline-config`，跑了 `npm run lint:boundaries` 看到通過，就跟擁有者說規則一樣有效。守門 `allowlistBoundaries.guard.test.ts` 用設定檔本身跑 ESLint、證明 disable 註解繞不過邊界規則，搬走之後它失敗了。
+- **證據**：公開庫 CI 執行 45013171522 的 Guard lane 與 Frontend：「an eslint-disable comment does not silence it」expected [] to have a length of 1。
+- **發現者**：CI 的守門通道（我第一次跑定期檢查時）。
+- **為什麼沒擋到**：改設定檔前沒有找誰讀它（`git grep eslint.boundaries.config`），只驗了我直接要的那個指令。
+- **類別**：未查證就回報；只驗自己要的出口、沒驗同一份輸入的其他讀者。
+- **機制**：守門通道本身（它擋下了）；改回設定、指令改用 `--quiet`。改共用設定檔前列出它的讀者：尚無機制。
 
 ### 2026-11-22　交回前只跑改到的測試；本機有 git 身分、CI 沒有，新 CI job 第一次跑就紅（PR #1937 第 2 輪後）
 - **發生了什麼**：第 2 輪加了 migration 224 與一個會建／刪資料庫的真 Postgres 測試，交回 `b6a0d2023` 時只跑了改到的測試檔。公開 CI 紅了五個 job：`backupFidelity`（新表有 `node_id` 欄但沒進 `NODE_TABLES`）、`crossWorkspaceReadSweep`（新表沒有工作區欄）、`testDatabaseGate` 加上 unit lane 載不進檔（`restoreScript.postgres` 沒有 `isTestDatabase()` 關卡，沒有 `DATABASE_URL` 時 `new URL(undefined)` 在收集階段就丟錯），還有新的 restore-scripts job 裡演練自我測試的 8 個 `--commit` 案例：`fake_commit` 用 `git commit-tree`，runner 上沒有 git 身分，做出的 ref 是空的。

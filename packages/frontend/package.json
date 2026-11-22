@@ -33,7 +33,7 @@
     "e2e:slides": "node e2e/browser-app/slideTables.mjs chromium && node e2e/browser-app/slideTables.mjs mobile-chrome && node e2e/browser-app/slideTablesPptx.mjs && node e2e/browser-app/slideColumns.mjs",
     "layout:audit": "node e2e/layout-audit/run.mjs",
     "layout:audit:selftest": "node e2e/layout-audit/selftest.mjs",
-    "lint:boundaries": "eslint -c eslint.boundaries.config.js src --max-warnings 0",
+    "lint:boundaries": "eslint -c eslint.boundaries.config.js src --quiet",
     "style:census": "node e2e/style-census/run.mjs",
     "style:census:selftest": "node e2e/style-census/selftest.mjs"
   },

@@ -29,6 +29,8 @@ step "backend lint" in_package backend npm run -s lint
 NO_DB=ONDEN_TESTS_WITHOUT_DATABASE=1
 step "backend guards (no-database run)" in_package backend env $NO_DB npx vitest run src/test/guards
 step "frontend guards (no-database run)" in_package frontend env $NO_DB npx vitest run src/test/guards
+# The import layers (eslint.boundaries.config.js): about 30 s, and before 2026-11-22 no job ran it at all.
+step "frontend import boundaries" in_package frontend npm run -s lint:boundaries
 step "unused code" npm run -s unused:check
 step "licences and third-party notices" npm run -s notices:check
 step "ratchet" npm run -s ratchet:check

@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const smoke = join(dirname(fileURLToPath(import.meta.url)), "smoke.mjs");
-const passthrough = process.argv.slice(2);
+const passthrough = process.argv.slice(2).filter((arg) => arg !== "--require-engines");
 const summary = [];
 for (const engine of ["chromium", "mobile-chrome", "webkit", "mobile-safari"]) {
   const run = spawnSync(process.execPath, [smoke, engine, ...passthrough], { stdio: "inherit" });
@@ -65,15 +65,17 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 }
 // The feature scripts that were written one at a time and listed by no runner (2026-11-14 audit: they could rot
 // unseen). Each is one Chromium run, with the window its usage line names; all pass against dist-browser today.
-// Left out on purpose, because they fail against today's UI (see the PR that added this list): paragraphs.mjs
-// (the 「收回原文」 request now needs child_id), phoneViewTabs.mjs (the board's title sheet no longer switches back to
-// 內容), timelineDrag.mjs (the timeline page was reworked with Today). measure.mjs, profileWorker.mjs and
-// saveUnderWrites.mjs measure and take no pass/fail; touchHold.mjs and the slide scripts have their own npm scripts.
+// Left out on purpose, because they fail against today's UI (checked again 2026-11-22; named with the reason in
+// scripts/ci-reach-baseline.json): paragraphs.mjs (the 「收回原文」 request now needs child_id), timelineDrag.mjs (the
+// timeline page was reworked with Today). measure.mjs, profileWorker.mjs and saveUnderWrites.mjs measure and take no
+// pass/fail; touchHold.mjs and the slide scripts have their own npm scripts. The last row (bigInk … phoneViewTabs) was
+// listed by no runner until 2026-11-22; each passed against dist-browser that day.
 const FEATURES = [
   ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
+  ["bigInk.mjs"], ["contentTabRemovable.mjs"], ["phoneAiPanel.mjs"], ["reviewCardFront.mjs"], ["reviewGroups.mjs"], ["splitNoteWraps.mjs"], ["phoneViewTabs.mjs"],
 ];
 const dirArgs = passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir");
 for (const [script, ...args] of chromiumRan ? FEATURES : []) {
@@ -90,4 +92,6 @@ for (const [profile, ...extra] of chromiumRan ? [["1280"], ["tablet-landscape"],
   summary.push([`dayWalk ${profile}${extra.length ? ` ${extra.join(" ")}` : ""}`, run.status === 0 ? "passed" : "FAILED"]);
 }
 console.log("\n" + summary.map(([engine, result]) => `${engine.padEnd(14)} ${result}`).join("\n"));
-process.exit(summary.some(([, result]) => result === "FAILED") ? 1 : 0);
+// --require-engines (the scheduled CI job): a SKIPPED engine fails too, so a runner without the browsers is not a green night.
+const requireEngines = process.argv.includes("--require-engines");
+process.exit(summary.some(([, result]) => result === "FAILED" || (requireEngines && result.startsWith("SKIPPED"))) ? 1 : 0);

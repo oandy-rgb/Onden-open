@@ -16,6 +16,7 @@ const INVALID = "The request wasn't valid.";
  *  the backend sends is in one of the two tables, and in neither twice. */
 const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   owner_only: "Only the workspace owner can do that.",
+  task_line_not_found: "This task's line is no longer in its note, so nothing was deleted. Reopen the note and try again.",
   browser_app_unavailable: "The trial version doesn't have this feature.",
   view_layout_not_for_tags: "Only notes can have this view.",
   view_layout_not_changeable: "This view can't be turned into the Content tab.",
@@ -325,6 +326,7 @@ const SERVER_SENTENCE_MESSAGES: Record<string, string> = {
   "not found": SERVER_ERROR_MESSAGES.not_found!,
   "note": SERVER_ERROR_MESSAGES.not_found!,
   "node not found or expired": SERVER_ERROR_MESSAGES.not_found!,
+  "task line not found in its note": LATE_SERVER_ERROR_MESSAGES.task_line_not_found!,
   "source note": "The note the link starts from no longer exists.",
   "target note": "The note the link points to no longer exists, or you can't see it.",
   "the note the link is written in cannot be changed": "You can't change the note this link is written in.",

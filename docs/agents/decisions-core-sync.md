@@ -1,6 +1,6 @@
 # 邊界決定：核心寫入、標籤同名、冪等、同步與 membership（第 10–15、17 批，2026-09-13）
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/backend/src/services/orderKeys.ts, packages/backend/src/services/actorPrefs.ts, packages/backend/src/services/actorReadSnapshot.ts, packages/backend/src/spine/txHooks.ts, packages/backend/src/services/sync/membership.ts, packages/backend/src/services/eventLog/bodyMerge*.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/membershipReconcile.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/localCopyState.ts, packages/frontend/src/lib/accountPrefStore.ts
 
 何時讀：改 `updateNode`、標籤改名、交易／冪等、sync、membership、待同步文字之前。
@@ -174,9 +174,32 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   而且和筆記的存檔不在同一條寫入通道，那一趟來回裡打字存檔，舊字可能進 store 再進草稿，直到之後的 `refresh()`；
   還原版本（`noteHistoryWriter`）也是沒有經過門的 GET（有值的對照、握著同一條通道，較安全）。守門 `answerDoor.guard`
   只認四個函式名，看不到直接的 `setData`。
-  `saveTiming` 的 seed 222、3333 與 #1866（改名後立刻重新整理又遇到 503）在 #1794 之後通過，但只證明模擬的重新整理：
+  `saveTiming` 的 seed 222、3333 與 #1866（改名後立刻重新整理又遇到 503）在 #1794 之後通過，但當時只證明模擬的重新整理：
   它（`saveTiming` 的 `reload()`）只清草稿，記憶體裡的 store、還沒有回應的欄位、頁面的水位與日誌都留著，所以擋住的是
   `serverCopyOver`。真的重新整理時這些都不在了，靠的是佇列的列蓋在回答上（佇列的投影；`saveSurvivesKill` 測關掉頁面後的存檔）。
+  2026-11-19 起 `reload()` 是真的重新整理（重新載入模組，舊頁面的回答沒人收；[note-writes.md](../architecture/note-writes.md#沒有被收下的文字不算數2026-11-19)），
+  這三則照樣通過，所以現在證明的是佇列的投影這一條。
+- **沒有被收下的文字不算數（2026-11-19）。** 重新整理後的第一次畫面是本機副本加上佇列的投影，編輯器的 base 就可能是一段伺服器
+  還沒收下、之後又拒絕的文字。被拒的文字不成為 base（`writeRecovery.withoutRefusedBase`，`writeQueue` 送出的兩處都經過它）；
+  救回副本只依伺服器回答的內文丟掉；上一頁沒排進佇列的存檔在 `runBoot` 顯示本機副本之前先排進去（`writeQueue.takeInLeftWrites`）。
+  規則、案例與不保證的，見 [note-writes.md](../architecture/note-writes.md#沒有被收下的文字不算數2026-11-19)。
+
+- **門對每一種列都用同一條規則（2026-11-20）。** 上一條只查筆記列自己那本帳（`node:<id>`）；屬性、任務、標籤套用、首頁各自有帳，
+  門卻不看，所以「等回應中」時同步回答、整份 bootstrap、`?nodes=none` 的更新會用伺服器的舊副本蓋掉手上的值：連改兩次屬性、
+  勾任務、加標籤，畫面回到第一次的值（`gateHoldsEveryUnansweredEdit.test.ts` 在修改前 21 則全紅）。現在只有一條規則、一個地方：
+  `storeOps.keepUnanswered(帳, 伺服器那一列, 手上那一列)`——**任何一種列，有還在等回應的欄位就保留手上的值**。
+  帳本名：筆記列 `node:<id>`、屬性 `attribute:<筆記>`、標籤套用 `membership:<筆記>`（每個標籤一個欄位，值是在分類標籤或一般標籤裡，
+  這一批從 `membership:<筆記>:<標籤>` 改成每則筆記一本）、任務 `task:<id>`、首頁與外框 `workspace:<id>`、網站設定 `workspace:<id>:config`、
+  標籤清單裡的一個標籤 `node:<標籤>`、圖譜上手動放的位置 `position:<筆記>`。`tagWriter.setHidden` 與 `graphPositionWriter` 這一批才開始記帳。
+  入口：`serverCopyOver`（筆記列、它的屬性與標籤）、`syncDeltaOver`（`applySyncDelta` 是它的 `.state`）、`wholeBootstrapOver`、
+  `sharedRowsOver`（首頁、網站設定、標籤清單、圖譜位置；`syncEngine.mergeBootstrapMeta` 用它）。
+  保留之後再讀一次，所以別台較新的值仍然會到（`syncEngine.showServerCopy`）：筆記那三本帳都有回應後讀那則筆記（`readAgainWhenAnswered`，
+  `GET /api/nodes/:id` 帶著屬性與標籤）；首頁、網站設定、標籤清單、圖譜位置在那筆有回應後做一次 `?nodes=none` 更新；
+  任務沒有帶位置的單筆讀取，所以做一次整份 bootstrap（`refresh()`，罕見：要在任務的修改等回應時剛好收到帶著舊值的回答）。
+  守門 `everyJournalAtTheDoor.guard`：`lib/` 裡每個 `optimisticFields(` 的帳都要出現在 `storeOps` 的程式裡，否則列進例外並寫原因
+  （目前只有白板布局 `canvas:`，它由 `refreshOpenCanvas` 讀回，不經過門）。
+  **還沒做（第二步、第三步）**：寫入一變成「已排隊」帳就清掉（`writeLifecycle` 的 `accepted` 對排隊結果也呼叫，各 writer `settle(true)`），
+  排隊中的搬移、排序、刪除、屬性在整包 bootstrap 後會退回舊值；`/api/tags`、檢視、檢視查詢、屬性、空間、RSS 的 GET 沒有位置（要後端）。
 
 實測與入口限制見 [待同步文字驗證](../archive/pending-note-text-fixes-2026-09-13.md)。API 完全不可達
 時的 LoginGate 冷啟動仍阻擋編輯器，登錄 GAP-20；不能以快取存在取代登入／換帳號隔離的契約。

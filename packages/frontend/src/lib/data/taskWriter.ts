@@ -200,5 +200,23 @@ export function makeTaskWriter(ctx: DataCtx) {
     });
   }
 
-  return { create, createStandaloneTask, patch, placeTask, unplaceTask };
+  /** Delete a task: DELETE /api/nodes/:id, the one delete. A task written in a note is a line of it, and the server takes
+   *  the line out of the note in the same transaction, so the note's next save cannot bring the task back. Task nodes are
+   *  not in the note list, so the delete cannot go through noteWriter.remove (it would find no node and send nothing).
+   *  Offline it is queued as it is; the server does the line when it is sent. Resolves null when there is no such task. */
+  async function remove(id: string) {
+    const previous = ctx.data.tasks.find((task) => task.id === id);
+    if (!previous) return null;
+    ctx.setData((state) => ({ ...state, tasks: state.tasks.filter((task) => task.id !== id) }));
+    const result = await commit<{ deleted: boolean }>(`task:${id}`, { method: "DELETE", path: `/api/nodes/${id}`, body: null }, {
+      destructive: true,
+      mirror: () => removeTask(id),
+      rejected: () => ctx.setData((state) => ({ ...state, tasks: state.tasks.some((task) => task.id === id) ? state.tasks : [...state.tasks, previous] })),
+    });
+    // The note's new body arrives with the next sync; ask for it now so the line is not shown (or saved back over) meanwhile.
+    if (previous.node_id !== null && result.status === "synced") await refreshNote();
+    return result;
+  }
+
+  return { create, createStandaloneTask, patch, remove, placeTask, unplaceTask };
 }

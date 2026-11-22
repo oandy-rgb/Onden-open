@@ -360,9 +360,8 @@ describe.skipIf(!enabled)("moving a workspace from host to host", () => {
       expect(job.status, `${path.join(" → ")}: ${job.error ?? ""}`).toBe("done");
       const where = path.join(" → ");
       expect(appDifferences(before.app, await next.app(arrived), parts), `${where}: what the app shows`).toEqual({});
-      // The notes saved from a subscription are compared in the FINDING below, not here.
-      const noSaved = (own: typeof before.own) => ({ ...own, rss: own.rss.map(({ saved: _saved, ...rest }) => rest) });
-      if (personal) expect(noSaved(await next.personal(arrived)), `${where}: review progress, personal settings, subscriptions`).toEqual(noSaved(before.own));
+      // Subscriptions are compared with the notes saved from each: a subscription gets a new id on a move, and its notes follow it.
+      if (personal) expect(await next.personal(arrived), `${where}: review progress, personal settings, subscriptions and their saved notes`).toEqual(before.own);
       // Version history (format 3, #1592): a move with history keeps every note's versions (title and text of each).
       // The restore itself saves each note once more (its creation in the new workspace), so the arrived list may hold more,
       // never fewer: every version the note had is still there.
@@ -390,11 +389,10 @@ describe.skipIf(!enabled)("moving a workspace from host to host", () => {
     await fc.assert(fc.asyncProperty(routeOf(true), (r) => hopsKeep(["attributes", "ink"], true, r)), roundTripRuns({ maxRuns: 4 }));
   }, 900_000);
 
-  // FINDING rss-saved-notes: a note saved from a feed keeps `_rss_source` (the subscription's id, modules/rss/sources.ts). A
-  // move gives the subscription a new id when its own is taken (backupExtras.ts importExtras: `taken ? randomUUID() : r.id`,
-  // always so on the same server) and the note's attribute is not mapped, so the note no longer belongs to its feed: the
-  // feed's list of saved notes is empty. Found by the property above on seeds 1, 2 (server → server, browser → browser).
-  it.fails("FINDING rss-saved-notes: after a move, a note saved from a subscription still belongs to that subscription", async () => {
+  // A note saved from a feed keeps `_rss_source` (the subscription's id, modules/rss/sources.ts). A move gives the subscription a new
+  // id when its own is taken (always so on the same server), so the notes' attribute goes through the same map: the notes are written
+  // after the ids are decided (backupExtras.ts planRssIds). Fixed case; the property above holds the same for random routes.
+  it("after a move, a note saved from a subscription still belongs to that subscription", async () => {
     const from = hosts[0]!;
     const left = await from.newPlace("hop-rss");
     await from.build(minimalWorld({ rss: [{ title: "Feed", url: "https://example.com/feed.xml", intervalMinutes: 60, embed: false, alwaysFulltext: false, saved: [0] }] }), left);
@@ -411,9 +409,9 @@ describe.skipIf(!enabled)("moving a workspace from host to host", () => {
     await fc.assert(fc.asyncProperty(holds, (r) => hopsKeep(["tagViews", "noteViews", "noteTabs", "tagFunctions", "tagExtends"], false, r)), roundTripRuns({ maxRuns: 4 }));
   }, 900_000);
 
-  // Pinned with the named losses of backupRoundTrip.property.test.ts (the same defects: views, functions, `extends`,
-  // pointers, graph positions, paragraph tags); red when the last is fixed: delete `.fails`.
-  it.fails("FINDING backup-app-parts: moves keep the views, functions, extends, pointers, graph and paragraph tags", async () => {
+  // Every part a restore shows, over a move: views, functions, extends, pointers, graph positions, paragraph tags, anchors, typed
+  // attributes and ink. The one open loss (an empty text attribute, an owner's decision) is not generated: see backupRoundTrip.property.test.ts.
+  it("moves keep the views, functions, extends, pointers, graph positions and paragraph tags", async () => {
     const lossy = routeOf(true).filter(({ spec }) => spec.rich!.tagViews.length + spec.rich!.noteViews.length + spec.rich!.functions.length + spec.rich!.extendsLinks.length + spec.rich!.pointers.length + spec.rich!.graph.length > 0);
     await fc.assert(fc.asyncProperty(lossy, (r) => hopsKeep(APP_PARTS, false, r)), roundTripRuns({ maxRuns: 4 }));
   }, 900_000);

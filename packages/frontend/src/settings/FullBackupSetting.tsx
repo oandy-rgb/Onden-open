@@ -243,6 +243,7 @@ function RestoreResult({ report }: { report: RestoreReport }) {
     [skipped.attributes, tr("Fields that were refused and left out: {n}", { n: skipped.attributes })],
     [skipped.links, tr("Links between notes that could not be made again: {n}", { n: skipped.links })],
     [skipped.positions, tr("Positions on a whiteboard that could not be placed: {n}", { n: skipped.positions })],
+    [skipped.pointers ?? 0, tr("Sidebar shortcuts that could not be put back: {n}", { n: skipped.pointers ?? 0 })],
     [skipped.tag_automation, tr("Old tag automation, which no longer exists, was not brought back: {n}", { n: skipped.tag_automation })],
     [skipped.tag_settings, tr("Tag settings (colour, fields, text) that were not brought back: {n}", { n: skipped.tag_settings })],
   ];

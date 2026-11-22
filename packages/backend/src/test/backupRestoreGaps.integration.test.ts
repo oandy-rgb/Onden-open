@@ -174,7 +174,7 @@ for (const format of [2, 3] as const) describe.skipIf(!enabled)(`restoring a bac
   });
 
   it("gap 3: the report says what was left out (nothing here, so all zero)", () => {
-    expect(report.skipped).toEqual({ tags: 0, attributes: 0, links: 0, positions: 0, tag_settings: 0, tag_automation: 0, tasks: 0, views: 0, functions: 0, attachments_too_large: 0, attachments_unreadable: 0, attachments_not_yours: 0 });
+    expect(report.skipped).toEqual({ tags: 0, attributes: 0, links: 0, positions: 0, tag_settings: 0, tag_automation: 0, tasks: 0, views: 0, functions: 0, pointers: 0, attachments_too_large: 0, attachments_unreadable: 0, attachments_not_yours: 0 });
     expect(report.tasks).toBe(2);
     expect(report.views).toBe(6 + 4);
   });

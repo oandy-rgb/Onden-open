@@ -286,7 +286,9 @@ export default function TaskSheet({ task, today, notes, actions, onClose }: Prop
             {t("Won't do")}<small>{t("Crossed out, not deleted")}</small>
           </Pressable>
         )}
-        <Pressable type="button" className="tk-sheet-delete" onClick={() => { actions.remove(task); onClose(); }}>{t("Delete task")}</Pressable>
+        <Pressable type="button" className="tk-sheet-delete" onClick={() => { actions.remove(task); onClose(); }}>
+          {t("Delete task")}{task.blockRef && <small>{t("Its line leaves the note too")}</small>}
+        </Pressable>
       </div>
       {placing && actions.place && (
         <div className="tk-sheet-notes">

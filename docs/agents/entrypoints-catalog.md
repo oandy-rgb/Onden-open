@@ -504,7 +504,7 @@ export const Frame = PreviewBlock;`
 - 取代：自己寫 componentDidCatch 的 class，或再多包一層 AppErrorBoundary
 - 為什麼：區域錯誤邊界：出錯的那一塊換成一句白話與「再試一次」，其他區塊與編輯中的內容不卸載；`resetKeys` 在使用者換筆記、頁面或分頁時清掉錯誤。錯誤與最外層 AppErrorBoundary 走同一個 reportRenderError。包在接縫上（模組畫面的共同入口 SecondaryLensOutlet、筆記頁三欄、OwnerViewPane），不要每個模組各包一次。
 
-## 共用邏輯（112）
+## 共用邏輯（113）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -984,6 +984,13 @@ const refresh = (calendarId: string) => calendarWriter.refresh(calendarId);`
 - 入口：`frontend/src/lib/data/writeLifecycle.ts`（`makeWriteLifecycle`、`inWriteOrder`）　項目 `write-lifecycle`
 - 寫法：`import { makeWriteLifecycle } from "./lib/data/writeLifecycle";`
 - 為什麼：樂觀更新、確認、失敗回復的流程用它，畫面先變、失敗時退回的行為才一致。
+
+### 要把伺服器的資料（同步回應、bootstrap、單筆讀取）放進 store，又不蓋掉還在等回應的修改
+
+- 入口：`frontend/src/lib/data/storeOps.ts`（`serverCopyOver`、`syncDeltaOver`、`wholeBootstrapOver`、`sharedRowsOver`）　項目 `server-copy-over-store`
+- 寫法：`import { syncDeltaOver } from "./lib/data/storeOps";`
+- 守門：`guard:everyJournalAtTheDoor`
+- 為什麼：一條規則（storeOps 內的 keepUnanswered）：任何一種列，有還在等回應的欄位（optimisticFields 的帳）就保留手上的值；新的帳要經過這裡，守門會擋。
 
 ### 一個帶著資料的回應（同步、成員資格頁、任何一種 bootstrap）要放進本機副本或畫面時，判斷它是不是在這台裝置已確認的寫入之前讀的
 
@@ -1612,7 +1619,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（57）
+## 後端（58）
 
 ### 要寫日誌
 
@@ -2060,6 +2067,16 @@ declare const actor: ActorCtx, workspaceId: string, newNoteId: string, backupNot
 await importNoteHistory(actor, workspaceId, newNoteId, () => reader.openHistory(backupNoteId)!);`
 - 取代：自己 INSERT domain_events 補歷史，或在備份格式裡另外塞一份版本表
 - 為什麼：版本歷史就是帶 body_hash 的事件加上 blobs；用原本的時間寫進去只有 spine/importedHistory.ts 一處：驗擁有者、驗雜湊、依來源事件 id 去重、標成不可作為事件復原。格式 3 才有這一段，舊伺服器看到會整份拒絕。設計：docs/architecture/backup-move.md。
+
+### 新增資料表或備份的新內容時，要說明「備份有沒有帶、誰在還原時放回去」
+
+- 入口：`backend/src/test/helpers/backupCoverage.ts`（`BACKUP_COVERAGE`、`backupGaps`）　項目 `be-backup-coverage`
+- 寫法：`import { BACKUP_COVERAGE } from "./test/helpers/backupCoverage.js";
+// 新增資料表 foo 之後，在 backupCoverage.ts 加一列：帶在筆記旁檔的哪個欄位、extras.json 的哪個欄位，
+// 或寫明不帶的原因；漏列守門測試 backupCoverage.guard.test.ts 會失敗。
+BACKUP_COVERAGE.note_pointers; // { carried: { by: "sidecar", field: "pointers" } }`
+- 取代：只在註解裡寫「備份沒帶 X」，或每次只補眼前那一個表
+- 為什麼：側欄捷徑、關係圖位置、訂閱與筆記的關聯都是「新增了表或面，備份沒跟上」。這份清單逐表記下誰帶、誰放回、不帶的理由與缺口，新表漏列會紅燈，缺口清單只准減少。設計：docs/architecture/backup-move.md。
 
 ### 寫入會改到筆記的標題、內文或手寫（新的寫入路徑），要讓它成為一個版本
 

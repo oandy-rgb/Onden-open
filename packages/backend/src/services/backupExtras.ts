@@ -143,12 +143,26 @@ export async function importFunctionRefs(
   return result;
 }
 
+/** The id each of the backup's subscriptions has in the new workspace: its own when no subscription here holds it, else a new one
+ *  (on the server it came from it is always held, by the subscription that was left behind). Only subscriptions whose space came
+ *  across are listed. Decided before the notes are written, because a note saved from a feed names it in `_rss_source`. */
+export async function planRssIds(extras: BackupExtras, spaces: ReadonlyMap<string, string>): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  for (const r of extras.rss) {
+    if (!spaces.has(r.space_id)) continue;
+    const taken = await db.selectFrom("rss_subscriptions").select("id").where("id", "=", r.id).executeTakeFirst();
+    ids.set(r.id, taken ? randomUUID() : r.id);
+  }
+  return ids;
+}
+
 /** Write `extras` into the workspace of `by` (a move into a new workspace,
  *  inside the restore's transaction). `ids` maps a backup note id to its id here,
  *  `spaces` a backup space id to the new one; a row naming one that was not
  *  restored is skipped. */
 export async function importExtras(
   workspaceId: string, by: ActorCtx, extras: BackupExtras, ids: Map<string, string>, spaces: Map<string, string>, owner: boolean,
+  rssIds?: ReadonlyMap<string, string>,
 ): Promise<ExtrasImport> {
   // `actorId` keys the restorer's own personal rows (whose they are); a carried "who did this" column records carriedActorId(by) (spine/authority.ts).
   const actorId = by.id;
@@ -167,13 +181,14 @@ export async function importExtras(
     await db.insertInto("focus_sessions").values({ id: randomUUID(), workspace_id: workspaceId, actor_id: actorId, task_id: mapped(r.task_id), started_at: r.started_at, ended_at: r.ended_at, note: r.note }).execute();
     done.focus++;
   }
+  const subscriptionIds = rssIds ?? await planRssIds(extras, spaces);
   for (const r of extras.rss) {
     const spaceId = spaces.get(r.space_id);
-    if (!spaceId) continue;
-    // The subscription keeps its id (a note's `_rss_source` names it) unless that id is taken by another workspace's.
-    const taken = await db.selectFrom("rss_subscriptions").select("id").where("id", "=", r.id).executeTakeFirst();
+    const subscriptionId = subscriptionIds.get(r.id);
+    if (!spaceId || !subscriptionId) continue;
+    // The id was decided with the notes (planRssIds): the notes saved from this feed name it.
     await db.insertInto("rss_subscriptions").values({
-      id: taken ? randomUUID() : r.id, workspace_id: workspaceId, space_id: spaceId, title: r.title, url: r.url, created_by_actor_id: carriedActorId(by),
+      id: subscriptionId, workspace_id: workspaceId, space_id: spaceId, title: r.title, url: r.url, created_by_actor_id: carriedActorId(by),
       fetch_interval_minutes: r.fetch_interval_minutes, embed: r.embed, always_fulltext: r.always_fulltext, auto_dismiss_days: r.auto_dismiss_days,
       auto_tag_id: mapped(r.auto_tag_id), default_tag_ids: r.default_tag_ids ? r.default_tag_ids.map((t) => mapped(t)).filter((t): t is string => !!t) : null,
       default_parent_id: mapped(r.default_parent_id),

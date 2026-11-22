@@ -45,9 +45,13 @@ export function optimisticFields<T extends object>(resource: string, before: T, 
   };
 }
 
-/** The fields of `resource` with an edit still waiting for its answer. */
-export function pendingFields(resource: string): Set<PropertyKey> {
-  return new Set(resources.get(resource)?.keys() ?? []);
+const NONE: ReadonlySet<PropertyKey> = new Set();
+
+/** The fields of `resource` with an edit still waiting for its answer (asked once per row of every server copy:
+ *  no allocation when there is none). */
+export function pendingFields(resource: string): ReadonlySet<PropertyKey> {
+  const fields = resources.get(resource);
+  return fields ? new Set(fields.keys()) : NONE;
 }
 
 /** Resolves once no edit of `resource` waits for its answer any more (now, if none does). Each settle runs inside

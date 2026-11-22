@@ -126,6 +126,11 @@ export type BackupNote = {
   /** Where its `[[links]]` pointed (ids of notes in this backup), as the source
    *  kept them (format 2; services/backupLinks.ts). Absent in older backups. */
   wikilinks?: string[];
+  /** The sidebar shortcuts (note_pointers) that point AT this note: the parent they sit under (a note in this backup, or null
+   *  for the top of the sidebar), their place among that parent's shortcuts and their label. A shortcut whose parent is not
+   *  in the backup is left out, as the app's own bootstrap leaves it out. Left out when there is none, and in backups made
+   *  before this field: the archive version stays 2, a reader that does not know it ignores it, like `wikilinks`. */
+  pointers?: Array<{ parent_id: string | null; order_key: string; display_prefix: string | null }>;
 };
 
 export type BackupSpace = {
@@ -243,6 +248,10 @@ async function readSidecarRows(workspaceId: string, ids: string[]) {
     `SELECT node_id::text, surface, x, y, width, height, color, folded, sub_canvas_id::text FROM node_positions
       WHERE workspace_id = $1 AND node_id = ANY($2::uuid[]) ORDER BY node_id, surface`, [workspaceId, chunk],
   )).rows);
+  const pointers = await groupedByNote(ids, async (chunk) => (await db.selectFrom("note_pointers")
+    .select(["target_id as node_id", "parent_id", "order_key", "display_prefix"])
+    .where("workspace_id", "=", workspaceId).where("target_id", "in", chunk)
+    .orderBy("target_id").orderBy(sql`order_key COLLATE "C"`).orderBy("id").execute()));
   const wikilinks = new Map<string, string[]>();
   for (let at = 0; at < ids.length; at += ID_CHUNK) {
     for (const e of await db.selectFrom("node_edges").select(["source_node_id", "target_node_id"])
@@ -266,7 +275,7 @@ async function readSidecarRows(workspaceId: string, ids: string[]) {
       if (r.holder_node_id) reviewCards.add(r.holder_node_id);
     }
   }
-  return { edges, positions, wikilinks, anchors, bindings, reviewCards };
+  return { edges, positions, pointers, wikilinks, anchors, bindings, reviewCards };
 }
 
 /** The full backup of what `actor` may read. Returns the archive, still
@@ -400,6 +409,8 @@ async function readBackupFiles(actor: ActorCtx, workspaceId: string, scratch: st
     const positions = (side.positions.get(n.id) ?? []).filter((p) => p.surface === "graph" || inBackup.has(String(p.surface)))
       .map((p) => (typeof p.sub_canvas_id === "string" && !inBackup.has(p.sub_canvas_id) ? { ...p, sub_canvas_id: null } : p));
     if (positions.length) sidecar.positions = positions;
+    const pointers = (side.pointers.get(n.id) ?? []).filter((p) => p.parent_id === null || inBackup.has(p.parent_id));
+    if (pointers.length) sidecar.pointers = pointers;
     sidecar.wikilinks = (side.wikilinks.get(n.id) ?? []).filter((id) => inBackup.has(id));
     const anchors = side.anchors.get(n.id) ?? [];
     if (anchors.length) sidecar.anchors = anchors;

@@ -2,7 +2,7 @@ import type { ContentNode, Tag } from "../api";
 import { upsertNode, removeNode } from "../localDb";
 import { randomUUID } from "../uuid";
 import { t } from "../i18n";
-import { addNodeTag, dropNodeTag, patchNode } from "./storeOps";
+import { addNodeTag, dropNodeTag, patchNode, tagPlace, type TagPlace } from "./storeOps";
 import { optimisticFields } from "./optimisticFields";
 import { makeWriteLifecycle } from "./writeLifecycle";
 import { reportWriteFailure, WriteActionError } from "./writeErrors";
@@ -17,13 +17,9 @@ export function makeTagWriter(ctx: DataCtx) {
 
   function membership(nodeId: string, tagId: string, apply: boolean) {
     const node = nodeOf(ctx.data, nodeId);
-    const hadClass = node?.class_tag_ids?.includes(tagId) ?? false;
-    const hadLabel = node?.label_tag_ids?.includes(tagId) ?? false;
     const after = (apply ? addNodeTag(ctx.data, nodeId, tagId) : dropNodeTag(ctx.data, nodeId, tagId)).nodes.find((row) => row.id === nodeId);
-    const settle = optimisticFields(`membership:${nodeId}:${tagId}`, { class: hadClass, label: hadLabel }, {
-      class: after?.class_tag_ids?.includes(tagId) ?? false,
-      label: after?.label_tag_ids?.includes(tagId) ?? false,
-    });
+    // One journal per note, one field per tag (storeOps.serverCopyOver keeps it over a server copy until answered).
+    const settle = optimisticFields<Record<string, TagPlace>>(`membership:${nodeId}`, { [tagId]: tagPlace(node, tagId) }, { [tagId]: tagPlace(after, tagId) });
     ctx.setData((state) => apply ? addNodeTag(state, nodeId, tagId) : dropNodeTag(state, nodeId, tagId));
     return commit(`node:${nodeId}`, {
       method: apply ? "PUT" : "DELETE", path: `/api/nodes/${nodeId}/tags/${tagId}`, body: apply ? "{}" : null,
@@ -36,14 +32,14 @@ export function makeTagWriter(ctx: DataCtx) {
       unconfirmed: () => { settle(true); },
       rejected: () => {
         const { replacement } = settle(false);
-        if (!Object.hasOwn(replacement, "class")) return;
+        if (!Object.hasOwn(replacement, tagId)) return;
         ctx.setData((state) => ({
         ...state, nodes: state.nodes.map((row) => {
           if (row.id !== nodeId) return row;
           const present = nodeHasTag(row, tagId);
           if (present !== apply) return row;
-          const restore = (ids: string[] = [], had: boolean) => [...ids.filter((id) => id !== tagId), ...(had ? [tagId] : [])];
-          return { ...row, class_tag_ids: restore(row.class_tag_ids, replacement.class ?? false), label_tag_ids: restore(row.label_tag_ids, replacement.label ?? false) };
+          const restore = (ids: string[] = [], place: TagPlace) => [...ids.filter((id) => id !== tagId), ...(replacement[tagId] === place ? [tagId] : [])];
+          return { ...row, class_tag_ids: restore(row.class_tag_ids, "class"), label_tag_ids: restore(row.label_tag_ids, "label") };
         }),
       }));
       },
@@ -93,13 +89,19 @@ export function makeTagWriter(ctx: DataCtx) {
   async function setHidden(tagId: string, hidden: boolean): Promise<{ queued: boolean }> {
     const before = (ctx.data.tags ?? []).find((tag) => tag.id === tagId)?.hidden
       ?? nodeOf(ctx.data, tagId)?.hidden ?? false;
+    const settle = optimisticFields<ContentNode>(`node:${tagId}`, { hidden: before } as ContentNode, { hidden });
     ctx.setData((state) => patchNode(state, tagId, { hidden }));
     const result = await commit(`node:${tagId}`, { method: "PATCH", path: `/api/nodes/${tagId}`, body: JSON.stringify({ hidden }) }, {
       mirror: async () => {
         const current = nodeOf(ctx.data, tagId);
         if (current) await upsertNode(current);
       },
-      rejected: () => ctx.setData((state) => patchNode(state, tagId, { hidden: before })),
+      accepted: () => { settle(true); },
+      unconfirmed: () => { settle(true); },
+      rejected: () => {
+        const { expected, replacement } = settle(false);
+        if (Object.hasOwn(replacement, "hidden") && (nodeOf(ctx.data, tagId)?.hidden ?? false) === expected.hidden) ctx.setData((state) => patchNode(state, tagId, { hidden: replacement.hidden }));
+      },
     });
     return { queued: result.status === "queued" };
   }

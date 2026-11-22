@@ -39,6 +39,9 @@ export type RestoreReport = {
     views: number;
     /** Functions a tag provides (with their settings) that could not be put back: the tag's definition is the owner's, or the tag is not here. */
     functions: number;
+    /** Sidebar shortcuts to a note that could not be put back (one already there, or a refused write). Absent in a report written by a
+     *  server from before shortcuts were in backups. */
+    pointers?: number;
     /** Attachments over the size a file of its type may have. */
     attachments_too_large: number;
     /** Attachments of a type that is not allowed, or whose bytes are damaged. */

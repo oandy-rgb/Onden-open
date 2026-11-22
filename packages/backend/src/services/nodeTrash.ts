@@ -46,6 +46,7 @@ import { withEventTransaction } from "../spine/eventTransaction.js";
 import { assertAuthority, assertUndoableBy, AuthorityError } from "../spine/authority.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { taskNodeIdsAmong } from "./tasksStore.js";
+import { taskSeam } from "./taskSeam.js";
 import { MEDIA_TYPES } from "@onden/markdown";
 import {
   deleteUnreferencedBlobs, dropQueuedWorkAbout, eraseEventsAbout, forgetNodesInSnapshots, forgetUnreferencedMedia, mediaStillReferenced, purgedContent,
@@ -226,6 +227,15 @@ export async function trashNode(
   });
 }
 
+/** The `tx_meta` of the delete event that holds `nodeId` in the trash now (what the delete recorded about itself, e.g. the
+ *  `ui_context` it came from), or null when the node is not deleted. Ids and the delete's own metadata only; nothing is
+ *  served. Undo of a delete that took something else along reads it (modules/tasks/deletion.ts). */
+export async function deleteEventMeta(workspaceId: string, nodeId: string): Promise<Record<string, unknown> | null> {
+  const row = await db.selectFrom("content_nodes as n").innerJoin("domain_events as e", "e.id", "n.deleted_by_event_id")
+    .select("e.tx_meta").where("n.workspace_id", "=", workspaceId).where("n.id", "=", nodeId).where("n.deleted_at", "is not", null).executeTakeFirst();
+  return row ? (row.tx_meta ?? {}) as Record<string, unknown> : null;
+}
+
 /** Bring a deleted note back whole (restoreLive) — the undo toast after a
  *  delete. Needs write_node on the retained note. Throws NodeTrashError 410
  *  when the row is gone and 409 when it is not deleted. */
@@ -254,6 +264,17 @@ export async function undeleteNode(
       });
     },
   }));
+}
+
+/** The delete route's delete: `trashNode`, except that a task which is a line of a note takes its line out of the note in
+ *  the same transaction (modules/tasks/deletion.ts, through the task seam), so the note's next save cannot bring it back. */
+export async function trashNodeWithTaskLine(actor: ActorCtx, workspaceId: string, nodeId: string): Promise<void> {
+  if ((await taskSeam()?.deleteTaskLine(actor, nodeId)) !== "done") await trashNode(actor, workspaceId, nodeId);
+}
+
+/** The undo route's counterpart: `undeleteNode`, and a task deleted with its line comes back with the line. */
+export async function undeleteNodeWithTaskLine(actor: ActorCtx, workspaceId: string, nodeId: string): Promise<void> {
+  if ((await taskSeam()?.undeleteTaskLine(actor, nodeId)) !== "done") await undeleteNode(actor, workspaceId, nodeId);
 }
 
 /** Load a deleted note for a purge and check who asks, under the event lock.

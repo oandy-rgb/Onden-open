@@ -4,12 +4,14 @@
 // exactly as they are (the data is kept; the next save after turning it on
 // brings them in step again), and no new task is made from a line.
 
+import { getWorkspaceId } from "../../db.js";
 import { moduleLeftOn } from "../../services/workspaceModules.js";
 import { functionTagNames } from "../../services/functionRefs.js";
 import { TASK_WORD_WHEN_TASK_IS_A_TAG } from "../../services/tasksStore.js";
 import { installTaskSeam } from "../../services/taskSeam.js";
 import { syncBlockTasks } from "./blockTasks.js";
 import { splitValidTaskFields } from "./fields.js";
+import { deleteTaskLine, undeleteTaskLine } from "./deletion.js";
 import { updateTask } from "./update.js";
 import type { TaskPatch } from "./update.js";
 import { TASKS_MODULE_ID, TASK_TAG_NAME } from "../../spine/taskIdentity.js";
@@ -37,5 +39,13 @@ installTaskSeam({
     await syncBlockTasks(opts);
   },
   updateTask: (actor, id, patch) => updateTask(actor, id, patch as TaskPatch),
+  async deleteTaskLine(actor, id) {
+    if (!(await tasksOn(await getWorkspaceId()))) return "not_a_line";
+    return deleteTaskLine(actor, id);
+  },
+  async undeleteTaskLine(actor, id) {
+    if (!(await tasksOn(await getWorkspaceId()))) return "not_a_line";
+    return undeleteTaskLine(actor, id);
+  },
   splitValidFields: splitValidTaskFields,
 });

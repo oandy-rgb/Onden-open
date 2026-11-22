@@ -36,7 +36,7 @@
     "modules/tasks/create.ts": 2,
     "modules/tasks/focus.ts": 9,
     "modules/tasks/lines.ts": 1,
-    "modules/tasks/placement.ts": 4,
+    "modules/tasks/placement.ts": 3,
     "modules/tasks/pushReminders.ts": 7,
     "modules/tasks/scheduler.ts": 3,
     "modules/tasks/update.ts": 2,

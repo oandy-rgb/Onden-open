@@ -32,6 +32,7 @@ for a quick pass. Without Docker, `npx playwright test --list` (in
 | `workerDeath.spec.ts` | 7 local-DB worker dies | fails (`test.fail`) at 30 s — known open: noticed only by the 60 s call timeout (#617) |
 | `staleDeploy.spec.ts` | 8a stale chunk → one reload keeps draft; 8b guard spent → error screen + Reload | pass (behavior already exists) |
 | `lateAnswer.spec.ts` | 10 a sync answer read before a save, delivered after its acknowledgement (answers out of order); the note reopened in the page must keep the saved text; 10b phone variant | pass with the watermark rule; fails with it switched off (checked on both) |
+| `refusedAcrossReload.spec.ts` | 11a a save on its way at a reload is refused (422, the resend too), then typing; 11c the same, then a rename; 11b the same save accepted; 11pa/11pc phone variants | not yet run on a real browser (this environment cannot run the stack): every typed word on the server or in recovery, no save after the reload uses the refused text as its base, the editor ends equal to the server (`fix/save-in-flight-across-reload`) |
 
 A test marked `test.fail()` is reported as *passed* while the bug exists and as
 **failed ("expected to fail, but passed")** once the fix lands. That is the

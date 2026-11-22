@@ -1,6 +1,6 @@
 # 備份還原與搬整個工作區
 
-> 狀態：現行（最後確認 2026-11-18；版本歷史見下節）
+> 狀態：現行（最後確認 2026-11-19；版本歷史見下節）
 > 涵蓋：packages/backend/src/services/backup*.ts, packages/backend/src/spine/importedHistory.ts, packages/backend/src/routes/backup.ts
 
 程式：`packages/backend/src/services/backupArchive.ts`（寫出）、`backupFile.ts`（檢查上傳）、`backupRestore.ts`（還原）、
@@ -15,6 +15,8 @@
 | 連結 | 全部筆記就位後、刪除之後才一次決定（`backupLinks.ts`）。格式 2 的備份記著每篇的 wikilink 目標，原樣還原（包括垃圾桶筆記刪除時留下的）；舊備份：未刪除的筆記用既有規則 `syncWikilinkEdges` 重算，垃圾桶筆記不連到未刪除的筆記（來源當時連到誰已不可知，連到同名孿生是猜的）。 |
 | 任務 | 從內文一行長出來的任務，在內文重建出任務後對齊備份所有 `_task_*` 欄位（狀態、時間、結束時間、完成時刻、重複…）；行已不在內文的已刪除任務改建成宿主底下的任務再刪除，不再被丟掉。值走 `restoredTaskField` 的白名單。**任務自己的內文、標籤與其他屬性**（三種任務——內文一行、筆記底下加的、獨立的——都一樣）也帶回：內文走 `updateNode`，標籤與屬性走筆記同一個 `restoreOwnContent`。任務的宿主不在（已刪除、或在別的空間）時任務無處可放：不寫入，記在報告的 `skipped.tasks`。 |
 | 已存的檢視 | 筆記的每一種檢視（表格、看板、月曆、相簿、白板、手寫、簡報…）都帶回（`noteViews.ts` 的 `restoreNoteViews`，每個檢視過 `viewCreateSchema` 驗證）；名稱重複、版面不認得的記在 `skipped.views`。標籤的檢視在標籤由還原新建（或搬整個工作區）時走 `appendTagView` 帶回；既有標籤不改。 |
+| 側欄捷徑 | 筆記旁檔（`.onden/notes/<id>.json`）新增選填欄位 `pointers`：指向這則筆記的捷徑，記著放在哪個上層（備份裡的筆記，或 `null` ＝側欄最上層）、順序鍵與標籤；上層不在備份裡的不寫（與 bootstrap 一致）。還原在所有筆記就位、刪除之前用 `createPointer` 放回；放不回去的（已存在、上層種類不對、被拒）計入 `skipped.pointers`（選填，舊伺服器的報告沒有它）。**格式版本仍是 2**：舊備份沒有這個欄位，照常還原、只是沒有捷徑；舊伺服器讀新備份會略過它（和 `wikilinks` 同一個做法）。 |
+| 關係圖位置 | 備份本來就帶（旁檔 `positions` 裡 `surface = "graph"` 的列）。還原不再把它當成「找不到白板」跳過，改走關係圖自己的寫入口 `moveGraphPosition`；失敗才計入 `skipped.positions`。 |
 | 系統屬性 | 見下表。 |
 
 ### 系統屬性
@@ -45,7 +47,7 @@
 （名稱、開關；個人空間 = 目標的個人空間；預設空間 = 目標的預設空間）；**成員不重建**，結果列出「原本有別人」的空間要重新邀請。
 筆記回到各自的空間；同名系統標籤改用備份的顏色、欄位與說明；頁面設計（`presentation`，網站外觀）跟筆記走。
 
-**`.onden/extras.json`（備份格式 2）**，只有搬家會讀：複習進度、專注紀錄、RSS 訂閱（保留 id，因為 `_rss_source` 指著它）、個人設定
+**`.onden/extras.json`（備份格式 2）**，只有搬家會讀：複習進度、專注紀錄、RSS 訂閱（`_rss_source` 指著它的 id；那個 id 在原伺服器上一定還被舊的訂閱佔著，所以新工作區裡通常是新 id——`planRssIds` 在寫筆記之前就決定好對應，筆記的 `_rss_source` 與訂閱列用同一份對應；對應不到的訂閱，筆記不寫 `_rss_source`）、個人設定
 （`actor_prefs`，只收 `isPrefKey`＋`parsePref` 過關的）、模組設定、模組開關與最新一份發布快照（只有擁有者備份才寫入）。
 `functionRefs`（2026-11-14 加，migration 201 同一個 PR，檔案版本仍是 1）：標籤與空間提供的功能（`function_refs` 沒有檢視 id 的列；已存檢視、任務自己的引用、卡片的複習引用由各自的載體帶，不重複），搬家時寫進新工作區，持有者與 `source_tag_id` 換成新 id，已有同一組（持有者、功能）的不覆蓋。一般還原不讀這個檔。沒有這個欄位的舊備份照常讀。
 舊備份（格式 1）仍可還原，只是沒有這些，也沒有 wikilink 紀錄。`backupFile.ts` 沿用 `MAX_JSON_BYTES` 與項目數上限。
@@ -77,7 +79,17 @@
 
 用到備份檔的用戶端：設定頁（下載連結、上傳與預覽、結果）、瀏覽器版（同一個後端程式；它自己的備份提醒呼叫不帶 `history`，仍是格式 2）、桌面版（同一個後端與前端，沒有自己的壓縮檔格式）、MCP（沒有備份工具）。
 
+## 備份帶了哪些表：`test/helpers/backupCoverage.ts`
+
+「備份有沒有帶這張表、誰在還原時放回去」只有一份清單：`BACKUP_COVERAGE`（逐表：帶在筆記旁檔的哪個欄位／`extras.json` 的哪個欄位／`spaces.json`／附件／版本歷史／從內文重算，
+或不帶與原因；`missing` 寫出「帶了這張表、但少了哪幾欄」）。守門 `src/test/guards/backupCoverage.guard.test.ts`：schema 新增的表若沒列（且在 `spine/syncClasses.json` 不是 `derived`／`node-local`）就失敗；
+清單承認的缺口（`gap: true` 或有 `missing`）是只准減少的 ratchet 清單。欄位名是 `BackupNote`／`BackupExtras` 的 key，改名會在編譯時壞掉。
+還原那一側由 `backupRoundTrip.property.test.ts` 與 `backupHostHop.property.test.ts` 比對「畫面前後一樣」，各表的最小案例在 `helpers/roundTripRichSpec.ts` 的 `RICH_LOSSES`。
+
 ## 已知缺口
+
+- 清單（`BACKUP_COVERAGE`）承認還沒帶的：`rss_mutes`（靜音）、`external_calendars`（行事曆訂閱）、`ink_manifests`／`ink_chunks`（大型手寫的舊版本）、`imported_media`、`snapshot_media`、`ai_edit_suggestions`（待審的 AI 修改）、`block_nodes` 的 `detached_*`／`hidden_at`、區塊層級複習進度、工作區的時區／換日時間／首頁筆記。
+- 值是空字串的文字屬性還原後不見（`restoredAttribute` 刻意排除空值）：該不該留是擁有者的決定，`empty-attribute` 案例維持 `it.fails`。
 
 - 白板分區（`_canvas_sections`）、區塊複習進度、發布快照用到的手寫頁圖檔與 `snapshot_media` 尚未帶；搬完需要再發布一次。
 - 舊備份的垃圾桶筆記連結只能保守處理（見上）。

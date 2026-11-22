@@ -7,6 +7,7 @@ import type { ContentNode } from "../api";
 import { t } from "../i18n";
 import type { DataCtx } from "./types";
 import { makeNoteWriter } from "./noteWriter";
+import { makeTaskWriter } from "./taskWriter";
 import { makeTagWriter } from "./tagWriter";
 import { makeWorkspaceWriter } from "./workspaceWriter";
 import { makeNoteHistoryWriter } from "./noteHistoryWriter";
@@ -23,6 +24,7 @@ export function makeNodeMutations(ctx: DataCtx) {
   const { addToast } = ctx;
 
   const writer = makeNoteWriter(ctx);
+  const taskWriter = makeTaskWriter(ctx);
   const tags = makeTagWriter(ctx);
   const workspace = makeWorkspaceWriter(ctx);
   const history = makeNoteHistoryWriter(ctx);
@@ -44,7 +46,9 @@ export function makeNodeMutations(ctx: DataCtx) {
       addToast(t(SERVER_ERROR_MESSAGES.reserved_tag!), "error");
       return false;
     }
-    const result = await writer.remove(id).catch(() => null);
+    // A task is not in the note list (only in `tasks`): its delete is the task writer's.
+    const isTask = !nodeOf(ctx.data, id) && ctx.data.tasks.some((task) => task.id === id);
+    const result = await (isTask ? taskWriter.remove(id) : writer.remove(id)).catch(() => null);
     if (!result) return false;
     if (result.status === "queued") {
       addToast(t('"{title}" deleted locally', { title: title ?? t("Node") }), "info");

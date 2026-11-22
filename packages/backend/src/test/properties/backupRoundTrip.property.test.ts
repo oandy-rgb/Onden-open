@@ -15,7 +15,8 @@
 // snapshot (keyed by title) is what is compared. Replay a failing world with
 // ROUNDTRIP_SEED=<seed>.
 //
-// A loss that exists today is pinned as `it.fails` with its fix named; none is left.
+// A loss that exists today is pinned as `it.fails` with its fix named. One is left: a text attribute whose value is empty
+// (`empty-attribute`), which is the owner's call to keep or not (see its entry in helpers/roundTripRichSpec.ts).
 
 import { describe, expect, it, vi } from "vitest";
 import fc from "fast-check";
@@ -26,6 +27,7 @@ import { buildWorld, freshWorkspace, snapshotWorkspace, type WorldSnapshot } fro
 import { fullBackup, restoreBackup } from "../helpers/roundTripApi.js";
 import { makeSpace } from "../helpers/spaceFixtures.js";
 import { zipEntries } from "../helpers/zipEntries.js";
+import { rawZip } from "../helpers/rawZip.js";
 import { seedQ } from "../helpers/seedQ.js";
 import { q } from "../../db.js";
 import { readApp, appDifferences, APP_PARTS, type AppPart } from "../helpers/roundTripRich.js";
@@ -198,25 +200,15 @@ describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
     expect(restored[0]!.value).toBe(layer);
   }, 120_000);
 
-  // The whole claim, every part: pinned while the named losses below exist. Only worlds that hold something a loss
-  // applies to are generated, so the property is not green by luck; when the last loss is fixed it turns red: delete `.fails`.
+  // The whole claim, every part: a restore into another workspace shows what the original showed. The worlds hold something the
+  // fixed parts below apply to (views, functions, `extends`, pointers, graph positions), so the property is not green by luck.
+  // The one loss that is left, an empty text attribute, is not generated here (`plainValue` is never empty); it is the named case
+  // `empty-attribute` below, pinned until the owner decides.
   const lossyPart = (spec: WorldSpec) => {
     const r = spec.rich!;
     return r.tagViews.length + r.noteViews.length + r.functions.length + r.extendsLinks.length + r.pointers.length + r.graph.length > 0;
   };
-  // What was lost in a restore into another workspace and is fixed: saved views (every layout, on tags and notes, with the ids
-  // their filters and board tabs name), the functions a tag provides, and `extends`. An ordinary test: a missing one, or one that
-  // still holds an old id, fails it. The pointers and graph positions are still in the pinned property above.
-  const RESTORED_PARTS: AppPart[] = ["tagViews", "noteViews", "noteTabs", "tagFunctions", "tagExtends"];
-  const holdsRestoredPart = (spec: WorldSpec) => spec.rich!.tagViews.length + spec.rich!.noteViews.length + spec.rich!.functions.length + spec.rich!.extendsLinks.length > 0;
-  it("a restore shows the same views (ids inside them too), tag functions and extends as the original", async () => {
-    await fc.assert(fc.asyncProperty(richWorld().filter(holdsRestoredPart), async (spec) => {
-      const { before, after } = await appTrip(spec);
-      expect(appDifferences(before, after, RESTORED_PARTS)).toEqual({});
-    }), roundTripRuns({ maxRuns: 8 }));
-  }, 600_000);
-
-  it.fails("FINDING backup-app-parts: a restore shows the same views, functions, extends, pointers, graph, paragraph tags and anchors as the original", async () => {
+  it("a restore shows the same views, functions, extends, pointers, graph, paragraph tags, anchors, attributes and ink as the original", async () => {
     await fc.assert(fc.asyncProperty(richWorld().filter(lossyPart), async (spec) => {
       const { before, after } = await appTrip(spec);
       expect(appDifferences(before, after, APP_PARTS)).toEqual({});
@@ -225,8 +217,8 @@ describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
 
   // One minimal, named case per loss (helpers/roundTripRichSpec.ts RICH_LOSSES: scenario, expected, actual, where).
   // Each is a fixed world, so any seed (the default 20261024) shows it.
-  // The saved views of tags and notes and the note tabs' settings come back since the restore writes them: ordinary tests now.
-  const RESTORED_NOW = new Set(["tag-views", "note-views", "note-tab-settings", "view-ids-tag", "view-ids-note-tab", "tag-functions", "tag-extends", "tag-functions-inherited"]);
+  // Every loss but `empty-attribute` is fixed and an ordinary test now; that one is the owner's call and stays `it.fails`.
+  const RESTORED_NOW = new Set(["tag-views", "note-views", "note-tab-settings", "view-ids-tag", "view-ids-note-tab", "tag-functions", "tag-extends", "tag-functions-inherited", "pointers", "graph-positions"]);
   describe.each(RICH_LOSSES.map((loss: RichLoss) => [loss.id, loss] as const))("loss %s", (_id, loss) => {
     (RESTORED_NOW.has(loss.id) ? it : it.fails)(`FINDING ${loss.id}: ${loss.scenario} ${loss.expected}`, async () => {
       const { before, after } = await appTrip(loss.world);
@@ -234,13 +226,66 @@ describe.skipIf(!enabled)("backup → restore into an empty workspace", () => {
     }, 120_000);
   });
 
-  // A paragraph with a block tag (`{idea}`) is still listed on its tag page. Passing for the small worlds below; the random
-  // property above finds a difference in blockTags in a larger world (a tag tree of five, paragraphs, links: the tag page of
-  // the RESTORED workspace lists a paragraph the original's does not, ROUNDTRIP seed 4 in the first run of this file's
-  // development, not reduced further) — so "blockTags" is in the pinned FINDING, not in the surviving parts.
+  // Compatibility of the sidebar shortcuts (note_pointers), carried in each note's sidecar as `pointers` (the archive version stays 2).
+  const shortcutsWorld = () => minimalWorld({ pointers: [{ target: 0, under: 1 }, { target: 1, under: null }] });
+  /** The sidecars of `zip` with `change` applied to each note's JSON, the rest of the archive as it was. */
+  const withSidecars = (zip: Buffer, change: (note: Record<string, unknown>) => void) => rawZip([...zipEntries(zip)].map(([name, data]) => {
+    if (!name.startsWith(".onden/notes/")) return { name, data };
+    const note = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+    change(note);
+    return { name, data: JSON.stringify(note) };
+  }));
+
+  it("a backup made before shortcuts were in it (no `pointers` in its notes) still restores, without shortcuts", async () => {
+    const a = await freshWorkspace("rt-old-a");
+    workspaceSwitch.ws = a.ws;
+    await buildWorld(shortcutsWorld(), a);
+    const zip = await fullBackup(a.ws, a.actor);
+    const holding = [...zipEntries(zip)].filter(([name, data]) => name.startsWith(".onden/notes/") && "pointers" in JSON.parse(data.toString("utf8")));
+    expect(holding.length, "the new backup writes shortcuts into the notes they point at").toBe(2);
+    const old = withSidecars(zip, (note) => { delete note.pointers; });
+    const b = await freshWorkspace("rt-old-b");
+    const space = await makeSpace(b.ws, "Restore target", [{ id: b.actor.id, permission: "edit" }]);
+    const report = await restoreBackup(b.ws, b.actor, old, space);
+    expect(report).toMatchObject({ created: expect.any(Number) });
+    workspaceSwitch.ws = b.ws;
+    const after = await readApp(b.ws, b.actor);
+    expect(after.pointers).toEqual([]);
+    expect(after.notes.map((n) => n.title).sort()).toEqual(["Note one", "Note two"]);
+  }, 120_000);
+
+  it("a shortcut under a note the backup does not hold is left out of the archive; one at the top of the sidebar is kept", async () => {
+    const a = await freshWorkspace("rt-part-pointer");
+    const built = await buildWorld(shortcutsWorld(), a);
+    // A partial backup of Note one only: its shortcut sits under Note two, which the backup lacks.
+    const one = [...zipEntries(await fullBackup(a.ws, a.actor, `note=${built.noteIds[0]}`))].filter(([name]) => name.startsWith(".onden/notes/"))
+      .map(([, data]) => JSON.parse(data.toString("utf8")) as { title: string; pointers?: unknown[] }).find((n) => n.title === "Note one")!;
+    expect(one.pointers).toBeUndefined();
+    const two = [...zipEntries(await fullBackup(a.ws, a.actor, `note=${built.noteIds[1]}`))].filter(([name]) => name.startsWith(".onden/notes/"))
+      .map(([, data]) => JSON.parse(data.toString("utf8")) as { title: string; pointers?: Array<{ parent_id: string | null }> }).find((n) => n.title === "Note two")!;
+    expect(two.pointers!.map((p) => p.parent_id)).toEqual([null]);
+  }, 120_000);
+
+  // A paragraph with a block tag (`{idea}`) is still listed on its tag page. (An earlier version of this comment named a difference in
+  // a larger world: the restored tag page listed a paragraph the original's did not. It was the test's own model, reduced to the
+  // fixed case below: the generator wrote `text {idea} ^id`, a typed `^id` AFTER the tag. A normal read does not see that old
+  // mark, so `{idea}` is not at the end of the line and the original lists nothing; a restore turns the typed id into an anchor
+  // and the text becomes `text {idea}`, which lists. Not a loss, and the generator no longer combines the two.)
   it.each([["tagged first", ["idea"]]] as const)("a paragraph block tag is listed on its tag page after a restore (%s)", async (_name, [tag]) => {
     const { before, after } = await appTrip(minimalWorld({}, tag));
     expect(appDifferences(before, after, ["blockTags", "anchors"])).toEqual({});
+  }, 120_000);
+
+  // Current behaviour, pinned so that a change shows: a paragraph written `text {idea} ^id` (the old typed id after the tag) is not on
+  // the tag page of the original, and is on the restored one, because the restore moves the id out of the text into an anchor. The id
+  // itself is kept (the same anchors before and after).
+  it("a typed ^id after a block tag hides the tag until the restore moves the id into an anchor (current behaviour)", async () => {
+    const world = minimalWorld({}, "idea");
+    world.notes[0]!.blocks = [{ kind: "paragraph", text: "段落", ref: "abc123", tag: "idea" }];
+    const { before, after } = await appTrip(world);
+    expect(before.tags.find((t) => t.path === "idea")!.blocks, "original").toEqual([]);
+    expect(after.tags.find((t) => t.path === "idea")!.blocks, "restored").toEqual([{ note: "Note one", label: "段落" }]);
+    expect(appDifferences(before, after, ["anchors"])).toEqual({});
   }, 120_000);
 
   // A backup over what this server restores is still downloaded (it may be restored on a server that allows more); the page

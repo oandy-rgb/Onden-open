@@ -35,7 +35,7 @@
 
 ## 3. 同步與本機副本
 
-前端把資料存在本機資料庫，寫入先進離線佇列（`writeQueue`；線上的保存也先記成一列再送，頁面當掉也不丟，見[筆記寫入](note-writes.md)），連上線後送出；伺服器回增量與「可讀集合」變化，
+前端把資料存在本機資料庫，寫入先進離線佇列（`writeQueue`；線上的保存也先記成一列再送，頁面當掉也不丟；被伺服器拒絕的文字不當下一次存檔的合併 base，見[筆記寫入](note-writes.md)），連上線後送出；伺服器回增量與「可讀集合」變化，
 權限改變時以 `membership_epoch` 核對。保存確認只來自「伺服器接受」或「離線佇列已持久化」，兩者在介面上分開顯示。
 
 - 位置：前端 `lib/data/syncEngine.ts`、`lib/data/writeQueue.ts`、`lib/localDbWorker.ts`、`lib/accountStorage.ts`；後端 `routes/sync.ts`、`services/sync/`

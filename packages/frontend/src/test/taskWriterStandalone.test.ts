@@ -144,3 +144,53 @@ describe("placeTask / unplaceTask", () => {
     expect(online.get().tasks[0]).toMatchObject({ node_id: null });
   });
 });
+
+describe("deleting a task (DELETE /api/nodes/:id, the one delete)", () => {
+  // Task nodes are not in the note list: the delete finds the task in `tasks` (an older path found no node and sent nothing).
+  it("a task written in a note: it leaves the list at once, the delete is sent, and the note is read again for its line", async () => {
+    const h = harness();
+    let release!: (value: unknown) => void;
+    mocks.api.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const removing = makeTaskWriter(h.ctx).remove("t1");
+    expect(h.get().tasks).toEqual([]);
+    expect(h.ctx.refresh).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.api).toHaveBeenCalled()); // the request goes out after the write's turn in the queue
+    release({ deleted: true });
+    expect((await removing)?.status).toBe("synced");
+    expect(sent()).toEqual([{ path: "/api/nodes/t1", method: "DELETE", body: undefined }]);
+    expect(db.removeTask).toHaveBeenCalledWith("t1");
+    expect(h.ctx.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("a standalone task is deleted the same way, with no note to read again", async () => {
+    const h = harness(true, [{ ...task, node_id: null }]);
+    mocks.api.mockResolvedValueOnce({ deleted: true });
+    expect((await makeTaskWriter(h.ctx).remove("t1"))?.status).toBe("synced");
+    expect(sent()).toEqual([{ path: "/api/nodes/t1", method: "DELETE", body: undefined }]);
+    expect(h.ctx.refresh).not.toHaveBeenCalled();
+  });
+
+  it("offline it is queued as it is (the server does the line when it is sent); the task stays off the list and nothing is read", async () => {
+    const h = harness(false);
+    expect((await makeTaskWriter(h.ctx).remove("t1"))?.status).toBe("queued");
+    expect(db.addPendingWrite).toHaveBeenCalledWith("DELETE", "/api/nodes/t1", null, expect.any(String));
+    expect(h.get().tasks).toEqual([]);
+    expect(db.removeTask).toHaveBeenCalledWith("t1");
+    expect(h.ctx.refresh).not.toHaveBeenCalled();
+  });
+
+  it("a refused delete puts the task back, keeps the local copy, and reads nothing", async () => {
+    const h = harness();
+    mocks.api.mockRejectedValueOnce(new ApiError(403, "forbidden"));
+    await expect(makeTaskWriter(h.ctx).remove("t1")).rejects.toMatchObject({ status: 403 });
+    expect(h.get().tasks).toEqual([task]);
+    expect(db.removeTask).not.toHaveBeenCalled();
+    expect(h.ctx.refresh).not.toHaveBeenCalled();
+  });
+
+  it("a task that is not in the list is not sent anywhere", async () => {
+    const h = harness(true, []);
+    expect(await makeTaskWriter(h.ctx).remove("t1")).toBeNull();
+    expect(mocks.api).not.toHaveBeenCalled();
+  });
+});

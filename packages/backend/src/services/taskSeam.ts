@@ -18,6 +18,9 @@ export class TaskUpdateRefusal extends Error {
   constructor(readonly status: 400 | 404 | 409, readonly error: string) { super(error); this.name = "TaskUpdateRefusal"; }
 }
 
+/** What a task's line did with a delete or its undo: it handled it, or the task is no note's line and the caller does. */
+export type TaskLineOutcome = "done" | "not_a_line";
+
 export type TaskSeam = {
   /** The words (lower case, written without `#`) that make a checkbox line a task line in this workspace, whether or
    *  not the module is on: the reserved `task` and the current name of each live tasks module tag (a renamed tag is
@@ -32,6 +35,12 @@ export type TaskSeam = {
   syncLines(opts: { workspaceId: string; noteId: string; actor: ActorCtx; lines: TaskLine[] }): Promise<void>;
   /** Change fields of a task the way PATCH /api/tasks/:id does; throws what it throws. */
   updateTask(actor: ActorCtx, id: string, patch: Record<string, unknown>): Promise<unknown>;
+  /** Delete task `id` as a line of its note: the line leaves the note and the task goes to the trash, one transaction
+   *  (modules/tasks/deletion.ts). "not_a_line", nothing done, when the task is not a line of a note (or the module is off
+   *  here): the caller deletes it as any node. */
+  deleteTaskLine(actor: ActorCtx, id: string): Promise<TaskLineOutcome>;
+  /** Undo that: the task back with its line. "not_a_line", nothing done, when the delete in force took no line out. */
+  undeleteTaskLine(actor: ActorCtx, id: string): Promise<TaskLineOutcome>;
   /** `_task_*` attributes (by full key) split into those the task routes would
    *  accept and the keys they would refuse. Not gated on the module being on:
    *  a value stored now is read by the module whenever it is turned on. */

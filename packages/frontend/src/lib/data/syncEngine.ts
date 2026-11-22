@@ -27,10 +27,10 @@ import { noteMembershipEpoch } from "../spaces";
 import { bindDomainLifecycle, canvasWriter } from "./domainWriters";
 import { isBodyInUse } from "./draftActions";
 import { sendWrite } from "./onlineWrite";
-import { flushPendingWrites, getReplayRejectionRevision, hasPendingWrite } from "./writeQueue";
+import { flushPendingWrites, getReplayRejectionRevision, hasPendingWrite, takeInLeftWrites } from "./writeQueue";
 import { refreshPendingCount } from "./syncStatus";
 import { setIncomingProblem } from "./incomingStatus";
-import { applySyncDelta, isEmptyDelta, serverCopyOver, wholeBootstrapOver } from "./storeOps";
+import { isEmptyDelta, noteJournals, sharedRowsOver, syncDeltaOver, wholeBootstrapOver, type Held } from "./storeOps";
 import { pendingFields, whenAnswered } from "./optimisticFields";
 import { ASK_AGAIN_AT_MOST } from "../answerPositions";
 import { askedNow, forgetWatermark, holdWrites, pageWouldTake, sameServer, serverWentBack, startWatermarkFrom, syncLoopStarted, syncPassEnded, takeAnswer, type AnswerOutcome, type Asked } from "./writePositions";
@@ -143,16 +143,18 @@ function withAttrsFromRows(data: Bootstrap): Bootstrap {
 let wholeBootstrapGeneration = 0;
 function setWholeBootstrap(data: Bootstrap): void {
   wholeBootstrapGeneration++;
-  // A field with an edit still waiting for its answer keeps the value held, as over a sync answer or a single read (storeOps.serverCopyOver),
-  // and the note is read again once it has its answer. With a local copy the queued text is laid over the rows already;
-  // a device with none (IndexedDB blocked, a private window) takes a whole bootstrap every pass and has only this.
-  const held = new Set<string>();
-  setData((prev) => {
-    const taken = wholeBootstrapOver(prev, data);
-    for (const id of taken.held) held.add(id);
-    return taken.state;
-  });
-  for (const id of held) readAgainWhenAnswered(id);
+  // With a local copy the queued text is laid over the rows already; a device with none (IndexedDB blocked, a private
+  // window) takes a whole bootstrap every pass and has only the store's rule (storeOps.keepUnanswered).
+  showServerCopy((prev) => wholeBootstrapOver(prev, data));
+}
+
+/** A server copy into the store through `over` (storeOps: every field whose edit still waits for its answer keeps the
+ *  value held), and what it kept read again once that edit has its answer. */
+function showServerCopy(over: (prev: Bootstrap) => { state: Bootstrap; held: Held }): void {
+  let held: Held = { notes: [], rest: [] };
+  setData((prev) => { const taken = over(prev); held = taken.held; return taken.state; });
+  for (const id of held.notes) readAgainWhenAnswered(id);
+  for (const journal of held.rest) readRestWhenAnswered(journal);
 }
 
 const ATTRIBUTE_PAGE_ROWS = 10_000;
@@ -369,24 +371,18 @@ async function fullRefreshDue(): Promise<boolean> {
   return !(at > 0 && age >= -FULL_REFRESH_MAX_AGE_MS && age < FULL_REFRESH_MAX_AGE_MS);
 }
 
-/** The bootstrap fields a ?nodes=none payload refreshes; everything per-node
- *  stays as the store has it. */
-function mergeBootstrapMeta(prev: Bootstrap, meta: Bootstrap): Bootstrap {
-  return {
-    ...prev,
-    workspace: meta.workspace,
-    suggestions: meta.suggestions,
-    events: meta.events,
-    actor_role: meta.actor_role,
-    actor_is_owner: meta.actor_is_owner,
-    can_review: meta.can_review,
+/** The bootstrap fields a ?nodes=none payload refreshes; everything per-node stays as the store has it. The rows this
+ *  device may be editing keep what still waits for its answer (storeOps.sharedRowsOver). */
+function mergeBootstrapMeta(prev: Bootstrap, meta: Bootstrap): { state: Bootstrap; held: Held } {
+  const held: Held = { notes: [], rest: [] };
+  const carried = {
+    workspace: meta.workspace, site_config: meta.site_config, chrome: meta.chrome, graph_positions: meta.graph_positions,
     ...(meta.tags !== undefined ? { tags: meta.tags } : {}),
-    site_config: meta.site_config,
-    chrome: meta.chrome,
-    timezone: meta.timezone,
-    canvas_memberships: meta.canvas_memberships,
-    graph_positions: meta.graph_positions,
   };
+  return { state: {
+    ...prev, ...carried, suggestions: meta.suggestions, events: meta.events, actor_role: meta.actor_role, actor_is_owner: meta.actor_is_owner,
+    can_review: meta.can_review, timezone: meta.timezone, canvas_memberships: meta.canvas_memberships, ...sharedRowsOver(prev, carried, held.rest),
+  }, held };
 }
 
 /** Refresh what the sync delta does not carry (?nodes=none). An older server
@@ -400,7 +396,7 @@ export async function refreshMeta(): Promise<void> {
   if (meta.nodes_omitted !== true) return;
   applyServerFeatures(meta.features);
   // Read before a write this device knows: takeBootstrap refuses it (RefusedAnswer, which the callers drop); the next one.
-  await takeBootstrap(meta, () => setData((prev) => mergeBootstrapMeta(prev, meta)));
+  await takeBootstrap(meta, () => showServerCopy((prev) => mergeBootstrapMeta(prev, meta)));
   pruneCanvasMirror(mark, meta.server_time);
 }
 
@@ -474,7 +470,16 @@ later.readWhenAnswered = (id) => readAgainWhenAnswered(id);
 // (storeOps.serverCopyOver): read the note again once it has one, the way a note held behind the queue is.
 function readAgainWhenAnswered(id: string): void {
   readAgain.add(id);
-  void whenAnswered(`node:${id}`).then(releaseHeldNotes).catch(() => {});
+  void Promise.all(noteJournals(id).map(whenAnswered)).then(releaseHeldNotes).catch(() => {});
+}
+
+// A task, the workspace, a tag in the tag list or a graph position kept over a copy: read again once its edit has its
+// answer — the rest of the bootstrap (?nodes=none), a task with the whole one (no read of one task carries a position).
+const restWaiting = new Set<string>();
+function readRestWhenAnswered(journal: string): void {
+  if (restWaiting.has(journal)) return;
+  restWaiting.add(journal);
+  void whenAnswered(journal).then(() => { restWaiting.delete(journal); return journal.startsWith("task:") ? refresh() : refreshMeta(); }).catch(() => {});
 }
 
 async function releaseHeldNotes(): Promise<void> {
@@ -483,7 +488,7 @@ async function releaseHeldNotes(): Promise<void> {
   const held = await Promise.resolve().then(() => heldNotesNowSent()).catch(() => [] as string[]);
   for (const id of held) readAgain.add(id);
   for (const id of [...readAgain]) {
-    if (pendingFields(`node:${id}`).size) continue;
+    if (noteJournals(id).some((journal) => pendingFields(journal).size)) continue;
     if (await hasPendingWrite((write) => targetsEntity(write, "node", id))) continue;
     readAgain.delete(id);
     await hydrateNode(id);
@@ -786,9 +791,7 @@ async function applyAndShow(delta: SyncDelta, request: { asked?: Asked; since?: 
     toStore: (fromCopy) => {
       applied = fromCopy;
       applyAnchorsOfDelta(delta);
-      setData((prev) => applySyncDelta(prev, fromCopy));
-      // A field kept over this copy (its edit has no answer yet: serverCopyOver): read again once it has one.
-      for (const node of fromCopy.nodes.upsert) if (serverCopyOver(node, getNode(node.id)).held) readAgainWhenAnswered(node.id);
+      showServerCopy((prev) => syncDeltaOver(prev, fromCopy));
       announceDrawingChangesOf(delta);
     },
   });
@@ -1239,6 +1242,8 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
   // workspace": the snapshot and its queue may be intact behind a timeout, and
   // the import replaces both.
   let localUnreadable = false;
+  // What the previous page left unqueued goes into the queue first, so the first paint lays it over the copy.
+  await takeInLeftWrites();
   let local = await loadBootstrapList().catch(() => { localUnreadable = true; return null; });
 
   // Load from user's folder if File System Access API is configured
@@ -1443,6 +1448,7 @@ export async function __resetSyncEngineForTests(): Promise<void> {
   reconciledRejectionRevision = null;
   mirrorFilledThisSession = false;
   digestPrefetch = null;
+  restWaiting.clear();
   bodyDownload = null;
   drawingDownload = null;
   drawingsComplete = false;

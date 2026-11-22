@@ -12,7 +12,7 @@ import { isSendingHere, sendingElsewhere, startSendingHere, stopSendingHere, whe
 import { classifyWriteFailure, sendFailureReason, WriteStorageError, writeFailureMessage, reportWriteFailure, isHandledNoteExists } from "./writeErrors";
 import { onProtocolBlockChange } from "../protocolGate";
 import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./patchedBody";
-import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable } from "./writeRecovery";
+import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable, withoutRefusedBase } from "./writeRecovery";
 import { PREFS, prefsAvailable } from "../prefs";
 import { onAppResume } from "../appResume";
 import { serverTruth } from "./serverTruthLoad";
@@ -177,11 +177,22 @@ async function adoptLegacyInFlight(): Promise<void> {
   if (left) await enqueue(left).catch(() => { /* enqueue has put it in recovery */ });
 }
 
-/** One adoption at a time: recordWrite runs it outside the lane (before its own row), the lane runs it too. */
+/** One adoption at a time: recordWrite runs it outside the lane (before its own row), the lane runs it too, and the
+ *  boot runs it before the local copy is first shown (takeInLeftWrites). */
 let adopting: Promise<void> = Promise.resolve();
 function adoptLeftWrites(): Promise<void> {
   adopting = adopting.catch(() => {}).then(adoptUnconfirmedWrites);
   return adopting;
+}
+
+/** What the previous page left on its way out and never put in the queue (it died before the worker answered: its
+ *  recovery copy in localStorage is all there is), taken into the queue before this page shows the local copy
+ *  (syncEngine.runBoot, before loadBootstrapList). The first paint lays the queued text over the copy, so the editor
+ *  opens on the text the person typed before the reload, and its next save builds on it: without this the page showed
+ *  the text from before until the drain had sent it and a sync brought it back, and a save typed meanwhile was merged
+ *  over it (saveTiming "reload at once"). Never throws: a queue that cannot take it leaves it in recovery. */
+export function takeInLeftWrites(): Promise<void> {
+  return adoptLeftWrites().catch(() => {});
 }
 
 /** Best effort: if the other copies cannot be read, this tab judges by its own. */
@@ -310,8 +321,10 @@ async function sendRecorded<T>(request: WriteRequest, idemKey: string, durable: 
       // (lib/liveInvalidation.ts): open the echo window before sending — the
       // tick can beat the response — and extend it once the write lands.
       noteLocalWrite();
+      // Read now, after the saves before it in the lane were answered: a refusal among them changes its base.
+      const sent = withoutRefusedBase(request);
       const value = await sendWithDeadline<T>(request.path, {
-        ...request.init, method: request.method, body: request.body ?? undefined, headers,
+        ...request.init, method: request.method, body: sent.body ?? undefined, headers,
       });
       noteLocalWrite();
       // Sent: a row left behind (this removal failed) only sends the key again, and the server answers it again.
@@ -461,7 +474,7 @@ async function drain(): Promise<void> {
       try {
         noteLocalWrite();
         const answer = await sendWithDeadline(write.path, {
-          method: write.method, body: write.body ?? undefined,
+          method: write.method, body: withoutRefusedBase(write).body ?? undefined,
           headers: write.idem_key ? { "Idempotency-Key": write.idem_key } : undefined,
         });
         noteLocalWrite();

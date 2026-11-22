@@ -202,7 +202,7 @@ describe("Settings › Your Data › full backup", () => {
   it("lists in words what the restore left out, and why", async () => {
     const user = userEvent.setup();
     api.apply.mockResolvedValue(jobOf({ status: "done", phase: "done", done: 10, event_id: "9", result: {
-      ...report, skipped: { ...report.skipped, tasks: 2, views: 1, functions: 7, attachments_too_large: 3, attachments_unreadable: 4, attachments_not_yours: 5, tags: 6 },
+      ...report, skipped: { ...report.skipped, tasks: 2, views: 1, functions: 7, attachments_too_large: 3, attachments_unreadable: 4, attachments_not_yours: 5, tags: 6, pointers: 8 },
     } }));
     render(<FullBackupRestore ctx={ctx} />);
     await user.upload(screen.getByLabelText(/full backup file/i), new File(["zip"], "b.zip"));
@@ -213,7 +213,7 @@ describe("Settings › Your Data › full backup", () => {
     expect(result).toHaveTextContent("Left out:");
     for (const line of [
       "Tasks left out because the note they belong to is not in this space: 2", "Saved views left out", "Functions that tags provide (with their settings) that were not brought back: 7", "Attachments left out because they are too large: 3",
-      "damaged or of a type that is not allowed: 4", "belongs to someone else's upload: 5", "Tags that could not be put back on notes: 6",
+      "damaged or of a type that is not allowed: 4", "belongs to someone else's upload: 5", "Tags that could not be put back on notes: 6", "Sidebar shortcuts that could not be put back: 8",
     ]) expect(result).toHaveTextContent(line);
     // Counts that are zero are not listed, and nothing on screen is an id or a code.
     expect(result).not.toHaveTextContent("Fields that were refused");

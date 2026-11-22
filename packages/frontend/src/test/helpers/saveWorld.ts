@@ -24,6 +24,9 @@ export type RequestState = "inflight" | "applied" | "failed" | "rejected" | "los
 export type WorldRequest = {
   id: number; nodeId: string; idemKey: string | null; keepalive: boolean; body: PatchBody;
   state: RequestState;
+  /** Nobody will hear its answer: sent by a page that has died since (a reload), or given up on by the page (the send
+   *  deadline aborted it). The server still decides it. */
+  orphan?: true;
   resolve(value: unknown): void; reject(error: unknown): void;
 };
 export type RecordedConflict = { nodeId: string; base: string; incoming: string; current: string };
@@ -81,6 +84,16 @@ export class SaveWorld {
   rejected: Array<{ id: number; method: string; path: string; body: string | null; idem_key: string | null; attempts: number; rejection: string }> = [];
   /** Per note: the text the local copy holds (upsertNode; a test that models the worker's applySync writes it too). */
   localText = new Map<string, string>();
+  /** Per note: the title the local copy holds (written with localText). */
+  localTitle = new Map<string, string>();
+  /** Which page load is alive. A reload (pageDied) ends one: its modules are loaded afresh by the test
+   *  (vi.resetModules), and what the dead one still had going reaches nothing: requests it has not sent are never
+   *  sent, worker calls it has not made are never made, answers to requests it sent go nowhere. Never reset: a page's
+   *  mocks keep the life they were made in. */
+  life = 0;
+  /** Idempotency keys the server refused: the same request is refused again (one key, one decision; a 4xx is about
+   *  the request, and the backend's claim is rolled back with it, so a resend is judged the same way). */
+  private refusedKeys = new Set<string>();
   private rowSeq = 0;
   /** A device with no local copy (IndexedDB blocked, a private window): answers pass through untouched, no queued text
    *  is laid over them, nothing is judged there (the page's door, takeAnswer, still is). Off at every reset. */
@@ -93,7 +106,7 @@ export class SaveWorld {
     this.typed.clear(); this.deleted.clear(); this.userTitles.clear(); this.appliedTitles.clear();
     this.rejectedBodies.clear(); this.rejectedNotes.clear();
     this.serverClock = 0; this.clockFrozen = false;
-    this.pending = []; this.rejected = []; this.rowSeq = 0; this.localText.clear(); this.reads = []; this.copyWatermark = null; this.copyless = false;
+    this.pending = []; this.rejected = []; this.rowSeq = 0; this.localText.clear(); this.localTitle.clear(); this.refusedKeys.clear(); this.reads = []; this.copyWatermark = null; this.copyless = false;
     for (const id of ["a", "b"]) {
       const lines = [this.nextToken(id), this.nextToken(id)];
       this.server.set(id, { id, title: `Note ${id.toUpperCase()}`, markdown: lines.join("\n"), at: this.tickClock() });
@@ -141,7 +154,9 @@ export class SaveWorld {
     read?.resolve(read.row);
   }
 
-  transport(path: string, init: { method?: string; body?: unknown; headers?: unknown; keepalive?: boolean; onHeaders?: (headers: Headers) => void } = {}): Promise<unknown> {
+  transport(path: string, init: { method?: string; body?: unknown; headers?: unknown; keepalive?: boolean; onHeaders?: (headers: Headers) => void } = {}, life = this.life): Promise<unknown> {
+    // A dead page sends nothing more.
+    if (life !== this.life) return new Promise(() => {});
     const match = /^\/api\/nodes\/([^/?]+)$/.exec(path);
     if (match && (init.method ?? "GET") === "GET") {
       const row = this.row(this.server.get(match[1]!)!);
@@ -159,10 +174,25 @@ export class SaveWorld {
       this.violations.push({ invariant: 6, text: `a save the server refused was sent again (note ${request.nodeId}, request ${request.id})` });
     }
     const base = body.base_markdown;
-    if (base !== undefined && this.retired.get(request.nodeId)?.has(base)) {
+    // A resend under the key of an earlier request is that same save (the server answers it from its record), not a
+    // new one built on an old base: a save given up on at the send deadline is queued and sent again under its key.
+    const resend = request.idemKey !== null && this.requests.some((r) => r.idemKey === request.idemKey);
+    if (base !== undefined && !resend && this.retired.get(request.nodeId)?.has(base)) {
       this.violations.push({ invariant: "S3", text: `a save of note ${request.nodeId} (request ${request.id}) carries a base this device had already replaced by an acknowledged save` });
     }
-    return new Promise((resolve, reject) => { this.requests.push({ ...request, resolve, reject }); });
+    return new Promise((resolve, reject) => {
+      const sent: WorldRequest = { ...request, resolve, reject };
+      this.requests.push(sent);
+      // Given up on (writeQueue's send deadline aborts it): like fetch, the page hears an AbortError now and nothing
+      // after; the server may still get it and decide it, which nobody hears either.
+      const signal = (init as { signal?: AbortSignal }).signal;
+      signal?.addEventListener("abort", () => {
+        if (sent.state !== "inflight") return;
+        sent.orphan = true;
+        sent.resolve = () => {}; sent.reject = () => {};
+        reject(signal.reason ?? new DOMException("aborted", "AbortError"));
+      }, { once: true });
+    });
   }
 
   /** The position of the last change `apply` made (null: it changed nothing, so the server committed no event). */
@@ -202,8 +232,11 @@ export class SaveWorld {
   }
 
   deliver(request: WorldRequest): void {
+    if (request.idemKey && this.refusedKeys.has(request.idemKey)) { this.failPermanently(request); return; }
     request.state = "applied";
     const row = this.apply(request);
+    // A dead page was told nothing: what it held before is not behind it (S1–S3 are about what this device was told).
+    if (request.orphan) { request.resolve(row); return; }
     this.acknowledge(request.nodeId, request.body.markdown, row.markdown ?? "");
     // The response's headers arrive before its body: lib/api.ts hands them to the position recorder first.
     const headers = new Headers(this.applied === null ? {} : { [EVENT_POSITION_HEADER]: String(this.applied) });
@@ -230,16 +263,48 @@ export class SaveWorld {
     request.reject(kind === "503" ? this.makeApiError(503) : new TypeError("Failed to fetch"));
   }
   failPermanently(request: WorldRequest): void {
+    // The key was committed already (an earlier copy of the same request): the server answers it from its record.
+    if (request.idemKey && this.idem.has(request.idemKey)) { this.deliver(request); return; }
     request.state = "rejected";
-    this.rejectedBodies.add(bodyKey(request.nodeId, request.body));
-    this.rejectedNotes.add(request.nodeId);
+    if (request.idemKey) this.refusedKeys.add(request.idemKey);
+    // Only a refusal some live page heard is one this device knows (#6: not sent again; #4: the editor may keep it).
+    if (!request.orphan) {
+      this.rejectedBodies.add(bodyKey(request.nodeId, request.body));
+      this.rejectedNotes.add(request.nodeId);
+    }
     request.reject(this.makeApiError(422));
   }
   /** The server applied it; the answer never arrived. */
   loseResponse(request: WorldRequest): void {
+    // Refused (this key is refused for good), and the refusal never arrived: the server holds nothing of it.
+    if (request.idemKey && this.refusedKeys.has(request.idemKey)) { request.state = "failed"; request.reject(new TypeError("Failed to fetch")); return; }
     this.apply(request);
     request.state = "lost";
     request.reject(new TypeError("Failed to fetch"));
+  }
+
+  /** The page that was alive dies (a reload). What it had on the wire stays with the server, which still decides it;
+   *  the answer reaches nobody. Its unanswered reads die with it. */
+  pageDied(): void {
+    this.life++;
+    for (const request of this.requests) {
+      if (request.state !== "inflight") continue;
+      request.orphan = true;
+      request.resolve = () => {};
+      request.reject = () => {};
+    }
+    this.reads = [];
+  }
+
+  /** What a new page shows before the server answers: the local copy's rows (the server's rows where it holds none),
+   *  with the queued text laid over them, as the worker's loadBootstrap does (pendingNoteProjection). */
+  bootRows(): ContentNode[] {
+    const copy = this.rows().map((row) => ({
+      ...row,
+      markdown: this.localText.get(row.id) ?? row.markdown,
+      title: this.localTitle.get(row.id) ?? row.title,
+    }));
+    return this.copyless ? this.rows() : projectPendingNoteText(copy as never, this.pending as never) as unknown as ContentNode[];
   }
 
   // ── the other device ──
@@ -279,7 +344,10 @@ export class SaveWorld {
     getRejectedWrites: async () => this.rejected.map((w) => ({ ...w })),
     dismissRejectedWrite: async (write: { id: number }) => { this.rejected = this.rejected.filter((w) => w.id !== write.id); },
     /** The local copy's text of each note, as the writer's mirror leaves it (noteWriter `mirror`: the store row). */
-    upsertNode: async (node: { id: string; markdown?: string | null }) => { this.localText.set(node.id, node.markdown ?? ""); },
+    upsertNode: async (node: { id: string; markdown?: string | null; title?: string | null }) => {
+      this.localText.set(node.id, node.markdown ?? "");
+      if (typeof node.title === "string") this.localTitle.set(node.id, node.title);
+    },
     // syncEngine.hydrateNode: no body stored on this device; the server's row is kept as it came.
     getStoredBody: async () => null,
     // A single read, judged by where it was read as the worker does (localDbWorker persistRemoteNode).
@@ -289,6 +357,8 @@ export class SaveWorld {
       // The queued text laid over it, as the worker does (pendingNoteProjection).
       const [projected] = projectPendingNoteText([node] as never, this.pending as never) as unknown as T[];
       this.localText.set(node.id, projected!.markdown ?? "");
+      const title = (projected as { title?: unknown }).title;
+      if (typeof title === "string") this.localTitle.set(node.id, title);
       if (head !== undefined) this.copyWatermark = higherPosition(this.copyWatermark, head);
       return projected!;
     },
@@ -299,7 +369,11 @@ export class SaveWorld {
       if (this.copyless) return delta;
       if (!isCurrentAnswer(delta.head_event_id, this.copyWatermark)) return { ...delta, nodes: { ...delta.nodes, upsert: [] }, stale: true as const, answer_watermark: this.copyWatermark, answer_server: SERVER_ID };
       const upsert = projectPendingNoteText(delta.nodes.upsert as never, this.pending as never) as typeof delta.nodes.upsert;
-      for (const row of upsert) this.localText.set(row.id, row.markdown ?? "");
+      for (const row of upsert) {
+        this.localText.set(row.id, row.markdown ?? "");
+        const title = (row as { title?: unknown }).title;
+        if (typeof title === "string") this.localTitle.set(row.id, title);
+      }
       if (delta.head_event_id !== undefined) this.copyWatermark = higherPosition(this.copyWatermark, delta.head_event_id);
       return { ...delta, nodes: { ...delta.nodes, upsert } };
     },
@@ -311,6 +385,14 @@ export class SaveWorld {
     getWatermark: async () => ({ position: this.copyWatermark, server: SERVER_ID, rebuildOwed: false }),
     rewindCursor: async () => {},
   };
+
+  /** The local database as the page of `life` reaches it: once that page is dead, its calls are never made (its
+   *  worker died with it) and never answer. */
+  localDbFor(life: number): typeof this.localDb {
+    const calls = this.localDb as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    return Object.fromEntries(Object.entries(calls).map(([name, call]) => [name,
+      (...args: unknown[]) => life === this.life ? call(...args) : new Promise(() => {})])) as unknown as typeof this.localDb;
+  }
 }
 
 export function bodyKey(nodeId: string, body: PatchBody): string {

@@ -117,7 +117,9 @@ import { TaskUpdateRefusal } from "./taskSeam.js";
 import { reviewSeam } from "./reviewSeam.js";
 import { createStandaloneTask } from "./standaloneTasks.js";
 import { createEdge } from "./edgeWrites.js";
-import { applyBoardChanges } from "./boardWrites.js";
+import { applyBoardChanges, moveGraphPosition } from "./boardWrites.js";
+import { createPointer } from "./pointers.js";
+import { ParentKindError } from "./parentKind.js";
 import { addWhiteboardTab, hasWhiteboardTab, type BoardCard, type BoardSection } from "./boardStore.js";
 import { backedUpView, restoreNoteViews, withRestoredIds } from "./noteViews.js";
 import { appendTagView } from "./tagViews.js";
@@ -136,7 +138,7 @@ import { discardAbandonedRestore, restoreFinished, restoreStarted, tagDefinition
 import type { BackupNote } from "./backupArchive.js";
 import { reconcileTaskFields, restoreSystemAttrs } from "./backupSystemAttrs.js";
 import { settleWikilinkEdges, type RestoredLinks } from "./backupLinks.js";
-import { importExtras, importFunctionRefs, type ExtrasImport } from "./backupExtras.js";
+import { importExtras, importFunctionRefs, planRssIds, type ExtrasImport } from "./backupExtras.js";
 import { NodeUpdateError, updateNode } from "./nodeUpdate.js";
 import { assertNewWorkspace, inspectTargetWorkspace, movePreview, notMovedFor, rebuildSpaces, type MovedSpaces, type TargetFacts } from "./backupWorkspaceMove.js";
 
@@ -592,6 +594,19 @@ async function tryWrite(write: () => Promise<unknown>): Promise<boolean> {
   catch (error) { if (isRefusal(error)) return false; throw error; }
 }
 
+/** The surface a note's place on the global graph is stored under (node_positions); every other surface is a board's id. */
+const GRAPH_SURFACE = "graph" as const;
+
+/** A shortcut that cannot be made (one already there, a parent of the wrong kind, an order key this server does not accept, or
+ *  a refusal as `tryWrite` has them) is counted and skipped like the other refused writes of a restore. */
+async function tryPointer(write: () => Promise<unknown>): Promise<boolean> {
+  try { return await tryWrite(write); }
+  catch (error) {
+    if (error instanceof ParentKindError || (error as { code?: string }).code === "23505") return false;
+    throw error;
+  }
+}
+
 /** Notes (and deletions) per committed batch. A note takes about 80 ms to
  *  restore, so another writer waits a few seconds at most for the lock. */
 export const RESTORE_BATCH = 50;
@@ -642,7 +657,7 @@ type RestoreRun = {
   anchorRemap: Map<string, string>;
   backupDay: string;
   /** A workspace move: backup space id → space here, and what the move cleared. */
-  moved: null | { spaces: MovedSpaces; facts: TargetFacts; cleared: { notes: number; tags: number } };
+  moved: null | { spaces: MovedSpaces; facts: TargetFacts; cleared: { notes: number; tags: number }; /** Each backed-up subscription's id here: the notes saved from a feed name it. */ rssIds: ReadonlyMap<string, string> };
   /** What the history phase carried (a move whose backup holds history); null when there was nothing to carry. */
   history: null | { notes: number; versions: number; failed: string[] };
   /** The spaces notes may land in: the target space, or all of a move's. */
@@ -794,14 +809,15 @@ async function beginRestore(
         for (const id of facts.builtinNoteIds) if (await tryWrite(() => trashNode(actor, workspaceId, id, { uiContext: "backup.restore" }))) cleared++;
         let clearedTags = 0;
         for (const id of facts.builtinTagIds) if (await tryWrite(() => trashNode(actor, workspaceId, id, { uiContext: "backup.restore" }))) clearedTags++;
-        moved = { spaces: await rebuildSpaces(authenticated, workspaceId, reader, spaceId, facts), facts, cleared: { notes: cleared, tags: clearedTags } };
+        const movedSpaces = await rebuildSpaces(authenticated, workspaceId, reader, spaceId, facts);
+        moved = { spaces: movedSpaces, facts, cleared: { notes: cleared, tags: clearedTags }, rssIds: reader.extras ? await planRssIds(reader.extras, movedSpaces.map) : new Map() };
       }
       const plan = await planRestore(actor, workspaceId, items, mode, spaceId, parentNote);
       const report: RestoreReport = {
         event_id: eventId, created: 0, superseded: 0, parent_note_id: null, copies: 0, unchanged: 0, in_history: 0, deleted_again: 0, tags_created: 0,
         attachments_written: written.length, tasks: 0, views: 0,
         skipped: {
-          tags: 0, attributes: 0, links: 0, positions: 0, tag_settings: 0, tag_automation: 0, tasks: 0, views: 0, functions: 0,
+          tags: 0, attributes: 0, links: 0, positions: 0, tag_settings: 0, tag_automation: 0, tasks: 0, views: 0, functions: 0, pointers: 0,
           attachments_too_large: attachmentsLeftOut.too_large, attachments_unreadable: attachmentsLeftOut.unreadable, attachments_not_yours: attachmentsLeftOut.not_yours,
         },
         moved: null,
@@ -1060,12 +1076,15 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
   // A board's section frames travel in its own `_canvas_sections` attribute; they are user-drawn, so they are written back
   // through applyBoardChanges below (same permission, event and transaction as the cards).
   const sectionsBySurface = new Map<string, BoardSection[]>();
+  const graphPlaces: Array<{ nodeId: string; p: Record<string, unknown> }> = [];
   for (const item of made) {
     const nodeId = run.createdIds.get(item.id)!;
     const full = await run.reader.readNote(item.id);
     const sections = backedUpSections(full.attributes);
     if (sections.length > 0) sectionsBySurface.set(nodeId, sections);
     for (const p of full.positions ?? []) {
+      // The global graph is no note's board: its places are written by the graph's own writer, after the boards.
+      if (p.surface === GRAPH_SURFACE) { graphPlaces.push({ nodeId, p }); continue; }
       const surface = typeof p.surface === "string" ? run.ids.get(p.surface) : undefined;
       if (!surface) { run.report.skipped.positions++; continue; }
       const sub = typeof p.sub_canvas_id === "string" ? run.ids.get(p.sub_canvas_id) ?? null : null;
@@ -1091,6 +1110,29 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
       const kind = (await q<{ node_type: "content" | "canvas" | "class_tag" }>(`SELECT node_type FROM content_nodes WHERE id = $1 AND ${liveNodeSql()} AND node_type IN ('content', 'canvas', 'class_tag')`, [surface])).rows[0]?.node_type;
       if (!kind || !await tryWrite(() => applyBoardChanges(actor, run.workspaceId, { id: surface, node_type: kind }, { upsertCards: cards, removeCards: [], upsertSections: sections, removeSections: [] }))) {
         run.report.skipped.positions += cards.length + sections.length;
+      }
+    });
+  }
+
+  for (let at = 0; at < graphPlaces.length; at += LINK_BATCH) {
+    await batch(run, async (actor) => {
+      for (const { nodeId, p } of graphPlaces.slice(at, at + LINK_BATCH)) {
+        const place = { surface: GRAPH_SURFACE, x: Number(p.x), y: Number(p.y), width: p.width as number | null, height: p.height as number | null, color: p.color as string | null, folded: p.folded === true };
+        if (!Number.isFinite(place.x) || !Number.isFinite(place.y) || !await tryWrite(() => moveGraphPosition(actor, run.workspaceId, nodeId, place))) run.report.skipped.positions++;
+      }
+    });
+  }
+
+  // ── Sidebar shortcuts: each note's shortcuts to it, under a parent that came back too ──
+  for (let at = 0; at < made.length; at += LINK_BATCH) {
+    await batch(run, async (actor) => {
+      for (const item of made.slice(at, at + LINK_BATCH)) {
+        for (const pointer of (await run.reader.readNote(item.id)).pointers ?? []) {
+          const parentId = pointer.parent_id === null ? null : run.ids.get(pointer.parent_id) ?? undefined;
+          if (parentId === undefined || !await tryPointer(() => createPointer(actor, run.workspaceId, {
+            targetId: run.createdIds.get(item.id)!, parentId, orderKey: pointer.order_key, displayPrefix: pointer.display_prefix ?? undefined,
+          }))) run.report.skipped.pointers = (run.report.skipped.pointers ?? 0) + 1;
+        }
       }
     });
   }
@@ -1141,7 +1183,7 @@ async function continueRestore(run: RestoreRun, onProgress: (progress: RestorePr
   if (moved) {
     await batch(run, async (actor) => {
       const empty: ExtrasImport = { review: 0, focus: 0, rss: 0, prefs: 0, moduleSettings: 0, modules: false, site: false, functionsLeftOut: 0 };
-      const { functionsLeftOut, ...carried } = run.reader.extras ? await importExtras(run.workspaceId, actor, run.reader.extras, run.ids, moved.spaces.map, run.owner) : empty;
+      const { functionsLeftOut, ...carried } = run.reader.extras ? await importExtras(run.workspaceId, actor, run.reader.extras, run.ids, moved.spaces.map, run.owner, moved.rssIds) : empty;
       run.report.skipped.functions += functionsLeftOut;
       run.report.moved = {
         spaces_created: moved.spaces.created, need_reinvite: moved.spaces.needReinvite, carried, cleared: moved.cleared,
@@ -1363,7 +1405,7 @@ async function restoreOwnContent(run: RestoreRun, actor: ActorCtx, item: Item, a
   await restoreBackedUpAttributes(actor, workspaceId, newId, full.attributes, ids, report);
   report.skipped.attributes += await restoreSystemAttrs(actor, workspaceId, newId, full.attributes,
     // A task is not on the site and has no 「備份」 copy of a live note beside it: it keeps what it had.
-    { withPerson: !!run.moved, published: !item.task && (action.kind !== "create" || action.alongside) ? "always_off" : item.deleted ? "off_only" : "as_backed" }, tryWrite);
+    { withPerson: !!run.moved, rssIds: run.moved?.rssIds, published: !item.task && (action.kind !== "create" || action.alongside) ? "always_off" : item.deleted ? "off_only" : "as_backed" }, tryWrite);
   // A move brings the page design (the site's look) as well.
   if (run.moved && full.presentation && typeof full.presentation === "object") {
     await db.updateTable("content_nodes").set({ presentation: JSON.stringify(full.presentation) }).where("id", "=", newId).execute();

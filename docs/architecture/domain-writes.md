@@ -1,6 +1,6 @@
 # 領域寫入模組
 
-> 狀態：現行（最後確認 2026-11-18）
+> 狀態：現行（最後確認 2026-11-20）
 > 涵蓋：packages/frontend/src/lib/data/domainWriters.ts, packages/frontend/src/lib/data/taskWriter.ts, packages/frontend/src/lib/data/propertyWriter.ts, packages/frontend/src/lib/data/tagWriter.ts, packages/frontend/src/lib/data/relationWriter.ts, packages/frontend/src/lib/data/canvasWriter.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/optimisticFields.ts, packages/frontend/src/lib/taskMirror.ts
 
 延續 `note-writes.md` 的局部重構。這一批把任務、屬性、標籤、關聯、白板的主要寫入流程
@@ -14,7 +14,7 @@
 
 | 模組 | 畫面表達的意圖 | 模組負責 |
 | --- | --- | --- |
-| `taskWriter` | `create / patch` | 穩定任務 ID、狀態／截止日／重複規則、保存與拒絕回復 |
+| `taskWriter` | `create / patch / remove` | 穩定任務 ID、狀態／截止日／重複規則、保存與拒絕回復；`remove` 是任務的刪除（任務節點不在筆記清單，不能走 `noteWriter.remove`）：先從清單拿掉，送 `DELETE /api/nodes/:id`（離線排進佇列、被拒絕就放回去），寫在筆記裡的任務由伺服器把那一行一起拿掉，成功後重新讀筆記 |
 | `taskAgenda` | `reads.workspace.taskAgenda`（伺服器議程） | 伺服器議程；bucket 規則是 `@onden/markdown` 的 `taskBucket`（後端 SQL 版由 `taskBucketRule.integration.test.ts` 對齊） |
 | `propertyWriter` | `set / remove` | 值、型別、繼承與來源、本機 metadata 還原、欄位 URL 編碼 |
 | `tagWriter` | `create / apply / remove` | 標籤節點與清單、分類／標籤成員關係及冪等的回復 |
@@ -40,8 +40,10 @@
 
 `optimisticFields` 追蹤每個欄位的待確認編輯。例如 `原值 → A → B`，若 A、B 都被拒絕，
 必須回到原值，不能讓 B 回復成已被拒絕的 A。它也讓舊回應不覆蓋後續待確認的同欄位修改。
-伺服器副本（同步回應、重新讀取）也不蓋掉還在等回應的欄位（`storeOps.serverCopyOver`）；`whenAnswered`
-讓同步引擎在該筆編輯有回應後再讀一次那則筆記。
+伺服器副本（同步回應、整份或 `?nodes=none` 的 bootstrap、重新讀取）也不蓋掉還在等回應的欄位，每一種列同一條規則
+（`storeOps.keepUnanswered`；帳本名與入口見 [decisions-core-sync](../agents/decisions-core-sync.md) 2026-11-20 那一條）；
+`whenAnswered` 讓同步引擎在該筆編輯有回應後再讀一次（筆記用單筆讀取，其他用 bootstrap）。
+新增一本帳的 writer 要讓它經過門，守門 `everyJournalAtTheDoor.guard` 會擋。
 這是單一執行環境內的排序與回復，並非跨裝置衝突解決。
 
 ## 錯誤與畫面契約

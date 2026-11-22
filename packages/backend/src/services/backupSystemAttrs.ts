@@ -112,7 +112,7 @@ export function restoredPublishedValue(how: PublishRestore, backed: string | nul
  *  (class "note"), plus "person" ones when `withPerson`, plus `_published` as `published` says. Returns how many writes were refused. */
 export async function restoreSystemAttrs(
   actor: ActorCtx, workspaceId: string, nodeId: string, attributes: ReadonlyArray<{ key: string; value: string }>,
-  opts: { withPerson: boolean; published: PublishRestore },
+  opts: { withPerson: boolean; published: PublishRestore; /** A move: each backed-up subscription's id here (backupExtras.ts planRssIds). */ rssIds?: ReadonlyMap<string, string> },
   write: (change: () => Promise<unknown>) => Promise<boolean>,
 ): Promise<number> {
   let refused = 0;
@@ -122,15 +122,19 @@ export async function restoreSystemAttrs(
     const kind = classifySystemAttr(a.key);
     const wanted = kind === "note" || (kind === "person" && opts.withPerson) || kind === "published";
     if (!wanted || a.value === "" || !isValidSystemAttributeValue(a.key, a.value)) continue;
+    // `_rss_source` names a subscription by id. A subscription that did not come across is not named: its id here could be
+    // another workspace's, and a note belonging to nothing is what the feed's list shows either way.
+    const value = a.key === "_rss_source" ? opts.rssIds?.get(a.value) : a.value;
+    if (value === undefined) continue;
     // The keys the note's own menu writes go the menu's way (its value rules, the space's publish switch);
     // the provenance stamps are module-owned, written as an attribute change.
     // 「不發布」 is never skipped quietly: a copy without it would be public at the next publish, so a refused write
     // there fails the restore (the caller's transaction rolls back) instead of being counted.
     const writeIt = isKeptOffSite(a) ? async (change: () => Promise<unknown>) => { await change(); return true; } : write;
     const ok = await writeIt(() => isWritableAttributeKey(a.key)
-      ? setNodeAttribute({ workspaceId, actor, nodeId, attribute: { key: a.key, value: a.value, value_type: "text", is_inheritable: false }, existingKey: true })
+      ? setNodeAttribute({ workspaceId, actor, nodeId, attribute: { key: a.key, value, value_type: "text", is_inheritable: false }, existingKey: true })
       : recordAttributeChange({
-        workspaceId, nodeId, key: a.key, actor, next: { value: a.value }, rule: "always",
+        workspaceId, nodeId, key: a.key, actor, next: { value }, rule: "always",
         authority: { kind: "node", nodeId, op: "set_attribute" }, uiContext: "backup.restore",
       }));
     if (!ok) refused++;

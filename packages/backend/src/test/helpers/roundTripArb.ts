@@ -74,7 +74,11 @@ const BLOCK_REF = fc.stringMatching(/^[a-z][a-z0-9]{3,7}$/);
 export const blockSpec = (noteCount: number, options: { blockTags?: boolean } = {}): fc.Arbitrary<BlockSpec> => {
   const target = fc.nat({ max: Math.max(0, noteCount - 1) });
   const common: Array<{ arbitrary: fc.Arbitrary<BlockSpec>; weight: number }> = [
-    { arbitrary: fc.record({ kind: fc.constant("paragraph" as const), text: sentence, ref: sometimes(BLOCK_REF, 30), tag: options.blockTags ? sometimes(fc.constantFrom("idea", "題目", "q-1"), 40) : fc.constant(null) }), weight: 8 },
+    // A paragraph holds a typed `^id` or a `{tag}`, not both: written as `text {tag} ^id`, the old typed id after the tag hides the
+    // tag from a normal read (blocks.ts readLegacyIds), and a restore turns the id into an anchor, which un-hides it. That is the
+    // restore migrating the old mark, not a loss: backupRoundTrip.property.test.ts pins the one case by name.
+    { arbitrary: fc.record({ kind: fc.constant("paragraph" as const), text: sentence, ref: sometimes(BLOCK_REF, 30), tag: options.blockTags ? sometimes(fc.constantFrom("idea", "題目", "q-1"), 40) : fc.constant(null) })
+      .map((b) => (b.tag && b.ref ? { ...b, ref: null } : b)), weight: 8 },
     { arbitrary: fc.record({ kind: fc.constant("heading" as const), level: fc.constantFrom(1, 2, 3) as fc.Arbitrary<1 | 2 | 3>, text: sentence }), weight: 2 },
     { arbitrary: fc.record({ kind: fc.constant("list" as const), items: fc.array(sentence, { minLength: 1, maxLength: 3 }), ordered: fc.boolean() }), weight: 3 },
     { arbitrary: fc.record({ kind: fc.constant("task" as const), text: sentence, done: fc.boolean() }), weight: 2 },

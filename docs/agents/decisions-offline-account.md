@@ -18,6 +18,10 @@
 - **只有 durable 狀態才算交接完成。** 拒絕狀態或使用者移除的保存失敗須保留原列，錯誤往上傳，
   本輪 drain 停止；不能已刪掉唯一請求再顯示「未儲存」。舊 queue migration 保留原鍵、順序和 attempts。
   DB 無法保存時不保證重載仍記得伺服器拒絕，但原本 durable pending 請求必須存在。
+- **拒絕的文字也記得「它不在伺服器上」（2026-11-19）。** 復原區裡被拒的存檔同時是送出時換 base 的依據
+  （`writeRecovery.withoutRefusedBase`）：重新整理之後，以它為 base 的存檔改用它自己的 base 送出。
+  上一頁離開時只留在 localStorage 的存檔，新頁面在顯示本機副本之前先照原鍵排進佇列（`writeQueue.takeInLeftWrites`）。
+  見 [筆記寫入](../architecture/note-writes.md#沒有被收下的文字不算數2026-11-19)。
   拒絕／移除都比對原請求的 method、path、body 與 key；匯入備份後的整數 ID 可能重用，
   舊 HTTP 回應或舊卡片不得改動另一份輸入。403 沿共用錯誤層給可讀說明，不在面板顯示內部角色／ID。
 - **連線正常不等於全部保存。** 頂欄圓點只表示已連線；pending 計數不包含已拒絕輸入，

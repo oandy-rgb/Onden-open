@@ -32,12 +32,13 @@
 //   (1 also covers saves the CLIENT refuses before sending: a title over 500 characters, a body over the cap, NUL, half a surrogate
 //    pair, the note gone from the store; the generator types them, deletes the open note elsewhere, and reloads)
 //
-// STATUS (fix/save-keepalive-resend; seed 7 below is open): #1–#3, #5, #6 hold on 20 extra seeds x 5000
-// runs; the only open one is #4 (a rename from the other device that arrives
-// while the user types never reaches the editor; fixed, see the nightly 2026-11-13 cases).
-// Older note: these failed on main (review 2026-10-24 data-integrity #1 #2 #3 #11
-// #12 #15; fixes in PR fix/a1-save-path). The named cases and the random
-// property are `it.fails`. After fix/a1-save-path merges, flip them (see FLIP).
+// STATUS (fix/save-in-flight-across-reload, 2026-11-19): the random property and the named cases are ordinary tests;
+// the one literal expected failure (`known`, it.fails) is "open (seed 432211385)" (a refused text typed again after a
+// reload is sent again, #6). The random property takes a fresh seed every run (printed; PROPS_SEED replays one).
+// A reload is a real one (loadPage / reloadPage): the app's modules are loaded afresh, the old page's unanswered
+// requests are decided by the server and heard by nobody. Before this the simulated reload kept the old page's
+// memory, and seed 11 (S3) failed only there.
+// SAVE_TIMING_FLIP=1 runs the expected failures as ordinary tests to read their output.
 //
 // Replay:  PROPS_SEED=<seed> PROPS_RUNS=<n> npm run test:props
 //          (fast-check prints seed, path and the shrunk command list.)
@@ -48,40 +49,112 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const responses = vi.hoisted(() => ({ listener: null as null | ((path: string, init: RequestInit | undefined, response: Response) => void) }));
-vi.mock("../../lib/api", async (original) => ({
-  ...await original<typeof import("../../lib/api")>(),
-  // lib/data/writePositions installs its recorder here; the world's responses are handed to it (see world.onResponse).
-  setWriteResponseListener: (listener: typeof responses.listener) => { responses.listener = listener; },
-  api: vi.fn(async (path: string, init?: unknown) => {
-    const { world } = await import("../helpers/saveWorld");
-    return world.transport(path, init as never);
-  }),
-}));
-vi.mock("../../lib/localDb", async () => {
-  const { world } = await import("../helpers/saveWorld");
-  return { ...world.localDb };
+// The world outlives every page: a reload loads the app's modules afresh (vi.resetModules), and this mock hands each
+// load the same world, where a fresh import would make a new, empty one.
+const kept = vi.hoisted(() => ({ world: null as unknown }));
+vi.mock("../helpers/saveWorld", async (original) => {
+  kept.world ??= await original();
+  return kept.world as typeof import("../helpers/saveWorld");
 });
-
-import { ApiError, nodeNeedsBody } from "../../lib/api";
+// Each page load gets its own transport and local database, cut off when that page dies (saveWorld.pageDied).
+// vi.resetModules does not run a vi.mock factory again, so a reload registers them anew (reloadPage).
+function mockPageBoundary(): void {
+  vi.doMock("../../lib/api", async (original) => {
+    const { world } = await import("../helpers/saveWorld");
+    const life = world.life;
+    return {
+      ...await original<typeof import("../../lib/api")>(),
+      // lib/data/writePositions installs its recorder here; the world's responses are handed to it (see world.onResponse).
+      setWriteResponseListener: (listener: typeof responses.listener) => { responses.listener = listener; },
+      api: vi.fn(async (path: string, init?: unknown) => world.transport(path, init as never, life)),
+    };
+  });
+  vi.doMock("../../lib/localDb", async () => {
+    const { world } = await import("../helpers/saveWorld");
+    return { ...world.localDbFor(world.life) };
+  });
+}
 import { ownerData } from "../ownerData";
-import { getAppState, resetAppState, selectOverviewSelectedNode, setAppState, setData, subscribeApp } from "../../lib/appStore";
-import {
-  __resetDraftStateForTests, applyRemoteNode, flushPendingSave, readOverviewDraft, resetDraftForNode, typeIntoDraft,
-} from "../../lib/data/draftActions";
-import { pendingFields } from "../../lib/data/optimisticFields";
-import { applySyncDelta } from "../../lib/data/storeOps";
 import type { ContentNode } from "../../lib/api";
 import type { AppliedSyncDelta } from "../../lib/localDb";
-import { flushPendingWrites, stopWriteRetry } from "../../lib/data/writeQueue";
-import { getRecoveryWrites, refreshRecoveryWrites, removeRecoveryWrite } from "../../lib/data/writeRecovery";
-import { setPending } from "../../lib/data/syncStatus";
-import { bindAccountStorage } from "../../lib/accountStorage";
 import { bodyKey, mergeGuard, tokensIn, world, SERVER_ID, type WorldRequest } from "../helpers/saveWorld";
-import { askedNow, forgetWatermark, takeAnswer } from "../../lib/data/writePositions";
 
-bindAccountStorage("u", "");
-world.onResponse = (path, init, response) => responses.listener?.(path, init, response as unknown as Response);
-world.makeApiError = (status) => new ApiError(status, JSON.stringify({ error: "x" }));
+// ── one page load ───────────────────────────────────────────────────────────
+//
+// The app's modules as one page load holds them. A reload (Editor.reload) ends this page and loads a new one:
+// every module is evaluated again, so every module-level Map, queue, lane, watermark, timer and listener of the old
+// page is gone by construction, not by a list of resets that could miss one. What survives is what survives a real
+// reload: the world's server, its local database (queue rows, refused rows, the local copy, the copy's watermark),
+// localStorage and sessionStorage. The old page's requests already on the wire are decided by the server and their
+// answers reach nobody (saveWorld.pageDied); its timers and window/document listeners are removed.
+async function loadPage() {
+  // lib/api first, alone: its mock awaits the real module, and an import racing it would get the real one (as tabWorld).
+  const api = await import("../../lib/api");
+  const localDb = await import("../../lib/localDb");
+  const appStore = await import("../../lib/appStore");
+  const draftActions = await import("../../lib/data/draftActions");
+  const optimisticFields = await import("../../lib/data/optimisticFields");
+  const storeOps = await import("../../lib/data/storeOps");
+  const writeQueue = await import("../../lib/data/writeQueue");
+  const writeRecovery = await import("../../lib/data/writeRecovery");
+  const syncStatus = await import("../../lib/data/syncStatus");
+  const accountStorage = await import("../../lib/accountStorage");
+  const writePositions = await import("../../lib/data/writePositions");
+  void localDb;
+  accountStorage.bindAccountStorage("u", "");
+  world.onResponse = (path, init, response) => responses.listener?.(path, init, response as unknown as Response);
+  world.makeApiError = (status) => new api.ApiError(status, JSON.stringify({ error: "x" }));
+  return { api, appStore, draftActions, optimisticFields, storeOps, writeQueue, writeRecovery, syncStatus, writePositions };
+}
+mockPageBoundary();
+vi.resetModules();
+let page = await loadPage();
+
+/** Listeners the app's modules put on window and document, by the page load that added them: a dead page's are removed. */
+const pageListeners: Array<{ life: number; remove: () => void }> = [];
+for (const target of [window, document] as EventTarget[]) {
+  const add = target.addEventListener.bind(target);
+  target.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) => {
+    add(type, listener, options);
+    pageListeners.push({ life: world.life, remove: () => target.removeEventListener(type, listener, options) });
+  }) as typeof target.addEventListener;
+}
+
+/** The page dies and a new one loads: see loadPage. */
+async function reloadPage(): Promise<void> {
+  vi.clearAllTimers();
+  world.pageDied();
+  for (const entry of pageListeners.splice(0)) entry.remove();
+  mockPageBoundary();
+  vi.resetModules();
+  page = await loadPage();
+}
+
+// The current page's functions, by the names the app uses.
+const nodeNeedsBody: typeof page.api.nodeNeedsBody = (...a) => page.api.nodeNeedsBody(...a);
+const getAppState: typeof page.appStore.getAppState = () => page.appStore.getAppState();
+const resetAppState: typeof page.appStore.resetAppState = (...a) => page.appStore.resetAppState(...a);
+const selectOverviewSelectedNode: typeof page.appStore.selectOverviewSelectedNode = (...a) => page.appStore.selectOverviewSelectedNode(...a);
+const setAppState: typeof page.appStore.setAppState = (...a) => page.appStore.setAppState(...a);
+const setData: typeof page.appStore.setData = (...a) => page.appStore.setData(...a);
+const subscribeApp: typeof page.appStore.subscribeApp = (...a) => page.appStore.subscribeApp(...a);
+const __resetDraftStateForTests = () => page.draftActions.__resetDraftStateForTests();
+const applyRemoteNode: typeof page.draftActions.applyRemoteNode = (...a) => page.draftActions.applyRemoteNode(...a);
+const flushPendingSave: typeof page.draftActions.flushPendingSave = (...a) => page.draftActions.flushPendingSave(...a);
+const readOverviewDraft: typeof page.draftActions.readOverviewDraft = (...a) => page.draftActions.readOverviewDraft(...a);
+const resetDraftForNode: typeof page.draftActions.resetDraftForNode = (...a) => page.draftActions.resetDraftForNode(...a);
+const typeIntoDraft: typeof page.draftActions.typeIntoDraft = (...a) => page.draftActions.typeIntoDraft(...a);
+const pendingFields: typeof page.optimisticFields.pendingFields = (...a) => page.optimisticFields.pendingFields(...a);
+const applySyncDelta: typeof page.storeOps.applySyncDelta = (...a) => page.storeOps.applySyncDelta(...a);
+const flushPendingWrites = () => page.writeQueue.flushPendingWrites();
+const stopWriteRetry = () => page.writeQueue.stopWriteRetry();
+const getRecoveryWrites = () => page.writeRecovery.getRecoveryWrites();
+const refreshRecoveryWrites = () => page.writeRecovery.refreshRecoveryWrites();
+const removeRecoveryWrite: typeof page.writeRecovery.removeRecoveryWrite = (...a) => page.writeRecovery.removeRecoveryWrite(...a);
+const setPending: typeof page.syncStatus.setPending = (...a) => page.syncStatus.setPending(...a);
+const askedNow = () => page.writePositions.askedNow();
+const forgetWatermark = () => page.writePositions.forgetWatermark();
+const takeAnswer: typeof page.writePositions.takeAnswer = (...a) => page.writePositions.takeAnswer(...a);
 
 /** PROPS_SKIP=3,6 ignores those invariants: once one bug is known, the shrinker
  *  would report it first every time and hide the others. */
@@ -106,6 +179,9 @@ const flush = async () => {
     due();
   }
 };
+
+/** How much of its exit save a page got done before it died (Editor.reload). */
+type ReloadGrace = "at once" | "after its work";
 
 // "extend": the token goes at the end of the last line, the way characters are typed into a sentence (the merge
 // works on lines, so two writers in one line is the case where it has to choose).
@@ -221,14 +297,30 @@ class Editor {
     setData((data) => ({ ...data, nodes: data.nodes.filter((n) => n.id !== id) }));
   }
 
-  /** Reload the page: pagehide first (the keepalive flush), then every in-memory draft is gone and the recovery
-   *  panel is read again from storage. */
-  async reload(): Promise<void> {
+  /** Reload the page: pagehide first (the keepalive flush), then the page dies and a new one loads (reloadPage: its
+   *  modules afresh; the old page's memory, timers, listeners and unanswered requests reach nothing). `grace`: how much
+   *  of the exit save the old page got done before it died. "at once": only what pagehide did synchronously (the
+   *  recovery copy in localStorage; its queue row and its request need worker round trips first). "after its work":
+   *  every step that did not wait for an answer (the queue row is written and the request is on the wire).
+   *  The new page boots as the app does: the local copy's rows with the queued text laid over them, the recovery
+   *  panel read from storage, then (online) the queue drained (syncEngine's loop drains before it syncs). */
+  async reload(grace: ReloadGrace = "after its work"): Promise<void> {
+    const { online, selectedId } = getAppState();
     this.pagehide();
-    __resetDraftStateForTests();
-    this.resetKey = ""; this.remoteKey = "";
+    if (grace === "after its work") await flush();
+    this.unsubscribe();
+    await reloadPage();
+    this.resetKey = ""; this.remoteKey = ""; effectsDue = null;
+    // syncEngine.runBoot's order: what the old page left unqueued goes into the queue, then the copy is shown
+    // (the test "the boot order is syncEngine's" below pins it).
+    await page.writeQueue.takeInLeftWrites();
+    resetAppState({ data: { ...ownerData, nodes: world.bootRows() }, online, selectedId });
+    this.unsubscribe = subscribeApp(() => { effectsDue = () => this.effects(); });
+    window.addEventListener("pagehide", this.onHide);
+    document.addEventListener("visibilitychange", this.onVisibility);
     await refreshRecoveryWrites();
     this.effects();
+    if (online) void flushPendingWrites();
   }
 
   switchNote(): void { setAppState({ selectedId: this.open === "a" ? "b" : "a" }); }
@@ -443,7 +535,7 @@ const C = {
   typeTooLong: (op: LineOp) => cmd(`type ${fmt(op)} into a body over the length cap`, (e) => e.type(op, "y".repeat(2_000_001))),
   longTitle: () => cmd("paste a 501-character title", (e) => e.pasteLongTitle()),
   vanish: () => cmd("the open note is deleted on another device", (e) => e.vanish()),
-  reload: () => cmd("reload the page", (e) => e.reload()),
+  reload: (grace: ReloadGrace = "after its work") => cmd(grace === "at once" ? "reload the page (it dies at once)" : "reload the page", (e) => e.reload(grace)),
   switchNote: () => cmd("switch note", (e) => e.switchNote()),
   tick: () => cmd("autosave tick", (e) => e.tick()),
   pagehide: () => cmd("pagehide (keepalive flush)", (e) => e.pagehide()),
@@ -467,6 +559,9 @@ const C = {
   offline: () => cmd("go offline", (e) => e.setOnline(false)),
   online: () => cmd("go online", (e) => e.setOnline(true)),
   drain: () => cmd("queue drain retry", () => { void flushPendingWrites(); }),
+  /** Nothing answers for longer than a send may take (writeQueue WRITE_ATTEMPT_DEADLINE_MS): the save is given up on
+   *  and queued under its key; the server may still get the first attempt (the world decides it later). */
+  timeout: () => cmd("no answer for 26 s (the send deadline passes)", async () => { await vi.advanceTimersByTimeAsync(26_000); }),
 };
 
 const lineOp = fc.record({ kind: fc.constantFrom<LineKind>("append", "prepend", "insert", "delete", "replace", "extend"), k: fc.nat(4) });
@@ -479,7 +574,7 @@ const commandKinds: Array<[kind: string, weight: number, arb: fc.Arbitrary<Cmd>]
   ["typeTooLong", 1, lineOp.map((op) => C.typeTooLong(op))],
   ["longTitle", 1, fc.constant(C.longTitle())],
   ["vanish", 1, fc.constant(C.vanish())],
-  ["reload", 1, fc.constant(C.reload())],
+  ["reload", 1, fc.constantFrom<ReloadGrace>("after its work", "at once").map(C.reload)],
   ["switch", 2, fc.constant(C.switchNote())],
   ["tick", 3, fc.constant(C.tick())],
   ["pagehide", 1, fc.constant(C.pagehide())],
@@ -500,6 +595,7 @@ const commandKinds: Array<[kind: string, weight: number, arb: fc.Arbitrary<Cmd>]
   ["offline", 1, fc.constant(C.offline())],
   ["online", 1, fc.constant(C.online())],
   ["drain", 1, fc.constant(C.drain())],
+  ["timeout", 1, fc.constant(C.timeout())],
 ];
 /** PROPS_WITHOUT=rename,evict leaves those commands out (kinds are the names
  *  above), to look past a known bug the same way PROPS_SKIP does. */
@@ -515,9 +611,11 @@ async function runSequence(commands: Iterable<Cmd>): Promise<string[]> {
   try {
     for (const command of commands) {
       if (command.check({})) await command.run({}, editor);
+      if (process.env.DBG) console.log("[dbg]", command.toString(), JSON.stringify({ rec: getRecoveryWrites().map((w) => [w.rejection ? "R" : "U", w.body]), rej: world.rejected.map((w) => w.body), pend: world.pending.map((w) => w.body), req: world.requests.map((r) => [r.id, r.state, r.orphan ? "orphan" : "", JSON.stringify(r.body)]), srv: world.server.get("a")!.markdown }));
       editor.checkStepBack();
     }
     const settled = await editor.settle();
+    if (process.env.DBG) console.log("[dbg] settled", JSON.stringify({ rec: getRecoveryWrites().map((w) => [w.rejection ? "R" : "U", w.body]), rej: world.rejected.map((w) => w.body), pend: world.pending.map((w) => w.body), req: world.requests.map((r) => [r.id, r.state, r.orphan ? "orphan" : "", JSON.stringify(r.body)]), srv: world.server.get("a")!.markdown }));
     return invariants(editor, settled).filter((p) => !SKIP.some((prefix) => p.startsWith(prefix)));
   } finally { editor.teardown(); }
 }
@@ -533,12 +631,16 @@ describe("save path under random timing", () => {
     expect(mergeGuard("x", "y", "y")).toBe(true);
   });
 
-  // fix/a1-save-path fixed the review cases, so they run as ordinary tests.
-  // `known` stays for what is still open after it (pass `stillOpen`): a remote
-  // rename arriving during typing never reaches the editor (#4),. The two #5
-  // sequences the random property found with other seeds (pinned below) are fixed. The
-  // random property runs as an ordinary test on its fixed default seed.
-  // SAVE_TIMING_FLIP=1 runs the open ones as ordinary tests to read the failures.
+  // The reload above boots the way the app does; if syncEngine.runBoot changes its order, this world must follow.
+  it("the boot order is syncEngine's (left writes queued before the copy is shown)", () => {
+    const source = readFileSync(resolve(__dirname, "../../lib/data/syncEngine.ts"), "utf8");
+    const boot = source.slice(source.indexOf("async function runBoot("));
+    expect(boot.indexOf("await takeInLeftWrites();")).toBeGreaterThan(0);
+    expect(boot.indexOf("await takeInLeftWrites();")).toBeLessThan(boot.indexOf("await loadBootstrapList()"));
+  });
+
+  // The review cases (fix/a1-save-path) and every case pinned since run as ordinary tests. `known` is for what is still
+  // open (pass `stillOpen`, or call it directly); SAVE_TIMING_FLIP=1 runs those as ordinary tests to read the failures.
   const known = process.env.SAVE_TIMING_FLIP ? it : it.fails;
   const regression = (name: string, commands: Cmd[], expected: RegExp, stillOpen = false) =>
     (stillOpen ? known : it)(name, async () => {
@@ -684,14 +786,16 @@ describe("save path under random timing", () => {
   ], /#4/);
   // Nightly 2026-11-15 (seed 765832): a long title pasted, body typed, reload, the long title pasted again. The second
   // refusal carries less text than the first; it used to hide the first one behind itself in the recovery panel.
-  // Still open (seed 7, found while checking the fix above; the same on main): reload with the keepalive save
-  // still in flight, rename, and the server then refuses that first save. The rename carries the first save's
-  // text as its body AND as its base, so the server keeps no body change while the client counts the text as
-  // saved and drops the refused copy (settleRefusedNoteText). The simulated reload keeps the in-memory store (the
-  // optimistic body), which a real reload does not: confirm in a real reload before fixing.
-  regression("open (seed 7): reload with a keepalive save in flight, rename, then that save is refused", [
+  // Seed 7 (found while checking the fix above; the same on main). Real: it fails the same way since reload() is a real
+  // reload (a new module load; see loadPage). The new page shows the queued text (the keepalive save's row, laid over
+  // the copy) and the editor takes it as its base. The server refuses that save (the old page's request and the new
+  // page's resend, one key); the rename after it then carried the refused text as body AND base, the server kept no
+  // body change, and the app counted the text as saved and dropped the refused copy (settleRefusedNoteText): gone.
+  // Fixed by one rule (note-writes.md "沒有被收下的文字不算數"): a refused text is never a base (writeRecovery
+  // withoutRefusedBase, where every save leaves), and a refused copy goes only on the server's own answer.
+  regression("seed 7: reload with a keepalive save in flight, rename, then that save is refused", [
     C.type({ kind: "append", k: 0 }), C.reload(), C.rename(), C.failPermanent(0),
-  ], /#1/, true);
+  ], /#1|#S4/);
   regression("nightly 2026-11-15: long title, typing, reload, long title again keeps the typing in recovery (seed 765832)", [
     C.longTitle(), C.type({ kind: "append", k: 0 }), C.reload(), C.longTitle(),
   ], /#1/);
@@ -772,8 +876,8 @@ describe("save path under random timing", () => {
     C.type({ kind: "append", k: 0 }), C.tick(), C.remoteBody("a", { kind: "prepend", k: 0 }), C.syncStarts(), C.syncAnswer(0), C.deliver(),
   ], /#4|gone from note|#S[234]/);
 
-  // Found by the random property (PROPS_RUNS=5000, seeds 2 and 3 below). Both need the simulated reload, which keeps
-  // the in-memory store (see "open (seed 7)"): confirm in a real reload before fixing. A late answer asked before the
+  // Found by the random property (PROPS_RUNS=5000, seeds 2 and 3 below). They were found with the old simulated reload
+  // (it kept the in-memory store); they also pass with the real reload (fix/save-in-flight-across-reload). A late answer asked before the
   // typing overwrites the optimistic row while the keepalive save is in flight; the reseed then reads that row.
   // Fixed with the 2026-11-19 report (same cause): a server copy no longer replaces a field whose edit has no answer
   // yet (storeOps.serverCopyOver), so these run as ordinary tests.
@@ -799,24 +903,98 @@ describe("save path under random timing", () => {
   ], /#3/);
 
   // PROPS_RUNS=5000 on main, three seeds (2026-11-16, with the clock commands in the generator). None of the three involves
-  // the clock; they are the same open families as above (the simulated reload keeps the store; a refused save left as a base).
+  // the clock; they are the same open families as above (found with the old simulated reload; a refused save left as a base).
   regression("5000 runs, seed 222: an answer asked before typing, reload, the answer delivered, pagehide: the editor shows the text from before (#4)", [
     C.syncStarts(), C.type({ kind: "append", k: 0 }), C.reload(), C.syncAnswer(0), C.pagehide(),
   ], /#4/); // fixed with the 2026-11-19 report (storeOps.serverCopyOver keeps a field whose edit has no answer yet)
   regression("5000 runs, seed 3333: typing, reload, an answer, rename, body evicted: a save carries a base already replaced (S3)", [
     C.type({ kind: "append", k: 0 }), C.reload(), C.syncStarts(), C.syncAnswer(0), C.rename(), C.evict(),
   ], /#S3/); // fixed with the 2026-11-19 report (the same)
+  // Only the old simulated reload failed this (it kept the old page's store and its unanswered saves); with a real reload it
+  // passes on main as well, so it is an ordinary test now.
   regression("5000 runs, seed 11 (no sync, no clock): rename, a NUL typed, reload, rename again: the next save carries a base already replaced (S3)", [
     C.rename(), C.tick(), C.typeRefused({ kind: "delete", k: 0 }, "\u0000"), C.reload(), C.rename(), C.deliver(0), C.switchNote(),
-  ], /#S3/, true);
+  ], /#S3/);
 
   // Seed 3: no sync involved. The keepalive save of the first typing is refused after the person typed something
-  // the client itself refuses (NUL); the next save still carries the refused text as its base, the server has moved
-  // not at all and the save is merged. Invariant S4 only: nobody else wrote.
+  // the client itself refuses (NUL); the next save still carried the refused text as its base, the server had moved
+  // not at all and the save was merged. Invariant S4 only: nobody else wrote. Real (fails the same with a real reload);
+  // fixed by the same rule as seed 7.
   regression("S4 (seed 3): typing, reload, a NUL typed, the first save refused, typing again is merged with no other writer", [
     C.type({ kind: "append", k: 0 }), C.reload(), C.typeRefused({ kind: "delete", k: 0 }, "\u0000"),
     C.failPermanent(0), C.type({ kind: "append", k: 0 }),
-  ], /#S4/, true);
+  ], /#S4/);
+
+  // Red on main 48f861028 and after, every time (the task of fix/save-in-flight-across-reload): one person typing, and the
+  // next save was sent on top of the text the server had refused, so the server merged it "with another writer". Real.
+  regression("type, reload, type, request #0 refused (422): #S4", [C.type({ kind: "append", k: 0 }), C.reload(), C.type({ kind: "append", k: 0 }), C.failPermanent(0)], /#S4/);
+
+  // Found by fresh seeds once reload() was a real reload (PROPS_RUNS=2000, seeds 630136798 and 86745993; 1835455566).
+  // The old page dies before its worker answers (the likely case on a real reload: the worker's reply is a task the
+  // unloading page no longer runs), so its exit save is only the recovery copy in localStorage. The new page showed
+  // the local copy (the text from before) and took the copy into the queue only on its first drain: the person typed
+  // on the old text and that save was merged over the adopted one (S3, S4), or the editor went back to the text from
+  // before after the server had it (S2). Fixed: the boot takes it into the queue before the first paint
+  // (writeQueue.takeInLeftWrites in syncEngine.runBoot), so the first paint lays it over the copy.
+  regression("reload at once (seed 630136798): type, the page dies before its worker answers, type again: no merge", [
+    C.type({ kind: "append", k: 0 }), C.reload("at once"), C.type({ kind: "append", k: 0 }),
+  ], /#S[234]|gone from note/);
+  regression("reload at once (seed 1835455566): type, the page dies before its worker answers, the save delivered: the editor keeps the text", [
+    C.type({ kind: "append", k: 0 }), C.reload("at once"), C.deliver(0), C.serverClockFreezes(),
+  ], /#S[234]|#4|gone from note/);
+
+  // Found by a fresh seed (PROPS_SEED=432211385 PROPS_RUNS=2000), NOT fixed here (another kind of problem: nothing is lost).
+  // A save refused before a reload; after the reload the person makes the same edit again and the app sends the very
+  // text the server already refused (#6). Which texts were refused lives in draftActions' memory (refusedText) and goes
+  // with the page; the recovery panel still holds it, but the editor does not read it from there. Same on main with
+  // the old simulated reload (it cleared that memory too). Kept as a literal expected failure.
+  known("open (seed 432211385): refused, reload, the same edit typed again is sent again (#6)", async () => {
+    const problems = await runSequence([
+      C.type({ kind: "delete", k: 0 }), C.background(), C.failPermanent(0), C.reload(), C.type({ kind: "delete", k: 0 }),
+      C.switchNote(), C.typeTooLong({ kind: "append", k: 0 }),
+    ]);
+    expect(problems.filter((p) => /#6 /.test(p)), problems.join("\n")).toEqual([]);
+  }, 20_000);
+
+  // Found by a fresh seed after the fix (PROPS_SEED=609062751 PROPS_RUNS=5000), NOT fixed here (nothing is lost: the
+  // text is in recovery twice). A title the app itself refuses (over 500 characters) on a note deleted on another
+  // device, a reload, the same title pasted again: the page-exit save keeps a second copy of the same refusal (#6,
+  // "in recovery once"). The app's own refusals get a fresh key each time and the copy that says "already kept" is
+  // looked up only among durable rows written by this page. Fails the same without this branch's product change.
+  known("open (seed 609062751): a refusal of the app's own, reload, the same refusal again is kept twice (#6)", async () => {
+    const problems = await runSequence([C.longTitle(), C.vanish(), C.reload(), C.longTitle(), C.background()]);
+    expect(problems.filter((p) => /#6 /.test(p)), problems.join("\n")).toEqual([]);
+  }, 20_000);
+
+  // Public run 44646109326 on main 037892ea1 (owner note 2026-11-20, PROPS_SEED=1082554938 PROPS_RUNS=100): the same family
+  // without a reload. The keepalive save at pagehide is built on the autosave still in flight (its text as base); the
+  // autosave is refused, and the keepalive save went out with the refused text as its base, so the server merged it
+  // although nobody else wrote. withoutRefusedBase covers it: the refusal is in recovery before the next save leaves.
+  regression("seed 1082554938: autosave in flight, type, pagehide, the autosave refused: no merge (S4)", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.type({ kind: "append", k: 0 }), C.pagehide(), C.failPermanent(0),
+  ], /#S4|gone from note/);
+
+  // The typed text is somewhere it can be found (the server, the queue or recovery) whatever happens to the save on its
+  // way: one case per way (fix/save-in-flight-across-reload). Invariant #1 (lost), and S4 (merged with nobody).
+  const typedTextKept = /gone from note|#S4|#2 /;
+  regression("in flight across: a refusal (4xx), then typing again", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.failPermanent(0), C.type({ kind: "append", k: 0 }), C.tick(),
+  ], typedTextKept);
+  regression("in flight across: no answer past the send deadline, then a refusal of the first attempt", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.timeout(), C.type({ kind: "append", k: 0 }), C.tick(), C.failPermanent(0),
+  ], typedTextKept);
+  regression("in flight across: the page is closed with a save on its way (it dies at once), opened again, the save refused", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.type({ kind: "append", k: 0 }), C.reload("at once"), C.failPermanent(0), C.type({ kind: "append", k: 0 }),
+  ], typedTextKept);
+  regression("in flight across: a reload with the save on its way, the save refused, typing again", [
+    C.type({ kind: "append", k: 0 }), C.tick(), C.reload(), C.failPermanent(0), C.type({ kind: "append", k: 0 }), C.tick(),
+  ], typedTextKept);
+  regression("in flight across: a reload, the save refused, then a rename", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.failPermanent(0), C.rename(), C.tick(),
+  ], typedTextKept);
+  regression("in flight across: a reload, the save refused, another note opened and back, typing again", [
+    C.type({ kind: "append", k: 0 }), C.reload(), C.switchNote(), C.failPermanent(0), C.switchNote(), C.type({ kind: "append", k: 0 }),
+  ], typedTextKept);
 
   // A save the app itself refuses before sending (lib/data/noteWriter.ts) keeps the typed text in the same
   // recovery store as a server refusal: it survives opening another note and a reload (the durable row).

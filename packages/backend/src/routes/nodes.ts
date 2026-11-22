@@ -31,7 +31,7 @@ import { duplicateNote, NoteDuplicateError } from "../services/noteDuplicate.js"
 import { PUBLISHED_KEY, isWritableAttributeKey } from "../services/systemAttributes.js";
 import { dropParentSiteDefaultMark, siteAttributesOf } from "../services/siteDefault.js";
 import { publicSite } from "../services/publicSite.js";
-import { purgeDeleted, purgePreview, trashNode, undeleteNode } from "../services/nodeTrash.js";
+import { purgeDeleted, purgePreview, trashNodeWithTaskLine, undeleteNodeWithTaskLine } from "../services/nodeTrash.js";
 import { promoteNode } from "../services/nodePromote.js";
 import { expandChildNote, moveBlockToChildNote, moveSelectionToChildNote, type BlockChildResult } from "../services/blockChildNote.js";
 import { recordAttributeChange } from "../services/attributeChange.js";
@@ -179,12 +179,12 @@ router.patch("/:id", async (c) => {
 // the prune job (ER5.6) hard-removes the row, undelete answers 410 (Gone),
 // which the restore UI shows as "expired".
 router.delete("/:id", async (c) => {
-  await trashNode(requireActor(c.get("actor")), await getWorkspaceId(), c.req.param("id"));
+  await trashNodeWithTaskLine(requireActor(c.get("actor")), await getWorkspaceId(), c.req.param("id"));
   return c.json({ deleted: true });
 });
 
 router.post("/:id/undelete", async (c) => {
-  await undeleteNode(requireActor(c.get("actor")), await getWorkspaceId(), c.req.param("id"));
+  await undeleteNodeWithTaskLine(requireActor(c.get("actor")), await getWorkspaceId(), c.req.param("id"));
   return c.json({ undeleted: true });
 });
 

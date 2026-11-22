@@ -251,6 +251,7 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
     const base = previous && early && earlier ? earlier : bases.get(nodeId);
     let saved: ContentNode;
     let queued: boolean;
+    let deduped = false;
     let editorTaken: ReturnType<typeof takeEditorChanges> = null;
     try {
       // A title the draft still shares with its base is not sent: another
@@ -273,6 +274,7 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
       }, { baseMarkdown, keepalive, bodyChange: editorTaken?.body });
       saved = result.node;
       queued = result.status === "queued";
+      deduped = result.deduped === true;
     } catch (error) {
       // The writer reports the cause. Keep a failed snapshot for an explicit
       // retry, but never replace a newer draft or change its save indicator.
@@ -297,7 +299,9 @@ export function flushPendingSave(opts: { keepalive?: boolean; retryRejected?: bo
       setAppState({ saveStatus: queued ? "queued" : "saved" });
     }
     failedTexts.delete(nodeId);
-    void settleRefusedNoteText(nodeId, { markdown: pending.draft, title: pending.title });
+    // A refused copy of this text goes only once the server says it holds it: its answer, not what was sent (a merge
+    // may have kept less) and not a queue that has yet to send it (docs/architecture/note-writes.md "沒有被收下的文字不算數").
+    if (!queued && !deduped && typeof saved.markdown === "string") void settleRefusedNoteText(nodeId, { markdown: saved.markdown, title: saved.title ?? pending.title });
     // The server now holds (at least) what we sent: later edits build on it.
     bases.set(nodeId, { markdown: pending.draft, title: pending.title });
     if (!queued) {

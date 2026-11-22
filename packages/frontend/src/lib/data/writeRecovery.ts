@@ -5,7 +5,7 @@ import { onAppResume } from "../appResume";
 import { randomUUID } from "../uuid";
 import { getRejectedWrites, rejectPendingWrite, storeRejectedWrite, dismissRejectedWrite, type RejectedWrite, type PendingWrite } from "../localDb";
 import { WriteStorageError, markRecoveryEntryShown } from "./writeErrors";
-import { targetsEntity, type WriteTarget } from "../pendingWriteTargets";
+import { targetIds, targetsEntity, type WriteTarget } from "../pendingWriteTargets";
 import { noteSizeProblem } from "@onden/markdown";
 
 const pendingExitProtection = new Set<OfflineQueueFailedDetail>();
@@ -341,6 +341,42 @@ export async function settleRefusedNoteText(nodeId: string, saved: { markdown: s
     if (held.title !== undefined && held.title !== saved.title && !noteSizeProblem({ title: held.title })) continue;
     try { await removeRecoveryWrite(write.id); } catch { /* stays listed */ }
   }
+}
+
+/** The merge base a note save is sent with. The rule (docs/architecture/note-writes.md "沒有被收下的文字不算數"):
+ *  text the server did not accept is not text it holds, so it is never a save's three-way-merge base. A request
+ *  whose `base_markdown` is the text of a refused save of the same note (held in recovery, which outlives a reload)
+ *  goes with that save's own base instead, followed back as far as it leads. Without this the server reads the
+ *  refused lines as "deleted by somebody else" and merges them away although nobody else wrote (saveTiming S4), and
+ *  the save then looks like it kept that text.
+ *  The base comes from many places (the editor's last accepted save, a row the store shows with this device's queued
+ *  text laid over it after a reload, an exit save built on the save before it); writeQueue applies this where every
+ *  request leaves (sendRecorded and the drain), so all of them take one road. Any other request is returned as is.
+ *  `body_change` is left alone: the server trusts it only when it turns the stored body into the new one. */
+export function withoutRefusedBase<R extends { method: string; path: string; body: string | null }>(request: R): R {
+  if (request.method !== "PATCH" || !request.body) return request;
+  const nodeId = targetIds(request, "node").find((id) => targetsEntity(request, "node", id));
+  if (!nodeId) return request;
+  let fields: Record<string, unknown>;
+  try { fields = JSON.parse(request.body) as Record<string, unknown>; } catch { return request; }
+  if (!fields || typeof fields !== "object" || typeof fields.base_markdown !== "string") return request;
+  const refusedBase = new Map<string, string>();
+  for (const write of [...rejectedRows, ...getUnconfirmedWrites().filter((entry) => entry.rejection !== undefined)]) {
+    if (write.method !== "PATCH" || !targetsEntity(write, "node", nodeId)) continue;
+    const refused = noteTextField(write.body).noteText?.markdown;
+    const base = baseOf(write.body);
+    if (refused !== undefined && base !== undefined && refused !== base && !refusedBase.has(refused)) refusedBase.set(refused, base);
+  }
+  let base = fields.base_markdown;
+  for (const seen = new Set<string>(); refusedBase.has(base) && !seen.has(base);) { seen.add(base); base = refusedBase.get(base)!; }
+  return base === fields.base_markdown ? request : { ...request, body: JSON.stringify({ ...fields, base_markdown: base }) };
+}
+
+function baseOf(body: string | null): string | undefined {
+  try {
+    const base = (JSON.parse(body ?? "null") as { base_markdown?: unknown } | null)?.base_markdown;
+    return typeof base === "string" ? base : undefined;
+  } catch { return undefined; }
 }
 
 export function confirmRecoveredWrite(idemKey: string): void {

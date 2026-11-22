@@ -2416,6 +2416,28 @@
       "why": "樂觀更新、確認、失敗回復的流程用它，畫面先變、失敗時退回的行為才一致。"
     },
     {
+      "id": "server-copy-over-store",
+      "need": "要把伺服器的資料（同步回應、bootstrap、單筆讀取）放進 store，又不蓋掉還在等回應的修改",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/data/storeOps.ts",
+          "exports": [
+            "serverCopyOver",
+            "syncDeltaOver",
+            "wholeBootstrapOver",
+            "sharedRowsOver"
+          ]
+        }
+      ],
+      "use": "import { syncDeltaOver } from \"./lib/data/storeOps\";",
+      "replaces": "",
+      "rules": [
+        "guard:everyJournalAtTheDoor"
+      ],
+      "why": "一條規則（storeOps 內的 keepUnanswered）：任何一種列，有還在等回應的欄位（optimisticFields 的帳）就保留手上的值；新的帳要經過這裡，守門會擋。"
+    },
+    {
       "id": "late-answer-positions",
       "need": "一個帶著資料的回應（同步、成員資格頁、任何一種 bootstrap）要放進本機副本或畫面時，判斷它是不是在這台裝置已確認的寫入之前讀的",
       "area": "共用邏輯",
@@ -5276,6 +5298,24 @@
       "replaces": "自己 INSERT domain_events 補歷史，或在備份格式裡另外塞一份版本表",
       "rules": [],
       "why": "版本歷史就是帶 body_hash 的事件加上 blobs；用原本的時間寫進去只有 spine/importedHistory.ts 一處：驗擁有者、驗雜湊、依來源事件 id 去重、標成不可作為事件復原。格式 3 才有這一段，舊伺服器看到會整份拒絕。設計：docs/architecture/backup-move.md。"
+    },
+    {
+      "id": "be-backup-coverage",
+      "need": "新增資料表或備份的新內容時，要說明「備份有沒有帶、誰在還原時放回去」",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/test/helpers/backupCoverage.ts",
+          "exports": [
+            "BACKUP_COVERAGE",
+            "backupGaps"
+          ]
+        }
+      ],
+      "use": "import { BACKUP_COVERAGE } from \"./test/helpers/backupCoverage.js\";\n// 新增資料表 foo 之後，在 backupCoverage.ts 加一列：帶在筆記旁檔的哪個欄位、extras.json 的哪個欄位，\n// 或寫明不帶的原因；漏列守門測試 backupCoverage.guard.test.ts 會失敗。\nBACKUP_COVERAGE.note_pointers; // { carried: { by: \"sidecar\", field: \"pointers\" } }",
+      "replaces": "只在註解裡寫「備份沒帶 X」，或每次只補眼前那一個表",
+      "rules": [],
+      "why": "側欄捷徑、關係圖位置、訂閱與筆記的關聯都是「新增了表或面，備份沒跟上」。這份清單逐表記下誰帶、誰放回、不帶的理由與缺口，新表漏列會紅燈，缺口清單只准減少。設計：docs/architecture/backup-move.md。"
     },
     {
       "id": "note-version-mint",

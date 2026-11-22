@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { migrate, q } from "../db.js";
 import { readChangeBundle } from "../services/stampedBundle.js";
 import { bundleOf, haveOfAll } from "../spine/stampedBundle.js";
+import { snapshotSourceNode } from "../services/stampedSnapshot.js";
 import { localNodeId, serverIdentityField } from "../spine/stamps.js";
 import { ensureOwnNodeId, forgetNodeId } from "../browser/nodeIdentity.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
@@ -23,7 +24,7 @@ import { abandonJoin, applyJoinPage, startJoin } from "../services/stampedJoin.j
 import type { StampedPage } from "../spine/snapshotSql.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { seedQ } from "./helpers/seedQ.js";
-import { admit, bundleFor, exchange, expectSame, makeRng, markWorld, peerOf, take, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
+import { admit, bundleFor, exchange, expectSame, heldAt, makeRng, markWorld, peerOf, take, withOriginAt, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { checkAsync } from "./helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
@@ -226,15 +227,15 @@ describe.skipIf(!isTestDb)("a restored and renewed node seen by others (the chan
     const bundle = bundleOf(JSON.parse(JSON.stringify(pages)));
     expect(bundle.sender).toBe(newId);
     // what the sender holds (`holds`; `upTo`, what the receiver will hold, stops below a write this bundle withholds from its reader: the friend's secret space)
-    expect(bundle.holds[oldId]).toBe(backupClock.get("n")! - 1);
-    expect(bundle.holds[newId]).toBe(Number((await rows<{ n: string }>(restored, `SELECT next_seq::text AS n FROM sync_clock WHERE workspace_id = $1`, [a.ws]))[0]!.n) - 1);
-    expect(bundle.holds[newId]).toBeGreaterThan(0);
-    for (const o of [oldId, newId]) expect(bundle.upTo[o]).toBeLessThanOrEqual(bundle.holds[o]!);
+    expect(heldAt(bundle.holds, oldId)).toBe(backupClock.get("n")! - 1);
+    expect(heldAt(bundle.holds, newId)).toBe(Number((await rows<{ n: string }>(restored, `SELECT next_seq::text AS n FROM sync_clock WHERE workspace_id = $1`, [a.ws]))[0]!.n) - 1);
+    expect(heldAt(bundle.holds, newId)).toBeGreaterThan(0);
+    for (const o of [oldId, newId]) for (const label of Object.keys(bundle.upTo)) expect(bundle.upTo[label]![o]).toBeLessThanOrEqual(bundle.holds[label]![o]!);
     const stamps = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]));
     const origins = new Set(stamps.map((s) => s.origin));
     expect(origins.has(oldId) && origins.has(newId)).toBe(true);
     for (const s of stamps) {
-      if (s.origin === oldId) expect(s.seq).toBeLessThanOrEqual(bundle.holds[oldId]!);
+      if (s.origin === oldId) expect(s.seq).toBeLessThanOrEqual(heldAt(bundle.holds, oldId)!);
       if (s.origin === newId) expect(s.seq).toBeGreaterThanOrEqual(1);
     }
     // the old id's stamps the bundle carries are the backup's (same number, same clock reading)
@@ -402,7 +403,8 @@ describe.skipIf(!isTestDb)("what a snapshot names as the former ids of its sourc
     const good = { workspaceId: world.ws, sourceNode: cap.summary.source, cutSeq: cap.summary.cut, personActorId: world.owner.id };
     const tooMany = Object.fromEntries(Array.from({ length: 33 }, () => [otherId(), 1]));
     const bad: [string, unknown][] = [
-      ["this node's own id", { [own]: 1 }], ["the source's id", { [cap.summary.source]: 1 }], ["genesis", { genesis: 1 }], ["an empty key", { "": 1 }],
+      ["this node's id in capitals", { [own.toUpperCase()]: 1 }], ["the source's id", { [cap.summary.source]: 1 }], ["the source's id in capitals", { [cap.summary.source.toUpperCase()]: 1 }],
+      ["another node id in capitals", { [otherId().toUpperCase()]: 1 }], ["genesis", { genesis: 1 }], ["an empty key", { "": 1 }],
       ["a word that is a vouched_by value", { admitted: 1 }], ["a negative number", { [otherId()]: -1 }], ["a fraction", { [otherId()]: 1.5 }],
       ["a string number", { [otherId()]: "1" }], ["an array", [1]], ["null", null], ["33 ids", tooMany],
     ];
@@ -410,7 +412,10 @@ describe.skipIf(!isTestDb)("what a snapshot names as the former ids of its sourc
       expect(await codeOf(onNode(shell, () => startJoin({ ...good, former: former as Record<string, number> }))), what).toBe("join_bad_former");
       expect((await rows<{ n: string }>(shell, `SELECT count(*)::text AS n FROM sync_join`))[0]!.n, what).toBe("0");
     }
-    for (const word of ["admitted", "snapshot", "self-restore", "genesis", ""]) {
+    // this node's own id is its own refusal: the copy is not damaged, this device has to start over with a new node id (review round 1, B6)
+    expect(await codeOf(onNode(shell, () => startJoin({ ...good, former: { [own]: 1 } })))).toBe("join_origin_is_this_node");
+    expect((await rows<{ n: string }>(shell, `SELECT count(*)::text AS n FROM sync_join`))[0]!.n).toBe("0");
+    for (const word of ["admitted", "snapshot", "self-restore", "genesis", "", cap.summary.source.toUpperCase()]) {
       expect(await codeOf(onNode(shell, () => startJoin({ ...good, sourceNode: word, former: cap.summary.former }))), word).toBe("join_bad_source");
     }
     await fillFrom(shell, world, cap); // the same empty database joins after every refusal
@@ -484,15 +489,52 @@ describe.skipIf(!isTestDb)("what a snapshot names as the former ids of its sourc
     expect(origins[1]!.have).toEqual(haveOfAll(lines[0]!.former![oldId]!));
   }, 300_000);
 
-  it("a renewed server that also holds a real foreign origin still cannot give a snapshot (snapshot_foreign_origin); a device that joined from a renewed server cannot either", async () => {
+  // own-node-transport batch 2: before it, both were refused (snapshot_foreign_origin). The counterexample the batch was asked about: a source restored from a backup that
+  // holds former ids AND another node's writes (as far as the backup held them). Its former ids travel as `former`, the other node as `brought`, disjoint; the device that joins
+  // holds exactly what the restored server holds, and is a source in turn (the server's ids are origins the server brought to it, never its own).
+  it("a renewed server that also holds a real foreign origin gives a snapshot (former + brought); a device that joined from a renewed server gives one too", async () => {
     const withForeign = await renewedServerWithSnapshot(34, { foreign: true });
-    expect(await codeOf(capture(withForeign.restored, withForeign.world))).toBe("snapshot_foreign_origin");
-    const { world, restored } = await renewedServerWithSnapshot(35);
+    const bId = await nodeIdOf(withForeign.b.node!);
+    const cap = await capture(withForeign.restored, withForeign.world);
+    expect(Object.keys(cap.summary.former)).toEqual([withForeign.oldId]);
+    const broughtOrigins = new Set(Object.values(cap.summary.brought).flatMap((of) => Object.keys(of)));
+    expect(broughtOrigins).toEqual(new Set([bId]));
+    const joined = track(await openNode("joined-from-renewed"));
+    await fillFrom(joined, withForeign.world, cap);
+    expect((await rows<{ origin: string; vouched_by: string }>(joined, `SELECT origin, vouched_by FROM sync_origins WHERE workspace_id = $1 ORDER BY origin`, [withForeign.world.ws])).map((r) => [r.origin, r.vouched_by]))
+      .toEqual([[withForeign.newId, "snapshot"], [withForeign.oldId, withForeign.newId], [bId, withForeign.newId]].sort(([x], [y]) => (x! < y! ? -1 : 1)));
+    await expectSame(withForeign.ar, peerAt(withForeign.ar, joined, "joined"), "the restored server and the device that joined it");
+
+    const { world, restored, ar, oldId, newId } = await renewedServerWithSnapshot(35);
     const device = track(await openNode("joined-device"));
     await fillFrom(device, world, await capture(restored, world));
     // its rows of the server's ids are vouched by the server ('snapshot', the server's new id), never 'self-restore': they are not this device's own
     expect((await rows<{ n: string }>(device, `SELECT count(*)::text AS n FROM sync_origins WHERE vouched_by = 'self-restore'`))[0]!.n).toBe("0");
-    expect(await codeOf(capture(device, world))).toBe("snapshot_foreign_origin");
+    const relayed = await capture(device, world);
+    expect(relayed.summary.former).toEqual({});
+    expect(new Set(Object.values(relayed.summary.brought).flatMap((of) => Object.keys(of)))).toEqual(new Set([oldId, newId]));
+    const next = track(await openNode("joined-from-device"));
+    await fillFrom(next, world, relayed);
+    await expectSame(peerAt(ar, device, "device"), peerAt(ar, next, "next"), "the device and the one that joined from it");
+  }, 300_000);
+
+  // review round 1, A2: a server renewed when migration 213 wrote its former id's row for the 19 labels of then; the labels carried since (migration 215's anchors and
+  // paragraph rows) are absent from that row. The former id wrote nothing to them, so the row holds it as far as the labels it names (heldOfFormer), not 0: the server
+  // is a source (no snapshot_source_unsettled), the joiner takes the old id's stamps (no join_stamp_beyond_former), and the two are the same.
+  it("a server renewed before migration 215's labels (its former id's row names 19 labels) is a source; the device that joins holds what it holds", async () => {
+    const { world, restored, ar, oldId } = await renewedServerWithSnapshot(38);
+    const later = ["block_anchors", "block_nodes", "block_node_tags", "note_anchor_places"];
+    await onNode(restored, () => seedQ(`UPDATE sync_origins SET have = have - $3::text[] WHERE workspace_id = $1 AND origin = $2`, [world.ws, oldId, later]));
+    const row = (await rows<{ have: Record<string, number> }>(restored, `SELECT have FROM sync_origins WHERE workspace_id = $1 AND origin = $2`, [world.ws, oldId]))[0]!;
+    expect(Object.keys(row.have).some((l) => later.includes(l))).toBe(false);
+    const held = Math.min(...Object.values(row.have));
+    expect(held).toBeGreaterThan(0);
+    expect(await codeOf(onNode(restored, () => snapshotSourceNode(world.ws)))).toBeNull();
+    const cap = await capture(restored, world);
+    expect(cap.summary.former).toEqual({ [oldId]: held });
+    const device = track(await openNode("joined-after-213"));
+    await fillFrom(device, world, cap);
+    await expectSame(ar, peerAt(ar, device, "device"), "the server renewed before 215 and the device that joined it");
   }, 300_000);
 
   it("a server restored twice names both former ids; a new device joins from it, and after bundles both ways the two are the same", async () => {
@@ -528,9 +570,9 @@ describe.skipIf(!isTestDb)("what a snapshot names as the former ids of its sourc
     await writeFor(a, makeRng(45), 4);
     const bundle = await bundleFor(a, b);
     for (const word of ["admitted", "snapshot", "self-restore"]) {
-      expect(await codeOf(take(b, { ...bundle, sender: word, upTo: { ...bundle.upTo, [word]: 0 } })), `sender ${word}`).toBe("bundle_malformed");
-      expect(await codeOf(take(b, { ...bundle, upTo: { ...bundle.upTo, [word]: 1 } })), `origin ${word} in upTo`).toBe("bundle_malformed");
-      expect(await codeOf(take(b, { ...bundle, base: { ...bundle.base, [word]: 0 } })), `origin ${word} in base`).toBe("bundle_malformed");
+      expect(await codeOf(take(b, { ...bundle, sender: word, upTo: withOriginAt(bundle.upTo, word, 0) })), `sender ${word}`).toBe("bundle_malformed");
+      expect(await codeOf(take(b, { ...bundle, upTo: withOriginAt(bundle.upTo, word, 1) })), `origin ${word} in upTo`).toBe("bundle_malformed");
+      expect(await codeOf(take(b, { ...bundle, base: withOriginAt(bundle.base, word, 0) })), `origin ${word} in base`).toBe("bundle_malformed");
     }
     expect((await take(b, bundle)).rejected).toEqual([]); // the bundle as it is is taken
   }, 300_000);

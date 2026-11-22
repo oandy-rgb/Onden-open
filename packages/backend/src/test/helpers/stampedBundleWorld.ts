@@ -6,7 +6,7 @@
 import { keyBetween } from "@onden/markdown/contract";
 import { q, withTransaction } from "../../db.js";
 import { readChangeBundle } from "../../services/stampedBundle.js";
-import { readHave, bundleOf } from "../../spine/stampedBundle.js";
+import { readHave, bundleOf, type Have } from "../../spine/stampedBundle.js";
 import { admitSyncNode, applyChangeBundle } from "../../spine/stampedImport.js";
 import { compareDigests, type ChangeBundle, type TableDigest } from "../../spine/snapshotSql.js";
 import type { ActorCtx } from "../../types.js";
@@ -193,6 +193,9 @@ export async function writeEachRowKind(peer: Peer, rng: Rng): Promise<string[]> 
 
 const ROW_KINDS = ["position", "spaceName", "capability", "member", "feed", "mute", "calendar", "moduleSettings", "config", "moduleSwitch"] as const;
 const ROW_TURNS = new Map<string, number>();
+/** Forget whose turn each row kind is (ROW_TURNS is kept per peer NAME, across tests): a test that calls this first draws the same writes for a seed whatever ran before it
+ *  in its file (the shuffled order otherwise changes them: review of the snapshot-source batch, round 1, A3). */
+export function resetRowTurns(): void { ROW_TURNS.clear(); }
 async function writeOtherRow(peer: Peer, rng: Rng, mine: string[], only?: (typeof ROW_KINDS)[number]): Promise<boolean> {
   const n = nextN(peer), owner = peer.owner.id;
   // a local write as the owner, in one stamped transaction (what mutate gives a root write; a stamped table refuses a write without one)
@@ -307,5 +310,21 @@ export async function expectSame(a: Peer, b: Peer, label = ""): Promise<{ a: Awa
   if (JSON.stringify(sa.heads) !== JSON.stringify(sb.heads)) throw new Error(`${label} ${a.name} and ${b.name} hold different other heads: ${JSON.stringify(firstDiff(sa.heads as unknown[], sb.heads as unknown[]))}`);
   return { a: sa, b: sb };
 }
+
+/** `have` with `origin` at `n` in every carried label: a test's "the receiver holds n of this origin", in the per-label form (spine/stampedBundle.ts Have). */
+export const withOriginAt = (have: Have, origin: string, n: number): Record<string, Record<string, number>> =>
+  Object.fromEntries(CARRIED_LABELS.map((l) => [l, { ...(have[l] ?? {}), [origin]: n }]));
+
+/** The number a Have gives `origin`, the same in every carried label (what a node holds after taking whole bundles; a test that reads one number per origin).
+ *  Undefined when no label names it; throws when the labels differ (the test then has to say which label it means). */
+export function heldAt(have: Have, origin: string): number | undefined {
+  const per = CARRIED_LABELS.map((l) => (have[l] && Object.hasOwn(have[l]!, origin) ? have[l]![origin]! : undefined));
+  if (per.every((n) => n === undefined)) return undefined;
+  if (new Set(per).size !== 1) throw new Error(`the labels hold ${origin} to different numbers: ${JSON.stringify(per)}`);
+  return per[0]!;
+}
+
+/** The least number a Have gives `origin` over every carried label (a label that does not name it: 0): how far it holds that origin's writes to every table. */
+export const leastAt = (have: Have, origin: string): number => Math.min(...CARRIED_LABELS.map((l) => (have[l] && Object.hasOwn(have[l]!, origin) ? have[l]![origin]! : 0)));
 
 export { makeRng };

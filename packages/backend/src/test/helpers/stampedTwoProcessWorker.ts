@@ -109,7 +109,7 @@ function firstRootId(pages: StampedPage[]): string {
   throw new Error("no Root note");
 }
 
-type Case = { name: string; direct?: boolean; pages: StampedPage[]; summary: { source: string; former: Record<string, number>; cut: number; pages: number; digest: TableDigest[] } };
+type Case = { name: string; direct?: boolean; pages: StampedPage[]; summary: { source: string; former: Record<string, number>; brought: Record<string, Record<string, number>>; cut: number; pages: number; digest: TableDigest[] } };
 
 async function refuseHalf(from: string, out: string): Promise<void> {
   await start();
@@ -172,9 +172,16 @@ async function importHalf(from: string, out: string): Promise<void> {
     node: (await q<{ node_id: string }>(`SELECT node_id FROM sync_node`)).rows[0]!.node_id,
     login: (await q<{ external_id: string | null }>(`SELECT external_id FROM actors WHERE id = $1`, [source.world.owner.id])).rows[0]?.external_id ?? null,
     shape, readyBefore, hello,
-    // a device that joined: its probe says so, and it cannot make a file (its rows carry the source's stamps); the ticket is not spent by that refusal
+    // a device that joined: its probe says so, and it makes a file in turn (own-node-transport batch 2): the hello names it as the source and brings the node it joined
+    // from, as far as it holds it, label by label; the ticket is spent by that read
     joinedProbe: await readinessRoute(source.world.owner as never),
-    foreign: await (async () => { const answered = await getSnapshot(source.world.owner as never, await ticketWithoutEvidence(source.world.owner as never)); return { ...answered, unspent: await unspent(source.world.owner as never) }; })(),
+    relay: await (async () => {
+      const owner = source.world.owner as never;
+      const res = await snapshotApp(owner).request("/api/snapshot", { headers: { [FRESH_PROOF_HEADER]: await ticketWithoutEvidence(owner) } });
+      const text = res.status === 200 ? await res.text() : "";
+      const hello = text ? JSON.parse(text.slice(0, text.indexOf("\n"))) as { source: string; brought: Record<string, Record<string, number>> } : null;
+      return { status: res.status, source: hello?.source ?? null, brought: hello?.brought ?? null, unspent: await unspent(owner) };
+    })(),
     // last, because it writes: the receiver goes on as a node of its own, and its write has seen both heads of the unit (the value it was written over and the one from before stamps)
     settled: await (async () => {
       await makeCaller(source.world.owner as never)("PATCH", `/api/nodes/${source.headNote}`, { title: "Grandchild, settled on the copy" });

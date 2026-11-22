@@ -20,8 +20,9 @@
 // permission; the workspace id it names is the id the database then has. A snapshot is as trusted as the owner of the empty database, who
 // can already do anything to this machine. While joining, no ordinary write is accepted for the workspace (stamps.ts stampTransaction).
 //
-// WHAT IS REFUSED, before any write of the page: a stamp whose origin is this node (or anything but the snapshot's source and
-// genesis); a (origin, seq) that appears with two different contents; a batch whose highest clock reading is further ahead of this
+// WHAT IS REFUSED, before any write of the page: a stamp whose origin is this node (or anything but the snapshot's source, its former ids,
+// the other origins it says it holds and genesis); a stamp beyond what the source says it holds of that origin (its cut, a former id's number,
+// a brought origin's number for that label); a (origin, seq) that appears with two different contents; a batch whose highest clock reading is further ahead of this
 // machine's clock than MAX_FOREIGN_CLOCK_AHEAD_MS; a table the classification does not carry; a column a snapshot does not carry
 // (a membership epoch, an invitation, a sealed address); a row of another workspace; a person that signs in through the
 // snapshot; a page whose number was applied with other content. The page is written in one savepoint: a refusal leaves nothing.
@@ -35,7 +36,7 @@ import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
 import { CARRIED_LABELS, UNIT_SOURCES, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
-import { BUNDLE_SCOPE, bundleRefused, haveOfAll, heldOfAll, normalizeHave } from "./stampedBundle.js";
+import { BUNDLE_SCOPE, MAX_BROUGHT_ORIGINS, broughtBound, bundleRefused, haveAt, haveOfAll, normalizeHave, originsOf, type Have } from "./stampedBundle.js";
 import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
@@ -50,20 +51,28 @@ export const joinRefused = refuse;
  *  up (cancelJoin) or cut off by a dead process (db.ts migrate()): a refused join leaves the same person, with the same sign-in, in the
  *  empty database. Null: the shell has no person of its own to keep. */
 /** `former`: the ids the source had before it was restored and took a new one (StampedPage.former, the snapshot's first line), each with the highest
- *  number of it the source holds; their stamps are the source's own. Absent or `{}`: a source that was never restored. */
-export type JoinInput = { workspaceId: string; sourceNode: string; cutSeq: number; personActorId: string; shellPersonId?: string | null; former?: Record<string, number> };
+ *  number of it the source holds; their stamps are the source's own. Absent or `{}`: a source that was never restored.
+ *  `brought`: the other origins the source holds, per label and origin as far as it holds them (StampedPage.brought, a Have of spine/stampedBundle.ts). Absent or `{}`: none. */
+export type JoinInput = { workspaceId: string; sourceNode: string; cutSeq: number; personActorId: string; shellPersonId?: string | null; former?: Record<string, number>; brought?: Have };
 
-type JoinRow = { workspace_id: string; source_node: string; cut_seq: string; source_former: Record<string, number>; state: "joining" | "done"; person_actor_id: string | null; page_hashes: Record<string, string>; applied_through: number };
+type JoinRow = { workspace_id: string; source_node: string; cut_seq: string; source_former: Record<string, number>; source_brought: Record<string, Record<string, number>>; state: "joining" | "done"; person_actor_id: string | null; page_hashes: Record<string, string>; applied_through: number };
 
 /** A node id as sync_take_node_id (migration 213) and db.ts make it: gen_random_uuid() as text. The one check for an id a snapshot or a change bundle
  *  names (its source or sender, its former ids, the origins it holds): `sync_origins.vouched_by` also holds the words 'snapshot', 'admitted' and
  *  'self-restore', and a node named like one of them would make a row mean something else (applyChangeBundle: who may send; snapshotSourceNode: an id of
- *  this very node). Genesis is not a node id; it is dropped or allowed by name where it may appear. */
-const isNodeId = (id: unknown): id is string => typeof id === "string" && isUuid(id);
+ *  this very node). Genesis is not a node id; it is dropped or allowed by name where it may appear. LOWER CASE only, as the database writes them (review round 1, B4:
+ *  every comparison of ids is of text, so `A…` and `a…` would be two nodes, and a capitalised form of this node's id would pass as another origin). */
+const isNodeId = (id: unknown): id is string => typeof id === "string" && isUuid(id) && id === id.toLowerCase();
 
 /** How many former ids a snapshot may name. A server takes one more id each time it is restored from a backup (scripts/restore.sh), so the list is
- *  as long as the number of restores in its life; 32 restores is far past any server this is for, and the bound keeps a file from naming millions. */
-const MAX_FORMER_IDS = 32;
+ *  as long as the number of restores in its life; 32 restores is far past any server this is for, and the bound keeps a file from naming millions.
+ *  The same bound as for the other origins it brings (spine/stampedBundle.ts MAX_BROUGHT_ORIGINS). */
+const MAX_FORMER_IDS = MAX_BROUGHT_ORIGINS;
+
+/** The snapshot says its source holds writes of THIS node (in `former` or `brought`): this database once sent bundles under the same node id, was emptied without taking a
+ *  new one, and joins again. Refused (its own code: the copy is not damaged, this device has to start over with a new id, own-node-transport proposal §3.5), and before
+ *  anything is written: the join would take those stamps as another node's, and this node would number its next writes again from 1 (review round 1, B6). */
+const thisNodeNamed = () => refuse("join_origin_is_this_node", "the snapshot says its source holds writes made by this node, under this node's id: this device has to start over with a new node id", 409);
 
 /** The `former` of a join, checked: at most MAX_FORMER_IDS node ids (not the source, not this node) with whole numbers. Refused whole otherwise. */
 function checkedFormer(former: unknown, sourceNode: string, local: string | null): Record<string, number> {
@@ -73,10 +82,35 @@ function checkedFormer(former: unknown, sourceNode: string, local: string | null
   const entries = Object.entries(former);
   if (entries.length > MAX_FORMER_IDS) throw refuse("join_bad_former", `a snapshot names at most ${MAX_FORMER_IDS} ids its source had before`);
   for (const [origin, n] of entries) {
-    if (!isNodeId(origin) || origin === sourceNode || origin === local || !Number.isSafeInteger(n) || (n as number) < 0) throw bad();
+    if (origin === local) throw thisNodeNamed();
+    if (!isNodeId(origin) || origin === sourceNode || !Number.isSafeInteger(n) || (n as number) < 0) throw bad();
   }
   return former as Record<string, number>;
 }
+
+/** The `brought` of a join, checked (docs/decisions/sync-trust-line.md, the first layer): an object of carried labels, each an object of node ids with whole numbers;
+ *  at most MAX_BROUGHT_ORIGINS origins over all labels; none of them the source, a former id of the source or genesis (this node: join_origin_is_this_node) (each of those is vouched for, or
+ *  refused, in its own way). Refused whole otherwise (`join_bad_brought`). The form before data shape 6 (one number per origin) is refused too, never read as labels. */
+function checkedBrought(brought: unknown, sourceNode: string, local: string | null, former: Record<string, number>): Record<string, Record<string, number>> {
+  if (brought === undefined) return {};
+  const bad = (why: string) => refuse("join_bad_brought", `the other origins a source holds are an object of carried labels, each an object of node ids and whole numbers (${why})`);
+  if (!isObject(brought)) throw bad("not an object");
+  const origins = new Set<string>();
+  for (const [label, of] of Object.entries(brought)) {
+    if (!CARRIED_LABELS.includes(label)) throw bad("a label a bundle does not carry, or one number per origin");
+    if (!isObject(of)) throw bad("a label that is not an object");
+    for (const [origin, n] of Object.entries(of)) {
+      if (origin === local) throw thisNodeNamed();
+      if (!isNodeId(origin)) throw bad("an origin that is not a node id");
+      if (origin === sourceNode || Object.hasOwn(former, origin)) throw bad("the source itself or a former id of the source");
+      if (!Number.isSafeInteger(n) || (n as number) < 0) throw bad("a number that is not a whole number");
+      origins.add(origin);
+    }
+  }
+  if (origins.size > MAX_BROUGHT_ORIGINS) throw refuse("join_bad_brought", `a snapshot names at most ${MAX_BROUGHT_ORIGINS} other origins its source holds`);
+  return brought as Record<string, Record<string, number>>;
+}
+
 
 // The tables a fresh install already holds rows in (the class tags and settings the migrations make, the default and system spaces, the
 // System account). Every OTHER carried table (spine/snapshotTables.json) must be empty in a shell: a new table added to the list is
@@ -198,10 +232,12 @@ export async function beginJoin(input: JoinInput): Promise<void> {
       // packaged database share it) they would stand beside the snapshot's own, ON CONFLICT DO NOTHING keeping the shell's meaning of an id the source names
       await snapshotRows(`DELETE FROM sync_origins WHERE workspace_id = $1`, [shellId]);
     }
-    const former = checkedFormer(input.former, input.sourceNode, await localNodeId().catch(() => null));
+    const local = await localNodeId().catch(() => null);
+    const former = checkedFormer(input.former, input.sourceNode, local);
+    const brought = checkedBrought(input.brought, input.sourceNode, local, former);
     await snapshotRows(
-      `INSERT INTO sync_join (workspace_id, source_node, cut_seq, person_actor_id, shell_person, source_former) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-      [input.workspaceId, input.sourceNode, input.cutSeq, input.personActorId, shellPerson ? JSON.stringify(shellPerson) : null, JSON.stringify(former)]);
+      `INSERT INTO sync_join (workspace_id, source_node, cut_seq, person_actor_id, shell_person, source_former, source_brought) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb)`,
+      [input.workspaceId, input.sourceNode, input.cutSeq, input.personActorId, shellPerson ? JSON.stringify(shellPerson) : null, JSON.stringify(former), JSON.stringify(brought)]);
   });
 }
 
@@ -266,10 +302,20 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
   if (page.source !== join.source_node) throw refuse("join_wrong_source", "the page was made on another node");
   if (page.cut !== Number(join.cut_seq)) throw refuse("join_wrong_cut", "the page belongs to another export of the source (a different cut)");
   if (sortedJson(page.former ?? {}) !== sortedJson(join.source_former)) throw refuse("join_wrong_former", "the page names other former ids of the source than the snapshot's first line");
-  // the origins the snapshot vouches for: the source, the ids it had before it was restored, and the genesis stamp
-  const vouched = new Set([join.source_node, GENESIS_ORIGIN, ...Object.keys(join.source_former)]);
-  // a former id is held only as far as the source says (markJoinDone writes that number): a stamp of it past the number is a lie, as bundle_stamp_beyond_cut is in a bundle
+  if (sortedJson(page.brought ?? {}) !== sortedJson(join.source_brought)) throw refuse("join_wrong_brought", "the page names other origins of the source than the snapshot's first line");
+  // the origins the snapshot vouches for: the source, the ids it had before it was restored, the other origins it holds, and the genesis stamp
+  const brought = join.source_brought;
+  const broughtOrigins = originsOf(brought);
+  const vouched = new Set([join.source_node, GENESIS_ORIGIN, ...Object.keys(join.source_former), ...broughtOrigins]);
+  // a former id, or another origin the source holds, is held only as far as the source says (markJoinDone writes that number), and the source's own writes up to its
+  // cut: a stamp past the number is a lie, as bundle_stamp_beyond_cut is in a bundle
   const beyondFormer = () => refuse("join_stamp_beyond_former", "a stamp of a former id of the source is beyond what the source says it holds of it");
+  const beyond = (label: string, w: { origin: string; seq: number }): JoinRefused | null => {
+    if (w.origin === join.source_node) return w.seq > Number(join.cut_seq) ? refuse("join_stamp_beyond_cut", "a stamp of the source is beyond the cut of the snapshot") : null;
+    if (w.seq > (join.source_former[w.origin] ?? Infinity)) return beyondFormer();
+    if (broughtOrigins.has(w.origin) && w.seq > broughtBound(brought, label, w.origin)) return refuse("join_stamp_beyond_brought", "a stamp of another origin the source holds is beyond what the source says it holds of it");
+    return null;
+  };
   if (!Number.isInteger(page.page) || page.page < 1) throw refuse("join_bad_page", "a page number is a whole number from 1");
   const seen = new Map<string, string>();
   const readings: ClockReading[] = [];
@@ -296,9 +342,10 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
     for (const stamp of stampsOf(item)) {
       if (stamp.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
       if (!vouched.has(stamp.origin)) throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
-      if (stamp.seq > (join.source_former[stamp.origin] ?? Infinity)) throw beyondFormer();
       if (!spec.stamps?.some((d) => d.label === stamp.label)) throw refuse("join_stamp_label", "a stamp of a kind this table does not have");
       if (![stamp.seq, stamp.wall, stamp.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw refuse("join_stamp_number", "a stamp number that is not a whole number");
+      const past = beyond(stamp.label, stamp);
+      if (past) throw past;
       const content = `${stamp.wall}/${stamp.counter}/${stamp.author ?? "~"}/${stamp.device ?? "~"}`;
       const id = `${stamp.origin}/${stamp.seq}`;
       if (seen.has(id) && seen.get(id) !== content) throw refuse("join_stamp_conflict", "one stamp number with two different contents");
@@ -311,8 +358,9 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
       for (const head of stamp.heads ?? []) {
         if (head.origin === local) throw refuse("join_stamp_from_this_node", "a stamp made on this node cannot come from a snapshot");
         if (!vouched.has(head.origin)) throw refuse("join_stamp_origin", "a stamp of an origin the snapshot does not vouch for");
-        if (head.seq > (join.source_former[head.origin] ?? Infinity)) throw beyondFormer();
         if (![head.seq, head.wall, head.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw refuse("join_stamp_number", "a stamp number that is not a whole number");
+        const headPast = beyond(stamp.label, head);
+        if (headPast) throw headPast;
         if (typeof head.contentHash !== "string" || (head.origin === "genesis") !== /^[0-9a-f]{64}$/.test(head.contentHash)) throw refuse("join_head_shape", "a head of a unit that does not say what it holds");
         checkSaw(head.saw);
         readings.push({ wall: head.wall, counter: head.counter });
@@ -378,7 +426,7 @@ async function clearWhatInsertTriggersMade(workspaceId: string): Promise<void> {
 
 async function lockJoin(workspaceId: string): Promise<JoinRow> {
   const row = (await snapshotRows<JoinRow>(
-    `SELECT workspace_id::text, source_node, cut_seq::text, source_former, state, person_actor_id::text, page_hashes, applied_through FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
+    `SELECT workspace_id::text, source_node, cut_seq::text, source_former, source_brought, state, person_actor_id::text, page_hashes, applied_through FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
   if (!row) throw refuse("join_not_started", "no join was started for this workspace", 409);
   return row;
 }
@@ -492,6 +540,14 @@ export async function markJoinDone(workspaceId: string, expected: { pages: numbe
         `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (workspace_id, origin) DO NOTHING`,
         [workspaceId, origin, join.source_node, JSON.stringify(haveOfAll(held))]);
     }
+    // the other origins the source holds: origins the source brought (vouched_by = the source, not a sender), each held per label exactly as far as the source held it,
+    // so this node knows what its source knew and a bundle from anyone who holds more sends only what is new (checkPage took no stamp of them past these numbers)
+    for (const origin of [...originsOf(join.source_brought)].sort()) {
+      const have = Object.fromEntries(Object.entries(join.source_brought).flatMap(([label, of]) => (Object.hasOwn(of, origin) ? [[label, of[origin]!]] : [])));
+      await snapshotRows(
+        `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (workspace_id, origin) DO NOTHING`,
+        [workspaceId, origin, join.source_node, JSON.stringify(have)]);
+    }
     await snapshotRows(`UPDATE sync_join SET state = 'done', finished_at = now() WHERE workspace_id = $1`, [workspaceId]);
   });
 }
@@ -539,43 +595,53 @@ export async function mergeUnitsIntoWorkspace(workspaceId: string, incoming: rea
 /** What taking a bundle did. */
 type BundleReport = RowsReport & {
   sender: string;
-  /** For each origin the receiver now holds further than before (or knew nothing of): the number it holds now. */
-  advanced: Record<string, number>;
+  /** For each label and origin the receiver now holds further than before (or knew nothing of): the number it holds now (a Have). */
+  advanced: Record<string, Record<string, number>>;
 };
-
-type Knowledge = { have: number; known: boolean };
 
 /**
  * Admit `node` to this workspace: its bundles are taken from now on. THE ONLY WAY a node that did not give this one its snapshot becomes a sender (with star transport the
  * centre admits each device once; a device admits the centre by taking its snapshot). Who may admit is the caller's to decide (the owner, in the pairing step, a later batch).
  * Holding nothing of it yet is `have = 0`. Admitting again changes nothing. This node's own node id is not admitted (it is this node).
+ * An origin this node knows only because another node brought it (vouched_by is that node's id: a bundle's sender or a snapshot's source, markJoinDone) BECOMES a sender,
+ * keeping what this node holds of it: a node that joined from B holds A's writes as far as B did, and taking A's bundles from there sends only what is new
+ * (snapshotBrought.integration.test.ts, A→B, B→C, then C↔A). An id this node had itself (`self-restore`) never becomes one.
  */
 export async function admitSyncNode(workspaceId: string, node: string, vouchedBy = "admitted"): Promise<void> {
   if (!node || node === GENESIS_ORIGIN) throw refuse("sync_bad_node", "a node id is needed");
   await withEventTransaction(workspaceId, async () => {
     if (node === (await localNodeId())) throw refuse("sync_node_is_self", "this node is not admitted to itself", 409);
-    await snapshotRows(`INSERT INTO sync_origins (workspace_id, origin, vouched_by) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, node, vouchedBy]);
+    const known = (await snapshotRows<{ vouched_by: string }>(`SELECT vouched_by FROM sync_origins WHERE workspace_id = $1 AND origin = $2 FOR UPDATE`, [workspaceId, node])).rows[0];
+    // a row whose vouched_by is a node id is an origin that node brought: it becomes a sender, what this node holds of it (`have`) stays
+    if (known && isNodeId(known.vouched_by) && (vouchedBy === "snapshot" || vouchedBy === "admitted")) {
+      await snapshotRows(`UPDATE sync_origins SET vouched_by = $3 WHERE workspace_id = $1 AND origin = $2`, [workspaceId, node, vouchedBy]);
+    } else if (!known) {
+      await snapshotRows(`INSERT INTO sync_origins (workspace_id, origin, vouched_by) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, origin) DO NOTHING`, [workspaceId, node, vouchedBy]);
+    }
   });
 }
 const GENESIS_ORIGIN = "genesis";
 
 const isOrigin = (o: string): boolean => o === GENESIS_ORIGIN || isNodeId(o);
-/** What a header says of an origin, -1 when it says nothing: its own keys only (review of PR #1907, round 1, point 12: `holds["constructor"]` is Object's function,
+/** What a header says of a label's origin, -1 when it says nothing: its own keys only (review of PR #1907, round 1, point 12: `holds["constructor"]` is Object's function,
  *  and a comparison with it is false, so a stamp of that origin passed the beyond-cut check). */
-const heldOf = (have: Record<string, number>, origin: string): number => Object.hasOwn(have, origin) ? have[origin]! : -1;
+const heldOf = (have: Have, label: string, origin: string): number => haveAt(have, label, origin) ?? -1;
+/** Every (label, origin, number) of a Have. */
+const entriesOf = (have: Have): [string, string, number][] => Object.entries(have).flatMap(([label, of]) => Object.entries(of).map(([o, n]) => [label, o, n] as [string, string, number]));
 
 function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
   if (bundle.layer !== "changes" || bundle.scope !== BUNDLE_SCOPE) throw bundleRefused("bundle_scope", "this is not a change bundle of this node's stamped tables", 422);
   if (bundle.dataShape !== SYNC_DATA_SHAPE_VERSION) throw bundleRefused("bundle_data_shape", `the bundle has data shape ${String(bundle.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: the older node has to be upgraded first`);
   if (bundle.workspaceId !== workspaceId) throw bundleRefused("bundle_wrong_workspace", "the bundle is of another workspace", 422);
+  // the header's numbers are per label and origin (data shape 6); the form before it, one number per origin, is refused with its own code, never read as labels
   normalizeHave(bundle.base);
   normalizeHave(bundle.upTo);
   normalizeHave(bundle.holds);
   if (!isNodeId(bundle.sender) || !Number.isSafeInteger(bundle.cut) || bundle.cut < 0) throw bundleRefused("bundle_malformed", "a bundle names its sender by its node id, and its cut", 422);
   // every origin it speaks of is a node id (or genesis), in its header and in its stamps
-  if (![...Object.keys(bundle.upTo), ...Object.keys(bundle.holds), ...Object.keys(bundle.base)].every(isOrigin)) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
+  if (![...originsOf(bundle.upTo), ...originsOf(bundle.holds), ...originsOf(bundle.base)].every(isOrigin)) throw bundleRefused("bundle_malformed", "a bundle names an origin that is not a node id", 422);
   // the receiver holds after the bundle at most what the sender holds
-  if (Object.entries(bundle.upTo).some(([o, n]) => n > heldOf(bundle.holds, o))) throw bundleRefused("bundle_malformed", "a bundle says its receiver will hold more than its sender holds", 422);
+  if (entriesOf(bundle.upTo).some(([label, o, n]) => n > heldOf(bundle.holds, label, o))) throw bundleRefused("bundle_malformed", "a bundle says its receiver will hold more than its sender holds", 422);
   if (!Array.isArray(bundle.items)) throw bundleRefused("bundle_malformed", "a bundle's items are a list", 422);
   for (const item of bundle.items) {
     // the form of an item, before anything reads it (review of PR #1853, round 7, point 2: a wrong form was a TypeError, never a coded refusal): a row with its list of
@@ -601,8 +667,8 @@ function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
       if (![w.seq, w.wall, w.counter].every((n) => Number.isSafeInteger(n) && n >= 0)) throw bundleRefused("bundle_malformed", "a stamp number that is not a whole number", 422);
       if (!isOrigin(w.origin)) throw bundleRefused("bundle_malformed", "a stamp of the bundle names an origin that is not a node id", 422);
       if (w.origin === GENESIS_ORIGIN) continue;
-      // nothing of an origin beyond what the sender says it holds: a stamp past the cut is a read that was not one snapshot, or a lie
-      if (w.seq > heldOf(bundle.holds, w.origin)) throw bundleRefused("bundle_stamp_beyond_cut", "a stamp of the bundle is beyond what its sender says it holds", 422);
+      // nothing of an origin beyond what the sender says it holds of that label: a stamp past the cut is a read that was not one snapshot, or a lie
+      if (w.seq > heldOf(bundle.holds, s.label, w.origin)) throw bundleRefused("bundle_stamp_beyond_cut", "a stamp of the bundle is beyond what its sender says it holds", 422);
     }
   }
 }
@@ -611,7 +677,7 @@ function checkBundleShape(workspaceId: string, bundle: ChangeBundle): void {
 function foreignWall(bundle: ChangeBundle, local: string): number {
   let max = 0;
   for (const item of bundle.items) for (const s of item.kind === "row" ? item.stamps : [item.stamp]) for (const w of [s, ...s.heads]) {
-    if (w.origin === GENESIS_ORIGIN || w.origin === local || w.seq <= (bundle.base[w.origin] ?? 0)) continue;
+    if (w.origin === GENESIS_ORIGIN || w.origin === local || w.seq <= (haveAt(bundle.base, s.label, w.origin) ?? 0)) continue;
     max = Math.max(max, w.wall);
   }
   return max;
@@ -623,11 +689,12 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
  * Refused whole, nothing written, with a code the caller branches on:
  *   bundle_data_shape        another SYNC_DATA_SHAPE_VERSION (spine/syncDataShape.ts)
  *   bundle_unknown_sender    the sender is not an origin this workspace accepts (sync_origins: its snapshot's source, or a node `admitSyncNode` admitted)
- *   bundle_gap               per origin the bundle starts past what this node holds (`base` > held): take a snapshot instead
+ *   bundle_gap               per label and origin the bundle starts past what this node holds (`base` > held): take a snapshot instead
  *   bundle_stamp_clash       a stamp (origin, seq) this node already holds is in the bundle with other content (a restored backup or a cloned profile made it twice)
  *   bundle_sender_restored   the sender holds less of ITSELF than this node does (it was restored from an older copy; also refused when it reads, spine/stampedBundle.ts)
  *   bundle_own_origin_ahead  the bundle says its sender holds writes of THIS node's origin beyond what this node ever made: this node was restored from an older backup
  *   bundle_stamp_beyond_cut, bundle_malformed, bundle_scope, bundle_wrong_workspace, bundle_from_self   the bundle is not what it says
+ *   bundle_bad_have, bundle_have_per_origin   its base, upTo or holds is not a Have (per label and origin); the second: it is the form before data shape 6
  *   stamp_clock_ahead        a clock further ahead than the bound (spine/stamps.ts): offer it again later
  *   merge_not_open           this workspace is being joined, or has no clock
  * Taken a second time, a bundle changes nothing. The same stamp with the same content is skipped (re-delivery); knowledge only moves forward.
@@ -641,17 +708,20 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     if (bundle.sender === local) throw bundleRefused("bundle_from_self", "a bundle made by this node is not taken by this node");
     assertForeignClockWithinBound(foreignWall(bundle, local));
     const rows = (await snapshotRows<{ origin: string; vouched_by: string; have: Record<string, number> }>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
-    const held = new Map(rows.map((r) => [r.origin, { have: heldOfAll(r.have), known: true } as Knowledge] as const));
+    // what this node holds of each origin, per label (a label it never took: 0); an origin without a row is one it knows nothing of
+    const known = new Map(rows.map((r) => [r.origin, r.have] as const));
+    const heldHere = (label: string, origin: string): number => known.get(origin)?.[label] ?? 0;
     // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
     if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
     const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
-    if ((bundle.holds[local] ?? 0) > ownMax) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
-    if ((bundle.base[bundle.sender] ?? 0) > (bundle.upTo[bundle.sender] ?? 0)) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
-    // (`holds`: what the sender has of the origin; its `upTo` can stop lower, below a write it withheld from this reader, and still bring writes past it)
-    for (const [origin, holds] of Object.entries(bundle.holds)) {
+    if (entriesOf(bundle.holds).some(([, o, n]) => o === local && n > ownMax)) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
+    if (entriesOf(bundle.base).some(([label, o, n]) => o === bundle.sender && n > (haveAt(bundle.upTo, label, o) ?? 0))) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
+    // (`holds`: what the sender has of the origin; its `upTo` can stop lower, below a write it withheld from this reader, and still bring writes past it). Label by label: a
+    // label this node holds less of than the bundle starts from is a gap even when every other label of that origin is not
+    for (const [label, origin, holds] of entriesOf(bundle.holds)) {
       if (origin === local) continue;
-      const base = bundle.base[origin] ?? 0;
-      if (base > (held.get(origin)?.have ?? 0) && holds > (held.get(origin)?.have ?? 0)) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin}: take a snapshot instead`);
+      const base = haveAt(bundle.base, label, origin) ?? 0, mine = heldHere(label, origin);
+      if (base > mine && holds > mine) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin} (${label}): take a snapshot instead`);
     }
     const report = await storeMergedRows(workspaceId, bundle.items);
     if (report.rejected.length) {
@@ -659,16 +729,21 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
       const first = report.rejected[0]!;
       throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", `a write of the bundle is not in the format${first.reason === "malformed" && first.unit ? ` (${first.table ?? "?"}: ${first.unit})` : ""}`, 422);
     }
-    const advanced: Record<string, number> = {};
-    for (const [origin, upTo] of Object.entries(bundle.upTo)) {
+    // knowledge only moves forward, label by label: an origin this node knew nothing of is written with every label the bundle names (vouched by the sender)
+    const advanced: Record<string, Record<string, number>> = {};
+    const moved = new Map<string, Record<string, number>>();
+    for (const [label, origin, upTo] of entriesOf(bundle.upTo)) {
       if (origin === local) continue;
-      const mine = held.get(origin)?.have, next = Math.max(mine ?? 0, upTo);
-      if (mine === undefined || next > mine) {
-        advanced[origin] = next;
-        await snapshotRows(
-          `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb)
-           ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || $4::jsonb`, [workspaceId, origin, bundle.sender, JSON.stringify(haveOfAll(next))]);
+      const mine = known.get(origin)?.[label], next = Math.max(mine ?? 0, upTo);
+      if (!known.has(origin) || mine === undefined || next > mine) {
+        (advanced[label] ??= {})[origin] = next;
+        moved.set(origin, { ...moved.get(origin), [label]: next });
       }
+    }
+    for (const [origin, have] of [...moved].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      await snapshotRows(
+        `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb)
+         ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || $4::jsonb`, [workspaceId, origin, bundle.sender, JSON.stringify(have)]);
     }
     const readings = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]).flatMap((s) => [s, ...s.heads].filter((w) => w.origin !== local).map((w) => ({ wall: w.wall, counter: w.counter }))));
     await advanceClockFor(workspaceId, readings);

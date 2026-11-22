@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, openNode, type SourceWorld } from "./helpers/stampedWorld.js";
-import { ALL_TABLES, admit, bundleFor, expectSame, exchange, makeRng, markWorld, nodeIdOf, peerOf, peerStateOf, take, withClockAhead, writeEachOp, writeEachRowKind, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
+import { ALL_TABLES, admit, bundleFor, expectSame, exchange, heldAt, makeRng, markWorld, nodeIdOf, peerOf, peerStateOf, take, withClockAhead, withOriginAt, writeEachOp, writeEachRowKind, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { withTransaction } from "../db.js";
 import { addFunction } from "../services/functionRefs.js";
 import { registerStandInFunction } from "./helpers/registerStandInFunction.js";
@@ -97,7 +97,7 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
     }
     await exchange(a, b); await exchange(a, c);
     await expectSame(a, b, "A and B"); await expectSame(a, c, "A and C");
-    expect(await onNode(c.node, () => readHave(c.ws))).toHaveProperty(await nodeIdOf(b)); // C came to know B's origin through A, which vouches for it
+    expect(heldAt(await onNode(c.node, () => readHave(c.ws)), await nodeIdOf(b))).toBeGreaterThan(0); // C came to know B's origin through A, which vouches for it
   }, 400_000);
 
   it("a clock 30 minutes ahead: the bundle is refused whole and offered again, and is taken once the receiver's clock has caught up", async () => {
@@ -147,7 +147,7 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
 
     // gap: the bundle was read against a node that held more than this one does
     const have = await onNode(a.node, () => readHave(a.ws));
-    const ahead = { ...have, [await nodeIdOf(b)]: 5 };
+    const ahead = withOriginAt(have, await nodeIdOf(b), 5);
     const { readChangeBundle } = await import("../services/stampedBundle.js");
     const { bundleOf } = await import("../spine/stampedBundle.js");
     const gapBundle: ChangeBundle = bundleOf(JSON.parse(JSON.stringify(await onNode(b.node, () => readChangeBundle(b.owner, b.ws, ahead)))));
@@ -210,8 +210,8 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
     const aId = await nodeIdOf(a);
     const have = await onNode(b.node, () => readHave(b.ws));
     // the sender answers as one that kept history only from its 5th write on: the bundle says it starts there (base), while B holds less
-    const lacking = { ...have, [aId]: (await onNode(a.node, () => readHave(a.ws)))[aId]! - 2 };
-    expect(lacking[aId]!).toBeGreaterThan(have[aId] ?? 0);
+    const lacking = withOriginAt(have, aId, heldAt(await onNode(a.node, () => readHave(a.ws)), aId)! - 2);
+    expect(heldAt(lacking, aId)!).toBeGreaterThan(heldAt(have, aId) ?? 0);
     const { readChangeBundle } = await import("../services/stampedBundle.js");
     const { bundleOf } = await import("../spine/stampedBundle.js");
     const bundle: ChangeBundle = bundleOf(JSON.parse(JSON.stringify(await onNode(a.node, () => readChangeBundle(a.owner, a.ws, lacking)))));
@@ -253,7 +253,7 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
     // and the restored A does not even make a bundle for B: B holds more of A than A ever made (also refused when taking one a forged sender made)
     expect(await refusal(bundleFor(a2, b))).toMatchObject({ code: "bundle_sender_restored" });
     const honest = await bundleFor(a, b);
-    expect(await refusal(take(b, { ...honest, upTo: { ...honest.upTo, [await nodeIdOf(a)]: 1 }, base: { ...honest.base, [await nodeIdOf(a)]: 5 } }))).toMatchObject({ code: "bundle_sender_restored" });
+    expect(await refusal(take(b, { ...honest, upTo: withOriginAt(honest.upTo, await nodeIdOf(a), 1), base: withOriginAt(honest.base, await nodeIdOf(a), 5) }))).toMatchObject({ code: "bundle_sender_restored" });
   }, 300_000);
 });
 
@@ -347,12 +347,12 @@ describe.skipIf(!isTestDb)("what one local transaction stamped travels together"
     })));
     for (let k = 0; k < 4; k++) await twoRowsInOneTransaction(`pair${k}`);
     const have = await onNode(b.node, () => readHave(b.ws));
-    const top = have[origin]!, cutOfA = (await onNode(a.node, () => readHave(a.ws)))[origin]!;
+    const top = heldAt(have, origin)!, cutOfA = heldAt(await onNode(a.node, () => readHave(a.ws)), origin)!;
     for (const pageBytes of [1, 400, 1_000_000]) {
       for (let at = top; at <= cutOfA; at++) { // `have` of A at every number: before, inside and after each pair's transaction
         const { bundleOf } = await import("../spine/stampedBundle.js");
         const { readChangeBundle } = await import("../services/stampedBundle.js");
-        const bundle = bundleOf(JSON.parse(JSON.stringify(await onNode(a.node, () => readChangeBundle(a.owner, a.ws, { ...have, [origin]: at }, { pageBytes })))));
+        const bundle = bundleOf(JSON.parse(JSON.stringify(await onNode(a.node, () => readChangeBundle(a.owner, a.ws, withOriginAt(have, origin, at), { pageBytes })))));
         const inBundle = new Set(bundle.items.flatMap((i) => (i.kind === "row" ? [String(i.values.id)] : [])));
         for (let p = 0; p < ids.length; p += 2) expect(inBundle.has(ids[p]!), `pair ${p / 2}, have ${at}, page ${pageBytes}`).toBe(inBundle.has(ids[p + 1]!));
       }
@@ -830,7 +830,7 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     const have = await onNode(b.node, () => readHave(b.ws));
     for (const base of [seq - 2, seq - 1, seq]) { // a base past the sender's cut is refused (bundle_sender_restored)
       for (const pageBytes of [1, 400, 1_000_000]) {
-        const pages = await onNode(a.node, async () => (await import("../services/stampedBundle.js")).readChangeBundle(a.owner, a.ws, { ...have, [origin]: Math.max(0, base) }, { pageBytes }));
+        const pages = await onNode(a.node, async () => (await import("../services/stampedBundle.js")).readChangeBundle(a.owner, a.ws, withOriginAt(have, origin, Math.max(0, base)), { pageBytes }));
         const bundle = (await import("../spine/stampedBundle.js")).bundleOf(JSON.parse(JSON.stringify(pages)));
         const got = labelsOfSeq(bundle);
         expect(got.length === 0 || JSON.stringify(got) === JSON.stringify(["content_nodes", "node_attributes", "node_tags"]), `base ${base}, page ${pageBytes}: ${got.join(",")}`).toBe(true);
@@ -849,11 +849,11 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     const before = JSON.stringify(await peerStateOf(b));
     expect(await refusal(take(b, { ...bundle, dataShape: SYNC_DATA_SHAPE_VERSION + 1 }))).toMatchObject({ code: "bundle_data_shape" });
     const nobody = "4b1d0000-0000-4000-8000-00000000b0b0"; // a node id nobody admitted (a word is not a node id: bundle_malformed)
-    expect(await refusal(take(b, { ...bundle, sender: nobody, upTo: { ...bundle.upTo, [nobody]: 0 }, holds: { ...bundle.holds, [nobody]: 0 } }))).toMatchObject({ code: "bundle_unknown_sender" });
+    expect(await refusal(take(b, { ...bundle, sender: nobody, upTo: withOriginAt(bundle.upTo, nobody, 0), holds: withOriginAt(bundle.holds, nobody, 0) }))).toMatchObject({ code: "bundle_unknown_sender" });
     const origin = await nodeIdOf(a);
-    expect(await refusal(take(b, { ...bundle, base: { ...bundle.base, [origin]: bundle.holds[origin]! - 1 } }))).toMatchObject({ code: "bundle_gap" });
+    expect(await refusal(take(b, { ...bundle, base: withOriginAt(bundle.base, origin, heldAt(bundle.holds, origin)! - 1) }))).toMatchObject({ code: "bundle_gap" });
     // a bundle that says its receiver will hold more of an origin than its sender holds is not what it says (`upTo` never passes `holds`)
-    expect(await refusal(take(b, { ...bundle, upTo: { ...bundle.upTo, [origin]: bundle.holds[origin]! + 1 } }))).toMatchObject({ code: "bundle_malformed", status: 422 });
+    expect(await refusal(take(b, { ...bundle, upTo: withOriginAt(bundle.upTo, origin, heldAt(bundle.holds, origin)! + 1) }))).toMatchObject({ code: "bundle_malformed", status: 422 });
     // the same (origin, seq) with other content, in an attribute's value
     const attr = bundle.items.find((i) => i.kind === "row" && i.table === "node_attributes" && i.stamps.some((x) => x.field === "value"));
     if (attr && attr.kind === "row") {

@@ -13,6 +13,7 @@ import { readStampedPages } from "../services/stampedSnapshot.js";
 import { abandonJoin, applyJoinPage, databaseJoinReadiness, finishJoin, joinProgress, startJoin } from "../services/stampedJoin.js";
 import { computeSnapshotDigest, compareDigests, type StampedPage } from "../spine/snapshotSql.js";
 import { SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
+import { CARRIED_LABELS } from "../spine/stampedMerge/index.js";
 import { markJoinDone, readJoinProgress } from "../spine/stampedImport.js";
 import { standAsideForImport, stampTransaction } from "../spine/stamps.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
@@ -142,8 +143,11 @@ describe.skipIf(!isTestDb)("a stamped snapshot copied to an empty database", () 
     const later = (a: { wall: number; counter: number }, b: { wall: number; counter: number }) => a.wall > b.wall || (a.wall === b.wall && a.counter > b.counter);
     expect(later({ wall: Number(receiver.edited.hlc_wall), counter: receiver.edited.hlc_counter }, { wall: Number(receiver.received.w), counter: receiver.received.c })).toBe(true);
     expect(receiver.after).toBe(receiver.before); // every write came through the write entry: none made its own stamp
-    // a database that has stamps of its own is not exported as it is: that rule is deliberate (the first stage cannot carry a second origin)
-    await expect(onNode(own, () => readStampedPages(world.owner, world.ws, { since: null, layer: "rows" }, async () => undefined))).rejects.toMatchObject({ code: "snapshot_foreign_origin" });
+    // a copy that holds the source's stamps and its own is a source in turn (own-node-transport batch 2): its snapshot brings the node it joined from, at the cut it took, in every label
+    const relayed = await onNode(own, () => readStampedPages(world.owner, world.ws, { since: null, layer: "rows" }, async () => undefined));
+    expect(relayed.source).toBe(receiver.node);
+    expect(Object.keys(relayed.brought).sort()).toEqual([...CARRIED_LABELS].sort());
+    for (const of of Object.values(relayed.brought)) expect(of).toEqual({ [cap.summary.source]: cap.summary.cut });
     await own.close();
   }, 60_000);
 

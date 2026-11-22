@@ -1,0 +1,28 @@
+-- 222: a snapshot names the other origins its source holds (every sync_origins row of the source that is not a former id), per label and origin as far as the
+-- source holds them, and the database that joins from it remembers them for the length of the join (src/spine/stampedImport.ts beginJoin / checkPage /
+-- markJoinDone; the own-node-transport proposal, PR #1936, §3.4, batch 2). Adds only: one column.
+-- No existing row is read for a purpose other than the preview below, changed or deleted.
+--
+-- WHAT THIS ADDS
+--   sync_join.source_brought  { label: { origin: the highest sequence number of that origin's writes to that label the source holds } } (spine/stampedBundle.ts Have),
+--                             from the snapshot's first line and the same on every page (services/stampedSnapshot.ts reads it from the source's sync_origins rows that
+--                             are not vouched 'self-restore'). '{}' for a source that holds no other origin, and for every join made before this migration (a source
+--                             that held another origin could not give a snapshot before this batch: snapshot_foreign_origin). The join takes the stamps of those
+--                             origins up to those numbers only, and markJoinDone gives each origin a sync_origins row (vouched_by = the source: an origin that source
+--                             brought, not a node that may send) holding exactly those numbers.
+--
+-- WHAT THIS DOES NOT DO, on purpose
+--   * no existing join, stamp or origin row is changed. sync_origins.have is per label since migration 206 and is read as it is: the change of the wire form of
+--     `have` (one number per origin → per label, SYNC_DATA_SHAPE_VERSION 6) needs no rewrite of what is stored.
+--
+-- Rolling back: restore the pre-upgrade backup (migrations only go forward). In place: ALTER TABLE sync_join DROP COLUMN source_brought (nothing of
+-- the older code reads it).
+-- drill: no allowance needed. This migration writes no row of any table the drill compares.
+--
+-- Read-only preview for the production database (SELECT only; works with default_transaction_read_only = on; counts only):
+--
+--   SELECT 'sync_join rows that get source_brought = {}' AS part, count(*)::bigint AS rows FROM sync_join
+--   UNION ALL SELECT 'sync_join rows changed otherwise', 0
+--   ;
+
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_brought jsonb NOT NULL DEFAULT '{}'::jsonb;

@@ -1,7 +1,7 @@
 # 同步的信任界線：收到的一律檢查；不被信任的電腦只當工作階段；不防「已接納的節點說謊」
 
-> 狀態：現行（最後確認 2026-11-19）
-> 涵蓋：packages/backend/src/spine/stampedImport.ts
+> 狀態：現行（最後確認 2026-11-22）
+> 涵蓋：packages/backend/src/spine/stampedImport.ts, packages/backend/src/services/stampedSnapshot.ts
 
 | 項目 | 內容 |
 | --- | --- |
@@ -42,6 +42,10 @@
 ## 相關檔案與狀態備註
 
 - 第一層：`packages/backend/src/spine/stampedImport.ts`（快照與修改包的入口）。PR #1801（2026-11-17）起：節點編號只收產生時的形式（`isNodeId`；快照的來源與舊編號、修改包的 `sender` 與 `upTo`／`base` 的來源），還原過的來源報的舊編號最多 32 個、每一頁都要和開頭報的相同，舊編號的標記不得超過它報的號碼（`join_stamp_beyond_former`）；每一種拒絕在 `nodeRenewal.integration.test.ts` 有測試。PR #1853（2026-11-18）起：修改包裡的列（`kind: "row"`）一定帶著值與每個單位的文字，兩者都是物件；寄件那一台不握有的列只以它的標記送（`kind: "tombstone"`），收件檢查只對這一種形式不查值——「沒有值」是包裡明確的形式，不是從缺少的欄位推出來的（`checkBundleShape`；`bundleReceivedChecks`「a row item of … without values」三張表各一則）。錨點、段落列、錨點單位的值另有收件檢查（`dbUnits.ts` `check`），列的工作區必須是它筆記的（migration 215 `sync_rows_in_their_notes_workspace`）。PR「fix/merge-space-follows-parent」（2026-11-19）起：修改包的標頭多一個 `holds`（寄件那台在切點握有的，標記不得超過它），`upTo` 不得超過 `holds`；COMMIT 時才檢查的錯誤在收件時提前跑，不合是有代碼的拒收（`bundle_malformed`／`bundle_unique_clash`），不是資料庫的原始錯誤。
+  自己的裝置之間的交換第 2 批（2026-11-22，migration 222）起：快照的來源可以握有別台的修改，第一行與每一頁帶「來源握有的其他來源」（`brought`：每個標籤、每個來源握有到第幾號，最多 32 個來源，和舊編號同一個上限），
+  每一頁要和第一行相同、節點編號只收小寫、不得含來源自己、舊編號或 genesis（含這台自己：`join_origin_is_this_node`）、舊的「每個來源一個數字」形狀不被讀成標籤（`join_bad_brought`、`join_wrong_brought`），帶來的來源的標記不得超過它那個標籤報的號碼（`join_stamp_beyond_brought`），
+  來源自己的標記不得超過切點（`join_stamp_beyond_cut`）；來源那一端在讀之前先確認自己擔保得了握有的每一個標記（`snapshot_foreign_origin`、`snapshot_source_unsettled`、`snapshot_source_joining`、`snapshot_too_many_origins`）。
+  `have` 與包頭的 `base`／`upTo`／`holds` 改成每個標籤一個，舊形狀以 `bundle_have_per_origin` 拒收。每一種拒絕在 `snapshotBrought.integration.test.ts` 有測試，拒絕後資料庫沒有變。
 - 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）。「工作階段的任何東西不離開這一台」（PR #1856）現在檢查的：
   工作階段的 `actors` 與 `space_members` 列、它們的標記與墓碑不進快照、修改包與摘要（`snapshotTables.ts` `stampMayLeaveSql`；兩節點測試 `sessionsStayOnTheirNode.integration.test.ts`）；
   判斷所靠的工作階段 `actors` 列，在它的工作區還在時，**資料庫**拒絕刪除與改 id、工作區、種類（migration 217 的觸發器；`sessionActorKept.integration.test.ts`），`removeActor` 也拒絕；

@@ -70,6 +70,9 @@ const unitNotRows = (p: Peer) => onNode(p.node, async () => (await q<{ differ: n
   [p.ws])).rows[0]!);
 const unitHeads = (p: Peer, note: string) => onNode(p.node, async () => Number((await q<{ n: string }>(
   `SELECT count(*)::text AS n FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = 'note_anchor_places' AND row_key = $2`, [p.ws, note])).rows[0]!.n));
+/** The other heads of a note's anchors unit, every column but the workspace: what a joiner must hold as its source does. */
+const headsOf = (p: Peer, note: string) => onNode(p.node, async () => (await q<{ r: string }>(
+  `SELECT (to_jsonb(h) - 'workspace_id')::text AS r FROM sync_stamp_heads h WHERE workspace_id = $1 AND table_name = 'note_anchor_places' AND row_key = $2 ORDER BY origin, seq`, [p.ws, note])).rows.map((r) => r.r));
 const body = (p: Peer, note: string) => onNode(p.node, async () => (await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [note])).rows[0]!.markdown);
 const write = (p: Peer, note: string, markdown: string) => onNode(p.node, () => p.call("PATCH", `/api/nodes/${note}`, { markdown }));
 const newNote = async (p: Peer, id: string, title: string) => onNode(p.node, async () => (await p.call("POST", "/api/nodes", { id, title, markdown: "", space_id: p.space })).id as string);
@@ -1027,9 +1030,10 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     expect(await unitNotRows(b)).toEqual({ differ: 0, missing: 0 });
   }, 600_000);
 
-  // round 3, point 11: a node that joins by snapshot while a note is in the 8b state: not possible in this stage. Every node in that state holds another node's stamps (the
-  // write it took the other head from), and a snapshot of such a node is refused (services/stampedSnapshot.ts snapshotSourceNode, 409 snapshot_foreign_origin). Pinned.
-  it("round 3, 11: a node in the 8b state cannot be the source of a snapshot today (snapshot_foreign_origin)", async () => {
+  // round 3, point 11: a node that joins by snapshot while a note is in the 8b state. Pinned as refused until own-node-transport batch 2 (snapshot_foreign_origin: every node in
+  // that state holds another node's stamps); now the source names the other origin it holds (`brought`) and the joiner takes the unit with both heads as it is. "Joining then
+  // one more bundle" is re-checked here, as the merge README asked when this gate opened: the joiner settles the unit with a save, and every node agrees.
+  it("round 3, 11: a node in the 8b state is the source of a snapshot: the joiner holds the same heads and anchors; a save there settles them; every node agrees", async () => {
     const { a, b, world } = await threeNodes(20);
     const note = await newNote(a, "f9f9f9f9-f9f9-4f9f-8f9f-f9f9f9f9f9f9", "Joined");
     await write(a, note, "Only paragraph here {plan}\n");
@@ -1038,8 +1042,24 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     await onNode(a.node, () => withTransaction(() => seedQ(`UPDATE block_anchors SET status = 'lost', from_utf16 = 0, to_utf16 = 0 WHERE note_id = $1`, [note])));
     await exchange(b, a); // A: two heads
     expect(await unitHeads(a, note)).toBe(1);
-    const refused = await capture(a.node!, world, 12_000).then(() => null, (e: { code?: string }) => e.code ?? String(e));
-    expect(refused).toBe("snapshot_foreign_origin");
+    const nd = await openNode("d");
+    open.push(nd);
+    await fillFrom(nd, world, await capture(a.node!, world, 12_000));
+    const d = peerOf("D", nd, world);
+    await onNode(d.node, () => setModulesOn(d.ws, null));
+    expect(await unitHeads(d, note)).toBe(1);
+    expect(await replicated(d, note)).toEqual(await replicated(a, note));
+    expect(await headsOf(d, note)).toEqual(await headsOf(a, note));
+    await admit(a, d);
+    expect((await resendAll(a, d)).stored, "the joiner holds everything its source holds").toBe(0);
+    await write(d, note, "Only paragraph here, B edited it, D saved it {plan}\n");
+    await exchange(d, a); await exchange(a, b); await exchange(a, d);
+    for (const p of [a, b, d]) expect(await unitHeads(p, note), p.name).toBe(0);
+    expect(await replicated(a, note)).toEqual(await replicated(d, note));
+    expect(await replicated(b, note)).toEqual(await replicated(d, note));
+    for (const p of [a, b, d]) expect(await unitNotRows(p), p.name).toEqual({ differ: 0, missing: 0 });
+    expect((await resendAll(a, d)).stored).toBe(0);
+    expect((await resendAll(d, a)).stored).toBe(0);
   }, 600_000);
 
   // round 3, point 7: on a note whose unit holds two heads (the 8b state), a write that is not a person's (an AI or an automation, stampTransaction notAPerson) is

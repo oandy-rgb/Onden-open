@@ -20,6 +20,7 @@ import { compareRowHashes, type TableHashes } from "./helpers/stampedRowHashes.j
 import { compareDigests, type StampedPage, type TableDigest } from "../spine/snapshotSql.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
+import { CARRIED_LABELS } from "../spine/stampedMerge/index.js";
 import { NO_OWN_SHELL_CASE, SHELL_CASES } from "./helpers/stampedShellCases.js";
 
 const run = promisify(execFile);
@@ -179,7 +180,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
   describe("the route gates the add-device screens lean on (services/freshProof.ts, routes/stampedSnapshot.ts)", () => {
     type Answer = { status: number; error: string | null };
     const gates = () => (source as unknown as { gates: { noTicket: Answer; spent: Answer; again: Answer; unknown: Answer; expired: Answer; friend: Answer; friendUnspent: boolean[]; token: Answer; ownerTicketAsFriend: Answer; ownerAfterFriend: Answer; readiness: { owner: Record<string, unknown>; friend: number } } }).gates;
-    const imported = () => receiver as unknown as { shape: { none: Answer; other: Answer; text: Answer; changed: boolean; readyAfter: Record<string, unknown> }; readyBefore: Record<string, unknown>; hello: Record<string, unknown>; joinedProbe: Record<string, unknown>; foreign: Answer & { unspent: boolean[] } };
+    const imported = () => receiver as unknown as { shape: { none: Answer; other: Answer; text: Answer; changed: boolean; readyAfter: Record<string, unknown> }; readyBefore: Record<string, unknown>; hello: Record<string, unknown> & { source: string; cut: number }; joinedProbe: Record<string, unknown>; node: string; relay: { status: number; source: string | null; brought: Record<string, Record<string, number>>; unspent: boolean[] } };
 
     it("the export needs a ticket, spends it once, and says why when it refuses", () => {
       const g = gates();
@@ -205,7 +206,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(lines.length).toBeGreaterThan(2);
       for (const line of lines) expect(line.startsWith('{"kind":"'), line.slice(0, 60)).toBe(true);
       expect(JSON.parse(lines[0]!)).toMatchObject({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION });
-      expect(SYNC_DATA_SHAPE_VERSION).toBe(5); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived): spine/syncDataShape.ts
+      expect(SYNC_DATA_SHAPE_VERSION).toBe(6); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived), 6 since migration 222 (`have` per label; a snapshot brings the other origins its source holds): spine/syncDataShape.ts
     });
 
     it("an importer refuses a file whose first line has no data shape, or another one, with join_data_shape, before a join starts; the empty database is still ready", () => {
@@ -221,10 +222,12 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(r.joinedProbe).toMatchObject({ ready: false, code: "join_already_done" });
     });
 
-    it("a device that joined cannot make a file: A exports, B joins, B's export is refused with snapshot_foreign_origin, and the ticket is not spent", () => {
+    it("a device that joined makes a file in turn: A exports, B joins, B's export names B as its source and brings A at the cut in every label; the ticket is spent", () => {
       const r = imported();
-      expect(r.foreign).toMatchObject({ status: 409, error: "snapshot_foreign_origin" });
-      expect(r.foreign.unspent).toEqual([true]);
+      expect(r.relay).toMatchObject({ status: 200, source: r.node });
+      expect(Object.keys(r.relay.brought).sort()).toEqual([...CARRIED_LABELS].sort());
+      for (const of of Object.values(r.relay.brought as Record<string, Record<string, number>>)) expect(of).toEqual({ [r.hello.source]: r.hello.cut });
+      expect(r.relay.unspent).toEqual([false]);
     });
   });
 

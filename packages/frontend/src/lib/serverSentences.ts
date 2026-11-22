@@ -228,6 +228,7 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   focus_not_found: "That focus record doesn't exist.",
   focus_still_running: "End the focus first: only a finished one has an end time to change.",
   bundle_bad_have: "The other device didn't say what it already has.",
+  bundle_have_per_origin: "The other device uses a different version of Onden.",
   bundle_sender_joining: "This device is still being filled from a copy, so it has nothing to send yet.",
   bundle_sender_restored: "This device was restored from an older copy, so it can't send changes.",
   bundle_no_pages: "The changes arrived empty.",
@@ -255,6 +256,11 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   join_bad_source: "Part of the copy is damaged. Start joining again.",
   join_wrong_former: "Part of the copy is damaged. Start joining again.",
   join_stamp_beyond_former: "Part of the copy is damaged. Start joining again.",
+  join_bad_brought: "Part of the copy is damaged. Start joining again.",
+  join_origin_is_this_node: "This device was set up before and still uses its old identity, so it can't take this copy. Reset this device, then join again.",
+  join_wrong_brought: "Part of the copy is damaged. Start joining again.",
+  join_stamp_beyond_brought: "Part of the copy is damaged. Start joining again.",
+  join_stamp_beyond_cut: "Part of the copy is damaged. Start joining again.",
   join_layer_not_done: "This kind of copy isn't available yet.",
   join_wrong_workspace: "That copy belongs to a different workspace.",
   join_wrong_source: "That copy came from another device than the one you started with.",
@@ -299,7 +305,10 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   join_not_empty: "This device already has notes of its own, so the notes from another device cannot be added.",
   join_no_login: "This account could not open the notes after they are added, so nothing was added.",
   join_from_self: "This file was made on this very device.",
-  snapshot_foreign_origin: "This device got its notes from another device, so it cannot make a file for a third one yet.",
+  snapshot_foreign_origin: "This device holds changes from a device it has no record of, so it cannot make a file for another one.",
+  snapshot_source_joining: "Notes are still being added to this device. Make the file when that has finished.",
+  snapshot_source_unsettled: "This device hasn't finished taking in changes from another device. Sync with that device once, then make the file again.",
+  snapshot_too_many_origins: "This device holds changes from too many other devices to make a file for another one.",
 };
 
 /** The wording for a coded refusal that is not in the boot table, or null. */

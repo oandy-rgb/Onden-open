@@ -17,4 +17,8 @@
 // 5 (a note's space follows its tree, migration 218): the `space` unit of content_nodes is the space a person WROTE (written_space_id), and space_id is derived
 // from the tree after a merge; a snapshot carries both columns. A node of version 4 would merge space_id as the unit and read the `space` stamps of notes under
 // a parent as the space they are in: the two would derive different spaces from the same stamps.
-export const SYNC_DATA_SHAPE_VERSION = 5;
+// 6 (a snapshot from a node that holds other origins, per-label progress; migration 222): `have`, and a change bundle's `base`, `upTo` and `holds`, are per label and
+// origin ({ label: { origin: n } }, spine/stampedBundle.ts Have) instead of one number per origin (the least over every label); a snapshot page and the hello of a
+// snapshot stream carry `brought`, the other origins the source holds with those numbers, and a joiner takes stamps of them. A node of version 5 would read a
+// per-label header as origins named like labels, and refuse a snapshot's brought stamps one by one (`join_stamp_origin`) instead of saying why.
+export const SYNC_DATA_SHAPE_VERSION = 6;

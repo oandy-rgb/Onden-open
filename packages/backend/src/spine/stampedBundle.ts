@@ -1,12 +1,13 @@
 // Reading a CHANGE BUNDLE: everything of a workspace's stamped units (every table of stampedMerge/dbUnits.ts UNIT_SOURCES and its JSON keys) that another node does not have yet (docs/research/sync-design-vs-literature-2026-11-16.md, the
 // list "before change bundles"; the taking half is `applyChangeBundle` in spine/stampedImport.ts).
 //
-//   const pages = await readChangeBundle(actor, workspaceId, { [originA]: 12, [originB]: 3 });   // services/stampedBundle.ts. `have`: per origin, the highest sequence number the receiver holds
+//   const pages = await readChangeBundle(actor, workspaceId, { content_nodes: { [originA]: 12, [originB]: 3 }, … });   // services/stampedBundle.ts. `have` (a Have, below): per label
+//                                                            // and origin, the highest sequence number the receiver holds (readHave of the receiver)
 //   const bundle = bundleOf(pages);                                                          // one bundle (all its pages), what applyChangeBundle takes
 //
-// WHAT A BUNDLE SAYS. `base` is the `have` it was read against; `holds` is what the sender holds at the cut, per origin. The bundle has every write of the scope above
+// WHAT A BUNDLE SAYS (every number per label and origin, a Have). `base` is the `have` it was read against; `holds` is what the sender holds at the cut. The bundle has every write of the scope above
 // `base` up to `holds` (an overwritten write is not there; the write that overwrote it had seen it) that the reader may read. `upTo` is what the receiver that held
-// `base` holds once it took the bundle: `holds`, except below the first write of an origin the bundle WITHHELD because its row is outside the reader's scope (a row of a
+// `base` holds once it took the bundle: `holds`, except below the first write of an origin to a label the bundle WITHHELD because its row is outside the reader's scope (a row of a
 // space the reader is not a member of): the receiver's `have` never passes a write it did not get, and the next bundle sends that write again, as soon as the reader
 // may read it (I5; stampedBundleWithheld test in mergeSpaceParent.integration.test.ts). The cost: until then, every bundle sends again what that origin wrote after the
 // withheld write (taking it again stores nothing). A row that
@@ -41,42 +42,91 @@ const CHUNK_ROWS = 10_000;
 import { bundleRefused } from "./bundleRefusal.js";
 export { bundleRefused };
 
-/** What a receiver says it holds: origin → highest sequence number (a whole number ≥ 0). The genesis origin is nobody's and is dropped. */
-export type Have = Readonly<Record<string, number>>;
-export function normalizeHave(have: unknown): Record<string, number> {
-  if (have === null || typeof have !== "object" || Array.isArray(have)) throw bundleRefused("bundle_bad_have", "what the receiver holds is an object of whole numbers", 400);
-  const out: Record<string, number> = {};
-  for (const [origin, n] of Object.entries(have)) {
-    if (!origin || !Number.isSafeInteger(n) || (n as number) < 0) throw bundleRefused("bundle_bad_have", "what the receiver holds is an object of whole numbers", 400);
-    if (origin !== GENESIS_STAMP_ORIGIN) out[origin] = n as number;
+/**
+ * What a node holds, PER LABEL (every label of CARRIED_LABELS: a table, or a JSON column's keys) and per origin: the highest sequence number up to which it holds that
+ * origin's writes to that label, a whole number ≥ 0 (a label or an origin it names nothing of: 0). The `have` of a request for a bundle and the `base`, `upTo` and `holds`
+ * of a bundle's header (data shape 6; before it one number per origin, the least over every label). Per label because a label that is carried later starts at 0 without
+ * taking every other label of every origin back to 0 (the own-node-transport proposal, PR #1936, §2.2). The genesis origin is nobody's and is dropped.
+ *
+ *   { "content_nodes": { [originA]: 12, [originB]: 3 }, "spaces": { [originA]: 12 }, … }
+ */
+export type Have = Readonly<Record<string, Readonly<Record<string, number>>>>;
+type MutableHave = Record<string, Record<string, number>>;
+
+/** `have` as a Have, checked: an object of carried labels, each an object of origins and whole numbers ≥ 0. The form before data shape 6 (one number per origin) is refused
+ *  with its own code, never read as labels (`bundle_have_per_origin`); anything else is `bundle_bad_have`. */
+export function normalizeHave(have: unknown): MutableHave {
+  const bad = (why: string) => bundleRefused("bundle_bad_have", `what the receiver holds is an object of carried labels, each an object of origins and whole numbers (${why})`, 400);
+  if (have === null || typeof have !== "object" || Array.isArray(have)) throw bad("not an object");
+  const out: MutableHave = {};
+  for (const [label, of] of Object.entries(have)) {
+    if (typeof of === "number") throw bundleRefused("bundle_have_per_origin", "what the receiver holds is per label since data shape 6, not one number per origin: the older node has to be upgraded first", 400);
+    if (!CARRIED_LABELS.includes(label)) throw bad("a label a bundle does not carry");
+    if (of === null || typeof of !== "object" || Array.isArray(of)) throw bad("a label that is not an object");
+    const per: Record<string, number> = {};
+    for (const [origin, n] of Object.entries(of)) {
+      if (!origin || !Number.isSafeInteger(n) || (n as number) < 0) throw bad("a number that is not a whole number");
+      if (origin !== GENESIS_STAMP_ORIGIN) per[origin] = n as number;
+    }
+    out[label] = per;
   }
   return out;
 }
 
-/**
- * What this node holds of the scope, per origin, as the `have` of a request for a bundle: its own origin up to the clock's last number (it holds everything it wrote), and each
- * origin it accepts up to what it took (sync_origins). Read in the caller's transaction.
- */
-export async function readHave(workspaceId: string): Promise<Record<string, number>> {
-  const own = (await snapshotRows<{ node_id: string; next_seq: string | null }>(
-    `SELECT n.node_id, c.next_seq::text FROM sync_node n LEFT JOIN sync_clock c ON c.workspace_id = $1 WHERE n.singleton`, [workspaceId])).rows[0];
-  if (!own) throw new Error("this database has no node id yet");
-  const have: Record<string, number> = {};
-  for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) have[o.origin] = heldOfAll(o.have);
-  have[own.node_id] = Number(own.next_seq ?? 1) - 1;
-  return have;
+/** What `have` says of one origin's writes to one label: its own keys only (review of PR #1907, round 1, point 12: `x["constructor"]` is Object's function). Absent: undefined. */
+export function haveAt(have: Have, label: string, origin: string): number | undefined {
+  const of = Object.hasOwn(have, label) ? have[label]! : undefined;
+  return of && Object.hasOwn(of, origin) ? of[origin]! : undefined;
+}
+
+/** Every origin a Have names, in any label. */
+export const originsOf = (have: Have): Set<string> => new Set(Object.values(have).flatMap((of) => Object.keys(of)));
+
+/** The rows of sync_origins (each origin's `have`, per label) and this node's own origin up to `cut`, as one Have over every carried label: what this node holds. */
+function haveOfRows(rows: readonly { origin: string; have: Readonly<Record<string, number>> }[], own: { node: string; cut: number }): MutableHave {
+  return Object.fromEntries(CARRIED_LABELS.map((label) => [label, { ...Object.fromEntries(rows.map((r) => [r.origin, r.have[label] ?? 0])), [own.node]: own.cut }]));
 }
 
 /**
- * How far a node holds an origin's writes to EVERY label a bundle carries: the least of `sync_origins.have` over CARRIED_LABELS (a label it never took counts 0). A bundle carries all
- * labels at one cut, so after taking one they are equal; a node that took only `content_nodes` before this batch holds the other labels from 0 and is sent them whole (its notes again too:
- * taking them twice changes nothing).
+ * What this node holds of the scope, per label and origin, as the `have` of a request for a bundle: its own origin up to the clock's last number in every label (it holds
+ * everything it wrote), and each origin it accepts up to what it took of each label (sync_origins.have, per label since migration 206). Read in the caller's transaction.
  */
-export function heldOfAll(have: Readonly<Record<string, number>>): number {
-  return Math.min(...CARRIED_LABELS.map((l) => have[l] ?? 0));
+export async function readHave(workspaceId: string): Promise<MutableHave> {
+  const own = (await snapshotRows<{ node_id: string; next_seq: string | null }>(
+    `SELECT n.node_id, c.next_seq::text FROM sync_node n LEFT JOIN sync_clock c ON c.workspace_id = $1 WHERE n.singleton`, [workspaceId])).rows[0];
+  if (!own) throw new Error("this database has no node id yet");
+  const rows = (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
+  return haveOfRows(rows, { node: own.node_id, cut: Number(own.next_seq ?? 1) - 1 });
+}
+
+/**
+ * How far this node holds the writes of an id it had itself before it was restored (a `self-restore` row of sync_origins): the least over the carried labels the row
+ * NAMES. Migration 213 wrote such a row for the labels that existed then (19); a label carried since (migration 215's four, batch 5's eight) is absent from a row written
+ * before it, and the old id wrote nothing to it (it took a new id before that label existed), so absent is not 0 here (review round 1, A2: the least over EVERY carried label made every such
+ * row 0, and every stamp of the old id "beyond" it). A row that names no carried label holds 0. What a snapshot names as `former`, and its source's bound for those stamps.
+ */
+export function heldOfFormer(have: Readonly<Record<string, number>>): number {
+  const named = CARRIED_LABELS.filter((l) => Object.hasOwn(have, l));
+  return named.length === 0 ? 0 : Math.min(...named.map((l) => have[l]!));
 }
 /** The `sync_origins.have` of an origin held up to `n` for every label a bundle carries. */
 export const haveOfAll = (n: number): Record<string, number> => Object.fromEntries(CARRIED_LABELS.map((l) => [l, n]));
+
+/** How many other origins a snapshot may name besides its source and its former ids (StampedPage.brought): one per device that sent the source writes, and one more
+ *  per restore of one of them; the same bound as for former ids (spine/stampedImport.ts), far past any workspace this is for. A source that holds more refuses to make
+ *  a snapshot (services/stampedSnapshot.ts), a joiner refuses a snapshot that names more. */
+export const MAX_BROUGHT_ORIGINS = 32;
+
+/**
+ * How far a stamp of `origin` to `label` may go when the source brought that origin: the number the source holds of it for that label. A label a snapshot carries and a
+ * bundle does not (spine/snapshotTables.json `content_nodes.collection_views`) has no number of its own: its stamps travel only in snapshots, so a node holds them of an origin
+ * no further than the least it held of that origin's carried labels when it joined (and that only grows); the least is the bound. The one rule, for the joiner's check of each
+ * stamp (checkPage) and the source's check of what it holds before it offers a snapshot (services/stampedSnapshot.ts `snapshotSourceNode`).
+ */
+export function broughtBound(have: Have, label: string, origin: string): number {
+  if (CARRIED_LABELS.includes(label)) return haveAt(have, label, origin) ?? 0;
+  return Math.min(...CARRIED_LABELS.map((l) => haveAt(have, l, origin) ?? 0));
+}
 
 /** Which of `keys` are rows of the table at all (in or out of the reader's scope). */
 async function rowsPresent(src: (typeof UNIT_SOURCES)[number], workspaceId: string, keys: string[]): Promise<Set<string>> {
@@ -105,14 +155,12 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     }
     // one snapshot: the cut and the stamps are read at the same moment (see the header)
     const cut = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
-    const upTo: Record<string, number> = {};
-    for (const o of (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows) upTo[o.origin] = heldOfAll(o.have);
+    const origins = (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
     // the receiver holds more of THIS node than it ever made: this node was restored from an older copy and has written the same numbers again with other content. Nothing it sends can be told from news; it must not send (the way out is a new node id, a later batch)
-    if ((base[node] ?? 0) > cut) throw bundleRefused("bundle_sender_restored", "the receiver holds writes of this node that this node never made: it was restored from an older copy");
-    upTo[node] = cut;
-    const holds = { ...upTo };
-    /** per origin, the first write of it this bundle withholds (its row is outside the reader's scope) */
-    const withheld: Record<string, number> = {};
+    if (Object.keys(base).some((label) => (haveAt(base, label, node) ?? 0) > cut)) throw bundleRefused("bundle_sender_restored", "the receiver holds writes of this node that this node never made: it was restored from an older copy");
+    const holds = haveOfRows(origins, { node, cut });
+    /** per label and origin, the first write of it this bundle withholds (its row is outside the reader's scope) */
+    const withheld: MutableHave = {};
     await options.afterCut?.();
 
     const pages: ChangeBundlePage[] = [];
@@ -128,9 +176,9 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
       // table's stamps, then read CHUNK_ROWS rows at a time (a query per chunk that looked for "the next 200 after the last" rescanned every stamp each time: quadratic)
       const changed = (await snapshotRows<{ row_key: string }>(
         `SELECT s.row_key FROM (
-           SELECT row_key, origin, seq FROM sync_stamps WHERE workspace_id = $1 AND table_name = ANY($2::text[])
-           UNION ALL SELECT row_key, origin, seq FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = ANY($2::text[])) s
-          WHERE s.origin <> 'genesis' AND s.seq > COALESCE(($3::jsonb ->> s.origin)::bigint, 0)
+           SELECT row_key, table_name, origin, seq FROM sync_stamps WHERE workspace_id = $1 AND table_name = ANY($2::text[])
+           UNION ALL SELECT row_key, table_name, origin, seq FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = ANY($2::text[])) s
+          WHERE s.origin <> 'genesis' AND s.seq > COALESCE(($3::jsonb -> s.table_name ->> s.origin)::bigint, 0)
           GROUP BY s.row_key ORDER BY s.row_key COLLATE "C"`, [workspaceId, labels, JSON.stringify(base)])).rows.map((r) => r.row_key);
       for (let at = 0; at < changed.length; at += CHUNK_ROWS) {
         const keys = changed.slice(at, at + CHUNK_ROWS);
@@ -147,9 +195,10 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
           if (row) add({ kind: "row", table: src.label, values: row.v, stamps: own, texts: row.texts });
           else if (present.has(key)) {
             if (!carriable.has(key)) continue;
-            for (const w of own.flatMap((st) => [st, ...st.heads])) {
-              if (w.origin === GENESIS_STAMP_ORIGIN || w.seq <= (base[w.origin] ?? 0)) continue;
-              withheld[w.origin] = Math.min(withheld[w.origin] ?? Infinity, w.seq);
+            for (const st of own) for (const w of [st, ...st.heads]) {
+              if (w.origin === GENESIS_STAMP_ORIGIN || w.seq <= (haveAt(base, st.label, w.origin) ?? 0)) continue;
+              const of = (withheld[st.label] ??= {});
+              of[w.origin] = Math.min(of[w.origin] ?? Infinity, w.seq);
             }
           } else {
             // a row that is not in the table: gone for good (its tombstone, and the keys of its JSON columns: the delete trigger leaves theirs), or never made here because it hangs
@@ -164,8 +213,9 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     }
     flush();
     if (pages.length === 0) pages.push({ ...header, pages: 0, page: 1, items: [] });
-    // what the receiver holds after the bundle: never past a write it withheld (I5)
-    const receiverHolds = Object.fromEntries(Object.entries(holds).map(([o, n]) => [o, withheld[o] === undefined ? n : Math.min(n, withheld[o]! - 1)]));
+    // what the receiver holds after the bundle: never past a write it withheld (I5), label by label (a write withheld in one table does not hold the others back)
+    const receiverHolds = Object.fromEntries(Object.entries(holds).map(([label, of]) => [label,
+      Object.fromEntries(Object.entries(of).map(([o, n]) => { const w = haveAt(withheld, label, o); return [o, w === undefined ? n : Math.min(n, w - 1)]; }))]));
     return pages.map((p) => ({ ...p, upTo: receiverHolds, pages: pages.length }));
   }
 }

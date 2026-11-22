@@ -194,6 +194,11 @@ export type StampedPage = {
   /** The ids that node had before it was restored from a backup and took a new one (migration 213), each with the highest sequence number of it the
    *  source holds: their stamps are the source's own. `{}` for a node that was never restored. The same on every page of one snapshot. */
   former: Record<string, number>;
+  /** The other origins the source holds writes of (every sync_origins row of the source that is not a former id: the snapshot's source, a node it admitted, an origin
+   *  one of those brought), per label and origin as far as the source holds them (its sync_origins.have; spine/stampedBundle.ts Have). The joining node holds exactly
+   *  that afterwards, and takes their stamps up to those numbers only (spine/stampedImport.ts checkPage). `{}` for a source that holds no other origin. The same on every
+   *  page of one snapshot, and on the first line of a snapshot stream (data shape 6). */
+  brought: Record<string, Record<string, number>>;
   workspaceId: string;
   items: SnapshotItem[];
 };
@@ -215,14 +220,14 @@ type ChangeBundleHeader = {
   sender: string;
   /** The sender's own sequence number when the read started (its stamps in the bundle are at most this). */
   cut: number;
-  /** What the receiver said it holds (the `have` of the request), per origin: the bundle has every write of the scope above these. */
-  base: Record<string, number>;
-  /** What the receiver holds of the scope, per origin, after taking the bundle: what the sender holds at the cut (`holds`), except that an origin with a write the
+  /** What the receiver said it holds (the `have` of the request), per label and origin (spine/stampedBundle.ts Have): the bundle has every write of the scope above these. */
+  base: Record<string, Record<string, number>>;
+  /** What the receiver holds of the scope, per label and origin, after taking the bundle: what the sender holds at the cut (`holds`), except that an origin with a write the
    *  bundle withholds (its row is outside the reader's scope) stops below that write, so the receiver's `have` never passes it and a later bundle sends it once
    *  the reader may read it (invariant I5, PR "fix/merge-space-follows-parent"). */
-  upTo: Record<string, number>;
-  /** What the sender holds of the scope, per origin, at the cut: no stamp of the bundle is beyond it. */
-  holds: Record<string, number>;
+  upTo: Record<string, Record<string, number>>;
+  /** What the sender holds of the scope, per label and origin, at the cut: no stamp of the bundle is beyond the number of its label and origin. */
+  holds: Record<string, Record<string, number>>;
   /** How many pages the bundle has. */
   pages: number;
 };
@@ -246,7 +251,10 @@ export async function readStampsOf(workspaceId: string, pairs: { label: string; 
   return r.rows;
 }
 
-/** Tombstones whose row is gone (a deleted row's stamp stays): after `after` (label, row key, field), in that order. NOT cut by any
+/** Every stamp of a row that is not in the table: its tombstone (a deleted row's stamp stays), and the live stamps of a row that was never made here because it
+ *  hangs on a note this node deleted for good (rule 4.9, stampedMerge/dbRows.ts) or the keys a delete left: the same stamps a change bundle sends as `tombstone`
+ *  items (spine/stampedBundle.ts), so a node that joins holds every stamp its source holds (review of the snapshot-source batch, round 1, A1). The digest counts
+ *  the same set (computeSnapshotDigest). After `after` (label, row key, field), in that order. NOT cut by any
  *  reader's scope: fine for the owner's whole-workspace copy; before an export for a limited reader the ids of rows the reader cannot
  *  read must not appear here (guards/snapshotLimitedScope.guard.test.ts).
  */
@@ -260,7 +268,7 @@ export async function readTombstoneChunk(
   params.push(limit);
   const r = await snapshotRows<WireStamp>(
     `SELECT ${STAMP_COLUMNS} FROM sync_stamps s
-      WHERE s.workspace_id = $1 AND s.table_name = $2 AND s.deleted AND ${stampMayLeaveSql()}${cursor}
+      WHERE s.workspace_id = $1 AND s.table_name = $2 AND ${stampMayLeaveSql()}${cursor}
         AND NOT EXISTS (SELECT 1 FROM ${quote(spec.table)} t WHERE ${def.when ? `(${def.when}) AND ` : ""}${def.rowKey} = s.row_key)
       ORDER BY s.row_key COLLATE "C", s.field COLLATE "C" LIMIT $${params.length}`, params);
   return r.rows;
@@ -331,7 +339,7 @@ export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeF
              FROM sync_stamps s
             WHERE s.workspace_id = $1 AND s.table_name = ${label} AND ${stampMayLeaveSql()}
               AND (EXISTS (SELECT 1 FROM inscope i WHERE i.k = s.row_key)
-                   OR (s.deleted AND NOT EXISTS (SELECT 1 FROM every e WHERE e.k = s.row_key)))) r`, sp)).rows[0]!;
+                   OR NOT EXISTS (SELECT 1 FROM every e WHERE e.k = s.row_key))) r`, sp)).rows[0]!;
       stamps += r.n;
       stampAgg += `${def.label}=${r.agg};`;
     }

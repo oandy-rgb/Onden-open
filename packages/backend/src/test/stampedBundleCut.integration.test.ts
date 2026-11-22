@@ -10,7 +10,8 @@ import { pool, q, withTransaction } from "../db.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { stampTransaction } from "../spine/stamps.js";
 import { readChangeBundle } from "../services/stampedBundle.js";
-import { readHave } from "../spine/stampedBundle.js";
+import { readHave, type Have } from "../spine/stampedBundle.js";
+import { heldAt, withOriginAt } from "./helpers/stampedBundleWorld.js";
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
@@ -29,7 +30,7 @@ describe.skipIf(!isTestDb)("a bundle read never skips a stamp that commits later
   const notes: string[] = [];
   const note = async (title: string) => (await makeCaller(owner)("POST", "/api/nodes", { id: randomUUID(), title, markdown: "", space_id: space })).id as string;
   /** The stamps of the workspace's notes as a bundle carries them: [origin, seq] of every row stamp, and the cut. */
-  const read = async (have: Record<string, number> = {}) => {
+  const read = async (have: Have = {}) => {
     const pages = await readChangeBundle(owner, WS, have);
     const stamps = pages.flatMap((p) => p.items.flatMap((i) => (i.kind === "row" ? i.stamps : [i.stamp]).flatMap((s) => [s, ...s.heads]))).filter((s) => s.origin !== "genesis");
     return { cut: pages[0]!.cut, node: pages[0]!.sender, seqs: stamps.map((s) => s.seq), upTo: pages[0]!.upTo };
@@ -85,9 +86,9 @@ describe.skipIf(!isTestDb)("a bundle read never skips a stamp that commits later
     expect(after.cut).toBe(n1 + 1); // both numbers are committed, in order
     expect(after.seqs).toEqual(expect.arrayContaining([n1, n1 + 1]));
     // the bundle for a receiver that held the first cut carries exactly what it lacks
-    const delta = await read({ [after.node]: before.cut });
+    const delta = await read(withOriginAt({}, after.node, before.cut));
     expect([...new Set(delta.seqs)].filter((s) => s > before.cut).sort((x, y) => x - y)).toEqual([n1, n1 + 1]);
-    expect(await readHave(WS)).toEqual(expect.objectContaining({ [after.node]: after.cut }));
+    expect(heldAt(await readHave(WS), after.node)).toBe(after.cut);
   }, 60_000);
 
   it("a write that commits BETWEEN the read of the cut and the read of the stamps is in neither (one snapshot)", async () => {
@@ -108,7 +109,7 @@ describe.skipIf(!isTestDb)("a bundle read never skips a stamp that commits later
     const stamps = pages.flatMap((p) => p.items.flatMap((i) => (i.kind === "row" ? i.stamps : [i.stamp]).flatMap((s) => [s, ...s.heads]))).filter((s) => s.origin !== "genesis");
     expect(pages[0]!.cut).toBe(before.cut); // the cut is that of the snapshot, whatever committed meanwhile
     expect(Math.max(...stamps.map((s) => s.seq))).toBeLessThanOrEqual(pages[0]!.cut); // no stamp past the cut: a stamp the cut does not cover would be skipped by the next bundle's base
-    const next = await read({ [pages[0]!.sender]: pages[0]!.cut });
+    const next = await read(withOriginAt({}, pages[0]!.sender, pages[0]!.cut));
     expect(next.seqs.some((s) => s > pages[0]!.cut)).toBe(true); // and the next bundle carries the write that was in between
   }, 60_000);
 });

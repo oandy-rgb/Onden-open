@@ -12,6 +12,7 @@ import { RealNode, onNode } from "../helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, digestAs, fillFrom, makeCaller, openNode, type SourceWorld } from "../helpers/stampedWorld.js";
 import { readStampedPages } from "../../services/stampedSnapshot.js";
 import { compareDigests } from "../../spine/snapshotSql.js";
+import { CARRIED_LABELS } from "../../spine/stampedMerge/index.js";
 import { checkAsync } from "../helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
@@ -83,7 +84,7 @@ describe.skipIf(!isTestDb)("a stamped snapshot after random writes", { timeout: 
     } catch { /* refused by the route: the database is as it was */ }
   });
 
-  it("copies to the same digest every time; the copy writes on as its own node; a copy is not exported again", async () => {
+  it("copies to the same digest every time; the copy writes on as its own node; a copy is exported in turn, bringing its source at the cut", async () => {
     await checkAsync(fc.asyncProperty(fc.array(OPS, { minLength: 2, maxLength: 9 }), async (ops) => {
       for (const op of ops) await run(op);
       const cap = await capture(src, world, 15_000);
@@ -100,7 +101,10 @@ describe.skipIf(!isTestDb)("a stamped snapshot after random writes", { timeout: 
         return (await q<{ origin: string; seq: string }>(`SELECT origin, seq::text FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = '*'`, [world.ws, id])).rows[0]!;
       });
       expect(own.seq).toBe("1");
-      await expect(onNode(dst, () => readStampedPages(world.owner, world.ws, { since: null, layer: "rows" }, async () => undefined))).rejects.toMatchObject({ code: "snapshot_foreign_origin" });
+      // and the copy is a source in turn: its snapshot brings the node it was copied from, at the cut it took, in every label (own-node-transport batch 2)
+      const relayed = await onNode(dst, () => readStampedPages(world.owner, world.ws, { since: null, layer: "rows" }, async () => undefined));
+      for (const of of Object.values(relayed.brought)) expect(of).toEqual({ [cap.summary.source]: cap.summary.cut });
+      expect(Object.keys(relayed.brought)).toHaveLength(CARRIED_LABELS.length);
       await dst.close();
       opened.splice(opened.indexOf(dst), 1);
     }), 15);

@@ -1,6 +1,6 @@
 # stampedMerge：帶標記的資料怎麼合成同一個結果
 
-> 狀態：現行（最後確認 2026-11-19）。核心與證明。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
+> 狀態：現行（最後確認 2026-11-22）。核心與證明。**純函式**：沒有資料庫、沒有通道、沒有畫面、不碰既有寫入路徑。
 > 涵蓋：packages/backend/src/spine/stampedMerge/**
 規則來源：[分散式準備 §4](../../../../../docs/architecture/proposals/distributed-ready-2026-11-12.md)、
 [來源標記](../../../../../docs/architecture/proposals/causal-stamps-2026-11-12.md)、
@@ -130,7 +130,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 ### 一個包說什麼
 
-- `base`：收的一方說它握有的（每個來源：連續握有到第幾號）；`holds`：送的一方在切點握有的（包裡的標記都不超過它）；`upTo`：收的一方收下這包之後握有的，等於 `holds`，除非有寫入被扣下（下面「讀者範圍外的寫入」：停在那個來源第一筆被扣下的寫入之前）。包裡有每個來源在 `(base, holds]` 之間、這個範圍的每一個寫入（被覆蓋的舊寫入不在：覆蓋它的寫入看過它），被扣下的除外。
+- 每個數字都是**每個標籤、每個來源**一個（`spine/stampedBundle.ts` 的 `Have`：`{ 標籤: { 來源: 號碼 } }`，資料形狀 6 起；之前是每個來源一個、取所有標籤的最小值）。`base`：收的一方說它握有的（每個標籤、每個來源：連續握有到第幾號）；`holds`：送的一方在切點握有的（包裡的標記都不超過它）；`upTo`：收的一方收下這包之後握有的，等於 `holds`，除非有寫入被扣下（下面「讀者範圍外的寫入」：停在那個來源第一筆被扣下的寫入之前）。包裡有每個來源在 `(base, holds]` 之間、這個範圍的每一個寫入（被覆蓋的舊寫入不在：覆蓋它的寫入看過它），被扣下的除外。
 - 一列只要有一個標記超過 `base` 就整列送（它所有的標記與 saw、meta、其他的頭，以及每個單位的值的文字），收的一方不必再問。刪掉的列是墓碑。
 - **切點為什麼不會漏**：序號在工作區的事件鎖與 `sync_clock` 那一列之下取，鎖到交易結束才放，所以同一工作區的序號依序取、依序提交，較大的序號不會比較小的先提交。
   讀包時切點（`next_seq - 1`）與標記在**同一個唯讀快照**讀（`withActorReadSnapshot`）；不加鎖，讀不讓寫的人等。`stampedBundleCut.integration.test.ts` 在真的 Postgres 用兩條連線證明，並且在讀的中途提交一筆寫入，確認它不在這個包裡也不超過切點。
@@ -165,7 +165,7 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 ## 每一張帶標記的表都跟著修改包走（第 2b-2a 批，migration 209）
 
 範圍從 `content_nodes` 擴大到 `dbUnits.ts` 的 `UNIT_SOURCES`（一份資料：每張表的列鍵、工作區、欄位，守門 `stampedBundleSources.integration.test.ts` 對照資料庫裡標記觸發器的參數）與 `JSON_SOURCES`（JSON 欄位的鍵，一鍵一個單位）。
-同一個核心（`rows.ts` `mergeRow`）、同一個列層寫回（`dbRows.ts`，依 `UNIT_SOURCES` 的順序：父表先），沒有第二套合併。`sync_origins.have` 每個標籤一個數字，一包在一個切點讀全部標籤，所以收下之後各標籤相同；
+同一個核心（`rows.ts` `mergeRow`）、同一個列層寫回（`dbRows.ts`，依 `UNIT_SOURCES` 的順序：父表先），沒有第二套合併。`sync_origins.have` 每個標籤一個數字；包的 `base`／`upTo`／`holds` 也是每個標籤一個（資料形狀 6，下面「握有別台修改的節點也能被快照」），被扣下的寫入只讓它那個標籤停住；
 只收過 `content_nodes` 的舊節點，其他標籤從 0 起算（筆記會整份再送一次，收兩次不改任何東西）。`NOT_CARRIED_YET` 列出接了觸發器但還沒跟著走的，各附原因：
 
 - 看板的區段（`node_attributes._canvas_sections`）**跟著走**，一個單位：屬性的 `value`（照一般單位合併：較晚的寫入勝，另一邊留成頭，每台相同；不逐個區段合併）。一份資料只有一種單位：migration 209 之後觸發器與起始標記都不再逐區段蓋章；
@@ -192,6 +192,17 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 （PR「fix/merge-space-follows-parent」加的十三項在最前面；之前的照舊。）
 
+- **誰可以成為寄件者還沒有撤銷，也有兩個邊角**（第 2 批審查第 1 輪 C；配對那一批，第 8 批，要定）：`admitSyncNode` 把 `vouched_by` 是某個節點編號的列升成寄件者——
+  快照來源的**舊編號**（加入時以 `vouched_by` ＝ 來源記下）也是這種列，admit 它就會讓一個已經不用的編號變成寄件者；admit 一個 `self-restore` 的編號什麼都不做、不報錯，
+  呼叫者之後才在收包時看到 `bundle_unknown_sender`；程式裡沒有撤銷，撤掉一台時「由那一台擔保的列」（它帶來的來源）怎麼辦也還沒定。
+- **重建的列在收件那台多一個欄位標記，寫的那台沒有**（自己的裝置之間的交換第 2 批用新種子找到，還沒修，屬於合併核心 `dbRows.ts`）：A 握有一則筆記的 `deleted` 欄位標記，
+  它的（來源、序號）和那一列重建時的 `*` 相同（B 的同一筆寫入）、`saw` 是空的；寫的那台 B 沒有這個欄位標記（欄位跟著 `*`）。兩台的值相同、標記集合不同；
+  這個標記在 B 的 `have` 以下，所以之後只有在另一筆寫入讓那一列整列送時才到得了 B，從 B 加入的 C 永遠收不到（A 給 C 的包不送它），整份重送存 1。
+  重現：`SNAPSHOT_BROUGHT_SEED=31054` 在真 Postgres 上跑 `snapshotBrought.integration.test.ts`，`--sequence.seed=1795315587520`（「P3」紅：A 與 C 的 `content_nodes` 標記差 1）。
+  產生器的全域狀態（`stampedBundleWorld.ts` 的 `ROW_TURNS`）讓單跑 P3 時寫入不同，所以要整個檔、同一個順序（那個檔現在每個測試先 `resetRowTurns`，種子每次新的，這個順序已經不存在）。
+  手寫的幾種「永久刪除再以同一 id 重建」順序裡，收件那台確實會寫出這個欄位標記（A 把 N 丟進垃圾桶、B 沒看到就永久刪除再以同一 id 重建；收到時 A 的 `deleted` 換成 `(B, 重建的序號)`、`saw` 空），
+  但之後那一列都被整列送過去，兩台、三台都相同；永遠送不到的那一步還沒找到，所以沒有 `it.fails` 釘住。`snapshotBrought` 的隨機寫入先關掉 `recreate`，修好之後打開。
+
 - **擴大範圍時，讀者握有的進度以下、範圍外的舊列不會補送**：I5 只管「包扣下的寫入」（下面「讀者範圍外的寫入」）。一個節點用快照加入時沒拿到的空間（快照就不帶），之後讀者成了那個空間的成員，那個空間裡在它 `have` 以下的列（空間本身、舊筆記）永遠不會送；只有之後的寫入會到，掛在不在的空間上的筆記建不起來。範圍變大時要整份重送那些列（或分空間的 `have`）。
 - **`upTo` 被扣下時，每一包都再送同一段**：被扣下的寫入之後那個來源寫的，每一包都會再送一次（收下不改任何東西），直到讀者讀得到。一個讀者永遠讀不到的空間（別人的個人空間）會讓這段一直長。解法是「已知缺口」清單（`have` 帶著扣下的序號），傳輸那一批決定。
 - **大子樹換空間的成本在 slug，不在推導**（PR #1907 第 1 輪第 13 點，量過，PostgreSQL 16）：1,000 則（深約 7 層）搬到別的空間，收到的那台 1.5 秒、3,052 個語句，其中推導 14 個（每層一個向下、一個載入），3,003 個是 `assignSlugs` 每則三個（查、查撞名、寫）；同一棵樹改最深那則的內文 20 毫秒、35 個語句。300 層的一條鏈：每層兩個語句（向下一層、向上一層），收到 0.5 秒。要變快：`assignSlugs` 改成整批（照 id 順序在記憶體裡模擬撞名），祖先改成一個遞迴查詢。
@@ -213,7 +224,6 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - **錨點單位有兩個頭時，那則筆記「不是人」的寫入被拒**：單位在寫錨點的語句結束時寫，系統或 AI 的寫入（`stampTransaction` `notAPerson`）對有其他頭的單位丟 `sync_unit_in_conflict`（409），是那個語句失敗（`anchorsReplicated`「round 3, 7」；第四輪前是 COMMIT 才失敗）。人看不到這個衝突（沒有畫面讀 `sync_stamp_heads`）；人的下一次存檔會把那些頭解決掉。給 2b-2b：衝突要有畫面。
 - **收件檢查對每一列新建的列各跑一個查詢**（`checkReceived` 比對帶來的欄位值與單位文字，`sync_logged_value`）：一包新建很多列時是線性但每列一個來回，傳輸那一批要合成一個語句。
 - **大量刪除仍比 main 慢**（後續，第五輪第 6 點與第六輪第 6 點）：跟著筆記消失的錨點、段落列、單位不寫墓碑，連同它們的標記一起清掉（下面「跟著筆記走的列」），每一列不再各呼叫一次觸發器（語句層級）。刪一個 2,000 則筆記、每則 20 個錨點與 20 個段落列的空間（`anchorBulkCost`），寫的列＝main 的＋那些列原本的標記（82,500，刪掉）＋每則筆記的單位一列（斷言），時間見 PR 說明「測試結果」（和 main 比的倍數在那裡，只有一個數）。產品的寫入有 15 s 的 `statement_timeout`（`PG_STATEMENT_TIMEOUT_MS`），`purgeSpaceDeleted` 是一個語句：大到碰得到的空間要分批刪，這是後續（沒做）。
-- **快照的來源不能有別台的標記**（`snapshotSourceNode`，409 `snapshot_foreign_origin`）：處在兩個頭狀態的節點今天不能被快照加入（`anchorsReplicated`「round 3, 11: a node in the 8b state…」釘住）。這一關打開時，加入後再收一包的情形要重新驗。
 - **一則筆記的錨點數沒有上限**：找不到的錨點永遠不刪，寫入端也沒有上限，所以收件端無從定一個（審查第 6 點；沒做）。
 - **兩台同時替同一個新段落各鑄錨點**：兩個錨點、兩列、兩個任務；下一次存檔依錨點的建立時間（鑄造那台的牆上時鐘）留一個、藏另一列、把它的任務丟進垃圾桶（`anchorsReplicated`「9」釘住）。規則（提議）：兩個有效錨點落在同一段時合成一個，任務與卡跟著留下的那個。
 - **任務筆記在收的一方已永久刪除，之後才收到指著它的段落列**：收的一方不建那一列，永久刪除的那一台照外鍵 SET NULL 留著列：兩台不同（`anchorsReplicated`「10」，`it.fails`）。
@@ -284,6 +294,43 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 - 衍生資料：由內文衍生的（連結、搜尋文字、段落列的顯示欄位）與領域事件，合併進來時都不會更新（2b-2b，一個機制）。錨點、段落列的 id 與任務行的連結、段落標籤自 migration 215 起是複製的，跟著寫入走（見下面那一節）。2b-1 釘的「永久刪除一列時收的一方的連鎖刪除不留墓碑」在 2b-2a 翻轉了：屬性的墓碑跟著包走。
 - slug：由標題在寫的那一端算出，不是單位。包把 slug 跟著勝出的標題走；兩個活著的筆記在同一空間要同一個 slug 時，id 較大的加上 `-<id 前八碼>`。這只保證資料庫的唯一索引不破，不保證所有歷史下各節點相同（需要決定）。
 - 同一個 id 在兩個節點各自建立（算出來的 id）：輸的創建值以頭的形式留下，列的建立欄位（slug、建立時間）跟著勝出的建立。
+
+## 握有別台修改的節點也能被快照（自己的裝置之間的交換第 2 批，migration 222）
+
+提案：「自己的裝置之間怎麼交換」（own-node-transport-2026-11-22，還在 PR #1936 的分支上）§2.2、§3.4、第 6 節第 2 批；信任界線：[sync-trust-line.md](../../../../../docs/decisions/sync-trust-line.md)。
+以前收過別台修改包的節點（例如中心收過一台裝置的包）就不能再被快照（`snapshot_foreign_origin`）：第二台裝置、換主機都卡住。現在：
+
+- **快照帶「來源握有的其他來源」**（`brought`，快照第一行與每一頁相同）：來源的 `sync_origins` 裡除了舊編號（`self-restore`，照舊走 `former`）以外的每一列，
+  每個標籤、每個來源握有到第幾號（就是它的 `sync_origins.have`）。加入的一方在 `markJoinDone` 各記一列（`vouched_by` ＝ 來源：帶來的來源，不是寄件者），
+  數字照抄：**加入的那台知道的，正好是來源在切點知道的**，所以之後誰送包來都只送新的。
+- **加入的一方怎麼檢查**（`checkPage`、`beginJoin` 的 `checkedBrought`；拒收就整份不寫）：`brought` 是「搬得動的標籤 → 節點編號 → 整數」的物件、最多 32 個來源
+  （`MAX_BROUGHT_ORIGINS`，和 `former` 同一個上限）、節點編號只收小寫（資料庫寫的形式；大寫的同一個編號不算另一台）、不含來源自己、舊編號、genesis（`join_bad_brought`；舊的「每個來源一個數字」也是這一碼，不會被讀成標籤）；
+  含這台自己的編號是 `join_origin_is_this_node`（這台以前用同一個編號送過包、清空後沒換號又來加入：要換新編號，提案 §3.5）；
+  每一頁要和第一行相同（`join_wrong_brought`）；一個帶來的來源的標記不得超過它那個標籤報的號碼（`join_stamp_beyond_brought`；只有快照帶、包不帶的標籤
+  `content_nodes.collection_views` 沒有自己的號碼，取它所有標籤的最小值：這種標記只會經快照來，加入時不超過那時的最小值，之後只會變大——`broughtBound`）；
+  來源自己的標記不得超過切點（`join_stamp_beyond_cut`）；誰都沒擔保的來源照舊 `join_stamp_origin`。
+- **快照帶來源握有的每一個標記**，包括沒有列的活標記（4.9 掛著的列、刪除留下的鍵）：和修改包的 `tombstone` 項同一組，摘要也算它們（`readTombstoneChunk`、`computeSnapshotDigest`；
+  第 1 輪審查 A1：以前只帶 `deleted` 的，加入的那台少了掛著的標記、`brought` 卻說它握有，之後沒有包會送）。
+- **舊編號那一列的號碼**取那一列寫了的標籤的最小值（`heldOfFormer`）：migration 213 只寫了當時的 19 個標籤，之後才搬得動的標籤舊編號沒寫過（第 1 輪審查 A2）。
+- **來源那一端先檢查自己**（`services/stampedSnapshot.ts` `snapshotSourceNode`，讀之前，也在花掉新鮮確認之前）：自己正在加入（`snapshot_source_joining`）；
+  握有某個來源的標記，卻沒有那個來源的列（`snapshot_foreign_origin`）；握有某個來源某個標籤的標記超過自己記的號碼（`snapshot_source_unsettled`：合併寫了標記卻沒記進度、
+  或 206 之前只記了 `content_nodes` 的舊進度列——跟那個來源交換一次就好）；其他來源超過 32 個（`snapshot_too_many_origins`）。
+  合併進行到一半不是一種會被讀到的狀態：一包一個交易，快照在一個 REPEATABLE READ 唯讀快照裡讀，要嘛全看到、要嘛全沒看到；讀之前的起始標記補寫（`sync_genesis_pass`，是寫入）碰到同一個標記鍵時會**等**開著的合併交易結束，所以合併中開始的匯出可能等它做完（最多到 statement timeout）（`snapshotBrought`「P4 … while a bundle is being taken」，真 Postgres 兩條連線，`pg_locks` 看過）。
+- **`have` 改成每個標籤一個**（`Have`，請求的 `have` 與包頭的 `base`／`upTo`／`holds` 一起），資料形狀升到 6。已存的進度本來就是每個標籤一個（migration 206），照原樣讀，不必改寫；
+  舊形狀（每個來源一個數字）以 `bundle_have_per_origin` 拒收，不被當成標籤讀。被扣下的寫入（I5）只讓它自己那個標籤停住。
+- **`admitSyncNode` 把「帶來的來源」升成寄件者**，保留握有的號碼：C 從 B 加入、B 從 A 加入之後，C 收進 A 就從 B 知道的地方接著收（A→B、B→C 快照，之後 C↔A 修改包）。
+  `self-restore`（這台自己以前的編號）不會變成寄件者。
+
+找過的反例（每一則在 `snapshotBrought.integration.test.ts`、`nodeRenewal.integration.test.ts`、`anchorsReplicated`「round 3, 11」）：
+
+| 情況 | 結果 |
+| --- | --- |
+| 來源在兩個頭的狀態（衝突，含錨點單位的 8b 狀態）、有留著的值（`kept_value`） | 加入的那台的標記與其他的頭逐欄相同；之後一個人的存檔結束衝突，每台相同 |
+| 來源被還原過、換了編號，同時握有別台的修改 | 舊編號走 `former`、別台走 `brought`，兩者不重疊；加入的那台和還原後的來源相同，也能再被快照 |
+| 來源的進度落後它握有的標記（206 之前的進度列、被調低的列） | 來源拒絕（`snapshot_source_unsettled`），跟那個來源交換一次之後可以；不猜、不多報 |
+| 起始（genesis）標記、帶 `meta.space`／`meta.seen` 的墓碑 | 照原樣帶過去（逐欄相同） |
+| A→B 快照、B→C 快照、之後 C↔A 修改包 | C 收進 A 之後兩邊相同，整份重送存 0 |
+| 讀者範圍外被扣下的寫入（I5）讓來源某標籤的標記超過它的進度 | 來源拒絕（`snapshot_source_unsettled`）；第一階段只有整個工作區（A1），不會發生 |
 
 ## 錨點與段落列跟著內文那筆寫入走（錨點提案第 2、3 步，migration 215）
 

@@ -16,8 +16,9 @@ import type { ActorCtx } from "../types.js";
 // THE LINES: every line starts with `{"kind":` (the stream's own `line()` writes it first and a test fails if one does not), so a reader may tell a line's
 // kind from its first bytes. The first line, the hello, names the data shape of the pages (spine/syncDataShape.ts); another one is refused.
 //
-// A DEVICE THAT JOINED CANNOT MAKE A FILE yet (GET answers 409 `snapshot_foreign_origin`): its rows carry stamps of another device, and this first stage
-// vouches for one origin only. Change bundles and vouched origins (the stamped-sync batch of #1758) are what lift it.
+// A DEVICE THAT JOINED, OR A SERVER THAT TOOK OTHER DEVICES' BUNDLES, MAKES A FILE TOO: the hello names the other origins it holds and how far (`brought`). GET answers 409
+// before it spends the ticket when this node cannot vouch for every stamp it holds (services/stampedSnapshot.ts snapshotSourceNode: `snapshot_source_joining`,
+// `snapshot_foreign_origin`, `snapshot_source_unsettled`, `snapshot_too_many_origins`).
 
 const router = new Hono<{ Variables: { actor: ActorCtx | null } }>();
 

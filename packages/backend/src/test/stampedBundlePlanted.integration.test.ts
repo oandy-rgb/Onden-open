@@ -119,7 +119,7 @@ describe.skipIf(!isTestDb)("trust line layer 1 on the receive side (docs/decisio
     const s = item.stamps.find((x) => x.field === "title" && x.origin === sender)!;
     // a write of A that this unit's winner had not seen (A wrote another note after it), that had seen what the winner had seen (an empty `saw` would read as a lost
     // creation value, rows.ts `staleCreation`), with an earlier clock: it loses and is kept as a conflict
-    s.heads.push({ origin: sender, seq: bundle.upTo[sender]!, contentHash: "", wall: s.wall - 1, counter: 0, author: s.author, device: s.device, deleted: false, saw: { ...s.saw }, meta: null, value: "x".repeat(NODE_TITLE_MAX + 1) });
+    s.heads.push({ origin: sender, seq: bundle.upTo[s.label]![sender]!, contentHash: "", wall: s.wall - 1, counter: 0, author: s.author, device: s.device, deleted: false, saw: { ...s.saw }, meta: null, value: "x".repeat(NODE_TITLE_MAX + 1) });
     const r = await refusal(take(b, bundle));
     const held = await titleOnB(b, note);
     console.info(`[stampedBundlePlanted] a head longer than the title limit: ${r ? `refused (${r.code})` : `taken; B now holds heads of length ${JSON.stringify(held.heads)} for that title`}`);

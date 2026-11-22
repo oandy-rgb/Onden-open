@@ -3926,6 +3926,7 @@ INSERT INTO schema_migrations (version) VALUES ('214_sync_join_source_former') O
 INSERT INTO schema_migrations (version) VALUES ('215_block_anchors_replicated') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('217_keep_session_actor_rows') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('218_space_follows_tree') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('222_sync_join_source_brought') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -6762,3 +6763,5 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_delete_space AFTER DELETE ON content_nodes FOR EACH ROW
   WHEN (OLD.node_type <> 'class_tag' AND OLD.space_id IS NOT NULL)
   EXECUTE FUNCTION content_nodes_tombstone_space();
+-- 222: a snapshot names the other origins its source holds, per label; the join remembers them (db/migrations/222_sync_join_source_brought.sql)
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS source_brought jsonb NOT NULL DEFAULT '{}'::jsonb;

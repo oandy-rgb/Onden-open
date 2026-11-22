@@ -18,7 +18,7 @@ import { q } from "../db.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { buildSourceWorld, capture, fillFrom, makeCaller, openNode, type SourceWorld } from "./helpers/stampedWorld.js";
-import { admit, bundleFor, expectSame, nodeIdOf, peerOf, resendAll, take, type Peer } from "./helpers/stampedBundleWorld.js";
+import { admit, bundleFor, expectSame, heldAt, leastAt, nodeIdOf, peerOf, resendAll, take, type Peer } from "./helpers/stampedBundleWorld.js";
 import { readHave } from "../spine/stampedBundle.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
@@ -942,10 +942,10 @@ describe.skipIf(!isTestDb)("a note's space follows its tree (migration 218)", ()
       const first = await bundleFor(a, b);
       const carried = (bundle: typeof first) => new Set(bundle.items.flatMap((i) => (i.kind === "row" ? i.stamps.map((x) => x.rowKey) : [i.stamp.rowKey])));
       expect([carried(first).has(f), carried(first).has(s4)], "the friend's space and note are not in the owner's bundle").toEqual([false, false]);
-      expect(first.holds[aOrigin]).toBeGreaterThanOrEqual(fSeq);
-      expect(first.upTo[aOrigin], "the receiver will hold A's writes only up to before the first one withheld").toBeLessThan(fSeq);
+      expect(heldAt(first.holds, aOrigin)).toBeGreaterThanOrEqual(fSeq);
+      expect(leastAt(first.upTo, aOrigin), "the receiver will hold A's writes only up to before the first one withheld").toBeLessThan(fSeq);
       await take(b, first);
-      const haveOfA = () => onNode(b.node, async () => (await readHave(b.ws))[aOrigin]!);
+      const haveOfA = () => onNode(b.node, async () => leastAt(await readHave(b.ws), aOrigin));
       expect(await haveOfA()).toBeLessThan(fSeq);
       expect((await take(b, await bundleFor(a, b))).stored, "the next bundle sends again what A wrote after it, and that stores nothing").toBe(0);
       // the owner joins the friend's space (a shared space is managed by the workspace's owner): the next bundle carries the space and the note

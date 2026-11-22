@@ -3777,6 +3777,8 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Those changes came from a device this one doesn't know.": "這些變更來自這台裝置不認識的裝置。",
   "The other device holds changes of this device that it never made.": "另一台裝置有這台裝置從沒做過的變更。",
   "Some changes in between are missing, so none were taken in.": "中間少了一些變更，所以一筆都沒有收進來。",
+  "This device can't finish taking in changes right now, so none were taken in.": "這台裝置現在沒辦法把變更收完，所以一筆都沒有收進來。",
+  "This device couldn't finish taking in the changes, so none were taken in.": "這台裝置沒能把這些變更收完，所以一筆都沒有收進來。",
   "The changes don't match what this device already holds, so none were taken in.": "變更和這台裝置已有的資料對不起來，所以一筆都沒有收進來。",
   "Part of the copy is damaged. Start joining again.": "複本有一部分壞掉了，請重新加入一次。",
   "That copy belongs to a different workspace.": "那份複本屬於另一個工作區。",

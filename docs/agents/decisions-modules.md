@@ -106,6 +106,7 @@
 - 以前網站模組沒有 `routePrefixes`，所以「網站」關閉（或從沒同意過）時，`POST /api/publish`、`/api/publish/include`、`/api/publish/preview`、`/api/preview` 照樣能用。現在 `routePrefixes: ["/api/publish", "/api/preview"]`，這幾條寫入在模組關閉時回 409 `module_not_imported`，與其他模組一樣。
 - **不擋的**：所有讀取——`GET /api/site*`、`/api/snapshots`、`/api/export-static`、`/api/git/diff/:hash`——因為「關掉模組只是收起功能，資料保留」，而且已經公開的網站不能因為這次部署就停止提供。公開網站的服務與靜態副本照舊。
 - **撤下一律可用**：把筆記標為「不發布」、移到垃圾桶、改空間發布開關，都走核心的筆記／屬性寫入，不經網站路由；它們觸發的 `site_rebuild` 重推原本被 `hooksWhenImported` 擋掉（模組關閉就不排）。網站模組現在宣告 `nodeHooksWhenOff: true`：它的 hook 只會「請求以最新快照減去撤下項目重推」（`republishSite` 不新增任何東西，也不會發布從沒發布過的網站），以及清掉被永久刪除筆記的快照內容，所以關閉時照跑。這個旗標只給「只會移除」的 hook；會新增或對外送出內容的 hook 不得使用。
+- **收進來的修改也聽得到**（2026-11-22，同步 4a 批）：一台收下另一台的修改包時，`services/receivedDerivation.ts` 用同一組 hook 通知模組（`spine/nodeHooks.ts` 的 `received`），但**只通知宣告 `nodeHooksOnReceive: true` 的模組**：網站（另一台把一頁標成不發布、隱藏、丟垃圾桶、永久刪除或換空間，這台也要請求重建，不然繼續公開＝外洩）與語意索引（每台自己的嵌入）。會寫複製資料的 hook 不得宣告：任務模組重新打開時搬 `block_nodes.task_id`（單位），寫的那台已經寫過、修改包帶過來了。
 - 沒有新的路由可以「取消發布整個網站」；撤下是逐篇的，這次沒有新增。
 
 ## 語意搜尋要真的對人有用（2026-11-14）

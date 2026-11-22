@@ -29,7 +29,7 @@ const RULES: Record<string, Rule> = {
     pattern: /\.startsWith\(\s*["']_["']\s*\)/,
     owners: ["markdown/src/sharedContract.ts"],
     exceptions: {
-      "backend/src/services/nodes.ts": "a note's slug that starts with `_` is reserved (a slug, not an attribute key)",
+      "backend/src/spine/noteSlugs.ts": "a note's slug that starts with `_` is reserved (a slug, not an attribute key; slugFor moved from services/nodes.ts in batch 4a)",
       "frontend/src/components/NodeAttributesPanel.tsx": "file is being edited in an open PR; move it to isShownPropertyKey (lib/childFields.ts) and delete INTERNAL_ATTRIBUTE_KEYS (components/attributes/utils.ts)",
     },
     sample: 'return !key.startsWith("_");',

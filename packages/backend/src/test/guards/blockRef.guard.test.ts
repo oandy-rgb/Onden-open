@@ -43,9 +43,10 @@ describe("block-link fallback is decided once", () => {
     ])).toEqual([]);
   });
 
-  it("the two body-write paths keep the index in step", () => {
-    for (const file of ["services/bodySideEffects.ts", "services/newNoteDerived.ts"]) {
-      expect(readFileSync(join(PACKAGES, "backend/src", file), "utf8")).toContain("syncNoteBlockRefs(");
+  it("the two body-write paths keep the index in step (through services/bodyDerivation.ts deriveFromBody, which a received bundle runs too)", () => {
+    expect(readFileSync(join(PACKAGES, "backend/src/services/bodyDerivation.ts"), "utf8")).toContain("syncNoteBlockRefs(");
+    for (const file of ["services/bodySideEffects.ts", "services/newNoteDerived.ts", "services/receivedDerivation.ts"]) {
+      expect(readFileSync(join(PACKAGES, "backend/src", file), "utf8")).toContain("deriveFromBody(");
     }
   });
 

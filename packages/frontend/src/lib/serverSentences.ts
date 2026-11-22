@@ -246,6 +246,8 @@ const LATE_SERVER_ERROR_MESSAGES: Record<string, string> = {
   bundle_own_origin_ahead: "The other device holds changes of this device that it never made.",
   bundle_gap: "Some changes in between are missing, so none were taken in.",
   bundle_stamp_clash: "The changes don't match what this device already holds, so none were taken in.",
+  bundle_no_derivation: "This device can't finish taking in changes right now, so none were taken in.",
+  bundle_derivation_failed: "This device couldn't finish taking in the changes, so none were taken in.",
   join_bad_cut: "Part of the copy is damaged. Start joining again.",
   join_stamp_saw: "Part of the copy is damaged. Start joining again.",
   join_bad_page: "Part of the copy is damaged. Start joining again.",

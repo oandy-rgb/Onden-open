@@ -96,21 +96,33 @@ export type NodeHooks = {
 };
 
 const hooks = new Map<string, NodeHooks>();
+/** The modules whose hooks also run for a change this node took from another node's change bundle (ModuleDefinition.nodeHooksOnReceive). */
+const onReceived = new Set<string>();
+
+/** Whose change a hook hears of: one written here (the default), or one this node took by change bundle (services/receivedDerivation.ts). A received change
+ *  reaches only the modules that registered with `onReceived`: a hook that writes a replicated row (the tasks module moves a task line, a unit) must not run
+ *  again on a node that takes the write, since the writer's node already wrote it and the bundle carried it. */
+export type HookOrigin = { received?: true };
 
 /** Register a module's hooks under its id. Registering the same object again
- *  is a no-op; a different one under the same id is a startup error. */
-export function registerNodeHooks(moduleId: string, moduleHooks: NodeHooks): void {
+ *  is a no-op; a different one under the same id is a startup error.
+ *  `onReceived`: its hooks only record work derived from committed state (an outbox intent that reads the state when it runs), so they run for a change
+ *  taken by bundle too. */
+export function registerNodeHooks(moduleId: string, moduleHooks: NodeHooks, options: { onReceived?: boolean } = {}): void {
   const existing = hooks.get(moduleId);
   if (existing === moduleHooks) return;
   if (existing) throw new Error(`[nodeHooks] hooks already registered for module: ${moduleId}`);
   hooks.set(moduleId, moduleHooks);
+  if (options.onReceived) onReceived.add(moduleId);
 }
+/** The hooks a change of this origin reaches. */
+const hooksFor = (origin: HookOrigin): [string, NodeHooks][] => [...hooks].filter(([id]) => !origin.received || onReceived.has(id));
 
 /** The modules' half of a title or body change (services/nodeCommits.ts
  *  nodeContentCommitted runs the core half first). A hook's throw rolls the
  *  write back with it. */
-export async function modulesContentCommitted(change: NodeContentCommit): Promise<void> {
-  for (const h of hooks.values()) await h.contentCommitted?.(change);
+export async function modulesContentCommitted(change: NodeContentCommit, origin: HookOrigin = {}): Promise<void> {
+  for (const [, h] of hooksFor(origin)) await h.contentCommitted?.(change);
 }
 
 /** The modules' half of a permanent delete's snapshot rewrite (see NodeHooks.snapshotPurged). */
@@ -133,9 +145,9 @@ export async function nodeAttributeWriting(change: NodeAttributeWrite): Promise<
 // subscriber runs in its own savepoint: one that fails is logged and rolled
 // back alone, never taking the user's write with it.
 async function runEach<K extends "attributeCommitted" | "spaceAudienceCommitted" | "lifecycleCommitted" | "visibilityCommitted">(
-  kind: K, change: Parameters<NonNullable<NodeHooks[K]>>[0], detail: Record<string, unknown> = {},
+  kind: K, change: Parameters<NonNullable<NodeHooks[K]>>[0], detail: Record<string, unknown> = {}, origin: HookOrigin = {},
 ): Promise<void> {
-  for (const [moduleId, h] of hooks) {
+  for (const [moduleId, h] of hooksFor(origin)) {
     const fn = h[kind] as ((c: typeof change) => Promise<void>) | undefined;
     if (!fn) continue;
     try {
@@ -150,24 +162,24 @@ async function runEach<K extends "attributeCommitted" | "spaceAudienceCommitted"
 
 /** Call in the transaction that moved notes between spaces, or changed a
  *  space's switches (services/spaces.ts). Never throws. */
-export async function spaceAudienceCommitted(change: SpaceAudienceCommit): Promise<void> {
-  await runEach("spaceAudienceCommitted", change);
+export async function spaceAudienceCommitted(change: SpaceAudienceCommit, origin: HookOrigin = {}): Promise<void> {
+  await runEach("spaceAudienceCommitted", change, {}, origin);
 }
 
 /** The modules' half of an attribute set or delete (services/nodeCommits.ts
  *  nodeAttributeCommitted runs the core half first). Never throws. */
-export async function modulesAttributeCommitted(change: NodeAttributeCommit): Promise<void> {
-  await runEach("attributeCommitted", change, { key: change.key });
+export async function modulesAttributeCommitted(change: NodeAttributeCommit, origin: HookOrigin = {}): Promise<void> {
+  await runEach("attributeCommitted", change, { key: change.key }, origin);
 }
 
 /** Call in the transaction that trashed notes or brought them back
  *  (services/nodeTrash.ts and the event-history undo). Never throws. */
-export async function nodeLifecycleCommitted(change: NodeLifecycleCommit): Promise<void> {
-  await runEach("lifecycleCommitted", change, { change: change.change });
+export async function nodeLifecycleCommitted(change: NodeLifecycleCommit, origin: HookOrigin = {}): Promise<void> {
+  await runEach("lifecycleCommitted", change, { change: change.change }, origin);
 }
 
 /** Call in the transaction of a change to who may see notes (mutate() does,
  *  for a mutation that declares `visibilityChanged`). Never throws. */
-export async function nodeVisibilityCommitted(change: NodeVisibilityCommit): Promise<void> {
-  await runEach("visibilityCommitted", change, { nodes: change.nodeIds.length });
+export async function nodeVisibilityCommitted(change: NodeVisibilityCommit, origin: HookOrigin = {}): Promise<void> {
+  await runEach("visibilityCommitted", change, { nodes: change.nodeIds.length }, origin);
 }

@@ -116,19 +116,21 @@ describe.skipIf(!isTestDb)("write stamps on attributes, tags, edges, pointers an
       expect(left.get("*")).toMatchObject({ deleted: true, author: owner.id });
     });
 
-    it("a value the note's text produced or Onden computed is not stamped; one that changes kind counts as made / removed", async () => {
+    it("a value the note's text produced is stamped (migration 223: it travels, batch 4a); one Onden computed is not, and one that changes to or from that kind counts as made / removed", async () => {
       const id = await note();
-      await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'fromtext', 'a', 'markdown')`, [ws, id]);
+      await stamped(() => q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'fromtext', 'a', 'markdown')`, [ws, id]));
+      await stamped(() => q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'fromyaml', 'a', 'frontmatter')`, [ws, id]));
       await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) VALUES ($1, $2, 'computed', 'a', 'derived')`, [ws, id]);
-      expect((await stampsOf("node_attributes", `${id}/fromtext`)).size).toBe(0);
-      expect((await stampsOf("node_attributes", `${id}/computed`)).size).toBe(0);
-      await seedQ(`UPDATE node_attributes SET value = 'b' WHERE node_id = $1 AND key = 'fromtext'`, [id]);
-      expect((await stampsOf("node_attributes", `${id}/fromtext`)).size).toBe(0);
-
-      await stamped(() => q(`UPDATE node_attributes SET source = 'ui' WHERE node_id = $1 AND key = 'fromtext'`, [id]));
       expect((await stampsOf("node_attributes", `${id}/fromtext`)).get("*")).toMatchObject({ deleted: false, author: owner.id });
-      await stamped(() => q(`UPDATE node_attributes SET source = 'markdown' WHERE node_id = $1 AND key = 'fromtext'`, [id]));
-      expect((await stampsOf("node_attributes", `${id}/fromtext`)).get("*")).toMatchObject({ deleted: true });
+      expect((await stampsOf("node_attributes", `${id}/fromyaml`)).get("*")).toMatchObject({ deleted: false, author: owner.id });
+      expect((await stampsOf("node_attributes", `${id}/computed`)).size).toBe(0);
+      await seedQ(`UPDATE node_attributes SET value = 'b' WHERE node_id = $1 AND key = 'computed'`, [id]);
+      expect((await stampsOf("node_attributes", `${id}/computed`)).size).toBe(0);
+
+      await stamped(() => q(`UPDATE node_attributes SET source = 'ui' WHERE node_id = $1 AND key = 'computed'`, [id]));
+      expect((await stampsOf("node_attributes", `${id}/computed`)).get("*")).toMatchObject({ deleted: false, author: owner.id });
+      await stamped(() => q(`UPDATE node_attributes SET source = 'derived' WHERE node_id = $1 AND key = 'computed'`, [id]));
+      expect((await stampsOf("node_attributes", `${id}/computed`)).get("*")).toMatchObject({ deleted: true });
     });
 
     it("a board's section frames keep their old and new value in the structure log; other attributes do not", async () => {

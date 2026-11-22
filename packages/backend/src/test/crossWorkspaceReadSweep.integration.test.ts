@@ -509,6 +509,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     // the join record of a database that was filled from a snapshot (migration 204; no route reads it)
     await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'sweep-probe-node', 0, 'done')`, [A.ws]);
 
+    // a restore that kept this node's id instead of renewing it (migration 224; no route reads it)
+    await seedQ(`INSERT INTO sync_restore_kept_node_id (workspace_id, node_id, reason) VALUES ($1, NULL, 'no-node-table')`, [A.ws]);
+
     // which nodes this node takes change bundles from (migration 206; no route reads it)
     await seedQ(`INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, 'sweep-probe-node', 'snapshot', '{}'::jsonb)`, [A.ws]);
 

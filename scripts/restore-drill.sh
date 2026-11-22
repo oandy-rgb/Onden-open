@@ -149,13 +149,14 @@ tsx() { (cd "$backend" && npx --no-install tsx "$@"); }
 # shellcheck source=lib/renewNodeId.sh
 source "$repo/scripts/lib/renewNodeId.sh"
 if [[ $use_docker == 1 ]]; then db_psql=(docker exec -i "$container" psql -U postgres -d "$dbname"); else db_psql=(psql "$DATABASE_URL"); fi
-renewed=0
+renewed="" # set to 1 once renewed: the comparison then checks the renewal
 renew_step() { # <何時>
   local out rc=0
   out=$(renewNodeId "${db_psql[@]}" 2>>"$work/renew.log") || rc=$?
   case $rc in
     0) read -r old_id new_id _ _ <<<"$out"; say "✓ 節點編號已換新（$1）：$old_id → $new_id"; renewed=1 ;;
     3) return 3 ;;
+    4) die "restore.sh 會拒絕這份備份：它有節點編號、卻沒有記下舊編號的表（migration 190–205 的版本做的；見 $work/renew.log）" ;;
     *) die "換新節點編號失敗（見 $work/renew.log）" ;;
   esac
 }
@@ -168,7 +169,7 @@ tsx scripts/drillInvariants.ts snapshot --database-url "$DATABASE_URL" --out "$w
 step "5b. 換新節點編號（restore.sh 的同一步）"
 renew_rc=0; renew_step "還原後、migration 前" || renew_rc=$?
 if [[ $renew_rc == 3 ]]; then
-  say "△ 這份備份早於 migration 213：restore.sh 會保留舊的節點編號並印出警告。演練在 migration 之後補做這一步，以檢查換號本身。"
+  say "△ 這份備份沒有節點編號（migration 190 之前的版本做的，從沒編過號）：restore.sh 也不換號，資料庫第一次寫入時才取得編號；這一項不比對。"
 fi
 
 # ── 6. migration（與後端開機同一支 migrate()）
@@ -176,9 +177,6 @@ step "6. 執行 migration"
 DATABASE_URL=$DATABASE_URL tsx scripts/drillMigrate.ts "$src" >"$work/migrate.log" 2>&1 \
   || { grep '^migration 失敗' "$work/migrate.log" >&2 || say "migrate 執行失敗（見 $work/migrate.log）" >&2; die "migration 沒有跑完，備份在這個版本上不能直接升級"; }
 say "✓ $(tail -n1 "$work/migrate.log")"
-if [[ $renewed == 0 ]]; then
-  renew_step "migration 後補做" || die "migration 之後仍沒有換號的函式（migration 213 沒有套用？）"
-fi
 
 # ── 7. migration 後
 step "7. 記錄 migration 後的狀態"
@@ -205,7 +203,7 @@ say "✓ 已解到暫存目錄（結束時刪除）"
 
 # ── 9. 比對
 step "9. 比對"
-if tsx scripts/drillInvariants.ts compare --before "$work/before.json" --after "$work/after.json" --node-renewed \
+if tsx scripts/drillInvariants.ts compare --before "$work/before.json" --after "$work/after.json" ${renewed:+--node-renewed} \
      --migrations-dir "$src/packages/backend/db/migrations" --media-dir "$work/media" --report "$work/report.json"; then
   printf '\n通過：還原演練沒有發現問題（備份 %s）\n' "$(basename "$backup")"
   status=0

@@ -9,11 +9,14 @@
 //     version.json     這份資料上次是由哪個版本開的（換版時據此自動備份，見 safeUpdate.mjs）
 //     backups/         換版前的自動備份，每份一個資料夾
 //     update-in-progress.json  升級或還原進行中的標記（指到要還原的備份）；正常情況下不存在
+//     renew-node-id.json       資料剛被還原、下次開後端前要換節點編號的標記（nodeRenewal.mjs）；正常情況下不存在
+//   <userData>.node-record.json  這台上次看到的節點編號與編號到第幾號（nodeRenewal.mjs）。刻意放在資料夾**外面**：
+//                    「把整個資料夾放回去」的還原（docs/desktop/README.md）不會把它一起帶回去，才看得出資料倒回去了
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** @typedef {{ root: string, data: string, pgdata: string, secretsFile: string, settingsFile: string, versionFile: string, backups: string, updateMarker: string }} DataLayout */
+/** @typedef {{ root: string, data: string, pgdata: string, secretsFile: string, settingsFile: string, versionFile: string, backups: string, updateMarker: string, renewalMarker: string, nodeRecord: string }} DataLayout */
 
 /** @param {string} userData @returns {DataLayout} */
 export function dataLayout(userData) {
@@ -26,6 +29,8 @@ export function dataLayout(userData) {
     versionFile: join(userData, "version.json"),
     backups: join(userData, "backups"),
     updateMarker: join(userData, "update-in-progress.json"),
+    renewalMarker: join(userData, "renew-node-id.json"),
+    nodeRecord: `${userData.replace(/[\\/]+$/, "")}.node-record.json`,
   };
 }
 

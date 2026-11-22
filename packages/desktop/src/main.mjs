@@ -80,6 +80,7 @@ async function run() {
     boot,
     layout: () => activeLayout,
     askBackupMissing: offerOpenAnyway,
+    askRenewalRefused: offerOpenAnyway,
     showFailure: async (error) => {
       log(`啟動失敗：${error instanceof Error ? error.message : String(error)}`);
       await showStartupFailure(error);

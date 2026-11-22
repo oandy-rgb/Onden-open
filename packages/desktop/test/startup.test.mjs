@@ -49,6 +49,7 @@ function fakeUi(choice = "quit") {
   return {
     calls,
     askBackupMissing: async () => { calls.ask++; return choice; },
+    askRenewalRefused: async () => { calls.ask++; return choice; },
     showFailure: async (error) => { calls.show.push(error); },
   };
 }
@@ -143,3 +144,33 @@ describe("失敗對話框的文字", () => {
     assert.match(d.diagnostics, /log line/);
   });
 });
+
+describe("換不了節點編號的流程（runStartup，review of #1937 point 6）", () => {
+  const refused = () => new UpdateFailure("renewal_refused", { from: "x", to: "x", diagnostics: "d" });
+  it("選「結束」：只問一次就結束，資料與標記不動", async () => {
+    const layout = seed();
+    writeFileSync(layout.renewalMarker, JSON.stringify({ backup: "b" }));
+    const ui = fakeUi("quit");
+    assert.equal(await runStartup({ boot: async () => { throw refused(); }, layout: () => layout, ...ui }), false);
+    assert.equal(ui.calls.ask, 1);
+    assert.equal(ui.calls.show.length, 0);
+    assert.deepEqual(JSON.parse(readFileSync(layout.renewalMarker, "utf8")), { backup: "b" });
+  });
+  it("選「直接開啟」：標記改成「保留原本的編號」，再啟動一次", async () => {
+    const layout = seed();
+    writeFileSync(layout.renewalMarker, JSON.stringify({ backup: "b" }));
+    const ui = fakeUi("open");
+    let n = 0;
+    assert.equal(await runStartup({ boot: async () => { if (n++ === 0) throw refused(); }, layout: () => layout, ...ui }), true);
+    assert.equal(n, 2);
+    assert.deepEqual(JSON.parse(readFileSync(layout.renewalMarker, "utf8")), { keep: true });
+  });
+  it("對話框的文字白話、不放代碼", () => {
+    for (const locale of ["zh-TW", "en"]) {
+      const { message, detail } = failureDialog(refused(), shellMessages(locale), BUILD);
+      assert.ok(message.length > 0 && detail.length > 0);
+      assert.doesNotMatch(`${message} ${detail}`, /node[_ ]id|uuid|sync_|json|onden-restore/i);
+    }
+  });
+});
+

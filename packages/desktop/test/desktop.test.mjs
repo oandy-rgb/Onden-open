@@ -11,7 +11,8 @@ import { freePort } from "../src/ports.mjs";
 import { startWebServer } from "../src/webServer.mjs";
 
 const dirs = [];
-const tmp = () => { const d = mkdtempSync(join(tmpdir(), "onden-desktop-test-")); dirs.push(d); return d; };
+// one level down: a layout keeps <userData>.node-record.json NEXT TO the folder (dataLayout.mjs), inside this temporary one
+const tmp = () => { const d = mkdtempSync(join(tmpdir(), "onden-desktop-test-")); dirs.push(d); const u = join(d, "u"); mkdirSync(u); return u; };
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 describe("資料夾與金鑰", () => {

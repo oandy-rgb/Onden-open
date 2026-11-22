@@ -14,7 +14,7 @@ migration 只能往前：回退映像不會讓資料庫退回去。所以安全�
 | 機制 | 位置 |
 | --- | --- |
 | 升級前一定有剛做好的備份；失敗就什麼都不動 | `scripts/upgrade.sh`、`docker/backup/run.sh once` |
-| 回退＝還原升級前備份 + 切回舊映像，需輸入 `yes` | `scripts/rollback.sh`（`upgrade.sh rollback`） |
+| 回退＝先切回舊映像、再還原升級前備份（還原換新節點編號；被拒或失敗時資料庫不動、切回原版本），需輸入 `yes` | `scripts/rollback.sh`（`upgrade.sh rollback`；還原規則見 [deploy.md「還原」](deploy.md)） |
 | 資料庫有程式不認得的 migration → 拒絕啟動 | `db.ts` `DatabaseNewerThanCodeError`、`index.ts` 開機 |
 | 從上一個發布版本升到目前的演練 | `scripts/upgrade-drill.sh` |
 | 使用者文件 | [upgrade.md](../self-host/upgrade.md) |

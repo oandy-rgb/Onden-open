@@ -223,6 +223,58 @@ jobs:
         if: failure()
         run: docker logs onden-pg
 
+  # The restore and upgrade scripts the way the servers run them (PR #1937, review round 2, point 2): scripts/restore.sh in compose mode on
+  # the repo's compose.yaml and Postgres image (PG 18 with pgroonga) with a pg_dump -Fc backup-vps folder; the fake-docker self-test of
+  # upgrade.sh / rollback; and the restore drill's self-test against the same image (host client tools of the same major version).
+  restore-scripts:
+    name: Restore scripts — compose · pg_dump -Fc · PG 18 + pgroonga
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Postgres image
+        run: docker build -t onden-ci-postgres:selftest ./docker/postgres
+
+      - name: restore.sh in compose mode, pg_dump -Fc folder (scripts/restore-ci-selftest.sh)
+        env:
+          REQUIRE_PGROONGA: "1"
+        run: bash scripts/restore-ci-selftest.sh
+
+      - name: upgrade.sh / rollback against a fake docker (scripts/upgrade-selftest.sh)
+        run: bash scripts/upgrade-selftest.sh
+
+      # The drill runs pg_dump / pg_restore on the host: they must be the server's major version (18), which the runner does not ship.
+      - name: PostgreSQL 18 client tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -q && sudo apt-get install -y -q postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Start Postgres for the drill
+        run: |
+          docker run -d --name onden-drill-pg -p 5432:5432 -e POSTGRES_DB=postgres -e POSTGRES_USER=onden -e POSTGRES_PASSWORD=onden \
+            onden-ci-postgres:selftest postgres -c shared_preload_libraries='pg_stat_statements'
+          for i in $(seq 1 60); do
+            docker exec onden-drill-pg pg_isready -h 127.0.0.1 -U onden -d postgres >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          docker logs onden-drill-pg; exit 1
+
+      - name: The restore drill's self-test (scripts/restore-drill-selftest.sh)
+        run: bash scripts/restore-drill-selftest.sh postgres://onden:onden@localhost:5432/postgres
+
   frontend:
     name: Frontend — lint · typecheck · unit · build
     runs-on: ubuntu-latest

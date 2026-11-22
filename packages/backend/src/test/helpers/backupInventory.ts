@@ -106,4 +106,5 @@ export const NODE_TABLES: Record<string, Coverage> = {
   ds_peers: notInBackup("device-sync bookkeeping"),
   ds_projection_failures: notInBackup("device-sync bookkeeping"),
   sync_node: notInBackup("device-sync bookkeeping"),
+  sync_restore_kept_node_id: notInBackup("device-sync bookkeeping: node_id is a sync node id, not a note (migration 224)"),
 };

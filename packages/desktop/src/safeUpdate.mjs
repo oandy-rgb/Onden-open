@@ -35,6 +35,8 @@ const COPIES_NEEDED = 2;
 export const DEFAULT_KEEP = 3;
 /** server.ts 在「資料庫比程式新」時記進後端日誌的固定字樣；測試會核對兩邊一致。 */
 export const NEWER_DATA_LOG_MARKER = "資料庫比這個版本新";
+/** serverEntry.mjs 在「還原後的資料換不了節點編號」時記進後端日誌的固定字樣（nodeRenewal.mjs RenewalRefused）。 */
+export const RENEWAL_REFUSED_LOG_MARKER = "還原後的資料換不了節點編號";
 
 /** 備份空間不夠；不會動到任何資料。 */
 export class InsufficientSpaceError extends Error {
@@ -51,10 +53,11 @@ export class InsufficientSpaceError extends Error {
  * 啟動失敗後呼叫者要告訴使用者什麼。kind：
  *   data_newer 資料比程式新（資料沒動）；rolled_back 升級失敗、資料已還原；
  *   restore_failed 升級失敗而且還原也失敗（標記與備份都在，下次啟動會再試）；no_space 空間不足（沒升級、資料沒動）；
- *   backup_missing 上次更新沒做完、但標記指到的備份不見或不完整（無法還原；使用者可選擇放棄還原直接開啟）。
+ *   backup_missing 上次更新沒做完、但標記指到的備份不見或不完整（無法還原；使用者可選擇放棄還原直接開啟）；
+ *   renewal_refused 還原後的資料換不了節點編號（nodeRenewal.mjs；資料沒動、不還原、不再備份；使用者可選擇照樣開啟＝保留原本的編號）。
  */
 export class UpdateFailure extends Error {
-  /** @param {"data_newer" | "rolled_back" | "restore_failed" | "no_space" | "backup_missing"} kind @param {{ from: string, to: string, cause?: unknown, diagnostics: string, backupDir?: string, neededBytes?: number, freeBytes?: number }} detail */
+  /** @param {"data_newer" | "rolled_back" | "restore_failed" | "no_space" | "backup_missing" | "renewal_refused"} kind @param {{ from: string, to: string, cause?: unknown, diagnostics: string, backupDir?: string, neededBytes?: number, freeBytes?: number }} detail */
   constructor(kind, detail) {
     super(kind);
     this.name = "UpdateFailure";
@@ -163,7 +166,7 @@ function fsyncPath(path) {
 }
 
 /** 寫暫存檔、刷到磁碟、改名、再刷資料夾：斷電後不是舊的完整內容、就是新的完整內容。 @param {string} file @param {string} text */
-function writeFileDurable(file, text) {
+export function writeFileDurable(file, text) {
   const tmp = `${file}.${process.pid}.tmp`;
   const fd = openSync(tmp, "w", 0o600);
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
@@ -319,6 +322,8 @@ export function clearUpdateMarker(layout) {
  */
 export function restoreBackup(layout, backupDir, { step } = {}) {
   if (!existsSync(join(backupDir, "meta.json"))) throw new Error(`${backupDir} is not a complete backup`);
+  // 還原後的資料要換節點編號（nodeRenewal.mjs）：在動任何東西之前寫，中途被打斷、之後放棄還原也照樣換。
+  markRenewalPending(layout, backupDir);
   // 上一次被打斷留下的暫存：.restoring 可能是半份、.replaced 是升級到一半的資料，兩者都不是我們要的。
   for (const item of BACKUP_ITEMS) {
     const target = join(layout.root, item.rel);
@@ -408,6 +413,14 @@ export function recoverFromInterruptedUpdate(layout, { to = "?", step } = {}) {
   }
 }
 
+/**
+ * 還原後下次開後端要先換節點編號（nodeRenewal.mjs renewBeforeBoot 讀它、換完才刪）。不在 BACKUP_ITEMS 裡：還原不會把它蓋掉。
+ * @param {import("./dataLayout.mjs").DataLayout} layout @param {string} backupDir
+ */
+export function markRenewalPending(layout, backupDir) {
+  writeFileDurable(layout.renewalMarker, JSON.stringify({ backup: backupDir }, null, 2));
+}
+
 /** 使用者明確選擇「放棄還原、直接開啟現有資料」：只清標記，不動資料。 @param {import("./dataLayout.mjs").DataLayout} layout */
 export function abandonInterruptedUpdate(layout) {
   clearUpdateMarker(layout);
@@ -433,6 +446,11 @@ export function restoreFromBackup(layout, chosen, { from, now, step }) {
  */
 export function isDataNewerFailure(tail) {
   return tail.some((line) => line.includes(NEWER_DATA_LOG_MARKER));
+}
+
+/** 後端啟動失敗的原因是不是「還原後的資料換不了節點編號」（serverEntry.mjs 記下的固定字樣）。 @param {readonly string[]} tail */
+export function isRenewalRefusedFailure(tail) {
+  return tail.some((line) => line.includes(RENEWAL_REFUSED_LOG_MARKER));
 }
 
 /**
@@ -482,8 +500,23 @@ export async function startWithSafeUpdate({ layout, current, startBackend, keep 
   const existing = hasExistingData(layout);
   const unchanged = previous !== null && stampLabel(previous) === to;
 
+  /** 換不了號：不是這個版本開不了資料，還原它沒有用（還原後還是一樣），所以不還原、不留這次的備份，交給使用者選（review of #1937, point 6）。
+   *  @param {unknown} error @param {{ from: string, backup?: BackupInfo }} at */
+  const refusedRenewal = (error, at) => {
+    const tail = failureTail(error);
+    if (!isRenewalRefusedFailure(tail)) return;
+    if (at.backup) { clearUpdateMarker(layout); rmSync(at.backup.dir, { recursive: true, force: true }); }
+    throw new UpdateFailure("renewal_refused", { from: at.from, to, cause: error, diagnostics: diagnosticsText({ from: at.from, to, reason: failureReason(error), tail }) });
+  };
+
   if (!existing || unchanged) {
-    const backend = await startBackend();
+    let backend;
+    try {
+      backend = await startBackend();
+    } catch (error) {
+      refusedRenewal(error, { from: to });
+      throw error;
+    }
     if (!unchanged) safely(() => writeVersionStamp(layout, current), onWarn, "write version file");
     return { backend, backup: null };
   }
@@ -513,6 +546,7 @@ export async function startWithSafeUpdate({ layout, current, startBackend, keep 
 
   /** 升級失敗（或成功後收尾失敗到不能繼續用）：資料還原成備份。 @param {unknown} error @returns {never} */
   const rollBack = (error) => {
+    refusedRenewal(error, { from, backup });
     const tail = failureTail(error);
     const diagnostics = diagnosticsText({ from, to, reason: failureReason(error), tail });
     if (isDataNewerFailure(tail)) {

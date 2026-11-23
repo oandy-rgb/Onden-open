@@ -54,7 +54,8 @@ describe("buildViewTabs", () => {
   });
 
   it("an inherited view is shown but not editable; the others follow canManage", () => {
-    const tabs = buildViewTabs({ views: [view("i", "table", { inherited_from: "p", inherited_name: "Parent" }), view("o", "table")], ...base });
+    // Views are inherited on tags, whose first tab (the list) has no record and stays where it is.
+    const tabs = buildViewTabs({ views: [view("i", "table", { inherited_from: "p", inherited_name: "Parent" }), view("o", "table")], ...base, ownerKind: "tag" });
     expect(tabs.map((tab) => [tab.key, tab.editable, tab.inheritedName])).toEqual([[CONTENT_TAB, false, null], ["i", false, "Parent"], ["o", true, null]]);
     expect(buildViewTabs({ views: [view("o", "table")], ...base, canManage: false }).every((tab) => !tab.editable)).toBe(true);
   });
@@ -83,13 +84,25 @@ describe("active tab and location", () => {
 
 describe("reorderTabs", () => {
   const tabs = buildViewTabs({ views: [view("a", "table", { pin_order: 0 }), view("b", "table", { pin_order: 1 }), view("c", "table", { pin_order: 2 })], ...base });
+  // Indexes count every tab, 「內容」 included (it is index 0 here, with no record).
   it("moves a tab and returns only the places that changed", () => {
-    expect(reorderTabs(tabs, "c", 0).map((c) => [c.tab.key, c.pinOrder])).toEqual([["c", 0], ["a", 1], ["b", 2]]);
-    expect(reorderTabs(tabs, "a", 0)).toEqual([]);
+    expect(reorderTabs(tabs, "c", 1).map((c) => [c.tab.key, c.pinOrder])).toEqual([["c", 0], ["a", 1], ["b", 2]]);
+    expect(reorderTabs(tabs, "a", 1)).toEqual([]);
   });
   it("a whiteboard without a record is stored with its new place", () => {
     const withBoard = buildViewTabs({ views: [view("a", "table")], ...base, earnsWhiteboard: true });
-    expect(reorderTabs(withBoard, CANVAS_TAB, 1).map((c) => [c.tab.key, c.pinOrder])).toEqual([[CANVAS_TAB, 1]]);
+    expect(reorderTabs(withBoard, CANVAS_TAB, 2).map((c) => [c.tab.key, c.pinOrder])).toEqual([[CANVAS_TAB, 1]]);
+  });
+  it("「內容」 with no record moves too (owner 2026-11-23): leaving the front, it is returned with its place, and every tab is numbered from it", () => {
+    expect(reorderTabs(tabs, CONTENT_TAB, 1).map((c) => [c.tab.key, c.pinOrder])).toEqual([[CONTENT_TAB, 1], ["b", 2], ["c", 3]]);
+    expect(reorderTabs(tabs, "c", 0).map((c) => [c.tab.key, c.pinOrder])).toEqual([["c", 0], [CONTENT_TAB, 1], ["a", 2], ["b", 3]]);
+    // Moving it to where it already is changes nothing and makes no record.
+    expect(reorderTabs(tabs, CONTENT_TAB, 0)).toEqual([]);
+  });
+  it("「內容」 with a record moves by its record, like any tab", () => {
+    const stored = buildViewTabs({ views: [view("a", "table", { pin_order: 0 }), view("k", "content", { name: "Content", pin_order: 1 })], ...base });
+    expect(stored.map((tab) => tab.key)).toEqual(["a", CONTENT_TAB]);
+    expect(reorderTabs(stored, CONTENT_TAB, 0).map((c) => [c.tab.key, c.pinOrder])).toEqual([[CONTENT_TAB, 0], ["a", 1]]);
   });
 });
 
@@ -119,12 +132,15 @@ describe("「內容」 that can be removed from the tabs (a record of layout con
   const content = (extra: Partial<SavedView> = {}) => view("c", "content", { name: "Content", ...extra });
   const tabsOf = (views: SavedView[], more: Partial<Parameters<typeof buildViewTabs>[0]> = {}) => buildViewTabs({ views, ...base, ...more });
 
-  it("a note with no record keeps 「內容」 fixed first, as every note made before did; it can be removed when another tab shows", () => {
+  it("a note with no record shows 「內容」 first, as every note made before did; it can be moved, and removed when another tab shows", () => {
     const alone = tabsOf([]);
-    expect(alone.map((tab) => [tab.key, tab.view, tab.editable, tab.hideable])).toEqual([[CONTENT_TAB, null, false, false]]);
+    expect(alone.map((tab) => [tab.key, tab.view, tab.editable, tab.hideable])).toEqual([[CONTENT_TAB, null, true, false]]);
     const withViews = tabsOf([view("a", "table")], { contentRemovable: true });
     expect(withViews.map((tab) => tab.key)).toEqual([CONTENT_TAB, "a"]);
-    expect(withViews[0]).toMatchObject({ editable: false, hideable: true });
+    expect(withViews[0]).toMatchObject({ editable: true, hideable: true });
+    // Read-only, and a tag's first tab (its list, which has no record to store): not movable.
+    expect(tabsOf([view("a", "table")], { canManage: false })[0]!.editable).toBe(false);
+    expect(tabsOf([view("a", "table")], { ownerKind: "tag" })[0]!.editable).toBe(false);
     // Read-only, and a tag's first tab (its list): not removable.
     expect(tabsOf([view("a", "table")], { canManage: false, contentRemovable: true })[0]!.hideable).toBe(false);
     expect(tabsOf([view("a", "table")], { ownerKind: "tag", contentRemovable: true })[0]!.hideable).toBe(false);
@@ -153,10 +169,10 @@ describe("「內容」 that can be removed from the tabs (a record of layout con
     expect(reorderTabs(tabs, CONTENT_TAB, 0).map(({ tab, pinOrder }) => [tab.key, pinOrder])).toEqual([[CONTENT_TAB, 0], ["a", 1]]);
   });
 
-  it("the built-in 「內容」 is not part of a move; a 「內容」 with a record is", () => {
+  it("the built-in 「內容」 stays out of a move among the others, and is part of one that takes it off the front", () => {
     const builtIn = tabsOf([view("a", "table"), view("b", "calendar", { pin_order: 1 })]);
-    expect(reorderTabs(builtIn, "b", 0).map(({ tab }) => tab.key)).toEqual(["b", "a"]);
-    expect(reorderTabs(builtIn, CONTENT_TAB, 1)).toEqual([]);
+    expect(reorderTabs(builtIn, "b", 1).map(({ tab }) => tab.key)).toEqual(["b", "a"]);
+    expect(reorderTabs(builtIn, CONTENT_TAB, 1).map(({ tab, pinOrder }) => [tab.key, pinOrder])).toEqual([[CONTENT_TAB, 1], ["b", 2]]);
   });
 
   it("a page always shows one tab: with nothing else, a hidden 「內容」 still shows, and cannot be removed", () => {

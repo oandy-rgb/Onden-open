@@ -4074,6 +4074,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "You can't change this note.": "你不能修改這篇筆記。",
   "The text of this note is tucked away, and you don't have permission to put its tab back.": "這則筆記的文字被收起來了，你沒有權限把它加回分頁列。",
   "Removing the tab needs a connection.": "移除分頁需要連線。",
+  "Moving the Content tab the first time needs a connection.": "第一次移動「內容」分頁需要連線。",
   "The text is still there. Add the 「Content」 tab back from ＋ to see it.": "文字還在。從「＋」把「內容」分頁加回來就看得到。",
   "Remove the “{name}” tab? The text is still there; only the tab is hidden. Search, publishing and export still include it.": "移除「{name}」分頁？文字還在，只是分頁看不見；搜尋、發布、匯出仍然包含它。",
   "Add tab": "加上分頁",

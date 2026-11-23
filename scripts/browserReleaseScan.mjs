@@ -2,7 +2,8 @@
 // 用法：node scripts/browserReleaseScan.mjs [資料夾]（預設 packages/frontend/dist-browser）；有發現就 exit 1。
 // `npm run deploy:browser` 在複製之前先跑這個。規則與唯一的例外都在這個檔案裡，例外只放建置本來就會有的字串。
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { extname, join, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const TEXT_EXTENSIONS = new Set([".js", ".mjs", ".css", ".html", ".json", ".webmanifest", ".svg", ".txt", ".map", ".md", ".xml"]);
@@ -55,6 +56,22 @@ function isVersionLike(text, index) {
   return /(?:version|ver|v|@|\/)\s*["']?$/i.test(text.slice(Math.max(0, index - 12), index));
 }
 
+/**
+ * 原封不動複製的第三方檔案：發布路徑 → 套件裡的原檔。和已安裝的原檔逐位元組相同時不掃——裡面的字串是套件作者發布的，
+ * 不是我們的（2026-11-23：pdf.js worker 壓縮後的一段亂碼長得像 email，擋下了發布）。內容只要差一個位元組就照常掃。
+ */
+export const VENDORED = {
+  // lib/pdf/pdfjs.ts 的 VERSION LOCK；pdfjsCompat.test.ts 檢查 public/ 的副本與原檔相同。
+  "pdf.worker.min.mjs": "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+};
+
+/** 這個發布檔是不是某個套件原檔的逐位元組副本。找不到原檔就不是（照常掃）。 */
+export function isVendoredCopy(relativePath, bytes, resolveDependency = (spec) => createRequire(join(dirname(fileURLToPath(import.meta.url)), "../packages/frontend/package.json")).resolve(spec)) {
+  const spec = VENDORED[relativePath.split("\\").join("/")];
+  if (!spec) return false;
+  try { return Buffer.compare(readFileSync(resolveDependency(spec)), bytes) === 0; } catch { return false; }
+}
+
 /** 建置資料夾裡不會被發布的檔案（建置的副產品，內含這台機器的路徑）。deploy:browser 複製時略過它們，掃描也不看。 */
 export const notPublished = (relativePath) => relativePath.endsWith(".meta.json");
 
@@ -67,13 +84,15 @@ function* walk(dir) {
 }
 
 /** 掃整個資料夾；回傳 { scanned, findings: [{ file, kind, label, match, line }] } */
-export function scanFolder(folder) {
+export function scanFolder(folder, resolveDependency) {
   const findings = [];
   let scanned = 0;
   for (const path of walk(folder)) {
     if (notPublished(relative(folder, path)) || !TEXT_EXTENSIONS.has(extname(path)) || statSync(path).size > MAX_BYTES) continue;
+    const bytes = readFileSync(path);
+    if (isVendoredCopy(relative(folder, path), bytes, resolveDependency)) continue;
     scanned++;
-    for (const f of scanText(readFileSync(path, "utf8"))) findings.push({ file: relative(folder, path), ...f });
+    for (const f of scanText(bytes.toString("utf8"))) findings.push({ file: relative(folder, path), ...f });
   }
   return { scanned, findings };
 }

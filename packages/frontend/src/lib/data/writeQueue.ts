@@ -11,6 +11,7 @@ import { bumpPending, refreshPendingCount, STUCK_AFTER_ATTEMPTS, type SendFailur
 import { isSendingHere, sendingElsewhere, startSendingHere, stopSendingHere, whenSentElsewhere } from "./sendingHere";
 import { classifyWriteFailure, sendFailureReason, WriteStorageError, writeFailureMessage, reportWriteFailure, isHandledNoteExists } from "./writeErrors";
 import { onProtocolBlockChange } from "../protocolGate";
+import { refusedWriteOwed, refusedWriteStep, storageStep } from "./storageSteps";
 import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./patchedBody";
 import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable, withoutRefusedBase } from "./writeRecovery";
 import { PREFS, prefsAvailable } from "../prefs";
@@ -294,7 +295,13 @@ export function submitWrite<T = unknown>(original: WriteRequest, options: { reco
  *  sends them, and nothing else waits for them (as before saves on their way had rows). */
 async function waitingIn(queue: PendingWrite[]): Promise<PendingWrite[]> {
   const elsewhere = await sendingElsewhere();
-  return queue.filter((write) => !isSendingHere(write.idem_key) && !(write.idem_key && elsewhere.has(write.idem_key)));
+  return queue.filter((write) => !isSendingHere(write.idem_key) && !refusedHere(write) && !(write.idem_key && elsewhere.has(write.idem_key)));
+}
+
+/** The server refused this row and taking it out of the queue failed (sendRecorded): it is not work waiting, and it is
+ *  never sent again. The drain tries the clear again instead. */
+function refusedHere(write: PendingWrite): boolean {
+  return refusedWriteOwed(write.idem_key);
 }
 
 async function sendRecorded<T>(request: WriteRequest, idemKey: string, durable: boolean): Promise<WriteResult<T>> {
@@ -339,7 +346,8 @@ async function sendRecorded<T>(request: WriteRequest, idemKey: string, durable: 
           try { await preserveDirectRejection({ ...request, idemKey }, writeFailureMessage(error), error); }
           catch (storageError) { reportWriteFailure(storageError, addToast); }
         }
-        if (own) await clearPendingWrite(own.id, own.idem_key).catch(() => {});
+        // A row this clear could not remove stays refused (storageSteps.ts refusedWriteStep): never sent again.
+        if (own) await storageStep(refusedWriteStep(idemKey), () => clearPendingWrite(own.id, own.idem_key));
         // What waited behind it is next, as after a send.
         await flushIfWaiting(idemKey, { absorb: true });
         throw error;
@@ -470,6 +478,7 @@ async function drain(): Promise<void> {
       // another tab): not work waiting here, and the rows after it do not wait for it (waitingIn). Another tab's:
       // drain again once its lock is free (sent, queued there, or that tab died).
       if (isSendingHere(write.idem_key)) continue;
+      if (refusedHere(write)) { await storageStep(refusedWriteStep(write.idem_key!), () => clearPendingWrite(write.id, write.idem_key)); continue; }
       if (write.idem_key && elsewhere.has(write.idem_key)) { drainWhenSentElsewhere(write.idem_key); continue; }
       try {
         noteLocalWrite();

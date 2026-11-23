@@ -381,6 +381,11 @@ jobs:
           npm run build -w packages/backend
           npm run build:browser
 
+      # The scan deploy:browser runs before publishing, on this real build: a string it would refuse is found by the PR,
+      # not at deploy time (docs/agents/mistakes.md 2026-11-23, the pdf.js worker that stopped the release).
+      - name: Pre-publish scan of the browser version
+        run: node scripts/browserReleaseScan.mjs packages/frontend/dist-browser
+
       # Chromium for the browser host. The desktop host drives the Electron that desktop:install downloads.
       - name: Install Chromium
         working-directory: packages/frontend/e2e

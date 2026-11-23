@@ -56,6 +56,7 @@ export type { InkVersion, NoteSearchOutcome, NoteSearchRow, NoteVersion } from "
 export { usePendingWrites, usePendingStuck, usePendingRetry } from "./syncStatus";
 export type { SendFailureReason, SendRetry } from "./syncStatus";
 export { useIncomingProblem } from "./incomingStatus";
+export { useStorageStepOwed } from "./storageSteps";
 export type { StuckWrites } from "./syncStatus";
 export { mergeTag } from "./tagMerge";
 export { findTagIdByPath, resolveTagPaths, tagPath } from "./tagPaths";

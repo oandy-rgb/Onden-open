@@ -26,6 +26,7 @@ import { EVENT_POSITION_HEADER, isSyncPath } from "@onden/markdown/contract";
 import { higherPosition, isCurrentAnswer, STALE_ANSWERS_BEFORE_WRITES_WAIT } from "../answerPositions";
 import { setWriteGate, setWriteResponseListener } from "../api";
 import { raiseWatermark, rewindCursor, type AnswerRefusal } from "../localDb";
+import { storageStep } from "./storageSteps";
 
 /** The page's copy of the watermark and of the server identity it counts in. */
 let watermark: string | null = null;
@@ -148,8 +149,10 @@ export async function takeAnswer<T>(answer: {
   if (fromCopy.stale) { startWatermarkFrom({ position: fromCopy.copy?.answer_watermark, server: fromCopy.copy?.answer_server }); return refusal(); }
   if (!isCurrentAnswer(answer.head, watermark)) {
     // The copy took it, but this page was told of a later write meanwhile: the store keeps what it has, and the copy's
-    // cursor goes back so the next answer carries this one's rows again.
-    if (answer.rewindTo !== undefined) await rewindCursor(String(answer.rewindTo)).catch(() => {});
+    // cursor goes back so the next answer carries this one's rows again. If it cannot go back, the next sync pass reads
+    // the whole state instead (storageSteps.ts "copyCursor"): a delta from that cursor would never carry these rows.
+    const to = answer.rewindTo;
+    if (to !== undefined) await storageStep("copyCursor", () => rewindCursor(String(to)));
     return refusal();
   }
   answer.toStore(fromCopy.value);

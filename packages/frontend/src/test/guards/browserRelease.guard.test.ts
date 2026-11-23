@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { scanFolder, scanText } from "../../../../../scripts/browserReleaseScan.mjs";
+import { isVendoredCopy, scanFolder, scanText } from "../../../../../scripts/browserReleaseScan.mjs";
 import { deploy, parseArgs, safeSegment, targetFolder } from "../../../../../scripts/deploy-browser.mjs";
 
 let work: string;
@@ -45,6 +45,25 @@ describe("pre-release scan", () => {
     const { findings } = scanFolder(dir);
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ file: join("assets", "app.js"), kind: "key", line: 3 });
+  });
+  it("leaves out a byte-for-byte copy of a dependency's file, and scans it again once one byte differs", () => {
+    // 2026-11-23: the pdf.js worker's minified text holds a run that looks like an email, and stopped the release.
+    const vendored = "/* pdf.js */ var a='jm@kbswfq.pkbgltMlwbaof';";
+    const original = join(work, "pdf.worker.min.mjs");
+    writeFileSync(original, vendored);
+    const resolveDependency = (spec: string) => { expect(spec).toBe("pdfjs-dist/legacy/build/pdf.worker.min.mjs"); return original; };
+    expect(scanFolder(build({ "pdf.worker.min.mjs": vendored }), resolveDependency).findings).toEqual([]);
+    rmSync(join(work, "dist"), { recursive: true });
+    const changed = scanFolder(build({ "pdf.worker.min.mjs": vendored + " // ops@gmail.com" }), resolveDependency).findings.map((f) => f.match);
+    expect(changed).toEqual(["jm@kbswfq.pkbgltMlwbaof", "ops@gmail.com"]);
+    rmSync(join(work, "dist"), { recursive: true });
+    // Same text under a path that is not a vendored copy: scanned.
+    expect(scanFolder(build({ "assets/app.js": vendored }), resolveDependency).findings).toHaveLength(1);
+  });
+  it("finds the vendored pdf.js worker in the installed package (the copy the real build ships)", () => {
+    const shipped = readFileSync(join(__dirname, "../../../public/pdf.worker.min.mjs"));
+    expect(isVendoredCopy("pdf.worker.min.mjs", shipped)).toBe(true);
+    expect(isVendoredCopy("pdf.worker.min.mjs", Buffer.concat([shipped, Buffer.from(" ")]))).toBe(false);
   });
 });
 

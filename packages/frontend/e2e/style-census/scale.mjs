@@ -54,7 +54,7 @@ export const KINDS = [
   { id: "border-where", label: "邊框出現的位置", guard: null },
   { id: "shadow", label: "陰影", guard: "fe-css-shadow" },
   { id: "control-height", label: "控制項高度（畫出來的）", guard: "fe-css-control-height（只擋數量變多的基準，見規則文件 §三）" },
-  { id: "tap-target", label: "觸控目標（實際可點的大小，只在觸控螢幕量）", guard: null },
+  { id: "tap-target", label: "觸控目標（實際可點的大小，只在觸控螢幕量）", guard: "tap-target 基準（scripts/tap-target-baseline.json，只減不增；style:census -- --check-taps）" },
   { id: "icon-size", label: "圖示尺寸", guard: "fe-icon-size（只擋數量變多的基準，見規則文件 §三）" },
   { id: "icon-stroke", label: "圖示線寬", guard: "fe-icon-stroke（只擋數量變多的基準，見規則文件 §三）" },
   { id: "z-index", label: "層級", guard: "fe-css-z-index" },

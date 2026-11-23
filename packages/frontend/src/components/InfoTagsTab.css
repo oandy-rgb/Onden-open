@@ -1,6 +1,17 @@
 /* The notes page's info panel: tabs 「標籤」「段落」 and their content. Quiet:
  * no boxes, hierarchy from type size and space. */
 .info-panel { align-content: start; padding: 0 16px 24px; }
+/* Touch: the grab strip of the pane's edge is 24px wide and starts 3px inside the pane (ui.css .pane-resizer), so the pane's
+   content, tabs included, starts at 28px; the sticky tab bar still runs to the pane's edge. */
+@media (pointer: coarse) {
+  .overview-activity.info-panel:has(> .pane-resizer--inspector) { padding-inline-start: calc(var(--ac-space-8) + var(--ac-space-2)); }
+  /* The strip's margin (ui.css) assumed the old 14px: it goes back to 2px inside the pane's edge. */
+  .overview-activity.info-panel > .pane-resizer--inspector { margin-left: calc(var(--ac-space-1) - var(--ac-space-8) - var(--ac-space-2)); }
+  .overview-activity.info-panel:has(> .pane-resizer--inspector) .info-panel-tabs {
+    margin-inline-start: calc(-1 * (var(--ac-space-8) + var(--ac-space-2)));
+    padding-inline-start: calc(var(--ac-space-8) + var(--ac-space-2));
+  }
+}
 .info-panel-tabs {
   position: sticky;
   top: 0;
@@ -27,6 +38,7 @@
    would be cut off above; it reaches down into the margin below instead. */
 @media (pointer: coarse) {
   .info-panel-tabs .info-panel-tab::after { top: 0; height: var(--onden-tap, 44px); transform: translateX(-50%); }
+  .info-panel-tabs .info-panel-tab { min-width: var(--onden-tap, 44px); }
 }
 /* The underline is a shadow, not ::after: on touch screens the tab's
    .tap-target uses ::after for its invisible 44px hit area (global.css), and

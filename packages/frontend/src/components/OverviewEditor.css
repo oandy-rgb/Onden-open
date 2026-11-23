@@ -64,7 +64,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 16px;
+  /* 12px between wrapped rows: each word's 6px reach (below) meets the next row's, never covers it. */
+  gap: var(--ac-space-5) 16px;
   min-height: 24px;
   font-size: var(--ac-fs-caption);
   line-height: 1.5;
@@ -107,7 +108,7 @@
 /* The tags are words in the line: accent text, no pill. The remove x shows for the chip
  * pointed at, focused or open; the ＋ on a note with none appears when the title area is
  * pointed at or focused (like Notion's "add icon") and takes no room before that. */
-.note-document .note-meta-line > .title-tag-row { display: inline-flex; flex-wrap: wrap; align-items: center; --meta-inner-gap: 6px; gap: 2px var(--meta-inner-gap); margin: 0; }
+.note-document .note-meta-line > .title-tag-row { display: inline-flex; flex-wrap: wrap; align-items: center; --meta-inner-gap: 6px; gap: var(--ac-space-5) var(--meta-inner-gap); margin: 0; }
 .note-document .obsidian-prop-strip .prop-tag { border: 0; background: none; padding: 0; font-size: inherit; line-height: inherit; }
 .note-document .obsidian-prop-strip .prop-tag:hover { background: none; text-decoration: underline; }
 .note-document .obsidian-prop-strip .prop-tag--applied { padding: 0; gap: 0; border-radius: var(--ac-radius-sm); }
@@ -141,7 +142,7 @@
 .note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add)::after {
   content: "";
   position: absolute;
-  inset: -7px -3px;
+  inset: -6px -3px;
   /* These words are also .tap-target (global.css), whose ::after is centred with width, height and a
    * translate(-50%, -50%). This rule wins the insets, so without the three lines below both applied:
    * the box stood half its height higher and half its width to the left, over the lower half of the
@@ -150,8 +151,26 @@
   height: auto;
   transform: none;
 }
-@media (max-width: 900px), (pointer: coarse) {
-  .note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add)::after { inset: -13px -4px; }
+/* Touch screen: every word of the grey line, and the title above it, is reached 44px by 44px, and no reach covers its
+ * neighbour (layout audit R7/R1 at pixel5 and in a 1920 split, 2026-11-22: the 13px reach above a 16px word stood over the title's lower
+ * 5px, and 4px beside a 33px tag left it 40px wide). The words stay close under the title, 6px further than a mouse's (owner
+ * 2026-11-22: tight, then 「稍微多空一點點」): the line is 44px tall with its words on one baseline at the top, and each word's reach starts 2px above the word and runs
+ * 44px down inside the line, so nothing reaches into the title. The tags stand 12px apart, so each one's 6px side reach
+ * meets the next one's, and a wrapped row starts 24px lower, where the 44px reach of the row above ends; the ＋ is
+ * drawn 32px wide. The title gets 6px above and below, 45px for one line
+ * (OverviewEditor sizes it from scrollHeight, padding included). The body moves about 22px. */
+@media (pointer: coarse) {
+  .note-document .obsidian-title-input { padding-block: var(--ac-space-3); }
+  .note-document .note-meta { margin: var(--ac-space-3) 0 var(--ac-space-2); }
+  .note-document .note-meta-line { min-height: var(--onden-tap); align-items: baseline; row-gap: var(--ac-space-8); }
+  .note-document .note-meta-line > .title-tag-row { --meta-inner-gap: var(--ac-space-5); align-items: baseline; row-gap: var(--ac-space-8); }
+  .note-document .note-meta-line .prop-tag--add { min-width: var(--ac-control-md); justify-content: center; }
+  .note-document .note-meta-line :is(.space-chip, .note-history-link, .prop-tag-name, .prop-tag--add)::after {
+    inset: auto -6px;
+    top: -2px;
+    height: var(--onden-tap);
+    transform: none;
+  }
 }
 .note-document .note-meta-cards { padding: 6px 0 4px; }
 .note-document .obsidian-save-button { width: auto; min-width: 64px; padding: 0 10px; }

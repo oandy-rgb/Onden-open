@@ -16,7 +16,7 @@ export { default as ColumnResizer } from "./ColumnResizer";
 export { Menu, MenuHeading, MenuItem, MenuLabel, MenuSeparator, Popover } from "./Popover";
 export { Tab, TabList, TabPanel } from "./Tabs";
 export { surfaceHost } from "./surfaceHost";
-export { usePopover } from "./usePopover";
+export { TOP_BAR_ATTR, usePopover } from "./usePopover";
 export { useInlinePopover, type PopoverPoint } from "./useInlinePopover";
 export { useTopModalLayer } from "./surfaceHost";
 export type { PopoverPlacement, PopoverState } from "./usePopover";

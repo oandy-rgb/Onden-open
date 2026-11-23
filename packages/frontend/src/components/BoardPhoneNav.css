@@ -21,6 +21,9 @@
 }
 .board-note-title__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-note-title svg { flex: 0 0 auto; color: var(--ac-muted); }
+/* Touch: the 36px row is reached 44px tall by an invisible 4px above and below (the button draws no box, so nothing
+   moves; the layout audit, R7 pixel5, measured 37px). The sides keep their width: ‹ undo redo and 「顯示」 sit there. */
+@media (pointer: coarse) { .board-note-title::after { content: ""; position: absolute; inset: -4px 0; } }
 
 .board-note-sheet__body { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; }
 .board-note-sheet__tabs { overflow-x: auto; }

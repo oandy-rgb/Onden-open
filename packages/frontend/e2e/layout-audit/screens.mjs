@@ -6,10 +6,10 @@ import { installHelpers } from "./env.mjs";
 export class Skip extends Error {}
 const skip = (why) => { throw new Skip(why); };
 
-/** Open an address inside the app and wait until it has drawn something. */
-async function open(h, query) {
+/** Open an address inside the app and wait until it has drawn something: the 筆記／任務 button, or what `ready` names. */
+async function open(h, query, ready = (page) => page.getByRole("button", { name: /^(筆記|任務)$/ })) {
   await h.page.goto(h.site.base + query);
-  await h.page.getByRole("button", { name: /^(筆記|任務)$/ }).first().waitFor({ timeout: 60_000 });
+  await ready(h.page).first().waitFor({ timeout: 60_000 });
   await h.page.waitForTimeout(1100);
   await installHelpers(h.page);
 }
@@ -113,7 +113,8 @@ export const SCREENS = [
   } },
   { id: "settings", name: "設定", async go(h) { await openSettings(h); } },
   { id: "settings-more", name: "設定（其他分頁）", async go(h) { await openSettings(h, 2); } },
-  { id: "canvas", name: "白板", go: (h) => open(h, note(IDS.parent, "canvas")) },
+  // On a phone (900 wide and below) the board fills the screen and has no 筆記／任務 button: wait for its cards.
+  { id: "canvas", name: "白板", go: (h) => open(h, note(IDS.parent, "canvas"), (page) => page.locator(".react-flow__node")) },
   { id: "slides", name: "簡報檢視", async go(h) {
     await open(h, note(IDS.long));
     if (h.phone) { await click(h.page.getByRole("button", { name: "資訊" }), "資訊"); await settle(h); }

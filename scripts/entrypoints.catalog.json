@@ -376,14 +376,15 @@
         {
           "file": "packages/frontend/src/components/ui/index.ts",
           "exports": [
-            "usePopover"
+            "usePopover",
+            "TOP_BAR_ATTR"
           ]
         }
       ],
       "use": "import { usePopover } from \"./components/ui\";",
       "replaces": "",
       "rules": [],
-      "why": "要控制 Popover 開在哪、何時關時用它，跟 Popover 配對使用；不要自己存座標。"
+      "why": "要控制 Popover 開在哪、何時關時用它，跟 Popover 配對使用；不要自己存座標。 釘在視窗頂端的列（頂列）標上 TOP_BAR_ATTR，浮出的東西就停在它下面、不蓋住導覽。"
     },
     {
       "id": "ui-tabs",

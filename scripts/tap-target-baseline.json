@@ -1,0 +1,102 @@
+{
+  "390": {
+    "daily": {
+      "total": 28,
+      "off": 3
+    },
+    "inbox": {
+      "total": 10,
+      "off": 1
+    },
+    "info-features": {
+      "total": 11,
+      "off": 0
+    },
+    "info-relations": {
+      "total": 15,
+      "off": 0
+    },
+    "info-tags": {
+      "total": 20,
+      "off": 1
+    },
+    "note-long": {
+      "total": 17,
+      "off": 8
+    },
+    "note-more-menu": {
+      "total": 7,
+      "off": 0
+    },
+    "settings": {
+      "total": 15,
+      "off": 0
+    },
+    "settings-more": {
+      "total": 20,
+      "off": 0
+    },
+    "tasks": {
+      "total": 31,
+      "off": 1
+    },
+    "tree-expanded": {
+      "total": 30,
+      "off": 1
+    },
+    "tree-selected-parent": {
+      "total": 30,
+      "off": 1
+    }
+  },
+  "1204x714": {
+    "daily": {
+      "total": 30,
+      "off": 1
+    },
+    "inbox": {
+      "total": 43,
+      "off": 8
+    },
+    "info-features": {
+      "total": 59,
+      "off": 9
+    },
+    "info-relations": {
+      "total": 60,
+      "off": 9
+    },
+    "info-tags": {
+      "total": 56,
+      "off": 9
+    },
+    "note-long": {
+      "total": 59,
+      "off": 9
+    },
+    "note-more-menu": {
+      "total": 6,
+      "off": 0
+    },
+    "settings": {
+      "total": 15,
+      "off": 0
+    },
+    "settings-more": {
+      "total": 30,
+      "off": 1
+    },
+    "tasks": {
+      "total": 37,
+      "off": 0
+    },
+    "tree-expanded": {
+      "total": 51,
+      "off": 4
+    },
+    "tree-selected-parent": {
+      "total": 60,
+      "off": 6
+    }
+  }
+}

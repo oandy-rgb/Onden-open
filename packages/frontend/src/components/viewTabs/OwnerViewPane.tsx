@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { lazyWithReload } from "../../lib/lazyWithReload";
 import { loadCollectionView } from "../collections";
 import { useT } from "../../lib/i18n";
-import { useNode, useOnline } from "../../lib/appStore";
+import { useNode } from "../../lib/appStore";
 import { useOwnerViews } from "../../lib/ownerViews";
 import { NOTE_VIEW_MODULES } from "../../modules";
 import RegionErrorBoundary from "../RegionErrorBoundary";
@@ -31,7 +31,6 @@ export default function OwnerViewPane({ info, viewId, onOpenNote, onOpenView, on
   const node = useNode(owner.kind === "node" ? owner.id : null) ?? null;
   const layout = views.find((view) => view.id === viewId)?.layout;
   const noteView = node ? NOTE_VIEW_MODULES.find((mod) => mod.id === layout) : undefined;
-  const online = useOnline();
   const fieldKeys = fields.map((field) => field.name ?? field.key ?? "").filter(Boolean);
   if (noteView && node) {
     const { Pane } = noteView.noteView;
@@ -52,7 +51,7 @@ export default function OwnerViewPane({ info, viewId, onOpenNote, onOpenView, on
             onSelectNode={onOpenNote} canManage={canManage} onOpenView={onOpenView} />
         </Suspense>
       </RegionErrorBoundary>
-      {owner.kind === "tag" && canManage && <Suspense fallback={null}><TagFieldsHost tagId={owner.id} online={online} onSaved={onSaved} /></Suspense>}
+      {owner.kind === "tag" && canManage && <Suspense fallback={null}><TagFieldsHost tagId={owner.id} onSaved={onSaved} /></Suspense>}
     </section>
   );
 }

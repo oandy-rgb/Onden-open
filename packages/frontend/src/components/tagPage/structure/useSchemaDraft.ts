@@ -2,15 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createSaveDebounce, SAVE_DEBOUNCE_MS } from "../../../lib/persistScheduler";
 import { onPageHide } from "../../../lib/pageHide";
 import type { Tag } from "../../../lib/api";
-import { reads, tagSchemaWriter } from "../../../lib/data";
+import { namedFields, tagSchemaWriter } from "../../../lib/data";
 import type { TagModuleBehaviour } from "../../../lib/tagModules";
 import type { Behaviour, FieldDef } from "../../TagsPanel";
-
-type FullTagRow = {
-  id: string;
-  schema_fields: FieldDef[] | null;
-  schema_behaviour: (Behaviour & TagModuleBehaviour) | null;
-};
 
 type SchemaPatch = Partial<{ fields: FieldDef[]; behaviour: Behaviour }>;
 
@@ -20,12 +14,9 @@ type SchemaPatch = Partial<{ fields: FieldDef[]; behaviour: Behaviour }>;
  *  edits across sections within one window MERGE into one PATCH. `flush()`
  *  submits what is waiting now (also when the page unmounts). `status` is
  *  "queued" when the schema writer holds the edit for later (offline or a
- *  transient failure) and "error" when it was refused. When the page is
- *  online the full current settings are read once from the server; a failed
- *  read calls `onLoadError`. */
-export function useSchemaDraft({ tag, online, onSaved, onLoadError }: {
-  tag: Tag; online: boolean; onSaved?: () => void; onLoadError: () => void;
-}) {
+ *  transient failure) and "error" when it was refused. `tag` is the live
+ *  catalog row; the draft follows it while it has no edits of its own. */
+export function useSchemaDraft({ tag, onSaved }: { tag: Tag; onSaved?: () => void }) {
   const [fields, setFields] = useState<FieldDef[]>(tag.schema_fields ?? []);
   // The catalog row (data.tags, also kept offline) already carries the fields and
   // behaviour from /api/tags; start from it so the page is whole offline.
@@ -33,28 +24,33 @@ export function useSchemaDraft({ tag, online, onSaved, onLoadError }: {
   const [status, setStatus] = useState<"saved" | "saving" | "queued" | "error">("saved");
   const statusRef = useRef(status);
   statusRef.current = status;
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+  const behaviourRef = useRef(behaviour);
+  behaviourRef.current = behaviour;
   const debounce = useRef(createSaveDebounce(SAVE_DEBOUNCE_MS.schema)).current;
   // Edits across sections within one debounce window MERGE into one PATCH —
   // a single timer with per-call payloads would drop the earlier section's
   // change (UI shows it, reload loses it).
   const pending = useRef<SchemaPatch>({});
 
-  // Confirm the editing settings from the server whenever this page is online
-  // (on open, and again after reconnecting); offline the catalog copy stands.
+  // The catalog row (data.tags: kept current by sync, also offline) is the one source of the saved
+  // settings, and tagSchemaWriter writes every save into it at once. So a change that is not ours
+  // (another device, a reconnect) arrives as a different row, and is shown unless this editor still has
+  // edits of its own: typed and waiting, in flight, queued, or refused and kept for the person to fix.
+  // There is no read of its own that a late, older answer could win.
+  const stored = tag.schema_fields;
+  const storedBehaviour = tag.schema_behaviour;
   useEffect(() => {
-    if (!online) return;
-    let live = true;
-    reads.tags.all<FullTagRow>()
-      .then((rows) => {
-        // Edits not yet on the server (typed, or queued offline) are newer than this read.
-        if (!live || Object.keys(pending.current).length || statusRef.current !== "saved") return;
-        const row = rows.find((r) => r.id === tag.id);
-        setFields((row?.schema_fields ?? []) as FieldDef[]);
-        setBehaviour(row?.schema_behaviour ?? {});
-      })
-      .catch(() => { if (live) onLoadError(); });
-    return () => { live = false; };
-  }, [tag.id, online]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed tag page owns this snapshot
+    if (Object.keys(pending.current).length || statusRef.current !== "saved") return;
+    if (JSON.stringify(namedFields(fieldsRef.current)) === JSON.stringify(stored ?? [])) return;
+    setFields((stored ?? []) as FieldDef[]);
+  }, [stored]);
+  useEffect(() => {
+    if (Object.keys(pending.current).length || statusRef.current !== "saved") return;
+    if (JSON.stringify(behaviourRef.current ?? {}) === JSON.stringify(storedBehaviour ?? {})) return;
+    setBehaviour((storedBehaviour ?? {}) as Behaviour & TagModuleBehaviour);
+  }, [storedBehaviour]);
 
   // One debounced PATCH carrying every slice edited in the window (600ms).
   const flush = useCallback(async () => {

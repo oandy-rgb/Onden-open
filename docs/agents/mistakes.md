@@ -1075,6 +1075,13 @@
 - **為什麼沒擋到**：寫觸發器時只想到「哪一欄改了」，沒有想到「是誰改的」；4.9 照提案的句子做，沒有先問 `seen` 能不能當成那個判斷的依據（檔頭本來就寫它只決定通知誰）。
 - **類別**：機制的前提沒有驗證。
 - **機制**：〔第 1 層〕兩則測試各自釘住（第一則兩種先後都跑，第二則是隨機種子與固定種子 2 的 R4）；觸發器改成不帶欄位清單、用 WHEN 判斷。BEFORE 觸發器改的欄位被 `UPDATE OF` 依賴：尚無機制擋。
+### 2026-11-22　標籤欄位的新帳本不在伺服器副本的那道門裡；兩個 PR 各自綠、併起來紅（#1914 與 #1915，零件對、組裝錯）
+- **發生了什麼**：#1914 為標籤欄位的整包儲存新開一本帳（`tag-schema:<tag>`），同時 #1915 讓每一種列的伺服器副本都經過 `storeOps.keepUnanswered`，標籤清單那一列查的是 `node:<tag>`。兩邊各自測試都綠；併起來後新帳本沒人看：欄位還在路上時，同步答覆、`?nodes=none` 或整份 bootstrap 帶回的舊標籤清單照樣蓋掉它，而且之後這筆儲存的回應到了也不會再讀一次，新加的欄位就留在舊值。同一處 `tagWriter.setHidden` 被拒時只對照筆記列，標籤只在標籤清單時不會還原。
+- **證據**：`gateHoldsEveryUnansweredEdit.test.ts` 新加「a tag's fields」一種列（同步、`?nodes=none`、整份三扇門＋「不會永遠擋住」＋被拒還原），把帳本改回 `tag-schema:` 時 4 則紅（seed 1795352016810），改成 `node:<tag>` 全綠；`tagHiddenRefusedTagListOnly.test.ts` 舊程式 1 則紅。
+- **發現者**：審查（公開 CI 的合併批次，守門 `everyJournalAtTheDoor` 解不出帶連字號的帳本名）。
+- **為什麼沒擋到**：#1914 開帳本時 #1915 還沒合，它依當時的 main 是對的；沒有人在併 main 後重問「我記的帳，門認得嗎」。守門能抓到，是因為正規式剛好解不出連字號，不是因為它看懂了語意。
+- **類別**：零件對、組裝錯。
+- **機制**：〔第 1 層〕`everyJournalAtTheDoor.guard`（帳本前綴必須出現在 `storeOps` 程式裡）；標籤欄位改記在門已認得的 `node:<tag>`（同一列一本帳，不再多開一個前綴），並進 `gateHoldsEveryUnansweredEdit.test.ts` 的種類表走真的同步引擎。守門只比前綴：一個帳本借用了門認得的前綴，但它記的欄位其實不在那一列上，守門看不出來，只能靠種類表那則測試：尚無通用機制。
 ### 2026-11-22　改 lint:boundaries 的設定只跑了它自己，沒跑讀同一份設定的守門；對擁有者說「規則一樣有效」
 - **發生了什麼**：為了消掉 136 個「行內註解無效」警告，我把 `eslint.boundaries.config.js` 的 `noInlineConfig` 搬到指令列的 `--no-inline-config`，跑了 `npm run lint:boundaries` 看到通過，就跟擁有者說規則一樣有效。守門 `allowlistBoundaries.guard.test.ts` 用設定檔本身跑 ESLint、證明 disable 註解繞不過邊界規則，搬走之後它失敗了。
 - **證據**：公開庫 CI 執行 45013171522 的 Guard lane 與 Frontend：「an eslint-disable comment does not silence it」expected [] to have a length of 1。

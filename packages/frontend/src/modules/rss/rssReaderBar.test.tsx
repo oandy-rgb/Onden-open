@@ -26,12 +26,17 @@ vi.mock("../../lib/data", async (importOriginal) => {
   return { ...mod, sendOrQueue: sendOrQueueMock };
 });
 vi.mock("../../lib/data/onlineWrite", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/data/onlineWrite")>()), sendWrite: sendWriteMock }));
+vi.mock("../../lib/localDb", () => ({
+  getPendingWrites: vi.fn(async () => []), addPendingWrite: vi.fn(), clearPendingWrite: vi.fn(async () => {}), upsertAttribute: vi.fn(async () => null),
+}));
 vi.mock("../../hooks/useIsMobile", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../../hooks/useIsMobile")>();
   return { ...mod, isMobileLayout: () => true };
 });
 
 import { forgetRssPrefs } from "./rssPrefs";
+import { addPendingWrite, getPendingWrites, clearPendingWrite } from "../../lib/localDb";
+import { memoryQueue } from "../../test/helpers/memoryQueue";
 import RssReaderPanel from "./RssReaderPanel";
 import { noWorkspaceData, type Tag } from "../../lib/api";
 import { resetAppState } from "../../lib/appStore";
@@ -69,11 +74,13 @@ beforeEach(() => {
   });
   sendWriteMock.mockReset();
   sendWriteMock.mockImplementation(async (_m: string, path: string) => (path.endsWith("/fulltext") ? { body: FULL } : {}));
+  memoryQueue({ addPendingWrite: vi.mocked(addPendingWrite), getPendingWrites: vi.mocked(getPendingWrites), clearPendingWrite: vi.mocked(clearPendingWrite) });
   sendOrQueueMock.mockReset();
   sendOrQueueMock.mockImplementation(async (_m: string, _p: string, body: string) => ({ node_id: JSON.parse(body).node_id }));
 });
 
-const seenCalls = () => sendWriteMock.mock.calls.filter((c) => String(c[1]).endsWith("/seen")).map((c) => String(c[1]));
+// Marking seen goes through the write queue (rssWriter.markSeen), which sends with api().
+const seenCalls = () => apiMock.mock.calls.filter((c) => String(c[0]).endsWith("/seen")).map((c) => String(c[0]));
 const fulltextCalls = () => sendWriteMock.mock.calls.filter((c) => String(c[1]).endsWith("/fulltext"));
 
 async function open(title: RegExp) {
@@ -137,7 +144,7 @@ describe("RSS reader: leaving marks seen", () => {
     expect(nav.children[0]!.tagName).toBe("SPAN");
     await userEvent.click(within(nav).getByRole("button", { name: /Next article/ }));
     await screen.findByRole("heading", { name: /Second story/ });
-    expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]);
+    await waitFor(() => expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]));
     const nav2 = screen.getByRole("navigation", { name: "Previous and next article" });
     expect(within(nav2).getByRole("button", { name: /Previous article/ })).toHaveTextContent("First story");
     expect(within(nav2).getByRole("button", { name: /Next article/ })).toHaveTextContent("Third story");
@@ -149,17 +156,17 @@ describe("RSS reader: leaving marks seen", () => {
     fireEvent.touchStart(pane, { touches: [{ clientX: 300, clientY: 400 }] });
     fireEvent.touchEnd(pane, { changedTouches: [{ clientX: 100, clientY: 410 }] });
     await screen.findByRole("heading", { name: /Second story/ });
-    expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]);
+    await waitFor(() => expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]));
     fireEvent.touchStart(pane, { touches: [{ clientX: 100, clientY: 400 }] });
     fireEvent.touchEnd(pane, { changedTouches: [{ clientX: 320, clientY: 405 }] });
     await screen.findByRole("heading", { name: /First story/ });
-    expect(seenCalls()).toEqual(["/api/rss/items/i1/seen", "/api/rss/items/i2/seen"]);
+    await waitFor(() => expect(seenCalls()).toEqual(["/api/rss/items/i1/seen", "/api/rss/items/i2/seen"]));
   });
 
   it("back to the list marks the open article seen", async () => {
     await open(/First story/);
     await userEvent.click(screen.getByRole("button", { name: "Back to list" }));
-    expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]);
+    await waitFor(() => expect(seenCalls()).toEqual(["/api/rss/items/i1/seen"]));
   });
 });
 

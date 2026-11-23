@@ -168,14 +168,13 @@ test("TAG-03: field edits with existing values, rejected saves, drafts vs refres
   await expect(chips.first()).toBeVisible();
   const remote = [...(await schema()), { name: "f_remote", type: "text", label: "Remote added" }];
   expect((await patch(remote)).status()).toBe(200);
-  // pinned: today's behaviour, no written rule (the open page does not show a field another tab added; a bounded look for it appearing)
-  await expect.poll(() => tagFieldLine(page).locator('.tag-field-item[data-field="f_remote"]').count(), { timeout: 4000 }).toBeGreaterThan(0).catch(() => {});
-  expect(await tagFieldLine(page).locator('.tag-field-item[data-field="f_remote"]').count()).toBe(0);
+  // The editor follows the tag list the store holds (sync keeps it current), so the open page shows the field another tab added.
+  await expect.poll(() => tagFieldLine(page).locator('.tag-field-item[data-field="f_remote"]').count(), { timeout: 20_000 }).toBeGreaterThan(0);
   await openFieldEditor(page, "f_num");
   await nameInput().fill("Local edit after remote");
   await expect.poll(() => labelOf("f_num")).toBe("Local edit after remote");
-  // pinned: today's behaviour, no written rule (the save sends this tab's whole field list, so the field the other tab added is dropped)
-  expect((await schema()).some((f) => f.name === "f_remote")).toBe(false);
+  // The save sends this tab's whole field list, which now includes the field the other tab added: it survives.
+  expect((await schema()).some((f) => f.name === "f_remote")).toBe(true);
   // The save carries the list of fields and nothing else (useSchemaDraft: one PATCH of the slices edited).
   expect(patches.length).toBeGreaterThan(0);
   for (const body of patches) expect(Object.keys(JSON.parse(body))).toEqual(["fields"]);
@@ -202,12 +201,9 @@ test("TAG-03: field edits with existing values, rejected saves, drafts vs refres
   await phone.close();
 });
 
-// FINDING: the editor's first read of /api/tags is slow and the user types before it lands. useSchemaDraft's own comment says
-// "Edits not yet on the server (typed, or queued offline) are newer than this read", and AGENTS.md 「保留較新修改與可恢復輸入」.
-// Today the typed label is saved (the server has it) but the late, older read then puts the previous label back into the input,
-// so the next save would write the old value over the new one.
-test("FINDING: a slow first read of the tag list must not replace what was typed meanwhile", async ({ page }) => {
-  test.fail();
+// A slow, older read of the tag list must not replace what was typed meanwhile (AGENTS.md 「保留較新修改與可恢復輸入」). The editor
+// has no read of its own (useSchemaDraft follows the store's tag list), so nothing late can put the previous label back into the input.
+test("a slow first read of the tag list does not replace what was typed meanwhile", async ({ page }) => {
   test.setTimeout(120_000);
   const stamp = Date.now();
   const { tagId, labelOf } = await makeTag(page, stamp);
@@ -217,6 +213,7 @@ test("FINDING: a slow first read of the tag list must not replace what was typed
   // Fetch now (before the edit), deliver late: the response predates the typed label.
   let delivered: () => void = () => {};
   const landed = new Promise<void>((res) => { delivered = res; });
+  // Nothing in the app has to read /api/tags again now, so `landed` may never come: judge after the late read's delay at the latest.
   await page.route("**/api/tags", async (r) => {
     if (r.request().method() !== "GET") return r.continue();
     const resp = await r.fetch();
@@ -230,7 +227,7 @@ test("FINDING: a slow first read of the tag list must not replace what was typed
   await input.waitFor();
   await input.fill("Typed before load");
   await expect.poll(() => labelOf("f_num")).toBe("Typed before load");
-  await landed;
+  await Promise.race([landed, page.waitForTimeout(5000)]);
   // Give the late read a bounded chance to show up in the input before judging.
   await expect.poll(() => input.inputValue(), { timeout: 3000 }).not.toBe("Typed before load").catch(() => {});
   expect(await input.inputValue()).toBe("Typed before load");

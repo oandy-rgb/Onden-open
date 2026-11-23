@@ -3,9 +3,9 @@
 // a failure is reported (once, through reportWriteFailure).
 import { ApiError } from "../api";
 import { sendWrite } from "./onlineWrite";
-import { addToast } from "../appStore";
-import { sendOrQueue } from "./writeQueue";
-import { reportWriteFailure } from "./writeErrors";
+import { addToast, getAppState, setData } from "../appStore";
+import { makeWriteLifecycle } from "./writeLifecycle";
+import { queuedWriteMessage, reportWriteFailure } from "./writeErrors";
 
 export type PinOutcome = "created" | "exists";
 
@@ -33,13 +33,18 @@ export async function pinPointer(targetId: string, parentId: string): Promise<Pi
   }
 }
 
-/** Remove a pin. Transport and 5xx failures queue for the reconnect drain, so
- *  the delete still lands; a refusal is reported and rethrown. */
+const commit = makeWriteLifecycle({ get online() { return getAppState().online; }, addToast });
+
+/** Remove a pin. The pin leaves the sidebar at once; a transport or 5xx failure
+ *  queues the delete for the reconnect drain (saying so, so the person does not
+ *  press again), and a refusal puts the pin back, is reported once and rethrown. */
 export async function unpinPointer(pointerId: string): Promise<void> {
-  try {
-    await sendOrQueue("DELETE", `/api/pointers/${pointerId}`, null);
-  } catch (error) {
-    reportWriteFailure(error, addToast);
-    throw error;
-  }
+  const removed = getAppState().data.pointers?.find((pin) => pin.id === pointerId);
+  if (removed) setData((data) => ({ ...data, pointers: data.pointers?.filter((pin) => pin.id !== pointerId) }));
+  const result = await commit(`pointer:${pointerId}`, { method: "DELETE", path: `/api/pointers/${pointerId}`, body: null }, {
+    rejected: () => {
+      if (removed) setData((data) => data.pointers?.some((pin) => pin.id === removed.id) ? data : { ...data, pointers: [...(data.pointers ?? []), removed] });
+    },
+  });
+  if (result.status === "queued") addToast(queuedWriteMessage(), "info");
 }

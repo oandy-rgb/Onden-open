@@ -15,15 +15,15 @@ import { tagTreeModel } from "./tagTreeModel";
  *  (FieldPopover). The tag page mounts the popover itself; this is the same
  *  popover over its own copy of the tag's schema draft, so only one of the two
  *  is on screen. Renders nothing until a column name is pressed. */
-export default function TagFieldsHost({ tagId, online, onSaved }: { tagId: string; online: boolean; onSaved?: () => void }) {
+export default function TagFieldsHost({ tagId, onSaved }: { tagId: string; onSaved?: () => void }) {
   const tags = useTagRows() ?? [];
   const tag = tags.find((candidate) => candidate.id === tagId);
   if (!tag) return null;
-  return <Loaded key={tag.id} tag={tag} allTags={tags} online={online} onSaved={onSaved} />;
+  return <Loaded key={tag.id} tag={tag} allTags={tags} onSaved={onSaved} />;
 }
 
-function Loaded({ tag, allTags, online, onSaved }: { tag: Tag; allTags: Tag[]; online: boolean; onSaved?: () => void }) {
-  const draft = useSchemaDraft({ tag, online, onSaved, onLoadError: () => {} });
+function Loaded({ tag, allTags, onSaved }: { tag: Tag; allTags: Tag[]; onSaved?: () => void }) {
+  const draft = useSchemaDraft({ tag, onSaved });
   const fieldModel = tagFieldModel(tag, draft.fields, tagTreeModel(tag, allTags), [], true);
   const fieldUsage = useFieldUsage(tag.id);
   return <FieldPopover tag={tag} draft={draft} fieldModel={fieldModel} fieldUsage={fieldUsage} canManage />;

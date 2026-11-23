@@ -5,6 +5,20 @@ import { useDismiss } from "../../hooks/useEscapeKey";
 import { observeSize } from "../../lib/observeSize";
 import { visibleContentBottom, visibleViewportTop } from "../../hooks/useVirtualKeyboard";
 
+/** Marks the bar pinned to the top of the window (the app's top bar): a floating surface stays below it. */
+export const TOP_BAR_ATTR = "data-top-bar";
+
+/** visibleViewportTop, less any bar pinned at the top (TOP_BAR_ATTR): how far up a floating surface may reach
+ *  without covering the navigation or the title under it. */
+function visibleContentTop(): number {
+  let top = visibleViewportTop();
+  for (const bar of document.querySelectorAll(`[${TOP_BAR_ATTR}]`)) {
+    const rect = bar.getBoundingClientRect();
+    if (rect.top <= top + 1 && rect.bottom > top) top = rect.bottom;
+  }
+  return top;
+}
+
 // One floating surface: placed next to a trigger (or at a pointer position for
 // a context menu), clamped to the viewport, closed by Esc, Back or a pointer press
 // outside, focused on open and handing focus back on close. Arrow keys, Home
@@ -74,9 +88,9 @@ export function usePopover<A extends HTMLElement = HTMLDivElement>({ open, onClo
       if (!element) return;
       const bounds = element.getBoundingClientRect();
       const viewWidth = document.documentElement.clientWidth;
-      // Not under the on-screen keyboard, nor the editor's bar on top of it.
+      // Not under the on-screen keyboard, nor the editor's bar on top of it, nor over the top bar.
       const viewHeight = visibleContentBottom();
-      const viewTop = visibleViewportTop();
+      const viewTop = visibleContentTop();
       const up = placement.startsWith("top");
       // What can be seen, unless the surface has to stay clear of a line.
       let room = viewHeight - viewTop - 2 * MARGIN;

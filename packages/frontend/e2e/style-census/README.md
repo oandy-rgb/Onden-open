@@ -10,6 +10,8 @@ cd packages/frontend
 npm run style:census                          # 全部：4 個寬度 × 2 個主題 × 所有畫面
 npm run style:census -- --sizes 390,1440 --themes light --screens note-long,daily --jobs 2
 npm run style:census -- --sheets <資料夾>      # 另外輸出每個畫面×寬度×主題一張 PNG、index.md、每個寬度×主題一張拼貼圖
+npm run style:census -- --sizes 1204x714,390 --themes light --screens note-long,tasks,settings --check-taps   # 觸控目標：和 scripts/tap-target-baseline.json 比，變多就失敗
+npm run style:census -- ... --write-taps      # 量完把基準寫低（只准往下，不會寫高）
 npm run style:census:selftest                 # 工具自己的測試（假頁面；不需要建置；也檢查規則文件有每一種的列）
 npm run style:census -- --compare <舊的 report.json>                 # 量完後比對：任何一種「不在刻度上」變多就結束碼 1
 npm run style:census -- --compare <舊的 report.json> --against <新的 report.json>   # 只比兩份檔案，不開瀏覽器
@@ -34,7 +36,8 @@ Chromium 全部程序合計峰值約 1.2–3 GB（3 個並行時）。機器小�
 | `compare.mjs` | 報告的機器可讀摘要（`summary`）與兩份報告的比對（`--compare`） |
 | `report.mjs` | report.json → 可讀的 Markdown |
 | `sheets.mjs` | index.md 與每個寬度×主題一張拼貼圖（用瀏覽器排版，不需要圖片函式庫） |
-| `viewports.mjs` | 寬度：手機 390、平板橫 1280×800、平板直 800×1280、桌面 1440；觸控裝置是觸控模擬 |
+| `tapBaseline.mjs` | 觸控目標基準（`scripts/tap-target-baseline.json`）的讀、比、寫；`--check-taps`／`--write-taps` 用它，不寫完整報告 |
+| `viewports.mjs` | 寬度：手機 390、平板橫 1280×800、Tab S9 實機尺寸 1204×714（觸控目標基準用）、平板直 800×1280、桌面 1440；觸控裝置是觸控模擬 |
 | `aiStandIn.mjs` | AI 面板的替身（瀏覽器版沒有 AI 角色）：一段固定的對話 |
 | `selftest.mjs` | 工具自己的測試 |
 

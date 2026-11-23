@@ -119,6 +119,9 @@
 .phone-view-tabs .view-tab { min-height: 40px; min-width: 40px; }
 /* ::before is placed from the padding box: -3px reaches 2px past the tab's 1px border, a full 44px. */
 .phone-view-tabs .view-tab::before { content: ""; position: absolute; inset: -3px -1px; }
+/* The ＋ is the row's last tab and the row ends in 20px of padding: its reach grows 5px into it, so the 40px glyph button
+   is reached 44px wide too (the 2px gap gives it only 1px on the left; the layout audit, R7 pixel5, measured 41px). */
+.phone-view-tabs .view-tab--add::before { right: -5px; }
 
 /* 「＋」 is a plain icon in the strip; in a full-screen board's title sheet it is a labelled row under the tabs. */
 .view-tab-add-label { display: none; }

@@ -11,9 +11,12 @@
   display: flex;
   gap: 2px;
   flex: 1;
+  min-width: 0;
 }
 .sidebar-tab {
   display: flex;
+  flex: 0 0 auto;
+  white-space: nowrap; /* a narrow sidebar clips the last tab; it never stacks a label's letters */
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
@@ -94,6 +97,10 @@
 }
 .sb-tagtree-heading > span:first-child { margin-right: auto; padding-left: 0; }
 .sb-tagtree-heading .sidebar-tag-new { min-width: 44px; min-height: 36px; justify-content: center; }
+@media (pointer: coarse) {
+  .sb-tagtree-heading { min-height: var(--onden-tap); }
+  .sb-tagtree-heading .sidebar-tag-new { min-height: var(--onden-tap); }
+}
 .sb-tagtree-disclosure { width: 100%; background: none; border: none; cursor: pointer; text-align: left; min-height: 44px; }
 .sb-tagtree-disclosure[aria-expanded="true"] .sb-tagtree-chevron,
 .sb-tagtree-toggle[aria-expanded="true"] .sb-tagtree-chevron { transform: rotate(90deg); }

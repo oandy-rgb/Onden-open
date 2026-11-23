@@ -276,7 +276,15 @@ export const CENSUS_SOURCE = String.raw`
           && rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight) {
         const hit = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === el || el.contains(t) || (el.labels && [...el.labels].some((l) => l === t || l.contains(t)))); };
         const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-        const walk = (x0, y0, dx, dy) => { let n = 0; for (let d = 0; d < 24; d++) { if (!hit(x0 + dx * (d + 1), y0 + dy * (d + 1))) break; n++; } return n; };
+        // How far past an edge the element still answers: whole pixels first, then the last pixel is bisected, so a hit area of exactly 44
+        // (an ::after centred on a box with a fractional edge) reads 44, not 43.
+        const walk = (x0, y0, dx, dy) => {
+          let near = 0, far = null;
+          for (let d = 1; d <= 24; d++) { if (hit(x0 + dx * d, y0 + dy * d)) near = d; else { far = d; break; } }
+          if (far === null) return near;
+          for (let i = 0; i < 6; i++) { const mid = (near + far) / 2; if (hit(x0 + dx * mid, y0 + dy * mid)) near = mid; else far = mid; }
+          return near;
+        };
         const hitW = rect.width + walk(rect.left, cy, -1, 0) + walk(rect.right, cy, 1, 0);
         const hitH = rect.height + walk(cx, rect.top, 0, -1) + walk(cx, rect.bottom, 0, 1);
         const smallest = r1(Math.min(hitW, hitH));

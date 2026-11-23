@@ -137,6 +137,13 @@ try {
     await page.waitForTimeout(500);
   };
   await holdProbe("tag row", page.locator(".sb-tagtree-item .sb-tagtree-name").first(), 0, 12);
+  // That hold moves the tag 60px down, which drags it: dropped on another tag, the app asks whether to move it under that
+  // one (which row it lands on depends on the row heights). Say no, so the question does not block the next tap.
+  const moveQuestion = page.locator(".confirm-dialog-backdrop[role=alertdialog]");
+  if (await moveQuestion.isVisible()) {
+    await page.keyboard.press("Escape");
+    await moveQuestion.waitFor({ state: "hidden", timeout: 5_000 });
+  }
   await page.locator(".obsidian-page-list [data-sb-id]").first().click();
   await page.locator(".view-tabs .view-tab").first().waitFor({ timeout: 20_000 });
   check("view tabs: have a non-passive touchstart listener at rest", await hasBlockingTouchStart(".view-tabs"));

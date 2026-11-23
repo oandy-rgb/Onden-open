@@ -2,20 +2,6 @@
   "about": "版面規則檢查的已知違規；只准變少（見 e2e/layout-audit/README.md）",
   "violations": [
     {
-      "rule": "R1",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"以此為中心\"]",
-      "reason": "白板「選取的卡片」工具列相鄰按鈕的點擊範圍互相蓋到角落（手機）。"
-    },
-    {
-      "rule": "R1",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"顏色\"]",
-      "reason": "白板「選取的卡片」工具列相鄰按鈕的點擊範圍互相蓋到角落（手機）。"
-    },
-    {
       "rule": "R5",
       "screen": "canvas",
       "viewport": "1100",
@@ -40,50 +26,8 @@
       "rule": "R7",
       "screen": "canvas",
       "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"以此為中心\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"收合子層\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"開啟\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
       "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"顏色\"]",
       "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "section.overview-workspace.obsidian-workspace.inspector-hidden > div.ui-layer--narrow.note-tab-actions.obsidian-actions > div.note-actions-overflow > button.note-actions-more-btn[aria-label=\"更多動作\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "section.workspace-grid > section.overview-workspace.obsidian-workspace.inspector-hidden > div.ui-layer--narrow.note-tab-actions.obsidian-actions > button.note-actions-more-btn.note-actions-info-btn.notes-inspector-toggle[aria-label=\"資訊\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "note-children",
-      "viewport": "pixel5",
-      "element": "section.obsidian-main > section.note-relations-section.note-relations-extra > h2.note-relations-heading > button.note-relations-toggle",
-      "reason": "關係區／資訊欄的列表列可點高度不足 44px（手機）。"
     },
     {
       "rule": "R7",
@@ -105,104 +49,6 @@
       "viewport": "pixel5",
       "element": "section.view-pane[aria-label=\"專案 的視角\"] > div.cv-root > div.cv-quickadd-input-wrap > input.cv-quickadd-input[aria-label=\"在 #專案 新增筆記\"]",
       "reason": "手機上這個可點元素的可點區域小於 44×44（量到的數字見報告）。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-selected-parent",
-      "viewport": "pixel5",
-      "element": "div.obsidian-page-list > div.obsidian-group > div.obsidian-group-header > button.obsidian-page-button.obsidian-group-title",
-      "reason": "手機側欄筆記樹的列高 40px（可點高度約 40–43px），不足 44px。"
-    },
-    {
-      "rule": "R7",
-      "screen": "note-more-menu",
-      "viewport": "pixel5",
-      "element": "div[role=menu].ui-menu.ui-menu--sheet.note-actions-sheet[aria-label=\"更多動作\"] > div.note-sheet-group > button[role=menuitem].ui-menu-item.ui-menu-item--danger",
-      "reason": "手機的 ⋯ 面板高度上限 85dvh、內容可捲；「刪除」在最底下，規則在未捲動時只量到畫面內露出的 24px（項目本身 48px 高）。屬量測限制，CSS 無法在不改面板高度下消除。"
-    },
-    {
-      "rule": "R7",
-      "screen": "note-new-view-menu",
-      "viewport": "pixel5",
-      "element": "div[role=menu].ui-menu.ui-menu--sheet.note-actions-sheet[aria-label=\"更多動作\"] > div.note-sheet-group > button[role=menuitem].ui-menu-item.ui-menu-item--danger",
-      "reason": "手機的 ⋯ 面板高度上限 85dvh、內容可捲；「刪除」在最底下，規則在未捲動時只量到畫面內露出的 24px（項目本身 48px 高）。屬量測限制，CSS 無法在不改面板高度下消除。"
-    },
-    {
-      "rule": "R7",
-      "screen": "search-sidebar",
-      "viewport": "pixel5",
-      "element": "aside.obsidian-sidebar > div.obsidian-page-list > div.obsidian-page-row.obsidian-search-row > button.obsidian-page-button.active",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "search-sidebar",
-      "viewport": "pixel5",
-      "element": "aside.obsidian-sidebar > div.obsidian-page-list > div.obsidian-page-row.obsidian-search-row > button.obsidian-page-button.sb-tag-node",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-expanded",
-      "viewport": "pixel5",
-      "element": "aside.obsidian-sidebar > div.obsidian-page-list > div.obsidian-page-row > button.obsidian-page-button",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-expanded",
-      "viewport": "pixel5",
-      "element": "div.obsidian-group > div.sb-group-children > div.obsidian-page-row.obsidian-page-row--child > button.obsidian-page-button",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-expanded",
-      "viewport": "pixel5",
-      "element": "div.obsidian-page-list > div.obsidian-group > div.obsidian-group-header > button.obsidian-page-button.obsidian-group-title",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-expanded",
-      "viewport": "pixel5",
-      "element": "div.sb-group-children > div.obsidian-group > div.obsidian-group-header.obsidian-group-header--indented > button.obsidian-group-toggle",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-expanded",
-      "viewport": "pixel5",
-      "element": "div.sb-group-children > div.obsidian-group > div.obsidian-group-header.obsidian-group-header--indented > button.obsidian-page-button.obsidian-group-title",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-selected-parent",
-      "viewport": "pixel5",
-      "element": "aside.obsidian-sidebar > div.obsidian-page-list > div.obsidian-page-row > button.obsidian-page-button",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-selected-parent",
-      "viewport": "pixel5",
-      "element": "div.obsidian-group > div.sb-group-children > div.obsidian-page-row.obsidian-page-row--child > button.obsidian-page-button",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-selected-parent",
-      "viewport": "pixel5",
-      "element": "div.sb-group-children > div.obsidian-group > div.obsidian-group-header.obsidian-group-header--indented > button.obsidian-group-toggle",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
-    },
-    {
-      "rule": "R7",
-      "screen": "tree-selected-parent",
-      "viewport": "pixel5",
-      "element": "div.sb-group-children > div.obsidian-group > div.obsidian-group-header.obsidian-group-header--indented > button.obsidian-page-button.obsidian-group-title",
-      "reason": "手機側欄筆記樹相鄰列沒有間隙，列高 40px（業主要求列要瘦，見 mobilePhoneDensity.spec.ts）；點擊範圍最多是列距，達不到 44px。不改看起來的密度，故保留。"
     }
   ]
 }

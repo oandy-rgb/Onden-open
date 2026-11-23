@@ -2,7 +2,7 @@
   "about": "版面或行為跟著「視窗」而不是頁面自己寬度的地方，依畫面分組；只准變少（見 windowWidthDeps.guard.test.ts）",
   "groups": {
     "editor": {
-      "mediaWidth": 11,
+      "mediaWidth": 10,
       "viewportUnit": 20,
       "widthCheck": 8,
       "fixedLayer": 0

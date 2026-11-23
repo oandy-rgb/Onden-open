@@ -256,29 +256,29 @@
     height: max(100%, var(--onden-tap, 44px));
     transform: translateY(-50%);
   }
-  /* A leaf's title lines up with a group's (its 28px toggle column, title padding 0). */
-  .obsidian-sidebar .obsidian-page-row:not(.obsidian-search-row):not(.sb-tagtree-item) > .obsidian-page-button { padding-left: 28px; }
-  /* The ▸ sits centred in a 28px column, clear of the row's edge and its
-     selected bar; the title gives up its own left padding so its text stays
-     where a leaf's does (28px). */
+}
+
+/* The ▸ column: one rule for every touch screen, a phone or a tablet in landscape alike (no second copy under the 900px
+ * level above). The column is 32px (a spacing step); the title gives up its left padding, a leaf's title lines up with
+ * a group's, and the ▸'s reach lies 12px left of the column to end where the title begins, so it never covers the
+ * title's first letters. */
+@media (pointer: coarse) {
+  .obsidian-sidebar .obsidian-page-row:not(.obsidian-search-row):not(.sb-tagtree-item) > .obsidian-page-button { padding-left: var(--ac-space-9); }
   .obsidian-sidebar .obsidian-group-toggle {
     position: relative;
     z-index: var(--z-local-1);
-    width: 28px;
+    width: var(--ac-space-9);
     font-size: var(--ac-fs-caption);
   }
   .obsidian-sidebar .obsidian-group-title { padding-left: 0; }
   .obsidian-sidebar .obsidian-group-title::after { left: 2px; }
-  /* Reach for the few-px triangle: the 28px column, 14px out to the left
-     (into the list's margin; the 2px it takes from the title's reach lie in the title's own left edge), ending where the title
-     button and its own reach begin, so the two never cover each other. */
   .obsidian-sidebar .obsidian-group-toggle::after {
     content: "";
     position: absolute;
-    left: -14px;
+    left: -12px;
     top: 50%;
-    width: var(--onden-tap, 44px);
-    height: max(100%, var(--onden-tap, 44px));
+    width: var(--onden-tap);
+    height: max(100%, var(--onden-tap));
     transform: translateY(-50%);
   }
 }
@@ -290,3 +290,17 @@
 }
 
 .sb-untitled { color: var(--ac-muted); }
+
+/* Touch screen of any width (a tablet in landscape is wider than the phone list level above): the tree's rows, the
+ * ▸ toggles and the bar buttons reach 44px, by the row's own height where the row is full width, by an invisible reach
+ * where the control is a few px of glyph. The mouse layout above 900px is untouched. */
+@media (pointer: coarse) {
+  .obsidian-sidebar .obsidian-page-row,
+  .obsidian-sidebar .obsidian-group-header,
+  .obsidian-sidebar .obsidian-page-button { min-height: var(--onden-tap); }
+  .obsidian-sidebar .sidebar-tab,
+  .obsidian-sidebar .sb-bar-btn { min-width: var(--onden-tap); justify-content: center; }
+  /* The grab strip of the pane's edge (ui.css .pane-resizer, 24px on touch) lies over the pane's last 24px: the rows
+     and the header's buttons stop short of it, so it never takes a tap meant for them. */
+  .obsidian-sidebar:has(> .pane-resizer) { padding-inline-end: var(--ac-space-8); }
+}

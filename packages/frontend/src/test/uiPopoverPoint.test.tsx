@@ -75,6 +75,17 @@ describe("usePopover at a point", () => {
     Object.defineProperty(window, "visualViewport", { value: undefined, configurable: true });
   });
 
+  it("stays below the top bar: a menu that flips above the line, and a tall one, stop at the bar's bottom edge", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return (this.hasAttribute("data-top-bar") ? { top: 0, bottom: 52, width: 1000, height: 52 } : { width: 100, height: 640 }) as DOMRect;
+    });
+    Object.defineProperty(window, "visualViewport", { value: { offsetTop: 0, height: 500 }, configurable: true });
+    render(<><header data-top-bar /><Beside at={{ x: 50, y: 450, lineTop: 420 }} /></>);
+    const surface = screen.getByRole("group", { name: "Suggestions" });
+    expect(Number.parseFloat(surface.style.getPropertyValue("--popover-y"))).toBe(60);
+    Object.defineProperty(window, "visualViewport", { value: undefined, configurable: true });
+  });
+
   it("leaves focus in the text, and closes on Esc or a press elsewhere", () => {
     const onClose = vi.fn();
     render(<Beside at={{ x: 10, y: 10 }} onClose={onClose} />);

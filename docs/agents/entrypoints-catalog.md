@@ -512,7 +512,7 @@ export const dialog = ReconfirmDialog;`
 - 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
 - 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
 
-## 共用邏輯（120）
+## 共用邏輯（121）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1496,6 +1496,18 @@ export const pageKeys = (stored: string | null, pdfUrl: string | null) => {
 };`
 - 取代：自己解析 `note_pages` 的 JSON、自己用 `pdf_url` 數頁、自己用 randomUUID 產生頁 key
 - 為什麼：頁清單（`note_pages`）只存「有哪些頁、什麼順序」，筆跡在 `note_ink`、PDF 文字在 `pdf_text`；頁 key 只由 `mintPageId` 產生且不重複使用，切段的後半拿新 id 但保留 key 前綴。舊的 PDF 筆記用 `pagesFromPdfUrl` 讀成同一種清單（key 仍是 `pdf:<n>`）。伺服器與前端的合併（`mergeNotePages`）是同一個純函式。
+
+### 按下去要好幾秒才有結果、或結果在頁面外的操作（發布網站、下載備份或匯出的檔案）：要先說正在做什麼，再說結果
+
+- 入口：`frontend/src/lib/pressFeedback.ts`（`announceDownloadPreparing`、`publishedAnswer`、`savedMessage`）；`frontend/src/lib/appStore.ts`（`startWorking`）　項目 `press-feedback`
+- 寫法：`import { startWorking } from "./lib/appStore";
+import { publishedAnswer } from "./lib/pressFeedback";
+export async function publishWithAnswer(publish: () => Promise<{ url: string }>) {
+  const notice = startWorking("Publishing the site…");
+  try { publishedAnswer(notice, (await publish()).url); } catch { notice.dismiss(); }
+}`
+- 取代：每個畫面自己寫一句「處理中」、或按下後什麼都不顯示
+- 為什麼：一則提示先說「進行中」，完成時原地變成結果（含時間、檔名、動作鈕），失敗時變成原因；在對話框開著時也看得到。失敗已由寫入層回報時用 dismiss，不重複通知。
 
 ## 功能模組接口（26）
 

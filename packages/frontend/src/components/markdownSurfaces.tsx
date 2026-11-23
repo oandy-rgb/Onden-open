@@ -7,7 +7,7 @@
 // siteMarkdown) may import MarkdownRenderer (test/guards/dup-b2-text.guard).
 
 import type { ReactNode } from "react";
-import type { FrozenQueryBlock } from "@onden/markdown";
+import { drawnWikilinks, wikilinkLabel, type FrozenQueryBlock } from "@onden/markdown";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { readerHtmlAsOneBlock } from "../lib/readerHtml";
 import type { WikilinkNode, WikilinkSource } from "../lib/wikilinks";
@@ -37,9 +37,22 @@ export function AiAnswer({ children, nodes, onNavigate }: { children: string; no
 
 /** A review card's back: the whole note drawn as text, math, diagrams and
  *  callouts included. It has no notes to resolve against, so a [[link]] shows
- *  as written, brackets and all, and an ![[embed]] is not drawn. */
+ *  its note name without the brackets (not clickable) and an ![[embed]] is not drawn. */
 export function ReviewCard({ children }: { children: string }) {
-  return <MarkdownRenderer>{children}</MarkdownRenderer>;
+  return <MarkdownRenderer>{linksAsNames(children)}</MarkdownRenderer>;
+}
+
+/** A note name drawn as plain words: its `*`, `_`, `$`… are not formatting. */
+const escapeMarkdown = (text: string) => text.replace(/[\\`*_~$[\]<>|]/g, "\\$&");
+
+/** `[[Note|alias]]` → the words a reader would see; the stored text is untouched. */
+function linksAsNames(markdown: string): string {
+  let out = markdown;
+  for (const link of drawnWikilinks(markdown).reverse()) {
+    if (markdown[link.start - 1] === "!") continue;
+    out = out.slice(0, link.start) + escapeMarkdown(wikilinkLabel(link.body)) + out.slice(link.end);
+  }
+  return out;
 }
 
 /** A feed article: text not written in Onden, where `$5 to $10` is prices, not

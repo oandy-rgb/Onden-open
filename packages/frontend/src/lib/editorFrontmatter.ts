@@ -8,7 +8,7 @@ import { t } from "./i18n";
 // Why: lang-markdown reads the closing `---` as a setext underline, so the
 // YAML lines drew as a big H2 heading above the note's real text, and the
 // values are already shown in the note's property strip. Collapsed, the block
-// is ONE small muted button ("⚙ 設定：description · output"); pressing it (click,
+// is ONE small muted button ("⚙ 設定：說明 · 結果"); pressing it (click,
 // Enter, Space) or moving the caret into the block shows the raw YAML to edit.
 // Expanded lines get `cm-frontmatter-line`, which cancels heading styling.
 // Only a block that starts at line 1 counts: a `---` rule later in the note
@@ -31,11 +31,25 @@ interface FrontmatterState { range: { from: number; to: number } | null; expande
 
 const USER_MOVES = ["select", "input", "delete", "undo", "redo", "move"];
 
+/** The settings a skill note keeps in its frontmatter, named for a person. A key
+ *  not listed here is the writer's own and is not echoed on the button (it is
+ *  YAML; the raw text is one press away). */
+function keyLabel(key: string): string | null {
+  switch (key) {
+    case "description": return t("what it does");
+    case "output": return t("result");
+    default: return null;
+  }
+}
+
 function summary(text: string): string {
-  const keys = (readFrontmatter(text)?.entries ?? []).flatMap((e) => (e.key ? [e.key] : []));
-  if (!keys.length) return t("Settings");
-  const shown = keys.slice(0, MAX_SHOWN_KEYS).join(" · ");
-  return t("Settings: {keys}", { keys: keys.length > MAX_SHOWN_KEYS ? `${shown} …` : shown });
+  const names = (readFrontmatter(text)?.entries ?? []).flatMap((e) => {
+    const name = e.key ? keyLabel(e.key) : null;
+    return name ? [name] : [];
+  });
+  if (!names.length) return t("Settings");
+  const shown = names.slice(0, MAX_SHOWN_KEYS).join(" · ");
+  return t("Settings: {keys}", { keys: names.length > MAX_SHOWN_KEYS ? `${shown} …` : shown });
 }
 
 class FrontmatterChip extends WidgetType {

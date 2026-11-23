@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { addToast, getAppState, subscribeApp, getNode } from "../lib/appStore";
+import { addToast, getAppState, startWorking, subscribeApp, getNode, type WorkingNotice } from "../lib/appStore";
 import { WriteActionError, drafts, writeErrors } from "../lib/data";
 import type { NoteExportFormat, NoteExportOptions } from "../lib/noteExport";
 import { t } from "../lib/i18n";
@@ -10,6 +10,8 @@ import { ClipboardRefused, writeClipboardLater } from "../lib/clipboard";
 // not at boot. The fetch starts inside the click, before the first await, so the print window
 // and the clipboard write still happen in the user's gesture.
 const loadNoteExport = () => import("../lib/noteExport");
+// The words of the "saved" answer load with the export, not at boot.
+const savedAs = async (name: string) => (await import("../lib/pressFeedback")).savedMessage(name);
 
 /** Export failures surface as themselves; only the clipboard's own refusal
  * reads as "could not copy". */
@@ -44,6 +46,8 @@ export function useNoteExport(editorVisible: boolean) {
     });
     const current = () => mounted.current && !cancelled;
     let popup: Window | null = null;
+    // A file for download is made first (the server writes the Markdown, Word is built here): say so, then what it was called.
+    const notice: WorkingNotice | null = format === "copy" || format === "pdf" ? null : startWorking(t("Preparing export…"));
     running.current = true;
     setBusy(true);
     try {
@@ -69,7 +73,9 @@ export function useNoteExport(editorVisible: boolean) {
         } else {
           const text = await file;
           const lib = await exportLib;
-          lib.downloadNoteText(text, lib.noteExportFilename((await snapshot).title, "md"), "text/markdown;charset=utf-8");
+          const name = lib.noteExportFilename((await snapshot).title, "md");
+          lib.downloadNoteText(text, name, "text/markdown;charset=utf-8");
+          notice?.done(await savedAs(name));
         }
         return true;
       }
@@ -80,7 +86,9 @@ export function useNoteExport(editorVisible: boolean) {
         const { noteExportDocx } = await import("../lib/noteExportDocx"); // Word's writer loads only when asked for
         const file = await noteExportDocx(snapshot, { font: options.font });
         if (!current()) return false;
-        downloadBlob(file, lib.noteExportFilename(snapshot.title, "docx"));
+        const name = lib.noteExportFilename(snapshot.title, "docx");
+        downloadBlob(file, name);
+        notice?.done(await savedAs(name));
         return true;
       }
       const html = await lib.renderNoteExport(snapshot);
@@ -95,7 +103,11 @@ export function useNoteExport(editorVisible: boolean) {
           if (!printWindow.closed) { printWindow.focus(); printWindow.print(); }
         }, { once: true });
         printWindow.document.close();
-      } else lib.downloadNoteText(html, lib.noteExportFilename(snapshot.title, "html"), "text/html;charset=utf-8");
+      } else {
+        const name = lib.noteExportFilename(snapshot.title, "html");
+        lib.downloadNoteText(html, name, "text/html;charset=utf-8");
+        notice?.done(await savedAs(name));
+      }
       return true;
     } catch (error) {
       popup?.close();
@@ -104,6 +116,7 @@ export function useNoteExport(editorVisible: boolean) {
     } finally {
       if (!current()) popup?.close();
       unsubscribe();
+      notice?.dismiss(); // still "preparing": it failed (reported below) or was cancelled
       running.current = false;
       if (mounted.current) setBusy(false);
     }

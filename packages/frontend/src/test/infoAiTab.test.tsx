@@ -17,6 +17,7 @@ const { drafts } = await import("../lib/data");
 const { registerNoteEditor } = await import("../lib/editorInsert");
 const { onSuggestionsChanged } = await import("../lib/aiSuggestionsBus");
 const { pendingReveal, clearReveal } = await import("../lib/noteReveal");
+const { refreshSpaces } = await import("../lib/spaces");
 const { default: InfoAiTab } = await import("../components/infoAi/InfoAiTab");
 
 const apiMock = vi.mocked(api);
@@ -50,6 +51,7 @@ let turns: unknown[] = [];
 function route() {
   apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === "/api/ai/panel-chat/open/roles") return roles;
+    if (path === "/api/spaces") return { spaces: [] };
     if (path === "/api/ai/panel-chat/open" && !init?.method) return { turns };
     if (path === "/api/ai/panel-chat" && init?.method === "POST") return { session_id: "s2", created: true };
     if (path === "/api/ai/panel-chat/open" && init?.method === "DELETE") { turns = []; return { cleared: 1 }; }
@@ -309,6 +311,36 @@ describe("when nobody can answer", () => {
     roles = { roles: [{ ...ROLES.roles[0]!, runtimes: [{ kind: "api", available: false, unavailable_reason: "no_key" }] }] };
     mount();
     expect(await screen.findByText("No API key.")).toBeInTheDocument();
+  });
+
+  it("an AI added to a space in Settings answers in the panel that is already open, without reopening the note", async () => {
+    roles = { roles: [] };
+    mount();
+    expect(await screen.findByText(/No AI is set up yet/)).toBeInTheDocument();
+    // Settings changed who is in the space: every such write ends by reloading the spaces.
+    roles = ROLES;
+    await act(async () => { await refreshSpaces(); });
+    expect(await screen.findByLabelText("Ask the AI")).toBeInTheDocument();
+    expect(screen.queryByText(/No AI is set up yet/)).toBeNull();
+  });
+
+  it("a failed reload of who can answer keeps the earlier answer instead of emptying the panel", async () => {
+    roles = ROLES;
+    mount();
+    expect(await screen.findByLabelText("Ask the AI")).toBeInTheDocument();
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/ai/panel-chat/open/roles") throw new Error("offline");
+      if (path === "/api/spaces") return { spaces: [] };
+      if (path === "/api/ai/panel-chat/open" && !init?.method) return { turns };
+      throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
+    });
+    const rolesReads = () => apiMock.mock.calls.filter(([p]) => p === "/api/ai/panel-chat/open/roles").length;
+    const before = rolesReads();
+    await act(async () => { await refreshSpaces(); });
+    await waitFor(() => expect(rolesReads()).toBeGreaterThan(before)); // the reload really ran and failed
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.queryByText("Looking for an AI…")).toBeNull();
+    expect(screen.getByLabelText("Ask the AI")).toBeInTheDocument();
   });
 
   it("a failed answer says why in a sentence, without codes", async () => {

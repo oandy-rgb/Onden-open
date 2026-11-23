@@ -37,12 +37,14 @@ export default function TagCardTop({ tag, onOpenTag }: { tag: Tag; onOpenTag: (t
         <Pressable type="button" className="tag-card-page tap-target" onClick={() => onOpenTag(tag.id)}>{t("Tag page →")}</Pressable>
       </div>
       <p className="tag-card-brings">
-        {t("Brings: {list}", { list: [...functions.map(({ id, title }) => {
-          // A function got through another tag it extends says where it comes from.
-          const source = abilitySource(tags, tag.id, id);
-          const via = source && source.id !== tag.id && source.schema_module !== id ? source : null;
-          return via ? `${t(title)} (${t("through #{name}", { name: via.name })})` : t(title);
-        }), ...(functions.length === 0 ? [t("no functions")] : []), ...(noFields ? [t("no fields")] : [])].join(" · ") })}
+        {functions.length === 0 && noFields
+          ? t("Only sorts notes: no extra features or fields")
+          : t("Notes with this tag get: {list}", { list: [...functions.map(({ id, title }) => {
+            // A function got through another tag it extends says where it comes from.
+            const source = abilitySource(tags, tag.id, id);
+            const via = source && source.id !== tag.id && source.schema_module !== id ? source : null;
+            return via ? `${t(title)} (${t("through #{name}", { name: via.name })})` : t(title);
+          }), ...(noFields || functions.length > 0 ? [] : [t("their own fields")])].join(" · ") })}
       </p>
     </header>
   );

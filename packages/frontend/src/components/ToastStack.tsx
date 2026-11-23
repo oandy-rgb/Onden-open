@@ -60,10 +60,11 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div
       className={`toast toast--${toast.kind}`}
       role={toast.kind === "error" ? "alert" : undefined}
+      aria-busy={toast.working || undefined}
       onMouseEnter={clear}
       onMouseLeave={() => arm(RESUME_MS)}
     >
-      <span className="toast-icon" aria-hidden="true">{KIND_ICON[toast.kind]}</span>
+      <span className="toast-icon" aria-hidden="true">{toast.working ? "…" : KIND_ICON[toast.kind]}</span>
       <span className="toast-message">{toast.message}</span>
       {toast.action && (
         <Pressable type="button" className="toast-action" onClick={toast.action.onClick}>{toast.action.label}</Pressable>
@@ -98,8 +99,9 @@ export default function ToastStack() {
   return (
     <TopLayerPortal>
       <div className={`${layerClass.fixed} toast-stack`} role="status" aria-live="polite" aria-atomic="false">
+        {/* The kind is in the key: a notice that turns from working into an error is a new node, so assistive tech announces it. */}
         {visible.map((t) => (
-          <ToastItem key={t.id} toast={t} />
+          <ToastItem key={`${t.id}:${t.kind}`} toast={t} />
         ))}
       </div>
     </TopLayerPortal>

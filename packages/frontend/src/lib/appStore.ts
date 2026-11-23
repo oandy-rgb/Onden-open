@@ -23,6 +23,7 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
 import { nodeIndexOf } from "./nodeIndex";
 import { noWorkspaceData, type Bootstrap, type Canvas, type CanvasMeta, type ContentNode, type Tag, type Workspace } from "./api";
 import type { LocalCopyState } from "./localCopyState";
+import { t } from "./i18n";
 import { isSystemNode, tagsById } from "./systemNodes";
 import { canvasList } from "./canvasList";
 
@@ -35,7 +36,7 @@ export type ToastKind = "success" | "error" | "info" | "warning";
 // computes the intended lifetime here, severity-scaled.
 /** `inDialog`: the answer to something the person just did inside the open dialog (a file that was downloaded from
  *  Settings), so it shows there instead of waiting for the dialog to close (ToastStack). */
-export type Toast = { id: string; message: string; kind: ToastKind; duration: number; action?: ToastAction; inDialog?: boolean };
+export type Toast = { id: string; message: string; kind: ToastKind; duration: number; action?: ToastAction; inDialog?: boolean; working?: boolean };
 // "rejected" = saving failed (server rejection or local queue persistence).
 // Keep Retry enabled and the draft intact; the error/recovery surface explains
 // the cause. "saved" requires server or durable queue acknowledgement.
@@ -288,6 +289,41 @@ export function addToast(
   // The same message still on screen is one notice, not a stack of repeats.
   if (!action && getAppState().toasts.some((toast) => toast.message === message && toast.kind === kind && !toast.action)) return;
   setAppState((s) => ({ toasts: [...s.toasts, { id, message, kind, duration, action, ...(options?.inDialog ? { inDialog: true } : {}) }] }));
+}
+
+/** A press whose answer takes a while (publishing, a large download): one notice that says it is working, then turns
+ *  into the answer in place (`done` / `fail`), so the person never faces a silent screen. It shows inside an open dialog
+ *  (the answer to what was just pressed there), and a failure keeps its text until read like any error toast. */
+export type WorkingNotice = {
+  done(message: string, action?: ToastAction): void;
+  fail(message: string, action?: ToastAction): void;
+  /** The answer is shown some other way (the error was already reported): take the notice away unless it already gave its answer. */
+  dismiss(): void;
+};
+
+/** How long a "working" notice waits before saying there is no answer yet (a large backup takes about a minute). */
+const WORKING_SLOW_MS = 90_000;
+
+export function startWorking(message: string): WorkingNotice {
+  const id = Math.random().toString(36).slice(2);
+  setAppState((s) => ({ toasts: [...s.toasts, { id, message, kind: "info", duration: 0, inDialog: true, working: true }] }));
+  let settled = false;
+  // A request with no time limit of its own can wait forever: after a while the notice says there is no answer yet
+  // (it keeps waiting; the answer still replaces it).
+  const slow = setTimeout(() => {
+    if (settled) return;
+    setAppState((s) => ({ toasts: s.toasts.map((toast) => toast.id === id ? { ...toast, message: t("Still waiting for the server. You can keep using Onden; this ends with a result on its own.") } : toast) }));
+  }, WORKING_SLOW_MS);
+  const settle = (text: string, kind: ToastKind, action?: ToastAction) => {
+    settled = true;
+    clearTimeout(slow);
+    setAppState((s) => ({
+      toasts: s.toasts.map((toast) => toast.id !== id ? toast
+        : { id, message: text, kind, duration: toastDuration(text, kind, action), action, inDialog: true }),
+    }));
+  };
+  // After an answer, dismiss leaves it showing: a `finally` can call it for every way out.
+  return { done: (text, action) => settle(text, "success", action), fail: (text, action) => settle(text, "error", action), dismiss: () => { if (!settled) { clearTimeout(slow); dismissToast(id); } } };
 }
 
 export function dismissToast(id: string): void {

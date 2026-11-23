@@ -213,15 +213,15 @@ describe("what the tag brings (the top of a card)", () => {
     render(<TagCardTop tag={course} onOpenTag={onOpenTag} />);
     expect(screen.getByText("#課程")).toBeInTheDocument();
     expect(screen.getByText("1 篇筆記")).toBeInTheDocument();
-    expect(screen.getByText("帶來：技能")).toBeInTheDocument();
+    expect(screen.getByText("有這個標籤的筆記會多出：技能")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "標籤頁 →" }));
     expect(onOpenTag).toHaveBeenCalledWith("t-course");
   });
 
-  it("says 沒有欄位 for a tag without fields", () => {
+  it("says a tag with no function and no field only sorts notes, without internal wording", () => {
     seed([review, course, plain]);
     act(() => setLocalePref("zh-TW"));
     render(<TagCardTop tag={plain} onOpenTag={() => {}} />);
-    expect(screen.getByText("帶來：沒有功能 · 沒有欄位")).toBeInTheDocument();
+    expect(screen.getByText("只用來分類，沒有額外的功能或欄位")).toBeInTheDocument();
   });
 });

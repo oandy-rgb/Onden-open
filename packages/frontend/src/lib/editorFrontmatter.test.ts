@@ -30,7 +30,7 @@ describe("editorFrontmatter", () => {
     const view = mount(SKILL);
     const chip = view.dom.querySelector<HTMLButtonElement>("button.cm-frontmatter-chip");
     expect(chip).not.toBeNull();
-    expect(chip?.textContent).toContain("description · output");
+    expect(chip?.textContent).toContain("what it does · result");
     expect(chip?.getAttribute("aria-expanded")).toBe("false");
     expect(view.dom.textContent).not.toContain("description: x");
     expect(view.dom.textContent).toContain("Body text");

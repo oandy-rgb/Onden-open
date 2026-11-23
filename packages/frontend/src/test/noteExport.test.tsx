@@ -245,3 +245,21 @@ it("writes an excerpt embedded by a part link (`![[筆記/開頭]]`, bound or ty
   const quote = "> The quick brown fox\n>\n> — [An Article](https://example.com/a#:~:text=See-,The%20quick%20brown%20fox) · Daily News";
   expect(sent.markdown).toBe(`${quote}\n\n![[2026-10-29/Plain words]]\n\nsee ![[2026-10-29/The quick brown fox]] here\n`);
 });
+
+it("a Markdown file download says it is preparing, then what the file is called; a failure leaves no 'preparing' behind", async () => {
+  const slow = deferred<{ markdown: string }>();
+  request.mockReturnValueOnce(slow.promise);
+  const { result } = renderHook(() => useNoteExport(false));
+  let done!: Promise<boolean>;
+  await act(async () => { done = result.current.exportNote("markdown"); });
+  expect(getAppState().toasts.map((toast) => toast.message)).toEqual(["Preparing export…"]);
+  await act(async () => { slow.resolve({ markdown: "file" }); await done; });
+  expect(getAppState().toasts.map((toast) => toast.message)).toEqual(['Downloaded "中文筆記.md". Keep the file somewhere safe.']);
+
+  resetAppState({ data: { ...noWorkspaceData, nodes: [note] }, selectedId: "a", online: true });
+  request.mockRejectedValueOnce(new ApiError(500, "{}"));
+  await act(async () => { expect(await result.current.exportNote("markdown")).toBe(false); });
+  const after = getAppState().toasts;
+  expect(after.some((toast) => toast.message === "Preparing export…")).toBe(false);
+  expect(after.some((toast) => toast.kind === "error")).toBe(true);
+});

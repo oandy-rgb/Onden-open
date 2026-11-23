@@ -17,6 +17,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getApiBase } from "../lib/api";
+import { useTransientFlag } from "../hooks/useTransientFlag";
+import { announceDownloadPreparing, DOWNLOAD_PREPARING_MS } from "../lib/pressFeedback";
 import { useT } from "../lib/i18n";
 import { dateLabel, timeLabel } from "../lib/timeLabels";
 import { backupLimits, backupRestore, sizeLabel, writeErrors, type UploadedBackup } from "../lib/data";
@@ -68,12 +70,20 @@ export function FullBackupDownload({ ctx }: { ctx: SettingContext }) {
   }, [ctx.online]);
   const totalBytes = weight ? weight.bytes + (size && withHistory ? size.bytes : 0) : 0;
   const href = `${getApiBase()}${FULL_BACKUP_PATH}${size && withHistory ? "?history=1" : ""}`;
+  // The browser downloads this link straight to disk once the server has built the whole zip (about a minute for a large
+  // one), so the page cannot tell when it starts: say it is preparing, and do not start a second copy meanwhile.
+  const [preparing, flashPreparing] = useTransientFlag(DOWNLOAD_PREPARING_MS);
+  const startDownload = (event: React.MouseEvent) => {
+    if (preparing) { event.preventDefault(); return; }
+    flashPreparing();
+    announceDownloadPreparing(tr("Preparing your backup. Your browser starts the download when it is ready, which can take a minute; look in its downloads list."));
+  };
   return (
     <DataRow
       title={tr("Full backup")}
       hint={tr("Notes, attachments, drawings and tag settings in one zip. Restore it into Onden, or open it as a folder.")}
       note={size ? tr("Leaves out other members' private notes, accounts and keys.") : tr("Leaves out version history, other members' private notes, accounts and keys.")}
-      action={<Link className={buttonClass("primary")} href={href} download>{tr("Download")}</Link>}
+      action={<Link className={buttonClass("primary")} href={href} download aria-disabled={preparing || undefined} onClick={startDownload}>{preparing ? tr("Preparing…") : tr("Download")}</Link>}
     >
       {weight && totalBytes > weight.limit && (
         <p className="settings-hint" role="status">

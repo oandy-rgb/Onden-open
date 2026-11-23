@@ -55,7 +55,7 @@ import { useDismiss } from "../../hooks/useEscapeKey";
 // excerpts.md); one toast with 復原. A passage this device already holds an
 // excerpt of is not written twice: the bar says where it is and offers to open
 // that note or to embed it in another. The end of an article leads with
-// 「寫點什麼」: a new draft, or added to an existing note, carrying embeds of
+// 「引用到筆記」: a new draft, or added to an existing note, carrying embeds of
 // this session's excerpts (their ids kept in memory only) or the article's link.
 //
 // The stream/library split ([[rss-rebuild]] revision): an article is a
@@ -143,9 +143,9 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
   // The excerpt this device already holds of the selection (the bar offers it instead of a copy).
   const [known, setKnown] = useState<{ noteId: string; words: string } | null>(null);
   // The note picker: for a quote (its passage kept, since focusing the picker
-  // clears the selection), for embedding a known excerpt, or for 「寫點什麼」 › 加到現有筆記….
+  // clears the selection), for embedding a known excerpt, or for 「引用到筆記」 › 加到現有筆記….
   const [picking, setPicking] = useState<{ kind: "quote"; passage: Passage } | { kind: "embed"; noteId: string; words: string } | { kind: "write" } | null>(null);
-  // 「寫點什麼」's choice (新草稿 / 加到現有筆記…) is open.
+  // 「引用到筆記」's choice (新草稿 / 加到現有筆記…) is open.
   const [writeOpen, setWriteOpen] = useState(false);
   // Back and Esc fold the choice away first, then Back goes on to leave the article.
   useDismiss(() => setWriteOpen(false), writeOpen);
@@ -416,7 +416,8 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
     setBusy(true);
     try {
       const { queued } = await saveArticle(a, destination);
-      setNotice(queued ? writeErrors.queuedMessage() : t("Saved — it's a regular note now."));
+      // A toast, not the notice line: that line pushes the whole list down.
+      addToast(queued ? writeErrors.queuedMessage() : t("Saved — it's a regular note now."), "success");
       setSaving(null);
       onRefresh?.();
     } catch (e) {
@@ -481,7 +482,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
   // Read at call time: a note started a moment ago (today's) is not in this render's `storeNodes` yet.
   const noteTitle = (id: string) => displayTitle(getNode(id)?.title);
 
-  /** One append (a quote, or 寫點什麼's text) went through: say where, offer
+  /** One append (a quote, or 引用到筆記's text) went through: say where, offer
    *  復原 — one undo step that removes exactly that text. */
   function appended(r: AppendResult, targetId: string, onUndone?: () => void) {
     const title = noteTitle(targetId);
@@ -565,10 +566,10 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
     else put();
   }
 
-  /** 「寫點什麼」's embeds of this session's excerpts. */
+  /** 「引用到筆記」's embeds of this session's excerpts. */
   const sessionEmbeds = (articleId: string) => (sessionQuotes.current.get(articleId) ?? []).map((q) => excerptEmbed(noteTitle(q.noteId), q.words));
 
-  /** 「寫點什麼」: this session's quotes from the article (or its link). */
+  /** 「引用到筆記」: this session's quotes from the article (or its link). */
   async function writeDraft() {
     if (!article || writing.current) return;
     writing.current = true;
@@ -774,7 +775,7 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
                 {/* The end of an article leads on: 上一篇 on the left, 下一篇 on
                     the right, the way a swipe goes. */}
                 <div className="rss-article-end">
-                  {/* 寫點什麼 leads; keeping the whole article is the quiet second,
+                  {/* 引用到筆記 leads; keeping the whole article is the quiet second,
                       on the same row. Its choices open below the row. */}
                   <div className="rss-end-actions">
                     <Button type="button" variant="primary" size="sm" className="rss-end-btn" aria-expanded={writeOpen}

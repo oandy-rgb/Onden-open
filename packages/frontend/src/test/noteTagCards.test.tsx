@@ -89,7 +89,7 @@ describe("tag cards", () => {
     expect(onOpenTag).toHaveBeenCalledWith("t-book");
     expect(novelCard).not.toHaveTextContent(/inherit/i);
     // What the tag brings, with the function it gets by extending #genre.
-    expect(novelCard).toHaveTextContent(/Brings: Skills \(through #genre\)/);
+    expect(novelCard).toHaveTextContent(/Notes with this tag get: Skills \(through #genre\)/);
     expect(novelCard).toHaveTextContent("1 note");
     // Status is the novel's and the meeting's: one value, in the first card.
     expect(within(novelCard).getByText(/Status/)).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("tag cards", () => {
     act(() => setLocalePref("zh-TW"));
     render(<NoteTagCards node={{ ...note, class_tag_ids: ["t-course"] }} canEdit onOpenTag={() => {}} show={{ tagId: "t-course" }} />);
     const card = await screen.findByRole("region", { name: "#課程" });
-    expect(card).toHaveTextContent("帶來：技能 · 沒有欄位");
+    expect(card).toHaveTextContent("有這個標籤的筆記會多出：技能");
     expect(card).not.toHaveTextContent("繼承");
     expect(card).not.toHaveTextContent("上層");
   });

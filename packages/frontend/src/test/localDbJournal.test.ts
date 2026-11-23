@@ -144,6 +144,36 @@ describe("queued writes", () => {
     await reopenWorker();
     expect(await bodies()).toEqual(["2"]);
   });
+
+  it("the journal stays bounded while writes never pause long enough for the debounced snapshot", async () => {
+    // A person writing on a large drawing: a queue row rewritten at every pen-up and the drawing's saves at each short
+    // pause, never two seconds apart. Counting records alone bounds the journal at a few hundred records (the compaction
+    // armed before the 200th still runs), but a record of a large drawing's save is megabytes: the bound has to be on
+    // what the records hold, and it must not wait for a quiet moment (review of #1958, item 2).
+    await ok("persistBootstrap", bootstrap);
+    const body = (i: number) => JSON.stringify({ value: `${i}`.padEnd(160_000, "x"), base_value: "" });
+    const journalChars = () => entries().reduce((sum, e) => sum + (e.op.t === "pw.put" ? e.op.row.body?.length ?? 0 : 0), 0);
+    const peak = { chars: 0, records: 0 };
+    const peakAfter = async (writes: number, from: number) => {
+      for (let i = from; i < writes; i++) {
+        await ok("replacePendingWrite", "PUT", "/api/nodes/n/attributes/ink_data", body(i), i % 3 === 0 ? `save${i}` : "kept");
+        await vi.advanceTimersByTimeAsync(300);
+        peak.chars = Math.max(peak.chars, journalChars());
+        peak.records = Math.max(peak.records, entries().length);
+      }
+      return { ...peak };
+    };
+    const early = await peakAfter(300, 0); // 160 KB a write: 48 MB in all
+    const late = await peakAfter(900, 300);
+    // Three times the writing (each write 160 KB), the same space: what the journal holds does not grow with the number of writes.
+    expect(late, `journal peak after 300 writes ${JSON.stringify(early)}, after 900 ${JSON.stringify(late)}`).toEqual(early);
+    expect(late.chars, `journal peak ${late.chars} chars`).toBeLessThan(20_000_000);
+    // Nothing was lost to the compaction: every save row and the kept row are still queued, with their last content.
+    await reopenWorker();
+    const rows = await ok("getPendingWrites") as Array<{ idem_key: string; body: string }>;
+    expect(rows).toHaveLength(301);
+    expect(rows.find((r) => r.idem_key === "kept")?.body).toBe(body(899));
+  }, 120_000);
 });
 
 describe("crash or abort in the middle of a save", () => {

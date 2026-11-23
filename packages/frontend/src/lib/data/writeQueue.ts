@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { noteLocalWrite } from "../liveInvalidation";
-import { addPendingWrite, catchUpWithOtherTabs, getPendingWrites, clearPendingWrite, bumpPendingWriteAttempt, type PendingWrite } from "../localDb";
+import { addPendingWrite, replacePendingWrite, catchUpWithOtherTabs, getPendingWrites, getRejectedWrites, clearPendingWrite, bumpPendingWriteAttempt, type PendingWrite } from "../localDb";
 import { writeTargets, targetIds, type WriteTarget } from "../pendingWriteTargets";
 import { addToast, getAppState, setData } from "../appStore";
 import { t } from "../i18n";
@@ -12,12 +12,13 @@ import { isSendingHere, sendingElsewhere, startSendingHere, stopSendingHere, whe
 import { classifyWriteFailure, sendFailureReason, WriteStorageError, writeFailureMessage, reportWriteFailure, isHandledNoteExists } from "./writeErrors";
 import { onProtocolBlockChange } from "../protocolGate";
 import { patchedBody, wholeBody, wholeFitsRequest, isPatchBaseUnknown } from "./patchedBody";
-import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable, withoutRefusedBase } from "./writeRecovery";
-import { PREFS, prefsAvailable } from "../prefs";
+import { rememberUnconfirmedWrite, confirmRecoveredWrite, preserveRejectedWrite, preserveDirectRejection, hasUserText, getRecoveryWrites, removeRecoveryWrite, adoptable, withoutRefusedBase, thisPageLife } from "./writeRecovery";
+import { PREFS, getPrefJson, prefsAvailable, removePref, setPrefJson } from "../prefs";
 import { onAppResume } from "../appResume";
 import { serverTruth } from "./serverTruthLoad";
 import { accountStorageKey } from "../accountStorage";
 import { readSession, removeSession, SESSION_KEYS } from "../sessionPrefs";
+import { setLocalCopyUnavailable } from "../localCopyStatus";
 
 export type WriteMethod = "POST" | "PUT" | "PATCH" | "DELETE";
 export type WriteResult<T> = { status: "synced"; value: T } | { status: "queued" };
@@ -159,6 +160,62 @@ async function adoptUnconfirmedWrites(): Promise<void> {
     }
     await removeRecoveryWrite(write.id);
   }
+  await adoptKeptWrites();
+}
+
+/** Kept rows an earlier page life copied at pen-up (keepUnsentWrite's `hold`) whose queue row it never wrote, queued under
+ *  their keys. After the recovery entries above: a save left on the way out under the same key holds more, and the queue
+ *  takes one row per key. A key another live tab holds is that tab's to write. */
+async function adoptKeptWrites(): Promise<void> {
+  const held = keptHeld();
+  const left = Object.entries(held).filter(([, entry]) => entry.life !== thisPageLife());
+  if (!left.length) return;
+  // Read now: the recovery entries above may have just been queued under the same keys.
+  const rows = await getPendingWrites().catch(() => null);
+  const refused = await getRejectedWrites().catch(() => null);
+  if (!rows || !refused) return;
+  const elsewhere = await sendingElsewhere().catch(() => new Set<string>());
+  for (const [idemKey, entry] of left) {
+    // Refused under this key: the server said no to it; the copy is not a way round that.
+    if (refused.some((write) => write.idem_key === idemKey)) { letGoKept(idemKey, Infinity); continue; }
+    if (elsewhere.has(idemKey)) continue;
+    const row = rows.find((write) => write.idem_key === idemKey);
+    try {
+      if (!row) await enqueue({ method: entry.method, path: entry.path, body: entry.body, idemKey });
+      // The row holds an earlier copy (strokes kept before the last ones): the copy is newer. A row the change's save
+      // rewrote (not made from nothing) holds everything kept before it and stays.
+      else if (row.body !== entry.body && madeFromNothing(row.body)) await replacePendingWrite(entry.method, entry.path, entry.body, idemKey);
+    } catch { return; /* stays held for the next page life */ }
+    letGoKept(idemKey, Infinity);
+  }
+}
+/** A kept row's request: a save made from nothing (`base_value` ""), as keepUnsentWrite's callers make it. */
+function madeFromNothing(body: string | null): boolean {
+  try { return (JSON.parse(body ?? "null") as { base_value?: unknown } | null)?.base_value === ""; } catch { return false; }
+}
+
+type HeldKept = { method: WriteMethod; path: string; body: string | null; life: string; v: number };
+/** The synchronous copies of kept rows, by key (PREFS.keptWrites). */
+function keptHeld(): Record<string, HeldKept> {
+  const raw = getPrefJson(PREFS.keptWrites);
+  return raw && typeof raw === "object" ? raw as Record<string, HeldKept> : {};
+}
+let keptVersion = 0;
+/** Copy a kept row's request now, in the caller's event handler: it outlasts the page however it ends (localStorage),
+ *  while the queue row is still on its way. False when storage cannot take it. */
+function holdKept(idemKey: string, request: WriteRequest): number {
+  const v = ++keptVersion;
+  const held = keptHeld();
+  held[idemKey] = { method: request.method, path: request.path, body: request.body, life: thisPageLife(), v };
+  return setPrefJson(PREFS.keptWrites, held) ? v : 0;
+}
+/** The queue row holds the copy's content (version `v` or later): the copy goes. */
+function letGoKept(idemKey: string, v: number): void {
+  const held = keptHeld();
+  const entry = held[idemKey];
+  if (!entry || entry.v > v) return;
+  delete held[idemKey];
+  if (Object.keys(held).length) setPrefJson(PREFS.keptWrites, held); else removePref(PREFS.keptWrites);
 }
 
 /** The write a tab of the previous build had on the wire when it was reloaded into this one (its sessionStorage
@@ -237,7 +294,7 @@ export function noteWriteStarted(): void { writeEpoch += 1; }
  *  given it to the queue (or died), any tab's drain sends it, under its key.
  *  Resolves false when storage cannot take the row: the write then goes as it
  *  did without one (sent, or queued with recovery as the fallback). */
-export function recordWrite(request: WriteRequest & { idemKey: string }): Promise<boolean> {
+export function recordWrite(request: WriteRequest & { idemKey: string }, { keptRow = false } = {}): Promise<boolean> {
   const held = startSendingHere(request.idemKey);
   // Rows are written in the order recordWrite is CALLED (that is the queue's order, made_at): each waits for the one
   // before it. Waiting only for its own lock would not do: the spec orders the grants of one lock name, not of
@@ -250,6 +307,10 @@ export function recordWrite(request: WriteRequest & { idemKey: string }): Promis
     await heldOrMoment(held);
     // What an earlier page life left in recovery goes into the queue first: it is older than this write.
     await adoptLeftWrites().catch(() => {});
+    // A write made under a kept row (keepUnsentWrite) finds that row already holding this request (its owner rewrote it
+    // just before, on this chain): sending the whole body again would only be dropped by the worker (one row per key).
+    const kept = keptRow ? undefined : keptRows.get(request.idemKey);
+    if (kept) return await kept;
     await addPendingWrite(request.method, request.path, request.body, request.idemKey);
     return true;
   }).catch(() => false);
@@ -257,6 +318,67 @@ export function recordWrite(request: WriteRequest & { idemKey: string }): Promis
   return recorded;
 }
 let recording: Promise<unknown> = Promise.resolve();
+
+/** A change kept on this device before its write is made (docs/architecture/note-writes.md「筆跡：抬筆就記下」).
+ *  Its queue row is recorded now, under the key its write will be sent with, like any save's row (recordWrite); unlike a
+ *  save's, nothing sends it while this page lives (its write lock keeps every drain off it). Until the write is made the
+ *  owner keeps the row current (`rewrite`: the same key, the newer request, one journal record); the write is then made
+ *  under `idemKey` (it finds its row already there) and `release()` lets go of the kept share of the lock. If the page
+ *  dies first, its locks go with it and the next drain sends the row under that key: the server answers a second arrival
+ *  of the key from its record, so a write that also left the page (a keepalive save) is never applied twice.
+ *  `drop()` takes the row out when no write follows (the change came back to what the server holds).
+ *  `recorded`/`rewrite` resolve false when storage could not take the row (then only the page holds the change). */
+/** Kept rows of this page, by key: the latest write of each (keepUnsentWrite). */
+const keptRows = new Map<string, Promise<boolean>>();
+export type KeptWrite = {
+  idemKey: string;
+  recorded: Promise<boolean>;
+  /** The row's newer content, copied at once (`hold`) and written into the row after the writes before it. `asSave`: the
+   *  change's own save (it holds everything kept before it); not copied: its page's exit protection covers it. */
+  rewrite(request: WriteRequest, options?: { asSave?: boolean }): Promise<boolean>;
+  /** Only the synchronous copy of newer content (a write into the row is still on its way: the caller writes it next). */
+  hold(request: WriteRequest): void;
+  release(): void;
+  drop(): Promise<void>;
+};
+export function keepUnsentWrite(request: WriteRequest): KeptWrite {
+  const idemKey = randomUUID();
+  // In the caller's handler, before anything waits: the queue row below waits for every write recorded before it (and
+  // for the worker), and a page that ends meanwhile would take the strokes with it (CI, review of #1958).
+  let heldAt = holdKept(idemKey, request);
+  const hold = (next: WriteRequest) => { heldAt = holdKept(idemKey, next); };
+  const durable = (v: number) => (ok: boolean) => { if (ok) letGoKept(idemKey, v); return ok; };
+  // recordWrite takes this key's kept share of its write lock; release (or drop) gives it back.
+  const recorded = recordWrite({ ...request, idemKey }, { keptRow: true }).then(durable(heldAt));
+  // Storage could not take it: only this page holds the change now. The person is told the way any copy this device
+  // could not save is told (the device notice, with its retry); the change still goes with its save as before.
+  const told = (kept: boolean) => { if (!kept) setLocalCopyUnavailable(true); return kept; };
+  void recorded.then(told);
+  let latest: Promise<boolean> = recorded;
+  keptRows.set(idemKey, latest);
+  let released = false;
+  const release = () => { if (!released) { released = true; keptRows.delete(idemKey); stopSendingHere(idemKey); } };
+  const rewrite = (next: WriteRequest, { asSave = false } = {}): Promise<boolean> => {
+    if (!asSave) hold(next);
+    const v = asSave ? Infinity : heldAt;
+    // On the same chain as every row (recordWrite's order): the write's own record, made after this, finds it current.
+    const done = recording.catch(() => {}).then(async () => {
+      await replacePendingWrite(next.method, next.path, next.body, idemKey);
+      return true;
+    }).catch(() => false).then(durable(v)).then(told);
+    recording = done;
+    latest = done;
+    keptRows.set(idemKey, done);
+    return done;
+  };
+  let dropping: Promise<void> | null = null;
+  const drop = () => dropping ??= latest.catch(() => {}).then(async () => {
+    try { await clearPendingWrite(0, idemKey); letGoKept(idemKey, Infinity); }
+    catch { /* left to the queue: sent once, under its key */ }
+    finally { release(); }
+  });
+  return { idemKey, recorded, rewrite, hold, release, drop };
+}
 
 /** How long a save's row waits for its own write lock: a lock nobody else holds is granted at once. */
 const RECORD_LOCK_WAIT_MS = 1_000;

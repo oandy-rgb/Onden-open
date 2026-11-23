@@ -111,6 +111,9 @@
 - **三個屬性、一種視角一份筆跡**：`ink_data`（內容是手寫頁或 PDF）、`board_ink`（白板筆層）、`note_ink`（手寫分頁）；鍵的清單 `INK_PAGE_ATTRS` 在 `@onden/markdown` 的 `sharedContract.ts`，前後端都從那裡來，
   同一個 codec、`saveInk(nodeId, doc, base, { attr })`、同一條 `PUT /attributes/:key` 合併與離線佇列。
 - **離開頁面不掉筆跡**：`pagehide`／分頁隱藏時 PDF（`commitDrawSession`）與 `InkNodeView` 立刻以 `keepalive` 存出還沒存的筆跡。
+- **抬筆就記下**（2026-11-22，[筆記寫入：筆跡：抬筆就記下](../architecture/note-writes.md#筆跡抬筆就記下2026-11-22)）：引擎提交新筆畫時多報 `onAdded`（只有那幾筆），
+  宿主做出只含它們的圖（`lib/ink/additions`、`lib/pdf` 的 `pdfWithOnly`）交給 `InkSaver.keepAdded`，記成佇列裡「從無做的存檔」的一列，鍵是下一次存檔的鍵；
+  停頓後的整份存檔照舊，用那一列的鍵送出。抬筆不編碼整份圖。
 - **存檔基底**（`lib/ink/surfaceSaver.ts` 的 `InkSaver`，手寫、PDF、白板共用）：伺服器回合併值時，下一次存檔先在本機 `mergeInk` 合併再以伺服器文字為基底送 patch，
   不能直接拿伺服器的回答當基底（引擎還看不到別台的筆，下一次存檔會把它們刪掉）；前一次被拒絕的存檔之後的存檔，等沒有存檔在途時用伺服器現值當基底重存，而且從第一筆被拒絕的存檔起，每一次存檔「從哪份筆跡改成哪份」都記下來（`unsent`），重存時依序套在伺服器文字上、各用自己的基底（只用一個舊基底，伺服器已接受的擦除會被當成對方的擦除，使用者之後的復原就丟了）；每一步都做與用戶端先合併同一個檢查（`mergeDropsSent`）：有一步丟掉本機這一版（另一台也改了同一筆、排序在後），就不送重播結果，改送畫面上的筆跡、base 用這串改動最早的那份，由伺服器合併並用 `submitted_value_ref` 留下（#1783 第 4 輪，`test/inkSaverLoser.test.ts`）；
   從歷史還原後 `announceDrawingRestored(nodeId)`，開著的筆層重新載入。

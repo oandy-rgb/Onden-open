@@ -29,7 +29,7 @@
 
 import { useCallback, useRef } from "react";
 import { mergeInk, encodeInk } from "@onden/markdown/ink";
-import { mergeDropsSent, saveInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions } from "../data";
+import { mergeDropsSent, saveInk, keepUnsentInk, type InkSaveBase, type InkSaveDoc, type InkSaveOptions, type KeptWrite } from "../data";
 
 /** How a save ended: accepted or not, what the server stored, and the text that was sent as the value (null: only the offline queue holds it). */
 type InkSaveOutcome = { saved: boolean; stored: string | null; sent: string | null };
@@ -40,6 +40,24 @@ const sendInk: InkSend = async (nodeId, doc, base, options) => {
   const saved = await saveInk(nodeId, doc, base, { ...options, onServerAnswer: (stored, sent) => { answer = { stored, sent }; } });
   return { saved: saved === true, stored: (answer as { stored: string } | null)?.stored ?? null, sent: (answer as { sent: string } | null)?.sent ?? null };
 };
+
+/** Keeps a drawing that is not sent yet on this device (lib/data keepUnsentInk); injectable for tests. */
+type InkKeep = (nodeId: string, doc: InkSaveBase, base: InkSaveBase | null | undefined, options: { attr?: InkSaveOptions["attr"]; into?: KeptWrite; holdOnly?: boolean }) => { kept: KeptWrite | null; written: Promise<boolean> };
+
+/** A kept row no save has taken this long after its last addition is let go: the strokes were taken back before the
+ *  surface's pause (a stroke drawn and undone), so no save will carry them. Longer than any surface's pause. */
+const KEPT_UNCLAIMED_MS = 5_000;
+/** A kept row holds at most this much (characters of the drawing of added strokes): past it the row is sealed and the next
+ *  strokes start a row of their own, so what one pen-up writes — and the local journal holds per record — stays bounded
+ *  however long one writes without the surface's pause. About 15–60 strokes. */
+const KEPT_ROW_MAX_CHARS = 32_000;
+
+/** A note's strokes added since its last save, kept on this device from pen-up (docs/architecture/note-writes.md
+ *  「筆跡：抬筆就記下」): `added`, a drawing holding only them, as text; `row`, the queue row it is written to (under the key
+ *  the save will use); one write at a time (`dirty`: more came while one was in flight). A save takes it. */
+type Keeping = { added: string; row: KeptWrite | null; busy: boolean; dirty: boolean; unclaimed: ReturnType<typeof setTimeout> | null;
+  /** Full rows from earlier in this change (KEPT_ROW_MAX_CHARS); they go once the save that carries their strokes has an outcome. */
+  sealed: KeptWrite[] };
 
 type Sent = {
   doc: InkSaveDoc;
@@ -78,10 +96,67 @@ type NodeState = {
 export class InkSaver {
   private seq = 0;
   private readonly nodes = new Map<string, NodeState>();
+  private readonly keeping = new Map<string, Keeping>();
 
-  /** `attr` is the attribute the surface keeps its drawing in (default `ink_data`; `note_ink` for the 手寫 tab); `send` is
-   *  injectable for tests. */
-  constructor(private readonly attr?: InkSaveOptions["attr"], private readonly send: InkSend = sendInk) {}
+  /** `attr` is the attribute the surface keeps its drawing in (default `ink_data`; `note_ink` for the 手寫 tab); `send` and
+   *  `keepWrite` are injectable for tests. */
+  constructor(
+    private readonly attr?: InkSaveOptions["attr"],
+    private readonly send: InkSend = sendInk,
+    private readonly keepWrite: InkKeep = keepUnsentInk,
+  ) {}
+
+  /** Strokes or shapes just finished (pen-up), as a drawing that holds only them (`added`, in the surface's own format:
+   *  lib/ink/additions). From this call on they are on this device until a save carries them: written into the note's kept
+   *  row — under the key its save will use — as a save made from nothing (the server adds them to whatever it holds and
+   *  takes nothing away). The work is the size of what was added since the last save, never of the whole drawing; the whole
+   *  drawing is encoded only by the save, at the surface's pause, as before. If the page dies first, the next page sends the
+   *  row; if a save also left the page (a keepalive save on the way out), it is the same key and the server applies it once. */
+  keepAdded(nodeId: string, added: InkSaveDoc): void {
+    const text = encodeInk(added);
+    let keeping = this.keeping.get(nodeId);
+    if (!keeping) { keeping = { added: text, row: null, busy: false, dirty: true, unclaimed: null, sealed: [] }; this.keeping.set(nodeId, keeping); }
+    else if (keeping.row && !keeping.busy && keeping.added.length + text.length > KEPT_ROW_MAX_CHARS) {
+      // Full: this row keeps what it has (it is durable: nothing is in flight); the new strokes start the next one.
+      keeping.sealed.push(keeping.row);
+      keeping.row = null;
+      keeping.added = text;
+      keeping.dirty = true;
+    } else { keeping.added = mergeInk("", keeping.added, text).value; keeping.dirty = true; }
+    const mine = keeping;
+    if (mine.unclaimed) clearTimeout(mine.unclaimed);
+    mine.unclaimed = setTimeout(() => {
+      if (this.keeping.get(nodeId) !== mine) return;
+      const { row, sealed } = this.takeKept(nodeId);
+      for (const r of [...sealed, ...(row ? [row] : [])]) void r.drop();
+    }, KEPT_UNCLAIMED_MS);
+    if (!mine.busy) this.writeKept(nodeId, mine);
+    // A write into the row is on its way, and this one waits for it: the strokes are copied now all the same, before this
+    // handler returns (KeptWrite.hold), so a page that ends before the row is written leaves them on the device.
+    else if (mine.row) this.keepWrite(nodeId, mine.added, null, { ...(this.attr ? { attr: this.attr } : {}), into: mine.row, holdOnly: true });
+  }
+
+  private writeKept(nodeId: string, keeping: Keeping): void {
+    keeping.busy = true;
+    keeping.dirty = false;
+    const { kept, written } = this.keepWrite(nodeId, keeping.added, null, { ...(this.attr ? { attr: this.attr } : {}), ...(keeping.row ? { into: keeping.row } : {}) });
+    keeping.row ??= kept;
+    void written.then(() => {
+      keeping.busy = false;
+      // More strokes came while that write was on its way, and no save took the row meanwhile: write them in too.
+      if (keeping.dirty && this.keeping.get(nodeId) === keeping) this.writeKept(nodeId, keeping);
+    });
+  }
+
+  /** The kept row a save now carries (its request becomes the save's, under the same key), and the change's sealed rows
+   *  (removed once that save has an outcome). Strokes after this start a row of their own. */
+  private takeKept(nodeId: string): { row: KeptWrite | null; sealed: KeptWrite[] } {
+    const keeping = this.keeping.get(nodeId);
+    if (!keeping) return { row: null, sealed: [] };
+    this.keeping.delete(nodeId);
+    if (keeping.unclaimed) clearTimeout(keeping.unclaimed);
+    return { row: keeping.row, sealed: keeping.sealed };
+  }
 
   private state(nodeId: string): NodeState {
     let state = this.nodes.get(nodeId);
@@ -105,17 +180,30 @@ export class InkSaver {
     state.damaged = false;
   }
 
+  /** Save the surface's drawing (it arrives settled: the surface waited for its pause), made under the note's kept row
+   *  when strokes were kept since the last save. */
   save(nodeId: string, next: InkSaveDoc, options?: InkSaveOptions): void {
+    const { row, sealed } = this.takeKept(nodeId);
+    this.sendNow(nodeId, next, options, row, sealed);
+  }
+
+  /** `kept`: the change's kept row this save is made under (none for the re-save after a refusal: a drawing waiting
+   *  meanwhile keeps its own). */
+  private sendNow(nodeId: string, next: InkSaveDoc, options: InkSaveOptions | undefined, kept: KeptWrite | null, sealed: KeptWrite[] = []): void {
     const state = this.state(nodeId);
-    // Unanswered saves: this one is made from the newest of them, else from what the server holds.
-    const from = state.pending.size > 0 ? state.latest : 0;
+    const { from, value, base, merged, replayed } = this.made(state, next);
     const seq = ++this.seq;
     state.pending.add(seq);
-    const { value, base, merged, replayed } = from ? { value: next, base: state.sent.get(from)!.doc, merged: false, replayed: [] } : this.fromServer(state, next);
     state.sent.set(seq, { doc: next, madeFrom: from, merged, replayed });
     state.latest = seq;
-    const sent = this.send(nodeId, value, base, this.attr ? { ...options, attr: this.attr } : options);
-    void Promise.resolve(sent).then((outcome) => this.answered(nodeId, state, seq, outcome));
+    const sent = this.send(nodeId, value, base, { ...options, ...(this.attr ? { attr: this.attr } : {}), ...(kept ? { kept } : {}) });
+    void Promise.resolve(sent).then((outcome) => this.answered(nodeId, state, seq, outcome)).finally(() => { for (const row of sealed) void row.drop(); });
+  }
+
+  /** What a save of `next` would send now: made from the newest unanswered save, else from what the server holds. */
+  private made(state: NodeState, next: InkSaveDoc): { from: number; value: InkSaveBase; base: InkSaveBase | null | undefined; merged: boolean; replayed: Change[] } {
+    const from = state.pending.size > 0 ? state.latest : 0;
+    return from ? { from, value: next, base: state.sent.get(from)!.doc, merged: false, replayed: [] } : { from, ...this.fromServer(state, next) };
   }
 
   /** The value and base of a save made from what the server holds: `next` as it is, or — when the server's text holds
@@ -205,7 +293,7 @@ export class InkSaver {
     state.damaged = false;
     this.settle(state);
     // Made from what the server holds now (nothing is pending, so `server` is the base).
-    if (again) this.save(nodeId, again.doc);
+    if (again) this.sendNow(nodeId, again.doc, undefined, null);
   }
 
   /** Nothing is pending: the numbers of the saves so far no longer matter. A save still pending keeps its record. */
@@ -225,5 +313,6 @@ export function useInkSurfaceSaver(attr?: InkSaveOptions["attr"]) {
   saver.current ??= new InkSaver(attr);
   const rebase = useCallback((nodeId: string, doc: InkSaveBase | null) => saver.current!.rebase(nodeId, doc), []);
   const save = useCallback((nodeId: string, next: InkSaveDoc, options?: InkSaveOptions) => saver.current!.save(nodeId, next, options), []);
-  return { rebase, save };
+  const keepAdded = useCallback((nodeId: string, added: InkSaveDoc) => saver.current!.keepAdded(nodeId, added), []);
+  return { rebase, save, keepAdded };
 }

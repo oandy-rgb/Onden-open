@@ -23,7 +23,7 @@ export default function HandwritingPane({ node, canEdit }: NoteViewPaneProps) {
   const t = useT();
   const nodeId = node.id;
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const { rebase, save } = useInkSurfaceSaver(NOTE_INK_ATTR);
+  const { rebase, save, keepAdded } = useInkSurfaceSaver(NOTE_INK_ATTR);
   // A version put back from History: this pane loads it again.
   const drawingRestored = useDrawingRestoreSerial(nodeId);
 
@@ -53,14 +53,19 @@ export default function HandwritingPane({ node, canEdit }: NoteViewPaneProps) {
     const doc = noteDoc(next);
     if (doc && !loaded.readOnly) save(nodeId, doc, options);
   };
+  // At pen-up: only the strokes just drawn, kept on the device at once (lib/ink/surfaceSaver keepAdded).
+  const keep = (added: InkPages) => {
+    const doc = noteDoc(added);
+    if (doc && !loaded.readOnly) keepAdded(nodeId, doc);
+  };
   return (
     <div className="handwriting-pane">
       <Suspense fallback={null}>
         {loaded.list ? (
           <NotePagesBook key={nodeId} nodeId={nodeId} list={loaded.list} listValue={loaded.listValue} stored={loaded.pages} readOnly={loaded.readOnly || !canEdit}
             readOnlyNotice={loaded.readOnly ? undefined : t("You can read this note but not change it, so this opens read-only.")}
-            save={(doc, options) => save(nodeId, doc, options)} />
-        ) : <InkNodeView key={nodeId} initialPages={loaded.pages} onPagesChange={persist} readOnly={loaded.readOnly || !canEdit} readOnlyNotice={loaded.readOnly ? undefined : t("You can read this note but not change it, so this opens read-only.")} nodeId={nodeId} />}
+            save={(doc, options) => save(nodeId, doc, options)} keepAdded={(doc) => keepAdded(nodeId, doc)} />
+        ) : <InkNodeView key={nodeId} initialPages={loaded.pages} onPagesChange={persist} onAdded={keep} readOnly={loaded.readOnly || !canEdit} readOnlyNotice={loaded.readOnly ? undefined : t("You can read this note but not change it, so this opens read-only.")} nodeId={nodeId} />}
       </Suspense>
     </div>
   );

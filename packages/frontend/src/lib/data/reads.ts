@@ -16,6 +16,8 @@ import {
   type NodeAttribute, type PendingApproval,
 } from "../api";
 import { hasPendingWrite } from "./writeQueue";
+import { getPendingWrites as pendingWrites } from "../localDb";
+import { isInkPageAttr } from "@onden/markdown";
 import { dedupedGet } from "./queryCache";
 import { writeTargets, type TargetedWrite } from "../pendingWriteTargets";
 import { localCopy } from "./sync";
@@ -128,11 +130,19 @@ const notes = {
   /** Some attribute values of one note. While a write to its attributes is
    *  queued, or the server cannot answer, the on-device copy answers. */
   async attributeValues<K extends string>(id: string, keys: readonly K[]): Promise<Record<K, string | null>> {
-    const fromMirror = async () => Object.fromEntries(await Promise.all(
-      keys.map(async (key) => [key, await localCopy.attribute(id, key).catch(() => null)] as const),
-    )) as Record<K, string | null>;
     const queuedAttribute = (write: TargetedWrite) => writeTargets(write)
       .some((target) => target.kind === "node" && target.id === id && target.part?.split("/")[0] === "attributes");
+    // A drawing comes back as it will be once its queued saves are sent: the copy here, with them laid over it
+    // (inkWriter.withQueuedInk) — a page opened after a kill shows the strokes only the queue holds.
+    const fromMirror = async () => {
+      const queued = (await pendingWrites().catch(() => [])).filter(queuedAttribute);
+      // Loaded only for a drawing (the ink writer is not part of the app's first load).
+      const ink = keys.some(isInkPageAttr) ? await import("./inkWriter") : null;
+      return Object.fromEntries(await Promise.all(keys.map(async (key) => {
+        const value = await localCopy.attribute(id, key).catch(() => null);
+        return [key, ink && isInkPageAttr(key) ? ink.withQueuedInk(id, key, value, queued) : value] as const;
+      }))) as Record<K, string | null>;
+    };
     if (await hasPendingWrite(queuedAttribute).catch(() => false)) return fromMirror();
     try {
       const res = await apiFetch(`/api/nodes/${id}/attributes?keys=${keys.map(enc).join(",")}`);

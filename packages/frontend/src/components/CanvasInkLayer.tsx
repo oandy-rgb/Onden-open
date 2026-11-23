@@ -5,7 +5,7 @@ import { BOARD_INK_ATTR, inkHasContent } from "@onden/markdown/ink";
 import { createCommittedRenderer, type ICommittedRenderer } from "../lib/ink/committed";
 import { InkEngine } from "../lib/ink/engine";
 import { useDrawingRestoreSerial } from "../hooks/useDrawingRestoreSerial";
-import { InkSaver, isEmptyInkClip, registerInkEdit, usePenShortcutTool, type InkClip, type InkSelection } from "../lib/ink";
+import { InkSaver, isEmptyInkClip, pageWithOnly, registerInkEdit, usePenShortcutTool, type InkAdded, type InkClip, type InkSelection } from "../lib/ink";
 import { flowInkTransform } from "../lib/ink/flowTransform";
 import type { InkActiveTool, InkDocument } from "../lib/ink/types";
 import type { BoardHistory } from "../hooks/useBoardHistory";
@@ -161,6 +161,14 @@ const CanvasInkLayer = forwardRef<CanvasInkHandle, Props>(function CanvasInkLaye
   }, [canvasId]);
   const persistRef = useRef(persist);
   useEffect(() => { persistRef.current = persist; }, [persist]);
+  // At pen-up, before the engine's debounce: only the strokes just drawn, kept on the device at once (lib/ink/surfaceSaver
+  // keepAdded); the whole layer follows with the debounced save above.
+  const keepAdded = useCallback((added: InkAdded) => {
+    const engine = engineRef.current;
+    if (engine) inkSaver.current!.keepAdded(canvasId, pageWithOnly(engine.pageSettings(), added));
+  }, [canvasId]);
+  const keepAddedRef = useRef(keepAdded);
+  useEffect(() => { keepAddedRef.current = keepAdded; }, [keepAdded]);
 
   const currentView = useCallback(() => {
     const vp = vpRef.current;
@@ -237,6 +245,7 @@ const CanvasInkLayer = forwardRef<CanvasInkHandle, Props>(function CanvasInkLaye
       onPenSeen: () => inputRef.current.onPenSeen(),
       onPenShortcut,
       onChange: (d) => persistRef.current(d),
+      onAdded: (added) => keepAddedRef.current(added),
       // One history for the whole board: the engine reports each new edit; undo and
       // redo (keys, toolbar, finger taps) all go through the board's history.
       onRecord: (op) => registerInkEdit(boardRef.current, () => engineRef.current, op),

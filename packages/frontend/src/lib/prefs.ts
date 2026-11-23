@@ -169,6 +169,9 @@ export const PREFS = {
   focusRun: { key: "onden.focusRun", scope: "account" },
   storagePref: { key: "onden-storage-pref", scope: "account" },
   lostWrites: { key: "onden.lostWrites", scope: "account" },
+  /** Strokes kept at pen-up whose queue row is not written yet (writeQueue.keepUnsentWrite): a synchronous copy the next
+   *  page takes into the queue. Removed once the row is durable. */
+  keptWrites: { key: "onden.keptWrites", scope: "account" },
   frecency: { key: "onden.frecency", scope: "account", migrateUnscoped: true },
   /** Retired: pinned tags are now the synced sidebarTags; read once by
    *  hooks/useSidebarTagPrefs, then removed. */

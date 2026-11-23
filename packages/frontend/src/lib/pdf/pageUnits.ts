@@ -40,7 +40,8 @@ import {
 import { pdfPageKey } from "@onden/markdown/page-text";
 import { drawingRecord, shapeRecord } from "./capture";
 import type { PdfDrawingStroke, PdfHighlightRecord, PdfShapeType } from "./coords";
-import { addDrawingToPage, addShapeToPage, decodePdfInk, drawingStrokeId, drawingStrokesToInk, type InkMultiPageDoc } from "./pdfAdapter";
+import { addDrawingToPage, addShapeToPage, decodePdfInk, drawingStrokeId, drawingStrokesToInk, emptyMultiPageDoc, type InkMultiPageDoc } from "./pdfAdapter";
+import { pageWithOnly, type InkAdded } from "../ink";
 
 /** Page height / width when nothing on a page says (A4). */
 const DEFAULT_RATIO = Math.SQRT2;
@@ -285,4 +286,14 @@ export function setPdfPageDoc(envelope: InkMultiPageDoc, n: number, doc: InkDocu
     units: { ...env.units!, pages: { ...env.units!.pages, [key]: { ...had, ...pdfPageRecord(n, doc, ratio) } } },
     unitsFrom: legacyFingerprint(written),
   };
+}
+
+/** A PDF note's envelope holding only `added` on page `key` (strokes just finished: lib/ink/additions), in both forms
+ *  through setPdfPageDoc, the page's settings taken from the note's own envelope. What the saver keeps at pen-up; merged
+ *  from nothing it adds exactly those strokes (test/inkAdditionsMerge.test.ts). `ratio` = the page's height / width. */
+export function pdfWithOnly(envelope: InkMultiPageDoc, key: string, added: InkAdded, ratio: number): InkMultiPageDoc | null {
+  const n = pdfPageOfKey(key);
+  if (n === null) return null;
+  const page = envelope.units?.pages[key]?.doc.page ?? emptyPageDoc().page;
+  return setPdfPageDoc(emptyMultiPageDoc(), n, pageWithOnly(page, added), ratio);
 }

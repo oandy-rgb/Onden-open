@@ -425,7 +425,7 @@ export default function OverviewEditor({
     setLoaded((current) => current?.nodeId === nodeId ? { ...current, ...change } : current);
   }, []);
 
-  const { rebase: rebaseInk, save: saveSurfaceInk } = useInkSurfaceSaver();
+  const { rebase: rebaseInk, save: saveSurfaceInk, keepAdded: keepAddedInk } = useInkSurfaceSaver();
   // A version put back from History: the surface loads it again (hooks/useDrawingRestoreSerial).
   const drawingRestored = useDrawingRestoreSerial(node?.id);
 
@@ -487,6 +487,15 @@ export default function OverviewEditor({
     if (!surfaceNodeId || inkReadOnly || !doc) return;
     saveSurfaceInk(surfaceNodeId, doc, options);
   }, [surfaceNodeId, inkReadOnly, saveSurfaceInk]);
+  // At pen-up: only the strokes just drawn, kept on the device at once (lib/ink/surfaceSaver keepAdded); the settled
+  // drawing above follows. Same note, same format as the save it comes before.
+  const keepPdfAdded = useCallback((added: InkMultiPageDoc) => {
+    if (surfaceNodeId && !inkReadOnly) keepAddedInk(surfaceNodeId, added);
+  }, [surfaceNodeId, inkReadOnly, keepAddedInk]);
+  const keepPagesAdded = useCallback((added: InkPages) => {
+    const doc = noteDoc(added);
+    if (surfaceNodeId && !inkReadOnly && doc) keepAddedInk(surfaceNodeId, doc);
+  }, [surfaceNodeId, inkReadOnly, keepAddedInk]);
 
   // Heptabase-style highlight → first-class node. Fires once per text
   // selection inside the PDF reader. The new node carries the quote as its
@@ -732,6 +741,7 @@ export default function OverviewEditor({
                     pdfUrl={pdfUrl.startsWith("/") ? `${getApiBase()}${pdfUrl}` : pdfUrl}
                     initialDoc={pdfInkDoc}
                     onChange={persistPdfInk}
+                    onAdded={keepPdfAdded}
                     readOnly={inkReadOnly || !canEdit}
                     readOnlyNotice={inkReadOnly ? undefined : viewOnlyInkNotice}
                     onTextHighlightCreated={spawnHighlightNode}
@@ -748,6 +758,7 @@ export default function OverviewEditor({
                     key={surfaceNodeId ?? "empty"}
                     initialPages={inkPages}
                     onPagesChange={persistInkPages}
+                    onAdded={keepPagesAdded}
                     readOnly={inkReadOnly || !canEdit}
                     readOnlyNotice={inkReadOnly ? undefined : viewOnlyInkNotice}
                     pageText={pageText}

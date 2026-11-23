@@ -27,6 +27,8 @@ export { extractInkClip, inkClipBounds, isEmptyInkClip, placeInkClip, type InkCl
 export {
   InkInputPolicy,
   fingerDraws,
+  TAP_MAX_MS,
+  TAP_SLOP_PX,
   type InkInputAction,
   type InkPointerSample,
 } from "./inputPolicy";

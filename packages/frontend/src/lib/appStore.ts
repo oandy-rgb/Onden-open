@@ -26,6 +26,7 @@ import type { LocalCopyState } from "./localCopyState";
 import { t } from "./i18n";
 import { isSystemNode, tagsById } from "./systemNodes";
 import { canvasList } from "./canvasList";
+import { hostCan } from "./hostCapabilities";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -216,9 +217,11 @@ export function setAccessRevoked(accessRevoked: boolean): void {
   setAppState({ accessRevoked });
 }
 
-/** Step D fail-closed display gate — see AppState.membershipGated. */
+/** Step D fail-closed display gate — see AppState.membershipGated. The one door for the flag: an environment
+ *  without other members (the local edition, lib/hostCapabilities.ts) never raises it, whatever path asks — there
+ *  is nobody whose access could have changed, and a check that cannot finish there must not lock the person out. */
 export function setMembershipGated(membershipGated: boolean): void {
-  setAppState({ membershipGated });
+  setAppState({ membershipGated: membershipGated && hostCan("membershipCheck") });
 }
 export function setActiveCanvas(updater: Updater<Canvas | null>): void {
   setAppState((s) => ({ activeCanvas: resolve(updater, s.activeCanvas) }));

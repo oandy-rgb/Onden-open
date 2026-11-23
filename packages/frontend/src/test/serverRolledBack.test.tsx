@@ -5,7 +5,7 @@
 // told once, membership is checked from the start. An answer merely late is only refused (#1794 review, rounds 3–4).
 // The copy here is a fake that keeps its watermark, cursor and owed rebuild and judges answers the way the worker does
 // (judgeAnswer); src/test/serverRolledBackRealCopy.test.tsx runs the same recovery over the real worker.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { READ_HEAD_HEADER } from "@onden/markdown/contract";
 
 const copy = vi.hoisted(() => ({
@@ -103,6 +103,7 @@ import { __resetSyncEngineForTests, hydrateNode, refresh, refreshMeta } from "..
 import { getAppState, resetAppState } from "../lib/appStore";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { _resetLocalCopyForTests } from "../lib/localCopyState";
+import { declareLocalOnlyHost } from "../lib/localOnlyStatus";
 import { forgetWatermark, pageWouldTake, startWatermarkFrom, syncPassEnded } from "../lib/data/writePositions";
 
 const SERVER = "s1";
@@ -446,5 +447,51 @@ describe("a healthy server is never taken for one that went back", () => {
     // Nothing started over and nobody was told (a reopen refresh an earlier boot test left may still ask a bootstrap).
     expect([copy.forgotten, warnings(), copy.owed]).toEqual([0, 0, false]);
     expect(pageWouldTake("129", SERVER)).toBe(false); // the watermark is still there
+  });
+});
+
+// The local edition (the browser version: one person, no server, no members) has no membership gate at all
+// (lib/hostCapabilities.ts): the same check that can never finish leaves it usable. Owner report 2026-11-23: after
+// 登出 there the workspace was locked behind 「正在確認工作區資料…」 for good. The server's gate above is unchanged.
+describe("a check that never finishes, with and without other members", () => {
+  afterEach(() => { declareLocalOnlyHost(false); });
+  function checkNeverFinishes() {
+    deviceKnows({ watermark: "100", cursor: 100 });
+    vi.mocked(getAllMembershipIds).mockResolvedValue(["n9"]);
+    vi.mocked(applySync).mockImplementation(async (d) => ({ ...(d as object), stale: true }) as never);
+    apiMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/sync") {
+        const since = JSON.parse(String(init?.body)).since;
+        return delta(Number(since) < 120 ? 120 : since, "120", [], { membership_epoch: 1 });
+      }
+      if (path.startsWith("/api/sync/membership")) throw new ApiError(404, "{}");
+      if (path.startsWith("/api/canvases")) return [];
+      return {};
+    });
+  }
+
+  it("on a server, the first check of the page raises the gate and a failed one keeps it up", async () => {
+    checkNeverFinishes();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(getAppState().membershipGated).toBe(false);
+    expect((await dataSync.sync()).ok).toBe(false);
+    expect(getAppState().membershipGated).toBe(true);
+    // The server's gate says it on screen; the console line is only for the local edition.
+    expect(warn.mock.calls.some(([line]) => line === "[onden] the workspace check did not finish")).toBe(false);
+    warn.mockRestore();
+  });
+
+  it("in the local edition the gate never comes up, though the check still reports that it did not finish", async () => {
+    declareLocalOnlyHost();
+    checkNeverFinishes();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect((await dataSync.sync()).ok).toBe(false);
+    expect(getAppState().membershipGated).toBe(false);
+    // No gate to see, so the console keeps the one trace of why (the cause is still being looked for).
+    expect(warn.mock.calls.some(([line]) => line === "[onden] the workspace check did not finish")).toBe(true);
+    warn.mockRestore();
+    // Any other path that asks for the gate (a membership tick, a refused replay) is answered the same way.
+    dataSync.membershipChanged();
+    expect(getAppState().membershipGated).toBe(false);
   });
 });

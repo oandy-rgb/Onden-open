@@ -76,11 +76,13 @@ for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
 // pass/fail; touchHold.mjs and the slide scripts have their own npm scripts. The last row (bigInk … phoneViewTabs) was
 // listed by no runner until 2026-11-22; each passed against dist-browser that day.
 const FEATURES = [
-  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["caretClearOfBar.mjs", "tablet"], ["caretKeyboardMatrix.mjs"], ["caretClearOfBar.mjs", "ios"], ["typeAtTheEnd.mjs"], ["shortTypingLayout.mjs", "tablet"], ["shortTypingLayout.mjs", "mobile-chrome"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
+  ["boardMotion.mjs"], ["boardPhoneFull.mjs"], ["caretClearOfBar.mjs"], ["deleteLineTask.mjs"], ["caretClearOfBar.mjs", "tablet"], ["caretKeyboardMatrix.mjs"], ["caretClearOfBar.mjs", "ios"], ["typeAtTheEnd.mjs"], ["tapBelowLastLine.mjs"], ["shortTypingLayout.mjs", "tablet"], ["shortTypingLayout.mjs", "mobile-chrome"], ["endRoomNoJump.mjs"], ["expandedPaneFillsWindow.mjs"], ["expandedPaneFillsWindow.mjs", "mobile-chrome"],
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["pdfNoteText.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
   ["bigInk.mjs"], ["contentTabRemovable.mjs"], ["phoneAiPanel.mjs"], ["reviewCardFront.mjs"], ["reviewGroups.mjs"], ["splitNoteWraps.mjs"], ["phoneViewTabs.mjs"], ["tabletViews.mjs"],
+  // The local edition has no sign-out and no membership gate, even with a check that never finishes (2026-11-23 owner report).
+  ["localEditionNoGate.mjs"], ["localEditionNoGate.mjs", "mobile-chrome"],
 ];
 const dirArgs = passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir");
 for (const [script, ...args] of chromiumRan ? FEATURES : []) {

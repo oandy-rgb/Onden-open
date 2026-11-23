@@ -35,6 +35,8 @@ step "unused code" npm run -s unused:check
 step "licences and third-party notices" npm run -s notices:check
 step "ratchet" npm run -s ratchet:check
 step "change notes" npm run -s changes:check
+# The merge gate (scripts/ci/mergeGate.sh) against a fake gh: each refusal refuses, the good case passes.
+step "merge gate self-test" bash scripts/merge-gate-selftest.sh
 # docs:covered compares this branch with origin/main and reads the PR text and commit messages, so it only means something in
 # the private repo (CI there fetches full history). Where it cannot find a base (exit 2: the public repo's branches are one commit on
 # public main, with no PR text), it says so and counts as skipped: neither a failure nor a silent pass.

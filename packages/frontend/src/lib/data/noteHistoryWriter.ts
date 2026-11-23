@@ -2,6 +2,7 @@ import { api, type ContentNode } from "../api";
 import { upsertAttribute, upsertNode } from "../localDb";
 import type { InkKind } from "@onden/markdown/ink";
 import { t } from "../i18n";
+import { queuedWriteMessage } from "./writeErrors";
 import { makeOnlineOperation } from "./onlineWrite";
 import { makeWriteLifecycle, reconcileFields } from "./writeLifecycle";
 import type { DataCtx } from "./types";
@@ -98,7 +99,7 @@ export function makeNoteHistoryWriter(ctx: DataCtx) {
     if (result.status === "synced") {
       try { await ctx.refresh(); }
       catch { ctx.addToast(t("The change is saved. Refresh to load the latest details."), "info"); }
-    }
+    } else ctx.addToast(queuedWriteMessage(), "info"); // nothing else changes on screen: say it is kept, so the person does not press again
     return result;
   }
   return { restoreVersion, restoreInkVersion, undelete, undoAgentRun, redoAgentRun, rewindWorkspace, undoRewind };

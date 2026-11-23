@@ -6,7 +6,9 @@
 // import fails ("Failed to fetch dynamically imported module", a 404 HTML
 // page in place of JS) and the error screen shows until the person reloads.
 //
-// Here a chunk-load failure does ONE full reload, after the open draft is
+// Here a chunk-load failure does ONE full reload, but only when the server shows the
+// file is gone (fileIsGoneFromServer); a request that merely failed on the network, even if
+// the connection is back by the time the handler runs, leaves the page alone. It does ONE reload, after the open draft is
 // flushed, so the page picks up the new index and its new chunk names. The
 // guard (sessionStorage) keeps it from looping: at most one automatic reload
 // per build of the app, and none within RELOAD_WINDOW_MS of the previous one.
@@ -16,7 +18,7 @@
 // Every code-split component goes through lazyWithReload (raw `lazy(` is
 // forbidden elsewhere: src/test/lazyWithReload.test.tsx).
 
-import { reloadPage } from "./api";
+import { pageHref, reloadPage } from "./api";
 import { dictionariesReady } from "./i18n";
 import { isBrowserOnline } from "./browserNetwork";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
@@ -118,15 +120,56 @@ export function takeReloadNotice(): number {
   return raw ? Number(raw) || 0 : 0;
 }
 
+/** How long the "is the file really gone?" check may take before it counts as a network problem. */
+const PROBE_TIMEOUT_MS = 4_000;
+
+const FILE_URL = /https?:\/\/[^\s"')]+|\/[\w./@~-]+\.(?:m?js|css)\b/i;
+
+/** The file a chunk-load error names (Chrome: "...module: <url>", Vite CSS: "...CSS for <path>"). */
+function failedFileUrl(failure: unknown): string | null {
+  const message = failure && typeof failure === "object" ? (failure as { message?: unknown }).message : null;
+  const hit = typeof message === "string" ? FILE_URL.exec(message) : null;
+  if (!hit) return null;
+  try { return new URL(hit[0], pageHref()).href; } catch { return null; }
+}
+
+/** The one place that tells a deploy from a network failure. A file that failed to load is "gone" only
+ *  when the server ANSWERS and no longer has it (404/410, or its HTML page where the file should be).
+ *  A request that gets no answer (offline, a blip that is already over when this runs, a timeout) or a
+ *  server error is the network. The probe is a HEAD with cache "no-store" on purpose: public/sw.js
+ *  answers only GET (a cached build file, or the offline shell page), so a HEAD always reaches the
+ *  real server and an offline answer can never pass for "the file is gone"
+ *  (src/test/serviceWorkerCache.test.ts holds the worker to that). On "network" the page stays and the
+ *  lazy part retries later. Without a file name in the error (Safari), "the server answers at all" is
+ *  the evidence. */
+async function fileIsGoneFromServer(failure: unknown): Promise<boolean> {
+  if (typeof fetch !== "function") return false;
+  const file = failedFileUrl(failure);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(file ?? new URL("/", pageHref()).href, { method: "HEAD", cache: "no-store", signal: controller.signal });
+    if (!file) return true;
+    if (response.status === 404 || response.status === 410) return true;
+    return response.ok && /text\/html/i.test(response.headers.get("content-type") ?? "");
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 let reloading: Promise<boolean> | null = null;
 
 /** Reload once for a stale chunk. Resolves true when the page is reloading
  *  (callers should then wait, not show an error), false when the guard or an
  *  unsaved draft stopped it. Concurrent failures share one attempt. */
-function reloadForStaleChunk(): Promise<boolean> {
+function reloadForStaleChunk(failure: unknown): Promise<boolean> {
   if (reloading) return reloading;
   if (!canAutoReload()) return Promise.resolve(false);
   const attempt = (async () => {
+    // Only a deploy justifies a reload; a failed request must leave the page as it is.
+    if (!(await fileIsGoneFromServer(failure))) { reloading = null; return false; }
     let verdict: ReloadVerdict;
     try { verdict = await withTimeout(beforeReload(), FLUSH_TIMEOUT_MS); } catch { verdict = { kind: "unknown" }; }
     if (verdict.kind !== "safe") { reloading = null; return false; }
@@ -194,7 +237,7 @@ export function lazyWithReload<T extends ComponentType<any>>(
       if (!isChunkLoadError(error)) throw error;
       failure = error;
     }
-    if (await reloadForStaleChunk()) return NEVER;
+    if (await reloadForStaleChunk(failure)) return NEVER;
     throw failure;
   });
 }
@@ -210,7 +253,7 @@ export function installChunkReloadHandler(target: Window = window): () => void {
     if (!canAutoReload()) return;
     event.preventDefault();
     console.warn("[chunk] a code-split file is missing (new deploy?): reloading once", (event as Event & { payload?: unknown }).payload);
-    void reloadForStaleChunk();
+    void reloadForStaleChunk((event as Event & { payload?: unknown }).payload);
   };
   target.addEventListener("vite:preloadError", onPreloadError);
   installed = () => {

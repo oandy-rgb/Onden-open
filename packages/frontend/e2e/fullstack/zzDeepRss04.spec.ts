@@ -84,11 +84,10 @@ test("RSS-04: next, counts, reopen, scope, per-person seen state", async ({ page
   await human.close();
 });
 
-// FINDING: a failed "seen" mark must not look seen (this spec's header; docs/research/full-feature-audit.md GAP-137: "標記結果失敗時回復清單狀態並提示，
-// 或排入既有寫入佇列"; docs/agents/errors-and-saves.md: only the server or the durable queue confirms). What the reader does instead: with POST /seen
-// answering 503 it moves on, draws the left article as read in its list, shows no notice, queues nothing, and the server never records it.
-test("FINDING: a failed seen mark is not drawn as read without being reported or queued", async ({ page }) => {
-  test.fail();
+// A failed "seen" mark must not look seen (this spec's header; docs/research/full-feature-audit.md GAP-137: "標記結果失敗時回復清單狀態並提示，
+// 或排入既有寫入佇列"; docs/agents/errors-and-saves.md: only the server or the durable queue confirms). The reader sends the mark through the write
+// queue (rssWriter.markSeen): a 503 is kept for a retry (the row stays drawn as read and the server gets it), a refusal (4xx) draws the row unread again and says so.
+test("a failed seen mark is not drawn as read without being reported or queued", async ({ page }) => {
   test.setTimeout(120_000);
   const stamp = Date.now();
   await seed(page, stamp, 3);

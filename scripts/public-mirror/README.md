@@ -36,4 +36,6 @@
 - 不要在 `docs/` 加圖片，不要把真實筆記內容寫進測試資料或文件：推上去就是公開的。
 - 推送 `public-push.sh <ref> <分支>`：不是 main 的分支一律是「公開 main ＋ 一個 commit」，蓋掉公開庫上那條分支原本的內容（強制推送），所以 `<ref>` 必須已經包含私人 main（先併 main）。2026-11-22 前是疊在公開分支舊的 commit 上，分支的基準停在舊 main，守門把 main 之後多出的東西都算成這條分支的改動。
 - 要完整端對端就加 `--fullstack`：同步 commit 帶一行 `ci-fullstack: true`，推送觸發的那次 run 就會跑完整端對端，不用再手動開一次（手動那次會取消推送的那次）。
-- 同一棵樹不重跑（`scripts/ci/sameTreeReceipt.sh`，ci.yml 的 `receipt` 工作）：已有一次跑完、必跑工作全綠的 run 是同一棵 git 樹，這次就沿用它，重的工作跳過、摘要寫出沿用哪一次。批次分支測過後合進 main，同步上來的 main 通常就是同一棵樹。完整端對端、排程的 run、PR 不沿用。
+- 同一棵樹不重跑（`scripts/ci/sameTreeReceipt.sh`，ci.yml 的 `receipt` 工作）：已有一次跑完、必跑工作全綠的 run 是同一棵 git 樹，這次就沿用它，重的工作跳過、摘要寫出沿用哪一次。批次分支測過後合進 main，同步上來的 main 通常就是同一棵樹。完整端對端、排程的 run、PR 不沿用。「同一棵樹有沒有全綠的 run」只有一份判斷（`scripts/ci/greenRunLib.sh`），收據和下面的合併閘門共用。
+- 合併只經過合併閘門（`scripts/ci/mergeGate.sh [--merge] <測過的 ref> <PR>…`，2026-11-23）：公開 CI 對 `<測過的 ref>` 那棵樹有一次必跑工作全綠的 run；每個 PR 的 head 都還是測過的那一版（測完之後沒再推）；今天的 main 加上這些 PR 等於測過的那一份（main 之後自己改的檔與產生的檔除外）；每個 PR 最新一則寫著「審查結論：」的留言是「可合併」，而且「已知缺口：」是「無」或附上擁有者放行的連結。完整端對端有已知紅燈的基準，不在必跑工作裡，合併批次前要自己看。本機的 Claude Code 掛鉤（`~/.claude/hooks/merge-gate-only.sh`）拒絕直接打 `gh pr merge`。閘門自己的測試：`scripts/merge-gate-selftest.sh`（守門通道跑）。
+- 審查結論的寫法（給閘門讀）：一行 `審查結論：可合併`（或 `退回`），一行 `已知缺口：無`，或列出缺口並附 `擁有者放行：<擁有者說可以的留言連結>`。

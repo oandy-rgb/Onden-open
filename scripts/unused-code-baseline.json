@@ -580,7 +580,6 @@
       "packages/frontend/src/modules/slides/exportPptx/readCanvas.ts": ["CANVAS_WIDTH", "fittedBox", "fontKindOf", "parseColor"],
       "packages/frontend/src/modules/slides/exportPptx/writePptx.ts": ["WriteOptions", "withoutStrayParagraphProps"],
       "packages/frontend/src/modules/slides/theme.ts": ["SiteLook", "siteLookOf", "themeStyle"],
-      "packages/frontend/src/modules/tasks/JournalTasksRow.tsx": ["JournalTasksRowProps"],
       "packages/frontend/src/modules/tasks/QuickAddPanel.tsx": ["QuickAddPanelProps"],
       "packages/frontend/src/modules/tasks/TimeField.tsx": ["TimeFieldProps"],
       "packages/frontend/src/modules/tasks/focus/FocusCycle.tsx": ["pendingRunSummary"],

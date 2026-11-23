@@ -30,7 +30,6 @@ export const QuickAddPanel = lazyWithReload(() => import("./QuickAddPanel"));
 export { quickTaskFromReading } from "./quickAddTask";
 export { createQuickTask } from "./createQuickTask";
 export type { QuickTaskResult, QuickTaskSaved } from "./createQuickTask";
-export { default as JournalTasksRow } from "./JournalTasksRow";
 // The focus timer: its bar, sheets and full screen (the shell mounts these two).
 export { default as FocusHost, FocusTopMark } from "./focus/FocusHost";
 

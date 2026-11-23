@@ -5,9 +5,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 # patches/ before the install: the root postinstall (patch-package) applies
 # them to node_modules (micromark's linear text resolver), and fails the
-# build if one no longer applies.
+# build if one no longer applies. Astro is installed under packages/frontend,
+# so its patch (CSS of lazy screens) is in packages/frontend/patches and is
+# applied by that package's own postinstall, with the same failure rule.
 COPY patches ./patches
 COPY packages/frontend/package.json ./packages/frontend/package.json
+COPY packages/frontend/patches ./packages/frontend/patches
 COPY packages/backend/package.json ./packages/backend/package.json
 COPY packages/markdown/package.json ./packages/markdown/package.json
 COPY packages/site/package.json ./packages/site/package.json

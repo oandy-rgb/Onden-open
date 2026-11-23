@@ -56,6 +56,7 @@
 
 - **瀏覽器禁止的標頭**：頁面不能送 `Cookie`；Worker 裡的 `Request` 會丟掉 `cookie`／`origin`。`localSession.ts` 用 `Proxy` 把 `headers` 換成含 session cookie 與 `origin` 的 `Headers`（一般 `Headers` 接受任何名稱）。
 - **登入**：試用版只有一個人，沒有登入畫面。快照裡已有本機帳號；worker 開機後自己登入（密碼固定、不是祕密：帳號只在這個瀏覽器的資料庫裡，能讀到密碼的程式碼本來就能讀資料庫）。每次啟動換新的 session 簽章密鑰（`env.ts`）；請求遇到 401（session 過期）會重新登入並重送一次。「登出」被擋下（回成功但什麼都不做），免得把人鎖在自己的筆記外。
+- **帶 Bearer 的請求**：worker 照樣補上本機登入的 cookie，但後端只用那個 Bearer 認證（`app.ts`）：撤銷或偽造的權杖回 401，不會退回成本機擁有者，與伺服器版、桌面版相同（以前這一步是 parity 的已知差異，2026-11-20 起沒有了）。
 - **SSE**：`/api/events/stream` 的回應是串流；worker 在佇列**外**讀它（它只轉發記憶體裡的通知，不碰資料庫），每個片段轉給頁面，`EventSource` 替身解析 `data:` 行。
 - **回應**：非串流的回應在佇列裡讀完整個 body 才送出，所以匯出 zip 這類「讀 body 時才查資料庫」的回應也在序列之內。
 

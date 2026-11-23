@@ -5,7 +5,7 @@ import { startCalendarScheduler } from "./refresh.js";
 // External calendars: read-only iCal subscriptions, shown on the day timeline.
 //
 //   • a calendar is a row of external_calendars (migration 160), a personal
-//     setting, not a note; its address is kept encrypted (store.ts, ONDEN_SECRET_KEY);
+//     setting, not a note; its address is kept sealed (store.ts, services/serverSecret.ts);
 //   • its events are rows of external_calendar_events, replaced whole on each fetch.
 //     They are never notes: not in the tree, search, sync of notes, or the website;
 //   • the fetch loop is a periodic job (refresh.ts, 15 minutes, first pass at boot),

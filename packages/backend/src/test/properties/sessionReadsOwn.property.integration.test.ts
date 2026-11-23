@@ -64,7 +64,7 @@ let noteA = "", noteB = "", reviewTag = "", sourceA = "", sourceB = "";
 let sessionOfP: ActorCtx, sessionOfM: ActorCtx, credentialOfP = "";
 
 /** The preferences a session is NOT given (model; the code's own table is services/actorPrefs.ts SESSION_MAY_READ_PREF). */
-const HIDDEN_PREFS: ReadonlySet<PrefKey> = new Set<PrefKey>(["sidebarTags", "recentBlocks", "dayNoteParent", "captureDestination", "rssFeedCounts", "rssReadingPosition", "splitPane", "splitPane.phone", "splitPane.desktop"]);
+const HIDDEN_PREFS: ReadonlySet<PrefKey> = new Set<PrefKey>(["sidebarTags", "recentBlocks", "dayNoteParent", "captureDestination", "rssFeedCounts", "rssReadingPosition", "reviewScope", "splitPane", "splitPane.phone", "splitPane.desktop"]);
 
 type Read = Awaited<ReturnType<typeof readEverything>>;
 /** Every personal read there is, as one actor sees it. */

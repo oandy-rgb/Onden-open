@@ -36,7 +36,7 @@ test("the home strip lists a deck with due cards and 'Study' opens a scoped sess
   // Studying it opens a subtree-scoped session over exactly that deck.
   await deckBtn.click();
   const panel = page.locator(".review-panel");
-  await expect(panel.locator(".review-scope")).toContainText(`Geometry ${stamp}`);
+  await expect(panel.locator(".review-scope-button")).toContainText(`Geometry ${stamp}`);
   await expect(panel.locator(".review-count")).toHaveText("3 left");
   await expect(panel.locator(".review-card-title")).toContainText(stamp.toString());
 });

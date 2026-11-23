@@ -10,7 +10,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { pool, q } from "../db.js";
 import { addCredentialDetectingFormat } from "../services/aiCredentialSetup.js";
-import { addCredential, listCredentials, revokeCredential, loadApiKey, decryptSecret, encryptSecret } from "../services/aiCredentials.js";
+import { addCredential, listCredentials, revokeCredential, loadApiKey } from "../services/aiCredentials.js";
+import { openSecret, sealSecret } from "../services/serverSecret.js";
+import { legacySealed, openAsPreviousDeploy, purposeSealed } from "./helpers/legacySealed.js";
 import { createToken } from "../services/agentTokens.js";
 import { resolveCurrentActor } from "../spine/currentActor.js";
 import { AgentSessionError, claimSession, endSession, loadRunner, pendingSessions, loadSession, startSession, type AgentSession } from "../services/agentSessions.js";
@@ -38,6 +40,7 @@ import type { AddressInfo } from "node:net";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789WXYZ";
 const SECRET = "ab".repeat(32);
+
 
 type World = Awaited<ReturnType<typeof agentWorld>>;
 let fake: Awaited<ReturnType<typeof startFakeMessagesService>>;
@@ -107,7 +110,9 @@ describe.skipIf(!isTestDb)("API keys", () => {
     expect(JSON.stringify(ev.payload)).not.toContain(KEY);
     expect(JSON.stringify(await listCredentials(w.ws, { actor: w.owner }))).not.toContain(KEY);
     // a ciphertext moved to another row id does not decrypt
-    expect(() => decryptSecret(row.secret_ciphertext, randomUUID())).toThrow(AgentSessionError);
+    expect(() => openSecret("ai-credential", randomUUID(), row.secret_ciphertext)).toThrow(AgentSessionError);
+    // the stored form is the one the previous deploy reads (rollout step 1, services/serverSecret.ts)
+    expect(openAsPreviousDeploy(SECRET, credential.id, row.secret_ciphertext)).toBe(KEY);
   });
 
   it("refuses without ONDEN_SECRET_KEY, for a non-owner, and for a malformed key", async () => {
@@ -115,7 +120,7 @@ describe.skipIf(!isTestDb)("API keys", () => {
     delete process.env.ONDEN_SECRET_KEY;
     try {
       expect(await addCredential(w.ws, { label: "x", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner }).then(() => null, (e) => e.code)).toBe("secret_key_missing");
-      expect(() => encryptSecret("x", randomUUID())).toThrow();
+      expect(() => sealSecret("ai-credential", randomUUID(), "x")).toThrow();
     } finally { process.env.ONDEN_SECRET_KEY = SECRET; }
     expect(await addCredential(w.ws, { label: "x", apiKey: "bad key", baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner }).then(() => null, (e) => e.code)).toBe("invalid_credential");
     expect(await addCredential(w.ws, { label: "x", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.agent }).then(() => "ok", (e) => e instanceof AuthorityError ? "denied" : "other")).toBe("denied");
@@ -126,6 +131,34 @@ describe.skipIf(!isTestDb)("API keys", () => {
     const c = await addCredential(w.ws, { label: "k", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
     await revokeCredential(w.ws, c.id, { actor: w.owner });
     expect(await loadApiKey(w.ws, c.id).then(() => null, (e) => e.code)).toBe("credential_revoked");
+  });
+
+  it("a key the previous deploy saved still opens, and reading it changes nothing in the row", async () => {
+    const w = await agentWorld("cred-legacy");
+    const c = await addCredential(w.ws, { label: "old", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    const old = legacySealed(SECRET, c.id, KEY);
+    await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [c.id, old]);
+    expect(await loadApiKey(w.ws, c.id)).toBe(KEY);
+    const after = (await q<{ s: Buffer }>(`SELECT secret_ciphertext AS s FROM ai_credentials WHERE id = $1`, [c.id])).rows[0]!.s;
+    expect(Buffer.from(after).equals(old)).toBe(true);
+  });
+
+  it("a version 2 key (from step 2 of the rollout) opens, and one sealed for a calendar address under the same id does not", async () => {
+    const w = await agentWorld("cred-v2");
+    const c = await addCredential(w.ws, { label: "v2", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [c.id, purposeSealed(SECRET, "ai-credential", c.id, KEY)]);
+    expect(await loadApiKey(w.ws, c.id)).toBe(KEY);
+    await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [c.id, purposeSealed(SECRET, "external-calendar", c.id, "https://cal.example/x.ics")]);
+    expect(await loadApiKey(w.ws, c.id).then(() => null, (e) => e.code)).toBe("credential_unreadable");
+  });
+
+  it("a row that does not open under this server's key is refused and left exactly as it is", async () => {
+    const w = await agentWorld("cred-legacy-foreign");
+    const c = await addCredential(w.ws, { label: "foreign", apiKey: KEY, baseUrl: fake.url, protocol: "v1_messages" }, { actor: w.owner });
+    const foreign = legacySealed("cd".repeat(32), c.id, KEY);
+    await q(`UPDATE ai_credentials SET secret_ciphertext = $2 WHERE id = $1`, [c.id, foreign]);
+    expect(await loadApiKey(w.ws, c.id).then(() => null, (e) => e.code)).toBe("credential_unreadable");
+    expect(Buffer.from((await q<{ s: Buffer }>(`SELECT secret_ciphertext AS s FROM ai_credentials WHERE id = $1`, [c.id])).rows[0]!.s).equals(foreign)).toBe(true);
   });
 });
 

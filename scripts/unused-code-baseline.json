@@ -130,7 +130,7 @@
       "packages/backend/src/services/agentTools/getAttachment.ts": ["ATTACHMENT_MAX_BYTES", "GetAttachmentResult"],
       "packages/backend/src/services/agentTools/rateLimit.ts": ["InMemoryRateLimiter", "RateLimiter", "_resetRateLimits", "getRateLimiter"],
       "packages/backend/src/services/agentTools/types.ts": ["McpContentBlock"],
-      "packages/backend/src/services/aiCredentials.ts": ["decryptSecret", "encryptSecret", "loadApiKey"],
+      "packages/backend/src/services/aiCredentials.ts": ["loadApiKey"],
       "packages/backend/src/services/aiRoles.ts": ["RolePatch", "RuntimeInput", "isReviewRule", "setRoleReviewRule"],
       "packages/backend/src/services/aiSessionStart.ts": ["SessionRow"],
       "packages/backend/src/services/aiSuggestionBlocks.ts": ["MAX_PARAGRAPHS", "SuggestionTooLargeError", "encodeUnit"],

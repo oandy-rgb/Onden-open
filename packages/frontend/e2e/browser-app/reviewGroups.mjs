@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Review groups in a real engine (browser app, desktop and the Pixel 5 emulation, not a phone):
 //   node e2e/browser-app/reviewGroups.mjs [chromium|mobile-chrome] [--dir dist-browser] [--shots <folder>]
-// Cards under two tags and a note, the status page's 「分組」 section (switch, rows), 「練這組」 opens the review limited to the
-// group with the group in the address; a reload keeps it, Back returns to the status page, 「全部卡片」 leaves the group.
+// Cards under two tags and a note (a card counts under a tag its note, or a note above it, carries), the status page's 「分組」
+// section (switch, rows), 「練這組」 opens the review limited to the group with the group in the address and in the 「範圍」
+// picker; a reload keeps it, Back returns to the status page; the picker lists notes and tags with counts, changes the queue
+// in place, and 全部 leaves the scope. The last choice is remembered when the page opens with no address.
 // --shots saves a screenshot of each step.
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -48,7 +50,8 @@ try {
     return note.id;
   };
   const lecture = (await api("/api/nodes", "POST", { title: "第一堂課", markdown: "" })).json.id;
-  await makeCard("排序", [tagA], lecture);
+  await api(`/api/nodes/${lecture}/tags/${tagA}`, "PUT"); // the lecture carries the tag, its cards do not
+  await makeCard("排序", [], lecture);
   await makeCard("圖論", [tagA, tagB], lecture);
   await makeCard("TCP", [tagB]);
   await makeCard("隨手一張", []);
@@ -72,24 +75,46 @@ try {
   await page.getByText(/演算法/).first().waitFor();
   await page.waitForTimeout(800);
   const placed = await address();
-  check("練這組 puts the group in the address and says which group", /^tag\.[0-9a-f-]{36}$/.test(placed ?? "") && (await body()).includes("演算法") && (await body()).includes("全部卡片"), String(placed));
+  check("練這組 puts the group in the address and says which group", /^tag\.[0-9a-f-]{36}$/.test(placed ?? "") && (await body()).includes("範圍") && (await body()).includes("演算法"), String(placed));
+  check("the scope holds the cards under the tagged lecture, though they carry no tag themselves", (await body()).includes("排序") || /2 張/.test(await body()));
   await shot("practising-group");
   await page.reload();
-  await page.getByRole("button", { name: "全部卡片" }).waitFor({ timeout: 40_000 });
+  await page.getByRole("button", { name: /範圍/ }).waitFor({ timeout: 40_000 });
   check("a reload keeps the group", (await address()) === placed);
   await page.goBack();
   await page.getByRole("region", { name: "分組" }).waitFor({ timeout: 20_000 });
   check("Back returns to the status page", (await address()) === "status");
   await page.goForward();
-  await page.getByRole("button", { name: "全部卡片" }).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "全部卡片" }).click();
+  await page.getByRole("button", { name: /範圍/ }).waitFor({ timeout: 20_000 });
+
+  // The picker: notes and tags with their counts, no id or technical word, a pick changes the queue in place.
+  await page.getByRole("button", { name: /範圍/ }).click();
+  const sheet = page.getByRole("dialog", { name: "範圍" });
+  await sheet.getByText("第一堂課").waitFor({ timeout: 20_000 });
+  const picker = await sheet.innerText();
+  check("the picker lists notes, tags and 沒有標籤 with counts", ["第一堂課", "#演算法", "#網路", "沒有標籤", "全部"].every((x) => picker.includes(x)) && /\d+ 張/.test(picker), picker.replace(/\n/g, " | ").slice(0, 200));
+  check("the picker shows no id or technical word", !/[0-9a-f]{8}-[0-9a-f]{4}/.test(picker) && !/tag_id|untagged|undefined|null|root\./.test(picker));
+  // The ✕ in the sheet's header is ui/SheetHeader's (38px with a mouse, 44px on a finger): not a row.
+  const small = await sheet.locator("button:not([aria-label='關閉'])").evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().height < 43.5).length);
+  check("every picker row is at least 44px tall", small === 0, `${small} smaller`);
+  await shot("picker");
+  await sheet.getByRole("button", { name: /#網路/ }).click();
   await page.waitForTimeout(600);
-  check("全部卡片 leaves the group", (await address()) === null && !(await body()).includes("全部卡片"));
+  check("a pick changes the scope in place (address and picker button)", /^tag\./.test((await address()) ?? "") && (await address()) !== placed && (await page.getByRole("button", { name: /範圍.*#網路/ }).count()) === 1);
+  await shot("picked");
+  await page.goto(`${site.base}?view=review`);
+  await page.getByRole("button", { name: /範圍/ }).waitFor({ timeout: 40_000 });
+  await page.waitForTimeout(800);
+  check("a page opened with no address returns to the last choice", /^tag\./.test((await address()) ?? "") && (await page.getByRole("button", { name: /範圍.*#網路/ }).count()) === 1, String(await address()));
+  await page.getByRole("button", { name: /範圍/ }).click();
+  await page.getByRole("dialog", { name: "範圍" }).getByRole("button", { name: /^全部/ }).click();
+  await page.waitForTimeout(600);
+  check("全部 leaves the scope", (await address()) === "all" && (await page.getByRole("button", { name: /範圍.*全部/ }).count()) === 1);
   const noTag = (async () => {})();
   await page.goto(`${site.base}?view=review&m=status`);
   await page.getByRole("region", { name: "分組" }).waitFor({ timeout: 40_000 });
   await page.locator(".review-group", { hasText: "沒有標籤" }).getByRole("button", { name: "練這組" }).click();
-  await page.getByText("正在練沒有標籤的卡片").waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /範圍.*沒有標籤/ }).waitFor({ timeout: 20_000 });
   check("沒有標籤 opens the cards under no tag", (await address()) === "untagged");
   await noTag;
   check("no page error", errors.length === 0, errors.join(" | "));

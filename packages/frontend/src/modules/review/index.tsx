@@ -49,7 +49,8 @@ export const reviewModule: FrontendModule = {
   screen: { label: "Review", Icon: Sparkles, Component: lazyWithReload(() => import("./ReviewScreen")) },
   openCommand: { id: "a-review", label: "Go to Review", keywords: ["study", "flashcards", "spaced", "srs", "due", "複習", "到期", "卡片", "閃卡", "記憶"], group: "Navigate", hint: "place" },
   HomeSection: ({ open }) => (
-    <ReviewHomeSection onOpenReview={() => open()} onStudyDeck={(rootId, rootTitle) => open({ rootId, rootTitle })} onOpenStatus={() => open({ page: "status" })} />
+    <ReviewHomeSection // The line counts every card, so it opens on all of them, not on the scope the person last chose.
+    onOpenReview={() => open({ page: "all" })} onStudyDeck={(rootId, rootTitle) => open({ rootId, rootTitle })} onOpenStatus={() => open({ page: "status" })} />
   ),
   noteHeaderAction: NoteCardPrefetchAction,
   noteCommands: [

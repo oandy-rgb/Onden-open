@@ -3,6 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { StatusError } from "../../statusError.js";
 import { q, getWorkspaceId } from "../../db.js";
+import { sql } from "kysely";
 import { db } from "../../dbKysely.js";
 import { addDays, dayStartInstant, localDayId } from "../../localDay.js";
 import { mutatePersonal, requireActor } from "../../spine/mutate.js";
@@ -170,16 +171,40 @@ async function loadReviewTags(workspaceId: string, actorId: string | null = null
   return [{ id: module.id, source: module.id, behaviour: personalBehaviour(module.behaviour, override) }];
 }
 
-/** The cards a tag picks: those whose note carries the tag or a tag under or extending it (tagHierarchy.memberTagIds, the rule a tag
- *  page lists notes by), and the paragraphs of those notes or carrying such a tag themselves. Returns the note ids and paragraph ids. */
-async function tagScope(workspaceId: string, tagId: string): Promise<{ notes: Set<string>; blocks: Set<string> }> {
-  const tagIds = await memberTagIds(workspaceId, tagId);
-  if (!tagIds.length) return { notes: new Set(), blocks: new Set() };
-  const notes = new Set((await db.selectFrom("node_tags").select("node_id").distinct().where("tag_id", "in", tagIds).execute()).map((row) => row.node_id));
-  const blocks = new Set((await db.selectFrom("block_node_tags").select("block_node_id").distinct().where("tag_id", "in", tagIds).execute()).map((row) => row.block_node_id));
-  return { notes, blocks };
+/** The cards a tag picks (the ONE rule: queue, deck, stats and the group counts all read it). A card is under tag T when it carries a
+ *  tag under or extending T itself (tagHierarchy.memberTagIds, the rule a tag page lists notes by), its note does, or a note above its
+ *  note does (the whole chain to the top). Worked out when read: nothing is written onto the cards, and a paragraph still does not
+ *  inherit tags (block-nodes.md §5). Returns the note ids (the tagged notes and everything under them) and the tagged paragraph ids. */
+async function tagScope(workspaceId: string, tagId: string): Promise<TagScope> {
+  return (await tagScopes(workspaceId, [tagId])).get(tagId)!;
 }
-const inTagScope = (card: EnrolledCard, scope: { notes: Set<string>; blocks: Set<string> }): boolean =>
+type TagScope = { notes: Set<string>; blocks: Set<string> };
+
+/** tagScope of several tags with two queries for all of them (plus each tag's member tags), not two per tag. */
+async function tagScopes(workspaceId: string, tagIds: string[]): Promise<Map<string, TagScope>> {
+  const members = new Map<string, string[]>();
+  for (const tagId of tagIds) members.set(tagId, await memberTagIds(workspaceId, tagId));
+  const every = [...new Set([...members.values()].flat())];
+  const notesByTag = new Map<string, Set<string>>();
+  const blocksByTag = new Map<string, Set<string>>();
+  if (every.length) {
+    const below = (await sql<{ tag_id: string; id: string }>`
+      WITH RECURSIVE below AS (
+        SELECT nt.tag_id, n.id FROM node_tags nt JOIN content_nodes n ON n.id = nt.node_id
+         WHERE n.workspace_id = ${workspaceId} AND ${sql.raw(liveNodeSql("n"))} AND nt.tag_id = ANY(${every}::uuid[])
+        UNION
+        SELECT b.tag_id, c.id FROM content_nodes c JOIN below b ON c.parent_id = b.id
+         WHERE c.workspace_id = ${workspaceId} AND ${sql.raw(liveNodeSql("c"))}
+      )
+      SELECT tag_id::text, id::text FROM below`.execute(db)).rows;
+    for (const row of below) (notesByTag.get(row.tag_id) ?? notesByTag.set(row.tag_id, new Set()).get(row.tag_id)!).add(row.id);
+    const blocks = await db.selectFrom("block_node_tags").select(["tag_id", "block_node_id"]).where("tag_id", "in", every).execute();
+    for (const row of blocks) (blocksByTag.get(row.tag_id) ?? blocksByTag.set(row.tag_id, new Set()).get(row.tag_id)!).add(row.block_node_id);
+  }
+  const union = (byTag: Map<string, Set<string>>, ids: string[]) => new Set(ids.flatMap(id => [...(byTag.get(id) ?? [])]));
+  return new Map(tagIds.map(tagId => [tagId, { notes: union(notesByTag, members.get(tagId)!), blocks: union(blocksByTag, members.get(tagId)!) }]));
+}
+const inTagScope = (card: EnrolledCard, scope: TagScope): boolean =>
   scope.notes.has(card.node_id) || (card.block !== null && scope.blocks.has(card.block.id));
 
 async function assertVisibleTag(actor: ActorCtx, workspaceId: string, tagId: string): Promise<void> {
@@ -190,13 +215,14 @@ async function assertVisibleTag(actor: ActorCtx, workspaceId: string, tagId: str
 /** The tags a person can study by, with the cards each covers: every live tag that is not hidden (the one hide rule: no list shows a
  *  hidden tag; a layout tag the app keeps for itself is no group either), each with its tagScope. The list "by tag" rows and the
  *  「沒有標籤」 scope share. */
-async function groupTagScopes(workspaceId: string, actor: ActorCtx): Promise<Array<{ id: string; title: string; scope: { notes: Set<string>; blocks: Set<string> } }>> {
+async function groupTagScopes(workspaceId: string, actor: ActorCtx): Promise<Array<{ id: string; title: string; scope: TagScope }>> {
   const rows = { rows: await db.selectFrom("content_nodes").select(["id", "title"])
     .where("workspace_id", "=", workspaceId).where("node_type", "=", TAG_NODE_TYPE).where("deleted_at", "is", null)
     .where("hidden", "=", false).where("reserved_key", "is", null).orderBy("title").orderBy("id").execute() };
   const visible: Array<{ id: string; title: string }> = [];
   for (const row of rows.rows) if (await canSeeTag(actor, row.id)) visible.push(row);
-  return Promise.all(visible.map(async tag => ({ ...tag, scope: await tagScope(workspaceId, tag.id) })));
+  const scopes = await tagScopes(workspaceId, visible.map(tag => tag.id));
+  return visible.map(tag => ({ ...tag, scope: scopes.get(tag.id)! }));
 }
 
 /** Which cards a study session covers: every card, the cards in one note's subtree, the cards of one tag, or the cards no tag
@@ -472,14 +498,12 @@ export type Stats = { due: number; new: number; learned: number; new_available: 
 
 /** Counts for the actor's cards (or one tag's, ReviewError 404 when not
  *  visible). `due` and `new_available` are what the person's daily cap allows today. */
-export async function stats(authenticated: ActorCtx | null, { tagId, now = new Date() }: { tagId?: string; now?: Date } = {}): Promise<Stats> {
+export async function stats(authenticated: ActorCtx | null, { now = new Date(), ...scope }: { now?: Date } & CardScope = {}): Promise<Stats> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
-    if (tagId) await assertVisibleTag(actor, workspaceId, tagId);
     const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
     const allCards = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
-    const scope = tagId ? await tagScope(workspaceId, tagId) : null;
-    const cards = (scope ? allCards.filter(card => inTagScope(card, scope)) : allCards).filter(card => !isHeld(card, now));
+    const cards = (await cardsInScope(workspaceId, actor, allCards, scope)).filter(card => !isHeld(card, now));
     const fresh = cards.filter(card => card.state === null).length;
     // What a person's cap rolls to tomorrow is not due today.
     const left = reviewsLeftToday(allCards, await loadDailyLimit(personalDataOwnerId(actor)), now);
@@ -647,18 +671,20 @@ const statusCard = (card: EnrolledCard): ReviewStatusCard => ({ node_id: card.no
 /** How the actor's reviews stand, counted by workspace day. Overdue cards
  *  are counted apart from the forecast; what the daily cap holds back rolls
  *  into tomorrow. */
-export async function status(authenticated: ActorCtx | null, { now = new Date() }: { now?: Date } = {}): Promise<ReviewStatus> {
+export async function status(authenticated: ActorCtx | null, { now = new Date(), ...scope }: { now?: Date } & CardScope = {}): Promise<ReviewStatus> {
   const workspaceId = await getWorkspaceId();
   return withActorReadSnapshot(authenticated, workspaceId, async actor => {
     const tags = await loadReviewTags(workspaceId, personalDataOwnerId(actor));
-    const all = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
+    const everyCard = await loadEnrolledCards(workspaceId, actor, tags, { bodies: false });
+    // The page follows the chosen scope; the daily cap stays the person's one number over every card.
+    const all = await cardsInScope(workspaceId, actor, everyCard, scope);
     const today = localDayId(now);
     const live = all.filter(card => !card.hold?.suspended);
     const scheduled = live.filter((card): card is EnrolledCard & { state: ReviewState } => card.state !== null);
     const dayOf = (card: EnrolledCard & { state: ReviewState }) => localDayId(new Date(dueAt(card)));
     const dueByToday = scheduled.filter(card => dayOf(card) <= today).sort((a, b) => dueAt(a).localeCompare(dueAt(b)));
     const limit = await loadDailyLimit(personalDataOwnerId(actor));
-    const left = reviewsLeftToday(all, limit, now);
+    const left = reviewsLeftToday(everyCard, limit, now);
     const { kept, rolledOver } = withinDailyCap(dueByToday, left);
     const overdue = kept.filter(card => dayOf(card) < today).length;
     const forecast = Array.from({ length: FORECAST_DAYS }, (_, index) => {
@@ -667,12 +693,12 @@ export async function status(authenticated: ActorCtx | null, { now = new Date() 
     });
     const heldNow = new Set(live.filter(card => isHeld(card, now)).map(card => card.block?.id ?? card.node_id));
     const fresh = live.filter(card => !heldNow.has(card.block?.id ?? card.node_id));
-        return {
+    return {
       today_date: today, overdue, today: kept.length - overdue,
       new_available: Math.min(fresh.filter(card => card.state === null).length, Math.max(0, left - kept.length)),
       rolled_over: rolledOver.length,
       reviews_per_day: limit,
-      reviewed_today: reviewedToday(all, now),
+      reviewed_today: reviewedToday(everyCard, now),
       forecast,
       forgotten_min: FORGOTTEN_MIN,
       forgotten: scheduled.filter(card => card.state.lapses >= FORGOTTEN_MIN)

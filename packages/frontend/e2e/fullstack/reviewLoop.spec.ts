@@ -105,6 +105,8 @@ test("panel says how many new cards today's one daily cap still allows", async (
   expect(stats.new_per_day).toBeUndefined();
   expect(stats.new).toBeGreaterThanOrEqual(1);
 
+  // The palette opens the scope the person last chose; earlier specs of this user may have left a narrow one.
+  await page.request.put("/api/me/prefs/reviewScope", { ...H, data: { value: "all" } });
   await ready(page, "/?view=notes");
   await page.waitForTimeout(600);
   await page.keyboard.press("Control+k");

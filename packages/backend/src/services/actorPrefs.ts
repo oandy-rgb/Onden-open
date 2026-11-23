@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { INK_PRESET_NAME_MAX, isHexColor } from "@onden/markdown";
+import { INK_PRESET_NAME_MAX, UUID_SOURCE, isHexColor } from "@onden/markdown";
 import { INK_SHAPE_KINDS } from "@onden/markdown/ink";
 import { q, getWorkspaceId } from "../db.js";
 import { mutatePersonal } from "../spine/mutate.js";
@@ -161,6 +161,10 @@ const PREF_SCHEMAS = {
   /** How the review status page groups cards to practise (frontend modules/review/reviewGroupPref):
    *  by tag or by note. Missing reads as by tag. Changes no note and no schedule. */
   reviewGroupBy: z.enum(["tag", "note"]),
+  /** The 範圍 the review page was last set to (frontend modules/review/reviewScopePref): the page's address text
+   *  (reviewPlace) of all cards, a note's subtree, a tag, or the cards under no tag. Cleared reads as all cards. Holds ids, so a
+   *  temporary session does not read it. Changes no note and no schedule. */
+  reviewScope: z.string().regex(new RegExp(`^(all|untagged|(root|tag)\\.${UUID_SOURCE})$`, "i")),
   /** The built-in skills (their ids, not the person's own skill notes: those
    *  keep the switch in their note) the person turned off for the AI's own
    *  picking (frontend modules/skills): off means the AI uses it only when
@@ -239,6 +243,7 @@ const SESSION_MAY_READ_PREF: Record<PrefKey, boolean> = {
   timeZoneAsk: true, timeZoneAnswered: true,
   fonts: true, inkPalette: true, inkShape: true, inkAutoShape: true, inkShapeFill: true, inkPresets: true,
   reviewsPerDay: true, reviewGroupBy: true,
+  reviewScope: false, // note and tag ids
   aiSkillsOff: true, // ids of the built-in skills
   splitPane: false, "splitPane.phone": false, "splitPane.desktop": false, // "note:<id>"
 };

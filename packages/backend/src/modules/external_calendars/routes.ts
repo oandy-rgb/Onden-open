@@ -4,7 +4,7 @@ import { isCalendarDay, isHexColor, daysBetween, EXTERNAL_CALENDAR_NAME_MAX } fr
 import { getWorkspaceId } from "../../db.js";
 import { requireActor } from "../../spine/mutate.js";
 import { assertMayReachOut, requirePerson } from "../../spine/authority.js";
-import { secretKeyConfigured } from "../../services/aiCredentials.js";
+import { secretKeyConfigured } from "../../services/serverSecret.js";
 import { CodedStatusError, StatusError } from "../../statusError.js";
 import { parseBody, uuidParam } from "../../routes/params.js";
 import type { ActorCtx } from "../../types.js";

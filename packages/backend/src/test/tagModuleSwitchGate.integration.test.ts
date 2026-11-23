@@ -81,8 +81,14 @@ describe.skipIf(!isTestDb)("module switches only through the modules endpoint (D
   beforeAll(async () => {
     await q(`INSERT INTO workspaces (name, slug) VALUES ('Test','default') ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name`);
     await getWorkspaceId();
-    const actor = await (await req("/api/actors", { method: "POST", json: { name: `d72 bot ${stamp}`, type: "agent", role: "editor" } })).json() as { id: string };
-    token = ((await (await req(`/api/actors/${actor.id}/tokens`, { method: "POST", json: { template: "researcher" } })).json()) as { token: string }).token;
+    // A real token (app.ts refuses a bearer that does not resolve): the setup must succeed, not send "Bearer undefined".
+    const made = await req("/api/actors", { method: "POST", json: { name: `d72 bot ${stamp}`, type: "agent" } });
+    expect(made.status, await made.clone().text()).toBeLessThan(300);
+    const actor = await made.json() as { id: string };
+    const minted = await req(`/api/actors/${actor.id}/tokens`, { method: "POST", json: { access: "write" } });
+    expect(minted.status, await minted.clone().text()).toBeLessThan(300);
+    token = ((await minted.json()) as { token: string }).token;
+    expect(token).toMatch(/^ondt_/);
   });
 
   it("bug 1: an imported pack's skills switch becomes an extends of the skills module tag, not a stored switch", async () => {

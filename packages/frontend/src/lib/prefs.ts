@@ -223,6 +223,8 @@ export const PREFS = {
   reviewsPerDay: { key: "onden.reviewsPerDay", scope: "account" },
   /** This device's copy of how the review status page groups cards (modules/review/reviewGroupPref): the server keeps the account's. */
   reviewGroupBy: { key: "onden.reviewGroupBy", scope: "account" },
+  /** This device's copy of the review page's last 範圍 (modules/review/reviewScopePref): the server keeps the account's. */
+  reviewScope: { key: "onden.reviewScope", scope: "account" },
   /** How far into 「這次更新」 this account has read (lib/changesSeenStore): this
    *  device's copy; the server keeps the account's. */
   changesSeen: { key: "onden.changesSeen", scope: "account" },

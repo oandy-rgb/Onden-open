@@ -1,5 +1,7 @@
 // Cookie-authenticated writes and the MCP endpoint refuse a foreign Origin;
-// bearer-token and Origin-less requests, and reads, are unaffected.
+// Origin-less requests and reads are unaffected. A bearer request is not judged by
+// Origin at all: a valid bearer passes, a made-up one is refused as unauthorized
+// before the guard (bearerNeverFallsBackToCookie.integration.test.ts, against the database).
 
 import { describe, it, expect, vi } from "vitest";
 
@@ -39,7 +41,7 @@ describe("origin guard", () => {
     expect(refused(await send("/api/nodes", { origin: "https://notes.example", host: "notes.example" }))).toBe(false);
   });
 
-  it("leaves bearer-token requests, Origin-less requests and reads alone", async () => {
+  it("does not judge a bearer request, an Origin-less request or a read by Origin", async () => {
     expect(refused(await send("/api/mcp/protocol", { origin: "https://evil.example", bearer: "ondt_whatever" }))).toBe(false);
     expect(refused(await send("/api/nodes"))).toBe(false);
     expect(refused(await send("/api/nodes", { method: "GET", origin: "https://evil.example" }))).toBe(false);

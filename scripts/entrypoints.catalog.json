@@ -5175,6 +5175,23 @@
       "why": "q() 在交易外寫核心資料表會丟錯，逼正式程式改走 mutate()／withEventTransaction()；測試建資料沒有事件可發，用 seedQ 開一個單句交易。被測的程式碼仍須走自己的真入口。"
     },
     {
+      "id": "be-test-stat-counts-now",
+      "need": "後端測試要讀 pg_stat_user_tables 的計數（讀了幾列、上次 ANALYZE 之後改了幾列）到「現在」為止，或要在所有寫入都算進去之後才 ANALYZE",
+      "area": "後端",
+      "entry": [
+        {
+          "file": "packages/backend/src/test/helpers/statisticsOfEveryConnection.ts",
+          "exports": [
+            "awaitCountsOfEveryConnection"
+          ]
+        }
+      ],
+      "use": "import { awaitCountsOfEveryConnection } from \"./test/helpers/statisticsOfEveryConnection.js\";\nawait awaitCountsOfEveryConnection();",
+      "replaces": "在測試裡只對 q() 那一條連線呼叫 pg_stat_force_next_flush()，或各自複製一份「每條閒置連線都送出」的迴圈",
+      "rules": [],
+      "why": "真 Postgres 的每條連線一秒最多送一次自己的計數、閒下來約十秒後才送，pg_stat_force_next_flush() 只管呼叫它的那一條；晚到的計數會讓量到的列數變少，或把剛 ANALYZE 過的表看成過期；回來時這個資料庫上沒有別的工作階段還留著（#1991、#1996 審查）。"
+    },
+    {
       "id": "store-node-by-id",
       "need": "用 id 找一個筆記／節點（某份 AppData 的全部節點：store、DataCtx 的 ctx.data、預覽或網站快照的 data）",
       "area": "共用邏輯",

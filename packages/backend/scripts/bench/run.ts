@@ -6,12 +6,13 @@
 // Writes <repo>/.bench/backend.json and the slim lean2 bootstrap the frontend
 // half decodes (.bench/bootstrap-slim-lean2.json). Search needs pgroonga; with
 // no pgroonga the two search metrics are reported as skipped, not as zero.
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import pg from "pg";
-import { timeMs, type Summary } from "../../../../scripts/bench/stats.mjs";
+import { summarize, timeMs, type Summary } from "../../../../scripts/bench/stats.mjs";
 import { assertBenchDatabase, benchDatabaseUrl, SCHEMA_SKIPS } from "./common.js";
 import { COMMON_WORD, MEDIA_FILENAME, RARE_WORD, SHAPE, readSeedRow, seedBenchDatabase } from "./seed.js";
 
@@ -94,6 +95,42 @@ async function main() {
     if (res.status !== 200) throw new Error(`event list answered ${res.status}`);
     await res.text();
   });
+
+  // The COMMIT of one import of 5,000 notes (src/test/versionCommitCost.integration.test.ts): every deferred check of migration 220 runs inside it, one
+  // statement under the 15-second statement timeout of a server (db.ts). Its time, alone on this job; the integration test counts its rows instead (a
+  // shared CI machine stretched the same COMMIT past 15 s). Last, because it writes: the notes are removed after each run (so each run starts from the
+  // same table sizes), their events cannot be (domain_events is append-only), so the seed is marked stale and the next bench reseeds.
+  if (!only || "backend.commit_5000_notes".includes(only)) {
+    const { withTransaction } = await import("../../src/db.js");
+    const { withEventTransaction } = await import("../../src/spine/eventTransaction.js");
+    const { createNote } = await import("../../src/services/noteCreate.js");
+    const admin = new pg.Client({ connectionString: url });
+    await admin.connect();
+    const spaceId = (await admin.query<{ id: string }>("SELECT id::text AS id FROM spaces WHERE workspace_id = $1 AND is_default LIMIT 1", [workspaceId])).rows[0]!.id;
+    const samples: number[] = [];
+    try {
+      for (let run = 0; run < Math.min(RUNS, 3); run++) {
+        const ids = Array.from({ length: 5000 }, () => randomUUID());
+        let workEnd = 0;
+        try {
+          await withTransaction(() => withEventTransaction(workspaceId, async () => {
+            for (const [i, id] of ids.entries()) {
+              await createNote({ actor, workspaceId, id, title: `Bench import ${i}`, markdown: `Bench import ${i}\n\nwith a line of text`, spaceId, event: { uiContext: "bench.import" } });
+            }
+            workEnd = performance.now();
+          }));
+          samples.push(performance.now() - workEnd);
+        } finally {
+          await admin.query("DELETE FROM content_nodes WHERE id = ANY($1::uuid[])", [ids]);
+        }
+      }
+    } finally {
+      await admin.query("DELETE FROM bench_seed"); // the events stay: the next `npm run bench` reseeds
+      await admin.end();
+    }
+    metrics["backend.commit_5000_notes"] = summarize(samples, "ms");
+    console.log(`[bench] ${"backend.commit_5000_notes".padEnd(34)} median ${String(metrics["backend.commit_5000_notes"]!.median).padStart(9)} ms   (${samples.length} runs; the statement timeout is 15000 ms)`);
+  }
 
   // The payload the frontend half decodes: what GET /api/bootstrap?bodies=none sends to lean2 clients.
   if (!only || "frontend".includes(only) || only.includes("bootstrap")) {

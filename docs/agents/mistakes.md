@@ -711,6 +711,7 @@
 - **為什麼沒擋到**：單獨跑那個檔時存檔大多落在同一條連線上；斷言只有上限，量到 0 也滿足。
 - **類別**：量測本身沒被驗證。
 - **機制**：〔第 4 層〕`stats()` 送出 `q()` 那條與每一條閒置連線的計數；斷言「沒有 215 時一次存檔至少寫每個錨點一列」，量到 0 就紅。其他用 `pg_stat_*` 的成本測試（`stampedBundleScale`）還沒查——尚無機制。
+- **2026-11-23 再出現**（#1991）：`stampedBundleScale`「a sender whose statistics are current analyzes nothing」在公開 CI 真 Postgres 第 3 片間歇紅（run 45098149194、45098217879、45102972984、45107899376、45136666708：`expected [ 'sync_stamps' ] to deeply equal []`）。測試建完世界就 `ANALYZE`，寫入那幾條連線還沒送出的改動數在 `ANALYZE` 之後才到，被算成「分析之後改的」。上一筆寫的「`stampedBundleScale` 還沒查」就是這裡。本機真 Postgres 16 舊檔：一般連跑 9 次 2 次紅（同時在跑型別檢查）；在 `ANALYZE` 與檢查之間停 1.5 秒的探針 50 次 11 次紅；修後同一探針與連跑見 PR。機制換成〔第 1 層〕：唯一入口 `test/helpers/statisticsOfEveryConnection.ts` `awaitCountsOfEveryConnection`（四份複本收回；回來時每條連線的計數都送出了，這個資料庫上也沒有別的工作階段還留著，等不到就失敗並列出是誰）。〔第 2 層〕新的成本測試不用這個入口、自己寫一份：尚無機制（掃原始碼文字的守門依審查拿掉了），靠入口清單與審查。
 
 ### 2026-11-17　變異沒被抓到：測展開的資料都和收的一方原本的列相同
 - **發生了什麼**：錨點單位（`note_anchor_places`）的變異檢查，讓收的一方展開時保留列自己的 `quote_suffix`：所有測試照樣通過。跨節點測試裡寫入端與收的一方的前後文一直相同，單節點的展開測試用的頭就是那一台自己的單位。
@@ -1231,3 +1232,11 @@
 - **為什麼沒擋到**：說明裡的結論比測試多一步（「標記相同」沒有被任何斷言檢查）。
 - **類別**：文件的結論沒有測試支撐。
 - **機制**：〔第 1 層〕那個情境現在多了比對標記的釘住測試。〔第 2 層〕「釘住的情境寫進 README 時，每一句結論都要有一個斷言」：尚無機制，靠審查。
+
+### 2026-11-23　一次交易建很多則筆記，COMMIT 的延後檢查每一則都把整張表掃一次；牆上時間的斷言把它說成「CI 慢」（#1996）
+- **發生了什麼**：`versionCommitCost`「5000 notes … the COMMIT stays far under the statement timeout」在公開 CI 兩次超過 15 秒（16.7、15.1 秒），一直被當成機器忙。改成數資料庫讀的列數之後才看到：從 COMMIT 起讀的列約是「筆記數 ×（筆記數＋21）」——2,000 則 4,042,000 列、5,000 則 25,105,000 列（真 Postgres 16，6.2 倍；線性是 2.5 倍），PGlite 相同。migration 220 的延後檢查在同一筆交易裡每一則都把 `note_version_events`、`note_versions`、`content_nodes` 整表讀一次（原因推測是表在交易裡從小長大、規劃器用的仍是交易開始前的統計，還沒證實）。220 已經在正式站上，一次匯入 2 萬則在伺服器上會撞 15 秒。
+- **證據**：#1996 的留言（兩種引擎的列數表、分表的整表讀取列數）；`versionCommitCost.integration.test.ts` 的 `it.fails`「the rows read from the COMMIT on grow linearly」。
+- **發現者**：測試（把牆上時間換成列數的那一刻）。
+- **為什麼沒擋到**：#1938 為 220 加這個測試時只斷言時間，而且 5,000 則在本機只要一兩秒；平方要到更大的量或忙的機器才看得出來，看出來時又被說成 CI 慢。
+- **類別**：成本只看時間、不看做了多少事。
+- **機制**：〔第 1 層〕`versionCommitCost` 改成數列數（`test/helpers/statisticsOfEveryConnection.ts` 等齊計數），「線性」那則釘成 `it.fails`，修好時翻成 `it`；15 秒只在 bench 單獨量（`scripts/bench/run.ts` `backend.commit_5000_notes`）。延後檢查成本的修正另一批（動 migration 與匯入的交易）：尚未修。〔第 2 層〕新的成本測試一律數列數、不斷言時間：尚無機制，靠審查。

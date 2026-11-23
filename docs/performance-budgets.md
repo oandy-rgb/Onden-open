@@ -1,6 +1,6 @@
 # 效能預算與基準測試
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-23）
 > 涵蓋：bench-budgets.json, packages/frontend/scripts/check-worker-bundle.mjs, packages/frontend/scripts/check-app-css.mjs
 
 20k 篇筆記的工作區是 Onden 的規模目標。2026-10-24 效能審查（分支 `review/2026-10-24-performance` 的 `docs/archive/research/review-2026-10-24/performance.md`）量過這個規模，
@@ -39,6 +39,7 @@ npm run bench:check    # 和 bench-budgets.json 比，超過預算就失敗，�
 | `backend.tag_catalog` | `readTagCatalog` |
 | `backend.served_site_load` / `media_visibility_check` | `loadServedSite`、`servedSiteShowsMedia`（35 MB 級的發佈快照） |
 | `backend.event_list_page` | `GET /api/events?limit=50` 的路由處理 |
+| `backend.commit_5000_notes` | 一筆交易用 `createNote` 建 5,000 則之後的 COMMIT（延後的檢查都在它裡面跑）；最多量 3 次、不暖機；最後才跑，跑完刪掉那些筆記並清掉 `bench_seed`，下一次重新種資料（事件只能附加、刪不掉） |
 | `frontend.*` | 在 Node 裡用真的 sql.js：`decodeBootstrapWire`、`persistBootstrapInto`（空資料庫冷啟）、`applySyncDelta`（500 筆 upsert 對 20k）、`patchNode` 之後的 `tagMemberCounts` |
 | `bundle.*` | 正式建置後的 gzip 大小：入口 chunk（`AppRoot`）、登入路徑（island 入口＋ React renderer＋它們的靜態 import 閉包，不含 `import()`） |
 
@@ -47,7 +48,7 @@ npm run bench:check    # 和 bench-budgets.json 比，超過預算就失敗，�
 ## 預算與雜訊
 
 `bench-budgets.json` 的 `median` 是上限，`mainMedian` 是 main 上兩次完整執行中較大的中位數。時間類預算＝`mainMedian`×1.3；
-建置大小是確定的，用 ×1.1。雲端共用機器的雜訊可到 ±15%：失敗時先重跑 `npm run bench`，真正的退步每次都會重現。
+建置大小是確定的，用 ×1.1。例外：`backend.commit_5000_notes` 的預算是伺服器的語句逾時 15,000 ms（產品的界線，不是 main 的倍數；它取代了整合測試裡會被 CI 負載拉長的同一條斷言，#1996）。雲端共用機器的雜訊可到 ±15%：失敗時先重跑 `npm run bench`，真正的退步每次都會重現。
 預算是在雲端容器量的；換機器（尤其是你的實機）第一次請先跑兩次 `npm run bench`，需要時整體重設預算再提交。
 
 ## 改善合併後怎麼收緊

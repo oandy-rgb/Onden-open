@@ -62,6 +62,11 @@
       "median": 80,
       "mainMedian": 59.59
     },
+    "backend.commit_5000_notes": {
+      "unit": "ms",
+      "median": 15000,
+      "mainMedian": 1835
+    },
     "frontend.decode_bootstrap_wire": {
       "unit": "ms",
       "median": 105,

@@ -530,7 +530,7 @@
 | # | 項目（README 原標題） | 類 | 一行理由 | 證據 |
 | --- | --- | --- | --- | --- |
 | 1 | 範圍同步的包不能沿用「筆記不在就是刪了」（main 第 190 行） | (2) | 整個工作區時「沒有那則筆記」只可能是刪了 | A1；`rowsThatGo`（`dbRows.ts`），README 第 260、269 行 |
-| 2 | 送的一方的統計要是新的（第 191–192 行） | (1) | 桌面版也是 PGlite，沒有 autovacuum；桌面版、瀏覽器版都沒有送件端的 `ANALYZE`（我 grep `packages/desktop/src`、`packages/backend/src/browser`、`packages/frontend/src` 沒有結果；後端只有收件端 `dbRows.ts` 在一包建了 100 列以上時做），完全沒有統計時「4 倍的標記讀 14.4 倍的列」 | `stampedBundleScale.integration.test.ts:127`；修法：讀包前若這張表沒有統計就 `ANALYZE`，之後每 N 次交換一次 |
+| 2 | 送的一方的統計要是新的（第 191–192 行） | (1)，**已做**（#1940：讀包前照 autovacuum 的線判斷、過時才 `ANALYZE`，`spine/senderStatistics.ts`；和這一列寫的「每 N 次交換」不同，N 改成資料庫自己記的改動數與頁數）。#1991：「統計是新的就什麼都不分析」那則在真 Postgres 間歇紅，原因是測試在每條連線的改動數送齊之前就 `ANALYZE`，產品不改，測試改成先等齊（`test/helpers/statisticsOfEveryConnection.ts`） | 桌面版也是 PGlite，沒有 autovacuum；桌面版、瀏覽器版都沒有送件端的 `ANALYZE`（我 grep `packages/desktop/src`、`packages/backend/src/browser`、`packages/frontend/src` 沒有結果；後端只有收件端 `dbRows.ts` 在一包建了 100 列以上時做），完全沒有統計時「4 倍的標記讀 14.4 倍的列」 | `stampedBundleScale.integration.test.ts:127`；修法：讀包前若這張表沒有統計就 `ANALYZE`，之後每 N 次交換一次 |
 | 3 | 只有錨點、段落列、段落標籤有收件檢查（第 193 行） | (1) | 信任界線第一層「收到的一律檢查（要做足）」是業主已定的；其他表今天只靠資料表自己的 CHECK；第 2.11 節新帶的 9 張表也要有 | `docs/decisions/sync-trust-line.md` 第 15 行；`RowSource.check`（`dbUnits.ts`）、`bundleReceivedChecks.integration.test.ts` |
 | 4 | 錨點單位有兩個頭時，那則筆記「不是人」的寫入被拒；衝突沒有畫面（第 194 行） | (1) | 業主一人就會發生：桌面版離線改一則、手機經伺服器改同一則；之後 AI 與背景工作在那則筆記上 409，人看不到衝突 | `anchorsReplicated.integration.test.ts:1050`「round 3, 7」；最小修法：「我的裝置」列出有衝突的筆記、讓人選一個（人的寫入會結束衝突） |
 | 5 | 收件檢查對每一列新建的列各跑一個查詢（第 195 行） | (1) | 原版放 (3)；第 1 輪審查第 9 點對：一包不可分、在 PGlite 上收大包期間本機存檔排隊失敗。修法是分段（第 2.10 節），合成一個語句仍做，量的數字變成分段的上限 | `dbPglite.ts:6-10`、`db.ts:93`；`stampedImport.ts:620` |

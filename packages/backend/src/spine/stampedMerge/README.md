@@ -193,6 +193,9 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 一包在一個交易裡讓表從小長大，查詢規劃器的統計卻還是交易開始前的（交易中不會有 autovacuum，PGlite 根本沒有）：快取的計畫（外鍵檢查、觸發器的查找）一直是整表讀，按鍵找一列的寫入走工作區的索引——每多一列就多讀整張表。
 所以合併的交易內 `plan_cache_mode = force_custom_plan`（`stampedImport.ts` `openMerge`），一包在一張表建了 100 列以上就在交易內 `ANALYZE` 那張表（`dbRows.ts`）；讀包時每張表的變動鍵只找一次、每塊 10,000 列。
 `stampedBundleScale.integration.test.ts` 斷言資料庫讀的列數（`pg_stat_user_tables`），不斷言時間。讀包的一端（寄件那台）也需要新的統計：`readBundlePages` 在讀之前，對包會讀的每一張表（`sync_stamps`、`sync_stamp_heads` 與每一張帶走的表）照 autovacuum 的預設門檻判斷統計是否過時（從沒分析過、分析後改了超過 50＋10 % 的列，或表在磁碟上的頁數和上次分析看到的差了 8＋10 % 以上：改動數在累計統計裡，PGlite 每次重開都丟掉，PostgreSQL 不乾淨的關機也丟），過時就在讀的那個唯讀快照裡 `ANALYZE`（`spine/senderStatistics.ts`）。伺服器的 autovacuum 讓每張表都在門檻內，所以什麼都不做；桌面版與瀏覽器版（PGlite，沒有 autovacuum）在要讀的時候得到伺服器會有的統計（`stampedBundleScale`「a sender with no statistics at all」，之前同一個設定 5 次有 3 次讀 14.4 倍的列）。
+
+改動數是每條連線自己先記著、再送進共用統計的（PostgreSQL 的累計統計：一秒最多送一次，閒下來的連線約十秒後才送）。一筆寫入剛提交、計數還沒送到時做的 `ANALYZE`，看得到那些列，但晚到的計數仍會算成「分析之後改的」：下一次讀包多做一次 `ANALYZE`（伺服器的 autovacuum 看的是同一個數，也一樣），讀出來的結果不變。反方向才是要注意的：一大批寫入的計數還沒送到時讀包，表會被看成「是新的」而不分析——多條連線的伺服器上，寫完之後最多約十秒內（閒下來的連線送出前）會這樣；頁數那條規則讀的是磁碟上實際的大小，所以長大超過 8＋10 % 頁的表仍會被分析，沒長那麼多的就照舊的統計規劃這一次讀（成本，不是結果），下一次讀包就分析。所以測試要在每條連線的計數都送齊之後才 `ANALYZE`、才讀計數（`test/helpers/statisticsOfEveryConnection.ts`；#1991：沒等齊時「統計是新的」那則在真 Postgres 上間歇看到 `sync_stamps` 過時）。「過時的表每張剛好分析一次、其他不分析」由 `stampedBundleScale`「a sender whose statistics are stale」以資料庫自己記的分析次數驗證。
+
 套用端的 `ANALYZE` 不需要比套用更多的權限，也不會讓套用失敗（本機 Postgres 16.15 實測）：表的擁有者以外的角色執行時只有一個 WARNING（`permission denied to analyze "…", skipping it`），交易照常提交——那時只是統計沒更新、成本回到修之前；
 `ANALYZE` 可以在交易區塊內執行（`VACUUM` 才不行），在唯讀交易裡也可以，之後同一條連線的語句照常。PGlite 以超級使用者執行，沒有權限的問題。
 

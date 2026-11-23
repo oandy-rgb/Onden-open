@@ -5,11 +5,12 @@
 // (ONDEN_SAVE_COST_REPORT=1 also prints an ordinary save, and a one-character edit of a note with 200 anchors), never asserted. Both engines.
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { dbDriver, pool, q, withTransaction } from "../db.js";
+import { q, withTransaction } from "../db.js";
 import { withRequestDevice } from "../requestContext.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { stampTransaction } from "../spine/stamps.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
+import { awaitCountsOfEveryConnection } from "./helpers/statisticsOfEveryConnection.js";
 import { buildSourceWorld, makeCaller, openNode } from "./helpers/stampedWorld.js";
 import { awaitAllDispatchers, inflightNodeIds } from "../services/dispatcherQueue.js";
 
@@ -17,16 +18,9 @@ const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const open: RealNode[] = [];
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); });
 
-/** Rows read so far, every table (sequential and index fetches), once every connection's counts are in (anchorSaveCost.integration.test.ts `stats`: a backend sends its
- *  counts at most once a second, and pg_stat_force_next_flush() reaches only the backend that calls it, so the work a save leaves is awaited and every idle one flushes). */
+/** Rows read so far, every table (sequential and index fetches), once every connection's counts are in (helpers/statisticsOfEveryConnection.ts). */
 async function rowsRead(): Promise<number> {
-  while (inflightNodeIds().length > 0) await awaitAllDispatchers();
-  await q(`SELECT pg_stat_force_next_flush()`); await q(`SELECT 1`);
-  if (dbDriver === "postgres") {
-    const clients = await Promise.all(Array.from({ length: pool.idleCount }, () => pool.connect()));
-    try { for (const c of clients) { await c.query(`SELECT pg_stat_force_next_flush()`); await c.query(`SELECT 1`); } } finally { for (const c of clients) c.release(); }
-  }
-  await q(`SELECT pg_stat_clear_snapshot()`);
+  await awaitCountsOfEveryConnection();
   return Number((await q<{ r: string }>(`SELECT (sum(seq_tup_read) + sum(COALESCE(idx_tup_fetch, 0)))::text AS r FROM pg_stat_user_tables`)).rows[0]!.r);
 }
 const tagged = (n: number, line: (i: number) => string = (i) => `Paragraph ${i} of the long note, tagged so it gets an anchor {kept}`) => Array.from({ length: n }, (_, i) => line(i)).join("\n\n") + "\n";

@@ -52,8 +52,12 @@ export type ViewTab = {
 export const contentTabIn = <V extends { layout?: string }>(views: readonly (V | null | undefined)[] | null | undefined): V | null =>
   (views ?? []).find((view): view is V => view?.layout === CONTENT_LAYOUT) ?? null;
 
-/** The tab keeps its place at the front and has no menu of moves: the built-in 「內容」 with no record. */
-export const isFixedFirstTab = (tab: Pick<ViewTab, "kind" | "view">): boolean => tab.kind === "content" && !tab.view;
+/** The built-in 「內容」 that has no record: it shows first, and the page opens on it. Moving it stores a record (lib/contentTab). */
+export const isUnstoredContent = (tab: Pick<ViewTab, "kind" | "view">): boolean => tab.kind === "content" && !tab.view;
+
+/** The row's first tab stays first: an unstored first tab that cannot be moved (a tag's list has no record to store). No other
+ *  tab may be put in front of it either: the menu, a drag and a touch drag all ask this. */
+export const keepsFirstPlace = (tabs: readonly ViewTab[]): boolean => !!tabs[0] && isUnstoredContent(tabs[0]) && !tabs[0].editable;
 
 /** A record of the whiteboard or of 「內容」 only keeps that the tab is gone; the board and the text are kept. */
 export const isTabHidden = (view: SavedView) => view.layout_config?.hidden === true;
@@ -94,7 +98,9 @@ export function buildViewTabs(input: TabsInput): ViewTab[] {
   const tabs: ViewTab[] = [];
   const contentTab = (): ViewTab => contentRecord
     ? { key: CONTENT_TAB, kind: "content", name: input.contentName, view: contentRecord, inheritedName: null, editable: canManage, hideable: false }
-    : { key: CONTENT_TAB, kind: "content", name: input.contentName, view: null, inheritedName: null, editable: false, hideable: false };
+    // A note's 「內容」 moves like any tab (owner 2026-11-23: it need not be first); moving it stores its record. A tag's
+    // first tab is its list, which has no record to store: it stays where it is.
+    : { key: CONTENT_TAB, kind: "content", name: input.contentName, view: null, inheritedName: null, editable: canManage && input.ownerKind !== "tag", hideable: false };
   if (!contentRecord) tabs.push(contentTab());
   const stored = whiteboardTabIn(views);
   const showsWhiteboard = canvasImported && (stored ? !isTabHidden(stored) : input.earnsWhiteboard || input.activeKey === CANVAS_TAB);
@@ -137,7 +143,7 @@ export function buildViewTabs(input: TabsInput): ViewTab[] {
 export function defaultTabKey(tabs: readonly ViewTab[]): string {
   const opensFirst = tabs.find((tab) => tab.opensFirst);
   if (opensFirst) return opensFirst.key;
-  return tabs.some(isFixedFirstTab) ? CONTENT_TAB : tabs[0]?.key ?? CONTENT_TAB;
+  return tabs.some(isUnstoredContent) ? CONTENT_TAB : tabs[0]?.key ?? CONTENT_TAB;
 }
 
 /** The tab the page is on, from where the location says it is. */
@@ -178,17 +184,19 @@ export function nameAfterViewChange(name: string, before: ViewNameParts, after: 
   return next === name ? null : next;
 }
 
-/** `pin_order` for every tab but the built-in 「內容」 after `key` is dropped at `index` among
- *  them: all get their new place, so a tie never decides the order. Only the
- *  tabs whose stored place changes (or that are not stored yet) are returned. */
+/** `pin_order` for every tab after `key` is dropped at `index` among all the tabs: all get their new place, so a tie never
+ *  decides the order. Only the tabs whose stored place changes, or that are not stored yet, are returned. The unstored
+ *  「內容」 holds no place while it stays in front (the others count from 0 after it, as they always did); once it leaves
+ *  the front it is returned with its place, and its record must be made (lib/contentTab). */
 export function reorderTabs(tabs: readonly ViewTab[], key: string, index: number): Array<{ tab: ViewTab; pinOrder: number }> {
-  const movable = tabs.filter((tab) => !isFixedFirstTab(tab));
-  const from = movable.findIndex((tab) => tab.key === key);
-  if (from < 0) return [];
-  const next = movable.slice();
+  const from = tabs.findIndex((tab) => tab.key === key);
+  const first = keepsFirstPlace(tabs) ? 1 : 0;
+  if (from < first) return [];
+  const next = tabs.slice();
   const [moved] = next.splice(from, 1);
-  next.splice(Math.max(0, Math.min(index, next.length)), 0, moved!);
-  return next.flatMap((tab, place) => (tab.view && tab.view.pin_order === place ? [] : [{ tab, pinOrder: place }]));
+  next.splice(Math.max(first, Math.min(index, next.length)), 0, moved!);
+  const skip = next[0] && isUnstoredContent(next[0]) ? 1 : 0;
+  return next.slice(skip).flatMap((tab, place) => (tab.view && tab.view.pin_order === place ? [] : [{ tab, pinOrder: place }]));
 }
 
 /** Tab keys by note, on this account: the tab each note was last left on. */

@@ -118,6 +118,8 @@ const listeners = new Set<() => void>();
 export const getActiveCanvas = (): Canvas | null => getAppState().activeCanvas;
 
 /** The modules the workspace has on (null/absent: every module, an older server). A narrow reader for code outside React that only asks which modules are on. */
+/** The note selected now, outside React (a hook's later callback comparing it with an earlier one). */
+export const getSelectedId = (): string | null => getAppState().selectedId;
 export const getWorkspaceModules = (): readonly string[] | null | undefined => getAppState().data.workspace?.modules;
 
 export function getAppState(): AppState {

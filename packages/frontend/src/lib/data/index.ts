@@ -36,7 +36,7 @@ export type { PlacementChild, PlacementContext, PlacementRefusal } from "./place
 export { PURGE_BATCH_MAX } from "./notePurge";
 // After domainWriters: dayNotes reads lib/spaces, which imports this entry.
 export { dayNoteParentPref, dayNoteParentStore, parseDayNoteParent, useDayNoteParent } from "./dayNoteParentStore";
-export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError } from "./dayNotes";
+export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError, PersonalSpaceUnknownError } from "./dayNotes";
 export type { DayNoteSeed, OpenedDayNote } from "./dayNotes";
 export { sendWrite } from "./onlineWrite";
 export { spaceWriter } from "./spaceWriter";

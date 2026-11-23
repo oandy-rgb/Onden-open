@@ -1,5 +1,5 @@
 // A note's 「內容」 tab can be removed from its tab row (lib/viewTabs: a record of layout "content" says it is hidden)
-// while its text stays the note's body. Everything that changes or depends on that goes through here, and this file
+// while its text stays the note's body, and moved off the front (the same record holds its place). Everything that changes or depends on that goes through here, and this file
 // loads only when it is used (hooks/useWorkspaceFocus, components/viewTabs/useViewTabActions import it on demand;
 // lib/offlineWarmup keeps it for offline). Writes queue offline like any view write, except making the record, which needs the server.
 
@@ -49,6 +49,22 @@ export async function hideContentTab(args: {
   if (record) await viewWriter.update(owner, record.id, { layout_config_patch: { hidden: true } });
   // Always stored under the English word, which the tab row shows in the person's own language (like the whiteboard's record).
   else await viewWriter.create(owner, { name: freeViewName("Content", args.takenNames), layout: "content", visible_fields: [], layout_config: { hidden: true }, pin_order: args.pinOrder }, NEEDS_CONNECTION());
+  return true;
+}
+
+const MOVE_NEEDS_CONNECTION = () => t("Moving the Content tab the first time needs a connection.");
+
+/** 「內容」 leaves the front of the row for the first time: make its record at `pinOrder` (shown, not hidden). False when there is no
+ *  connection to make it with (said once); the caller then moves nothing. The writer reports a refusal (and rethrows). */
+export async function placeContentTab(args: { owner: ViewOwner; takenNames: readonly string[]; pinOrder: number; online: boolean }): Promise<boolean> {
+  if (!args.online) { addToast(MOVE_NEEDS_CONNECTION(), "info"); return false; }
+  // Another device may have made the record since this page read the tabs: then that one takes the place (the server answers
+  // a second create with the record it has, keeping its old place).
+  await reloadOwnerViews(args.owner);
+  const record = contentTabIn(peekOwnerViews(args.owner));
+  if (record) { await viewWriter.update(args.owner, record.id, { pin_order: args.pinOrder }); return true; }
+  // Stored under the English word, as hideContentTab stores it; the row shows it in the person's own language.
+  await viewWriter.create(args.owner, { name: freeViewName("Content", args.takenNames), layout: "content", visible_fields: [], pin_order: args.pinOrder }, MOVE_NEEDS_CONNECTION());
   return true;
 }
 

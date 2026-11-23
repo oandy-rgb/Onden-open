@@ -8,7 +8,8 @@
 #  1. a finished ci.yml run on the public mirror has the tree public-push made from <tested-ref> (its commit says
 #     「同步：私人庫 <sha>」) with every required job green (scripts/ci/greenRunLib.sh, the receipt job's own judgement);
 #  2. each PR's head on GitHub is a commit <tested-ref> contains: nobody pushed after the tested push;
-#  3. merging the PR heads onto today's origin/main gives <tested-ref>'s tree, apart from files only main changed since and
+#  3. merging the PR heads onto today's origin/main gives <tested-ref>'s tree, apart from files only main changed since (a file
+#     both sides changed must match: merged without a conflict it was still never tested) and
 #     the generated files (entrypoints catalog, notices; the guard lane checks those are fresh);
 #  4. each PR's newest comment with a 「審查結論：」 line says 可合併, and its 「已知缺口：」 line says 無 or names the owner's
 #     approval (「擁有者放行：」 with a link to where the owner said so).
@@ -49,6 +50,13 @@ done
 echo "ok 2  每個 PR 的 head 都是測過的那一版"
 
 # 3. Today's main plus these heads is the tested tree.
+# The files allowed to differ from the tested tree: those main changed since the tested commit's base (a merge commit's own
+# changes included) that the tested commit did not change. A file both sides changed is not allowed: merged without a
+# conflict, the result was still never tested. Computed once from the base, so the check after merging needs no count of
+# commits and stays right when someone else merges meanwhile.
+base=$(git merge-base "$tested" origin/main)
+testedfiles=$(git diff --name-only "$base" "$tested")
+allowed() { git diff --name-only "$base" origin/main | grep -vxF -f <(printf '%s\n' "$testedfiles" | sed '/^$/d'; echo /dev/null) || true; }
 cur=$(git rev-parse origin/main)
 for h in "${heads[@]}"; do
   t=$(git merge-tree --write-tree --name-only "$cur" "$h" 2>/dev/null); code=$?
@@ -59,7 +67,7 @@ for h in "${heads[@]}"; do
   fi
   cur=$(git commit-tree "$tree" -p "$cur" -p "$h" -m gate)
 done
-mainonly=$(git log --format= --name-only "$tested..origin/main" | sort -u)
+mainonly=$(allowed)
 odd=$(git diff --name-only "$cur" "$tested" | grep -vE "$GENERATED" | grep -vxF -f <(printf '%s\n' "$mainonly" | sed '/^$/d'; echo /dev/null) || true)
 [ -z "$odd" ] || fail "今天的 main 加上這些 PR 和測過的不一樣（不是 main 自己改的檔）：$(echo $odd)"
 echo "ok 3  今天的 main 加上這些 PR = 測過的那一份（main 之後自己改的檔除外）"
@@ -92,7 +100,7 @@ for i in "${!prs[@]}"; do
   echo "merged #$n（先帶入 main）"
 done
 git fetch -q origin main
-mainonly=$(git log --format= --name-only "$tested..origin/main" | sort -u)
+mainonly=$(allowed)
 odd=$(git diff --name-only origin/main "$tested" | grep -vE "$GENERATED" | grep -vxF -f <(printf '%s\n' "$mainonly" | sed '/^$/d'; echo /dev/null) || true)
 [ -z "$odd" ] || fail "合完之後 main 和測過的不一樣：$(echo $odd)"
 echo "main $(git rev-parse --short origin/main) = 測過的那一份（main 之後自己改的檔除外）"

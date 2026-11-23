@@ -70,4 +70,15 @@ reset; : > "$FAKE_GH/comment"; expect refuse "no review verdict at all" "審查�
 reset; echo e > a.txt && git commit -qam "main moves on another file" && git push -q origin main
   expect pass "main moved on a file the PR does not touch"
   git reset -q --hard HEAD~1 && git push -q -f origin main
+reset; git checkout -qb side main && echo s > s.txt && git add s.txt && git commit -qm side && git checkout -q main \
+  && git merge -q --no-ff --no-commit side >/dev/null 2>&1 && echo m > m.txt && git add m.txt && git commit -qm "a merge that also changes a file of its own" && git push -q origin main
+  expect pass "main moved through a merge commit that changes a file itself (not only through its branch's commits)"
+  git reset -q --hard HEAD~1 && git push -q -f origin main && git branch -qD side
+reset; printf 'one\n2\n3\n4\n5\nsix\n' > shared.txt && git add shared.txt && git commit -qm "a file with room" && git push -q origin main \
+  && git checkout -q pr && git merge -q main >/dev/null 2>&1 && sed -i '1s/.*/ONE/' shared.txt && git commit -qam "the PR changes line 1" && git push -q -f origin "HEAD:refs/pull/7/head" \
+  && git rev-parse HEAD > "$FAKE_GH/head" && git checkout -q -B train pr && t2=$(git rev-parse HEAD) && git checkout -q main \
+  && sed -i '6s/.*/SIX/' shared.txt && git commit -qam "main changes line 6 of the same file" && git push -q origin main
+  saved=$tested; tested=$t2
+  expect refuse "main and the PR both changed one file without a conflict: the merged file was never tested" "不一樣"
+  tested=$saved; git reset -q --hard HEAD~2 && git push -q -f origin main && git push -q -f origin "$head:refs/pull/7/head"
 [ "$failures" -eq 0 ] && echo "merge gate self-test passed" || { echo "merge gate self-test: $failures case(s) wrong"; exit 1; }

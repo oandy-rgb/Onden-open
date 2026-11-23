@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { setSelectedId, useAppSelector, useSelectedId } from "../lib/appStore";
+import { getSelectedId, setSelectedId, useAppSelector, useSelectedId } from "../lib/appStore";
 import { dailyNotesEnabled, findDayNode } from "../lib/dayNode";
 import { getLaunchPreference } from "../lib/launchPreference";
-import { landingHistory, navigate, parseLocation, type AppLocation } from "./useUrlLocation";
+import { currentEntryId, landingHistory, navigate, parseLocation, type AppLocation } from "./useUrlLocation";
 import { PREFS, getPref } from "../lib/prefs";
 import { consumeFirstRunLanding, useFirstRunLanding } from "../lib/firstRunLanding";
 import type { useUiMode } from "./useUiMode";
@@ -35,8 +35,8 @@ type Options = {
   initialLocation: AppLocation;
   ui: Pick<ReturnType<typeof useUiMode>, "setMode" | "setNotesView" | "setOverviewMobileTab">;
   openNote: (id: string) => void;
-  /** Opens (or creates) today's note; resolves to its id. */
-  openDailyNote: (options?: { announce?: boolean }) => Promise<string | null>;
+  /** Opens (or creates) today's note; resolves to its id (null: not opened). */
+  openDailyNote: (options?: { announce?: boolean; stillWanted?: () => boolean }) => Promise<string | null>;
 };
 
 /**
@@ -145,7 +145,15 @@ export function useLandingNote({ initialLocation, ui, openNote, openDailyNote }:
       land(() => openNote(existingToday.id));
       return;
     }
-    void openDailyNote({ announce: false }).then(id => {
+    // Finding or starting today's note can take a while (without the spaces list it waits for the
+    // server, lib/data/dayNotes). Whatever the person opened or went to meanwhile wins: the landing
+    // then does nothing, not even its fallback (2026-11-22: it took over a note an e2e test had just
+    // opened, once the personal space was no longer guessed).
+    const selectedAtLanding = getSelectedId();
+    const entryAtLanding = currentEntryId();
+    const stillWanted = () => getSelectedId() === selectedAtLanding && currentEntryId() === entryAtLanding;
+    void openDailyNote({ announce: false, stillWanted }).then(id => {
+      if (!stillWanted()) return;
       if (id) setOverviewMobileTab("edit");
       else landOnFallback();
     });

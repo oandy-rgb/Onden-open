@@ -1083,6 +1083,20 @@ async function getLastFullRefresh(): Promise<number> {
   return Number.isFinite(at) ? at : 0;
 }
 
+/** The caller's spaces as the server last listed them (lib/spaces.ts), so an offline start knows the personal space.
+ *  Kept with the copy's sync state: it goes with the snapshot, a wipe drops it, and a new MIRROR_SCHEMA_VERSION drops it
+ *  too (localDbSchema stampMirrorSchema) — the server has renumbered spaces before (its migration 201). Null: none kept. */
+async function loadSpaces(): Promise<unknown[] | null> {
+  const raw = qry<{ value: string }>("SELECT value FROM sync_state WHERE key = 'spaces'")[0]?.value;
+  if (!raw) return null;
+  try { const list: unknown = JSON.parse(raw); return Array.isArray(list) ? list : null; } catch { return null; }
+}
+
+async function storeSpaces(spaces: unknown[]): Promise<void> {
+  run("INSERT INTO sync_state (key, value) VALUES ('spaces', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [JSON.stringify(spaces)]);
+  scheduleSave();
+}
+
 async function getMembershipEpoch(): Promise<number> {
   const rows = qry<{ value: string }>("SELECT value FROM sync_state WHERE key = 'membership_epoch'");
   return rows.length > 0 ? parseInt(rows[0].value, 10) : 0;
@@ -1647,6 +1661,8 @@ const ops = {
   getLastEventId,
   setMembershipEpoch,
   getMembershipEpoch,
+  loadSpaces,
+  storeSpaces,
   getLastFullRefresh,
   fillNodeAttributes,
   fillAttributeRows,

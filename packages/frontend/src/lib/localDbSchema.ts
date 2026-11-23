@@ -246,15 +246,21 @@ function migratePlaceKeys(database: Database): void {
  *  copy kept the old space id and old tag ids on them: the sidebar listed the personal space's notes under "Other".
  *  4: order keys (server migration 200) replace the integer order. The backfill wrote a key on every existing row without an
  *  event, so a copy made before it holds no key (or the placeholders an upgrade makes); the whole bootstrap this version asks
- *  for reads every row's real key and stamp again. */
-export const MIRROR_SCHEMA_VERSION = 4;
+ *  for reads every row's real key and stamp again.
+ *  5: the caller's spaces list is kept in the copy (sync_state 'spaces', lib/spaces.ts) so an offline start knows the
+ *  personal space. A change of this number drops that list along with full_refresh_at (stampMirrorSchema): the space
+ *  ids are the server's random ones and it has renumbered them before (3 above), so a later renumbering that raises
+ *  this number must not leave a stale personal space here. Raising it now makes every copy read its notes again in
+ *  the same start that first stores the list, so the notes' space ids and the list come from the same server state. */
+export const MIRROR_SCHEMA_VERSION = 5;
 
 /** Record the schema version this mirror was prepared with; a different one
- *  forgets when the last whole bootstrap was stored, so the next open does one. */
+ *  forgets when the last whole bootstrap was stored, so the next open does one,
+ *  and the kept spaces list, so the personal space is read from the server again. */
 function stampMirrorSchema(database: Database): void {
   const [row] = database.exec("SELECT value FROM sync_state WHERE key = 'mirror_schema_version'");
   if (Number(row?.values?.[0]?.[0] ?? 0) === MIRROR_SCHEMA_VERSION) return;
-  database.run("DELETE FROM sync_state WHERE key = 'full_refresh_at'");
+  database.run("DELETE FROM sync_state WHERE key IN ('full_refresh_at', 'spaces')");
   database.run(
     "INSERT INTO sync_state (key, value) VALUES ('mirror_schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     [String(MIRROR_SCHEMA_VERSION)],

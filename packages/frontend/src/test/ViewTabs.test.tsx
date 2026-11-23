@@ -40,6 +40,7 @@ vi.mock("../lib/api", async (original) => {
       const shows = reply.views.some((v) => v.layout !== "content" && v.layout_config?.hidden !== true);
       return { views: reply.views, content_tab_removable: shows || (reply.board && !reply.views.some((v) => v.layout === "canvas")) };
     }
+    if (path === `/api/tags/${NODE}/views`) return { views: reply.views };
     throw new Error(`unexpected ${path}`);
   }) };
 });
@@ -89,8 +90,8 @@ describe("ViewTabs", () => {
       if (phone) {
         fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
         fireEvent.contextMenu(tab("Content"));
-        // A phone has no 「開在右邊」: 「內容」's menu is only the removal, which one who may change the note has.
-        expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Remove tab"]);
+        // A phone has no 「開在右邊」: 「內容」 moves like any tab (owner 2026-11-23) and can be removed; it keeps its name.
+        expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Move left", "Move right", "Remove tab"]);
       }
     } finally { clearPhoneLayout(); }
   });
@@ -464,12 +465,12 @@ describe("ViewTabs", () => {
       expect(tab("B")).toHaveAttribute("draggable", "true");
     });
 
-    it("「內容」 can be held, but its menu offers only 「開在右邊」 and the removal: it has nothing to rename or move", async () => {
+    it("「內容」 can be held; its menu moves it and removes it, but has nothing to rename (its name is fixed)", async () => {
       await two();
       touch("pointerdown", 20, 10, tab("Content"));
       await hold();
       touch("pointerup", 20, 10);
-      expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Open on the right", "Remove tab"]);
+      expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Open on the right", "Move left", "Move right", "Remove tab"]);
     });
 
     it("the browser's own long-press contextmenu is swallowed while held", async () => {
@@ -575,6 +576,72 @@ describe("ViewTabs: removing and adding back 「內容」", () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(writes.create).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("an existing note (no record): 「內容」 moves off the front (owner 2026-11-23); the first move makes its record, shown, at its new place", async () => {
+    reply.views = [saved("a", "A", "table", { pin_order: 0 }), saved("b", "B", "table", { pin_order: 1 })];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "A", "B"]));
+    const menu = openMenuOf("Content");
+    expect(within(menu).getByRole("menuitem", { name: "Move left" })).toBeDisabled();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Move right" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    // Not hidden, under the English word, at place 1; the table after it moves on to 2. A keeps 0. Nothing is asked.
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, { name: "Content", layout: "content", visible_fields: [], pin_order: 1 }, "Moving the Content tab the first time needs a connection.");
+    await waitFor(() => expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "b", { pin_order: 2 }));
+    expect(writes.update).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(ZH_TW_LATE["Moving the Content tab the first time needs a connection."]).toBe("第一次移動「內容」分頁需要連線。");
+  });
+
+  it("moving another tab in front of 「內容」 also makes its record; a move behind it does not", async () => {
+    reply.views = [saved("a", "A", "table", { pin_order: 0 }), saved("b", "B", "table", { pin_order: 1 })];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "A", "B"]));
+    fireEvent.click(within(openMenuOf("B")).getByRole("menuitem", { name: "Move left" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledTimes(2));
+    expect(writes.create).not.toHaveBeenCalled();
+    expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "b", { pin_order: 0 });
+    expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "a", { pin_order: 1 });
+    cleanup(); resetOwnerViews(); writes.update.mockClear();
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "A", "B"]));
+    fireEvent.click(within(openMenuOf("A")).getByRole("menuitem", { name: "Move left" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ layout: "content", pin_order: 1 }), expect.any(String)));
+    expect((writes.create.mock.calls[0] as unknown[])[1]).not.toHaveProperty("layout_config");
+  });
+
+  it("another device made the 「內容」 record after this page read the tabs: the move gives that record the place, no second record", async () => {
+    reply.views = [saved("a", "A", "table", { pin_order: 0 }), saved("b", "B", "table", { pin_order: 1 })];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "A", "B"]));
+    reply.views = [...reply.views, saved("c9", "Content", "content", { pin_order: 7 })];
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Move right" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledWith({ kind: "node", id: NODE }, "c9", { pin_order: 1 }));
+    expect(writes.create).not.toHaveBeenCalled();
+  });
+
+  it("on a tag page the list keeps its place: the next tab cannot move in front of it, and no 「內容」 record is asked for", async () => {
+    reply.views = [saved("a", "A", "table", { pin_order: 0 }), saved("b", "B", "table", { pin_order: 1 })];
+    renderTabs({ owner: { kind: "tag", id: NODE, name: "Books" } });
+    await waitFor(() => expect(tabNames()).toHaveLength(3));
+    expect(within(openMenuOf("A")).getByRole("menuitem", { name: "Move left" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.click(within(openMenuOf("B")).getByRole("menuitem", { name: "Move left" }));
+    await waitFor(() => expect(writes.update).toHaveBeenCalledTimes(2));
+    expect(writes.update).toHaveBeenCalledWith({ kind: "tag", id: NODE }, "b", { pin_order: 0 });
+    expect(writes.create).not.toHaveBeenCalled();
+  });
+
+  it("offline, the first move of 「內容」 (it makes the record) is refused: one sentence, no tab moves", async () => {
+    resetAppState({ online: false });
+    reply.views = [saved("a", "A", "table", { pin_order: 0 }), saved("b", "B", "table", { pin_order: 1 })];
+    renderTabs();
+    await waitFor(() => expect(tabNames()).toEqual(["Content", "A", "B"]));
+    fireEvent.click(within(openMenuOf("Content")).getByRole("menuitem", { name: "Move right" }));
+    await waitFor(() => expect(toasts).toEqual(["Moving the Content tab the first time needs a connection."]));
+    expect(writes.create).not.toHaveBeenCalled();
+    expect(writes.update).not.toHaveBeenCalled();
   });
 
   it("removing the last other tab while 「內容」 is hidden: one request, nothing is selected before the write, and the page lands on 「內容」 once the server shows it again", async () => {

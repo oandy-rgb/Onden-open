@@ -232,6 +232,8 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
   };
   const slugsOf = (p: Peer, ids: readonly string[]) => onNode(p.node, async () =>
     Object.fromEntries((await q<{ id: string; slug: string }>(`SELECT id::text, slug FROM content_nodes WHERE id = ANY($1::uuid[])`, [ids])).rows.map((r) => [r.id, r.slug] as const)));
+  /** The slug a note that gave way has on a node that took a bundle (migration 235 content_nodes_settle_slugs): its name and the first eight of its id. */
+  const gaveWay = (name: string, id: string) => `${name}-${id.split("-")[0]}`;
   /** Two ids, the first smaller than the second (uuid text order: the order the id rule and every `ORDER BY id` use). */
   const orderedIds = (): [string, string] => { const x = [randomUUID(), randomUUID()].sort(); return [x[0]!, x[1]!]; };
 
@@ -267,7 +269,7 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
     }
   }, 600_000);
 
-  it("slugs, two nodes that each moved a note with one slug into one space without seeing the other's: the same slugs on both, in either order of delivery; the earlier move keeps the slug", async () => {
+  it("slugs, two nodes that each moved a note with one slug into one space without seeing the other's: the same slugs on both, in either order of delivery; the earlier move keeps the slug, the other takes its name and the first eight of its id", async () => {
     const { a, b, nodes } = await pair(6);
     const away = await otherSpace(a);
     const tag = randomUUID().slice(0, 6);
@@ -289,13 +291,14 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
     await exchange(b2, a2); await exchange(a2, b2); // A first takes B's move, then B takes A's
     const end = await slugsOf(a, both);
     for (const p of [b, a2, b2]) expect(await slugsOf(p, both), p.name).toEqual(end);
-    // A moved first (its write's stamp is the earlier one: the clocks of this process only move forward): A's note keeps the slug, B's takes the next free one
-    expect(end).toEqual({ [fromA]: `twin-${tag}`, [fromB]: `twin-${tag}-2` });
+    // A moved first (its write's stamp is the earlier one: the clocks of this process only move forward): A's note keeps the slug; B's, which gave way on a node
+    // that took a bundle, takes its name and the first eight of its id (a function of the writes, not of what else the node holds: batch 5)
+    expect(end).toEqual({ [fromA]: `twin-${tag}`, [fromB]: gaveWay(`twin-${tag}`, fromB) });
     await expectSameDerived(a, b, both, "two moves, A→B first");
     await expectSameDerived(a2, b2, both, "two moves, B→A first");
   }, 600_000);
 
-  it("slugs, a note that follows its tree into a space while the other node made a note there with its slug: the same slugs on both, in either order; the earlier write keeps it", async () => {
+  it("slugs, a note that follows its tree into a space while the other node made a note there with its slug: the same slugs on both, in either order; the earlier claim (the follower's creation) keeps it", async () => {
     const { a, b, nodes } = await pair(7);
     const away = await otherSpace(a);
     const tag = randomUUID().slice(0, 6);
@@ -312,18 +315,17 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
     await exchange(b2, a2); await exchange(a2, b2);
     const end = await slugsOf(a, ids);
     for (const p of [b, a2, b2]) expect(await slugsOf(p, ids), p.name).toEqual(end);
-    // B made its note first: it keeps the slug; the note that followed the move takes the next free one
-    expect(end).toEqual({ [root]: `root-${tag}`, [child]: `kin-${tag}-2`, [made]: `kin-${tag}` });
+    // the note that followed its tree wrote nothing of its own (a move stamps its root only: migration 218), so its claim to the name is its creation, earlier than
+    // B's note: it keeps the slug on both nodes, and B's note takes its name and the first eight of its id (batch 5; 4a kept it for B's note by counting the
+    // moves above the follower, which no write of the follower passes through)
+    expect(end).toEqual({ [root]: `root-${tag}`, [child]: `kin-${tag}`, [made]: gaveWay(`kin-${tag}`, made) });
     await expectSameDerived(a, b, ids, "follower and a new note, A→B first");
     await expectSameDerived(a2, b2, ids, "follower and a new note, B→A first");
   }, 600_000);
 
-  // NOT SETTLED, pinned (review of PR #1941, round 2, A1): a note that gives way by its PLACE takes the first free slug on the node's state, so three notes moved into one
-  // space at once on two nodes can end with different suffixes. A pure function of the replicated state would need each moved note's base slug, which no unit holds (a
-  // slug is no unit; after the move only its title travels): with the title's slug as the base, a note `x-2` moved alone into a space where `x` is free would become `x`
-  // (main keeps `x-2`), and a note would change slug when ANOTHER note of its group is renamed away or deleted, on one server too. The two ways out (`-<id8>` for every
-  // note that gives way; slug as a unit, batch 5) are the owner's to choose (stampedMerge/README.md).
-  it.fails("slugs, NOT SETTLED: three notes moved into one space at once (A, B, A; neither node sees the other's), in either order of delivery, end with the same slugs on both", async () => {
+  // Pinned as NOT SETTLED by batch 4a (review of PR #1941, round 2, A1): a note that gave way by its place took the first free slug on the node's state. Since batch 5 the
+  // slug each write chose is a unit (migration 235) and the one a node shows is a function of the units (content_nodes_settle_slugs), so the two nodes agree.
+  it("slugs: three notes moved into one space at once (A, B, A; neither node sees the other's), in either order of delivery, end with the same slugs on both, the earliest move keeping the name", async () => {
     const { a, b, nodes } = await pair(14);
     const away = await otherSpace(a);
     const tag = randomUUID().slice(0, 6);
@@ -343,6 +345,34 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
     await exchange(b2, a2); await exchange(a2, b2);
     const end = await slugsOf(a, trio);
     for (const p of [b, a2, b2]) expect(await slugsOf(p, trio), p.name).toEqual(end);
+    // A moved p1 first: it keeps the name; p3 (A's second) took `-2` where it was written and keeps it (no other note wants `-2`); p2 (B's), which gave way on the
+    // nodes that took it, takes its name and the first eight of its id
+    expect(end).toEqual({ [p1]: `trio-${tag}`, [p2]: gaveWay(`trio-${tag}`, p2), [p3]: `trio-${tag}-2` });
+  }, 600_000);
+
+  // review of PR #1992, round 1, point 4, and the owner's decision of 2026-11-23: a note that holds a name and is moved under another note of the same space keeps
+  // it (its place is no claim), on the node that holds the note that gave way and on the node that takes the move alike. A rename lets it go (the next part).
+  it("slugs: the note that holds a name is moved under another note on the node that holds the one that gave way: it keeps the name on both nodes; renamed away, the other takes it on both", async () => {
+    const { a, b } = await pair(15);
+    const tag = randomUUID().slice(0, 6);
+    const shelf = await note(a, `Shelf ${tag}`);
+    await exchange(a, b);
+    const x = await note(a, `Foo ${tag}`); // A's, made first: it holds the name
+    const w = await note(b, `Foo ${tag}`); // B's, made later without seeing A's
+    await exchange(a, b); await exchange(b, a);
+    const both = [x, w];
+    expect(await slugsOf(b, both)).toEqual({ [x]: `foo-${tag}`, [w]: gaveWay(`foo-${tag}`, w) });
+    expect(await slugsOf(a, both)).toEqual(await slugsOf(b, both));
+    await write(b, "PATCH", `/api/nodes/${x}`, { parent_id: shelf });
+    const atB = await slugsOf(b, both);
+    await exchange(b, a); await exchange(a, b);
+    expect(await slugsOf(a, both)).toEqual(atB);
+    expect(await slugsOf(b, both)).toEqual(atB);
+    expect(atB).toEqual({ [x]: `foo-${tag}`, [w]: gaveWay(`foo-${tag}`, w) });
+    // renamed: it lets the name go, and the note that gave way takes it, on the node that renames (its group is settled again) and on the one that takes the rename
+    await write(b, "PATCH", `/api/nodes/${x}`, { title: `Bar ${tag}` });
+    await exchange(b, a); await exchange(a, b);
+    for (const p of [a, b]) expect(await slugsOf(p, both), p.name).toEqual({ [x]: `bar-${tag}`, [w]: `foo-${tag}` });
   }, 600_000);
 
   it("the website: a note unpublished, and one trashed, on the device make the centre that took them request a rebuild and take them off its stored snapshot (a leak otherwise)", async () => {

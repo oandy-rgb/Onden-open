@@ -248,8 +248,9 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
     const tables = (await q<{ t: string }>(`SELECT table_name AS t FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1`)).rows.map((r) => r.t);
     const holders: string[] = [];
     for (const t of tables) {
-      // (a slug is a name, not a reference: slugs such as module-<old id> and note text are kept as they are, see the migration's header)
-      const row = t === "content_nodes" ? "(to_jsonb(x) - 'slug' - 'markdown')::text" : "x::text";
+      // (a slug is a name, not a reference: slugs such as module-<old id> and note text are kept as they are, see the migration's header; written_slug is the
+      // slug its write chose, migration 235: the same name)
+      const row = t === "content_nodes" ? "(to_jsonb(x) - 'slug' - 'written_slug' - 'markdown')::text" : "x::text";
       const n = (await q<{ n: number }>(`SELECT count(*)::int AS n FROM "${t}" x WHERE ${row} LIKE ANY($1::text[])`, [olds.map((id) => `%${id}%`)])).rows[0]!.n;
       if (n > 0) holders.push(t);
     }

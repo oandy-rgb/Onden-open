@@ -98,7 +98,9 @@ describe.skipIf(!isTestDb)("write stamps on content_nodes", () => {
 
     await ok("PATCH", `/api/nodes/${id}`, { title: "renamed" });
     const afterTitle = await stampsOf(id);
-    expect([...afterTitle.keys()].sort()).toEqual(["*", "title"]);
+    // a rename gives the note the slug its title gives, and that slug is a unit since migration 235: the same write stamps both
+    expect([...afterTitle.keys()].sort()).toEqual(["*", "slug", "title"]);
+    expect({ ...afterTitle.get("slug"), field: "title" }).toEqual(afterTitle.get("title"));
     expect(afterTitle.get("*")).toEqual(created);
     const titleStamp = afterTitle.get("title")!;
     expect(titleStamp.seq).toBeGreaterThan(created.seq);
@@ -130,6 +132,29 @@ describe.skipIf(!isTestDb)("write stamps on content_nodes", () => {
     const childStamps = await stampsOf(id);
     expect(childStamps.get("space")).toBeUndefined();
     expect((await q<{ s: string }>(`SELECT space_id::text AS s FROM content_nodes WHERE id = $1`, [id])).rows[0]!.s).toBe(spaceB);
+  });
+
+  // review of PR #1992, round 1, point 1: a slug is a unit since migration 235, and its stamp is no edit: a move to another space leaves the `updated_at` of every note
+  // under the moved one as it was, a note whose `updated_at` a write moved forward without a stamp (a board's or a canvas's own) and a note that takes `-2` there too
+  it("a move to another space leaves every moved descendant's updated_at as it was, also one moved forward without a stamp and one that takes -2 there", async () => {
+    const tag = randomUUID().slice(0, 6);
+    const root = await create({ title: `Mover ${tag}` });
+    const plain = await create({ parent_id: root, title: `Plain ${tag}` });
+    const ahead = await create({ parent_id: root, title: `Ahead ${tag}` });
+    const clash = await create({ parent_id: root, title: `Clash ${tag}` });
+    await create({ space_id: spaceB, title: `Clash ${tag}` }); // in the target space: the moved one takes `-2`
+    await create({ space_id: spaceB, title: `Ahead ${tag}` }); // and this one too
+    await ok("PATCH", `/api/nodes/${ahead}`, { markdown: "an edit: a stamp that counts" });
+    await seedQ(`UPDATE content_nodes SET updated_at = now() + interval '1 day' WHERE id = $1`, [ahead]); // later, as boardWrites.ts does: no stamp
+    const times = async () => Object.fromEntries((await q<{ id: string; t: string }>(`SELECT id::text, updated_at::text AS t FROM content_nodes WHERE id = ANY($1::uuid[])`, [[plain, ahead, clash]])).rows.map((r) => [r.id, r.t]));
+    const before = await times();
+    const preview = await ok("GET", `/api/spaces/move-preview?node=${root}&to=${spaceB}`);
+    await ok("POST", "/api/spaces/move", { node_id: root, to_space_id: spaceB, membership_epoch: preview.membership_epoch });
+    expect((await q<{ slug: string }>(`SELECT slug FROM content_nodes WHERE id = $1`, [clash])).rows[0]!.slug).toBe(`clash-${tag}-2`);
+    expect((await stampsOf(clash)).get("slug")).toBeDefined();
+    expect((await stampsOf(ahead)).get("slug")).toBeDefined(); // `ahead-<tag>-2`: a slug stamp on a note whose updated_at is ahead of its stamps
+    expect((await stampsOf(plain)).get("slug")).toBeUndefined(); // its slug is as it was: the move wrote nothing of it
+    expect(await times()).toEqual(before);
   });
 
   it("deleting a note and its children shares the root's stamp; restoring stamps the deleted state again", async () => {

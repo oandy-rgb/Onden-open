@@ -68,23 +68,27 @@
  },
  "block_link_bindings": {
   "class": "stamped",
-  "note": "per (note, link text)",
-  "snapshot": "genesis"
+  "note": "per (note, link text): the anchor a person confirmed (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "focus_sessions": {
   "class": "stamped",
-  "note": "whole row",
-  "snapshot": "genesis"
+  "note": "whole row, one unit (task, start, end, sentence); two running records of one person both stay (4.4) (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "review_states": {
   "class": "stamped",
-  "note": "per (card, person); personal data",
-  "snapshot": "genesis"
+  "note": "per (card, person), keyed by an id derived from them: the state, the step before and when, one unit; personal data (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "actor_prefs": {
   "class": "stamped",
-  "note": "per key; personal data",
-  "snapshot": "genesis"
+  "note": "per key: the value with its forward order and edit time, one unit; personal data (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "actor_module_settings": {
   "class": "stamped",
@@ -129,13 +133,15 @@
  },
  "ai_edit_suggestions": {
   "class": "stamped",
-  "note": "each decision",
-  "snapshot": "genesis"
+  "note": "the row only: a suggestion does not change once made (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "ai_edit_suggestion_items": {
   "class": "stamped",
-  "note": "each decision",
-  "snapshot": "genesis"
+  "note": "each decision: status, who and when, one unit (migration 236)",
+  "wired": true,
+  "snapshot": "rows"
  },
  "note_block_refs": {
   "class": "derived",
@@ -294,11 +300,12 @@
   "note": "attachments, after launch"
  },
  "actors": {
-  "class": "separate",
-  "note": "identity: only changed on the main server",
-  "snapshot": "identity",
+  "class": "stamped",
+  "note": "identity: written on the main server only (migration 237 refuses it on a node that joined from another); name and write mode each on their own",
+  "wired": true,
+  "snapshot": "rows",
   "neverLeaves": "the actors row of a temporary session (type 'session'): the session lives on the node it was opened on; what it wrote keeps its id as the author of its stamps",
-  "snapshotNote": "id, name, type, write mode and created time only; the sign-in link (external_id) of a person and every invitation column stay on the node"
+  "snapshotNote": "the identity only: id, name, type, write mode and created time, with their stamps; the sign-in link (external_id) of a person and every invitation column stay on the node"
  },
  "agent_runners": {
   "class": "undecided",

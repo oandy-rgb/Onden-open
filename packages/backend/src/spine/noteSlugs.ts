@@ -1,20 +1,17 @@
-// A note's slug: the one rule (D55) and how two nodes end with the same slug (docs/architecture/proposals/own-node-transport-2026-11-22.md §2.12.6, batch 4a).
-// A slug is not a unit. The write path derives it: `slugFor` from the title, then `freeSlug` gives the first of `base`, `base-2`, `base-3`… no live note of the space
-// holds (services/nodes.ts uniqueSlug). It travels with a title (spine/stampedMerge/dbRows.ts DERIVED_WITH: the slug of the write that set the title).
-// When two live notes of one space want one slug (`settleSlugs`), the note that CLAIMED it later gives way. A note's claim is the latest stamp of what put it where
-// it is under that name: its creation, title and restore, the place (`parent`) of it and of every note above it, and the space written for the note at the top
-// (`claimOf`). Stamps are replicated, so every node that holds the same writes picks the same note. How the one that gives way is named follows what its claim is:
-//   - NAMED (its latest claim is its creation or its title: the slug came with a write that carries it, DERIVED_WITH) → `slug-<first eight of its id>`, the name no
-//     node's state changes (the rule of the merge before batch 4a), so any number of notes made or renamed at once on two nodes end the same;
-//   - PLACED (a move, the tree it follows, a restore: no write carries its slug) → the first free one from it (`freeSlug`, `-2`…), which is what the write path of a move
-//     or a restore gives, so a node that takes that write by bundle ends with the writer's `-2`.
-//   - a move, restore or rename made here is the newest write this node holds, so the note it moved (and every note under it) gives way to the notes already in
-//     that space, whose slugs never change for it (review of PR #1941, round 1, point 1: a published address changes only by its own note's writes). The same as main;
-//   - two nodes that each moved, restored or made a note with one slug in one space without seeing the other's: the later claim gives way, on both nodes, in either
-//     order of delivery (test/receivedDerivation.integration.test.ts).
-// What this does not settle: the free slug a PLACED loser takes is the first free one on the node's state. Two nodes agree on it when they hold the same notes of
-// that space; three or more notes moved or restored to one slug at once, or a note made at the same time with the very `-2` a placed loser takes, can leave two
-// nodes with different suffixes.
+// A note's slug: the one rule (D55) and how every node ends with the same slug (docs/architecture/proposals/own-node-transport-2026-11-22.md §2.12.6; batch 4a,
+// then batch 5: migration 235).
+// THE WRITE PATH derives it: `slugFor` from the title, then `freeSlug` gives the first of `base`, `base-2`, `base-3`… no live note of the space holds
+// (services/nodes.ts uniqueSlug). A move here (services/spaces.ts) gives way to the notes already in the target space (`settleSlugs`: the notes it writes have
+// the latest claim), so a published address changes only by its own note's writes (review of PR #1941, round 1, point 1), as on main.
+// THE SLUG IS A UNIT since batch 5: the slug the write chose is `written_slug` (the unit `slug`), stamped and carried; on the node that writes it is the slug
+// (the BEFORE trigger content_nodes_written_slug). A node that TAKES a bundle gives the slug from replicated state only (`settleReceivedSlugs`, the SQL function
+// content_nodes_settle_slugs): among the live notes of a space that want one name, the one with the earliest claim has it, every other one has
+// `<name>-<first eight of its id>`. A claim is the latest stamp of the note's OWN creation, title, slug, deletion and written space (`SLUG_CLAIM_FIELDS`); not its
+// place (the owner, 2026-11-23: a move in the tree within the space keeps a published address).
+// A move's `~<id>` is no written slug (the BEFORE trigger skips it), so a note under a moved one that keeps its slug writes nothing of it.
+// A local write that changes one of those for a live note settles its old group again when a note of it gave way (content_nodes_slug_group_left: none on a
+// single server), and a bundle settles the old and new groups of every note it bears on: so the slugs are a function of the writes a node holds, in any order of
+// delivery, with any number of notes on one name (test/receivedDerivation.integration.test.ts).
 import { slugify } from "@onden/markdown";
 import { isCanvas, isTag } from "@onden/markdown/contract";
 import { snapshotRows } from "./snapshotSql.js";
@@ -49,6 +46,20 @@ export async function freeSlug(workspaceId: string, base: string, opts: { exclud
     if ((await snapshotRows(`SELECT id FROM content_nodes WHERE ${where}`, params)).rows.length === 0) return slug;
     slug = `${base}-${i++}`;
   }
+}
+
+/** The units of a note whose stamps are its claim to its name where a bundle is taken (content_nodes_settle_slugs, migration 235; a test compares them). Only the
+ *  note's own, so a change of any passes through its row and the group is settled again wherever it changes; not its place (`parent`): a note moved under
+ *  another note of its space keeps its name (the owner's decision of 2026-11-23, PR #1992). */
+export const SLUG_CLAIM_FIELDS: readonly string[] = ["*", "title", "slug", "deleted", "space"];
+
+/**
+ * After a bundle is written: give each note of `ids` (which may hold `~` and its id meanwhile) and every live note that wants a name of `names` or of those notes the
+ * slug replicated state gives it (the header). In the caller's transaction; writes `slug` only, no stamp (it is no unit).
+ */
+export async function settleReceivedSlugs(workspaceId: string, ids: readonly string[], names: readonly string[]): Promise<void> {
+  if (!ids.length && !names.length) return;
+  await snapshotRows(`SELECT content_nodes_settle_slugs($1::uuid, $2::uuid[], $3::text[])`, [workspaceId, [...ids].sort(), [...new Set(names)].sort()]);
 }
 
 /** The space a note without one counts as in the unique slug index (migration 099 content_nodes_space_slug_uq). */
@@ -99,8 +110,8 @@ const setSlug = (workspaceId: string, id: string, slug: string) =>
 
 /**
  * Give each note of `wanted` (which holds a name no note has, `~` and its id, or its slug already) the slug it wants, in id order. Where another live note of its
- * space holds it, the one that claimed it later takes the first free one from it (the rule above). In the caller's transaction. The same function where a note
- * is moved here (services/spaces.ts), and where a bundle brings notes (spine/stampedMerge/dbRows.ts).
+ * space holds it, the one that claimed it later takes the first free one from it (the notes a move here writes, whose claim is this node's latest write, and
+ * under them). In the caller's transaction. Where a note is moved here (services/spaces.ts); a bundle's notes take theirs by `settleReceivedSlugs`.
  */
 export async function settleSlugs(workspaceId: string, wanted: readonly { id: string; slug: string }[]): Promise<void> {
   for (const { id, slug } of [...wanted].sort((a, b) => (a.id < b.id ? -1 : 1))) {

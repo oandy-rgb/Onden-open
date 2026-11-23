@@ -28,4 +28,8 @@
 // 8 (the values a note's text gives it travel, migration 223, batch 4a): node_attributes rows whose source is `markdown` or `frontmatter` are units, carried by a
 // snapshot and a change bundle (spine/attributeSource.ts STAMPED_ATTRIBUTE_SOURCES). A node of version 7 holds such a row as no unit: it would make the carried row
 // again over its own (a unique clash on (node, key)) and leave it out of what it sends.
-export const SYNC_DATA_SHAPE_VERSION = 8;
+// 9 is taken by the history batch 3 (issue #1971).
+// 10 (own-node transport batch 5, migrations 235–): a note's `slug` is a unit (written_slug, the slug its write chose; the slug a node shows is settled from the
+// units, spine/noteSlugs.ts), and the tables a snapshot carried with genesis stamps only travel by bundle too (stampedMerge/dbUnits.ts UNIT_SOURCES). A node of
+// version 8 or 9 would refuse those labels (`bundle_scope`) and read a bundle's slug as no unit.
+export const SYNC_DATA_SHAPE_VERSION = 10;

@@ -33,5 +33,11 @@ export async function rerunMigration(version: string): Promise<void> {
     }),
     ...[...m.sql.matchAll(TRIGGER)].filter((hit) => redefinedByRerun.has(`${hit[2]}.${hit[1]}`)).map((hit) => hit[0]),
   ]);
-  await seedQ([mine, ...later].join("\n"));
+  // and every trigger the statements above (re)define ends as its LAST definition: a restored statement can carry other triggers with it (a statement of 218 that
+  // the rerun of 209 puts back also put back 218's three stamp triggers of content_nodes, over 235's; PR #1992), so the newest definition of each is put back last
+  const newest = new Map<string, string>();
+  for (const m of all.slice(at + 1)) for (const hit of m.sql.matchAll(TRIGGER)) newest.set(`${hit[2]}.${hit[1]}`, hit[0]);
+  const touched = new Set([mine, ...later].flatMap((text) => [...text.matchAll(TRIGGER)].map((hit) => `${hit[2]}.${hit[1]}`)));
+  const last = [...touched].filter((name) => newest.has(name)).map((name) => newest.get(name)!);
+  await seedQ([mine, ...later, ...last].join("\n"));
 }

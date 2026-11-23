@@ -31,6 +31,8 @@ const CLASSIFIED: Record<string, { why: Why; note: string }> = {
   "rss_subscriptions.created_by_actor_id": { why: "carried-actor", note: "a feed (modules/rss/sources.ts createSource; subscribing is also personal: mutatePersonal) and a move (services/backupExtras.ts importExtras)" },
   "ai_edit_suggestions.agent_actor_id": { why: "agent-only", note: "the AI that proposed it" },
   "ai_edit_suggestion_items.decided_by": { why: "carried-actor", note: "deciding is a person's (routes/aiSuggestions.ts requirePerson); written through carriedActorId all the same" },
+  "ai_edit_suggestion_items.written_decided_by": { why: "carried-actor", note: "the copy of decided_by the write made (migration 236 ai_edit_suggestion_items_written): what carriedActorId gave decided_by" },
+  "ai_edit_suggestion_items.accepted_by": { why: "carried-actor", note: "decided_by of the write that accepted (migration 236 ai_edit_suggestion_items_written): what carriedActorId gave it" },
   "actor_module_settings.actor_id": { why: "personal", note: "review settings per tag" },
   "actor_prefs.actor_id": { why: "personal", note: "preferences" },
   "review_states.actor_id": { why: "personal", note: "review progress" },

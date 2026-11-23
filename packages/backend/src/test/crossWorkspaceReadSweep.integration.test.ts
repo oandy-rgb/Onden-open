@@ -506,8 +506,6 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
       await grade(A.owner, g.note, 3);
     }
     await replaceSettings(A.owner, reviewTag, { maximum_interval_days: 7 });
-    // the join record of a database that was filled from a snapshot (migration 204; no route reads it)
-    await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'sweep-probe-node', 0, 'done')`, [A.ws]);
 
     // a restore that kept this node's id instead of renewing it (migration 224; no route reads it)
     await seedQ(`INSERT INTO sync_restore_kept_node_id (workspace_id, node_id, reason) VALUES ($1, NULL, 'no-node-table')`, [A.ws]);
@@ -526,6 +524,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     // a pending invitation (a person with no account yet) and a push subscription of the owner's device
     const inviteEmail = `${canary("Invitee").toLowerCase()}@sweep.test`;
     const invited = await createActor(A.owner, async () => ({ type: "human", name: canary("InviteeName"), email: inviteEmail }) as never) as { id: string; invite_url?: string };
+    // the join record of a database that was filled from a snapshot (migration 204; no route reads it). After the invitation: a node that joined from another
+    // makes no person (migration 237 actors_written_on_the_centre)
+    await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'sweep-probe-node', 0, 'done')`, [A.ws]);
     await saveSubscription(A.owner, A.ws, {
       endpoint: `https://fcm.googleapis.com/fcm/send/${canary("PushEndpoint")}`, p256dh: canary("P256dh"), auth: canary("PushAuth"),
     }, `Mozilla/5.0 ${canary("Browser")}`);

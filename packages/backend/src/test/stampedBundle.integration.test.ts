@@ -426,7 +426,7 @@ describe.skipIf(!isTestDb)("updated_at is a function of the stamps", () => {
     const def = await onNode(a.node, async () => (await q<{ d: string }>(`SELECT pg_get_functiondef('sync_touch_updated_at(uuid, text)'::regprocedure) AS d`)).rows[0]!.d);
     expect(def).toContain(`field NOT IN (${NOT_AN_EDIT_FIELDS.map((f) => `'${f}'`).join(", ")})`);
     expect(def).toContain("meta->>'quiet'");
-    expect(NOT_AN_EDIT_FIELDS).toEqual(["*", "sort"]);
+    expect(NOT_AN_EDIT_FIELDS).toEqual(["*", "sort", "slug"]);
   }, 300_000);
   it("a position change and a housekeeping rewrite do not count; an ordinary edit does; after the exchange both nodes hold the same updated_at for each of them", async () => {
     const { a, b } = await cluster(15);

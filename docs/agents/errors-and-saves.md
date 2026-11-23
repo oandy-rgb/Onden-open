@@ -1,7 +1,7 @@
 # 一致的錯誤與保存契約
 
-> 狀態：現行（最後確認 2026-11-18）
-> 涵蓋：packages/backend/src/httpError.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeErrors.ts, packages/frontend/src/lib/data/backgroundWrite.ts
+> 狀態：現行（最後確認 2026-11-23）
+> 涵蓋：packages/backend/src/httpError.ts, packages/frontend/src/lib/data/writeLifecycle.ts, packages/frontend/src/lib/data/writeQueue.ts, packages/frontend/src/lib/data/writeErrors.ts, packages/frontend/src/lib/data/backgroundWrite.ts, packages/frontend/src/lib/data/storageSteps.ts
 
 何時讀：改前端保存／離線佇列／錯誤處理、依成功才關閉的表單，或後端 HTTP 錯誤映射之前。
 原文自 2026-10-22 之前的 AGENTS.md 逐字搬入，只調整相對連結與標題層級。
@@ -22,6 +22,7 @@
   只有記憶體更新不能顯示已保存，待同步也不能顯示已同步。
 - 區分永久拒絕、登入失效、可重試失敗與本機儲存失敗，採用既有對應策略。
   回復只影響本次操作，保留較新的修改及可恢復輸入。
+- 儲存步驟（寫本機副本、清佇列、倒回同步游標、寫使用者的資料夾）失敗不吞：走 `lib/data/storageSteps.ts` 的 `storageStep`，失敗的步驟「欠著」直到同一步成功，讀它的地方寫明欠著時守住什麼（告訴使用者，或改走整份重讀、不再重送）。吃掉是對的只限已有冪等鍵或只是快取的步驟，並在那一行寫理由。
 - 被伺服器拒絕的文字不算伺服器有的：它不成為下一次存檔的合併 base（`writeRecovery.withoutRefusedBase`，`writeQueue` 送出時套用），
   它的救回副本只在伺服器回答的內文就是那段文字時才丟（只進佇列不算；[筆記寫入：沒有被收下的文字不算數](../architecture/note-writes.md#沒有被收下的文字不算數2026-11-19)）。
 - 已收到提交確認後，本機副本更新失敗不能把整次寫入改判成未提交，或誘發重複建立。

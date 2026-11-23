@@ -13,6 +13,7 @@ import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stamped
 import { admit, bundleFor, peerOf, take } from "./helpers/stampedBundleWorld.js";
 import { refreshSenderStatistics } from "../spine/senderStatistics.js";
 import { UNIT_SOURCES } from "../spine/stampedMerge/index.js";
+import { awaitCountsOfEveryConnection } from "./helpers/statisticsOfEveryConnection.js";
 
 /** The tables a bundle reads (spine/stampedBundle.ts BUNDLE_READ_TABLES). */
 const BUNDLE_READ_TABLES = ["sync_stamps", "sync_stamp_heads", ...new Set(UNIT_SOURCES.map((s) => s.table))];
@@ -23,12 +24,10 @@ const open: RealNode[] = [];
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); });
 
 /** The rows the database says it read (sequential and index fetches, every table) so far: a count of work that does not depend on how busy the machine is.
- *  Statistics are flushed and the cached snapshot dropped first, so the number is as of now. */
+ *  Every connection's counts are in first (helpers/statisticsOfEveryConnection.ts), so the number is as of now. */
 async function rowsRead(node: RealNode): Promise<number> {
   return onNode(node, async () => {
-    await q(`SELECT pg_stat_force_next_flush()`);
-    await q(`SELECT 1`);
-    await q(`SELECT pg_stat_clear_snapshot()`);
+    await awaitCountsOfEveryConnection();
     return Number((await q<{ r: string }>(`SELECT (sum(seq_tup_read) + sum(COALESCE(idx_tup_fetch, 0)))::text AS r FROM pg_stat_user_tables`)).rows[0]!.r);
   });
 }
@@ -76,6 +75,8 @@ async function cost(stamps: number, senderAnalyzed: boolean | "never" = true, wi
       })));
     }
   });
+  // every write's change count is in before the sender's statistics are set (helpers/statisticsOfEveryConnection.ts: one sent after an ANALYZE reads as changed since it)
+  await onNode(na, () => awaitCountsOfEveryConnection());
   // the sender's statistics are current, as autovacuum keeps them on a server (PGlite has no autovacuum: PR, 需要決定). The receiver needs nothing: a merge brings its own up to date (dbRows.ts)
   if (senderAnalyzed === true) await onNode(na, () => q(`ANALYZE`));
   if (senderAnalyzed === "never") await onNode(na, () => forgetStatistics());
@@ -158,7 +159,37 @@ describe.skipIf(!isTestDb)("the cost of reading and taking a bundle grows in pro
     const na = await openNode("a");
     open.push(na);
     await buildSourceWorld(na);
+    // current = analyzed after every change was counted: a count a connection sends after the ANALYZE (seconds after its write: helpers/statisticsOfEveryConnection.ts) would read as a change since it (#1991)
+    await onNode(na, () => awaitCountsOfEveryConnection());
     await onNode(na, () => q(`ANALYZE`));
+    expect(await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]);
+  }, 900_000);
+
+  // The other direction (review of PR #1996, point 2): statistics current, then far more than autovacuum's line written to some tables. Each of those, and
+  // only those, is analyzed before the read, exactly once (the database's own count of analyses), and nothing is stale after.
+  it("a sender whose statistics are stale analyzes each stale table exactly once before it reads, and no other", async () => {
+    const na = await openNode("a");
+    open.push(na);
+    const world = await buildSourceWorld(na);
+    await onNode(na, () => awaitCountsOfEveryConnection());
+    await onNode(na, () => q(`ANALYZE`));
+    await onNode(na, () => withRequestDevice(randomUUID(), () => withTransaction(() => withEventTransaction(world.ws, async () => {
+      await stampTransaction(world.ws, world.owner.id);
+      const ids = (await q<{ id: string }>(`INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id)
+               SELECT $1, 'manual', 'content', 'stale ' || g, 'stale-' || g, 'body ' || g, $2 FROM generate_series(1, 3000) g RETURNING id::text`, [world.ws, world.spaceA])).rows.map((r) => r.id);
+      await q(`INSERT INTO node_attributes (workspace_id, node_id, key, value, source) SELECT $1, x::uuid, 'stale', 'v', 'ui' FROM unnest($2::text[]) x`, [world.ws, ids]);
+    }))));
+    await onNode(na, () => awaitCountsOfEveryConnection());
+    const analyses = () => onNode(na, async () => {
+      await awaitCountsOfEveryConnection();
+      const r = await q<{ t: string; n: string }>(`SELECT relname::text AS t, analyze_count::text AS n FROM pg_stat_user_tables WHERE relname = ANY($1::text[])`, [BUNDLE_READ_TABLES]);
+      return new Map(r.rows.map((x) => [x.t, Number(x.n)]));
+    });
+    const before = await analyses();
+    const analyzed = await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)));
+    const after = await analyses();
+    expect(analyzed).toEqual(["content_nodes", "node_attributes", "sync_stamps"]);
+    for (const t of new Set(BUNDLE_READ_TABLES)) expect(after.get(t)! - before.get(t)!, t).toBe(analyzed.includes(t) ? 1 : 0);
     expect(await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]);
   }, 900_000);
 
@@ -175,7 +206,7 @@ describe.skipIf(!isTestDb)("the cost of reading and taking a bundle grows in pro
       await q(`INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id)
                SELECT $1, 'manual', 'content', 'grown ' || g, 'grown-' || g, 'a body long enough to fill pages ' || repeat('x', 200) || g, $2 FROM generate_series(1, 3000) g`, [world.ws, world.spaceA]);
     }))));
-    await onNode(na, async () => { await q(`SELECT pg_stat_reset()`); await q(`SELECT pg_stat_clear_snapshot()`); });
+    await onNode(na, async () => { await awaitCountsOfEveryConnection(); await q(`SELECT pg_stat_reset()`); await q(`SELECT pg_stat_clear_snapshot()`); }); // no count of the grown rows arrives after the reset
     const analyzed = await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)));
     expect(analyzed).toEqual(expect.arrayContaining(["content_nodes", "sync_stamps"]));
     expect(await onNode(na, () => withTransaction(() => refreshSenderStatistics(BUNDLE_READ_TABLES)))).toEqual([]); // and then nothing is stale

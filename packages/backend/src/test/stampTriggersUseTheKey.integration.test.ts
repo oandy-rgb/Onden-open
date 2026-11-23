@@ -8,8 +8,9 @@
 // it grows by about the stamps added (checked by hand when this file was written: the PR says how much). Both engines.
 // SAFETY: one node database (a PGlite, or a database of the test server on a real Postgres), dropped after the test.
 import { afterAll, describe, expect, it } from "vitest";
-import { dbDriver, pool, q, withTransaction } from "../db.js";
+import { q, withTransaction } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
+import { awaitCountsOfEveryConnection } from "./helpers/statisticsOfEveryConnection.js";
 import { buildSourceWorld, openNode } from "./helpers/stampedWorld.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { stampTransaction } from "../spine/stamps.js";
@@ -23,12 +24,7 @@ afterAll(async () => { await node?.close(); });
 
 /** Rows read so far from the two stamp tables (every connection's counters flushed first: a real Postgres keeps them per backend until then). */
 async function stampRowsRead(): Promise<number> {
-  await q(`SELECT pg_stat_force_next_flush()`); await q(`SELECT 1`);
-  if (dbDriver === "postgres") {
-    const clients = await Promise.all(Array.from({ length: pool.idleCount }, () => pool.connect()));
-    try { for (const c of clients) { await c.query(`SELECT pg_stat_force_next_flush()`); await c.query(`SELECT 1`); } } finally { for (const c of clients) c.release(); }
-  }
-  await q(`SELECT pg_stat_clear_snapshot()`);
+  await awaitCountsOfEveryConnection();
   const r = (await q<{ n: string }>(`SELECT (sum(seq_tup_read) + sum(COALESCE(idx_tup_fetch, 0)))::text AS n FROM pg_stat_user_tables
     WHERE relname IN ('sync_stamps', 'sync_stamp_heads')`)).rows[0]!;
   return Number(r.n);

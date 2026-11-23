@@ -1695,7 +1695,7 @@ export const noteView: NoteViewSpec = { Pane: lazyWithReload(() => import("./mod
 - 守門：`fe-import-boundaries`
 - 為什麼：殼層只透過這裡讀模組貢獻的東西，不 import 任何模組目錄；這樣模組才能被關掉或刪掉而殼層不壞。
 
-## 後端（61）
+## 後端（62）
 
 ### 要寫日誌
 
@@ -2113,6 +2113,14 @@ declare const id: string;
 await seedQ("UPDATE content_nodes SET title = $2 WHERE id = $1", [id, "起點"]);`
 - 取代：在測試裡對 content_nodes／node_attributes／node_tags／node_edges／block_nodes 直接 q("INSERT/UPDATE/DELETE …")（q() 在交易外會丟錯）
 - 為什麼：q() 在交易外寫核心資料表會丟錯，逼正式程式改走 mutate()／withEventTransaction()；測試建資料沒有事件可發，用 seedQ 開一個單句交易。被測的程式碼仍須走自己的真入口。
+
+### 後端測試要讀 pg_stat_user_tables 的計數（讀了幾列、上次 ANALYZE 之後改了幾列）到「現在」為止，或要在所有寫入都算進去之後才 ANALYZE
+
+- 入口：`backend/src/test/helpers/statisticsOfEveryConnection.ts`（`awaitCountsOfEveryConnection`）　項目 `be-test-stat-counts-now`
+- 寫法：`import { awaitCountsOfEveryConnection } from "./test/helpers/statisticsOfEveryConnection.js";
+await awaitCountsOfEveryConnection();`
+- 取代：在測試裡只對 q() 那一條連線呼叫 pg_stat_force_next_flush()，或各自複製一份「每條閒置連線都送出」的迴圈
+- 為什麼：真 Postgres 的每條連線一秒最多送一次自己的計數、閒下來約十秒後才送，pg_stat_force_next_flush() 只管呼叫它的那一條；晚到的計數會讓量到的列數變少，或把剛 ANALYZE 過的表看成過期；回來時這個資料庫上沒有別的工作階段還留著（#1991、#1996 審查）。
 
 ### 要讓多個節點（裝置、伺服器）不經單一裁決者同步筆記（分散式同步，beta，預設關閉）
 

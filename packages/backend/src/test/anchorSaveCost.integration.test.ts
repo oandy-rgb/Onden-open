@@ -4,9 +4,9 @@
 // All the anchors' places of a note are one unit (note_anchor_places, round 2 of the review, point 2): a save writes that one row and its one stamp, so the rows written
 // above main's do not grow with the number of anchors; the bound below is the same constant for 50 and 200 anchors. Measured 2026-11-17 (PR description).
 import { afterEach, describe, expect, it } from "vitest";
-import { dbDriver, pool, q } from "../db.js";
-import { awaitAllDispatchers, inflightNodeIds } from "../services/dispatcherQueue.js";
+import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
+import { awaitCountsOfEveryConnection } from "./helpers/statisticsOfEveryConnection.js";
 import { buildSourceWorld, openNode } from "./helpers/stampedWorld.js";
 import { admit, exchange, peerOf } from "./helpers/stampedBundleWorld.js";
 import { capture, fillFrom } from "./helpers/stampedWorld.js";
@@ -26,18 +26,11 @@ const TRIGGERS_215 = ["block_anchors_sync_stamp_insert", "block_anchors_sync_sta
 const NODE_TRIGGERS_215 = ["block_nodes_sync_stamp_insert", "block_nodes_sync_stamp_update", "block_nodes_go_with_note", "block_nodes_made_afresh",
   "block_nodes_in_notes_workspace_insert", "block_nodes_in_notes_workspace_update"];
 
-/** Rows read and written so far in this database, once every connection's counts are in. A backend sends its counts to the shared statistics at most once a second, or ten
- *  seconds after it goes idle, and pg_stat_force_next_flush() reaches only the backend that calls it. So: wait for the work a save leaves after its commit (the
- *  dispatcher's cascades, services/dispatcherQueue.ts, until none is left), then make q()'s connection and every idle one flush. Review of PR #1853, round 3 point 5
- *  (a save counted short by a whole save under a parallel batch) and round 4 point 5 (no waiting on the clock). */
+/** Rows read and written so far in this database, once every connection's counts are in (helpers/statisticsOfEveryConnection.ts: the work a save leaves after its
+ *  commit is awaited, then every connection sends its counts). Review of PR #1853, round 3 point 5 (a save counted short by a whole save under a parallel batch) and
+ *  round 4 point 5 (no waiting on the clock). */
 async function stats(): Promise<{ read: number; written: number }> {
-  while (inflightNodeIds().length > 0) await awaitAllDispatchers();
-  await q(`SELECT pg_stat_force_next_flush()`); await q(`SELECT 1`);
-  if (dbDriver === "postgres") {
-    const clients = await Promise.all(Array.from({ length: pool.idleCount }, () => pool.connect()));
-    try { for (const c of clients) { await c.query(`SELECT pg_stat_force_next_flush()`); await c.query(`SELECT 1`); } } finally { for (const c of clients) c.release(); }
-  }
-  await q(`SELECT pg_stat_clear_snapshot()`);
+  await awaitCountsOfEveryConnection();
   const r = (await q<{ r: string; w: string }>(`SELECT (sum(seq_tup_read) + sum(COALESCE(idx_tup_fetch, 0)))::text AS r, (sum(n_tup_ins) + sum(n_tup_upd) + sum(n_tup_del))::text AS w FROM pg_stat_user_tables`)).rows[0]!;
   return { read: Number(r.r), written: Number(r.w) };
 }

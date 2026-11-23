@@ -2,6 +2,7 @@ import type { ViewDef } from "@onden/markdown";
 import type { EvalNode } from "../../lib/basesEval";
 import { useT } from "../../lib/i18n";
 import { Pressable } from "../ui";
+import { fieldDisplayName } from "../viewLayoutKit";
 
 type Props = {
   rows: EvalNode[];
@@ -20,7 +21,7 @@ export function BasesTable({ rows, view, onSelectNode }: Props) {
       <table className="bases-table">
         <thead>
           <tr>
-            {order.map((key) => <th key={key}>{key}</th>)}
+            {order.map((key) => <th key={key}>{fieldDisplayName(key, t)}</th>)}
           </tr>
         </thead>
         <tbody>

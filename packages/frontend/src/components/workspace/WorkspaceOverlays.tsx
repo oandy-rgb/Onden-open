@@ -108,6 +108,7 @@ export default function WorkspaceOverlays({ palette, settings, sharedDraft, open
             onConnect={settings.connected}
             onOpenTag={onOpenTag}
             onOpenNote={onOpenNote}
+            onNewNoteInSpace={(spaceId) => { void create("note", { spaceId }); }}
           />
         </Suspense>
       )}

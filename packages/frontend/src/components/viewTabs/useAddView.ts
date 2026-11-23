@@ -8,7 +8,9 @@ import { useCanvasImported, useModuleFilter } from "../../hooks/useModuleFilter"
 import { NOTE_VIEW_MODULES, hiddenNoteViewLayouts } from "../../modules";
 import { useOwnerViews } from "../../lib/ownerViews";
 import { autoViewName, buildViewTabs, CANVAS_TAB, CONTENT_TAB, freeViewName, type ViewTab } from "../../lib/viewTabs";
-import { reads, type ViewOwner } from "../../lib/data";
+import { reads, tagSchemaWriter, type ViewOwner } from "../../lib/data";
+import { useTagRows } from "../../lib/appStore";
+import { fieldKeyFrom, namesTakenAround, uniqueFieldKey } from "../../lib/tagFields";
 import { layoutChoices, placementChanges, viewNameParts, type LayoutChoice } from "../collections";
 import { useViewTabActions } from "./useViewTabActions";
 import { isWhiteboardLayout } from "../../lib/whiteboardNote";
@@ -27,6 +29,9 @@ export type AddViewSource = {
   /** Add the view (the field is "" when the choice takes none or is automatic)
    *  and open its tab. A refusal was reported by the writer; nothing opens. */
   add: (choice: LayoutChoice, field: string) => Promise<void>;
+  /** A tag's page with nothing to split a board by: gives the tag a 「狀態」 select field (to do / in progress / done)
+   *  and resolves with its name; null when the writer refused (it reported why). Absent on a note's page. */
+  addStatusField?: () => Promise<string | null>;
 };
 
 type Tabs = ReturnType<typeof useViewTabActions>;
@@ -85,6 +90,7 @@ export function useAddView(args: {
   onSelect: (key: string) => void;
 }): AddViewSource {
   const { ownerId, open = false, tabs, actions, fields, ownerKind, onSelect } = args;
+  const t = useT();
   const canvasImported = useCanvasImported();
   const offerWhiteboard = canvasImported && !tabs.some((tab) => tab.kind === "canvas");
   // A tag's list is always a tab, so only a note whose 「內容」 was removed is offered it back.
@@ -117,5 +123,23 @@ export function useAddView(args: {
     if (id) onSelect(id);
   }, [addContent, addWhiteboard, create, fields, firstTabOf, onSelect, actions.takenNames]);
 
-  return { choices, fields, ownerKind, busy: actions.busy, add };
+  const tags = useTagRows();
+  const addStatusField = useMemo(() => {
+    if (ownerKind !== "tag" || !ownerId) return undefined;
+    return async () => {
+      const tag = tags?.find((row) => row.id === ownerId);
+      if (!tag) return null;
+      // The tag's OWN list (`schema_fields`), not `fields`: that one also holds what the tags above give, and writing
+      // those back would copy them here (the server refuses the names: 409 field_name_inherited).
+      const own = tag.schema_fields ?? [];
+      // The key is stored data and stays the same in every language; only the label is the creator's words.
+      // The options have no display names (a select field's options are plain values, as typed in the tag editor).
+      const key = uniqueFieldKey(fieldKeyFrom("Status"), [...own.map((f) => f.name ?? f.key ?? ""), ...namesTakenAround(tag, tags ?? [])]);
+      const field: FieldDef = { name: key, label: t("Status"), type: "select", options: [t("To do"), t("In progress"), t("Done")] };
+      try { await tagSchemaWriter.update(ownerId, { fields: [...own, field] }); } catch { return null; } // Reported by the tag-schema writer.
+      return key;
+    };
+  }, [ownerKind, ownerId, tags, t]);
+
+  return { choices, fields, ownerKind, busy: actions.busy, add, addStatusField };
 }

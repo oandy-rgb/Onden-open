@@ -53,7 +53,12 @@ export function PlacePicker({ groups, current, currentMark, searchLabel, where, 
     for (const group of groups) {
       const spaceKey = group.space?.id ?? "none";
       const rows: Option[] = [];
-      if (!q) rows.push({ key: `${spaceKey}:top`, group, parentId: null, title: topLabel ?? t("Top level"), depth: 0 });
+      const top = topLabel ?? t("Top level");
+      if (!q) rows.push({ key: `${spaceKey}:top`, group, parentId: null, title: top, depth: 0 });
+      // Typing a space's name finds that space: its top level, as 「空間 › 最上層」.
+      else if (group.space && containsTitle(q, spaceLabel(group.space))) {
+        rows.push({ key: `${spaceKey}:top`, group, parentId: null, title: `${spaceLabel(group.space)} › ${top}`, depth: 0 });
+      }
       for (const entry of group.entries) {
         if (q && !containsTitle(q, entry.title)) continue;
         if (notes >= ROW_LIMIT) { more = true; break; }

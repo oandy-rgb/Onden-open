@@ -61,8 +61,9 @@ test("phone: the tab row is one scrolling line with 44px targets", async ({ page
   await ready(page, `/?view=notes&node=${parent.id}`);
   const row = page.locator(".view-tabs");
   await expect(row).toBeVisible();
-  const box = await row.evaluate((el) => ({ wrap: getComputedStyle(el).flexWrap, overflowX: getComputedStyle(el).overflowX }));
-  expect(box).toEqual({ wrap: "nowrap", overflowX: "auto" });
+  // The tab list scrolls; 「＋」 beside it never scrolls away (#1848).
+  const box = await row.evaluate((el) => ({ wrap: getComputedStyle(el).flexWrap, listOverflowX: getComputedStyle(el.querySelector(".view-tabs-list")!).overflowX }));
+  expect(box).toEqual({ wrap: "nowrap", listOverflowX: "auto" });
   // Each target answers a touch over 44px of height: since #1331 the phone's tabs are drawn 40px tall and an
   // invisible ::before grows the hit area 2px above and below (ViewTabs.css .phone-view-tabs). So measure what a
   // touch reaches: scan down the target's middle and keep the span of points that land on it (its ::before included).

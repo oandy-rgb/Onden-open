@@ -20,7 +20,6 @@ vi.mock("@xyflow/react", async (original) => ({
   },
   Background: () => null,
   MiniMap: () => <div data-testid="minimap" />,
-  NodeToolbar: ({ nodeId, children }: { nodeId: string; children: ReactNode }) => <div data-testid="node-toolbar" data-node-id={nodeId}>{children}</div>,
 }));
 vi.mock("../components/CardNode", () => ({ CardNode: () => null }));
 vi.mock("../components/SectionNode", () => ({ SectionNode: () => null }));
@@ -236,18 +235,19 @@ describe("full screen", () => {
 describe("the bar over the selected card", () => {
   const select = (id: string) => act(() => { setAppState({ selectedId: id }); });
 
-  it("appears on the selected card with open, colour, sub-notes and ⋯, and its actions reach the board", () => {
+  it("appears for the selected card, docked, with open, colour, sub-notes and ⋯, and its actions reach the board", () => {
     const onOpenCard = vi.fn(); const onToggleBranch = vi.fn(); const onSetNodesColor = vi.fn(); const onNodeContextMenu = vi.fn(); const onCenterBoard = vi.fn();
     mount({
       nodes: [card("a", { expanded: true, below: 0 }), card("b")],
       tree: { mode: "auto", depth: 2, childless: false, crumbs: [], backTo: vi.fn(), setMode: vi.fn(), setDepth: vi.fn() },
       actions: { onOpenCard, onToggleBranch, onSetNodesColor, onNodeContextMenu, onCenterBoard },
     });
-    expect(screen.queryByTestId("node-toolbar")).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "Selected card" })).toBeNull();
     select("a");
-    const holder = screen.getByTestId("node-toolbar");
-    expect(holder).toHaveAttribute("data-node-id", "a");
-    const bar = within(holder).getByRole("toolbar", { name: "Selected card" });
+    const bar = screen.getByRole("toolbar", { name: "Selected card" });
+    // Docked at a fixed place on the board, not drawn over the card (it covered the cards above it).
+    expect(bar.closest(".board-selection-dock")).not.toBeNull();
+    expect(bar.closest(".react-flow__node, .react-flow__viewport")).toBeNull();
     fireEvent.click(within(bar).getByRole("button", { name: /Open card/ }));
     expect(onOpenCard).toHaveBeenCalledWith("a");
     fireEvent.click(within(bar).getByRole("button", { name: /Centre here/ }));
@@ -400,5 +400,17 @@ describe("the bar over the selected card on a narrow board", () => {
     expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Open card", "Colour", "Fold card", "Centre here", "Collapse sub-notes", "Card actions"]);
     expect(bar.querySelectorAll(".board-selection-label")).toHaveLength(5);
     for (const button of buttons.slice(0, 5)) expect(button.querySelector(".board-selection-label")?.textContent).toBe(button.getAttribute("aria-label"));
+  });
+});
+
+describe("undo while the pen is in hand", () => {
+  it("the corner leaves out its undo and redo: the pen's toolbar has the same two, one history for the board", () => {
+    mount();
+    const corner = () => screen.getByRole("group", { name: "Canvas controls" });
+    expect(within(corner()).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Undo", "Redo", "Zoom out", "Zoom in", "Fit view"]);
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Pen" }));
+    expect(within(corner()).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Zoom out", "Zoom in", "Fit view"]);
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Select" }));
+    expect(within(corner()).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Undo", "Redo", "Zoom out", "Zoom in", "Fit view"]);
   });
 });

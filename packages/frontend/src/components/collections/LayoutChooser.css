@@ -1,0 +1,24 @@
+/* 「＋ 檢視」 (AddViewPanel): the layouts, then the one field a view module asks for.
+   Imported by LayoutChooser itself, not by CollectionView: the chooser is in the page before any view's own chunk
+   (and its stylesheet) has loaded, and without these rules the first-opened panel was 66px wide with the icons
+   stacked over the names. */
+.cv-add-view-panel { min-width: 220px; padding: var(--ac-space-3); }
+.cv-add-view-list { list-style: none; margin: 0; padding: 0; }
+.cv-add-view-option, .cv-add-view-back {
+  display: flex; align-items: center; gap: var(--ac-space-4); width: 100%;
+  padding: var(--ac-space-3) var(--ac-space-5); border: 0; border-radius: var(--ac-radius-md); background: none;
+  font: inherit; font-size: var(--ac-fs-small); color: var(--ac-ink); text-align: left; cursor: pointer;
+}
+.cv-add-view-have { margin-left: auto; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.cv-add-view-option:hover, .cv-add-view-back:hover { background: var(--ac-overlay-hover); }
+.cv-add-view-back { color: var(--ac-muted); }
+.cv-add-view-form { display: grid; gap: var(--ac-space-5); padding: var(--ac-space-1) var(--ac-space-2) var(--ac-space-3); }
+.cv-add-view-field { display: grid; gap: var(--ac-space-2); font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.cv-add-view-field select { font: inherit; font-size: var(--ac-fs-small); padding: var(--ac-space-2) var(--ac-space-4); border: var(--ac-border-thin) solid var(--ac-line); border-radius: var(--ac-radius-md); background: var(--ac-surface); color: var(--ac-ink); }
+.cv-add-view-note { margin: 0; font-size: var(--ac-fs-caption); line-height: var(--ac-lh-ui); color: var(--ac-muted); }
+.cv-add-view-create { justify-self: start; padding: var(--ac-space-2) var(--ac-space-5); border: var(--ac-border-thin) solid var(--ac-accent); border-radius: var(--ac-radius-md); background: var(--ac-accent); color: var(--ac-accent-ink); font: inherit; font-size: var(--ac-fs-caption); cursor: pointer; }
+.cv-add-view-create:disabled { opacity: var(--ac-opacity-disabled); cursor: default; }
+@media (pointer: coarse) {
+  .cv-add-view-option, .cv-add-view-back, .cv-add-view-create, .cv-add-view-field select { min-height: var(--ac-tap); }
+}
+

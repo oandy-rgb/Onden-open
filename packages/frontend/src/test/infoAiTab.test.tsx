@@ -17,6 +17,7 @@ const { drafts } = await import("../lib/data");
 const { registerNoteEditor } = await import("../lib/editorInsert");
 const { onSuggestionsChanged } = await import("../lib/aiSuggestionsBus");
 const { pendingReveal, clearReveal } = await import("../lib/noteReveal");
+import { spaceFilterStore } from "../lib/settingsRequest";
 const { refreshSpaces } = await import("../lib/spaces");
 const { default: InfoAiTab } = await import("../components/infoAi/InfoAiTab");
 
@@ -305,6 +306,16 @@ describe("when nobody can answer", () => {
     expect(screen.getByRole("button", { name: "Open AI settings" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Ask the AI")).toBeNull();
     expect(screen.queryByRole("button", { name: "Send question" })).toBeNull();
+  });
+
+  it("「打開 AI 設定」 opens the page of the space this note is in, not the list of all spaces", async () => {
+    roles = { roles: [] };
+    spaceFilterStore.clear();
+    mount();
+    await screen.findByText(/No AI is set up yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Open AI settings" }));
+    expect(spaceFilterStore.get()).toBe("sp");
+    spaceFilterStore.clear();
   });
 
   it("a role whose only way is unavailable says why in the settings' words", async () => {

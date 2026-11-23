@@ -84,13 +84,12 @@ test("COL-01: view CRUD via API vs UI, delete active/last, create failure, reope
     }
   };
   // 「＋」 opens the panel of ways of seeing the page; a layout the page already has only opens its tab ("Already here"), so
-  // each UI create below picks a layout the tag has no view of. Calendar asks for its date field (the first is taken: Created
-  // date) and Cards for its cover (automatic); Table needs nothing.
+  // each UI create below picks a layout the tag has no view of. Each is made at once (#1848): Calendar takes the first date
+  // field (Created date), Cards picks its cover itself, Table needs nothing.
   const addPanel = (p: Page) => p.getByRole("dialog", { name: "Add a view" });
   const addViaUi = async (p: Page, layout: "Table" | "Calendar" | "Cards") => {
     await p.locator(".view-tab--add").click();
     await addPanel(p).getByRole("button", { name: layout }).click();
-    if (layout !== "Table") await p.locator(".cv-add-view-form").getByRole("button", { name: "Add view", exact: true }).click();
   };
   await openViews(page, 2);
   // The tabs after 「List」 are the saved views, in the API's order.

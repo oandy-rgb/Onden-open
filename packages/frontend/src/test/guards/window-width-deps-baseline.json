@@ -86,7 +86,7 @@
       "fixedLayer": 0
     },
     "tag-page": {
-      "mediaWidth": 9,
+      "mediaWidth": 8,
       "viewportUnit": 4,
       "widthCheck": 0,
       "fixedLayer": 0
@@ -98,7 +98,7 @@
       "fixedLayer": 0
     },
     "website-slides": {
-      "mediaWidth": 3,
+      "mediaWidth": 2,
       "viewportUnit": 28,
       "widthCheck": 3,
       "fixedLayer": 1

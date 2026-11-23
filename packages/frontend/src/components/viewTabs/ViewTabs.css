@@ -1,19 +1,29 @@
 /* The row of view tabs above a note's or a tag's title (ViewTabs.tsx).
-   One row that never wraps: when the tabs do not fit, the row scrolls
-   sideways. Touch screens get 44px targets. */
+   The row is two things side by side: the tab list, which scrolls sideways when the tabs do not fit, and 「＋」,
+   which never scrolls away, so it can always be pressed however narrow the page's own column is (a tablet with three
+   columns open leaves the centre about 435px). Where the list does not fit, its ends fade (.center-lens-bar below)
+   so it reads as slidable. Touch screens get 44px targets. */
 .view-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--ac-space-2);
   flex-wrap: nowrap;
   min-width: 0;
   max-width: 100%;
+}
+.view-tabs-list {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-/* 「＋」 is a button beside the tab list, not a tab in it. */
-.view-tabs-list { flex: none; display: flex; align-items: center; gap: 4px; }
+.view-tabs-list::-webkit-scrollbar { display: none; }
+.view-tabs > .view-tab--add { flex: none; }
 .view-tab {
   position: relative;
   flex: none;
@@ -114,8 +124,10 @@
 /* The first tab's icon sits on the title's left edge (the page's 20px at this width): the row starts one tab padding
    and border (11px) before it, so the open tab's background hangs out to the left. */
 .phone-view-tabs { flex: none; padding: 0 20px 0 9px; }
-.phone-view-tabs .view-tabs { gap: 2px; padding: 2px 0; overscroll-behavior-x: contain; scrollbar-width: none; }
-.phone-view-tabs .view-tabs::-webkit-scrollbar { display: none; }
+.phone-view-tabs .view-tabs { gap: 2px; }
+/* The list is what scrolls, and a scroller clips: the 2px above and below are inside it, so each tab's ::before (3px out)
+   still reaches 44px instead of being cut at the 40px it is drawn (e2e noteViewTabs). */
+.phone-view-tabs .view-tabs-list { gap: var(--ac-space-1); padding-block: var(--ac-space-1); overscroll-behavior-x: contain; }
 .phone-view-tabs .view-tab { min-height: 40px; min-width: 40px; }
 /* ::before is placed from the padding box: -3px reaches 2px past the tab's 1px border, a full 44px. */
 .phone-view-tabs .view-tab::before { content: ""; position: absolute; inset: -3px -1px; }
@@ -125,7 +137,19 @@
 
 /* 「＋」 is a plain icon in the strip; in a full-screen board's title sheet it is a labelled row under the tabs. */
 .view-tab-add-label { display: none; }
-.board-note-sheet__tabs .view-tabs { flex-direction: column; align-items: stretch; overflow: visible; }
-.board-note-sheet__tabs .view-tabs-list { flex-direction: column; align-items: stretch; }
+.board-note-sheet__tabs .view-tabs { flex-direction: column; align-items: stretch; }
+.board-note-sheet__tabs .view-tabs-list { flex-direction: column; align-items: stretch; overflow: visible; }
 .board-note-sheet__tabs .view-tab { max-width: none; justify-content: flex-start; }
 .board-note-sheet__tabs .view-tab-add-label { display: inline; }
+
+/* In the title strip the list's ends fade where more tabs are hidden: the first gradient pair is painted with the
+   content (`local`) in the strip's own colour, so it covers the second pair, drawn with the box (`scroll`), only
+   while the list is scrolled to that end. No script: the hint is there exactly while there is something to slide to. */
+.center-lens-bar .view-tabs-list {
+  --view-tabs-fade: color-mix(in srgb, var(--ac-ink) 14%, transparent);
+  background:
+    linear-gradient(to right, var(--ac-surface) 30%, transparent) left center / 20px 100% no-repeat local,
+    linear-gradient(to left, var(--ac-surface) 30%, transparent) right center / 20px 100% no-repeat local,
+    linear-gradient(to right, var(--view-tabs-fade), transparent) left center / 10px 100% no-repeat scroll,
+    linear-gradient(to left, var(--view-tabs-fade), transparent) right center / 10px 100% no-repeat scroll;
+}

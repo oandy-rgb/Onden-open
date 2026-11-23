@@ -10,7 +10,7 @@ import PermissionControl, { useStandingLabel, type Standing } from "./Permission
 import "./strings";
 
 // The ONE write path for where a person or an AI stands in a space (不在 / 可看 / 可編輯), and for the
-// space's 「讓 AI 讀」 switch. 「空間與成員」 (people in a space) and 「設定 › AI」 (spaces of an AI) both draw
+// space's 「AI 可以讀」 switch. 「空間與成員」 (people in a space) and 「設定 › AI」 (spaces of an AI) both draw
 // it, so neither rewrites the write, the 復原 toast or the confirmation:
 //   const standing = useStandingWriter({ previousOf, reload });   standing.change(person, space, "view")
 //   const allowAiRead = useAllowAiRead(reload);                    allowAiRead(space)

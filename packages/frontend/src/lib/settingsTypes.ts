@@ -42,6 +42,8 @@ export type SettingContext = {
   openTag?: (id: string) => void;
   /** Close settings and open a note. */
   openNote?: (id: string) => void;
+  /** Close settings and make a note at the top level of a space (「在這個空間新增筆記」). */
+  newNoteInSpace?: (spaceId: string) => void;
 };
 
 interface BaseSettingDef {

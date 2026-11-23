@@ -28,10 +28,7 @@ export function useTagStructure({ tag, online, onSaved, onFunctionRemoved }: {
 }) {
   const t = useT();
   const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
-  const draft = useSchemaDraft({
-    tag, online, onSaved,
-    onLoadError: () => setAbilityMessage(t("Could not load this tag's settings. Reopen this tag to retry.")),
-  });
+  const draft = useSchemaDraft({ tag, onSaved });
   const [abilityBusy, setAbilityBusy] = useState(false);
   const functionActions = useFunctions({ kind: "node", id: tag.id }, { online, onChanged: onSaved });
   const importer = useModuleImportConfirm();

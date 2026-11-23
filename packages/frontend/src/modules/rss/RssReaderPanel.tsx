@@ -206,7 +206,11 @@ export default function RssReaderPanel({ online, onClose, onOpenNode, onRefresh,
   const markLeft = useCallback((a: Article | null) => {
     if (!a || a.seen) return;
     setItems((prev) => prev?.map((it) => it.id === a.id ? { ...it, seen: true } : it) ?? prev);
-    void rssWriter.markSeen(a.id).then(() => refreshSources()).catch(() => null);
+    // Refused (or not even queued): the server never recorded it, so the row is unseen again, not "seen until a reload".
+    void rssWriter.markSeen(a.id).then(() => refreshSources()).catch((e) => {
+      setItems((prev) => prev?.map((it) => it.id === a.id ? { ...it, seen: false } : it) ?? prev);
+      setNotice(writeErrors.message(e));
+    });
   }, [refreshSources]);
 
   /** Back to the list (or another feed): the open article is left. */

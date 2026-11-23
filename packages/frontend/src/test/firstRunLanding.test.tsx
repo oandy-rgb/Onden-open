@@ -34,7 +34,36 @@ describe("useLandingNote on a brand-new workspace", () => {
     const openNote = vi.fn(); const openDailyNote = vi.fn(async () => null);
     setAppState({ bootstrapped: true, membershipGated: false, data: { ...noWorkspaceData, nodes: [note("a")] } as never });
     renderHook(() => useLandingNote({ initialLocation: loc, ui, openNote, openDailyNote }));
-    expect(openDailyNote).toHaveBeenCalledWith({ announce: false });
+    expect(openDailyNote).toHaveBeenCalledWith(expect.objectContaining({ announce: false }));
+  });
+});
+
+// Finding or starting today's note can wait (for the spaces list, a slow server). The note the
+// person — or an e2e test — opens in the meantime stays open: the landing neither selects today's
+// note nor falls back (PR 1953's critical e2e run: the title box showed today's date instead).
+describe("useLandingNote while today's note is still on its way", () => {
+  it("leaves a note opened meanwhile alone, and does not fall back", async () => {
+    const openNote = vi.fn();
+    let arrive: (id: string | null) => void = () => {};
+    let asked: { stillWanted?: () => boolean } | undefined;
+    const openDailyNote = vi.fn((options?: { stillWanted?: () => boolean }) => { asked = options; return new Promise<string | null>((done) => { arrive = done; }); });
+    setAppState({ bootstrapped: true, membershipGated: false, data: { ...noWorkspaceData, nodes: [note("a"), note("b")] } as never });
+    renderHook(() => useLandingNote({ initialLocation: loc, ui, openNote, openDailyNote }));
+    expect(asked?.stillWanted?.()).toBe(true);
+    act(() => setAppState({ selectedId: "b" })); // the person opens another note
+    expect(asked?.stillWanted?.()).toBe(false);
+    await act(async () => arrive(null)); // not opened: still no fallback over their choice
+    expect(openNote).not.toHaveBeenCalled();
+    expect(ui.setOverviewMobileTab).not.toHaveBeenCalled();
+  });
+
+  it("still lands on today's note when nothing else was opened", async () => {
+    const openNote = vi.fn();
+    const openDailyNote = vi.fn(async () => "today");
+    setAppState({ bootstrapped: true, membershipGated: false, data: { ...noWorkspaceData, nodes: [note("a")] } as never });
+    renderHook(() => useLandingNote({ initialLocation: loc, ui, openNote, openDailyNote }));
+    await act(async () => {});
+    expect(ui.setOverviewMobileTab).toHaveBeenCalledWith("edit");
   });
 });
 

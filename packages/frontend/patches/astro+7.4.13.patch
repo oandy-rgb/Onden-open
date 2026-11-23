@@ -1,0 +1,81 @@
+diff --git a/node_modules/astro/dist/core/build/plugins/plugin-css.js b/node_modules/astro/dist/core/build/plugins/plugin-css.js
+index b0a7ba4..04f1246 100644
+--- a/node_modules/astro/dist/core/build/plugins/plugin-css.js
++++ b/node_modules/astro/dist/core/build/plugins/plugin-css.js
+@@ -146,6 +146,7 @@ function rollupPluginAstroBuildCSS(options) {
+ 					}
+ 				}
+ 			}
++			const clientOnlyPagesByChunk = this.environment?.name === ASTRO_VITE_ENVIRONMENT_NAMES.client ? staticClientOnlyPages(bundle, internals) : /* @__PURE__ */ new Map();
+ 			for (const [, chunk] of Object.entries(bundle)) {
+ 				if (chunk.type !== "chunk") continue;
+ 				if ("viteMetadata" in chunk === false) continue;
+@@ -157,13 +158,9 @@ function rollupPluginAstroBuildCSS(options) {
+ 				// client:only component and if so, add its CSS to the page it belongs to.
+ 				if (this.environment?.name === ASTRO_VITE_ENVIRONMENT_NAMES.client) {
+ 					const chunkCssModules = Object.keys(chunk.modules).filter((m) => isCSSRequest(m));
+-					for (const id of Object.keys(chunk.modules)) {
+-						// Only walk from CSS modules to find client:only parents. When Rollup
+-						// merges unrelated modules into the same chunk, walking from every module
+-						// would incorrectly attribute the chunk's CSS to pages reached through
+-						// modules that have no CSS dependency.
+-						if (!isCSSRequest(id)) continue;
+-						for (const pageData of getParentClientOnlys(id, this, internals)) {
++					// Onden patch: the pages whose client:only island loads this chunk up front (see staticClientOnlyPages).
++					{
++						for (const pageData of clientOnlyPagesByChunk.get(chunk.fileName) ?? []) {
+ 							// The page already has these styles when the component is also rendered
+ 							// on the server, e.g. a static instance alongside a client:only one.
+ 							const ssrCssModules = pageToSsrCssModules[pageData.moduleSpecifier];
+@@ -422,7 +419,11 @@ function rollupPluginAstroBuildCSS(options) {
+ 				// helper at runtime and must not be treated as orphaned.
+ 				const wasAddedToChunk = Object.values(bundle).some((chunk) => chunk.type === "chunk" && (chunk.viteMetadata?.importedAssets?.has(id) || chunk.viteMetadata?.importedCss?.has(id)));
+ 				const isOrphaned = !sheetAddedToPage && !wasAddedToChunk;
+-				if (wasInlined || isOrphaned) {
++				// Onden patch: a client chunk's own stylesheet (importedCss) is loaded with the chunk by Vite's
++				// preload helper when the chunk is lazy, so the file is kept: inlining it into one page (where
++				// the chunk is static) must not take it from another page that loads the chunk lazily.
++				const loadedWithChunk = this.environment?.name === ASTRO_VITE_ENVIRONMENT_NAMES.client && Object.values(bundle).some((chunk) => chunk.type === "chunk" && chunk.viteMetadata?.importedCss?.has(id));
++				if (wasInlined && !loadedWithChunk || isOrphaned) {
+ 					// wasInlined : CSS is already added to all used pages
+ 					// isOrphaned : CSS is already used in a merged chunk
+ 					// we can delete it from the bundle
+@@ -563,10 +564,35 @@ function getChunksSharedByIslands(bundle, internals) {
+ 	}
+ 	return shared;
+ }
+-function* getParentClientOnlys(id, ctx, internals) {
+-	for (const info of getParentModuleInfos(id, ctx)) {
+-		yield* getPageDatasByClientOnlyID(internals, info.id);
++// Onden patch: a client:only island's page links the CSS of the chunks the
++// island loads up front — its own chunk and what that imports STATICALLY.
++// Upstream walks the module graph through dynamic importers, so every lazy
++// screen's CSS is linked up front (and, through barrels whose unused exports
++// were tree-shaken into lazy chunks, even static paths name lazy chunks).
++// A lazy chunk's CSS loads with it: Vite's preload helper fetches it first.
++function staticClientOnlyPages(bundle, internals) {
++	const pagesByChunk = /* @__PURE__ */ new Map();
++	for (const item of Object.values(bundle)) {
++		if (item.type !== "chunk") continue;
++		const pages = /* @__PURE__ */ new Set();
++		for (const id of Object.keys(item.modules)) {
++			for (const pageData of getPageDatasByClientOnlyID(internals, id)) pages.add(pageData);
++		}
++		if (pages.size === 0) continue;
++		const queue = [item.fileName];
++		const seen = /* @__PURE__ */ new Set();
++		while (queue.length > 0) {
++			const fileName = queue.pop();
++			if (seen.has(fileName)) continue;
++			seen.add(fileName);
++			const linked = pagesByChunk.get(fileName) ?? /* @__PURE__ */ new Set();
++			for (const pageData of pages) linked.add(pageData);
++			pagesByChunk.set(fileName, linked);
++			const next = bundle[fileName];
++			if (next?.type === "chunk") queue.push(...next.imports);
++		}
+ 	}
++	return pagesByChunk;
+ }
+ /**
+ * Whether the page is rendered by the given server environment: SSR renders on-demand

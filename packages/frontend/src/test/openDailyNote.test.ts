@@ -21,6 +21,7 @@ import { useNodeCreation } from "../hooks/useNodeCreation";
 import { ApiError, type Bootstrap, type ContentNode } from "../lib/api";
 import { getAppState, resetAppState, setData } from "../lib/appStore";
 import { todayId } from "../lib/localDate";
+import { knowPersonalSpace } from "./helpers/knownSpaces";
 
 function makeParams() {
   return {
@@ -38,8 +39,9 @@ function makeParams() {
 
 describe("openDailyNote", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
-  beforeEach(() => {
+  beforeEach(async () => {
     resetAppState();
+    await knowPersonalSpace();
     submit.mockReset().mockResolvedValue(undefined);
     fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
@@ -62,6 +64,15 @@ describe("openDailyNote", () => {
     expect(getAppState().data.nodes.map((n) => n.id)).toEqual([id]);
     expect(params.setSelectedId).toHaveBeenCalledWith(id);
     expect(params.setMode).toHaveBeenCalledWith("notes");
+  });
+
+  // The landing asks whether it may still take the screen once today's note is ready (useLandingNote).
+  it("selects nothing when the caller no longer wants it (the person opened another note meanwhile)", async () => {
+    const params = makeParams();
+    const { openDailyNote } = useNodeCreation(params);
+    expect(await openDailyNote({ announce: false, stillWanted: () => false })).toBeNull();
+    expect(params.setSelectedId).not.toHaveBeenCalled();
+    expect(params.setMode).not.toHaveBeenCalled();
   });
 
   it("opens an existing day node instead of creating a new one", async () => {

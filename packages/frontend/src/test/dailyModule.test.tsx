@@ -50,7 +50,7 @@ import { importedFeatures } from "../hooks/useImportedFeatures";
 import { noWorkspaceData, type Bootstrap, type ContentNode } from "../lib/api";
 import { getAppState, resetAppState, setBootstrapped, setData, setOnline } from "../lib/appStore";
 import { dailyNotesEnabled, dailyNotesEnabledIn } from "../lib/dayNode";
-import { DailyNotesDisabledError, InvalidDayNoteDateError, dayNoteId, dayNotesOutside, makeDayNotes, usableDayNoteParent } from "../lib/data/dayNotes";
+import { DailyNotesDisabledError, InvalidDayNoteDateError, PersonalSpaceUnknownError, dayNoteId, dayNotesOutside, makeDayNotes, usableDayNoteParent } from "../lib/data/dayNotes";
 import type { DataCtx } from "../lib/data/types";
 import { useNodeCreation } from "../hooks/useNodeCreation";
 import { useDayNoteWrites } from "../hooks/useDayNoteWrites";
@@ -179,14 +179,15 @@ describe("the parent-note setting", () => {
     expect(usableDayNoteParent([note("journal")], null, SPACE)).toBeNull();
   });
 
-  it("is skipped while the personal space is unknown (offline boot): top level", async () => {
+  // Unknown is a device that never heard the server (lib/spaces.ts keeps the list in the local copy): no day note is
+  // started rather than one at the top level under a random id (2026-11-21).
+  it("starts nothing while the personal space is unknown", async () => {
     space.id = null;
     for (const parent of [note("journal"), note("journal", { space_id: "other-space" }), note("journal", { space_id: null })]) {
       sendOrQueue.mockClear();
       expect(usableDayNoteParent([parent], "journal", null)).toBeNull();
-      await device([parent], ["daily"], () => "journal").openToday({ fallbackId: "f-1" });
-      expect(nodePosts()[0]).toMatchObject({ id: "f-1", title: today() });
-      expect(nodePosts()[0]!.parent_id).toBeUndefined();
+      await expect(device([parent], ["daily"], () => "journal").openToday()).rejects.toBeInstanceOf(PersonalSpaceUnknownError);
+      expect(nodePosts()).toEqual([]);
     }
   });
 
@@ -195,7 +196,7 @@ describe("the parent-note setting", () => {
   it("waits for the spaces on a cold start, then uses the parent and the (space, date) id", async () => {
     space.id = null;
     space.loads = SPACE;
-    await device([note("journal")], ["daily"], () => "journal").openToday({ fallbackId: "f-1" });
+    await device([note("journal")], ["daily"], () => "journal").openToday();
     expect(nodePosts()[0]).toMatchObject({ id: dayNoteId(SPACE, today()), title: today(), parent_id: "journal" });
   });
 
@@ -261,6 +262,22 @@ describe("the parent-note setting", () => {
     expect(await found.openTasksNote(SHARED)).toMatchObject({ created: false, node: { id: there.id } });
     expect(await found.openTasksNote()).toMatchObject({ created: false, node: { id: mine.id } });
     expect(sendOrQueue).not.toHaveBeenCalled();
+  });
+
+  // Quick-add and capture: a task with no note of its own (dayNotes.openTaskHome).
+  it("homes a task: personal → today's diary (module on) or the 任務 note; a shared space → its 任務 note", async () => {
+    const SHARED = "99999999-2222-4333-8444-555555555555";
+    expect(await device([note("journal")], ["daily"]).openTaskHome(SPACE)).toMatchObject({ node: { id: dayNoteId(SPACE, today()) } });
+    expect(await device([note("journal")], ["daily"]).openTaskHome(undefined)).toMatchObject({ node: { id: dayNoteId(SPACE, today()) } });
+    expect(await device([note("journal")], ["canvas"]).openTaskHome(SPACE)).toMatchObject({ node: { id: dayNoteId(SPACE, "任務") } });
+    expect(await device([note("journal")], ["daily"]).openTaskHome(SHARED)).toMatchObject({ node: { id: dayNoteId(SHARED, "任務") } });
+    space.id = null; // never heard the server: no guessed home, for any space
+    for (const where of [undefined, SPACE, SHARED]) {
+      sendOrQueue.mockClear();
+      await expect(device([note("journal")], ["daily"]).openTaskHome(where)).rejects.toBeInstanceOf(PersonalSpaceUnknownError);
+      await expect(device([note("journal")], ["canvas"]).openTasksNote(where)).rejects.toBeInstanceOf(PersonalSpaceUnknownError);
+      expect(nodePosts()).toEqual([]);
+    }
   });
 
   it("does not take another space's 任務 note for the shared one", async () => {

@@ -23,6 +23,7 @@ const SPACE = "11111111-2222-4333-8444-555555555555";
 vi.mock("../lib/spaces", async (original) => ({
   ...await original<typeof import("../lib/spaces")>(),
   personalSpaceId: () => SPACE,
+  spacesHeardFromServer: () => true,
 }));
 const created = vi.hoisted(() => vi.fn());
 vi.mock("../lib/data/noteWriter", async (original) => ({

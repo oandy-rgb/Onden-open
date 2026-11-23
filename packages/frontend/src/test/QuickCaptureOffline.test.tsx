@@ -36,6 +36,7 @@ import { getAppState, resetAppState } from "../lib/appStore";
 import { reads } from "../lib/data";
 import { refreshSpaces, resetSpacesForTest } from "../lib/spaces";
 import { INBOX_TAG_ID, captureProps, type CaptureProps } from "./helpers/captureProps";
+import { knowPersonalSpace } from "./helpers/knownSpaces";
 
 function renderCapture(overrides: Partial<CaptureProps> = {}) {
   const props = captureProps({ initialDraft: "hello offline world", ...overrides });
@@ -112,6 +113,7 @@ describe("QuickCapture offline-safe save", () => {
   });
 
   it("mints today's day node through the write queue when the setting is today's journal", async () => {
+    await knowPersonalSpace(); // kept from an earlier start: an offline device knows its own space
     captureDestinationPref.store.save("today");
     renderCapture({ online: false });
     expect(screen.getByRole("button", { name: /Goes to: Today's journal/ })).toBeInTheDocument();

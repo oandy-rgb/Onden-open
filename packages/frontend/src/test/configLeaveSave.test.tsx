@@ -38,7 +38,7 @@ it("view builder: a pending filter is sent when the page is hidden, inside the d
 
 it("tag schema editor: a pending change is sent when the page is hidden, to the tag it was made on", () => {
   const tag = { id: "tag-1", schema_fields: [] } as unknown as Tag;
-  const { result } = renderHook(() => useSchemaDraft({ tag, online: false, onLoadError: () => {} }));
+  const { result } = renderHook(() => useSchemaDraft({ tag }));
   act(() => result.current.save({ fields: [{ name: "price", type: "number" }] } as never));
   expect(spies.schemaUpdate).not.toHaveBeenCalled();
   hide();

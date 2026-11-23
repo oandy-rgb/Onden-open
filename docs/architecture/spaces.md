@@ -1,7 +1,7 @@
 # 空間：用「放在哪裡」決定誰看得到（設計草案 v3）
 
-> 狀態：現行（最後確認 2026-11-01）
-> 涵蓋：packages/backend/src/services/spaces.ts, packages/backend/src/spine/spaceAccess.ts
+> 狀態：現行（最後確認 2026-11-22）
+> 涵蓋：packages/backend/src/services/spaces.ts, packages/backend/src/spine/spaceAccess.ts, packages/frontend/src/lib/spaces.ts
 
 狀態：**全部階段已實作**（2026-10-13，分支 `feat/spaces`，PR #10）。空間一律生效，沒有開關；
 現有的標籤權限由 migration 094 一次性、fail-closed 轉換，舊的標籤權限程式已刪除（使用者決定「直接完成轉換，不太需要過度」）。
@@ -407,6 +407,19 @@ outbox 效果在執行時：若節點已移到關閉該能力的空間、或開�
 - 對已移到唯讀空間的筆記的離線寫入得到 403、移到不可讀空間得到 404，兩者都已被歸類為「被拒絕的輸入」保留給使用者（`writeErrors.ts:37-44`）；只需補測試。
 - 移除成員：撤銷其 session；`space_members` cascade；其私人空間交給擁有者決定（轉移、封存或刪除）。
 - 401 `membership_removed`／`account_changed` 不得被當成離線（第 0 階段修正）。
+
+### 前端：空間清單在離線時也知道（2026-11-22）
+
+畫面要知道「我的個人空間是哪一個」才能放對日記與任務、判斷「只能看」。清單由 `lib/spaces.ts` 擁有：
+
+- **來源**：伺服器的 `/api/spaces`，以及本機副本裡上次的回答（`sync_state` 的 `spaces`，跟筆記的離線副本同一個資料庫、每個帳號一份）。
+  伺服器每次回答（包括 membership epoch 變動觸發的重抓）都寫回本機；開機在第一次畫面前讀回（`restoreSpaces`）。
+- **作廢**：空間 id 是伺服器給的、換過（migration 201），所以本機那份跟著 `MIRROR_SCHEMA_VERSION` 一起作廢（版本 5 起），
+  連線後伺服器的回答也會蓋掉它；連線中、這一頁還沒聽到伺服器回答時，建日記會先等一下伺服器（最多 3 秒）。
+- **不知道**：只剩「從沒聽過伺服器的裝置」（新裝置、清過資料）。這時不猜：日記與沒指定筆記的任務、速記不建，
+  說一句「連上網路後才會建今天的日記」（`PersonalSpaceUnknownError`，經 `writeErrors.report`），打的字留在輸入框；
+  `findDayNode` 找不到任何筆記（不把別的空間同日期的筆記當成今天的日記）；`canEdit` 維持「不知道就先當可編輯，伺服器仍會拒絕」。
+- 已經放錯位置的日記不自動搬，用設定裡「把現有的日記移到這裡」。
 
 ## 與現有機制的對應
 

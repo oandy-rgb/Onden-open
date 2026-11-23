@@ -3,10 +3,10 @@
 // rides the offline queue.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const sendOrQueue = vi.fn();
+const submitWrite = vi.fn();
 vi.mock("../lib/data/writeQueue", async (original) => ({
   ...await original<typeof import("../lib/data/writeQueue")>(),
-  sendOrQueue: (...args: unknown[]) => sendOrQueue(...args),
+  submitWrite: (...args: unknown[]) => submitWrite(...args),
 }));
 
 import { pinPointer, unpinPointer } from "../lib/data/pointerWriter";
@@ -18,7 +18,7 @@ function respond(status: number, body: unknown = {}) {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
 }
 
-beforeEach(() => { resetAppState(); sendOrQueue.mockReset().mockResolvedValue(undefined); });
+beforeEach(() => { resetAppState(); submitWrite.mockReset().mockResolvedValue({ status: "synced", value: undefined }); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("pointer writer", () => {
@@ -48,8 +48,8 @@ describe("pointer writer", () => {
 
   it("unpins through the offline queue and reports a refusal", async () => {
     await unpinPointer("p1");
-    expect(sendOrQueue).toHaveBeenCalledWith("DELETE", "/api/pointers/p1", null);
-    sendOrQueue.mockRejectedValueOnce(new ApiError(403, JSON.stringify({ error: "forbidden" })));
+    expect(submitWrite.mock.calls[0]![0]).toMatchObject({ method: "DELETE", path: "/api/pointers/p1", body: null });
+    submitWrite.mockRejectedValueOnce(new ApiError(403, JSON.stringify({ error: "forbidden" })));
     await expect(unpinPointer("p2")).rejects.toBeInstanceOf(ApiError);
     expect(errors()).toHaveLength(1);
   });

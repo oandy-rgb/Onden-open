@@ -4,7 +4,9 @@ import { getViteConfig } from "astro/config";
 // Tests that render .astro components (Astro's container API) need Astro's own
 // Vite plugins, which the main vitest.config.ts (React + jsdom) doesn't load.
 // Run with `npm run test:astro` (CI runs it after the unit tests).
-export default getViteConfig({
+// A variable, not an inline literal: getViteConfig's type comes from the Vite that Astro 7 brings (8), while
+// vitest augments the hoisted one (7), so `test` is unknown to an inline literal's excess-property check.
+const config = {
   // @onden/markdown is read from source (the backend image alone builds its dist).
   resolve: { alias: [
     // The subpath entries first: an alias matches by prefix, and the local-DB
@@ -30,4 +32,6 @@ export default getViteConfig({
     // Two workers, as in vitest.config.ts (7 GB RAM, 16 cores).
     maxWorkers: 2,
   },
-});
+};
+
+export default getViteConfig(config);

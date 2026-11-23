@@ -539,6 +539,11 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
   const jsonColumns = json.map((j) => j.column);
   const isJson = (name: string) => address("x", name).table !== src.label;
   const lines: StructureLine[] = [];
+  /** The units of a row's own table other than its `*` (not the keys of its JSON columns: other labels), gone: what a row that is not on this node keeps of its
+   *  fields (nothing; they follow `*`). The delete trigger does the same on the node that removes the row (sync_stamp_trigger, migration 205). */
+  const dropFieldUnits = async (row: string): Promise<void> => {
+    for (const t of ["sync_stamps", "sync_stamp_heads"]) await snapshotRows(`DELETE FROM ${t} WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field <> '*'`, [workspaceId, src.label, row]);
+  };
   // Removals first: a note that goes frees its slug for a note that comes (see below), and a parent that goes empties its children's parent column the way the database does
   // (each unit it empties keeps the id on its stamp: migration 215 sync_keep_emptied_id)
   for (const { i, l, m } of merged) {
@@ -546,8 +551,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     const win = m.star[0]!;
     // the row is gone for good: its units go with it (the delete trigger does the same; the keys of its JSON columns stay as stamps, below), and the log says what became of a note
     const gone = textOf(m.before.get("deleted")) ?? "false";
-    await snapshotRows(`DELETE FROM sync_stamps WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field <> '*'`, [workspaceId, src.label, i.row]);
-    await snapshotRows(`DELETE FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field <> '*'`, [workspaceId, src.label, i.row]);
+    await dropFieldUnits(i.row);
     const params: unknown[] = [workspaceId];
     // a note that goes leaves the notes under it at the top here (the foreign key empties their parent): their space is derived again
     if (notes) tree.seeds.push(...(await snapshotRows<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND parent_id = $2::uuid`, [workspaceId, i.row])).rows.map((r) => r.id));
@@ -619,8 +623,12 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     // what the merge says changed is said of a row that is here (round 9, point 5 b: not of a row that went with its note, nor of one this node does not make)
     if (here) for (const e of m.events) report.events.push({ address: address(i.row, e.field), result: { ...e.result, deferred: [] } });
     // a row this node does not hold keeps its writes' values only where they go with a note (ids; round 9, point 2): another table's row hanging on a note or space
-    // deleted for good here keeps its stamps, each a copy without its value, never the text it carried
+    // deleted for good here keeps no value, and of its own table's units only its `*`: every field follows the creation, as on a node that removed the row (the
+    // delete trigger and the removals above, `dropFieldUnits`). A node without the row cannot tell which field units a node with it keeps (storeUnit drops a creation
+    // value equal to the winner's, and a copy without values equals nothing), so "none" is the one shape every node can reach (README 「沒有那一列的欄位跟著 `*`」).
+    // The keys of its JSON columns are units of their own and stay, as copies without their values.
     const keeps = !here && !!src.goesWithNote;
+    const followsStar = (f: string) => !here && !keeps && !isJson(f);
     const shape = (u: Unit | undefined): Unit | undefined => (u && !here && !keeps ? withoutValues(u) : u);
     const fresh = madeHere.has(i.row) && !l.state; // made here from the carried values, nothing of it held before: only stamps to write (storeUnit)
     if (m.exists) {
@@ -629,7 +637,10 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
       // the same row made twice (two nodes made the same id, or this node still holds a row that another deleted and made again): the creation that wins is the row, on every node
       const from = carriedFrom(src, { i, l, m });
       if (from.overwrite) await overwriteCarriedColumns(src.table, workspaceId, match(i.row), i.values!, [...Object.values(src.fields).flatMap((c) => c.split("+")), ...src.key.map((k) => k.column), ...jsonColumns, ...(notes ? ["order_stamp", "slug"] : [])]);
+      // what this node stored of such a row before (a field unit written by an older version of this rule) goes, with no unit written in its place
+      if (l.state && [...l.state.own.keys()].some(followsStar)) await dropFieldUnits(i.row);
       for (const f of new Set([...m.fields.keys(), ...m.before.keys()])) {
+        if (followsStar(f)) continue;
         const after = m.fields.get(f), prior = m.before.get(f);
         const a = address(i.row, f);
         if (!after) { // no cell is left for it (cannot happen while a creation gives every field a value): nothing of its own is kept
@@ -653,6 +664,8 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
       }
     } else {
       if (!l.state || m.starChanged) { await storeUnit(workspaceId, address(i.row, STAR), m.star); report.stored++; }
+      // a row deleted for good keeps only its `*` of its own table here too (the removals above did it for a row that was here; this is one that was not)
+      if (!l.exists && l.state && [...l.state.own.keys()].some((f) => !isJson(f))) await dropFieldUnits(i.row);
       // the keys of a JSON column are units of their own and are kept when the row is gone (the delete trigger leaves their tombstones on the node that removed it)
       // ... as their stamps only: a removed row's keys keep no value (round 9, point 2)
       for (const x of m.leftOver.filter((x) => isJson(x.field))) {

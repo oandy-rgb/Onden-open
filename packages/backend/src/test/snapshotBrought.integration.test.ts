@@ -284,12 +284,14 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
       expect((await exchange(a, c)).rejected).toEqual([]);
       expect((await exchange(c, a)).rejected).toEqual([]);
     }
-    await expectSame(a, c, "A and C");
+    // updated_at of an attribute is not a function of its stamps yet (the it.fails "updated_at of an attribute" above, README 「接上傳輸前必須完成」): compared apart, as in
+    // P2; take the known difference out of both comparisons when that is fixed (seeds 318921, 787109, 905894 went red on it, on main too: review of PR #1965)
+    await expectSame(a, c, "A and C", [UPDATED_AT_OF_ATTRIBUTES]);
     expect((await resendAll(a, c)).stored).toBe(0);
     expect((await resendAll(c, a)).stored).toBe(0);
     // and B, which neither A nor C sent to in between, catches up from A and is the same too
     await exchange(a, b);
-    await expectSame(a, b, "A and B");
+    await expectSame(a, b, "A and B", [UPDATED_AT_OF_ATTRIBUTES]);
   }, 900_000);
 
   it("P4: a source with an unfinished join, with stamps past what it says it holds of an origin, or of an origin it has no row for, refuses with a code", async () => {
@@ -378,7 +380,9 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     expect([heldBefore, heldNow], JSON.stringify({ said, heldBefore, heldNow })).toContainEqual(said);
     const { peer: c } = await joinFrom("c", a, world, cap);
     expect((await exchange(a, c)).rejected).toEqual([]);
-    await expectSame(a, c, "A and C");
+    // updated_at of an attribute is not a function of its stamps yet (the it.fails "updated_at of an attribute" above, README 「接上傳輸前必須完成」): compared apart, as in
+    // P2; take the known difference out of both comparisons when that is fixed (seeds 318921, 787109, 905894 went red on it, on main too: review of PR #1965)
+    await expectSame(a, c, "A and C", [UPDATED_AT_OF_ATTRIBUTES]);
     expect((await resendAll(a, c)).stored).toBe(0);
   }, 900_000);
 

@@ -8,6 +8,7 @@ import { lazyWithReload } from "../lib/lazyWithReload";
 import { Pressable } from "./ui";
 import AccountSessionBoundary from "./AccountSessionBoundary";
 import { pendingInviteToken } from "../lib/invite";
+import BootWatchdog from "./BootWatchdog";
 
 // The sign-in form is only for someone who is not signed in: it loads on use,
 // behind the same "Loading…" line the session check shows.
@@ -19,7 +20,7 @@ function InviteGate({ children }: { children: React.ReactNode }) {
   const [pending] = useState(() => pendingInviteToken() !== null);
   if (!pending) return <>{children}</>;
   return (
-    <Suspense fallback={<div className="login-loading" role="status">{t("Accepting the invite…")}</div>}>
+    <Suspense fallback={<BootWatchdog><div className="login-loading" role="status">{t("Accepting the invite…")}</div></BootWatchdog>}>
       <InviteClaimGate>{children}</InviteClaimGate>
     </Suspense>
   );
@@ -98,7 +99,7 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  const loadingView = <div className="login-loading" role="status">{t("Loading…")}</div>;
+  const loadingView = <BootWatchdog><div className="login-loading" role="status">{t("Loading…")}</div></BootWatchdog>;
   if (isPending) return loadingView;
 
   return (

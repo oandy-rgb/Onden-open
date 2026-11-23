@@ -49,6 +49,18 @@ describe("the scheduled report", () => {
     expect(diedEarly).not.toContain("可以從已知清單刪掉");
   });
 
+  it("the production probe: a skip and the known reds show even on a green night, a new red is listed by name", () => {
+    const probeLog = [at("探針略過 略過：巡檢帳號未設定（缺 ONDEN_PROBE_URL）"), at("探針已知 local.chromium.no-logout：本機版不該有登出（等修正上線）"), at("探針可刪 local.webkit.no-member-gate（這次通過）")].join("\n");
+    const green = compose({ ...base, jobs: [job("Scheduled — production probe", "success", 5)], readLog: () => probeLog });
+    expect(green).toContain("- 略過 略過：巡檢帳號未設定");
+    expect(green).toContain("- 已知 local.chromium.no-logout");
+    expect(green).toContain("- 可刪 local.webkit.no-member-gate");
+    const red = compose({ ...base, jobs: [job("Scheduled — production probe", "failure", 5)], readLog: () => at("探針新紅 local.webkit.note-survives-reload  重新整理後找不到剛打的字") });
+    expect(red).toContain("`probe › local.webkit.note-survives-reload`");
+    const weekly = compose({ ...base, kind: "weekly", jobs: [job("Scheduled — production probe", "skipped")], readLog: () => null });
+    expect(weekly).not.toContain("不該略過"); // the probe is a daily job
+  });
+
   it("a job the kind should have run but skipped is named; the comment stays under GitHub's limit", () => {
     const text = compose({ ...base, jobs: [job("Scheduled — browser version (…)", "skipped")], readLog: () => null });
     expect(text).toContain("不該略過卻沒有跑的工作：Scheduled — browser version (…)");

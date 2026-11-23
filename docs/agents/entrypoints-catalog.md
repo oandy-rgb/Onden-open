@@ -512,7 +512,7 @@ export const dialog = ReconfirmDialog;`
 - 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
 - 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
 
-## 共用邏輯（121）
+## 共用邏輯（122）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1013,6 +1013,16 @@ const refresh = (calendarId: string) => calendarWriter.refresh(calendarId);`
 - 取代：直接顯示 error.message、自己分類 HTTP 錯誤
 - 守門：`guard:wording`
 - 為什麼：寫入失敗要告訴使用者時用它，把錯誤變成看得懂的一句話；直接顯示 error.message 會出現英文代碼。
+
+### 一個儲存步驟（寫本機副本、清佇列、倒回游標、寫使用者的資料夾）失敗時，後面的程式不能當作沒事
+
+- 入口：`frontend/src/lib/data/storageSteps.ts`（`storageStep`、`storageStepFailed`、`storageStepOwed`、`settleStorageStep`、`useStorageStepOwed`）　項目 `storage-steps`
+- 寫法：`import { storageStep, storageStepOwed } from "./lib/data/storageSteps";
+import { rewindCursor } from "./lib/localDb";
+await storageStep("copyCursor", () => rewindCursor("100"));
+const readWholeNext = storageStepOwed("copyCursor");`
+- 取代：在儲存步驟後面寫 .catch(() => {})／.catch(() => null)
+- 為什麼：失敗的步驟記為「欠著」直到同一步成功；讀它的地方寫明欠著時守住什麼（告訴使用者，或改走整份重讀、不再重送）。
 
 ### 要處理一次寫入的樂觀更新、確認與回復
 

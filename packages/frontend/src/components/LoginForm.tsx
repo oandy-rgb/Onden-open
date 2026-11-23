@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { authClient, fetchConfiguredProviders, type SocialProvider } from "../lib/auth-client";
 import { t, useT } from "../lib/i18n";
-import { pageOrigin } from "../lib/api";
+import { askServerVersion, pageOrigin } from "../lib/api";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../lib/passwordRules";
 import { inviteRequestHeaders, pendingInviteToken } from "../lib/invite";
 import { FieldError, Pressable, TextField } from "./ui";
@@ -42,6 +42,10 @@ function authFailureMessage(error: { code?: string; message?: string; status?: n
   // Never the auth library's own text: it is English and meant for developers.
   return fallback;
 }
+
+/** Sign-in goes through the auth client, which never reads the server's version or protocol. One light read right after
+ *  it lets the page hear them (lib/api) before the workspace's first sync, so a too-old page is told while still booting. */
+function noteServerVersion(): void { void askServerVersion().catch(() => {}); }
 
 export default function LoginForm({ refetch }: { refetch: () => Promise<unknown> | void }) {
   useT();
@@ -101,13 +105,13 @@ export default function LoginForm({ refetch }: { refetch: () => Promise<unknown>
       if (mode === "login") {
         const res = await authClient.signIn.email({ email, password });
         if (res.error) setError(authFailureMessage(res.error, t("Login failed")));
-        else await refetch();
+        else { await refetch(); noteServerVersion(); }
       } else {
         // A pending invite link rides along: a closed server admits only a
         // sign-up carrying a valid link for this email.
         const res = await authClient.signUp.email({ email, password, name }, { headers: inviteRequestHeaders() });
         if (res.error) setError(authFailureMessage(res.error, t("Signup failed")));
-        else await refetch();
+        else { await refetch(); noteServerVersion(); }
       }
     } catch {
       setError(t("Something went wrong"));

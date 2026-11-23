@@ -46,6 +46,7 @@ import { BOOTSTRAP_HEADER_VALUE, decodeBootstrapWire } from "./bootstrapWire";
 import { assertBootstrapShape, assertSyncDeltaShape } from "./wireShape";
 import { later, readAgain, serverTruth, serverTruthOrTell } from "./serverTruthLoad";
 import { heldNotesNowSent } from "../localDb";
+import { settleStorageStep, storageStep, storageStepFailed, storageStepOwed } from "./storageSteps";
 
 // ── User-folder export (fs-access) ───────────────────────────────────────────
 
@@ -59,8 +60,14 @@ export function scheduleUserFolderSync(): void {
     if (!dirHandle) return;
     // The folder copy is the person's own file: it gets every drawing, not
     // only those opened here (a lean bootstrap leaves them out).
-    void downloadDrawingsForOffline({ force: true })
-      .then(() => exportDatabase()).then((file) => writeDbToDir(dirHandle!, file)).catch(() => null);
+    // A failure (disk full, the folder moved, its permission taken back) is owed: Settings says the folder's copy is
+    // not current until a later write here succeeds (storageSteps.ts "folderCopy").
+    const folder = dirHandle;
+    void storageStep("folderCopy", async () => {
+      // The drawings are a server read, not a storage step: offline, the folder still gets what this device holds.
+      await downloadDrawingsForOffline({ force: true }).catch(() => null);
+      await writeDbToDir(folder, await exportDatabase());
+    });
   }, 2000);
 }
 
@@ -1041,9 +1048,13 @@ export function sync(): Promise<SyncResult> {
       // A copy that cannot say fails the pass. One that counts in another log than this page (the page saw another
       // identity, and the rebuild that followed failed) owes the rebuild too, before its cursor is judged.
       const copy = await getWatermark();
-      if (!startWatermarkFrom(copy) || copy.rebuildOwed) {
+      // A refused answer's rewind that failed (storageSteps.ts "copyCursor"): the copy's cursor may be past rows the
+      // screen never took, so only a whole read brings them; settled once one is taken.
+      const cursorOwed = storageStepOwed("copyCursor");
+      if (!startWatermarkFrom(copy) || copy.rebuildOwed || cursorOwed) {
         reconciledRejectionRevision = null;
         if (!await refreshWhole({ insideSync: true })) return { ok: false, unreachable: !getAppState().online };
+        if (cursorOwed) settleStorageStep("copyCursor");
       }
       let since: number | string = await getLastEventId({ startingSync: true });
       // Step C: the routine sync no longer sends `known[]`. Revocation/grant is
@@ -1264,8 +1275,9 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
           }
         }
         if (usableFolder) dirHandle = handle;
-      }
-    }
+        else storageStepFailed("folderCopy", new Error("The folder's copy could not be read"));
+      } else storageStepFailed("folderCopy", new Error("No permission to write to the folder"));
+    } else storageStepFailed("folderCopy", new Error("The folder is no longer known"));
   }
   // Cold-start GATE-FIRST (fail-closed): if we're painting from a CACHED
   // mirror, raise the gate BEFORE the paint so possibly-stale/revoked content
@@ -1311,7 +1323,7 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
     const reopen = !!local && hasCursor;
     if (!reopen && (!local || localBig)) {
       try {
-        const slim = await fetchBootstrap("/api/bootstrap?bodies=none");
+        const slim = await readWithDeadline((signal) => fetchBootstrap("/api/bootstrap?bodies=none", signal));
         await paintThenPersist(slim, () => { answeredOnline(since); setBootstrapped(true); });
         slimLanded = true;
         mirrorFilledThisSession = !local;

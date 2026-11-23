@@ -1352,6 +1352,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Could not change the storage location. The previous location is still in use. Try again.": "無法變更儲存位置，目前仍使用原位置。請重試。",
   "Keep the current data in this browser? The old folder copy will remain available.": "將目前資料儲存在這個瀏覽器？原資料夾的副本會保留。",
   "A local database copy is saved to this folder. Keep a separate backup before clearing browser data.": "本機資料庫副本會儲存到這個資料夾。清除瀏覽器資料前，請另外下載備份。",
+  "The copy in this folder couldn't be updated, so it may be missing recent changes. The folder may have been moved, be full, or no longer allow writing. Your notes on this device are fine; choose the folder again or keep them in the browser.": "這個資料夾裡的副本沒能更新，可能少了最近的修改。資料夾可能被移走、空間滿了，或不再允許寫入。這台裝置上的筆記沒事；請重新選擇資料夾，或改存在瀏覽器裡。",
   "Data is stored in this browser. Clearing site data erases it. Download a backup or choose a folder for a local copy.": "資料儲存在這個瀏覽器，清除網站資料會將它刪除。請下載備份，或選擇資料夾儲存本機副本。",
   "Could not create a local backup. Keep this page open and try again.": "無法建立本機備份。請保留此頁面並重試。",
   "Replace this device's local snapshot and queued changes with the backup? This does not restore data on the server.": "以備份取代此裝置的本機資料與待同步變更？這不會還原伺服器上的資料。",

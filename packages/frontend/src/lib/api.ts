@@ -203,7 +203,10 @@ const protocolBlockError = (block: "page_old" | "server_old") =>
   new ApiError(426, JSON.stringify({ error: block === "page_old" ? "client_too_old" : "server_too_old" }));
 
 /** While the server is too old for this page, the one request that still goes out: it tells the gate when that ends. */
-setProtocolProbe(() => apiFetch("/api/me"));
+/** One light read whose only purpose is its response headers (the server's build and protocol, noted on every
+ *  response). The protocol gate asks it while held; sign-in asks it once (components/LoginForm). */
+export function askServerVersion(): Promise<unknown> { return apiFetch("/api/me"); }
+setProtocolProbe(askServerVersion);
 
 /** Who hears that the server refused this page as too old (426 `client_too_old`: lib/buildVersion.ts offers the reload).
  *  Set once by the app, like the build listener. */

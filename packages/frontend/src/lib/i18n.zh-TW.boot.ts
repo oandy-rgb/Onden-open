@@ -78,6 +78,12 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Your account has changed": "登入帳號已變更",
   "Reload to continue with the account you just signed in to.": "請重新載入頁面，繼續使用剛登入的帳號。",
   "Reload page": "重新載入頁面",
+  "This is taking longer than expected": "比預期的久",
+  "Reload the page to try again. Your notes stay as they are.": "重新載入頁面再試一次。你的筆記不會有變動。",
+  "A new version is out. Reloading…": "有新版本，重新載入中…",
+  "A new version is out": "有新版本了",
+  "Your notes stay as they are.": "你的筆記不會有變動。",
+  "Reload to continue with the new version.": "重新載入頁面，改用新版本。",
   "You were removed from this workspace. Ask the owner to add you again.": "你已被移出這個工作區。請擁有者重新把你加入。",
   // Server refusals by code (lib/serverErrors.ts SERVER_ERROR_MESSAGES).
   "You are now signed in as a different account (or to another server) than this page. Sign back in to the original account to keep working here; its unsent changes wait until then. To switch accounts, reload the page.": "你現在登入的帳號（或伺服器）和這個頁面不同。要在這裡繼續，請登回原本的帳號；尚未送出的修改會等到那時再送出。要改用新帳號，請重新載入頁面。",

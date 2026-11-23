@@ -1,7 +1,7 @@
 # 部署、回滾與備份（VPS）
 
 > 狀態：現行（最後確認 2026-11-01）
-> 涵蓋：scripts/deploy-vps.sh, scripts/backup-vps.sh, scripts/restore-vps.sh, scripts/restore-drill.sh
+> 涵蓋：scripts/deploy-vps.sh, scripts/backup-vps.sh, scripts/restore-vps.sh, scripts/restore-drill.sh, packages/frontend/e2e/probe/prod-probe.mjs, packages/frontend/e2e/probe/probeLib.mjs
 
 何時讀：要部署到正式 VPS、回滾、做或還原備份，或正式站／localhost 連不上、登入出現 `INVALID_ORIGIN` 時。
 每次部署在 docs/deploy-log.md（未隨公開庫附上） 加一列。以下流程整理自 2026-09-28～10-22 的實際部署紀錄
@@ -93,6 +93,20 @@
   自訂網域的 `CNAME` 是唯一取自即時設定的檔案（綁定主機，不算內容）。網站一律公開，沒有「不推送」的受限模式。
 - 沒有別的網站建置物：舊的網站殼（`dist-published`、`build:published`、`published_bundle` 磁碟區、`deploy-site.yml` 與分享連結）隨 P5 刪除，
   `compose.yaml`、Dockerfile、備份腳本都不再提到它們。
+
+## 部署後檢查：線上巡檢（2026-11-23）
+
+合併前的 CI 看不到「上線之後」的樣子（2026-11-23 擁有者自己用才發現本機版登出卡死、開機先閃英文、部署後第一次打開一直轉圈）。
+`packages/frontend/e2e/probe/prod-probe.mjs` 就是看上線後的站：
+
+- 本機版網站（`https://onden.o-andy.com`，資料只在瀏覽器）：Chromium 與 WebKit 各開一次**全新的瀏覽器設定檔**（繁體中文）。檢查：90 秒內開好（不卡在轉圈或「正在確認工作區資料」）、
+  開機過程每個畫面都沒有英文字串、新增筆記打字重新整理後還在、本機版選單沒有「登出」、沒有未處理的錯誤。失敗留下截圖與頁面文字。
+- 伺服器正式站：用專用巡檢帳號（一般成員）登入 → 新增標題帶日期的筆記 → 確認落在自己的個人空間、重新整理還在 → 永久刪除（刪除前確認範圍只有這一篇，否則不刪）。
+  只動它自己建的那一篇。**密鑰 `ONDEN_PROBE_URL`／`ONDEN_PROBE_EMAIL`／`ONDEN_PROBE_PASSWORD` 沒設就印「略過：巡檢帳號未設定」**，報告看得到，不失敗也不假裝通過。
+- 每天自動跑（`ci.yml` 的 `scheduled-probe`，結果進 scheduled-report）。**部署後手動跑**：`cd packages/frontend && npm run probe:prod`
+  （`-- --only local` 只跑本機版、`-- --engines chromium` 只跑一種引擎、`-- --out <資料夾>` 指定失敗證據放哪；伺服器段要先在 shell 設那三個環境變數）。
+- 已知會紅、正在別的 PR 修的項目在 `packages/frontend/e2e/probe-known-baseline.json`（只准減少）：不讓巡檢失敗，但報告一定列出；修正上線、巡檢看到通過，就把那一行刪掉。
+- 腳本自己的判斷由 `npm run probe:prod:selftest` 驗（英文閃過會被抓到、密鑰不存在就略過、已知紅與新紅分開）。
 
 ## 回滾
 

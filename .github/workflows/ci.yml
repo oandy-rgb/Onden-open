@@ -627,6 +627,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The daily production probe (owner, 2026-11-23): the deployed sites, which no pre-merge check sees. Part 1 opens the
+  # local-edition site in fresh WebKit and Chromium profiles; part 2 uses the dedicated probe account (secrets
+  # ONDEN_PROBE_URL / _EMAIL / _PASSWORD; missing → it says 「略過：巡檢帳號未設定」 and the report shows that).
+  # Known reds waiting for a fix are in packages/frontend/e2e/probe-known-baseline.json (only shrinks).
+  scheduled-probe:
+    name: Scheduled — production probe
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' && inputs.extended == 'daily'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the browsers
+        working-directory: packages/frontend/e2e
+        run: npm ci && npx playwright install --with-deps chromium webkit
+      - name: The probe's own tests
+        working-directory: packages/frontend
+        run: npm run probe:prod:selftest
+      - name: Probe the deployed sites
+        working-directory: packages/frontend
+        env:
+          ONDEN_PROBE_URL: ${{ secrets.ONDEN_PROBE_URL }}
+          ONDEN_PROBE_EMAIL: ${{ secrets.ONDEN_PROBE_EMAIL }}
+          ONDEN_PROBE_PASSWORD: ${{ secrets.ONDEN_PROBE_PASSWORD }}
+        run: npm run probe:prod -- --out "$RUNNER_TEMP/probe-artifacts"
+      # Screenshots and page text of a failure only (the probe masks the probe account's secrets in what it keeps).
+      - name: Keep the failure screenshots and page text
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-failures
+          path: ${{ runner.temp }}/probe-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
   scheduled-weekly:
     name: Scheduled weekly — ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
@@ -683,7 +720,7 @@ jobs:
   scheduled-report:
     name: Scheduled — report
     runs-on: ubuntu-latest
-    needs: [receipt, guard, pairing-relay, backend, backend-postgres, restore-scripts, frontend, parity, e2e-critical, e2e-fullstack, scheduled-unit, scheduled-browser, scheduled-webkit, scheduled-weekly]
+    needs: [receipt, guard, pairing-relay, backend, backend-postgres, restore-scripts, frontend, parity, e2e-critical, e2e-fullstack, scheduled-unit, scheduled-browser, scheduled-webkit, scheduled-probe, scheduled-weekly]
     if: always() && github.event_name == 'workflow_dispatch' && inputs.extended != '' && github.repository == 'oandy-rgb/Onden-open'
     permissions:
       contents: read

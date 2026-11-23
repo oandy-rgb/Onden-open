@@ -1,0 +1,11 @@
+{
+  "//": "每日巡檢（e2e/probe/prod-probe.mjs）已知會紅、正在其他 PR 修的項目；列在這裡的紅不讓巡檢失敗，但報告一定會列出。只准減少（scripts/ratchetLib.mjs）：修正上線、巡檢看到通過，就刪那一行。",
+  "checks": {
+    "local.chromium.no-logout": "本機版不該有登出（fix/local-edition-host-capabilities 修，2026-11-23）",
+    "local.webkit.no-logout": "本機版不該有登出（fix/local-edition-host-capabilities 修，2026-11-23）",
+    "local.chromium.no-member-gate": "本機版不該有「確認工作區資料」成員閘門（修正中，2026-11-23）",
+    "local.webkit.no-member-gate": "本機版不該有「確認工作區資料」成員閘門（修正中，2026-11-23）",
+    "local.chromium.no-english-flash": "開機先閃英文（修正中，2026-11-23）",
+    "local.webkit.no-english-flash": "開機先閃英文（修正中，2026-11-23）"
+  }
+}

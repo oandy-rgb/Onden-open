@@ -9,7 +9,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 
 vi.mock("../lib/lazyWithReload", async (orig) => ({ ...(await orig<typeof import("../lib/lazyWithReload")>()), BUILD_ID: "build-a" }));
 
-import { isNewerServerBuild, reloadForNewBuild, watchServerBuild } from "../lib/buildVersion";
+import { reloadForNewBuild, watchServerBuild } from "../lib/buildVersion";
+import { isNewerServerBuild } from "../lib/lazyWithReload";
 import { apiFetch, setClientTooOldListener, setServerBuildListener } from "../lib/api";
 import { chunkReloadPage, resetChunkReloadForTests, setBeforeChunkReload } from "../lib/lazyWithReload";
 import { getAppState, resetAppState } from "../lib/appStore";

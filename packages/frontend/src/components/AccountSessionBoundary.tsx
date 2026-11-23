@@ -3,6 +3,7 @@ import { bindAccountStorage, boundAccountId, matchesAccountStorageServer } from 
 import { getApiBase, reloadPage } from "../lib/api";
 import { t } from "../lib/i18n";
 import { Pressable } from "./ui";
+import BootWatchdog from "./BootWatchdog";
 
 /** Establish request ownership before children can start reads or writes.
  * A different account must not inherit this page's writers or module stores. */
@@ -24,6 +25,6 @@ export default function AccountSessionBoundary({ userId, children }: { userId: s
       </div>
     );
   }
-  if (!ready || previous !== userId) return <div className="login-loading" role="status">{t("Loading…")}</div>;
+  if (!ready || previous !== userId) return <BootWatchdog><div className="login-loading" role="status">{t("Loading…")}</div></BootWatchdog>;
   return <>{children}</>;
 }

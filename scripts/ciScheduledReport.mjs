@@ -17,15 +17,18 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LABEL = "scheduled-checks";
 const MAX_COMMENT = 60_000; // GitHub refuses a comment over 65,536 characters
 /** Jobs each kind does not start, so their `skipped` is expected (ci.yml `if:` on inputs.extended / inputs.fullstack). */
-const NOT_IN = { daily: [/^Scheduled weekly/], weekly: [/^Scheduled — (fuzz|browser)/, /^Full-stack E2E/] };
+const NOT_IN = { daily: [/^Scheduled weekly/], weekly: [/^Scheduled — (fuzz|browser|production probe)/, /^Full-stack E2E/] };
 const E2E_JOB = /E2E/;
+/** The daily production probe (packages/frontend/e2e/probe/prod-probe.mjs): its job is read even when green, because a skip
+ *  (「略過：巡檢帳號未設定」) and the known reds (waiting for a fix) are news, not silence. */
+const PROBE_JOB = /production probe/;
 
 const strip = (text) => text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, "");
 
 /** One job's log → failing tests, passing E2E tests and seed lines. A line is `<time> <text>` (job log) or
  *  `<job>\t<step>\t<time> <text>` (`gh run view --log`); colour codes come as an escape byte or as the text `^[`. */
 export function readJobLog(log) {
-  const failed = new Set(); const passed = new Set(); const seeds = new Set();
+  const failed = new Set(); const passed = new Set(); const seeds = new Set(); const probe = [];
   for (const raw of log.split("\n")) {
     const text = strip(raw.includes("\t") ? raw.split("\t")[2] ?? "" : raw).replace(/^\S+Z /, "");
     let m;
@@ -34,13 +37,15 @@ export function readJobLog(log) {
     else if ((m = /^\s+✓\s+\d+ (\[[\w-]+\] › [^ ]+?):\d+:\d+ › (.+?)(?: \([\d.]+m?s\))?\s*$/.exec(text))) passed.add(`${m[1]} › ${m[2]}`);
     else if ((m = /^(\S+)\s+FAILED$/.exec(text.trim()))) failed.add(`browser-app › ${m[1]}`);
     // layout:audit names each violation outside its baseline, and a page it could not open; its selftest a failed case.
+    else if ((m = /^探針新紅 (\S+)/.exec(text))) failed.add(`probe › ${m[1]}`);
+    else if ((m = /^探針(已知|可刪|略過) (.+)$/.exec(text))) probe.push(`${m[1]} ${m[2]}`);
     else if ((m = /^新違規 (R\d+ \S+ @ \S+)\s*$/.exec(text))) failed.add(`layout-audit › ${m[1]}`);
     else if ((m = /^審核本身的問題：(.+?)：/.exec(text))) failed.add(`layout-audit › 打不開：${m[1]}`);
     else if ((m = /^FAIL {2}(R\d+ .+?)（(?:應該|不該)報/.exec(text))) failed.add(`layout-audit selftest › ${m[1]}`);
     if ((m = /\b([A-Z_]*SEED)=(\d+)/.exec(text))) seeds.add(`${m[1]}=${m[2]}`);
     else if ((m = /^\[fuzz\] seed=(\d+)/.exec(text))) seeds.add(`FUZZ_SEED=${m[1]}`);
   }
-  return { failed, passed, seeds };
+  return { failed, passed, seeds, probe };
 }
 
 /** Only main's runs are posted to the issue; any other branch's report goes to its job summary. */
@@ -54,11 +59,12 @@ export function compose({ kind, branch = "main", sha, url, jobs, readLog, known 
   const lines = [`**${kind === "weekly" ? "每週" : "每天"}的定期檢查** · ${branch} \`${sha.slice(0, 9)}\` · [這次的執行](${url})`, ""];
   const unread = [];
   const logs = new Map();
-  for (const j of others.filter((x) => red.includes(x) || (E2E_JOB.test(x.name) && x.conclusion === "success"))) {
+  for (const j of others.filter((x) => red.includes(x) || ((E2E_JOB.test(x.name) || PROBE_JOB.test(x.name)) && x.conclusion === "success"))) {
     const log = readLog(j);
     if (log === null) { if (red.includes(j)) unread.push(j.name); continue; }
     logs.set(j.name, readJobLog(log));
   }
+  const probeNotes = [...logs].filter(([name]) => PROBE_JOB.test(name)).flatMap(([, r]) => r.probe);
   if (!red.length) lines.push(`全部 ${others.filter((j) => j.conclusion !== "skipped").length} 個工作通過。`);
   const seeds = new Set();
   for (const j of red) {
@@ -80,6 +86,7 @@ export function compose({ kind, branch = "main", sha, url, jobs, readLog, known 
     lines.push("", `E2E：新的紅 ${fresh.length} 個；已知的紅 ${hit.length} 個（\`packages/frontend/e2e/known-red-baseline.json\`）。`);
     if (removable.length) lines.push("這次看到通過、可以從已知清單刪掉的：", ...removable.map((t) => `  - \`${t}\``));
   }
+  if (probeNotes.length) lines.push("", "線上巡檢（正式站）：", ...probeNotes.map((n) => `- ${n}`));
   if (unread.length) lines.push("", `紀錄讀不到的工作：${unread.join("、")}`);
   if (seeds.size) lines.push("", "失敗的工作用到的隨機種子（重跑用）：", ...[...seeds].map((s) => `- \`${s}\``));
   if (skipped.length) lines.push("", `不該略過卻沒有跑的工作：${skipped.join("、")}`);

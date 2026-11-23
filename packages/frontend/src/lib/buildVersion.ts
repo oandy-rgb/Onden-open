@@ -5,24 +5,9 @@
 // saved first.
 
 import { setClientTooOldListener, setServerBuildListener } from "./api";
-import { SESSION_KEYS, readSession, writeSession } from "./sessionPrefs";
+import { SESSION_KEYS, writeSession } from "./sessionPrefs";
 import { setNewVersionAvailable } from "./appStore";
-import { BUILD_ID, reloadForNewVersion, type ReloadVerdict } from "./lazyWithReload";
-
-/** The server build the person already reloaded for. A frontend-only deploy
- *  leaves the two builds different even after the reload; asking again for
- *  the same server build would only nag. */
-function reloadedFor(): string | null {
-  return readSession(SESSION_KEYS.buildNotice);
-}
-
-/** Whether a server on `serverBuild` means this page (built as `ownBuild`) is
- *  old. Unknown on either side ("dev" in tests and local builds, no header
- *  from a server that does not know) never does. */
-export function isNewerServerBuild(serverBuild: string | null, ownBuild: string = BUILD_ID, alreadyReloaded: string | null = reloadedFor()): boolean {
-  if (!serverBuild || ownBuild === "dev") return false;
-  return serverBuild !== ownBuild && serverBuild !== alreadyReloaded;
-}
+import { BUILD_ID, reloadForNewVersion, isNewerServerBuild, type ReloadVerdict } from "./lazyWithReload";
 
 let latestServerBuild: string | null = null;
 
@@ -46,7 +31,7 @@ function offerReload(newer: boolean): void {
 /** The build the server (or, in the trial version, the published folder's build file) says is current. */
 export function noteServerBuild(serverBuild: string | null): void {
   if (serverBuild) latestServerBuild = serverBuild;
-  offerReload(isNewerServerBuild(serverBuild));
+  offerReload(isNewerServerBuild(serverBuild, BUILD_ID));
 }
 
 /** 「有新版，重新載入」: reload once no text lives only in memory. Anything but

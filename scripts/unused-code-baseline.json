@@ -345,7 +345,6 @@
       "packages/frontend/src/lib/browserAppDiagnostics.ts": ["DiagnosticsInput", "recentIssues"],
       "packages/frontend/src/lib/browserAppMedia.ts": ["workerPathOf"],
       "packages/frontend/src/lib/browserAppWorker.ts": ["ReadyInfo"],
-      "packages/frontend/src/lib/buildVersion.ts": ["isNewerServerBuild"],
       "packages/frontend/src/lib/canvasMinimap.ts": ["MINIMAP_DEFAULT_CARD", "MINIMAP_SECTION"],
       "packages/frontend/src/lib/canvasViewDecision.ts": ["CanvasViewDecision"],
       "packages/frontend/src/lib/canvasViewport.ts": ["CanvasViewport", "isValidViewport"],

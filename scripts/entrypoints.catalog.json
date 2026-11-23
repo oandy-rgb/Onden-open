@@ -2484,6 +2484,27 @@
       "why": "寫入失敗要告訴使用者時用它，把錯誤變成看得懂的一句話；直接顯示 error.message 會出現英文代碼。"
     },
     {
+      "id": "storage-steps",
+      "need": "一個儲存步驟（寫本機副本、清佇列、倒回游標、寫使用者的資料夾）失敗時，後面的程式不能當作沒事",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/data/storageSteps.ts",
+          "exports": [
+            "storageStep",
+            "storageStepFailed",
+            "storageStepOwed",
+            "settleStorageStep",
+            "useStorageStepOwed"
+          ]
+        }
+      ],
+      "use": "import { storageStep, storageStepOwed } from \"./lib/data/storageSteps\";\nimport { rewindCursor } from \"./lib/localDb\";\nawait storageStep(\"copyCursor\", () => rewindCursor(\"100\"));\nconst readWholeNext = storageStepOwed(\"copyCursor\");",
+      "replaces": "在儲存步驟後面寫 .catch(() => {})／.catch(() => null)",
+      "rules": [],
+      "why": "失敗的步驟記為「欠著」直到同一步成功；讀它的地方寫明欠著時守住什麼（告訴使用者，或改走整份重讀、不再重送）。"
+    },
+    {
       "id": "write-lifecycle",
       "need": "要處理一次寫入的樂觀更新、確認與回復",
       "area": "共用邏輯",

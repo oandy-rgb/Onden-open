@@ -185,6 +185,10 @@ function reloadForStaleChunk(failure: unknown): Promise<boolean> {
   return attempt;
 }
 
+/** Reload once, by itself, because this page is too old for the server (the boot watchdog, components/BootWatchdog).
+ *  Same once-per-build guard and draft-saving step as a stale chunk. Resolves true when the page is reloading. */
+export function reloadOnceForNewVersion(): Promise<boolean> { return reloadForStaleChunk(); }
+
 /** Reload now because the person asked (the server runs a newer build): the
  *  same draft-saving step as a stale chunk, but no once-per-build guard, since
  *  a click is not a loop. Anything but `safe` means text would be lost: the
@@ -196,6 +200,21 @@ export async function reloadForNewVersion(): Promise<ReloadVerdict> {
   rememberReloadNotice(verdict.recovered.length);
   chunkReloadPage.reload();
   return verdict;
+}
+
+/** The server build the person already reloaded for. A frontend-only deploy
+ *  leaves the two builds different even after the reload; asking again for
+ *  the same server build would only nag. */
+function reloadedFor(): string | null {
+  return readSession(SESSION_KEYS.buildNotice);
+}
+
+/** Whether a server on `serverBuild` means this page (built as `ownBuild`) is
+ *  old. Unknown on either side ("dev" in tests and local builds, no header
+ *  from a server that does not know) never does. */
+export function isNewerServerBuild(serverBuild: string | null, ownBuild: string = BUILD_ID, alreadyReloaded: string | null = reloadedFor()): boolean {
+  if (!serverBuild || ownBuild === "dev") return false;
+  return serverBuild !== ownBuild && serverBuild !== alreadyReloaded;
 }
 
 const NEVER = new Promise<never>(() => {});

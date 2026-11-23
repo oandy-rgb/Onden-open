@@ -17,6 +17,21 @@ export type LocalOnlyStatus = {
   signsInWithoutPassword?: boolean;
 };
 
+/** This page keeps the notes only on this device for its whole life. Unlike the status line (set once the shell's
+ *  notice has loaded), this is declared before the app mounts, so the sync engine's first pass already knows it;
+ *  lib/hostCapabilities.ts reads it. Never undone: another kind of page is another page load. */
+let localOnlyHost = false;
+
+/** The shell that owns the on-device storage (browserApp/BrowserAppShell.tsx), before it mounts the app.
+ *  `false` only for tests going back to a page with a server. */
+export function declareLocalOnlyHost(localOnly = true): void {
+  localOnlyHost = localOnly;
+}
+
+export function isLocalOnlyHost(): boolean {
+  return localOnlyHost;
+}
+
 let status: LocalOnlyStatus | null = null;
 const listeners = new Set<() => void>();
 

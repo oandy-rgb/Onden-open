@@ -28,8 +28,10 @@ beforeEach(() => {
   vi.spyOn(chunkReloadPage, "reload").mockImplementation(reload);
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  // A deploy: the server answers, and the old hashed file is no longer there.
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("not found", { status: 404 })));
 });
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("lazyWithReload", () => {
   it("passes a successful import through", async () => {
@@ -56,6 +58,39 @@ describe("lazyWithReload", () => {
     mount(Lazy);
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("failed while offline, handler runs once online again: the network, not a deploy, so no reload", async () => {
+    // The request died with the connection; a few ms later the browser is online and the file is on the server.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("export {}", { status: 200, headers: { "content-type": "text/javascript" } })));
+    const uninstall = installChunkReloadHandler();
+    try {
+      const event = new Event("vite:preloadError", { cancelable: true });
+      Object.assign(event, { payload: chunkError() });
+      window.dispatchEvent(event);
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+      expect(reload).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem(KEY)).toBeNull(); // nothing was spent of the once-per-build allowance
+    } finally { uninstall(); }
+  });
+
+  it("asks the real server with a HEAD that skips every cache (the service worker never answers a HEAD)", async () => {
+    const fetchSpy = vi.fn(async () => new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    mount(lazyWithReload(() => Promise.reject(chunkError())));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(fetchSpy).toHaveBeenCalledWith("https://x/_astro/Foo.abc123.js", expect.objectContaining({ method: "HEAD", cache: "no-store" }));
+  });
+
+  it("a request that gets no answer is the network: no reload, the error screen shows, a later deploy still reloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    mount(lazyWithReload(() => Promise.reject(chunkError())));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(reload).not.toHaveBeenCalled();
+    resetChunkReloadForTests();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { status: 200, headers: { "content-type": "text/html" } })));
+    mount(lazyWithReload(() => Promise.reject(chunkError())));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
   });
 
   it("concurrent failures share one reload", async () => {

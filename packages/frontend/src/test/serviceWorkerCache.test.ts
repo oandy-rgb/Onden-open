@@ -113,6 +113,20 @@ describe("service worker offline cache", () => {
     expect((await request("/fonts/plex-sans-400.woff2"))!.status).toBe(200);
   });
 
+  it("never answers a HEAD itself: lib/lazyWithReload asks the real server whether a file is gone, offline or not", async () => {
+    await request("/", { mode: "navigate" });
+    await request("/_astro/Foo.abc123.js");
+    for (const network_ of ["up", "down"] as const) {
+      network = network_;
+      fetched = [];
+      // Cached or not, an offline-shell page or a stored file must not stand in for the server's answer.
+      expect(await request("/_astro/Foo.abc123.js", { method: "HEAD" })).toBeNull();
+      expect(await request("/_astro/NeverLoaded.def456.css", { method: "HEAD" })).toBeNull();
+      expect(await request("/", { method: "HEAD" })).toBeNull();
+      expect(fetched).toEqual([]); // the worker did not fetch, store or answer anything
+    }
+  });
+
   it("serves a hashed build file from the cache without the network", async () => {
     await request("/_astro/TagsOverview.D_0x.js");
     fetched = [];

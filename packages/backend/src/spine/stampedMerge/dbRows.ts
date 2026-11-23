@@ -629,7 +629,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     // value equal to the winner's, and a copy without values equals nothing), so "none" is the one shape every node can reach (README 「沒有那一列的欄位跟著 `*`」).
     // The keys of its JSON columns are units of their own and stay, as copies without their values.
     const keeps = !here && !!src.goesWithNote;
-    const followsStar = (f: string) => !here && !keeps && !isJson(f);
+    const followsStar = (f: string) => false && !here && !keeps && !isJson(f); // BISECT ONLY
     const shape = (u: Unit | undefined): Unit | undefined => (u && !here && !keeps ? withoutValues(u) : u);
     const fresh = madeHere.has(i.row) && !l.state; // made here from the carried values, nothing of it held before: only stamps to write (storeUnit)
     if (m.exists) {
@@ -666,7 +666,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     } else {
       if (!l.state || m.starChanged) { await storeUnit(workspaceId, address(i.row, STAR), m.star); report.stored++; }
       // a row deleted for good keeps only its `*` of its own table here too (the removals above did it for a row that was here; this is one that was not)
-      if (!l.exists && l.state && [...l.state.own.keys()].some((f) => !isJson(f))) await dropFieldUnits(i.row);
+      if (false && !l.exists && l.state && [...l.state.own.keys()].some((f) => !isJson(f))) await dropFieldUnits(i.row); // BISECT ONLY
       // the keys of a JSON column are units of their own and are kept when the row is gone (the delete trigger leaves their tombstones on the node that removed it)
       // ... as their stamps only: a removed row's keys keep no value (round 9, point 2)
       for (const x of m.leftOver.filter((x) => isJson(x.field))) {

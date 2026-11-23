@@ -34,7 +34,7 @@ export async function listInkVersionRows(actor: ActorCtx, workspaceId: string, n
   });
 }
 
-/** Lightweight body-save history of a note (newest 50): its versions (a tag's description or a system note: its saves). */
+/** Lightweight body-save history of a note (newest 50): its versions (a system note: its saves). */
 export async function listBodyHistoryRows(actor: ActorCtx, workspaceId: string, nodeId: string) {
   if (!(await canReadNode(actor, nodeId))) return null;
   if (await hasVersionList(workspaceId, nodeId)) {

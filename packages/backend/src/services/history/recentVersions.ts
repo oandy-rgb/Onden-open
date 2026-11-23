@@ -19,7 +19,7 @@ export async function recentVersions(actor: ActorCtx, workspaceId: string, page:
   keepVersionStatisticsCurrent();
   const params: unknown[] = [workspaceId];
   const readable = await readableNotesSql(actor, workspaceId, "n", params);
-  // A note's or board's versions come from the version tables; a tag's description and a system note have none yet and keep reading their saves.
+  // A note's, board's or tag description's versions come from the version tables; a system note has none and keeps reading its saves.
   // `tie` orders the saves of one instant: the event number, or the version's place in its transaction.
   const result = await pool.query<{ node_id: string }>(
     `SELECT s.id, s.node_id, s.title, s.changed_at, s.on_another_device, n.title AS current_title, n.slug

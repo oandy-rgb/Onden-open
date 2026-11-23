@@ -1,7 +1,7 @@
 // THE ORACLE for the proof of history-replication batch 2: the readers of a note's text, drawings and "the workspace at T" as they were
 // BEFORE they read the version tables, copied here from the code of origin/main at 4c66a2eae+ (services/history/noteVersions.ts, pointInTime.ts,
 // inkChanges.ts, nodeReads.ts, nodeUpdate.ts restoreNodeVersion). They read domain_events. Test code only: the product no longer has them
-// (a tag's description and a system note keep reading events: services/history/noteVersions.ts, its last section). historyReadersMatchEvents.integration.test.ts
+// (a system note keeps reading events: services/history/noteVersions.ts, its last section; a tag's description reads versions since batch 8, migration 231). historyReadersMatchEvents.integration.test.ts
 // runs these and the product's readers on one database and compares them row for row.
 import { shownAuthorKind, shownAuthorName, versionAuthor } from "../../services/authorName.js";
 import { q } from "../../db.js";

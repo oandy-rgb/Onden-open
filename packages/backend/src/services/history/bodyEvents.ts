@@ -46,8 +46,8 @@ export const AUTHOR_REF_SQL = `coalesce(v.author_id::text, (SELECT e.actor_id FR
 /** The saves made on the workspace-clock day `dateExpr` (a SQL `date` expression), as a derived table to put in FROM:
  *  "a note was edited on a day" means this and nothing else — the day lens (services/dayLens.ts) asks it directly; History's per-day lists cut
  *  the same days from their collapsed edits' last save. Columns: workspace_id, target_id (text), target_type, created_at, actor_id (text: the
- *  person's id, else the actor the event recorded the save with, else the kind of author). A note's or board's saves are its versions (note_versions); a tag's description and a system note
- *  have none yet and contribute their save events. `workspace` is a SQL expression (`$1`). `actors`: also say who (the lookup per row is not free). */
+ *  person's id, else the actor the event recorded the save with, else the kind of author). A note's, board's or tag description's saves are its versions (note_versions); a system note
+ *  has none and contributes its save events. `workspace` is a SQL expression (`$1`). `actors`: also say who (the lookup per row is not free). */
 export function saveOnDaySql(workspace: string, dateExpr: string, { actors = false }: { actors?: boolean } = {}): string {
   const onDay = (at: string) => `${at} >= ${sqlDayStart(dateExpr)} AND ${at} < ${sqlDayStart(`${dateExpr} + 1`)}`;
   return `(SELECT v.workspace_id, v.note_id::text AS target_id, 'node'::text AS target_type, v.at::timestamptz AS created_at,

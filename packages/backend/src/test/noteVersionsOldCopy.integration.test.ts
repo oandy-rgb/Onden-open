@@ -18,11 +18,12 @@ import { PREVIEW_SQL } from "./helpers/versionsPreview.js";
 
 const backend = resolve(import.meta.dirname, "../..");
 const count = async (text: string) => Number((await q<{ n: string }>(text)).rows[0]!.n);
+// notes only: a tag's description versions are migration 231's (noteVersionsTags.integration.test.ts), written by the same upgrade
 const written = async () => ({
-  body_versions: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit = 'body' AND version_key LIKE 'g:%'`)),
-  ink_versions: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit <> 'body' AND version_key LIKE 'g:%' AND kind <> 'set_aside'`)),
-  body_baselines: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit = 'body' AND version_key LIKE 'b:%'`)),
-  ink_baselines: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit <> 'body' AND version_key LIKE 'b:%'`)),
+  body_versions: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit = 'body' AND version_key LIKE 'g:%' AND note_id NOT IN (SELECT id FROM content_nodes WHERE node_type = 'class_tag')`)),
+  ink_versions: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit <> 'body' AND version_key LIKE 'g:%' AND kind <> 'set_aside' AND note_id NOT IN (SELECT id FROM content_nodes WHERE node_type = 'class_tag')`)),
+  body_baselines: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit = 'body' AND version_key LIKE 'b:%' AND note_id NOT IN (SELECT id FROM content_nodes WHERE node_type = 'class_tag')`)),
+  ink_baselines: String(await count(`SELECT count(*)::text AS n FROM note_versions WHERE unit <> 'body' AND version_key LIKE 'b:%' AND note_id NOT IN (SELECT id FROM content_nodes WHERE node_type = 'class_tag')`)),
   // a save of a note with a version list that names text no blob holds: not minted, and not mapped
   ink_inline_values: String(await count(`SELECT count(DISTINCT ve.version_key)::text AS n FROM note_version_events ve JOIN domain_events e ON e.id = ve.event_id
      WHERE e.event_type = 'ATTRIBUTE_SET' AND NOT e.payload ? 'value_ref' AND e.payload ? 'value'`)),

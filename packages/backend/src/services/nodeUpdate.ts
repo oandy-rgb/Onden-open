@@ -174,8 +174,8 @@ export async function restoreNodeVersion(
   { actor, restoreTitle = true }: { actor: ActorCtx; restoreTitle?: boolean },
 ): Promise<NodeSaveResult> {
   return saveNodeChange(workspaceId, id, { actor, dryRun: false }, async (current) => {
-    // A version of a note or board is a row of its version list, named by its key (or, from an older client, by the number of an event of
-    // this node: note_version_events says which version it recorded). A tag's description has no version rows yet and still names an
+    // A version of a note, a board or a tag's description is a row of its version list, named by its key (or, from an older client, by the number
+    // of an event of this node: note_version_events says which version it recorded). A system note has no version rows and still names an
     // event (any body_hash-carrying event of the note), as before (services/history/noteVersions.ts, the last section).
     const stored = await hasVersionList(workspaceId, id);
     let version: { key: string; title: string | null; markdown: string } | null;
@@ -205,7 +205,7 @@ export async function restoreNodeVersion(
       // save's own title is not the new one for a tag (its rename is written apart).
       payload: { ...(versionEvent ? { version_id: versionEvent } : {}), title: restoreTitle && version.title ? version.title : current.title },
       txMeta: { ui_context: "node.version.restore" },
-      restoredFrom: stored ? version.key : null, // a tag's description has no versions yet
+      restoredFrom: stored ? version.key : null, // a system note has no versions
       cascadeLabel: "node.version.restore.cascade",
       backupPrefix: "NODE_RESTORED",
     };
@@ -528,7 +528,8 @@ async function saveNodeChange(
         if (bodyHash !== null) {
           await recordVersion({
             workspaceId, noteId: id, unit: "body", contentHash: bodyHash, kind: record.eventType === "NODE_RESTORED" ? "restored" : "updated",
-            title: updated.title as string, restoredFrom: record.restoredFrom ?? null,
+            // A tag's name is written apart (below), so the row's title here is not the one the save's event names: the version says what the event says.
+            title: isTag ? String(record.payload.title ?? next.title) : updated.title as string, restoredFrom: record.restoredFrom ?? null,
           });
         }
         // Overlapping concurrent edits: what each conflict left out, for the

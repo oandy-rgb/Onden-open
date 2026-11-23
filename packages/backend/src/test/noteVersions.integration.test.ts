@@ -292,7 +292,7 @@ describe.skipIf(!isTestDb)("two writes of one note in one transaction, restores 
     });
   }, 120_000);
 
-  it("a task made with text, its rename, the next occurrence of a repeating one and a board's rename each mint their version; a tag mints none", async () => {
+  it("a task made with text, its rename, the next occurrence of a repeating one and a board's rename each mint their version; a tag mints one for its description and none for its name", async () => {
     const n = await node("tasks");
     const world = await buildSourceWorld(n);
     await onNode(n, async () => {
@@ -316,10 +316,11 @@ describe.skipIf(!isTestDb)("two writes of one note in one transaction, restores 
       await world.call("PATCH", `/api/canvases/${board}`, { title: "Board two" });
       expect((await versionsOf(board)).map((v) => v.title)).toEqual(["Board", "Board two"]);
 
-      const tag = (await world.call("POST", "/api/tags", { name: "versionless" })).id as string;
-      await world.call("PATCH", `/api/tags/${tag}`, { name: "still versionless" });
+      const tag = (await world.call("POST", "/api/tags", { name: "named" })).id as string;
+      await world.call("PATCH", `/api/tags/${tag}`, { name: "renamed" });
+      expect(await count(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [tag]), "a tag's creation and its name are no version").toBe(0);
       await world.call("PATCH", `/api/nodes/${tag}`, { markdown: "a tag's description, saved through the ordinary save" });
-      expect(await count(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [tag])).toBe(0);
+      expect(await count(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [tag]), "its description is one (migration 231; noteVersionsTags.integration.test.ts)").toBe(1);
       expect(await misses()).toBe(0);
     });
   }, 180_000);

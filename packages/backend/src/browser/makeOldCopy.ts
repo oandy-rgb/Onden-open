@@ -158,6 +158,16 @@ if (mode === "history") {
   const drawing = JSON.stringify({ v: 1, strokes: [{ id: "a", points: [[0, 0], [4, 4]] }] });
   await call("PUT", `/api/nodes/${made[2]}/attributes/ink_data`, { value: drawing });
   await call("PUT", `/api/nodes/${made[2]}/attributes/ink_data`, { value: JSON.stringify({ v: 1, strokes: [{ id: "a", points: [[0, 0], [4, 4]] }, { id: "b", points: [[5, 5], [9, 9]] }] }) });
+  // a tag's description is saved as a note's text is (batch 8 of the history work: migration 231 gives it versions): three saves, a restore of the first, a rename
+  const tag = String((await call("POST", "/api/tags", { name: "歷史標籤" })).id);
+  for (let k = 1; k <= 3; k++) await call("PATCH", `/api/nodes/${tag}`, { markdown: `標籤說明的第 ${k} 版` });
+  const tagSaves = await call("GET", `/api/nodes/${tag}/versions?raw=1`) as unknown as Array<{ id: string }>;
+  await call("POST", `/api/nodes/${tag}/versions/${tagSaves[tagSaves.length - 1]!.id}/restore`, {});
+  await call("PATCH", `/api/tags/${tag}`, { name: "歷史標籤（改名）" });
+  await call("PATCH", `/api/nodes/${tag}`, { markdown: "改名之後的說明" });
+  // and the whiteboard of the tag's page (board_ink): drawn, drawn on
+  await call("PUT", `/api/nodes/${tag}/attributes/board_ink`, { value: JSON.stringify({ v: 1, strokes: [{ id: "t1", points: [[0, 0], [3, 3]] }] }) });
+  await call("PUT", `/api/nodes/${tag}/attributes/board_ink`, { value: JSON.stringify({ v: 1, strokes: [{ id: "t1", points: [[0, 0], [3, 3]] }, { id: "t2", points: [[4, 4], [8, 8]] }] }) });
   const parent = String((await call("POST", "/api/nodes", { title: "要刪的上層", markdown: "上層" })).id);
   await call("POST", "/api/nodes", { title: "要刪的下層", markdown: "下層", parent_id: parent });
   await call("DELETE", `/api/nodes/${parent}`);

@@ -139,7 +139,7 @@ Migration `136` 只加兩個 partial index（`tx_meta ? 'rewind_id'`／`'undoes_
 
 ## 版本清單與時間點讀版本表（歷史複製第 2 批，2026-11-22）
 
-筆記與白板的內文、標題、手寫歷史讀版本表（`note_versions`，migration 220；規格：歷史跟著同步走的提案（PR #1935）第 5 節），不再讀 `domain_events`。
+筆記、白板與標籤說明的內文、標題、手寫歷史讀版本表（`note_versions`，migration 220；規格：歷史跟著同步走的提案（PR #1935）第 5 節），不再讀 `domain_events`。
 **讀者**：版本清單與 `?raw=1`（含段落歷史）、`GET /api/nodes/:id/history`、還原一版、回到某一天（`noteStatesAt`）與倒回的「回到倒回之前」（`revertStep`）、
 「近期變動」（`recentVersions`）、日記視角的「這天改過」（`saveOnDaySql`）、手寫的版本／修改／當天變化（`inkChanges.ts`、`nodeReads.ts`）、備份的版本歷史（[備份搬家](backup-move.md)）。
 一個入口 `services/history/storedVersions.ts`：順序、身分、作者都在那裡，各讀者不各寫一份。
@@ -157,7 +157,7 @@ Migration `136` 只加兩個 partial index（`tx_meta ? 'rewind_id'`／`'undoes_
   所有讀 `note_versions` 的地方（含用 key 取一版的 `resolveVersionKey`）都用 `spine/noteVersions.ts` 的 `STATE_VERSION_SQL`（`bodyEvents.ts` 轉出；`historyReadersSetAside.integration.test.ts` 把同一份放到一邊的字餵給每個讀者）（近期變動、這天改過、手寫的修改與當天變化再加 `EDIT_VERSION_SQL`：基準不是那天的修改）。基準版本只有在它是最早的一個狀態時，清單上才帶標記 `baseline`，畫面寫「最早留下的樣子」（migration 220 也會為「沒有任何版本指到的現況」鑄基準，那可能晚於舊版本：就是普通的一列）。備份的歷史檔在基準那行多 `baseline: true`（舊讀取者當作建立），匯入時存回基準。
 - **復原是自己的一列**：清單認一個版本是不是復原，看版本的種類、`restored_from`，以及**鑄下這個版本的存檔**是不是版本還原或事件復原（`tx_meta.restored_from`）——`restored_from` 只有在結果和某個更早的版本內容相同時才有，只看它會讓「結果不同的復原」併進前後的段落（審查 #1948 第 3 輪）。近期變動與日視角不列重複存檔、基準與內文已不在 `blobs` 的存檔（和清單同一條規則）。
 - **統計**：migration 225 在升級時 `ANALYZE` 三張版本表；沒有 autovacuum 的節點（PGlite）由 `keepVersionStatisticsCurrent` 維持：讀取只**觸發**（十分鐘一次、不等、失敗只記一行，不進請求），分析用寄件統計的同一條規則 `spine/senderStatistics.ts`。
-- **標籤說明與系統筆記還沒有版本**（業主 2026-11-22）：它們的歷史清單、還原、近期變動、這天改過、備份的歷史，**繼續讀事件，和以前一模一樣**（`hasVersionList` 決定，`noteVersions.ts` 最後一段是原來的查詢）。補上版本的那一批再改。
+- **標籤說明與標籤頁白板也有版本**（歷史第 8 批，migration 231；業主 2026-11-22 的另外決定）：`note_version_in_scope` 多收標籤，`hasVersionList` 因此對標籤說也是「有」，清單、還原、近期變動、這天改過、備份的歷史、手寫歷史都走上面同一條路，沒有為標籤另寫的分支。標籤的版本是它的**說明**（`markdown`）與頁面白板（`board_ink`）的版本：**建立標籤與改名都不鑄版本**（名字另外寫成 `TAG_UPDATED`，標籤沒有帶內文的建立事件，舊清單也不把這兩件算存檔），一個請求同時改說明與名字時，版本記存檔事件記的那個名字。升級時舊歷史由 `tag_versions_backfill` 補成版本（只動標籤，已對到版本的事件略過，所以可以再跑）；升級前後的清單逐列相同，差別只有列的位址（版本的 key，不再是事件編號；舊的數字網址仍可還原）。**只有系統筆記**仍沒有版本、仍讀事件（`noteVersions.ts` 最後一段是原來的查詢）。
 - **仍讀事件的**（本機的帳，不是版本）：AI 的工作與審閱（`agentRuns`、`agentRunUndo`）、一天的修改次數與「誰改了」（`activity.ts`，要看 `ui_context` 的系統整理）、倒回的事件列（`rewindEvents`）、
   事件復原（`eventRestore`）、贏了內文衝突的標記（`BODY_CONFLICT`，只用來斷列）。
 - **證明**：`historyReadersMatchEvents.integration.test.ts`——同一份資料庫（舊版拷貝 `makeOldCopy history`，加上遷移後的新存檔），舊的事件讀法（`helpers/legacyHistoryReaders.ts`，只在測試裡）與新讀法

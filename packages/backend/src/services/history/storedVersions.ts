@@ -1,7 +1,7 @@
 // A note's saved versions, read from the version tables (note_versions, migration 220; the history-replication proposal, PR #1935, §5). Every History
 // page that lists, compares, restores or cuts "the text at a time" asks here for a note that has a version list, so the
-// order, the identity (`version_key`) and the author live in one place. The event log is still read for the two things that have no version
-// yet: a tag's description and a system note (`hasVersionList()` in spine/noteVersions.ts says which; migration 220 note_version_in_scope is the one rule), and for the
+// order, the identity (`version_key`) and the author live in one place. The event log is still read for the one thing that has no version
+// list: a system note (`hasVersionList()` in spine/noteVersions.ts says which; migration 220 note_version_in_scope, widened to a tag's description by 231, is the one rule), and for the
 // local account of what happened (body conflicts, AI runs, rewinds).
 //
 // ORDER (§5): the version's time in milliseconds (the logical clock's wall part, else the time written down), then the clock's counter,

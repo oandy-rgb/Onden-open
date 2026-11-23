@@ -61,7 +61,7 @@
 
 兩份筆跡都進歷史，一份在「手寫改動」、一份在「白板筆跡改動」，不混在一起。`@onden/markdown` 的 `InkKind`（`handwriting`／`board`）與 `INK_KIND_ATTR`
 決定每種筆跡存在哪個屬性；一則筆記的筆跡歷史（`inkChanges.ts`：計數、差異、版本列表、還原；`nodeReads.ts` 的 `/ink-versions`）讀版本表 `note_versions`（歷史複製第 2 批，
-migration 220；每種筆跡一個 `unit`＝它的屬性鍵，`INK_KIND_ATTR[kind]`），版本的身分是 `version_key`；`activity.ts`（「這天編輯過的筆記」、活動圖）仍讀事件，用
+migration 220；每種筆跡一個 `unit`＝它的屬性鍵，`INK_KIND_ATTR[kind]`；標籤頁的白板（`board_ink`）自 migration 231 起一樣有，舊的存檔由 `tag_versions_backfill` 補），版本的身分是 `version_key`；`activity.ts`（「這天編輯過的筆記」、活動圖）仍讀事件，用
 `services/history/bodyEvents.ts` 的 `inkEventSql(alias, kind)`——「這個事件算哪一種筆跡儲存」的唯一定義。
 
 | 項目 | 做法 |

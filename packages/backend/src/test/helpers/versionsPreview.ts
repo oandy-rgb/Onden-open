@@ -1,4 +1,4 @@
-// The read-only preview block in the header of migration 220 (db/migrations/220_note_versions.sql, between `preview:begin` and
+// The read-only preview blocks in the headers of migrations 220, 230 and 231 (db/migrations/220_note_versions.sql, between `preview:begin` and
 // `preview:end`), as an operator would paste it into a read-only transaction: the tests run exactly that text, so the header the operator
 // reads is the query whose numbers the tests compare with what the migration writes.
 import { readFileSync } from "node:fs";
@@ -12,3 +12,5 @@ export function previewSqlOf(file: string): string {
     .slice(1).map((line) => line.replace(/^-- ?/, "")).filter((line) => !/^(BEGIN READ ONLY|ROLLBACK);$/.test(line)).join("\n");
 }
 export const PREVIEW_SQL = previewSqlOf("220_note_versions.sql");
+/** Migration 231's block (a tag's description and whiteboard versions; history batch 8). */
+export const TAG_PREVIEW_SQL = previewSqlOf("231_tag_description_versions.sql");

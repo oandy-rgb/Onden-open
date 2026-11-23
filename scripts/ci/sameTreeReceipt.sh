@@ -13,21 +13,12 @@ out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 out reused false
 [ "${ELIGIBLE:-false}" = true ] || { echo "not eligible for reuse: running everything"; exit 0; }
 tree=$(git rev-parse 'HEAD^{tree}')
-# The jobs a reused run must have finished green; a renamed job simply stops matching, and then nothing is reused.
-required='^(Guard lane|Pairing and relay|Backend — lint|Backend — real Postgres \(|Frontend — lint|Three-host parity|Critical-path E2E)'
-want=10   # guard, pairing, backend, 4 Postgres shards, frontend, parity, critical-path e2e
-runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?status=completed&per_page=40" \
-  --jq '.workflow_runs[] | "\(.id) \(.head_sha) \(.head_commit.tree_id)"' 2>/dev/null || true)
-while read -r id sha runtree; do
-  [ -n "$id" ] && [ "$sha" != "$GITHUB_SHA" ] && [ "$runtree" = "$tree" ] || continue
-  jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" --jq '.jobs[] | "\(.conclusion)\t\(.name)"' 2>/dev/null || true)
-  green=$(printf '%s\n' "$jobs" | awk -F'\t' '$1 == "success" { print $2 }' | grep -cE "$required" || true)
-  all=$(printf '%s\n' "$jobs" | cut -f2 | grep -cE "$required" || true)
-  if [ "$all" -eq "$want" ] && [ "$green" -eq "$want" ]; then
-    echo "same tree $tree as run $id, all $want required jobs green: reused"
-    { echo "### Same tree as run [$id](https://github.com/$GITHUB_REPOSITORY/actions/runs/$id)"
-      echo "Its guard lane and suites were all green on exactly this tree, so they are not run again. The full-stack e2e is never reused."; } >> "$GITHUB_STEP_SUMMARY"
-    out reused true; out from "$id"; exit 0
-  fi
-done <<< "$runs"
+. "$(dirname "$0")/greenRunLib.sh"
+id=$(green_run_for_tree "$GITHUB_REPOSITORY" "$tree" "$GITHUB_SHA")
+if [ -n "$id" ]; then
+  echo "same tree $tree as run $id, all $GREEN_RUN_WANT required jobs green: reused"
+  { echo "### Same tree as run [$id](https://github.com/$GITHUB_REPOSITORY/actions/runs/$id)"
+    echo "Its guard lane and suites were all green on exactly this tree, so they are not run again. The full-stack e2e is never reused."; } >> "$GITHUB_STEP_SUMMARY"
+  out reused true; out from "$id"; exit 0
+fi
 echo "no finished green run of tree $tree: running everything"

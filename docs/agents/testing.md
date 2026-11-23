@@ -72,9 +72,9 @@ markdown 守門的 `test/guards/sources.ts` 的 `nameLengthLimitSites`／`builds
 讀取權限關卡（`eslint-rules/require-read-gate.js`）同理：`gateEvidence.js` 只認呼叫或使用，不認 import 或註解。守門自己要有「擋得住違規樣本、不誤擋擁有者」的測試，誤判過的寫法補進去。
 
 **每次合併前都要過守門通道**：`scripts/guard-lane.sh`（筆電約 3.5 分鐘，雲端也能跑）。公開庫的 CI 手動啟動時也會跑它（`gh workflow run ci.yml --repo oandy-rgb/Onden-open --ref <分支>`；PR 說明有「不需要更新說明」時加 `-f pr_body=不需要更新說明`），所以推公開庫的那一次同時是守門的那一次，不必在筆電另跑。它依序跑 markdown 套件完整測試（裡面的守門會掃前後端原始碼）、
-site 套件測試、後端與前端的 `src/test/guards/`、`ratchet:check`、`changes:check`。只跑自己那個套件的 PR 仍可能弄壞這些：
+site 套件測試、後端與前端的 `src/test/guards/`、`ratchet:check`、`changes:check`、合併閘門的自我測試（`scripts/merge-gate-selftest.sh`）。只跑自己那個套件的 PR 仍可能弄壞這些：
 2026-11-10 的 main 同時帶著過期的資料庫型別檔、五個紅的 markdown 守門和一個紅的 site 測試，每個都是「自己的套件全綠」的 PR 合進來的。
-合併的人在 PR 分支（已併入最新 main）上跑，紅的不合併；雲端任務的驗證清單也要列這一條。它不取代完整套件。
+合併的人在 PR 分支（已併入最新 main）上跑，紅的不合併；雲端任務的驗證清單也要列這一條。它不取代完整套件。實際合併只經過合併閘門 `scripts/ci/mergeGate.sh`（2026-11-23；規則見 `scripts/public-mirror/README.md`）：它查公開 CI 對測過的那棵樹全綠、PR 測完沒再推、審查結論可合併。
 
 **離線的端對端 spec 先等「離線就緒」（2026-11-18）**：`setOffline(true)` 之前呼叫 `expectOfflineReady(page)`（`e2e/fullstack/helpers.ts`）。harness 要等閒置時的離線預熱
 （`lib/offlineWarmup.ts`）才有延後載入的畫面；之前離線，第一個還沒載入的畫面會讓 `AppErrorBoundary` 取代整個 app，排隊的寫入沒人送，看起來像「離線的修改沒有到伺服器」。

@@ -2271,7 +2271,6 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Target recall (%)": "目標記憶率（%）",
   "Use 0–500 new cards, 70–97% recall and 1–36500 days.": "新卡 0–500 張、記憶率 70–97%、間隔 1–36500 天。",
   "Module tag": "標籤",
-  "Could not load this tag's settings. Reopen this tag to retry.": "無法載入這個標籤的設定，請重新開啟這個標籤再試一次。",
   "Abilities": "能力",
   "from #{name}": "來自 #{name}",
   "Includes notes of its child tags: {names}": "也包含子標籤的筆記：{names}",

@@ -1,6 +1,6 @@
 // A fake server, transport and local database for the writes that are not a note's text: an attribute, a task, a
-// tag on a note, a tag's hidden flag, the workspace's home page, a hand-placed graph position. The REAL writers
-// (propertyWriter, taskWriter, tagWriter, workspaceWriter, graphPositionWriter) send through the real write lifecycle
+// tag on a note, a tag's hidden flag, a tag's fields, the workspace's home page, a hand-placed graph position. The REAL writers
+// (propertyWriter, taskWriter, tagWriter, tagSchemaWriter, workspaceWriter, graphPositionWriter) send through the real write lifecycle
 // and queue; the answers that carry rows come back through the real sync engine (POST /api/sync → applyAndShow →
 // storeOps), the ?nodes=none refresh and the whole bootstrap (takeBootstrap), and single note reads (GET
 // /api/nodes/:id). Test: test/gateHoldsEveryUnansweredEdit.test.ts.
@@ -21,7 +21,7 @@ export const NOTE_ID = "00000000-0000-4000-8000-000000000001";
 export const TAG_ID = "00000000-0000-4000-8000-000000000002";
 export const TASK_ID = "00000000-0000-4000-8000-000000000003";
 
-type ServerNote = { id: string; title: string; node_type: string; attrs: Record<string, string>; tags: string[]; hidden: boolean };
+type ServerNote = { id: string; title: string; node_type: string; attrs: Record<string, string>; tags: string[]; hidden: boolean; fields?: unknown[] };
 export type FieldRequest = { id: number; method: string; path: string; body: unknown; state: "inflight" | "applied" | "rejected"; resolve(value: unknown): void; reject(error: unknown): void };
 type HeldAnswer = { path: string; value: unknown; read(): unknown; resolve(value: unknown): void };
 
@@ -47,7 +47,7 @@ export class FieldWorld {
     this.head = 10; this.requests = []; this.unanswered = []; this.held = []; this.holdAnswers = false; this.log = []; this.seq = 0;
     this.notes = new Map<string, ServerNote>([
       [NOTE_ID, { id: NOTE_ID, title: "A note", node_type: "content", attrs: { status: "start" }, tags: [], hidden: false }],
-      [TAG_ID, { id: TAG_ID, title: "toread", node_type: "tag", attrs: {}, tags: [], hidden: false }],
+      [TAG_ID, { id: TAG_ID, title: "toread", node_type: "tag", attrs: {}, tags: [], hidden: false, fields: [] }],
     ]);
     this.tasks = new Map([[TASK_ID, { id: TASK_ID, node_id: NOTE_ID, title: "Do it", status: "todo" } as NodeTask]]);
     this.home = null;
@@ -65,7 +65,7 @@ export class FieldWorld {
   }
   tagCatalog(): Tag[] {
     return [...this.notes.values()].filter((n) => n.node_type === "tag")
-      .map((n) => ({ id: n.id, name: n.title, color: null, schema_id: null, ...(n.hidden ? { hidden: true } : {}) }) as Tag);
+      .map((n) => ({ id: n.id, name: n.title, color: null, schema_id: null, schema_fields: structuredClone(n.fields ?? []), ...(n.hidden ? { hidden: true } : {}) }) as Tag);
   }
   workspace() { return { ...WORKSPACE, home_node_id: this.home }; }
   graphPositions(): GraphPosition[] { return [...this.positions].map(([nodeId, p]) => ({ nodeId, ...p })); }
@@ -181,6 +181,11 @@ export class FieldWorld {
       const task = { ...this.tasks.get(m[1]!)!, ...body } as NodeTask;
       this.tasks.set(task.id, task);
       return { ...task };
+    }
+    if ((m = /^\/api\/tags\/([^/]+)\/schema$/.exec(path)) && method === "PATCH") {
+      const tag = this.notes.get(m[1]!)!;
+      if (Array.isArray(body.fields)) tag.fields = structuredClone(body.fields);
+      return {};
     }
     if (path === "/api/workspace" && method === "PATCH") {
       if (Object.hasOwn(body, "home_node_id")) this.home = body.home_node_id as string | null;

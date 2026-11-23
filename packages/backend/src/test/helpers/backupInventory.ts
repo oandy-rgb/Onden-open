@@ -86,6 +86,7 @@ export const NODE_TABLES: Record<string, Coverage> = {
   ink_manifests: notInBackup("the list of chunks of each earlier version of a big drawing (migration 203): History, as ink_chunks"),
   note_versions: restored("a format-3 backup's history comes back as versions: spine/importedHistory.ts mints one `g:` version per carried save (migration 220); without history a restore has the notes' new saves only, as today"),
   note_version_positions: restored("written with each version spine/importedHistory.ts mints: the restore transaction's own position"),
+  trash_groups: notInBackup("which notes went to the trash together (migration 230); a restore deletes the backup's deleted notes again, and those deletes write their own stamps and groups"),
   note_version_events: notInBackup("this node's own map from its events to versions (migration 220); event ids mean nothing on another server, and importedHistory writes the map for the events it carries in"),
   note_pointers: notInBackup("sidebar pointers (a note shown under another) are not in a backup yet: found by this inventory, not one of the audit's four gaps"),
   node_embeddings: notInBackup("a search projection computed from the text, written again by the outbox"),

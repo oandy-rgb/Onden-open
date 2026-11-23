@@ -605,6 +605,8 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     await recordSnapshotMedia(snapshotId, snapshotPayload);
     await ensureSiteBundle({ workspaceId: A.ws });
     await seedQ(`INSERT INTO push_reminder_sent (task_id, moment) VALUES ($1, $2)`, [open.task, `${day}T09:00`]);
+    // A "deleted together" group (migration 230): a marker row of a note of A's (the table is not read by any route; it is here to say whose it is).
+    await seedQ(`INSERT INTO trash_groups (workspace_id, root_id, note_id, ordinal, root_stamp, note_stamp) VALUES ($1, $2, $2, 0, '', '')`, [A.ws, open.note]);
     // a ticket of a fresh confirmation (services/freshProof.ts): the table is keyed by the person it was handed to
     await seedQ(`INSERT INTO fresh_proofs (ticket_hash, actor_id, purpose, expires_at) VALUES ($1, $2, 'snapshot_export', now() + interval '2 minutes')`, [canary("FreshProof"), A.owner.id]);
     await seedQ(`INSERT INTO fresh_proof_attempts (actor_id, failures) VALUES ($1, 1)`, [A.owner.id]);

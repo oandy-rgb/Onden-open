@@ -7,6 +7,7 @@ import { randomUUID } from "../../lib/uuid";
 import { pollWhileVisible } from "../../lib/noteChatDom";
 import { insertIntoNoteEditor } from "../../lib/editorInsert";
 import { announceSuggestionsChanged } from "../../lib/aiSuggestionsBus";
+import { useSpaces } from "../../lib/spaces";
 import type { HandOptions, HandPick } from "../../lib/handToAi";
 import {
   addChip, additionAtEnd, chatEntry, chipsToScope, insertion, removeChip, turnIsOpen, withoutAddition,
@@ -35,6 +36,9 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
   const [live, setLive] = useState<LiveAnswer | null>(null);
   const nodeRef = useRef(nodeId);
   nodeRef.current = nodeId;
+  // Who can answer depends on the spaces' AI switches and members. Every change to them (Settings here, another
+  // device through the sync's membership epoch) reloads the spaces, so that reload is the signal to ask again.
+  const { spaces } = useSpaces(online);
   const stopRef = useRef<() => void>(() => {});
   const requestRef = useRef<{ key: string; id: string } | null>(null);
 
@@ -89,9 +93,6 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
     requestRef.current = null;
     if (!online) return;
     let cancelled = false;
-    reads.panelChat.roles<{ roles: HandOptions["roles"] }>(nodeId)
-      .then((body) => { if (!cancelled) setOptions({ can_hand_off: true, roles: Array.isArray(body.roles) ? body.roles : [] }); })
-      .catch(() => { if (!cancelled) setOptions(null); });
     void reloadThread().then((all) => {
       // An answer still being written (this tab was closed, or another device asked): follow it.
       const open = all.find(turnIsOpen);
@@ -100,6 +101,17 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
     return () => { cancelled = true; };
   }, [nodeId, online, reloadThread, follow]);
   useEffect(() => () => stopRef.current(), []);
+
+  // Who can answer: asked for the note, and again whenever the spaces change, without closing the panel. The earlier
+  // answer stays on screen until the new one arrives, so a refresh does not flash "looking for an AI".
+  useEffect(() => {
+    if (!online) return;
+    let cancelled = false;
+    reads.panelChat.roles<{ roles: HandOptions["roles"] }>(nodeId)
+      .then((body) => { if (!cancelled) setOptions({ can_hand_off: true, roles: Array.isArray(body.roles) ? body.roles : [] }); })
+      .catch(() => { /* a failed reload keeps the last answer; a new note already cleared it above */ });
+    return () => { cancelled = true; };
+  }, [nodeId, online, spaces]);
 
   // Subscription / MCP answers do not stream: look at the thread again while one is open.
   const waiting = turns.some(turnIsOpen) && live === null;

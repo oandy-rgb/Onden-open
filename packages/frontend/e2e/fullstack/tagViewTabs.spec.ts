@@ -94,9 +94,9 @@ test("tag page: a calendar added from 「＋」 uses the date field picked; the 
     // "exam" has no date-like name: the old guess would have used updated_at.
     await page.getByRole("button", { name: "Add a view" }).click();
     const panel = page.getByRole("dialog", { name: "Add a view" });
+    // The calendar is made at once with the tag's date field (no question first, #1848): the note lands on the 15th, the
+    // day in "exam", not today's updated_at.
     await panel.getByRole("button", { name: "Calendar", exact: true }).click();
-    await expect(panel.getByRole("combobox", { name: "Date field" })).toHaveValue("exam");
-    await panel.getByRole("button", { name: "Add view", exact: true }).click();
     const cell = page.locator(".cv-cal-cell", { has: page.locator(".cv-cal-chip", { hasText: title }) });
     await expect(cell.locator(".cv-cal-daynum")).toHaveText("15");
     await page.screenshot({ path: `${SHOTS}/view-modules-calendar.png` });

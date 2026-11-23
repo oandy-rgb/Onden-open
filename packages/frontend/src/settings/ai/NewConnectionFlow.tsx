@@ -18,7 +18,7 @@ import "./strings";
 // (an AI is given, `forRole`). It asks: the kind (an API key, or a connection code for your own AI) → for a key its
 // address and key and 「測試」 (only a passed test may be saved) → who uses it: an AI that exists, a new AI, or nobody
 // yet (a key only) → for an AI on a key, its model (from the list that key reports) and monthly limit.
-// Nothing here opens a space's 「讓 AI 讀」 switch: a new AI stands only where AI reading is already on (the server decides).
+// Nothing here opens a space's 「AI 可以讀」 switch: a new AI stands only where AI reading is already on (the server decides).
 
 type Kind = "key" | "code";
 type Target = "existing" | "new" | "none";

@@ -275,7 +275,7 @@
       "packages/frontend/src/components/SidebarTagTree.tsx": ["TAG_FILTER_THRESHOLD"],
       "packages/frontend/src/components/SpaceFilter.tsx": ["SpaceFilterProps"],
       "packages/frontend/src/components/SyncStatus.tsx": ["SyncTrouble"],
-      "packages/frontend/src/components/TagsPanel.tsx": ["SchemaEditor", "SchemaFieldClash", "fieldKeyFrom"],
+      "packages/frontend/src/components/TagsPanel.tsx": ["SchemaEditor", "SchemaFieldClash"],
       "packages/frontend/src/components/WhatsNewCard.tsx": ["WHATS_NEW_CARD_MAX"],
       "packages/frontend/src/components/collections/CollectionView.tsx": ["renderLayout"],
       "packages/frontend/src/components/compare/TextCompareView.tsx": ["COMPARE_TIMEOUT_MS", "CompareChanges", "CompareLayout", "compareChanges"],

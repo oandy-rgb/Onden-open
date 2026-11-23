@@ -14,7 +14,7 @@ import "./strings";
 
 // 換連線: point an AI at another saved key (with its model and limit), at a connection code for your own AI, or at a
 // connection that is made right now. Only the AI's connection changes: where it stands in each space, and each
-// space's 「讓 AI 讀」 switch, are not touched.
+// space's 「AI 可以讀」 switch, are not touched.
 
 export default function ChangeConnectionFlow({ role, data, online, aiOn, onDone, onFresh, onCancel }: {
   role: AiRoleInfo; data: AiPageData; online: boolean; aiOn: boolean;

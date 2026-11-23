@@ -21,8 +21,8 @@ import { isNote } from "@onden/markdown/contract";
 //     article opens), so a passage is not written twice without a click ever
 //     waiting on a lookup;
 //   appendToNote(targetId, block)             — the same append for any block
-//     (「寫點什麼」 › 加到現有筆記… with this session's excerpts);
-//   startDraft({ embeds, source, destination }) — 「寫點什麼」 › 新草稿.
+//     (「引用到筆記」 › 加到現有筆記… with this session's excerpts);
+//   startDraft({ embeds, source, destination }) — 「引用到筆記」 › 新草稿.
 //
 // An excerpt lives in a note YOU write (today's note by default); the
 // embed `![[Note/first words]]` shows it elsewhere without copying it
@@ -132,7 +132,7 @@ export function knownExcerpt(known: readonly KnownExcerpt[], url: string | null,
   return url ? known.find((k) => sameExcerpt(k.excerpt, { url, exact: text })) ?? null : null;
 }
 
-/** 「寫點什麼」 › 新草稿: a plain note, created the way quick capture creates
+/** 「引用到筆記」 › 新草稿: a plain note, created the way quick capture creates
  *  one (noteWriter.create with a client id), at `destination` — its parent
  *  note and tags; with no parent, under today's note, as quick capture
  *  does. Carries this session's excerpts as embeds (or just the source line)
@@ -158,7 +158,7 @@ async function createDraft(title: string, markdown: string, destination: RssDest
   return { nodeId: created.node.id, status: created.status === "queued" ? "queued" : "synced" };
 }
 
-/** What 「寫點什麼」 starts with: the excerpts' embeds, each showing its quote
+/** What 「引用到筆記」 starts with: the excerpts' embeds, each showing its quote
  *  and source; the article's source line when there are none. */
 export function draftBlock(embeds: readonly string[], source: QuoteSource): string {
   return embeds.length > 0 ? embeds.join("\n\n") : quoteSourceLine(source);

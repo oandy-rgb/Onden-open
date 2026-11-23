@@ -1,5 +1,5 @@
 // 設定 › AI: one card or two areas from the counts, first use, a key that is tested before it is kept, an AI that
-// lost its key, and above all: no flow ever turns a space's 「讓 AI 讀」 switch on.
+// lost its key, and above all: no flow ever turns a space's 「AI 可以讀」 switch on.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -131,7 +131,7 @@ describe("設定 › AI: first use", () => {
     await waitFor(() => expect(writes().some((c) => c.path === "/api/ai/roles")).toBe(true));
     const made = writes().find((c) => c.path === "/api/ai/roles")!;
     expect(made.body).toMatchObject({ name: "AI", connection: { kind: "api_new", base_url: "https://ai.example.com", model: "m-1", cap: { kind: "unlimited" } } });
-    expect(spaceWrites()).toEqual([]);            // no space's 「讓 AI 讀」 is opened by this flow
+    expect(spaceWrites()).toEqual([]);            // no space's 「AI 可以讀」 is opened by this flow
     // One key and one AI: now one card.
     expect(await screen.findByText("@ai")).toBeInTheDocument();
     expect(document.querySelector(".ai-settings")).toHaveAttribute("data-layout", "merged");

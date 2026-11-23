@@ -80,7 +80,7 @@ const FEATURES = [
   ["handwritingFillsHeight.mjs"], ["keyboardScrollNoJitter.mjs"],
   ["listBackNoJump.mjs", "mobile-chrome"], ["partLinks.mjs"], ["pdfNoteText.mjs"], ["phoneBackList.mjs"], ["scrollJitter.mjs"],
   ["sidebarSpringOpen.mjs"], ["textStylePopover.mjs"], ["touchFocusCaret.mjs"], ["touchSelection.mjs"],
-  ["bigInk.mjs"], ["contentTabRemovable.mjs"], ["phoneAiPanel.mjs"], ["reviewCardFront.mjs"], ["reviewGroups.mjs"], ["splitNoteWraps.mjs"], ["phoneViewTabs.mjs"],
+  ["bigInk.mjs"], ["contentTabRemovable.mjs"], ["phoneAiPanel.mjs"], ["reviewCardFront.mjs"], ["reviewGroups.mjs"], ["splitNoteWraps.mjs"], ["phoneViewTabs.mjs"], ["tabletViews.mjs"],
 ];
 const dirArgs = passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir");
 for (const [script, ...args] of chromiumRan ? FEATURES : []) {

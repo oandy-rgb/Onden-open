@@ -138,3 +138,15 @@ describe("within one space", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("a note dropped on the line of a space with no notes yet", () => {
+  it("goes to that space, like the heading above it", async () => {
+    const NEW = space("sp-new", "Year 3");
+    await setup([ME, TEAM, NEW]);
+    const row = document.querySelector<HTMLElement>('[data-sb-space-none="sp-new"]')!;
+    expect(row).not.toBeNull();
+    await drag(select("a"), row, "mouse");
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Year 3");
+  });
+});

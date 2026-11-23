@@ -5760,6 +5760,31 @@
       "replaces": "另做一把只限某幾個空間的權杖，或在每個讀取入口另寫「這個人只能看這幾個空間」的判斷",
       "rules": [],
       "why": "工作階段是 actors 的一列（type 'session'），所以它能讀寫什麼由 space_members 與同一條空間規則決定，並且永遠不比開它的人寬；沒有第二條權限判斷。結束與到期由資料庫時間在每個請求判斷，憑證只存雜湊。"
+    },
+    {
+      "id": "press-feedback",
+      "need": "按下去要好幾秒才有結果、或結果在頁面外的操作（發布網站、下載備份或匯出的檔案）：要先說正在做什麼，再說結果",
+      "area": "共用邏輯",
+      "entry": [
+        {
+          "file": "packages/frontend/src/lib/pressFeedback.ts",
+          "exports": [
+            "announceDownloadPreparing",
+            "publishedAnswer",
+            "savedMessage"
+          ]
+        },
+        {
+          "file": "packages/frontend/src/lib/appStore.ts",
+          "exports": [
+            "startWorking"
+          ]
+        }
+      ],
+      "use": "import { startWorking } from \"./lib/appStore\";\nimport { publishedAnswer } from \"./lib/pressFeedback\";\nexport async function publishWithAnswer(publish: () => Promise<{ url: string }>) {\n  const notice = startWorking(\"Publishing the site…\");\n  try { publishedAnswer(notice, (await publish()).url); } catch { notice.dismiss(); }\n}",
+      "replaces": "每個畫面自己寫一句「處理中」、或按下後什麼都不顯示",
+      "rules": [],
+      "why": "一則提示先說「進行中」，完成時原地變成結果（含時間、檔名、動作鈕），失敗時變成原因；在對話框開著時也看得到。失敗已由寫入層回報時用 dismiss，不重複通知。"
     }
   ]
 }

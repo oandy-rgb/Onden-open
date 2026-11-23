@@ -1,4 +1,4 @@
-import { fieldNameClashes, newFieldNameClashes, type FieldClashRow } from "@onden/markdown";
+import { cutToGraphemes, fieldNameClashes, isAttributeKey, newFieldNameClashes, normalizeText, WORD_CHARS, type FieldClashRow } from "@onden/markdown";
 import type { SchemaField, Tag } from "./api";
 
 // Field inheritance (docs/architecture/module-library.md rule 2): the fields
@@ -68,4 +68,20 @@ export function selectOptionsPatch(field: { default?: string }, options: string[
  *  (`1e3` is a number to the browser's number box but not to the server's rule). */
 export function numberDefaultFrom(raw: string): string | undefined {
   return /^-?\d+(\.\d+)?$/.test(raw) ? raw : undefined;
+}
+
+const NON_KEY_RUN = new RegExp(`[^${WORD_CHARS}]+`, "gu");
+export function fieldKeyFrom(label: string): string {
+  const words = normalizeText(label).trim().toLowerCase().replace(NON_KEY_RUN, "_").replace(/^_+|_+$/g, "");
+  const key = cutToGraphemes(words, 40).replace(/_+$/, "");
+  if (!key) return "field";
+  return isAttributeKey(key) ? key : `f_${key}`;
+}
+
+/** `base`, or `base_2`, `base_3`… — the first key not in `taken` (the tag's other fields and the names around it). */
+export function uniqueFieldKey(base: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  let key = base, n = 2;
+  while (used.has(key)) key = `${base}_${n++}`;
+  return key;
 }

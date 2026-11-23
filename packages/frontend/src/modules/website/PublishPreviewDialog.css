@@ -1,4 +1,11 @@
 .shell-dialog.publish-review { width: min(640px, calc(100vw - 32px)); max-height: min(85vh, 760px); overflow: auto; }
+/* The long list scrolls by itself; the buttons stay at the bottom of the dialog where the thumb can find them. */
+.shell-dialog.publish-preview-dialog { display: flex; flex-direction: column; overflow: hidden; }
+.publish-preview-dialog .shell-dialog-content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 0; }
+.publish-review-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--ac-space-6) var(--ac-space-6) var(--ac-space-4); }
+.publish-preview-dialog .publish-review-actions { flex: 0 0 auto; margin-top: 0; padding: var(--ac-space-5) var(--ac-space-6); border-top: var(--ac-border-thin) solid var(--ac-line); }
+.publish-review-standing { margin-top: var(--ac-space-6); }
+.publish-review h3.publish-review-group { margin: 0 0 var(--ac-space-1); font-size: var(--ac-fs-base); }
 .publish-review-title { margin: 0 0 4px; font-size: var(--ac-fs-lg); }
 .publish-review h3 { margin: 14px 0 6px; font-size: var(--ac-fs-caption); }
 .publish-review-hint, .publish-review-note { color: var(--ac-muted); font-size: var(--ac-fs-caption); }
@@ -13,3 +20,4 @@
 .publish-review-site-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--ac-muted); }
 .publish-review-site-frame { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-md); }
 .publish-left-out-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.publish-review-site-note { margin: var(--ac-space-4) var(--ac-space-5) 0; }

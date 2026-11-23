@@ -9,7 +9,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ViewTabs } from "../components/viewTabs";
-import { reads } from "../lib/data";
+import { reads, tagSchemaWriter } from "../lib/data";
 import { resetAppState, setAppState } from "../lib/appStore";
 import { resetOwnerViews } from "../lib/ownerViews";
 import { takeViewSettingsRequest } from "../lib/viewSettingsRequest";
@@ -201,13 +201,100 @@ describe("ViewTabs", () => {
     expect(edit).toHaveBeenCalled();
   });
 
-  it("a calendar with no date field explains the built-in dates and still can be added", async () => {
+  // A first view is made at once from the default the chooser has already picked; the field is changed in the view's settings.
+  it("adding a calendar places it by the page's date field without asking first", async () => {
+    renderTabs({ fields: [{ name: "due", type: "date" }, { name: "mood", type: "text" }] });
+    fireEvent.click(within(await openAdd()).getByRole("button", { name: "Calendar" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ layout: "calendar", layout_config: { date_field: "due" } }));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("new-id"));
+  });
+
+  it("a calendar on a page with no date field uses the created date, and is still added at once", async () => {
     renderTabs({ fields: [{ name: "mood", type: "text" }] });
     fireEvent.click(within(await openAdd()).getByRole("button", { name: "Calendar" }));
-    expect(await screen.findByRole("note")).toHaveTextContent(/no date field yet.*Created date or Last edited date/);
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent)).toEqual(["Created date", "Last edited date"]);
-    expect(screen.getByRole("button", { name: "Add view" })).toBeEnabled();
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ layout: "calendar", layout_config: { date_field: "created_at" } }));
+  });
+
+  it("adding cards picks the cover itself (automatic) and asks nothing", async () => {
+    renderTabs({ fields: [{ name: "mood", type: "text" }] });
+    fireEvent.click(within(await openAdd()).getByRole("button", { name: "Cards" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ layout: "gallery" }));
+  });
+
+  it("a board with a select field is added at once, split by it", async () => {
+    renderTabs({ fields: [{ name: "status", type: "select", options: ["a", "b"] }] });
+    fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+    await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+    expect(writes.create).toHaveBeenCalledWith({ kind: "node", id: NODE }, expect.objectContaining({ layout: "kanban", group_by: "status" }));
+  });
+
+  const putTag = (own: unknown[], effective?: unknown[]) => setAppState((s) => ({ data: { ...s.data, tags: [{ id: NODE, name: "task", parent_id: null, schema_fields: own, effective_fields: effective ?? own, schema_extends: [] }] as never } }));
+
+  it("on a tag with nothing to split by, the board's explanation has a button that adds a Status field and then the board", async () => {
+    const update = vi.spyOn(tagSchemaWriter, "update").mockResolvedValue({ status: "ok" } as never);
+    try {
+      putTag([]);
+      renderTabs({ owner: { kind: "tag", id: NODE, name: "task" }, fields: [] });
+      fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+      expect(await screen.findByRole("note")).toHaveTextContent(/Add a Select field/);
+      fireEvent.click(screen.getByRole("button", { name: "Add a “Status” field" }));
+      await waitFor(() => expect(writes.create).toHaveBeenCalledTimes(1));
+      // the key is fixed (not the interface language's word); the label is the shown name
+      expect(update).toHaveBeenCalledWith(NODE, { fields: [{ name: "status", label: "Status", type: "select", options: ["To do", "In progress", "Done"] }] });
+      expect(writes.create).toHaveBeenCalledWith({ kind: "tag", id: NODE }, expect.objectContaining({ layout: "kanban", group_by: "status" }));
+    } finally { update.mockRestore(); }
+  });
+
+  it("a tag that inherits fields sends only its own list plus the new field: nothing is copied from the tags above", async () => {
+    const update = vi.spyOn(tagSchemaWriter, "update").mockResolvedValue({ status: "ok" } as never);
+    try {
+      const inherited = { name: "author", type: "text", inherited_from: "book" };
+      const own = { name: "pages", type: "number" };
+      putTag([own], [inherited, own]);
+      // A text field is on offer to split by, so the board is not stopped: ask for the field button through a tag with only a number field
+      renderTabs({ owner: { kind: "tag", id: NODE, name: "task" }, fields: [] });
+      fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Add a “Status” field" }));
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      const sent = (update.mock.calls[0]![1] as { fields: Array<{ name: string }> }).fields.map((f) => f.name);
+      expect(sent).toEqual(["pages", "status"]);
+    } finally { update.mockRestore(); }
+  });
+
+  it("the new field's key avoids the names the tag already has or inherits", async () => {
+    const update = vi.spyOn(tagSchemaWriter, "update").mockResolvedValue({ status: "ok" } as never);
+    try {
+      putTag([{ name: "status", type: "text" }]);
+      renderTabs({ owner: { kind: "tag", id: NODE, name: "task" }, fields: [] });
+      fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Add a “Status” field" }));
+      await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      expect((update.mock.calls[0]![1] as { fields: Array<{ name: string }> }).fields.map((f) => f.name)).toEqual(["status", "status_2"]);
+    } finally { update.mockRestore(); }
+  });
+
+  it("a refused field write adds no board", async () => {
+    const update = vi.spyOn(tagSchemaWriter, "update").mockRejectedValue(new Error("refused"));
+    try {
+      putTag([]);
+      renderTabs({ owner: { kind: "tag", id: NODE, name: "task" }, fields: [] });
+      fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Add a “Status” field" }));
+      await waitFor(() => expect(update).toHaveBeenCalled());
+      expect(writes.create).not.toHaveBeenCalled();
+    } finally { update.mockRestore(); }
+  });
+
+  it("a note's board explanation has no field button (the sub-notes' tag is not this panel's to change)", async () => {
+    renderTabs({ fields: [] });
+    fireEvent.click(within(await openAdd()).getByRole("button", { name: "Board" }));
+    await screen.findByRole("note");
+    expect(screen.queryByRole("button", { name: "Add a “Status” field" })).toBeNull();
   });
 
   it("renames a view from its menu", async () => {

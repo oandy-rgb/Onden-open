@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: 10px;
   width: min(440px, 95vw);
-  max-height: min(560px, 80dvh);
+  max-height: min(560px, calc(100dvh - var(--ac-space-8)));
   box-sizing: border-box;
   padding: 14px;
   background: var(--ac-surface);

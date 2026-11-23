@@ -27,7 +27,7 @@ type Dialog = { kind: "connection" } | { kind: "ai" } | { kind: "change"; id: st
 // Settings › AI (owner only; docs/agents/decisions-ai-collaboration.md「設定 › AI」). A connection (an API key, or a
 // connection code for the owner's own AI) and an AI are separate things. One connection and one AI is drawn as one
 // card; anything else as two areas, 「連線」 and 「你的 AI」, from the same cards. Nothing here opens a space's
-// 「讓 AI 讀」 switch.
+// 「AI 可以讀」 switch.
 export default function AiSettings({ ctx }: { ctx: SettingContext }) {
   const t = useT();
   const isOwner = useIsOwner();

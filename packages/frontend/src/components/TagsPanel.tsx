@@ -1,4 +1,4 @@
-import { numberDefaultFrom, selectOptionsPatch } from "../lib/tagFields";
+import { fieldKeyFrom, numberDefaultFrom, selectOptionsPatch, uniqueFieldKey } from "../lib/tagFields";
 import { ChevronUp, ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { FieldDef } from "../lib/api";
 import { t as tr, useT } from "../lib/i18n";
@@ -9,7 +9,6 @@ import { Button, Checkbox, Pressable, Select, TextField } from "./ui";
 import { reads } from "../lib/data";
 import type { FieldUsage } from "../hooks/useFieldUsage";
 import { confirmFieldRemoval } from "./confirmFieldRemoval";
-import { isAttributeKey, normalizeText, WORD_CHARS, cutToGraphemes } from "@onden/markdown";
 import { downloadBlob } from "../lib/download";
 import EmptyState from "./EmptyState";
 
@@ -55,23 +54,14 @@ export async function exportTagPack(tag: { id: string; name: string; schema_slug
 // the one attribute key grammar (@onden/markdown isAttributeKey, D44), so it
 // survives an export and re-import: a label starting with a digit gets `f_`.
 // A label's combining marks stay (`कीमत`, not `क_मत`) and the key is NFC (D58).
-const NON_KEY_RUN = new RegExp(`[^${WORD_CHARS}]+`, "gu");
-export function fieldKeyFrom(label: string): string {
-  const words = normalizeText(label).trim().toLowerCase().replace(NON_KEY_RUN, "_").replace(/^_+|_+$/g, "");
-  const key = cutToGraphemes(words, 40).replace(/_+$/, "");
-  if (!key) return "field";
-  return isAttributeKey(key) ? key : `f_${key}`;
-}
+export { fieldKeyFrom };
 function committedKeyOf(f: FieldDef): string { return f.name || f.key || ""; }
 /** A field another tag has the name of: `tag` names that tag, `field` the
  *  field as it shows there, `below` whether that tag is under this one. */
 export type SchemaFieldClash = { tag: string; field: string; below: boolean };
 
 function uniqueKey(base: string, fields: FieldDef[], selfIdx: number, alsoTaken: readonly string[] = []): string {
-  const taken = new Set([...fields.filter((_, i) => i !== selfIdx).map(committedKeyOf), ...alsoTaken]);
-  let k = base, n = 2;
-  while (taken.has(k)) k = `${base}_${n++}`;
-  return k;
+  return uniqueFieldKey(base, [...fields.filter((_, i) => i !== selfIdx).map(committedKeyOf), ...alsoTaken]);
 }
 /** A new field from what the person typed: the key is derived from the name, and differs from every
  *  field already there and every name taken above or below (`takenNames`). */

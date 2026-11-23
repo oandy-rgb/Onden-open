@@ -4,7 +4,8 @@
 // changed in between is previewed again instead of published. Used by the
 // Studio's Publish → and the timeline's Publish….
 import { useRef, useState } from "react";
-import { addToast } from "../../lib/appStore";
+import { addToast, startWorking } from "../../lib/appStore";
+import { publishedAnswer } from "../../lib/pressFeedback";
 import { writeErrors } from "../../lib/data";
 import { t } from "../../lib/i18n";
 import { precompileDiagrams } from "../../lib/diagramPrecompile";
@@ -78,15 +79,19 @@ export function usePublishReview(writer: Writer) {
     const current = pending;
     if (!current || busy.current) return null;
     busy.current = true; setPublishing(true);
+    // The dialog closes within a second of a good publish: this notice is what tells the person how it went.
+    const notice = startWorking(t("Publishing the site…"));
     try {
       // Flowcharts are laid out here, in the browser that has mermaid, and only
       // their data goes up; what is not ready in time is drawn by the reader's browser.
       const diagrams = await precompileDiagrams(current.preview.diagrams_needed ?? []);
       const result = await writer.publish({ ...current.body, ...(diagrams.length > 0 ? { diagrams } : {}), preview_hash: current.preview.hash });
       setPending(null);
+      publishedAnswer(notice, result.url);
       return result;
     } catch (error) {
-      // Reported by the writer. Stale: show what would go out now instead.
+      // The writer reported why (an error notice); this one has nothing left to say. Stale: show what would go out now instead.
+      notice.dismiss();
       if (isPreviewStale(error)) await load(current.body).catch((e) => { setPending(null); writeErrors.report(e, addToast); });
       return null;
     } finally { busy.current = false; setPublishing(false); }

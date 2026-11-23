@@ -74,6 +74,17 @@ describe("note write lifecycle", () => {
       JSON.stringify({ id: result.node.id }), key);
   });
 
+  it("names the copy in the person's language and tells the server the same ending", async () => {
+    setLocalePref("zh-TW");
+    try {
+      const h = harness();
+      const result = await h.writer.duplicate(note);
+      expect(result.node.title).toBe("Original 副本");
+      const body = JSON.parse(String(mocks.api.mock.calls[0]![1].body));
+      expect(body).toMatchObject({ copy_suffix: " 副本" });
+    } finally { setLocalePref("en"); }
+  });
+
   it("rolls back only a permanently refused duplicate and retains its rejected intent", async () => {
     const h = harness();
     mocks.api.mockRejectedValueOnce(new ApiError(403, "forbidden"));

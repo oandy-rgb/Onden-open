@@ -8,7 +8,7 @@ import { useT } from "../../lib/i18n";
 import "./RssSheets.css";
 import { listsAsNote } from "../../lib/nodeTags";
 
-// Pick the note a quote (or 「寫點什麼」's text) is appended to: the same
+// Pick the note a quote (or 「引用到筆記」's text) is appended to: the same
 // note picker as 「存到」's 「在筆記裡」 (RssDestinationFields → ParentPicker),
 // notes only, in a sheet. Picking closes it; the caller appends.
 

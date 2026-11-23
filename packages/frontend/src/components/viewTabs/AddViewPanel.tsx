@@ -8,8 +8,8 @@ import type { AddViewSource } from "./useAddView";
 // What is listed and what choosing does is `AddViewSource` (useAddView), the
 // same the note's ⋯ › 檢視 uses; the choice and the field it asks for are the
 // collections' LayoutChooser, the same step 「⚙」 shows when a view's layout
-// is changed. The whiteboard and the table are added at once; the others first
-// ask for the one field they need, and the answer is stored on the view.
+// is changed. A view is added at once, placed by the field the chooser already has a default for (a date, a cover,
+// a select field); only a board with nothing to split by stops at its explanation, with a button that adds one.
 
 type Props = {
   popover: PopoverState<HTMLElement>;
@@ -26,6 +26,7 @@ export default function AddViewPanel({ popover, source, onEditFields, onClose }:
       <LayoutChooser
         choices={source.choices} fields={source.fields} ownerKind={source.ownerKind} busy={source.busy} submitLabel={t("Add view")}
         onChoose={(picked, chosen) => { onClose(); void source.add(picked, chosen); }}
+        onAddStatusField={source.addStatusField}
         onEditFields={onEditFields && (() => { onClose(); onEditFields(); })}
       />
     </Popover>

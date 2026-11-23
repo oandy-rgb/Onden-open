@@ -40,7 +40,7 @@ export const AI_SETTINGS_ZH_TW: Record<string, string> = {
   "Change connection": "換連線",
   "The key it used was deleted.": "它用的金鑰已刪除。",
   "It has no connection yet.": "它還沒有連線。",
-  "Give it “Can edit” in a space that lets AI read, so it can suggest changes there.": "在一個讓 AI 讀的空間給它「可編輯」，它才能在那裡提建議。",
+  "Give it “Can edit” in a space that lets AI read, so it can suggest changes there.": "在一個開啟「AI 可以讀」的空間給它「可編輯」，它才能在那裡提建議。",
   "Stopped": "停用中",
   "Not ready yet": "還不能用",
 
@@ -113,12 +113,12 @@ export const AI_SETTINGS_ZH_TW: Record<string, string> = {
   "Remove this AI": "刪除這個 AI",
 
   // 空間權限（「設定 › AI」與「空間與成員」共用）
-  "This space doesn't let AI read.": "這個空間不讓 AI 讀。",
-  "This space doesn't let AI read, so “{standing}” has no effect now. Letting AI read here brings it back.": "這個空間不讓 AI 讀，所以「{standing}」現在沒有作用。打開讓 AI 讀就會恢復。",
+  "This space doesn't let AI read.": "這個空間沒有開啟「AI 可以讀」。",
+  "This space doesn't let AI read, so “{standing}” has no effect now. Letting AI read here brings it back.": "這個空間沒有開啟「AI 可以讀」，所以「{standing}」現在沒有作用。打開「AI 可以讀」就會恢復。",
   "The connection code was already made, but its reply was lost, so it can't be shown again. Revoke it and make a new one.": "連線碼已經產生了，但回應遺失，沒辦法再顯示一次。請作廢它後再做一組新的。",
   "The key was saved, but it could not be found again. Close this and look in the list.": "金鑰已儲存，但找不到它。請關閉後到清單裡看。",
-  "Let AI read here": "打開讓 AI 讀",
-  "Let AI read the notes in “{space}”? Every AI that stands in this space will be able to read them.": "要讓 AI 讀「{space}」裡的筆記嗎？所有在這個空間裡的 AI 都會讀得到。",
+  "Let AI read here": "打開「AI 可以讀」",
+  "Let AI read the notes in “{space}”? Every AI that stands in this space will be able to read them.": "要開啟「{space}」的「AI 可以讀」嗎？所有在這個空間裡的 AI 都會讀得到。",
 
   // 舊入口的提示（空間與成員）
 

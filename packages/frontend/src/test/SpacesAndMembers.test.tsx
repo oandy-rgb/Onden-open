@@ -276,6 +276,15 @@ describe("空間與成員 (owner, two columns)", () => {
     await waitFor(() => expect(writes()).toContainEqual({ method: "POST", path: "/api/spaces", body: { name: "Reading" } }));
   });
 
+  it("a space has a visible next step: a button that starts its first note there", async () => {
+    serve();
+    const newNoteInSpace = vi.fn();
+    render(<SpacesAndMembers ctx={{ ...ctx, newNoteInSpace }} />);
+    await waitFor(() => space("lab"));
+    fireEvent.click(screen.getByRole("button", { name: "New note in this space" }));
+    expect(newNoteInSpace).toHaveBeenCalledWith("lab");
+  });
+
   it("an AI role's own things (how it runs, pause, its key) sit under it, and nothing is lost", async () => {
     botIn("lab", "view");
     runners = [{ actor_id: "bot", handle: "ai", enabled: true }];

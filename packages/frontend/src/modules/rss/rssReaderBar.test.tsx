@@ -39,7 +39,7 @@ import { addPendingWrite, getPendingWrites, clearPendingWrite } from "../../lib/
 import { memoryQueue } from "../../test/helpers/memoryQueue";
 import RssReaderPanel from "./RssReaderPanel";
 import { noWorkspaceData, type Tag } from "../../lib/api";
-import { resetAppState } from "../../lib/appStore";
+import { resetAppState, getAppState } from "../../lib/appStore";
 
 const LONG = `<p>${"A full paragraph of the article. ".repeat(40)}</p>`;
 const SHORT = "<p>Only a short description…</p>";
@@ -121,7 +121,7 @@ describe("RSS reader: saving the whole article", () => {
     await userEvent.click(await screen.findByRole("button", { name: /First story/ }));
     await screen.findByRole("heading", { name: /First story/ });
     await userEvent.click(within(endSave()).getByRole("button", { name: /Save to notes/ }));
-    expect(await screen.findByText("Saved on this device — it will sync when the server is reachable.")).toBeInTheDocument();
+    await waitFor(() => expect(getAppState().toasts.map((toast) => toast.message)).toContain("Saved on this device — it will sync when the server is reachable."));
     const minted = JSON.parse(String(sendOrQueueMock.mock.calls[0]![2])).node_id;
     await userEvent.click(within(endSave()).getByRole("button", { name: /Saved · open note/ }));
     expect(onOpenNode).toHaveBeenCalledWith(minted);

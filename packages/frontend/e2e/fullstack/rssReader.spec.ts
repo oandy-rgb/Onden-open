@@ -254,7 +254,7 @@ test.describe("mobile reading immersion", () => {
     await page.locator(".rss-article-end").scrollIntoViewIfNeeded();
     await expect(page.locator(".rss-next-btn")).toBeVisible();
     const row = page.locator(".rss-article-end .rss-end-actions");
-    const write = row.getByRole("button", { name: /Write something|寫點什麼/ });
+    const write = row.getByRole("button", { name: /Write something|引用到筆記/ });
     const save = row.locator(".rss-act-save");
     await expect(write).toBeVisible();
     await expect(save).toBeVisible();

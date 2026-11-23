@@ -19,7 +19,7 @@ vi.mock("../../lib/data", async (importOriginal) => {
 
 import RssReaderPanel from "./RssReaderPanel";
 import { noWorkspaceData, type ContentNode, type Tag } from "../../lib/api";
-import { resetAppState } from "../../lib/appStore";
+import { resetAppState, getAppState } from "../../lib/appStore";
 
 const tag = (id: string, name: string, parent_id: string | null = null) => ({ id, name, parent_id, color: "", schema_id: null }) as Tag;
 const note = (id: string, title: string, node_type = "content"): ContentNode =>
@@ -73,6 +73,9 @@ describe("RSS save sheet", () => {
     expect(body.destination).toBeUndefined(); // the server files it at the default
     expect(body.node_id).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // "Saved — it's a regular note now." is a toast: the notice line would push the whole list down.
+    expect(document.querySelector(".rss-notice")).toBeNull();
+    expect(getAppState().toasts.map((toast) => toast.message)).toContain("Saved — it's a regular note now.");
   });
 
   it("changing the destination sends it: a quick tag, another parent note", async () => {

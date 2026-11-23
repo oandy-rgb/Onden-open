@@ -77,6 +77,21 @@
 
 ## 紀錄
 
+### 2026-11-17　新使用者的第一條路（建空間 → 放第一則筆記）沒有任何測試走過（擁有者在真平板上先發現）
+- **發生了什麼**：擁有者在 Galaxy Tab S9 上以新使用者的方式建了一個空間，找不到地方放第一則筆記：空的空間不出現在側欄；選位置清單輸入空間名稱找不到；鍵盤打開時清單只剩一列半；空間設定頁建完沒有下一步；建立面板第一次打開出現在左上角；AI 面板的按鈕開到空間清單，且同一個開關有三種名字。
+- **證據**：`groupRootsBySpace` 一律濾掉沒有筆記的空間；`PlacePicker` 只比對筆記標題；`usePopover` 的定位 effect 只在 `open` 變動時跑，第一次打開時延後載入的面板還沒掛上；`i18n.zh-TW.late.ts` 的「可以送給 AI」與設定頁的「AI 可以讀」並存。
+- **發現者**：擁有者（真機）。
+- **為什麼沒擋到**：每個零件各自有測試，但都從「已經有筆記的空間」起跳；沒有測試從空白工作區走完整條第一次使用的路，也沒有人檢查「同一個概念的名字」跨檔案一致。
+- **類別**：邊界沒走到（空集合、第一次載入）；同一概念多個名字。
+- **機制**：`createSheet.test.tsx` 的「a space with no notes yet」、`uiPopoverLazyBody.test.tsx`、`aiReadWording.test.ts`（掃所有 zh 字串檔，舊說法一出現就失敗）、`e2e/fullstack/newSpaceFirstNote.spec.ts`。鍵盤打開時的清單高度只有 `placePickerLayout.test.ts` 擋掉寫死扣除高度的寫法；實際高度尚無自動量測，靠 Playwright 手動量過（真機未驗證）。
+### 2026-11-17　窄欄（平板三欄都開，中欄約 435px）一次露出八個版面問題（邊界沒走到）
+- **發生了什麼**：Galaxy Tab S9 上，分頁列的「＋」被右邊按鈕蓋住、「新增檢視」面板第一次打開只有 38–66px 寬、簡報的「換成…」清單疊在投影片上沒有底色、卡片顯示 `updated_at`、白板開在 40%、選卡片的按鈕列蓋住別張卡片。
+- **證據**：本批的 `e2e/browser-app/tabletViews.mjs`：在修正前的建置上量到「＋」被蓋、面板 66px、清單透明且「套用」高 24px；修正後全過。面板寬度的根因是 `.cv-add-view-panel` 的樣式放在較晚載入的 `CollectionView.css`，面板本身卻在開機就載入。
+- **發現者**：實機。
+- **為什麼沒擋到**：版面稽核（layout-audit）的寬度只有 900、1100、1280 這些「視窗」寬度，沒有「視窗寬、窗格窄」的組合；元件測試在 happy-dom 量不到版面；樣式表歸屬沒有檢查。
+- **類別**：邊界沒走到（最窄的一格）、零件對、組裝錯（樣式表與元件分開載入）。
+- **機制**：1 層：`test/guards/narrowColumn.guard.test.ts`（分頁清單才捲動、面板樣式跟元件載入、簡報窄版看容器寬度）、`viewFieldNames.test.tsx`（檢視不露內部欄位名）；3 層：`e2e/browser-app/tabletViews.mjs`（1204×714 觸控，量「＋」按得到、面板寬、清單不被切）。
+- **還沒擋住的**：`tabletViews.mjs` 要擁有者指定才跑（CI 不自動跑）；layout-audit 還沒有「視窗寬、窗格窄」的寬度（可把 1204 加 `localStorage` 窗格寬度存成一個 viewport 項目）；其他分頁（日記、任務、閱讀）在 435px 未量。
 ### 2026-11-22　開機時「打開今天的日記」從立刻變成要等，晚到的結果蓋掉了使用者剛打開的筆記（零件對、組裝錯；#1953）
 - **發生了什麼**：#1953 讓 `findDayNode` 在個人空間未知時找不到任何筆記。全新的瀏覽器（e2e 每則都是）開機時空間還沒到，啟動落點（`useLandingNote`）因此不再立刻打開已存在的今天日記，改走 `openDailyNote`，它等空間清單（最多 3 秒）後才選取今天的日記；那時測試已經打開「Single …」，標題框變成今天的日期。同一個「晚到就蓋掉」在修正前也存在（今天的日記還不存在、要等空間才建的時候），只是很少走到。
 - **證據**：公開 run 45070671260，`inboxGovernance.spec.ts:118` `@critical`；分支 `fix/spaces-known-at-boot`，修正前 `firstRunLanding.test.tsx` 的 `leaves a note opened meanwhile alone` 與 `openDailyNote.test.ts` 的 `selects nothing when the caller no longer wants it` 紅。

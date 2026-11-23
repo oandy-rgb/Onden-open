@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copyText } from "../../lib/clipboard";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
 
 import { addToast } from "../../lib/appStore";
 import { aiRoleWriter, workspaceAccessWriter, writeErrors } from "../../lib/data";
 import { useT } from "../../lib/i18n";
 import { inviteLinkFor } from "../../lib/invite";
 import { spaceFilterStore } from "../../lib/settingsRequest";
+import { writableSpaces } from "../../lib/newNoteTarget";
 import { refreshSpaces, spaceApi, spaceLabel, useSpaces, type Space } from "../../lib/spaces";
 import { canManageSpace, useIsOwner } from "../../lib/capabilities";
 import { confirmDialog } from "../../components/ConfirmDialog";
@@ -169,6 +170,13 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
     <PersonDetail person={who} roster={roster} spaces={spaces} editable={isOwner} online={ctx.online} actions={actions} onTransfer={() => setTransferring(true)} />
   );
   const switches = selectedSpace && canManageSpace(selectedSpace) ? <SpaceSwitches key={selectedSpace.id} space={selectedSpace} onChanged={() => void reload()} /> : null;
+  // The next step after making a space: start its first note. Settings closes, then the workspace makes it.
+  const newNote = ctx.newNoteInSpace && selectedSpace && writableSpaces(spaces).some((s) => s.id === selectedSpace.id) ? (
+    <Button variant="secondary" size="sm" className="sm-new-note"
+      onClick={() => ctx.newNoteInSpace?.(selectedSpace.id)}>
+      <Plus size={16} aria-hidden="true" /> {t("New note in this space")}
+    </Button>
+  ) : null;
   const memberList = (space: Space | null, withDetail: boolean) => (
     <PeopleList {...list} people={ordered} space={space} selectedId={withDetail ? personId : null} detail={withDetail ? detail : undefined}
       defaultSpaceId={defaultSpaceId} onSelect={pickPerson} onInvite={invite} onAiCreated={() => void reload()} />
@@ -186,6 +194,7 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
         <section className="sm-col" aria-label={t("Spaces")}>
           <h3>{t("Spaces")}</h3>
           {spaceList(person)}
+          {!person && newNote}
           {!person && switches}
         </section>
         <section className="sm-col" aria-label={person ? t("Members") : t("Who is in {space}", { space: selectedSpace ? spaceLabel(selectedSpace) : "" })}>
@@ -210,6 +219,7 @@ export default function SpacesAndMembers({ ctx }: { ctx: SettingContext }) {
         <BackButton onBack={back} />
         <h3>{spaceLabel(selectedSpace)}</h3>
         <p className="sm-sentence" role="status">{lead}</p>
+        {newNote}
         {memberList(selectedSpace, false)}
         {switches}
       </section>

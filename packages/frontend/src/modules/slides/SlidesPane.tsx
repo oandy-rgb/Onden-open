@@ -4,7 +4,7 @@
 // layout or theme is the note's `slides_data` attribute. 「播放」 plays the same
 // slides full screen (PresentationPlayer draws this view's SlideView).
 import { anchorSpansOf, anchorsVersion, watchAnchors } from "../../lib/blockAnchorStore";
-import { Fragment, memo, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowDown, ArrowUp, Check, Copy, Download, GripVertical, Palette, Play, Plus, Trash2 } from "lucide-react";
 import { withPageLayout, withSlidesTheme, SLIDES_THEMES } from "@onden/markdown";
 import { Button, Menu, MenuItem, Switch, usePopover } from "../../components/ui";
@@ -17,6 +17,7 @@ import { useDragReorder } from "../../components/NavLayoutEditor";
 import { useFollowCaret, useSplit } from "../../lib/splitViewStore";
 import { drafts } from "../../lib/data";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { observeSize } from "../../lib/observeSize";
 import { displayTitle, untitledTitle } from "../../lib/noteLabel";
 import { useT } from "../../lib/i18n";
 import type { NoteViewPaneProps } from "../types";
@@ -43,9 +44,25 @@ const ThumbPic = memo(function ThumbPic({ page, layout, vars, render }: { page: 
   return <SlideView page={page} layout={layout} vars={vars} render={render} />;
 });
 
+/** slidesPane.css `@container sp (max-width: 719px)`: below this pane width the thumbnails are a row. */
+const SP_ROW_BELOW_PX = 720;
+
 export default function SlidesPane({ node, canEdit, onOpenNode }: NoteViewPaneProps) {
   const t = useT();
   const mobile = useIsMobile();
+  // The pane's own width, not the window's: slidesPane.css lays the thumbnails out as a row under 720px of pane (a
+  // phone, or a narrow side-by-side pane), and then the selected slide's tools go above the list, as on a phone; left in
+  // the 112px thumbnail they covered it (e2e slidesEdit, 2026-11-24). Unmeasured (0) keeps the column.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [narrowPane, setNarrowPane] = useState(false);
+  useLayoutEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    const measure = () => { const width = pane.getBoundingClientRect().width; setNarrowPane(width > 0 && width < SP_ROW_BELOW_PX); };
+    measure();
+    return observeSize(pane, measure);
+  }, []);
+  const toolsAbove = mobile || narrowPane;
   const nodes = useAllNodes();
   const { data, change } = useSlidesData(node);
   const { vars } = useDeckLook(data.theme);
@@ -234,11 +251,11 @@ export default function SlidesPane({ node, canEdit, onOpenNode }: NoteViewPanePr
   ) : null;
 
   return (
-    <div className="sp" onKeyDown={onKey}>
+    <div ref={paneRef} className="sp" onKeyDown={onKey}>
       <h1 className="sp-title">{displayTitle(node.title)}</h1>
       <div className={`sp-main${layoutOpen && !mobile ? " has-replace" : ""}`}>
         <div className="sp-side">
-          {mobile && tools}
+          {toolsAbove && tools}
           <ol ref={listRef} className="sp-thumbs" aria-label={t("Slides")}>
             {pages.map((p, i) => {
               const own = chosenLayout(p, data.layouts);
@@ -257,7 +274,7 @@ export default function SlidesPane({ node, canEdit, onOpenNode }: NoteViewPanePr
                     {canEdit && !mobile && (
                       <Button variant="icon" size="sm" className="sp-grip" title={t("Drag to move")} aria-label={t("Drag to move")} {...handle(p.key, i)}><GripVertical size={16} aria-hidden="true" /></Button>
                     )}
-                    {i === index && !mobile && tools}
+                    {i === index && !toolsAbove && tools}
                   </li>
                 </Fragment>
               );

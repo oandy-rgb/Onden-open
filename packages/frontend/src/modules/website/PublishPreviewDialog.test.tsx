@@ -8,7 +8,7 @@ import type { PublishPreview } from "@onden/contract";
 import { noWorkspaceData, type ContentNode } from "../../lib/api";
 import { resetAppState } from "../../lib/appStore";
 import { hintsSeenStore } from "../../lib/hintsSeenStore";
-import { setLocalePref } from "../../lib/i18n";
+import { dictionariesReady, setLocalePref } from "../../lib/i18n";
 import type { Space } from "../../lib/spaces";
 
 // The confirmation before a publish shows the candidate itself: what changes
@@ -71,6 +71,38 @@ describe("publish preview dialog", () => {
     expect(screen.getByText("In “Home”: [[Secret]] reads “(private)”")).toBeInTheDocument();
     expect(screen.getByText("a.png: it belongs to a private note")).toBeInTheDocument();
     expect(screen.getByText("b.png: the file is missing on the server")).toBeInTheDocument();
+  });
+
+  it("keeps what the site shows apart from what this publish changes, so 'nothing changed' does not sit over a long list", () => {
+    render(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={() => {}}
+      pending={pending({ ...base, diff: { ...nothing } })} />);
+    const group = screen.getByRole("group", { name: "What readers will and won't see" });
+    expect(screen.getByText("Nothing has changed since the last publish.").closest("[role=group]")).toBeNull();
+    expect(within(group).getByText("This is the same as last time. It is about what the site shows, not about this publish.")).toBeInTheDocument();
+    expect(within(group).getByText(/Links to private notes/)).toBeInTheDocument();
+    expect(within(group).getByText(/Images readers won't see/)).toBeInTheDocument();
+  });
+
+  it("the buttons stay outside the part that scrolls", () => {
+    render(<PublishPreviewDialog pending={pending()} publishing={false} online onConfirm={() => {}} onCancel={() => {}} />);
+    const body = document.querySelector(".publish-review-body")!;
+    expect(body).toContainElement(screen.getByText("New on the site (1)"));
+    for (const name of ["See the site", "Cancel", "Confirm & publish →"]) expect(body).not.toContainElement(screen.getByRole("button", { name }));
+  });
+
+  it("after a publish that did not go out, the same button offers another try", async () => {
+    const onConfirm = vi.fn(async () => false);
+    render(<PublishPreviewDialog pending={pending()} publishing={false} online onConfirm={onConfirm} onCancel={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & publish →" }));
+    expect(await screen.findByRole("button", { name: "Try publishing again →" })).toBeEnabled();
+  });
+
+  it("a private link reads in the app's language", async () => {
+    setLocalePref("zh-TW");
+    await dictionariesReady();
+    render(<PublishPreviewDialog pending={pending()} publishing={false} online onConfirm={() => {}} onCancel={() => {}} />);
+    expect(document.body.textContent).toContain("顯示成「（私人）」");
+    expect(document.body.textContent).not.toContain("(private)");
   });
 
   it("lists the files that become public, a logo and an icon in plain words and no file names", () => {

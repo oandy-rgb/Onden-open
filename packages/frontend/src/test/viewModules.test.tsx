@@ -66,45 +66,41 @@ describe("「＋」 in the tab row", () => {
     expect(screen.queryByRole("dialog", { name: "Add a view" })).toBeNull();
   });
 
-  it("a calendar asks for a date field (date fields and the built-in dates) and stores it", async () => {
+  // A first view is made at once from the default the chooser has picked; the field is changed later in the view's settings.
+  it("a calendar is placed by the page's first date field at once", async () => {
     workspace(null);
     const { add, panel } = menu();
     fireEvent.click(within(panel).getByRole("button", { name: "Calendar" }));
-    const select = within(panel).getByRole("combobox", { name: "Date field" });
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Finished", "Created date", "Last edited date"]);
-    fireEvent.click(within(panel).getByRole("button", { name: "Add view" }));
+    expect(within(panel).queryByRole("combobox")).toBeNull();
     await vi.waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ layout: "calendar" }), "finished"));
   });
 
-  it("a board groups by the field picked, select fields first", async () => {
+  it("a board is split by the first select field at once", async () => {
     workspace(null);
     const { add, panel } = menu();
     fireEvent.click(within(panel).getByRole("button", { name: "Board" }));
-    const select = within(panel).getByRole("combobox", { name: "Columns by" });
-    expect((select as HTMLSelectElement).value).toBe("status");
-    fireEvent.click(within(panel).getByRole("button", { name: "Add view" }));
+    expect(within(panel).queryByRole("combobox")).toBeNull();
     await vi.waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ layout: "kanban" }), "status"));
   });
 
-  it("cards may leave the cover automatic", async () => {
+  it("cards leave the cover automatic and ask nothing", async () => {
     workspace(null);
     const { add, panel } = menu();
     fireEvent.click(within(panel).getByRole("button", { name: "Cards" }));
-    expect((within(panel).getByRole("combobox", { name: "Cover" }) as HTMLSelectElement).value).toBe("");
-    fireEvent.click(within(panel).getByRole("button", { name: "Add view" }));
+    expect(within(panel).queryByRole("combobox")).toBeNull();
     await vi.waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ layout: "gallery" }), ""));
   });
 
-  it("a board on a tag without fields says what to add instead of a dead button; a calendar still can be added", () => {
+  it("a board on a tag without fields says what to add instead of a dead button; a calendar is still added, by the created date", async () => {
     workspace(null);
-    const { panel } = menu({ fields: [] });
+    const { add, panel } = menu({ fields: [] });
     fireEvent.click(within(panel).getByRole("button", { name: "Board" }));
     expect(within(panel).getByRole("note")).toHaveTextContent("Add a Select field");
     expect(within(panel).queryByRole("button", { name: "Add view" })).toBeNull();
     // A calendar always has the built-in dates to fall back on.
     fireEvent.click(within(panel).getByRole("button", { name: "Back" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Calendar" }));
-    expect(within(panel).getByRole("button", { name: "Add view" })).toBeEnabled();
+    await vi.waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ layout: "calendar" }), "created_at"));
   });
 
   it("offers the whiteboard first when the page has none and it is turned on", () => {

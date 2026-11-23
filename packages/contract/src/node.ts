@@ -15,6 +15,14 @@ import { isValidOrderKey } from "@onden/markdown/contract";
  *  failing later as an unmapped database error (22021). */
 export const noNul = (schema: z.ZodString) => schema.refine((v) => !v.includes("\u0000"), { message: "contains_nul" });
 
+/** What POST /api/nodes/:id/duplicate takes. `copy_suffix` is how the copy's title ends in the person's language
+ *  (" 副本"): one short visible line, no tab, newline, control or zero-width character, not blank. Absent = " (Copy)".
+ *  A server older than this field answers 400 to it, so deploy the backend first or together with the app. */
+export const DuplicateNoteRequest = z.object({
+  id: z.string().uuid().optional(),
+  copy_suffix: z.string().max(20).refine((v) => v.trim() !== "" && !/[\p{Cc}\p{Cf}\u2028\u2029]/u.test(v), { message: "invalid_copy_suffix" }).optional(),
+}).strict();
+
 /** What the app (or an agent) sends to create a note (POST /api/nodes) or to
  *  change one (PATCH /api/nodes/:id, where every key is optional and only the
  *  keys sent count). The extras only creation takes (tags, attributes, space)

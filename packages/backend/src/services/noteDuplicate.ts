@@ -39,6 +39,7 @@ type Source = {
   is_task: boolean;
 };
 type CopyAttribute = AttributeState & { key: string };
+/** What a copy's title ends with unless the person's language asks for another (`copySuffix`). */
 const COPY_SUFFIX = " (Copy)";
 type CopyTag = { id: string; title: string; node_type: string; deleted_at: string | null };
 
@@ -54,6 +55,8 @@ export type DuplicateNoteOptions = {
   sourceId: string;
   /** Stable client UUID for ordinary copies; historical restore may omit it. */
   newNodeId?: string;
+  /** The copy title's ending in the person's language, e.g. " 副本"; one short line. */
+  copySuffix?: string;
   /** Historical body/title replace only these fields, never the current parent/tags. */
   historical?: { title: string; markdown: string; eventId: string };
 };
@@ -128,7 +131,8 @@ export async function duplicateNote(options: DuplicateNoteOptions) {
     const attrs = ownRows.filter((a) => a.key !== PUBLISHED_KEY && isPersonAuthored(a.source) && a.source !== "frontmatter");
     if (keptOff) attrs.push({ ...keptOff, source: ownRows.find(isKeptOffSite)!.source });
     // A copy of a title at the cap still fits it (services/noteSize.ts).
-    const title = historical?.title ?? `${clampNoteTitle(source.title, NODE_TITLE_MAX - COPY_SUFFIX.length)}${COPY_SUFFIX}`;
+    const suffix = options.copySuffix ?? COPY_SUFFIX;
+    const title = historical?.title ?? `${clampNoteTitle(source.title, NODE_TITLE_MAX - suffix.length)}${suffix}`;
     const markdown = historical?.markdown ?? source.markdown;
     const slug = await uniqueSlug(workspaceId, slugify(title), copySpace ? { spaceId: copySpace } : { parentId: source.parent_id });
     const bodyHash = await putBlob(markdown);

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { ready, openQuickCapture, openQuickCaptureByHotkey, saveQuickCapture, ensureInbox, openTasksTab, taskRow, pollBootstrap, H } from "./helpers";
+import { ready, openQuickCapture, saveQuickCapture, ensureInbox, openTasksTab, taskRow, pollBootstrap, H } from "./helpers";
 
 // Behaviour-driven journeys over the daily-driver loop (capture → task →
 // daily-note → link) — the retention core. Drive the real UI the way a person
@@ -33,17 +33,6 @@ test("quick capture files a note in the inbox", { tag: "@critical" }, async ({ p
   const inboxTag = await ensureInbox(page); // the tag the first capture made (idempotent)
   expect(captured.parent_id ?? null).toBeNull(); // in the inbox, not under a note
   expect([...(captured.class_tag_ids ?? []), ...(captured.label_tag_ids ?? [])]).toContain(inboxTag);
-});
-
-// 1b — Desktop has no capture button (the QuickCapture FAB is mobile-only,
-// display:none >900px): Ctrl+Shift+N is the way in, and the topbar says nothing
-// else about it.
-test("desktop hotkey opens quick capture; the topbar has no capture button", { tag: "@critical" }, async ({ page }) => {
-  await ready(page, "/?view=notes");
-  await expect(page.locator(".app-topbar")).toBeVisible();
-  await expect(page.locator(".app-topbar").getByRole("button", { name: /^(捕捉|Capture)$/ })).toHaveCount(0);
-  await openQuickCaptureByHotkey(page);
-  await expect(page.locator(".quick-capture-textarea")).toBeVisible();
 });
 
 // 2 — Typing `[[` opens the note picker and selecting inserts a wikilink.

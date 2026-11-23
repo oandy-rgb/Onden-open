@@ -12,6 +12,7 @@ import { noWorkspaceData, type ContentNode } from "../lib/api";
 import { getAppState, resetAppState } from "../lib/appStore";
 import { setLocalePref } from "../lib/i18n";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
+import { useGraphViewState } from "../hooks/useGraphViewState";
 
 const node = (id: string, over: Partial<ContentNode> = {}) =>
   ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: null, space_id: "s1", ...over }) as ContentNode;
@@ -26,7 +27,7 @@ function connect(childId: string, parentId: string) {
     assignToGroup,
     refresh: vi.fn(async () => {}),
   } as unknown as Parameters<typeof useBoardWorkspace>[0];
-  const hook = renderHook(() => useBoardWorkspace(options));
+  const hook = renderHook(() => useBoardWorkspace({ ...options, graphView: useGraphViewState() }));
   act(() => hook.result.current.actions.onParentConnect(childId, parentId));
   return assignToGroup;
 }

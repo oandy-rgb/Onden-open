@@ -8,6 +8,7 @@
 import { event, pool, q } from "../db.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { mutate, requireActor } from "../spine/mutate.js";
+import { signatureForCapturedActor } from "../spine/currentActor.js";
 import { assertAuthority } from "../spine/authority.js";
 import { getWorkspaceId } from "../db.js";
 import { slugify, isUuid } from "@onden/markdown";
@@ -141,6 +142,9 @@ export async function installTagPackApproved(
       if (error instanceof AttributeWriteError && error.code === "invalid_key") throw new PermanentOutboxFailure(`tag pack refused: ${error.message}`);
       throw error;
     });
+    // The approval stands when the proposer was removed after it: the install completes, signed as the system with the proposer's id
+    // in the payload (signatureForCapturedActor), instead of failing every retry for a day and being buried as dead.
+    const sig = await signatureForCapturedActor(workspaceId, requestedBy.actorId, requestedBy.actorType);
     await event(
       workspaceId, "TAG_IMPORTED", "tag", tag.id,
       {
@@ -150,8 +154,9 @@ export async function installTagPackApproved(
         via_approval: true,
         ...packModulesPayload(pack),
         ...(switches.module_switches.length ? { module_switches: switches.module_switches } : {}),
+        ...sig.payloadExtra,
       },
-      requestedBy.actorType, requestedBy.actorId,
+      sig.actorType, sig.actorId,
     );
     return { id: tag.id, name: tag.title };
   });

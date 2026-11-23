@@ -78,10 +78,16 @@ const kb = (n) => `${(n / 1024).toFixed(1)} KiB`;
 // (lib/data/loadedOnFirstUse.ts, onlineWriters.ts), the split view's divider and quote button load with the second side,
 // and the server-setup and invite-claim screens load on use. measured + 5 KiB (312_614) would be higher than today's
 // budget, so it stays at 310_204 (2.6 KiB of room) instead of being raised.
+//
+// Slimming round 2026-11-22 (perf/boot-slim-5-board): measured 300_345 B, about 309_650 B before (302.4 KiB; -9.1 KiB). The board's hooks
+// (useBoardWorkspace, useGraphLayout, useCanvasActions, useBoardTree and the layout and card code only they use) now run in
+// components/BoardController, loaded right after the first paint together with the board screen; boot code keeps only the
+// small store lib/boardController. measured + 5 KiB (305_465) is lower than today's budget, so the budget stays at 310_204
+// (it is not raised, and now has 9.6 KiB of room).
 export const BOOT_BUDGET_GZIP = 310_204;
 // The boot JS of main when the budget was last set. Update it with the budget, or when
 // a merge moves the boot JS by more than 1 KiB, so the delta below stays meaningful.
-export const BOOT_MEASURED_GZIP = 307_494;
+export const BOOT_MEASURED_GZIP = 300_345;
 /** Growth over this much (bytes, gzip) needs a reason in the PR description. */
 export const BOOT_GROWTH_NOTE = 1_024;
 // Libraries only a screen needs, which must never be in the boot JS: a value

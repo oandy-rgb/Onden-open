@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { resetAppState } from "../lib/appStore";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
+import { useGraphViewState } from "../hooks/useGraphViewState";
 
 function options() {
   return {
@@ -29,7 +30,7 @@ describe("useBoardWorkspace groups", () => {
   beforeEach(() => resetAppState());
 
   it("keeps actions and board when the shell re-renders with fresh closures", () => {
-    const hook = renderHook((opts) => useBoardWorkspace(opts), { initialProps: options() });
+    const hook = renderHook((opts) => useBoardWorkspace({ ...opts, graphView: useGraphViewState() }), { initialProps: options() });
     const first = hook.result.current;
     hook.rerender(options());
     expect(hook.result.current.actions).toBe(first.actions);
@@ -38,7 +39,7 @@ describe("useBoardWorkspace groups", () => {
 
   it("a handler calls the latest closure", () => {
     const first = options();
-    const hook = renderHook((opts) => useBoardWorkspace(opts), { initialProps: first });
+    const hook = renderHook((opts) => useBoardWorkspace({ ...opts, graphView: useGraphViewState() }), { initialProps: first });
     const next = options();
     hook.rerender(next);
     act(() => hook.result.current.actions.onSelectNode("n1"));
@@ -47,7 +48,7 @@ describe("useBoardWorkspace groups", () => {
   });
 
   it("a new board object when a value in it changes", () => {
-    const hook = renderHook((opts) => useBoardWorkspace(opts), { initialProps: options() });
+    const hook = renderHook((opts) => useBoardWorkspace({ ...opts, graphView: useGraphViewState() }), { initialProps: options() });
     const first = hook.result.current;
     act(() => first.board.setCanvasSearch("foo"));
     expect(hook.result.current.board).not.toBe(first.board);

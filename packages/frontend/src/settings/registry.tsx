@@ -11,7 +11,7 @@ import { chooseLocalBackupFolder, switchToBrowserStorage } from "../lib/localBac
 import { getLaunchPreference } from "../lib/launchPreference";
 import { PREFS, setPref } from "../lib/prefs";
 import { useLocalOnlyStatus } from "../lib/localOnlyStatus";
-import { writeErrors } from "../lib/data";
+import { useStorageStepOwed, writeErrors } from "../lib/data";
 import { installTagPack } from "../lib/moduleLibrary";
 import { BUILT_IN_SETTINGS } from "../modules";
 import { getLocalePref, setLocalePref, t, useT, type LocalePref } from "../lib/i18n";
@@ -106,6 +106,8 @@ function StorageLocationWidget({ ctx }: { ctx: SettingContext }) {
   // A build that keeps the notes only in this browser (the trial) has no server copy to fall back on: say so, online or not.
   const localOnly = useLocalOnlyStatus();
   const keptHere = !ctx.online || localOnly !== null;
+  // The last write to the folder failed (or it could not be opened): its copy is not current, so never say it is saved there.
+  const folderBehind = useStorageStepOwed("folderCopy") && storagePref === "fs-access";
 
   useEffect(() => {
     if (storagePref === "fs-access") {
@@ -148,7 +150,9 @@ function StorageLocationWidget({ ctx }: { ctx: SettingContext }) {
       hint={keptHere ? tr("On this device: {where}", { where }) : tr("On the server. This device's copy: {where}", { where })}
       note={!keptHere
         ? tr("This device keeps a copy for working offline. Clearing site data removes only that copy; your notes stay on the server.")
-        : storagePref === "fs-access"
+        : folderBehind
+          ? null
+          : storagePref === "fs-access"
           ? tr("A local database copy is saved to this folder. Keep a separate backup before clearing browser data.")
           : tr("Data is stored in this browser. Clearing site data erases it. Download a backup or choose a folder for a local copy.")}
       action={isFileSystemAccessSupported() && (storagePref !== "fs-access" ? (
@@ -166,6 +170,7 @@ function StorageLocationWidget({ ctx }: { ctx: SettingContext }) {
         </>
       ))}
     >
+      {folderBehind && <FieldError>{tr("The copy in this folder couldn't be updated, so it may be missing recent changes. The folder may have been moved, be full, or no longer allow writing. Your notes on this device are fine; choose the folder again or keep them in the browser.")}</FieldError>}
       {error && <FieldError>{error}</FieldError>}
     </DataRow>
   );

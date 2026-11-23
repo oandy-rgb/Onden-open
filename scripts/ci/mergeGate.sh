@@ -91,7 +91,9 @@ for i in "${!prs[@]}"; do
   if gh pr merge "$n" -R "$PRIVATE" --merge --match-head-commit "$h" >/dev/null 2>&1; then echo "merged #$n"; continue; fi
   # GitHub said no although git can: bring main into the branch (no conflict allowed), push, merge that.
   git fetch -q origin main
-  t=$(git merge-tree --write-tree "$h" origin/main 2>/dev/null) || fail "#$n GitHub 拒絕合併，帶入 main 也有衝突：要手動處理"
+  # Main first, the PR second: the same direction the train merged in, so two insertions at one place land in the same order as in
+  # the tested tree (2026-11-23: the other direction put #1953's two mistakes.md entries in a different order).
+  t=$(git merge-tree --write-tree origin/main "$h" 2>/dev/null) || fail "#$n GitHub 拒絕合併，帶入 main 也有衝突：要手動處理"
   m=$(git commit-tree "$t" -p "$h" -p origin/main -m "Merge main into #$n (GitHub refused a merge git can do)")
   b=$(gh pr view "$n" -R "$PRIVATE" --json headRefName --jq .headRefName)
   git push -q origin "$m:refs/heads/$b" || fail "#$n 推不上去"

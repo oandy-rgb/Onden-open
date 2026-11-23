@@ -9,22 +9,30 @@ import { emptiedOnSite } from "./publishing/takenDown.js";
 import { liveNodeSql, tagNodeSql } from "../../spine/nodeSql.js";
 
 /** Whether any of these nodes may be something the site serves: a note in a
- *  space that publishes or one marked 「發布」 (publishing/publishedSet.ts), or
- *  a tag (it has a page of its own when shown). A note its own 「不發布」 or its
+ *  space that publishes or one marked 「發布」 (publishing/publishedSet.ts), a
+ *  tag (it has a page of its own when shown), or a drawing whose picture the
+ *  latest snapshot carries (trashing it takes the picture down). A note its own 「不發布」 or its
  *  source keeps off (a feed's saved article, unless marked 「發布」) is not: hiding
  *  or trashing it changes nothing the site shows. A blank note is NOT told apart
  *  here: its notes underneath may be trashed with it, and a missed takedown costs
  *  more than one extra push. Read in the writing transaction, so it sees the change. */
-async function touchesSite(nodeIds: string[]): Promise<boolean> {
+async function touchesSite(workspaceId: string, nodeIds: string[]): Promise<boolean> {
   const r = await q(
-    `SELECT 1 FROM content_nodes n LEFT JOIN spaces s ON s.id = n.space_id
+    `WITH lending AS MATERIALIZED (
+       SELECT coalesce(p.payload->'picture_sources', '[]'::jsonb) AS sources FROM publish_snapshots p
+        WHERE p.workspace_id = $3
+        ORDER BY p.created_at DESC LIMIT 1)
+     SELECT 1 FROM content_nodes n LEFT JOIN spaces s ON s.id = n.space_id
        LEFT JOIN node_attributes flag ON flag.node_id = n.id AND flag.key = $2
       WHERE n.id = ANY($1::uuid[])
         AND (flag.value = 'true'
              OR (s.capabilities->>'publish' = 'true' AND flag.value IS DISTINCT FROM 'false' AND n.source_type <> 'rss')
-             OR ${tagNodeSql("n")})
+             OR ${tagNodeSql("n")}
+             -- a drawing whose picture the latest snapshot carries where a published note embeds it: its small
+             -- picture_sources list (publishing/drawingEmbeds.ts pictureSourceList), read once for the whole query
+             OR EXISTS (SELECT 1 FROM lending WHERE lending.sources @> jsonb_build_array(jsonb_build_object('source_node_id', n.id::text))))
       LIMIT 1`,
-    [nodeIds, PUBLISHED_KEY],
+    [nodeIds, PUBLISHED_KEY, workspaceId],
   );
   return (r.rowCount ?? 0) > 0;
 }
@@ -66,7 +74,7 @@ export const websiteModule: ModuleDefinition = {
     },
     // A served note hidden or shown, a tag shown or hidden.
     visibilityCommitted: async ({ workspaceId, actor, nodeIds }) => {
-      if (await touchesSite(nodeIds)) await requestSiteRebuild(workspaceId, actor);
+      if (await touchesSite(workspaceId, nodeIds)) await requestSiteRebuild(workspaceId, actor);
     },
     // The address of the static copy follows the custom domain (cname.ts): set or cleared, the copy is pushed again
     // so the CNAME, canonical links and the publish log's link agree.
@@ -76,7 +84,7 @@ export const websiteModule: ModuleDefinition = {
     spaceAudienceCommitted: async ({ workspaceId, actor }) => { await requestSiteRebuild(workspaceId, actor); },
     // A served note or a tag trashed or brought back.
     lifecycleCommitted: async ({ workspaceId, actor, nodeIds }) => {
-      if (await touchesSite(nodeIds)) await requestSiteRebuild(workspaceId, actor);
+      if (await touchesSite(workspaceId, nodeIds)) await requestSiteRebuild(workspaceId, actor);
     },
   },
   // In use once the site was published or a note is marked for publishing.

@@ -88,13 +88,13 @@ describe("ReviewPanel", () => {
   it("removes a held card when a live module, membership or deletion change excludes it from the server queue", async () => {
     let queued = [card(1)];
     mockFetch(url => url.includes("/queue") ? { cards: queued, total: queued.length } : {});
-    render(<ReviewPanel online tagId="course" onOpenNode={() => {}} />);
+    render(<ReviewPanel online scope={{ kind: "tag", id: "course" }} onOpenNode={() => {}} />);
     await screen.findByText("Card 1");
     await userEvent.click(screen.getByRole("button", { name: /Show answer/ }));
     queued = [];
     changed();
     expect(screen.queryByText("body 1")).toBeNull();
-    await screen.findByText(/Nothing to review with this tag/);
+    await screen.findByText(/Nothing to review in this scope today/);
     expect(screen.queryByText("Card 1")).toBeNull();
   });
 
@@ -223,11 +223,11 @@ describe("ReviewPanel", () => {
   it("uses tag scope and resets the answer/session when switching tags", async () => {
     mockFetch((url) => url.includes("tag_id=course-a") ? { cards: [card(1)], total: 1 }
       : url.includes("tag_id=course-b") ? { cards: [card(2)], total: 1 } : {});
-    const { rerender } = render(<ReviewPanel online tagId="course-a" tagName="Course A" onOpenNode={() => {}} />);
+    const { rerender } = render(<ReviewPanel online scope={{ kind: "tag", id: "course-a" }} onOpenNode={() => {}} />);
     await screen.findByText("Card 1");
     await userEvent.click(screen.getByRole("button", { name: /Show answer/ }));
     expect(screen.getByTestId("md")).toHaveTextContent("body 1");
-    rerender(<ReviewPanel online tagId="course-b" tagName="Course B" onOpenNode={() => {}} />);
+    rerender(<ReviewPanel online scope={{ kind: "tag", id: "course-b" }} onOpenNode={() => {}} />);
     expect(screen.queryByText("Card 1")).toBeNull();
     await screen.findByText("Card 2");
     expect(screen.queryByTestId("md")).toBeNull();
@@ -242,9 +242,9 @@ describe("ReviewPanel", () => {
       if (url.includes("tag_id=old")) return new Promise<Response>((resolve) => { finishOld = resolve; });
       return Promise.resolve(new Response(JSON.stringify(url.includes("/queue") ? { cards: [card(2)], total: 1 } : {}), { status: 200 }));
     }) as unknown as typeof fetch;
-    const { rerender } = render(<ReviewPanel online tagId="old" onOpenNode={() => {}} />);
+    const { rerender } = render(<ReviewPanel online scope={{ kind: "tag", id: "old" }} onOpenNode={() => {}} />);
     await waitFor(() => expect(finishOld).toBeTypeOf("function"));
-    rerender(<ReviewPanel online tagId="new" onOpenNode={() => {}} />);
+    rerender(<ReviewPanel online scope={{ kind: "tag", id: "new" }} onOpenNode={() => {}} />);
     await screen.findByText("Card 2");
     finishOld(new Response(JSON.stringify({ cards: [card(1)], total: 1 }), { status: 200 }));
     await waitFor(() => expect(screen.getByText("Card 2")).toBeInTheDocument());

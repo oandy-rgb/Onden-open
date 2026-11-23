@@ -10,7 +10,7 @@ COPY package.json package-lock.json ./
 # them to node_modules (micromark's linear text resolver), and fails the
 # build if one no longer applies. Only the patches for packages the backend
 # installs: patch-package fails on a patch whose package is absent (astro's
-# patch is frontend-only).
+# patch is frontend-only: packages/frontend/patches).
 COPY patches/micromark+*.patch ./patches/
 COPY packages/backend/package.json ./packages/backend/package.json
 # Stub other workspace members so npm resolves the workspace graph

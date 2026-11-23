@@ -1,0 +1,37 @@
+/* 「範圍」 under the review title: one 44px button, and the sheet it opens (ui/Sheet: bottom on a phone, a card on desktop). */
+.review-scope-bar { margin: 0 var(--ac-space-6) var(--ac-space-4); }
+.review-scope-button {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-4);
+  width: 100%;
+  min-height: var(--ac-tap);
+  justify-content: flex-start;
+  background: var(--ac-overlay-subtle);
+}
+.review-scope-label { flex: none; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-name { flex: 1 1 auto; min-width: 0; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--ac-fw-semibold); }
+
+.review-scope-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  width: min(480px, 100%);
+  max-height: min(600px, 90%);
+  box-sizing: border-box;
+  padding: var(--ac-space-5);
+  background: var(--ac-surface);
+  border: var(--ac-border-thin) solid var(--ac-line);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-modal);
+}
+.review-scope-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.review-scope-options { list-style: none; margin: 0; padding: 0; }
+.review-scope-heading { margin: var(--ac-space-5) var(--ac-space-4) var(--ac-space-1); color: var(--ac-muted); font-size: var(--ac-fs-caption); font-weight: var(--ac-fw-semibold); }
+.review-scope-row-button { display: flex; align-items: center; gap: var(--ac-space-4); width: 100%; min-height: var(--ac-tap); justify-content: flex-start; text-align: start; }
+.review-scope-row-button[aria-pressed="true"] { background: var(--ac-overlay-subtle); }
+.review-scope-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.review-scope-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-scope-row-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-row-counts { flex: none; white-space: nowrap; color: var(--ac-muted); font-size: var(--ac-fs-caption); }
+.review-scope-note { margin: var(--ac-space-5) var(--ac-space-4); color: var(--ac-muted); font-size: var(--ac-fs-caption); }

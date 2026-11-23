@@ -95,8 +95,14 @@ describe.skipIf(!isTestDb)("field names are judged where the schema is written (
   });
 
   it("an agent's pack proposal is refused at the tool, before it is queued", async () => {
-    const agent = await (await req("/api/actors", { method: "POST", json: { name: `fn bot ${stamp}`, type: "agent", role: "editor" } })).json() as { id: string };
-    const token = (await (await req(`/api/actors/${agent.id}/tokens`, { method: "POST", json: { template: "researcher" } })).json() as { token: string }).token;
+    // A real token (app.ts refuses a bearer that does not resolve): the setup must succeed, not send "Bearer undefined".
+    const made = await req("/api/actors", { method: "POST", json: { name: `fn bot ${stamp}`, type: "agent" } });
+    expect(made.status, await made.clone().text()).toBeLessThan(300);
+    const agent = await made.json() as { id: string };
+    const minted = await req(`/api/actors/${agent.id}/tokens`, { method: "POST", json: { access: "write" } });
+    expect(minted.status, await minted.clone().text()).toBeLessThan(300);
+    const token = (await minted.json() as { token: string }).token;
+    expect(token).toMatch(/^ondt_/);
     const res = await req("/api/mcp/tools/proposeTagPack", {
       method: "POST", headers: { authorization: `Bearer ${token}` },
       json: { args: { name: `proposal-${stamp}`, fields: [{ name: "due date", type: "date" }] } },

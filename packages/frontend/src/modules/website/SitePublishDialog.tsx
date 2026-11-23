@@ -8,7 +8,7 @@ export default function SitePublishDialog({ site }: { site: Pick<SiteWork, "publ
   if (!publish.pending) return null;
   return (
     <PublishPreviewDialog
-      pending={publish.pending} publishing={publish.status === "publishing"} online={online}
+      pending={publish.pending} outcome={publish.outcome} publishing={publish.status === "publishing"} online={online}
       onConfirm={() => publish.confirm()} onCancel={publish.cancel}
       onInclude={(ids) => void publish.include(ids)}
       onChanged={() => void publish.refresh()}

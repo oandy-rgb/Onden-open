@@ -13,7 +13,8 @@ import { mediaFiles } from "../../../services/mediaFiles.js";
 import { buildCandidate, candidateHash, type SnapshotOpts } from "./snapshot.js";
 import { nodesOf, siteDiff, type SiteDiff } from "./siteDiff.js";
 import { loadServedSite } from "./servedSite.js";
-import { serveDrawingEmbeds } from "./drawingEmbeds.js";
+import { carriedPictures, serveDrawingEmbeds } from "./drawingEmbeds.js";
+import { presentationWords } from "./siteWords.js";
 import { serveHandwritingPages, storeHandwritingPages } from "./handwritingPages.js";
 import { leftOutNotes } from "./publishedSet.js";
 import { takenDownSinceLastPublish } from "./takenDown.js";
@@ -41,6 +42,12 @@ type NewMedia = {
 /** A video the external static host will not carry (videoLimit.ts): readers
  *  of that copy get a link to the original site instead. */
 type LargeVideo = { filename: string; size_mb: number; node_ids: string[] };
+
+/** The candidate payload as the site would serve it: without the list of drawings that lend pictures. */
+function withoutBookkeeping(payload: Record<string, unknown>): Record<string, unknown> {
+  const { picture_sources: _sources, ...rest } = payload;
+  return rest;
+}
 
 export async function buildPublishPreview(workspaceId: string, opts: SnapshotOpts): Promise<PublishPreview> {
   const candidate = await buildCandidate(workspaceId, opts);
@@ -99,19 +106,21 @@ export async function buildPublishPreview(workspaceId: string, opts: SnapshotOpt
 
   // Shown as readers will get it: embedded drawings as their pictures, as
   // the served site draws them (the hash above is of the candidate as stored).
+  // Every picture the candidate carries is shown: this publish is what makes them public.
   const shownNodes = structuredClone(nextNodes);
-  serveDrawingEmbeds(shownNodes);
+  serveDrawingEmbeds(shownNodes, () => true, presentationWords(candidate.payload.presentation));
   serveHandwritingPages(shownNodes);
 
   return {
     hash: candidateHash(candidate),
     site: {
       id: null, title: candidate.title, home_node_id: candidate.homeNodeId, event_cursor: candidate.eventCursor,
-      payload: { ...candidate.payload, nodes: shownNodes }, artifact_ref: served.artifact_ref, created_at: new Date().toISOString(),
+      payload: { ...withoutBookkeeping(candidate.payload), nodes: shownNodes }, artifact_ref: served.artifact_ref, created_at: new Date().toISOString(),
     },
     live: published ? { snapshot_id: served.id!, published_at: new Date(served.created_at).toISOString() } : null,
     diff,
     private_links: candidate.privateLinks.map((l) => ({ node_id: l.nodeId, node_title: l.nodeTitle, target: l.target, shown_as: l.shownAs })),
+    embedded_pictures: carriedPictures(nextNodes),
     blocked_media,
     new_media,
     large_videos,

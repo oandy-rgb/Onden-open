@@ -45,6 +45,8 @@ type FreezeInput = {
   nodes: readonly FreezeNode[];
   /** For the link rule on field values (redaction.publishedNames). */
   names: readonly PublishedName[];
+  /** What a field value's link to a note not on the site reads as (siteWords privateText). */
+  privateText: string;
 };
 
 type Listing = { rows: SiteRow[]; viewKind: ViewKind };
@@ -52,7 +54,7 @@ const byNewest = (created: ReadonlyMap<string, number>) => (a: SiteRow, b: SiteR
   (created.get(b.id) ?? 0) - (created.get(a.id) ?? 0) || compareText(a.id, b.id);
 
 export async function freezeDesign(input: FreezeInput): Promise<{ design: FrozenDesign; unpublishedRefs: UnpublishedRef[] }> {
-  const { workspaceId, actor, nodes, names } = input;
+  const { workspaceId, actor, nodes, names, privateText } = input;
   const design = structuredClone(input.design);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const publishedIds = [...byId.keys()];
@@ -69,7 +71,7 @@ export async function freezeDesign(input: FreezeInput): Promise<{ design: Frozen
     const note = byId.get(id);
     if (!note) return null;
     const safe = Object.fromEntries(Object.entries(fields).map(([key, value]) =>
-      [key, typeof value === "string" ? inertUnpublishedWikilinks(value, names) : value]));
+      [key, typeof value === "string" ? inertUnpublishedWikilinks(value, names, privateText) : value]));
     return siteRowOf(note, safe);
   };
 

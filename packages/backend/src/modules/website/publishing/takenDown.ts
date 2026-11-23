@@ -12,7 +12,7 @@
 
 import { sql } from "kysely";
 import { db } from "../../../dbKysely.js";
-import { publishedNodeIds } from "./publishedSet.js";
+import { pictureSourceIds, publishedNodeIds } from "./publishedSet.js";
 import { latestSnapshotPayload, latestSnapshotRow } from "./latestSnapshot.js";
 import { withCurrentIds, withFormerIds } from "../../../services/idRewrites.js";
 
@@ -27,10 +27,57 @@ export async function recordTakedowns(workspaceId: string): Promise<void> {
                WHERE NOT (n->>'id' = ANY(${allowed}::text[]))
                  AND NOT (coalesce(p.payload->'taken_down', '[]'::jsonb) @> to_jsonb(n->>'id'))) AS gone
        FROM ${latestSnapshotRow(workspaceId)} p`.execute(db)).rows[0];
-  if (!latest || latest.gone.length === 0) return;
-  await sql`UPDATE publish_snapshots
-               SET payload = jsonb_set(payload, '{taken_down}', coalesce(payload->'taken_down', '[]'::jsonb) || to_jsonb(${latest.gone}::text[]))
-             WHERE id = ${latest.id}`.execute(db);
+  if (!latest) return;
+  if (latest.gone.length > 0) {
+    await sql`UPDATE publish_snapshots
+                 SET payload = jsonb_set(payload, '{taken_down}', coalesce(payload->'taken_down', '[]'::jsonb) || to_jsonb(${latest.gone}::text[]))
+               WHERE id = ${latest.id}`.execute(db);
+  }
+  // The same for the pictures of embedded drawings, in its own list (picturesTakenDownSince).
+  const pictures = await picturesTakenDownSince(latest.id, workspaceId);
+  if (pictures.length > 0) {
+    const entries = JSON.stringify(pictures.map((id) => ({ source_node_id: id })));
+    await sql`UPDATE publish_snapshots
+                 SET payload = jsonb_set(payload, '{pictures_taken_down}', coalesce(payload->'pictures_taken_down', '[]'::jsonb) || ${entries}::jsonb)
+               WHERE id = ${latest.id}`.execute(db);
+  }
+}
+
+/** The drawings whose pictures the snapshot `snapshotId` carries (its small
+ *  `picture_sources` list, drawingEmbeds.pictureSourceList — not a scan of
+ *  every note), and those of them already recorded as taken down. */
+async function snapshotPictureSources(snapshotId: string): Promise<{ sources: string[]; gone: Set<string> }> {
+  const row = (await sql<{ sources: string[]; gone: string[] }>`
+    SELECT ARRAY(SELECT s->>'source_node_id' FROM jsonb_array_elements(coalesce(p.payload->'picture_sources', '[]'::jsonb)) s) AS sources,
+           ARRAY(SELECT t->>'source_node_id' FROM jsonb_array_elements(coalesce(p.payload->'pictures_taken_down', '[]'::jsonb)) t) AS gone
+      FROM publish_snapshots p WHERE p.id = ${snapshotId}`.execute(db)).rows[0];
+  return { sources: row?.sources ?? [], gone: new Set(row?.gone ?? []) };
+}
+
+/** The same rule for the pictures of embedded drawings: a drawing whose
+ *  picture the snapshot carries and that may no longer lend it
+ *  (publishedSet.pictureSourceIds: marked 「不發布」, trashed, moved to someone
+ *  else's personal space) is recorded in `pictures_taken_down`, so putting it
+ *  back does not serve the old picture before the next publish. Its own list,
+ *  not `taken_down`: a drawing can leave the site as a page and still lend its
+ *  picture. Each entry names the drawing as `source_node_id`, so a permanent
+ *  delete takes the entry with it (purgedContent.withoutNodes). Reads only:
+ *  returns the drawings to add; recordTakedowns writes them. */
+async function picturesTakenDownSince(snapshotId: string, workspaceId: string): Promise<string[]> {
+  const { sources, gone } = await snapshotPictureSources(snapshotId);
+  if (sources.length === 0) return [];
+  const allowed = await pictureSourceIds(workspaceId, sources);
+  return sources.filter((id) => !allowed.has(id) && !gone.has(id));
+}
+
+/** The drawings among `sources` whose pictures the served site shows now:
+ *  those that may lend it (publishedSet.pictureSourceIds) and were not taken
+ *  down since the snapshot (`takenDown`: its `pictures_taken_down`). */
+export async function servedPictureSources(workspaceId: string, sources: readonly string[], takenDown: unknown): Promise<Set<string>> {
+  const gone = new Set((Array.isArray(takenDown) ? takenDown : [])
+    .map((entry) => (entry as { source_node_id?: unknown } | null)?.source_node_id)
+    .filter((id): id is string => typeof id === "string"));
+  return pictureSourceIds(workspaceId, sources.filter((id) => !gone.has(id)));
 }
 
 /** The notes the latest snapshot carries that were taken down since it was

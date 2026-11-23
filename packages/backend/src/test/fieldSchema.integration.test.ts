@@ -76,8 +76,15 @@ describe.skipIf(!isTestDb)("one schema field shape (D48)", () => {
     await q(`INSERT INTO workspaces (name, slug) VALUES ('Test','default') ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name`);
     await getWorkspaceId();
     await turnModuleOn(await getWorkspaceId(), "ai"); // the agent tools belong to the AI module
-    const actor = await (await req("/api/actors", { method: "POST", json: { name: `field bot ${stamp}`, type: "agent", role: "editor" } })).json() as { id: string };
-    researcherToken = ((await (await req(`/api/actors/${actor.id}/tokens`, { method: "POST", json: { template: "researcher" } })).json()) as { token: string }).token;
+    // A real token: the request must be authenticated by it (app.ts refuses a bearer that does not resolve), so a setup that fails here
+    // fails the suite instead of sending "Bearer undefined".
+    const made = await req("/api/actors", { method: "POST", json: { name: `field bot ${stamp}`, type: "agent" } });
+    expect(made.status, await made.clone().text()).toBeLessThan(300);
+    const actor = await made.json() as { id: string };
+    const minted = await req(`/api/actors/${actor.id}/tokens`, { method: "POST", json: { access: "write" } });
+    expect(minted.status, await minted.clone().text()).toBeLessThan(300);
+    researcherToken = ((await minted.json()) as { token: string }).token;
+    expect(researcherToken).toMatch(/^ondt_/);
   });
 
   it("the tag schema PATCH round-trips a rating field with its max", async () => {

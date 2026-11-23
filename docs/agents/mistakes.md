@@ -68,6 +68,7 @@
 | 新增的東西沒人核對它進了備份 | 新增資料表、模式或面（側欄捷徑、關係圖位置、訂閱）時，備份的寫出或還原沒跟上，也沒有任何清單會因此失敗；缺口只存在於 `it.fails` 的註解，沒人修 |
 | 註解裡的不變條件沒人檢查 | 註解或規則寫「只可能」「一定」「永遠不會」，程式裡有反例，也沒有測試或守門擋住反例 |
 | 不可信來源的值被記下 | 不被信任的那一端（臨時工作階段的電腦、請求的標頭或本文欄位）自己給的值，被這台當成事實記下，或跟著寫入送給別台 |
+| 未載入被當成一個答案 | 一份還沒拿到的資料（清單、設定、身分）在程式裡是 `null`／空陣列，被下游當成「沒有」「最上層」「任何一個都算」來做事，而不是「還不知道、先別做」 |
 | 比較的兩邊型別不同，索引用不上 | SQL 把有索引的欄位和另一個型別的值比（`text` 欄位對觸發器的 `TG_TABLE_NAME`（`name`）），規劃器只能整表讀；小資料庫看不出來，成本隨資料量成長 |
 | 實機操作碰到真實資料 | 在業主的裝置上量測或驗收時，模擬的點擊、按鍵落在真實筆記上（打了字、改了東西），而不是在測試空間 |
 | 同時進行太多、整合落後 | 開著的 PR 累積到審不完；修正卡在沒合併的 PR 裡，業主以為修好了的問題在正式站上還在 |
@@ -95,6 +96,28 @@
 - **還沒擋住的**：尚無機制——沒有守門找出「`mutate` 以外、用請求 actor 的 id 直接呼叫 `event()`」的其他地方（例如發布快照、區塊錨點的事件，要逐一確認是否已在重讀過的交易內）；MCP 協定端點（`/api/mcp/protocol`）上同一情形會變成 200 的工具錯誤，不是 401。（協定端點這一條在 2026-11-22 那筆處理：`actorGoneDuring`。）
 - 再次出現：2026-11-18，安全審查（PR #1875 的留言）點名 `services/tagPacks.ts` 的 `TAG_IMPORTED` 後，逐條走 `spineEventGate` 允許清單又找到三處同形狀：核准的標籤包在提案的代理被移除後重試一天再埋掉（核准的匯入遺失）、派生工作補跑的「操作者已不在→丟棄並留紀錄」那筆紀錄本身寫不進去（意圖永遠留著、每次補跑重來）、即時派生失敗的紀錄寫不進去（promise 被拒）；另外 `POST /api/publish` 的 `PUBLISH_SNAPSHOT_CREATED` 和原本的稽核紀錄同形狀（回 500）。證據：`capturedActorRemoved.integration.test.ts` 四個案例在修正前全紅（`expected 1 to be +0`、`promise rejected "error: domain_events.actor_id = …"`、`expected { status: 'pending' } to match { status: 'done' }`、`expected error: domain_events.actor_id … to be an instance of UnauthorizedError`），修正後綠。發現者：審查。上一筆寫「發布快照要逐一確認」卻沒在同一個 PR 確認，是這次的原因。機制：〔第 1 層〕請求路徑走 `appendEventAsCurrentActor`（發布快照因此離開允許清單），背景工作走 `signatureForCapturedActor`（`spine/currentActor.ts`），兩者都有測試；允許清單每一條的說明寫明它屬於哪一種。還沒擋住的：仍沒有守門檢查「新的直接 `event()` 呼叫用的 actor id 是不是在鎖後確認過」，允許清單只擋新檔案、不擋既有檔案裡的新呼叫（尚無機制）。
 - 同一個 PR 第一輪說明寫「500 的伺服器記錄不帶 actor id」（未查證就回報）：migration 071 的拒絕訊息本身就含 actor id 與 workspace id，`apiOnError` 把整個錯誤記下來。證據：在 main 的產品程式上讓工具寫完後刪掉自己的操作者，記錄是 `unhandled route error err=error: domain_events.actor_id = <uuid> is uuid-shaped but resolves to no actor in workspace <uuid>`。發現者：審查之後的實測。機制：上一行的兩個入口讓這條路徑不再走到資料庫的拒絕；其他仍可能撞上 migration 071 的寫入，記錄照樣會帶出 id（尚無機制）。
+### 2026-11-22　開機時「打開今天的日記」從立刻變成要等，晚到的結果蓋掉了使用者剛打開的筆記（零件對、組裝錯；#1953）
+- **發生了什麼**：#1953 讓 `findDayNode` 在個人空間未知時找不到任何筆記。全新的瀏覽器（e2e 每則都是）開機時空間還沒到，啟動落點（`useLandingNote`）因此不再立刻打開已存在的今天日記，改走 `openDailyNote`，它等空間清單（最多 3 秒）後才選取今天的日記；那時測試已經打開「Single …」，標題框變成今天的日期。同一個「晚到就蓋掉」在修正前也存在（今天的日記還不存在、要等空間才建的時候），只是很少走到。
+- **證據**：公開 run 45070671260，`inboxGovernance.spec.ts:118` `@critical`；分支 `fix/spaces-known-at-boot`，修正前 `firstRunLanding.test.tsx` 的 `leaves a note opened meanwhile alone` 與 `openDailyNote.test.ts` 的 `selects nothing when the caller no longer wants it` 紅。
+- **發現者**：審查（公開 CI 的關鍵路徑 e2e）。
+- **為什麼沒擋到**：PR 只跑了 vitest 與守門，沒跑 e2e（寫成「由審查者在公開 CI 跑」）；單元測試把落點與 `openDailyNote` 分開測，沒有一則讓「落點還在等」與「使用者打開別的」同時發生。
+- **類別**：零件對、組裝錯。
+- **機制**：〔第 1 層〕落點的非同步部分只在畫面沒被動過時生效：`openDailyNote` 的 `stillWanted`（選取與歷史項目都沒變），落點的後備也一樣；`firstRunLanding.test.tsx` 的「while today's note is still on its way」兩則。
+- **還沒擋住的**：其他開機後非同步才決定畫面的地方沒有盤點；改了「開機時找得到什麼」的 PR 沒有規則要求自己先跑 `--grep @critical`。
+
+### 2026-11-22　空間清單只在記憶體，離線冷開機時「個人空間不知道」被當成「放最上層、用隨機 id、任何空間都算」（未載入被當成一個答案）
+- **發生了什麼**：正式站 2026-11-21 的日記（手機 Brave PWA，台灣清晨 4:08 建立）落在個人空間最上層、id 是隨機的，其他天都在設定的上層底下、id 由（個人空間、日期）算出；11-15 也是隨機 id。`lib/spaces.ts` 的清單只在記憶體，冷開機到 `/api/spaces` 回答前、離線開機整段，`personalSpaceId()` 都是 null；`dayNotes.openDay` 因此用隨機 id、`usableDayNoteParent` 回最上層。同一個 null 還讓任務進了「任務」筆記而不是今天的日記（`createQuickTask` 把個人空間當成共用空間）、`openTasksNote` 可能建出第二篇、`findDayNode` 把任何空間同日期的筆記當今天的、`canEdit` 把「只能看」當可編輯。
+- **證據**：分支 `fix/spaces-known-at-boot`；修正前 `spacesKnownAtBoot.test.tsx` 13 則全紅（例：`expected { saved: 'queued', noteTitle: '任務' } to match object { … noteTitle: <今天> }`、`expected { id: 'team-day', … } to be undefined`）。
+- **發現者**：上線後（擁有者使用）。
+- **為什麼沒擋到**：`dayNotes` 的註解把「空間未載入時用隨機 id、最上層」寫成刻意的後退，測試也釘住它（`uses the caller's fallback id before the personal space is known`、`is skipped while the personal space is unknown: top level`）；沒有測試走「離線冷開機、本機有副本」這條真路徑。
+- **類別**：未載入被當成一個答案（新增）。
+- **機制**：
+  - 〔第 1 層〕清單存進本機副本（`sync_state` 的 `spaces`，`MIRROR_SCHEMA_VERSION` 5 起一變就作廢），開機在第一次畫面前讀回（`lib/spaces.ts` `restoreSpaces`、`syncEngine.runBoot`）；「不知道」只剩從沒聽過伺服器的裝置。
+  - 〔第 1 層〕會寫入的入口在「不知道」時拒絕而不猜：`dayNotes.openDay`／`openTasksNote`／`openTaskHome` 丟 `PersonalSpaceUnknownError`（一句白話、輸入保留）；`findDayNode` 不知道就找不到。`fallbackId` 選項刪除。
+  - 〔第 2 層〕`spacesKnownAtBoot.test.tsx`（只假 `lib/api`、`lib/localDb`）：離線冷開機、新裝置離線、伺服器換 id、共用空間同日期筆記（含隨機種子）、換帳號；`spacesKeptInCopy.test.ts` 用真的 worker；`mirrorSchemaVersion.test.ts` 驗作廢。
+- **還沒擋住的**：其他「未載入就是 null」的清單（偏好、標籤目錄等）沒有逐一盤點；這一類尚無通用守門，只能靠審查看到 `?? null` 之後的預設動作。
+
+
 ### 2026-11-20　測試世界（happy-dom）同步送 selectionchange，升級 CodeMirror 之後 52 則編輯器測試紅；補丁讓測試世界與真瀏覽器的時序又差了一處
 - **發生了什麼**：`@codemirror/view` 升到 6.43.15 後，happy-dom 在「移動選取」的那次呼叫裡同步送出 `selectionchange`，CodeMirror 把它當成更新中的更新（「Calls to EditorView.update are not allowed…」），52 則編輯器測試紅。真瀏覽器的 `selectionchange` 是事後的獨立任務、且合併。`test/setup.ts` 因此只在「編輯器更新中」把它事後送達並合併，其他時候維持同步（第一版全域改成事後，讓依賴同步讀選取的 rssQuote 11 則紅、worker 記憶體爆掉）。
 - **證據**：全套 vitest 紅 52 → 補丁後 9800 過；第一版補丁的 rssQuote 11 則與 OOM。
@@ -144,6 +167,14 @@
 - **類別**：零件對、組裝錯。
 - **機制**：〔程式本身〕alias 改成從後端實際載入的 better-auth 出發解析 core（`build-browser.mjs` 的 `betterAuthCoreDir`），不管 npm 放在哪一層都拿到同一份。〔第 4 層〕換依賴的 PR 跑 `npm run build:browser` 與瀏覽器版冒煙。
 - **還沒擋住的**：`build:browser` 裡其他 `nm(...)` 寫死根目錄的 alias（`path-browserify`、`events`、`buffer`…）同樣依賴提升位置；往上一層是讓 `build-browser.mjs` 在 alias 指到不存在的檔或和使用者解析到的版本不同時直接失敗，並把 `build:browser` 放進換依賴時必跑的檢查。
+### 2026-11-20　發布對話框：確認後沒有任何回饋，第一行說「沒有變動」下面卻是長長的清單（邊界沒走到）
+- **發生了什麼**：擁有者在手機與桌面發布時，第一行寫「自上次發布以來沒有變動」，下面卻列了一長串連結與圖片的檢查；按「確認並發布」後對話框直接關掉，沒說發布了沒有、網站在哪；手機上按鈕在很長的捲動最底下。同一次也發現 9 篇筆記整頁只剩「(private)」（嵌入的手寫在「只有我」），這一項是規則的取捨，業主改了規則（〈嵌入的圖跟著筆記走〉）。
+- **證據**：feat/site-embeds-follow-note 的 `PublishPreviewDialog.test.tsx`（「No note changed…」「after the publish, says it went out…」「a publish that failed says so…」）與 `usePublishReview.diagrams.test.tsx`（outcome）；拿掉修正時這幾個轉紅。
+- **發現者**：擁有者使用。
+- **為什麼沒擋到**：對話框的測試只測「什麼都沒變」與「有變」兩格，沒有「筆記沒變但還有檢查」這一格；確認後的測試只看有沒有呼叫發布，沒有人問「之後畫面說了什麼」。
+- **類別**：邊界沒走到。
+- **機制**：〔第 1 層〕上面的測試；發布結果只有一個來源（`usePublishReview` 的 `outcome`），三個用到發布對話框的畫面共用。
+- **還沒擋住的**：尚無機制擋「其他對話框成功後直接關掉、不說結果」這一類；往上一層的做法是讓 `ShellDialog` 類的確認流程要求提供結果畫面。
 ### 2026-11-18　模組自己的標籤在模組開著時能被刪掉，只有任務標籤受保護（只擋了一個案例、沒擋整類）
 - **發生了什麼**：擁有者回報「我不應該能刪掉收件夾的」。`reservedTags.assertTagDefinitionChange`（所有刪除、合併都經過）只認 `reserved_key` 與任務模組的標籤；擷取模組的 `收件匣`（`tag_schema.module = 'capture'`）與其他模組自己的標籤都能被刪或合併掉。刪掉之後下一次擷取：`createMemberModuleTag` 用 `newIdFor` 在衍生 id 被垃圾桶裡那一列佔用時改用隨機 id，於是**鑄出第二個收件匣**，舊的擷取筆記留在垃圾桶那一列上（node_tags 還在，但收件匣頁看不到）。
 - **證據**：`packages/backend/src/test/moduleTagNotDeletable.integration.test.ts`（修正前：刪除回 200、合併來源回 200、刪掉後再擷取回傳新 id，共 3 項紅；修正後 6 項綠）。
@@ -217,6 +248,34 @@
   - 〔第 1 層〕`saveTiming` 的重新整理重新載入 app 的模組（`vi.resetModules`，同 `tabWorld`），舊頁面的請求變成沒人聽的請求（`saveWorld.pageDied`），監聽與計時器移除；清的範圍由「重新載入」決定，不是清單。開機順序由「the boot order is syncEngine's」對照 `syncEngine.runBoot` 原始碼。
   - 〔第 1 層〕產品一條規則、三處各一個入口：被拒的文字不當 base（`writeRecovery.withoutRefusedBase`，`writeQueue` 送出的兩處）；救回副本只依伺服器回的內文丟；開機先收上一頁留下的（`writeQueue.takeInLeftWrites`）。`saveTiming` 的具名案例與每種情況（拒絕、逾時、關頁、重新整理、改名、切換筆記）各一則。
 - **還沒擋住的**：重新整理後打出與被拒文字一模一樣的內容會再送一次（seed 432211385，釘成預期失敗）；e2e `faults/refusedAcrossReload.spec.ts` 由擁有者送公開 CI 前沒在真瀏覽器跑過的話，真瀏覽器的部分仍未驗證（見 PR）。
+### 2026-11-20　「密文貼到別列解不開」只在一張表裡成立：同一把伺服器金鑰後來也加密行事曆網址（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`aiCredentials.ts` 寫「The row id is the cipher's associated data, so a ciphertext copied onto another row does not decrypt」。後來外部行事曆用同一個函式（`sealText`）以同一把 `ONDEN_SECRET_KEY` 加密網址，附加資料仍只有列 id：API 金鑰的密文搬到 `external_calendars` 同一個 id 的列（或反過來）解得開。另外截斷的密文丟 `TypeError`（500），不是「讀不到」。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`src/test/serverSecret.test.ts`「a value sealed for one purpose does not open for the other…」與「…or a cut value does not open」修前紅、修後綠；`externalCalendars.integration.test.ts`「a secret sealed as an API key under the same id does not open as a calendar address」修前紅。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的斷言只對「一種秘密、一張表」測過（`aiRuntimeApi` 的「moved to another row id」）；第二個用途加進來時沒有人回頭看那句話還成不成立，也沒有測試把一種秘密放進另一種的表。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕`services/serverSecret.ts` 是唯一加解密的地方（`serverSecret.guard.test.ts` 擋第二個呼叫 `createCipheriv`／讀金鑰的檔、擋用途由別的檔或執行時決定）；第 2 版的值綁 `<用途>:<列 id>`，跨用途、跨列、竄改、截斷各有測試。分兩次部署（擁有者審查，#1923）：這一版能讀第 2 版、仍寫第 1 版、不改寫；`serverSecret.test.ts`「writes the form the previous deploy reads」用前一版的讀法讀新寫的值。
+- **還沒擋住的**：**第二步尚未做**：寫第 2 版、把第 1 版的列重封（讀到時與開機時）、全部重封後拒絕第 1 版。在那之前存著的值都是第 1 版，用途不保護任何東西：第 1 版的值以任一用途都打得開（`serverSecret.test.ts` 把這件事寫成測試，第二步要把它改成拒絕）。
+- 第一版修法本身又犯了一次（#1923 擁有者審查）：一部署就把所有 API 金鑰重封成新格式，回滾到前一版映像就全部讀不出來。資料格式的改變沒有先問「退回一版還讀得到嗎」。機制：〔第 1 層〕上面那則「前一版讀得到」的測試；〔第 4 層〕改存放格式時，先出「能讀新格式、仍寫舊格式」的一版。
+
+### 2026-11-20　「瀏覽器頁面設不了 bearer 標頭」所以看到 bearer 就跳過來源檢查，認不得的 bearer 又退回 cookie（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`app.ts` 的來源檢查（CSRF）只要看到 `Authorization: Bearer` 就跳過，理由寫「a page in a victim's browser can set neither a bearer header nor a forged Origin」；之後的身分解析在 bearer 解析不到時，照樣用同一個請求的登入 cookie。結果別的網站帶著亂寫的 bearer 與那個人的 cookie 送寫入，伺服器會以那個人的身分接受（修前實測：外來 Origin 的 `PUT /api/me/prefs/nav` 回 200 並寫入）。真正擋住的只剩瀏覽器的 CORS 預檢。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`bearerNeverFallsBackToCookie.integration.test.ts` 的「an unknown bearer with a valid cookie is refused…」「a bearer header that does not parse is refused too…」修前紅（200）、修後綠。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的理由是「頁面設不了標頭」，但頁面可以設（只是要過預檢）；跳過檢查依據的是「有沒有標頭」，不是「標頭有沒有驗證通過」。`originGuard.test.ts` 只用一個假的 bearer 檢查「沒被來源檢查擋」，沒有檢查那個請求之後被當成誰。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕bearer 在來源檢查之前解析一次；帶 bearer 的請求只能由那個 bearer 認證，解析不到（含格式錯）一律 401，不看 cookie；來源檢查只對真的解析成功的 bearer 讓開。上面的測試加上「bearer＋cookie 時是 bearer 的身分」「沒有 bearer 的外來寫入照舊 403」。
+- **還沒擋住的**：無已知的同類入口（`clientGate.ts` 見下一行）；「看到某個標頭就跳過檢查」沒有掃描式的守門。
+- 同類又一次（#1923 擁有者審查）：`clientGate.ts` 只要有任何 `Authorization` 標頭（含代理的 `Basic`）就不檢查頁面的協定版本；修前實測一個不帶協定標頭的舊頁面帶著 `Basic` 與 cookie 建了一則筆記（201）。改成看已驗證的 actor（`spine/authority.ts` `isPerson`）；`clientGate.test.ts`「asks a person's page even when the request carries an Authorization header」與 `bearerNeverFallsBackToCookie`「a page's note write with a proxy's Basic header」修前紅。同一輪也發現 bearer 的 401 排在協定標頭與請求紀錄之前、沒有那個標頭（測試「the 401 for a bearer says the server's protocol」修前紅），已移到它們之後。
+
+### 2026-11-22　四個 agent 權杖的測試從來沒有拿到權杖，靠的正是 #1923 拿掉的退回才是綠的；我自己的回報也把其中一則說成「沒重跑、無關」（測試的模型錯了；未查證就回報）
+- **發生了什麼**：#1923 併入 main 後，公開 run 45030945350 的真 Postgres 有測試回 401（`fieldSchema`、`fieldNameGate`、`tagModuleSwitchGate`）。原因不在權杖：這三個檔建 agent 時還帶著已移除的 `role`（回 400 `role_removed`），建權杖用已移除的 `template`（回 500），所以送出的是 `Authorization: Bearer undefined`。在 main 上它退回成原生來源的管理員，測試以管理員身分通過；#1923 讓認不得的 bearer 一律 401，測試才露出來。正式站的權杖走同一個 `resolveBearerActor`，沒有變。另外，我第一輪回報裡寫「import, an approved proposal and the schema PATCH store the same behaviour 紅，沒有重跑」，那一則就是 `fieldSchema` 的這個失敗，是這個 PR 造成的，我沒有查就當成無關。
+- **證據**：#1923 留言 7080893024；在 main `886242fe3` 上實測 `POST /api/actors`（帶 `role`）400、`/tokens` 500、`GET /api/mcp/tools` 帶 `Bearer undefined` 回 200；修正後三個檔 17 則全綠，且建立步驟有斷言（權杖要是 `ondt_` 開頭）。
+- **發現者**：測試（公開 CI，合併前）。
+- **為什麼沒擋到**：測試的準備步驟沒有檢查回應，拿到 `undefined` 也照樣往下；API 改版（移除 `role`、`template`）時這些檔沒有紅，因為退回把錯蓋住了。我在本機只跑了自己挑的檔與一部分完整套件，那一部分裡紅的一則被我放進「沒重跑」而不是先查。
+- **類別**：測試的模型錯了（測試走的不是它以為的那條認證路徑）；未查證就回報。
+- **機制**：〔第 1 層〕三個檔的準備步驟斷言建立成功、權杖形狀是 `ondt_…`；認不得的 bearer 一律 401（`bearerNeverFallsBackToCookie`），以後同樣的錯會在準備步驟或第一個請求就紅，不會再被退回蓋住。〔第 4 層〕回報時，完整套件裡紅的測試若沒有查過原因，不得寫成「和這個 PR 無關」，要寫「沒查」。
+- **還沒擋住的**：沒有守門找出「測試拿 `undefined` 當憑證」這種準備步驟；同一輪公開 CI 上另外三則紅（`sessionReadsOwn.property`、端對端 `zzDeepSys03`、`zzDeepToken01` 的 500）後來確認都不是 #1923 造成的：沒有 #1923 的 run 也紅（擁有者 2026-11-22 留言 7084235814、7084955629、7086572174；`zzDeepToken01` 是 #1875 的競態，我在真 Postgres 上的乾淨 `main` 重現 8 次 2 紅）。
 
 ### 2026-11-19　「內容」能不能收，畫面與伺服器各算一次，兩個答案在「算出來的白板分頁」上不同（零件對、組裝錯）
 - **發生了什麼**：#1767 的再審（note-ed，讀程式）發現：只有「畫面依卡片算出來的白板分頁」（沒有白板檢視紀錄）時，畫面認為「內容」可以收（分頁多於一個），伺服器的 `keepContentTabShowing` 只數檢視紀錄、看不到白板，確認後立刻把 `hidden` 清掉：人按了確認、「內容」還在。第二輪審查已要求「由伺服器保證」，我把保證放在伺服器，卻沒有把「能不能收」這個**答案**也只放一處，畫面仍自己用分頁數量算。
@@ -949,6 +1008,7 @@
 - **類別**：未查證就回報；驗證的不是要上線的那一版。
 - **機制**：〔第 4 層，文字規則〕回報前用 `git rev-parse --short HEAD` 取代號，不憑記憶；推送前在最後一個 commit 之後跑完整 `bash scripts/guard-lane.sh` 並寫出結束碼。
 - **還沒擋住的**：尚無機制。往上一層的做法：`.claude/settings.json` 加推送前（`git push`）的 hook 跑 `scripts/guard-lane.sh`；留言裡的 commit 代號若要機器核對，可在回報用的指令裡直接印出 `git rev-parse`。
+- **2026-11-22（#1927）再一次**：推送前跑了 `guard-lane.sh`（exit 0）與發布相關的整合測試，沒跑完整後端套件；`src/test/spineGate.test.ts` 不在 `guards/` 資料夾、守門道不跑它，新的 `recordPictureTakedowns` 寫 SQL 卻不在它的清單裡，公開庫第 8 批才擋下。同一批還有兩個完整端對端 spec 沒更新（`zzDeepFind03` 還在找英文佔位字）。修法：寫入收回已列名的 `recordTakedowns`、spec 改成網站語言的佔位字；這次推送前跑完整後端套件。機制仍只有第 4 層——守門道外的守門測試（`spineGate`、`attributeWriters` 這類）該搬進 `guards/` 或讓 `guard-lane.sh` 一起跑：尚無機制。
 ### 2026-11-18　把檢查搬進共用的一層，沒有列出誰會經過它；名為「AI」的測試用的是人（退步沒被抓到）
 - **發生了什麼**：PR #1856 第 4 輪把「發布標記只有人能寫」搬進所有屬性列共用的 `storeAttributeState`，對每一筆 `_published` 都問 `requirePerson`。但新筆記從父筆記、來源或範本帶來的「不發布」（`siteDefault.ts`、`noteDuplicate.ts`、`templateExpander.ts`、段落變子筆記）也經過那一層，寫的人是建立者：AI 的權杖與臨時工作階段在「不發布」的筆記底下建筆記、複製、展開範本，從成功變成 403。
 - **證據**：PR #1856 審查第 5 輪第 1 點（讀碼，附行號）；`nonPersonKeptOff.integration.test.ts` 拿掉豁免後 10 則紅。
@@ -988,6 +1048,14 @@
 - **類別**：測試量不到它要擋的東西。
 - **機制**：〔第 2 層〕成本測試的節點握有 `BULK` 則筆記，斷言以它為比例（每則帶來的筆記不超過 `BULK / 10` 列）。「每個成本斷言先跑一次它要擋的變異」：尚無機制，靠每輪的變異清單。
 
+### 2026-11-20　在錯的資料夾找補丁的檔案，就寫「Astro 7 已沒有這個檔」（PR #1921 審查第 2 點）
+- **發生了什麼**：升級 Astro 7 時，我要確認 `patches/astro+6.4.6.patch` 改的 `plugin-css.js` 還在不在，在 repo 根目錄 `ls node_modules/astro/...`；Astro 7 被 npm 放進 `packages/frontend/node_modules`，根目錄沒有，我就在 PR 說明寫「Astro 7 已沒有這個檔」並刪了補丁。那個檔在 `packages/frontend/node_modules/astro/dist/core/build/plugins/plugin-css.js`，補丁要修的問題（延後載入畫面的 CSS 被前置連到頁面）只修了一部分。
+- **證據**：PR #1921 審查留言第 2 點；移植後的 `packages/frontend/patches/astro+7.4.13.patch`，`npm run postinstall`（在 `packages/frontend`）印出 `astro@7.4.13 ✔`。
+- **發現者**：審查。
+- **為什麼沒擋到**：「檔案不存在」是我在一個路徑上看到的，沒有用 `npm ls`／`find` 確認套件實際放在哪；補丁被刪之後也沒有東西要求我證明它不再需要（建置當時還被別的錯擋住，沒跑到 `check-app-css`）。
+- **類別**：用一次查找就斷定「不存在」，而且拿它當刪除的理由。
+- **機制**：〔第 1 層〕補丁改放 `packages/frontend/patches/`，由 `packages/frontend` 的 `postinstall`（`patch-package --error-on-fail`）套用：套不上就讓安裝失敗，不會默默沒有補丁；`check-app-css` 在 `npm run build` 內，補丁沒效時 CSS 沒被連到就失敗。刪補丁前要先在能過預算的建置上跑過 `check-app-css`：尚無機制，靠審查。
+- **還沒擋住的**：升級 Astro 時，補丁是否仍需要，只有 `check-app-css` 抓得到「樣式表沒連到」；抓不到「多連了延後載入的樣式表」（開機 CSS 變大）。
 ### 2026-11-19　手寫存檔修正（#1896）第一版讓「存檔被拒絕時留下的紀錄」無上限成長，沒有算規模
 - **發生了什麼**：修「被拒絕的存檔之後復原遺失筆」時，我讓 `InkSaver` 從第一次拒絕起每次存檔多留一筆變更（各帶一整份編碼過的畫），每次重存對每一筆跑一次合併。存檔持續被拒（權限被拿掉、伺服器因太大拒收）而人繼續寫時，記憶體與每次提筆的計算量隨次數成長；原本 main 上被拒的存檔沒有任何成本。我只把它列在「沒驗證」，沒有當成要先修的缺口。
 - **證據**：擁有者在 #1896 的審查指出 `unsent` 沒有上限；修正後新增測試「連續 60 次被拒絕後只留一筆變更、下一次被接受的存檔仍帶全部筆」。
@@ -1075,6 +1143,13 @@
 - **為什麼沒擋到**：寫觸發器時只想到「哪一欄改了」，沒有想到「是誰改的」；4.9 照提案的句子做，沒有先問 `seen` 能不能當成那個判斷的依據（檔頭本來就寫它只決定通知誰）。
 - **類別**：機制的前提沒有驗證。
 - **機制**：〔第 1 層〕兩則測試各自釘住（第一則兩種先後都跑，第二則是隨機種子與固定種子 2 的 R4）；觸發器改成不帶欄位清單、用 WHEN 判斷。BEFORE 觸發器改的欄位被 `UPDATE OF` 依賴：尚無機制擋。
+### 2026-11-22　標籤欄位的新帳本不在伺服器副本的那道門裡；兩個 PR 各自綠、併起來紅（#1914 與 #1915，零件對、組裝錯）
+- **發生了什麼**：#1914 為標籤欄位的整包儲存新開一本帳（`tag-schema:<tag>`），同時 #1915 讓每一種列的伺服器副本都經過 `storeOps.keepUnanswered`，標籤清單那一列查的是 `node:<tag>`。兩邊各自測試都綠；併起來後新帳本沒人看：欄位還在路上時，同步答覆、`?nodes=none` 或整份 bootstrap 帶回的舊標籤清單照樣蓋掉它，而且之後這筆儲存的回應到了也不會再讀一次，新加的欄位就留在舊值。同一處 `tagWriter.setHidden` 被拒時只對照筆記列，標籤只在標籤清單時不會還原。
+- **證據**：`gateHoldsEveryUnansweredEdit.test.ts` 新加「a tag's fields」一種列（同步、`?nodes=none`、整份三扇門＋「不會永遠擋住」＋被拒還原），把帳本改回 `tag-schema:` 時 4 則紅（seed 1795352016810），改成 `node:<tag>` 全綠；`tagHiddenRefusedTagListOnly.test.ts` 舊程式 1 則紅。
+- **發現者**：審查（公開 CI 的合併批次，守門 `everyJournalAtTheDoor` 解不出帶連字號的帳本名）。
+- **為什麼沒擋到**：#1914 開帳本時 #1915 還沒合，它依當時的 main 是對的；沒有人在併 main 後重問「我記的帳，門認得嗎」。守門能抓到，是因為正規式剛好解不出連字號，不是因為它看懂了語意。
+- **類別**：零件對、組裝錯。
+- **機制**：〔第 1 層〕`everyJournalAtTheDoor.guard`（帳本前綴必須出現在 `storeOps` 程式裡）；標籤欄位改記在門已認得的 `node:<tag>`（同一列一本帳，不再多開一個前綴），並進 `gateHoldsEveryUnansweredEdit.test.ts` 的種類表走真的同步引擎。守門只比前綴：一個帳本借用了門認得的前綴，但它記的欄位其實不在那一列上，守門看不出來，只能靠種類表那則測試：尚無通用機制。
 ### 2026-11-22　改 lint:boundaries 的設定只跑了它自己，沒跑讀同一份設定的守門；對擁有者說「規則一樣有效」
 - **發生了什麼**：為了消掉 136 個「行內註解無效」警告，我把 `eslint.boundaries.config.js` 的 `noInlineConfig` 搬到指令列的 `--no-inline-config`，跑了 `npm run lint:boundaries` 看到通過，就跟擁有者說規則一樣有效。守門 `allowlistBoundaries.guard.test.ts` 用設定檔本身跑 ESLint、證明 disable 註解繞不過邊界規則，搬走之後它失敗了。
 - **證據**：公開庫 CI 執行 45013171522 的 Guard lane 與 Frontend：「an eslint-disable comment does not silence it」expected [] to have a length of 1。

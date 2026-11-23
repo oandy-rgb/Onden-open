@@ -5,6 +5,7 @@
 import { embedMatches, formatInkRegion, nodeRefId, aliasLinksBySlug, linkNamesNote, type FrozenQueryBlock, splitWikilink, scanWikilinks, wikilinkTarget, parseInkRegion } from "@onden/markdown";
 import { q } from "../../../db.js";
 import { takeDownDesign } from "./siteRows.js";
+import { presentationWords } from "./siteWords.js";
 import { nodeAliasesSql } from "../../../services/wikilinkEdges.js";
 import { liveNodeSql, tagNodeSql } from "../../../spine/nodeSql.js";
 
@@ -12,7 +13,8 @@ import { liveNodeSql, tagNodeSql } from "../../../spine/nodeSql.js";
 // print that private node's TITLE as link text (and link to a 404). Neutralize
 // at serve time: keep links whose target IS in the published set; for a target
 // that is NOT published, drop the title — use the author's explicit alias if one
-// was given (`[[Target|public label]]`), else redact to "(private)". This closes
+// was given (`[[Target|public label]]`), else redact to the site's placeholder
+// word (siteWords privateText: 「（未公開）」 on a zh-TW site, "(private)" in English). This closes
 // the "inert links to unpublished" leak in both the /api/site JSON and the
 // rendered /site HTML (which renders from this same markdown).
 //
@@ -51,7 +53,7 @@ function publishedResolver(published: ReadonlyArray<PublishedName>): (target: st
   };
 }
 
-function inertWith(markdown: string, isPublished: (target: string) => boolean, onInert?: (link: InertLink) => void): string {
+function inertWith(markdown: string, isPublished: (target: string) => boolean, privateText: string, onInert?: (link: InertLink) => void): string {
   if (typeof markdown !== "string" || !markdown.includes("[[")) return markdown;
   let out = "", last = 0;
   for (const m of scanWikilinks(markdown)) {
@@ -61,7 +63,7 @@ function inertWith(markdown: string, isPublished: (target: string) => boolean, o
     if (target === "" || isPublished(target)) continue;                    // published → keep
     const alias = splitWikilink(m.body).alias?.trim();
     // inert: alias or redacted. A quoted region of a drawing (`|ink=頁@x,y,w,h`) is no label: it never shows.
-    const shownAs = alias && !parseInkRegion(alias) ? alias : "(private)";
+    const shownAs = alias && !parseInkRegion(alias) ? alias : privateText;
     onInert?.({ target, shownAs });
     // An embed (`![[…]]`) of it reads the same, without its `!`.
     const start = m.start > 0 && markdown[m.start - 1] === "!" ? m.start - 1 : m.start;
@@ -71,13 +73,15 @@ function inertWith(markdown: string, isPublished: (target: string) => boolean, o
   return last === 0 ? markdown : out + markdown.slice(last);
 }
 
+/** `privateText`: what readers see for a link with no text of its own (siteWords privateText). */
 export function inertUnpublishedWikilinks(
   markdown: string,
   published: ReadonlyArray<PublishedName>,
+  privateText: string,
   onInert?: (link: InertLink) => void,
 ): string {
   if (typeof markdown !== "string" || !markdown.includes("[[")) return markdown;
-  return inertWith(markdown, publishedResolver(published), onInert);
+  return inertWith(markdown, publishedResolver(published), privateText, onInert);
 }
 
 /** The `aliases` attribute of each node in `ids` (wikilinkEdges reads them the same way). */
@@ -142,6 +146,7 @@ const NODE_REF_MARK = "onden://node/";
  *  published note by one of its aliases stay a link. */
 export function redactPayloadNodes(
   nodes: unknown,
+  privateText: string,
   onInert?: (node: { id?: unknown; title?: unknown }, link: InertLink) => void,
   aliases?: ReadonlyMap<string, string[]>,
 ): void {
@@ -151,7 +156,7 @@ export function redactPayloadNodes(
   const slugById = new Map(pub.flatMap((n) => (typeof n.id === "string" && typeof n.slug === "string" && n.slug ? [[n.id.toLowerCase(), n.slug] as const] : [])));
   for (const n of pub) {
     if (typeof n.markdown === "string") n.markdown = nameRegionEmbedsBySlug(n.markdown, slugById);
-    if (typeof n.markdown === "string") n.markdown = inertWith(n.markdown, isPublished, onInert && ((link) => onInert(n, link)));
+    if (typeof n.markdown === "string") n.markdown = inertWith(n.markdown, isPublished, privateText, onInert && ((link) => onInert(n, link)));
   }
 }
 
@@ -162,11 +167,12 @@ export function redactPayloadNodes(
  *  inert again against the pages still served, as the page text is. */
 export function keepServedQueryRows(
   nodes: ReadonlyArray<{ id?: unknown; title?: unknown; slug?: unknown; query_blocks?: unknown }>,
+  privateText: string,
   aliases?: ReadonlyMap<string, string[]>,
 ): void {
   const served = new Set(nodes.map((n) => n.id));
   const names = publishedNames(nodes, aliases);
-  const inert = (text: string) => inertUnpublishedWikilinks(text, names);
+  const inert = (text: string) => inertUnpublishedWikilinks(text, names, privateText);
   for (const node of nodes as Array<{ query_blocks?: unknown }>) {
     if (!Array.isArray(node.query_blocks)) continue;
     node.query_blocks = (node.query_blocks as FrozenQueryBlock[]).map((block) => ({
@@ -258,8 +264,9 @@ export function scrubUnpublishedParents(nodes: unknown): void {
 export async function scrubStoredSnapshot({ payload: out }: { payload: Record<string, unknown> }): Promise<void> {
   const nodes = Array.isArray(out.nodes) ? out.nodes as Array<{ id?: unknown; title?: unknown; slug?: unknown; markdown?: unknown }> : [];
   const aliases = await publishedAliases(nodes.map((n) => n.id));
-  redactPayloadNodes(nodes, undefined, aliases);
-  keepServedQueryRows(nodes, aliases);
+  const { privateText } = presentationWords(out.presentation);
+  redactPayloadNodes(nodes, privateText, undefined, aliases);
+  keepServedQueryRows(nodes, privateText, aliases);
   const presentation = out.presentation as { design?: Record<string, unknown> } | null | undefined;
   const design = presentation?.design;
   if (design && typeof design === "object") {
@@ -267,7 +274,7 @@ export async function scrubStoredSnapshot({ payload: out }: { payload: Record<st
     const keptTags = new Set([...Object.keys((design.tag_pages ?? {}) as object), ...Object.keys((design.tag_names ?? {}) as object)]);
     presentation!.design = takeDownDesign(design, new Set(nodes.map((n) => String(n.id))), keptTags, {
       pages: new Map(nodes.map((n) => [String(n.id), { title: String(n.title ?? ""), markdown: String(n.markdown ?? "") }])),
-      redact: (text) => inertUnpublishedWikilinks(text, names),
+      redact: (text) => inertUnpublishedWikilinks(text, names, privateText),
     });
   }
 }

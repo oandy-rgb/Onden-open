@@ -131,27 +131,6 @@ app.use(
   }),
 );
 
-// Origin guard for cookie-authenticated writes (CSRF) and the MCP endpoint
-// (DNS rebinding). CORS above only decides what a browser may READ; it does not
-// refuse the request. A browser always sends Origin on a cross-site write, so a
-// write (or any /api/mcp/protocol call) whose Origin is neither listed in
-// CORS_ORIGIN nor this server's own host is refused. Requests with no Origin
-// (curl, native clients) and bearer-token requests are unaffected: a page in a
-// victim's browser can set neither a bearer header nor a forged Origin.
-// Hono's csrf() would not do: it only looks at form-typed bodies, and this API
-// takes JSON, which a cross-site page can also send.
-const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-app.use("*", async (c, next) => {
-  const origin = c.req.header("origin");
-  if (!origin || parseBearer(c.req.header("authorization"))) return next();
-  if (!UNSAFE_METHODS.has(c.req.method) && c.req.path !== "/api/mcp/protocol") return next();
-  if (!corsAllowedSet || corsAllowedSet.has(origin)) return next();
-  let sameHost = false;
-  try { sameHost = new URL(origin).host === c.req.header("host"); } catch { /* an unparsable Origin is not our own */ }
-  if (sameHost) return next();
-  return c.json({ error: "origin_not_allowed" }, 403);
-});
-
 const withBuildHeader = buildHeader(config.str("ONDEN_BUILD_ID"));
 if (withBuildHeader) app.use("*", withBuildHeader);
 app.use("*", serverProtocolHeader());
@@ -184,6 +163,50 @@ if (!isTest()) {
   });
 }
 
+// Bearer credentials, resolved once, before the origin guard and the actor middleware read them. Placed after the protocol
+// header and the request log so a refusal here says the server's protocol and is logged like every other answer. A request that presents
+// `Authorization: Bearer …` is authenticated by that bearer — an agent token (ondt_, services/agentTokens.ts) or a
+// temporary session's credential (onds_, services/participantSessions.ts) — or refused with 401. It is never
+// authenticated by the sign-in cookie that may ride along: an unknown, revoked, expired or unparsable bearer would
+// otherwise turn into the person's cookie session with the origin guard below already skipped. Other schemes
+// (a proxy's `Basic`) are not ours and are left alone.
+const BEARER_SCHEME = /^\s*bearer(?:\s|$)/i;
+// The actor each bearer request resolved to, read by the origin guard and the actor middleware of the same request.
+const bearerActors = new WeakMap<Request, ActorCtx>();
+app.use("*", async (c, next) => {
+  const header = c.req.header("authorization");
+  if (!header || !BEARER_SCHEME.test(header)) return next();
+  const bearer = parseBearer(header);
+  const actor = bearer
+    ? (await resolveBearerActor(bearer)) ?? (await resolveTemporarySessionActor(bearer, await getWorkspaceId()))
+    : null;
+  if (!actor) return c.json({ error: "unauthorized" }, 401);
+  bearerActors.set(c.req.raw, actor);
+  return next();
+});
+
+// Origin guard for cookie-authenticated writes (CSRF) and the MCP endpoint
+// (DNS rebinding). CORS above only decides what a browser may READ; it does not
+// refuse the request. A browser always sends Origin on a cross-site write, so a
+// write (or any /api/mcp/protocol call) whose Origin is neither listed in
+// CORS_ORIGIN nor this server's own host is refused. Requests with no Origin
+// (curl, native clients) and requests authenticated by a valid bearer (above) are
+// unaffected: a page in a victim's browser holds no valid bearer of theirs, and one
+// that sends a made-up bearer was already refused.
+// Hono's csrf() would not do: it only looks at form-typed bodies, and this API
+// takes JSON, which a cross-site page can also send.
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+app.use("*", async (c, next) => {
+  const origin = c.req.header("origin");
+  if (!origin || bearerActors.has(c.req.raw)) return next();
+  if (!UNSAFE_METHODS.has(c.req.method) && c.req.path !== "/api/mcp/protocol") return next();
+  if (!corsAllowedSet || corsAllowedSet.has(origin)) return next();
+  let sameHost = false;
+  try { sameHost = new URL(origin).host === c.req.header("host"); } catch { /* an unparsable Origin is not our own */ }
+  if (sameHost) return next();
+  return c.json({ error: "origin_not_allowed" }, 403);
+});
+
 // ── Better Auth handler ──────────────────────────────────────────────────
 // Public list of OAuth providers the deployment has configured (ids only, no
 // secrets) so the login UI shows only the buttons that will actually work. A
@@ -211,17 +234,13 @@ const PUBLIC_PATHS = new Set(["/health", "/api/site"]);
 app.use("*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
   // Auth resolution order:
-  //   1. Authorization: Bearer <token>  →  agent token actor (multi-agent)
+  //   1. Authorization: Bearer <token>  →  agent token actor (multi-agent); resolved by the bearer middleware above,
+  //      which already refused (401) a request whose bearer does not resolve, so a bearer request never reaches 2 or 3.
   //   2. Better Auth session cookie     →  human actor
   //   3. Native-origin fallback         →  System actor (dev / Capacitor app)
-  // A valid bearer token always wins, so an authenticated agent isn't masked
-  // by a stale session cookie present on the same request.
   //   1b. the same header may carry a temporary session's credential (services/participantSessions.ts): that is a person's
   //       own hands on another computer, so it is the whole app (not confined to MCP), as the participant it was opened as.
-  const bearer = parseBearer(c.req.header("authorization"));
-  const bearerActor = bearer
-    ? (await resolveBearerActor(bearer)) ?? (await resolveTemporarySessionActor(bearer, await getWorkspaceId()))
-    : null;
+  const bearerActor = bearerActors.get(c.req.raw) ?? null;
   if (bearerActor && c.req.header("X-Onden-Expected-User")) throw new UnauthorizedError("account_changed");
   // POST /api/invites/claim resolves the session WITH its invite link, so the
   // first sign-in claims the invited member instead of becoming a viewer

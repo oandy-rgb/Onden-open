@@ -1,6 +1,6 @@
 # 摘錄（excerpt）：帶來源的段落
 
-> 狀態：現行（最後確認 2026-11-01）
+> 狀態：現行（最後確認 2026-11-20）
 
 > 狀態：RSS 劃線已實作（2026-10-29）。PDF 劃線、「閱讀頁依網址找出劃線」尚未做，見下方「之後」。
 > 涵蓋：packages/markdown/src/excerpt.ts, packages/frontend/src/lib/noteExportExcerpts.ts, packages/backend/src/modules/website/publishing/excerptEmbeds.ts
@@ -56,7 +56,8 @@
   就把「引用 + 來源行（標題、帶 Text Fragment 的原文連結、訂閱名稱）」寫進被發布的筆記快照，即使來源筆記（例如私人日記）沒有發布。
   理由：摘錄只是公開文章的一句話加原文連結，符合 Onden 鼓勵輸出的原則。
   - **只有那一個段落**出去：來源筆記的其他內容（摘錄底下的想法、日記的其他段落）、標題、id 與連到它的連結都不會進快照。
-  - **不是摘錄的嵌入**（一般段落、讀不到的筆記）維持 `publishBlockEmbeds` 既有規則：網站只放連到已發布筆記的連結，否則顯示「(private)」。
+  - **不是摘錄的嵌入**（一般段落、讀不到的筆記）維持 `publishBlockEmbeds` 既有規則：網站只放連到已發布筆記的連結，否則顯示網站語言的佔位字（中文網站「（未公開）」，英文 "(private)"；`siteWords` 的 `privateText`）。
+    嵌入的是手寫（整張或一塊區域）則另有規則：圖跟著嵌入它的筆記走，見 [網站的呈現模型](site-render-model.md)〈嵌入的圖跟著筆記走〉。
   - **是快照**（呈現模型 B）：展開發生在發布當下（`modules/website/publishing/excerptEmbeds.ts`，在 redaction 之前），之後改或刪日記
     不影響已發布的網站；重新發布才會更新。展開用的仍是 `@onden/markdown` 的 `expandExcerptEmbeds`（與匯出同一份，不另寫一套）。
   - 只讀發布者讀得到的筆記；沒有發布者身分（匿名）時不展開。

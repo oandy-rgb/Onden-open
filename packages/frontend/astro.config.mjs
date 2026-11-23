@@ -11,10 +11,40 @@ import hoverWithPointer from "./scripts/hoverWithPointer.mjs";
 // build time is unique enough.
 const BUILD_ID = process.env.ONDEN_BUILD_ID || Date.now().toString(36);
 
+// Astro 7 bundles with Rolldown (Vite 8). Left alone it splits the boot JS (what AppRoot and the workspace import
+// statically) into ~200 small chunks that gzip about 15% worse than Rollup's 11, and the 302.9 KiB budget
+// (scripts/check-boot-bundle.mjs) fails. The island's component and the workspace are loaded by dynamic import, so
+// they are not "initial" for Rolldown; making them entries puts everything they import statically in one `boot` chunk.
+// `includeDependenciesRecursively: false` keeps that chunk to the modules boot code really imports: with it on,
+// every unused re-export of a barrel (modules/tasks/index.ts re-exports the task screens) would be pulled in too.
+// That option needs preserveEntrySignatures other than Astro's "exports-only" (allow-extension: exports are kept).
+function bootChunkPlugin() {
+  return {
+    name: "onden-boot-chunk",
+    apply: "build",
+    applyToEnvironment: (environment) => environment.name === "client",
+    configEnvironment(name) {
+      if (name !== "client") return;
+      return { build: { rolldownOptions: {
+        preserveEntrySignatures: "allow-extension",
+        output: { codeSplitting: { groups: [{ name: "boot", tags: ["$initial"], includeDependenciesRecursively: false }] } },
+      } } };
+    },
+    buildStart() {
+      // Exports stay: the island imports AppRoot's default, the page imports the workspace's.
+      for (const file of ["AppRoot.tsx", "components/BuilderWorkspace.tsx"]) {
+        this.emitFile({ type: "chunk", preserveSignature: "allow-extension", id: fileURLToPath(new URL(`./src/${file}`, import.meta.url)) });
+      }
+    },
+  };
+}
+
 export default defineConfig({
+  // Astro 7 changed the default from true to "jsx"; keep the minified HTML the web build always had.
+  compressHTML: true,
   integrations: [react()],
   vite: {
-    plugins: [tailwindcss(), bootReportPlugin()],
+    plugins: [tailwindcss(), bootReportPlugin(), bootChunkPlugin()],
     // A hover tint only with a pointer that hovers; on a touch screen it would stick to the last tap.
     css: { postcss: { plugins: [hoverWithPointer()] } },
     // The build time is its own constant: lib/buildTime (「這次更新」 compares it with when the account was created).

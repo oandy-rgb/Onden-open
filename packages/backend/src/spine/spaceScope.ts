@@ -92,6 +92,19 @@ export async function isTagDefinition(nodeId: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
+/** The joins SITE_OWNED_SPACE_SQL reads, for the content_nodes row `n`: its live
+ *  space `s`, the workspace `w` and the space's owner `o`. */
+export const SITE_SPACE_JOIN = (n: string): string => `JOIN spaces s ON s.id = ${n}.space_id AND s.deleted_at IS NULL
+       JOIN workspaces w ON w.id = ${n}.workspace_id
+       LEFT JOIN actors o ON o.id = s.owner_actor_id`;
+
+/** A space whose content the site may ever carry: the site is the workspace
+ *  owner's (owner 2026-11-14), so a personal space of anyone else never
+ *  qualifies. One rule for the pages
+ *  (publishableSpaceNodeIds) and for the drawings a published note embeds
+ *  (publishing/publishedSet.ts pictureSourceIds). Over SITE_SPACE_JOIN. */
+export const SITE_OWNED_SPACE_SQL = `(s.kind <> 'personal' OR (o.id IS NOT NULL AND ${workspaceOwnerSql("o", "w")}))`;
+
 /** Live node ids that may go on the public site under the space rule: in a
  *  space whose `publish` switch is on (a note kept off by its own `_published` 'false' is left out by
  *  the publishing code itself). The site is the workspace owner's (owner
@@ -99,11 +112,9 @@ export async function isTagDefinition(nodeId: string): Promise<boolean> {
  *  switch already on, so no data fix is needed for switches set before. */
 export async function publishableSpaceNodeIds(workspaceId: string): Promise<Set<string>> {
   const r = await q<{ id: string }>(
-    `SELECT n.id FROM content_nodes n JOIN spaces s ON s.id = n.space_id AND s.deleted_at IS NULL
-       JOIN workspaces w ON w.id = n.workspace_id
-       LEFT JOIN actors o ON o.id = s.owner_actor_id
+    `SELECT n.id FROM content_nodes n ${SITE_SPACE_JOIN("n")}
       WHERE n.workspace_id = $1 AND ${liveNodeSql("n")} AND s.capabilities->>'publish' = 'true'
-        AND (s.kind <> 'personal' OR (o.id IS NOT NULL AND ${workspaceOwnerSql("o", "w")}))`,
+        AND ${SITE_OWNED_SPACE_SQL}`,
     [workspaceId],
   );
   return new Set(r.rows.map((row) => row.id));

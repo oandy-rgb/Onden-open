@@ -1,6 +1,6 @@
 # 邊界決定：核心寫入、標籤同名、冪等、同步與 membership（第 10–15、17 批，2026-09-13）
 
-> 狀態：現行（最後確認 2026-11-20）
+> 狀態：現行（最後確認 2026-11-22）
 > 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/backend/src/services/orderKeys.ts, packages/backend/src/services/actorPrefs.ts, packages/backend/src/services/actorReadSnapshot.ts, packages/backend/src/spine/txHooks.ts, packages/backend/src/services/sync/membership.ts, packages/backend/src/services/eventLog/bodyMerge*.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/membershipReconcile.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/localCopyState.ts, packages/frontend/src/lib/accountPrefStore.ts
 
 何時讀：改 `updateNode`、標籤改名、交易／冪等、sync、membership、待同步文字之前。
@@ -230,6 +230,9 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **本機鏡像版本**：`sync_state.mirror_schema_version`（`MIRROR_SCHEMA_VERSION`）；改變時清掉 `full_refresh_at`，下次開啟做完整 bootstrap。
   改本機欄位語意時要加一。版本 2（migration 194 把釘選 id 改成由「上層、目標」算出）：舊副本裡的釘選 id 伺服器已不認得，
   所有副本都重新讀一次，不另外保留舊 id 的對照。
+  版本 5（2026-11-22）：副本開始存**自己的空間清單**（`sync_state` 的 `spaces`，`lib/spaces.ts`）。版本號一變，這份清單跟
+  `full_refresh_at` 一起清掉：空間 id 是伺服器給的、換過（migration 201 → 版本 3），之後再換 id 時升版就不會留下舊的個人空間。
+  開機在第一次畫面前讀回（`syncEngine.runBoot` 的 `restoreSpaces`），伺服器每次回答都寫回；只有從沒聽過伺服器的裝置才是「不知道」。
 - **同一行並行輸入（F03／F04）**：`bodyMerge.ts` 的衝突區塊先再試一次字元層級（`mergeChars`）：兩邊都只「加字」
   （沒刪／改任何字元）時兩份都留，同一點的兩段依文字的 code unit 順序排，與先後存檔無關（重播與另一分頁合併結果相同）。
   任一邊刪或改了字元仍是衝突：保留較晚存檔、`BODY_CONFLICT` 帶回被蓋掉的字，不把兩份改寫拼成誰都沒寫的文字。
@@ -295,6 +298,7 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   閱讀位置（`rssReadingPosition`）、上次打開閱讀的時間（`rssLastVisit`）。
   共用 `lib/accountPrefStore.ts` 的 `createAccountPref`（`syncedPrefStore` 加 serverKey、本機副本 `…Copy`、parser、搬遷）；
   後端 key 與形狀在 `services/actorPrefs.ts`（map 最多 500／50 筆、字串長度有限、形狀不對 400）。
+- **複習頁的「範圍」**（`reviewScope`，頁面位址文字：全部、筆記、標籤或沒有標籤；`reviewScopePref`）同樣走 `createAccountPref`；內含筆記與標籤 id，所以臨時工作階段讀成「沒設過」。
 - **搬遷**：舊本機值在第一次同步成功後才處理——伺服器沒有值才送上去一次，有值就用伺服器的（上次打開閱讀的時間改比「較新」：
   `isNewer`，相等不算較新）；之後舊 key 刪除（`PREFS` 標 Retired，仍留著讓搬遷讀得到）。同步前頁面先顯示舊值，離線也能用。
 - **「較新」**：`rssLastVisit` 儲存時若伺服器的比較新就保留伺服器的，舊裝置不會把時間往回寫。

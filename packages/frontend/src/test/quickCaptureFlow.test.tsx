@@ -30,6 +30,7 @@ import { reads } from "../lib/data";
 import { resetAppState } from "../lib/appStore";
 import { PREFS, removePref } from "../lib/prefs";
 import { INBOX_TAG_ID, captureProps, type CaptureProps } from "./helpers/captureProps";
+import { knowPersonalSpace } from "./helpers/knownSpaces";
 
 const note = (id: string, title: string, extra: Partial<ContentNode> = {}): ContentNode =>
   ({ id, title, slug: id, markdown: "", source_type: "manual", node_type: "content", ...extra });
@@ -57,7 +58,8 @@ beforeAll(async () => {
   // The box loads on the first request to open it; load it once here so no test pays for the import.
   await import("../modules/capture/QuickCapture");
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await knowPersonalSpace(); // today's diary is the home of a task with no note
   resetAppState();
   localStorage.clear();
   removePref(PREFS.quickCaptureDraft);

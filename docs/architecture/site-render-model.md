@@ -1,7 +1,7 @@
 # 網站的呈現模型（W38）
 
 > 狀態：現行
-> 涵蓋：packages/backend/src/modules/website/publishing/servedSite.ts, packages/backend/src/modules/website/publishing/publishedSet.ts, packages/backend/src/modules/website/publishing/takenDown.ts, packages/backend/src/modules/website/publishing/snapshot.ts, packages/backend/src/modules/website/publishing/preview.ts, packages/backend/src/modules/website/publishing/siteDiff.ts, packages/backend/src/modules/website/publishing/handwritingPages.ts, packages/backend/src/modules/website/publishing/pagesPush.ts, packages/backend/src/services/siteDefault.ts, packages/frontend/src/components/siteFrame/**
+> 涵蓋：packages/backend/src/modules/website/publishing/servedSite.ts, packages/backend/src/modules/website/publishing/publishedSet.ts, packages/backend/src/modules/website/publishing/takenDown.ts, packages/backend/src/modules/website/publishing/snapshot.ts, packages/backend/src/modules/website/publishing/preview.ts, packages/backend/src/modules/website/publishing/siteDiff.ts, packages/backend/src/modules/website/publishing/handwritingPages.ts, packages/backend/src/modules/website/publishing/drawingEmbeds.ts, packages/backend/src/modules/website/publishing/pagesPush.ts, packages/backend/src/services/siteDefault.ts, packages/frontend/src/components/siteFrame/**
 
 何時讀：改發布、網站上有哪些筆記、下架、發布前預覽、網站的 Markdown 輸出或手寫頁時。
 W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）、選項比較與實作順序已移到 [site-render-model-history.md](site-render-model-history.md)。
@@ -12,7 +12,8 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 ## 呈現模型：快照為準，下架即時（使用者 2026-10-14 決定，選項 B）
 
 - 網站的內容與設定是最近一次發布的快照（`publish_snapshots` 一列，`publishing/snapshot.ts buildAndEnqueueSnapshot`）：筆記的 Markdown 原文（id、標題、slug、正文、父層、標籤）、edges、首頁，
-  先做 redaction（未發布的 wikilink 變成「(private)」、未發布的父層拿掉）。快照另帶 `redirects`。
+  先做 redaction（未發布的 wikilink 變成網站語言的佔位字：中文網站「（未公開）」、英文 "(private)"，`siteWords` 的 `privateText`；未發布的父層拿掉）。快照另帶 `redirects`。
+  筆記嵌入的手寫圖跟著筆記凍結進快照（見〈嵌入的圖跟著筆記走〉）。
 - 即時資料只能**撤下**，不能新增或修改內容：服務出去的是「最近快照 − 下架」（`servedSite.ts loadServedSite`；下架判斷見下面的「拿下來的內容不會自己回來」）。
   快照之後新發布的筆記、改過的正文與設定，等下一次發布才生效；沒有快照時網站是空的。
 - 同一份「快照 − 下架」是所有出口的來源：自架的 `/site/...`（`packages/frontend/src/pages/site/`，Astro SSR，讀 `GET /api/site`）、zip 匯出（`GET /api/export-static`）、外部靜態主機（`pagesPush.ts`，用 `loadServedSite`）、
@@ -52,13 +53,17 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 ## 發布前預覽：預覽就是候選快照
 
 - `POST /api/publish/preview`（唯讀，與發布同一個權限）用和 `buildAndEnqueueSnapshot` 同一個建構函式（`buildCandidate`）產生候選快照，不寫入、不排推送，回傳：
-  與**上次發布的快照**的差異（新增、移除、內容有改、順序有動、連結有變、設定有變）、會變成「(private)」的連結、不會公開或不會打包的圖片、候選內容的 hash，以及 `left_out`。
+  與**上次發布的快照**的差異（新增、移除、內容有改、順序有動、連結有變、設定有變）、會變成佔位字的連結（`private_links`，`shown_as` 是讀者看到的字）、
+  會跟著筆記一起公開的圖（`embedded_pictures`，每張一次，帶顯示它的筆記與手寫的 id）、不會公開或不會打包的圖片、候選內容的 hash，以及 `left_out`。
   差異是跟上次快照比，不是跟讀者現在看到的比：下架立即生效，讀者看到的永遠是候選的子集，拿來比的話「移除」永遠是空的；已經下架、這次才正式移除的筆記標成「讀者已經看不到」（`taken_down`）。
 - `left_out`：不會上線、但業主可能想知道的筆記與原因：標了「發布」卻被擋（`hidden`＝隱藏；`space_not_published`＝所在空間未開發布，附空間種類與名稱），以及發布中的空間裡被排除的
   （`kept_off`＝自己設成不發布；`kept_off_by_parent`＝建立時上層不發布而預設不發布；`blank`＝空白；`saved_article`＝從訂閱存下的文章）。與 `publishedNodeIds` 同一條件，只列操作者讀得到的筆記，不洩漏他人私人空間的標題。
   `POST /api/publish` 的回應也帶同一份，所以「發布成功但網站是空的」一定有說明。對話框據此給動作：搬到可發布的空間（先顯示搬過去誰會多看到，確認後才搬）或開啟該空間的發布設定；不改新筆記預設在「只有我」。
 - **`preview_hash` 必填**：`POST /api/publish` 不帶 hash 回 400，不發布；帶了但伺服器重建的候選內容 hash 不同，回 409 `preview_stale`（「內容在預覽後變了，請重新預覽」）。使用者確認的就是實際發布的。
   不新增內容的內部重建（`republishSite`，取消發布後的重新部署）不經過這條路，只用已經發出去的快照重做輸出。介面上的發布路徑都先預覽再帶 hash（`usePublishReview`）。
+- **對話框**（`PublishPreviewDialog`）：筆記都沒變、但下面還有要看的項目時，第一行說「筆記沒有變動，再發布一次網站維持原樣，並套用下面幾點」，不再只寫「沒有變動」；
+  「會一起公開的圖（N）」列出 `embedded_pictures` 的縮圖與所在筆記，每張有「不公開」（對那張手寫設「不發布」，提示裡可以復原，之後重新預覽）；
+  確認、取消那一列固定在對話框捲動區的底部；按「確認並發布」後對話框不關，改成「已發布 · 時間 · 開啟網站」（`usePublishReview` 的 `outcome`），失敗則在按鈕上方寫出原因、保留整份預覽。
 - **同樣內容一定得到同樣的 hash**：候選內容的每個查詢都有完整排序（`created_at` 相同時以 id 決定，標籤列也排序）。
 - **差異與 hash 用同一份「讀者看得到的內容」**（`publishing/siteDiff.ts`）：每則筆記的標題、網址、內文、上層、標籤、它在兄弟筆記間的順序（`moved`），以及它兩端的已發布連結（`links_changed`，Related／反向連結／導覽連結），加上網站設定。
   hash 只算這些，所以預覽說「沒有變動」時發布不會 409，409 時新預覽一定列得出變了什麼。`updated_at`、原始 `sort_order` 數值、`node_type`、`side_effects` 不算；
@@ -98,6 +103,27 @@ W38 開工前的「現況」（兩套渲染器、快照與即時資料混用）�
 - **存檔**（`storeHandwritingPages` → `services/media.ts storeGeneratedMedia`）：檔案不存在才畫，畫完原子寫入並記成那篇筆記的媒體。預覽（交易外）、發布路由與核准後的發布（`warmHandwritingPages`，交易外）都會先存好，所以發布交易裡通常只剩寫一列資料。改畫法就要升 `INK_PAGE_RENDER_VERSION`（`handwritingPage.test.ts` 釘住一張固定圖的雜湊，沒升會失敗）。
 - **回收**：發布記好新快照後，`forgetReplacedPages` 把這個工作區中新快照沒有用到的 `ink-*.svg`（改過手寫留下的舊檔、預覽產生但沒發布的檔）忘掉，走 `services/media.ts removeMediaFiles`（與永久刪除共用同一個「刪紀錄、提交後刪檔」）；永久刪除筆記時 `purgedContent` 也把這篇擁有的檔案列入，一起收掉。
 - **提供**（`serveHandwritingPages`，在下架過濾之後、與預覽）：`ink_pages` 變成內文後面的 `![][ink-page-N]`，其位址 `/api/media/….svg#ink-page-N` 帶穩定記號（`@onden/markdown` 的 `handwritingPageMarkdown`／`handwritingPageNumber`），之後就是一般 Markdown 圖片，網站、RSS、分享連結、zip、靜態主機都不必認識手寫。alt 不寫在伺服器：它依網站語言，由網站的 renderer 產生（`siteLocale` 的 `handwritingPage`）。預覽與發布後一樣用網址讀圖（預覽的圖只有能讀那篇筆記的人打得開），回應不再內嵌每頁約 22 MB 的 base64。
-- **下架即時**：圖是媒體檔，能不能讀走 `canReadMedia` → 擁有筆記是否仍在網站上（`snapshot_media`），所以下架後頁面與圖片網址同時消失；靜態主機打包時用同一個檢查（`mediaBundle.ts`）。私人筆記不在已發布集合裡，筆畫不會進快照。
+- **下架即時**：圖是媒體檔，能不能讀走 `canReadMedia` → 擁有筆記是否仍在網站上（`snapshot_media`），所以下架後頁面與圖片網址同時消失；靜態主機打包時用同一個檢查（`mediaBundle.ts`）。私人筆記不在已發布集合裡，它自己的頁面與筆畫不會進快照（被已發布筆記嵌入的那張圖例外，見下一節）。
 - **畫法**：每頁是整張紙（寬 1000、從 x=0 起，高度到最後一筆再留邊，最多到頁高），底色固定淺色紙（`INK_PAPER_COLOR`）。筆跡顏色是照淺色頁存的（深色模式在畫面上才反相），所以紙一律淺色；紙畫在 SVG 裡，不靠 CSS，RSS 閱讀器、zip 與靜態主機看到的一樣。
 - **頁面**：`MarkdownRenderer` 只在收到 `handwritingAlt`（網站的 `makeSiteMarkdown` 才傳）時認得位址上的記號，加上 `md-image--ink-page`（`MarkdownRenderer.css` 讓它滿寬、頁間留距）並給網站語言的 alt；App 的 renderer 與使用者自己寫的圖不受影響。網站上所有圖片本來就是 `loading="lazy"`，所以第二頁起是 lazy。RSS 內文只放第一頁（`withoutHandwritingPages`），alt 同樣依網站語言；文章封面與分享圖不取手寫頁（SVG 不是分享圖，也避免跟內文重複）。搜尋索引只讀標題與文字，圖片沒有文字，不受影響。
+
+## 嵌入的圖跟著筆記走（業主 2026-11-20，參考 Quartz）
+
+業主看到 9 篇已發布的筆記整頁只有「(private)」：內文是 `![[2025-12-16 05.51.08.excalidraw]]`，嵌入的是匯入的 Excalidraw 手寫，放在「只有我」。
+舊規則「嵌入的東西沒發布就變佔位字」技術上正確但不好用。Quartz 的做法：已發布筆記嵌入的圖跟著內容一起發布，隱私的界線是整個排除的資料夾；Excalidraw 發布成圖，不是頁面。
+Onden 照這個做，但保留發布前確認：
+
+- **什麼會出去**：已發布筆記裡的 `![[手寫]]`（整張）或 `![[手寫|ink=頁@x,y,w,h]]`（一塊區域），發布當下凍結成**那一張圖**，存在嵌入它的筆記上（`pictures: [{ key, source_node_id, svg }]`），
+  內文裡的嵌入換成 `![label](onden-picture:<key>)`，只留作者自己寫的 label。手寫本身**沒有頁面、標題、slug、連結**；區域以外的筆畫、其他頁、它的文字與名字都不進快照
+  （`drawingEmbeds.ts carryEmbeddedPictures`，在 redaction 之前跑；測試 `publishDrawingPictures.integration.test.ts` 對整份快照與服務出去的內容檢查）。已發布的手寫被嵌入也走同一條路，
+  所以「圖從哪來」只有一個規則；舊快照存在手寫自己節點上的 `drawing_svg`／`drawing_regions` 在下一次發布前照舊讀。
+- **誰的圖可以出去**（`publishedSet.ts pictureSourceIds`，與頁面共用 `spine/spaceScope.ts` 的 `SITE_OWNED_SPACE_SQL`）：沒有標「不發布」、沒被刪、沒隱藏、不是系統筆記，
+  且不在工作區擁有者以外的人的個人空間；發布當下另外要求發布者讀得到（`readableAmong`），沒有發布者身分時只帶已發布集合裡的手寫。
+- **一般連結不變**：`[[手寫]]` 指到不在網站上的筆記，照舊變成佔位字；PDF 筆記不畫（伺服器沒有 PDF 繪圖），嵌入 PDF 照舊是佔位字，PDF 檔也不發布。貼上的圖片（`/api/media/…`）照舊走媒體規則。
+- **下架即時**：服務時（`servedSite.applyTakedown` → `takenDown.servedPictureSources`）每張圖再查一次 `pictureSourceIds`，手寫標「不發布」、被刪或搬到別人的空間，圖立刻變回佔位字；
+  嵌入它的筆記下架，圖跟著筆記一起消失。照「拿下來的內容不會自己回來」，讓圖下架的同一個交易裡（`recordTakedowns`）把手寫記進快照的 `pictures_taken_down`，放回之後要等下一次發布；
+  刪除手寫也會觸發靜態主機重推（網站模組的 `touchesSite` 認得「最新快照帶著它的圖」）。永久刪除時 `withoutNodes` 依 `source_node_id` 把那張圖從所有存著的快照拿掉。
+- **一張多頁的手寫整份嵌入**：只畫第一頁，和 App 裡的嵌入看到的一樣（兩邊都用 `inkToSvg`）；其他頁不出去，對話框在那張圖旁寫「其他 N 頁不會公開」（`pages_not_shown`）。
+  兩張長得一樣的手寫（例如一份和它的複本）在對話框是兩列，各自有「不公開」（`carriedPictures` 以手寫＋圖分組）。
+- **簿記**：快照頂層另存一個小清單 `picture_sources`（`[{ source_node_id }]`，`pictureSourceList`），下架紀錄與網站模組的 `touchesSite` 只讀它，不在寫入交易裡掃整份含 SVG 的 payload；服務與預覽時拿掉。
+- **讀者看到的**：`![手繪圖](data:image/svg+xml…)`，沒有 label 時 alt 用網站語言的字（`siteWords` 的 `drawingAlt`），不用手寫的名字；`pictures` 與手寫 id 不會出現在服務出去的內容。

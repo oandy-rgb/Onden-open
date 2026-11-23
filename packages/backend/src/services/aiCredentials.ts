@@ -5,10 +5,11 @@
 // owner may also write down the service's price per million tokens, which only
 // feeds an estimate shown next to the token counts.
 //
-//   • Stored only as AES-256-GCM ciphertext. The key is ONDEN_SECRET_KEY, a
-//     deploy environment variable: never in the database, never in a setting.
-//     The row id is the cipher's associated data, so a ciphertext copied onto
-//     another row does not decrypt.
+//   • Stored only as ciphertext sealed by services/serverSecret.ts for the purpose
+//     `ai-credential` and the row id (what is authenticated depends on the rollout
+//     step written there: today only the row id). The key is ONDEN_SECRET_KEY, a deploy
+//     environment variable: never in the database, never in a setting. A
+//     ciphertext copied onto another row does not open.
 //   • What leaves this module for a caller is the label and the last four
 //     characters. The plaintext is returned only by loadApiKey(), which the
 //     `api` runtime alone may import (test/guards/aiRuntime.guard.test.ts).
@@ -16,13 +17,13 @@
 //     exist for any role.
 //   • A backup of the database holds the ciphertext: keep the backup and
 //     ONDEN_SECRET_KEY apart (docs/agents/deploy.md).
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import type { ActorCtx } from "../types.js";
 import { mutate } from "../spine/mutate.js";
 import { isWorkspaceOwner, AuthorityError } from "../spine/authority.js";
 import { AgentSessionError } from "./agentSessionError.js";
-import { config } from "../config.js";
+import { openSecret, requireSecretKey, sealSecret } from "./serverSecret.js";
 import type { ProtocolId } from "./agentRuntime/index.js";
 
 export type AiCredential = {
@@ -31,51 +32,6 @@ export type AiCredential = {
   /** USD per million tokens, written by the owner; both null when left blank. */
   price_input_per_m: number | null; price_output_per_m: number | null;
 };
-
-const CIPHER_VERSION = 1;
-
-/** ONDEN_SECRET_KEY: 32 bytes as 64 hex characters or as base64. Null when unset or malformed. */
-function secretKey(): Buffer | null {
-  const raw = config.str("ONDEN_SECRET_KEY")?.trim();
-  if (!raw) return null;
-  const key = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
-  return key.length === 32 ? key : null;
-}
-
-export const secretKeyConfigured = (): boolean => secretKey() !== null;
-
-function requireSecretKey(): Buffer {
-  const key = secretKey();
-  if (!key) throw new AgentSessionError("secret_key_missing", "the server has no ONDEN_SECRET_KEY, so it cannot keep API keys", 409);
-  return key;
-}
-
-export function encryptSecret(plaintext: string, rowId: string): Buffer {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", requireSecretKey(), iv);
-  cipher.setAAD(Buffer.from(rowId));
-  const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  return Buffer.concat([Buffer.from([CIPHER_VERSION]), iv, cipher.getAuthTag(), body]);
-}
-
-export function decryptSecret(blob: Buffer, rowId: string): string {
-  if (blob[0] !== CIPHER_VERSION) throw new AgentSessionError("credential_unreadable", "the stored key cannot be read", 409);
-  const decipher = createDecipheriv("aes-256-gcm", requireSecretKey(), blob.subarray(1, 13));
-  decipher.setAAD(Buffer.from(rowId));
-  decipher.setAuthTag(blob.subarray(13, 29));
-  try {
-    return Buffer.concat([decipher.update(blob.subarray(29)), decipher.final()]).toString("utf8");
-  } catch {
-    // Wrong ONDEN_SECRET_KEY or a tampered row. Say nothing about which.
-    throw new AgentSessionError("credential_unreadable", "the stored key cannot be read", 409);
-  }
-}
-
-/** Keep another secret of the person's under the same server key (an external calendar's address,
- *  modules/external_calendars). `rowId` binds the ciphertext to its row. Throws when the server has no
- *  ONDEN_SECRET_KEY. These are not the API-key readers the api-runtime guard watches: no key is read here. */
-export const sealText = (plaintext: string, rowId: string): Buffer => encryptSecret(plaintext, rowId);
-export const openText = (sealed: Buffer, rowId: string): string => decryptSecret(sealed, rowId);
 
 /** Any service's key: printable characters, no spaces. */
 const API_KEY = /^[\x21-\x7e]{8,500}$/;
@@ -130,7 +86,7 @@ export async function addCredential(
     apply: async () => (await q<AiCredential>(
       `INSERT INTO ai_credentials (id, workspace_id, label, secret_ciphertext, secret_last4, created_by, base_url, protocol, price_input_per_m, price_output_per_m)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${COLS}`,
-      [id, workspaceId, label, encryptSecret(apiKey, id), last4, actor.id, baseUrl, protocol, prices.input, prices.output])).rows[0]!,
+      [id, workspaceId, label, sealSecret("ai-credential", id, apiKey), last4, actor.id, baseUrl, protocol, prices.input, prices.output])).rows[0]!,
   });
 }
 
@@ -184,5 +140,5 @@ export async function loadApiKey(workspaceId: string, credentialId: string): Pro
     `SELECT id::text, secret_ciphertext, revoked_at FROM ai_credentials WHERE id::text = $1 AND workspace_id = $2`,
     [credentialId, workspaceId])).rows[0];
   if (!row || row.revoked_at) throw new AgentSessionError("credential_revoked", "the API key was revoked", 409);
-  return decryptSecret(row.secret_ciphertext, row.id);
+  return openSecret("ai-credential", row.id, row.secret_ciphertext);
 }

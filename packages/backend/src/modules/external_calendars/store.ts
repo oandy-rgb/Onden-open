@@ -9,7 +9,7 @@ import { q, allowUnstampedWrite } from "../../db.js";
 import { mutatePersonal } from "../../spine/mutate.js";
 import { isTemporarySessionActor, personalDataOwnerId } from "../../spine/authority.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
-import { sealText, openText } from "../../services/aiCredentials.js";
+import { openSecret, sealSecret } from "../../services/serverSecret.js";
 import { dayClock, localDayId, sqlDayStart, addDays } from "../../localDay.js";
 import { StatusError } from "../../statusError.js";
 import type { ActorCtx } from "../../types.js";
@@ -62,7 +62,7 @@ export async function addCalendar(
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (id) DO UPDATE SET id = external_calendars.id WHERE external_calendars.actor_id = EXCLUDED.actor_id
        RETURNING ${COLS}`,
-      [input.id, workspaceId, current.id, input.name, input.color, sealText(input.href, input.id), input.host])).rows[0];
+      [input.id, workspaceId, current.id, input.name, input.color, sealSecret("external-calendar", input.id, input.href), input.host])).rows[0];
     // The id belongs to someone else's calendar: say nothing about it.
     if (!saved) throw new StatusError(404, "not_found");
     return saved;
@@ -90,7 +90,7 @@ export async function removeCalendar(workspaceId: string, actor: ActorCtx, id: s
 /** The saved address, for the fetch only. Never put its result in a response, a log or an event. */
 export async function loadCalendarUrl(id: string): Promise<string | null> {
   const row = (await q<{ url_ciphertext: Buffer }>(`SELECT url_ciphertext FROM external_calendars WHERE id = $1`, [id])).rows[0];
-  return row ? openText(row.url_ciphertext, id) : null;
+  return row ? openSecret("external-calendar", id, row.url_ciphertext) : null;
 }
 
 /** Calendars the 15-minute pass should fetch: switched on, not tried in the last `minAgeMs`. */

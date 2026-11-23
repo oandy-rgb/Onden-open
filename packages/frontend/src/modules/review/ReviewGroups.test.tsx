@@ -91,7 +91,7 @@ describe("the 「分組」 section", () => {
     expect(within(groups).queryByRole("list")).toBeNull();
   });
 
-  it("「練這組」 opens the session limited to the group as a new page, names the group, and All cards leads back", async () => {
+  it("「練這組」 opens the session limited to the group as a new page, names the group, and the way back to all cards works", async () => {
     setModuleAddress("status");
     screenOpen();
     const groups = await section();
@@ -101,16 +101,17 @@ describe("the 「分組」 section", () => {
     expect(getModuleAddress()).toBe(`tag.${TAG_A}`);
     await waitFor(() => expect(calls.some((call) => call.url.includes(`/api/review/queue?tag_id=${TAG_A}`))).toBe(true));
     expect(takeHistoryIntent()).toBe("push");
-    // The title is not known to this test's store, so the line shows the placeholder name, never an id.
-    const line = await screen.findByText(/Reviewing notes tagged #/);
-    expect(line.textContent).not.toContain(TAG_A);
+    // The title is not known to this test's store, so the picker shows the placeholder name, never an id.
+    const picker = await screen.findByRole("button", { name: /Review scope/ });
+    expect(picker.textContent).toContain("#");
+    expect(picker.textContent).not.toContain(TAG_A);
     // Back (the address returns to the previous entry, as useUrlSync does on popstate): the status page again.
     setModuleAddress("status");
     expect(await screen.findByRole("region", { name: "Groups" })).toBeInTheDocument();
     // Forward again, then All cards.
     setModuleAddress(`tag.${TAG_A}`);
-    await userEvent.click(await screen.findByRole("button", { name: "All cards" }));
-    expect(getModuleAddress()).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: "Review all cards" }));
+    expect(getModuleAddress()).toBe("all");
     await waitFor(() => expect(calls.at(-1)!.url).not.toContain("tag_id") );
   });
 
@@ -122,7 +123,7 @@ describe("the 「分組」 section", () => {
     await userEvent.click(within(rows[1]!).getByRole("button", { name: "Practise this group" }));
     expect(getModuleAddress()).toBe("untagged");
     await waitFor(() => expect(calls.some((call) => call.url.includes("/api/review/queue?untagged=true"))).toBe(true));
-    expect(await screen.findByText("Practising cards with no tag")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Review scope.*No tag/ })).toBeInTheDocument();
   });
 
   it("a reload keeps the group: the address alone opens the scoped session", async () => {

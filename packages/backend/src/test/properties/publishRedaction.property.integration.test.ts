@@ -332,7 +332,7 @@ async function runScenario(specIn: Spec): Promise<string[]> {
           taskRef: `[[onden://node/${t.id}|${label}]]`, taskEmbed: `![[onden://node/${t.id}]]`, taskTitle: `![[${t.title}]]`,
         }[form];
         lines.push(`See ${text}`, "");
-        if (s.state === "published" && privateAtPublish(t)) expectsPlaceholder.push({ from: p, text: form === "piped" || form === "taskRef" ? label : "(private)" });
+        if (s.state === "published" && privateAtPublish(t)) expectsPlaceholder.push({ from: p, text: form === "piped" || form === "taskRef" ? label : "（未公開）" });
       }
       if (s.query === "query") lines.push("```onden-query", `tags: ${tagNames[0]}`, "sort: title", "```", "");
       if (s.query === "base") {

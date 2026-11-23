@@ -72,7 +72,7 @@ export default function PublishedSnapshots({ online, onRefresh }: PublishedSnaps
         </div>
       )}
       {review.pending && (
-        <PublishPreviewDialog pending={review.pending} publishing={review.publishing} online={online}
+        <PublishPreviewDialog pending={review.pending} outcome={review.outcome} publishing={review.publishing} online={online}
           onConfirm={confirm} onCancel={review.cancel} onChanged={() => void review.refresh()} />
       )}
     </div>

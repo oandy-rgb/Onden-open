@@ -74,8 +74,8 @@ describe.skipIf(!isTestDb)("publish redaction resolves aliases (DB)", () => {
     const nodes = c.payload.nodes as Array<{ id: string; title: string; slug: string; markdown: string; aliases?: unknown }>;
     const slug = (id: string) => nodes.find((n) => n.id === id)!.slug;
     expect(nodes.find((n) => n.id === home)!.markdown).toBe(
-      `Read the [[${slug(guide)}|guide]], the [[${slug(guide)}#安裝|手冊#安裝]], the [[${slug(faq)}|FAQ]] and the (private).`);
-    expect(c.privateLinks).toEqual([{ nodeId: home, nodeTitle: "Home", target: "Roadmap", shownAs: "(private)" }]);
+      `Read the [[${slug(guide)}|guide]], the [[${slug(guide)}#安裝|手冊#安裝]], the [[${slug(faq)}|FAQ]] and the （未公開）.`);
+    expect(c.privateLinks).toEqual([{ nodeId: home, nodeTitle: "Home", target: "Roadmap", shownAs: "（未公開）" }]);
     // Aliases decide the redaction and the rewrite; they are not added to the payload.
     expect(nodes.every((n) => !("aliases" in n))).toBe(true);
   });

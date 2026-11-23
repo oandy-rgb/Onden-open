@@ -10,6 +10,7 @@ export { freshProof } from "./freshProof";
 export type { FreshProofPurpose } from "./freshProof";
 export type { UploadedBackup } from "./backupRestore";
 export { importCanvasFile } from "./canvasImport";
+export { namedFields } from "./tagSchemaWriter";
 export { loadOnlineWriters } from "./onlineWriters";
 export { bindDomainLifecycle, blockChildWriter, blockLinkWriter, canvasWriter, historyWriter, nodeActions, nodeMutations, onlineOperation, graphPositionWriter, noteWriter, propertyWriter, relationWriter, tagConfigWriter, tagSchemaWriter, tagWriter, taskWriter, focusWriter, viewWriter, workspaceWriter, writersFor } from "./domainWriters";
 export type { WriterOptions } from "./domainWriters";
@@ -35,7 +36,7 @@ export type { PlacementChild, PlacementContext, PlacementRefusal } from "./place
 export { PURGE_BATCH_MAX } from "./notePurge";
 // After domainWriters: dayNotes reads lib/spaces, which imports this entry.
 export { dayNoteParentPref, dayNoteParentStore, parseDayNoteParent, useDayNoteParent } from "./dayNoteParentStore";
-export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError } from "./dayNotes";
+export { dayNotes, dayNoteParentSetting, dayNotesOutside, usableDayNoteParent, DailyNotesDisabledError, PersonalSpaceUnknownError } from "./dayNotes";
 export type { DayNoteSeed, OpenedDayNote } from "./dayNotes";
 export { sendWrite } from "./onlineWrite";
 export { spaceWriter } from "./spaceWriter";

@@ -110,7 +110,7 @@ describe.skipIf(!isTestDb)("site addresses come from the served snapshot (DB)", 
   it("bugs 1 + 4: [[My Alias]] survives the snapshot and links the aliased page", async () => {
     const site = await loadServedSite(WS);
     const served = site.payload.nodes as NodeRow[];
-    expect(served.find((n) => n.id === ids.links)?.markdown).toBe("[[target|My Alias]] and (private)");
+    expect(served.find((n) => n.id === ids.links)?.markdown).toBe("[[target|My Alias]] and （未公開）");
     expect(JSON.stringify(site)).not.toContain('"aliases"');
     // The site opens it by the served slug (servedLinkTarget, no aliases).
     expect(servedLinkTarget("target|My Alias", served, ids.links)?.id).toBe(ids.target);

@@ -6,7 +6,7 @@
 // the preview nor stales it.
 //
 // Reader-visible: a note's title, slug, markdown, parent and label tags (and
-// a drawing's picture, when a published note embeds it, and its query blocks'
+// the pictures of the drawings it embeds, and its query blocks'
 // frozen lists, D113); its
 // place among its siblings (the site's nav, D64); the published edges it is an
 // end of (Related, backlinks, nav links). Not: node_type (no template reads
@@ -25,9 +25,10 @@ export type PayloadNode = {
   id: string; title?: string; slug?: string; markdown?: string; parent_id?: string | null; tags?: string[];
   /** The place among siblings: a key since migration 200 (and the stamp that breaks a tie); a snapshot from before has the integer. */
   order_key?: string; order_stamp?: string; sort_order?: number; created_at?: unknown;
-  /** A published drawing's picture, as the notes embedding it show it (drawingEmbeds.ts). */
+  /** The pictures of the drawings this note embeds, named in its text by key (drawingEmbeds.ts). */
+  pictures?: Array<{ key: string; source_node_id: string; svg: string }>;
+  /** A snapshot from before 2026-11-20: a published drawing's picture on its own node, and its quoted areas (drawingEmbeds.ts). */
   drawing_svg?: string;
-  /** Pictures of the parts of it that published notes quote (drawingEmbeds.ts). */
   drawing_regions?: Record<string, string>;
   /** A handwriting note's pages, one served address each (handwritingPages.ts). */
   ink_pages?: string[];
@@ -64,6 +65,8 @@ function readerView(node: PayloadNode, publishedIds: ReadonlySet<string>, edges:
     slug: node.slug ?? "",
     markdown: node.markdown ?? "",
     // Only when there is one, so a site without embedded drawings hashes as before.
+    // What readers see of an embedded picture is its drawing, not which note lent it.
+    ...(node.pictures?.length ? { pictures: node.pictures.map((p) => [p.key, p.svg]) } : {}),
     ...(node.drawing_svg ? { drawing: node.drawing_svg } : {}),
     ...(node.drawing_regions ? { drawing_regions: node.drawing_regions } : {}),
     // Named by content, so a redrawn page is a changed note.

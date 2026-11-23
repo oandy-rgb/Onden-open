@@ -34,7 +34,7 @@ import { readableScopeSql } from "../../../services/readPolicy.js";
 import { LISTED_NODE_SQL } from "../../../spine/reservedNodes.js";
 import { memberTagIdsNamed } from "../../../services/tagHierarchy.js";
 import { nodeAliasesSql } from "../../../services/wikilinkEdges.js";
-import { inertUnpublishedWikilinks, publishedAliases, publishedNames, type PublishedName } from "./redaction.js";
+import { inertUnpublishedWikilinks, publishedAliases, publishedNames } from "./redaction.js";
 import { liveTagNodeSql } from "../../../spine/nodeSql.js";
 import { isTag } from "@onden/markdown/contract";
 
@@ -50,14 +50,18 @@ export type ListedPage = { id: string; title: string; slug: string };
 export async function freezeQueryBlocks(
   workspaceId: string,
   notes: ReadonlyArray<{ id: string; title: string; markdown: string }>,
-  scope: { actor: ActorCtx | null; listed: readonly ListedPage[] },
+  scope: { actor: ActorCtx | null; listed: readonly ListedPage[]; /** A frozen cell's link to a page not listed reads as this (siteWords privateText). */ privateText: string },
 ): Promise<Map<string, FrozenQueryBlock[]>> {
   const out = new Map<string, FrozenQueryBlock[]>();
   const listed = new Map(scope.listed.map((p) => [p.id, p]));
   const ids = [...listed.keys()];
   // What a frozen cell or block label may still name: the listed pages only (redaction.ts).
-  let names: PublishedName[] | null = null;
-  const listedNames = async () => names ??= publishedNames(scope.listed, await publishedAliases(ids));
+  let inert: Inert | null = null;
+  const listedNames = async (): Promise<Inert> => {
+    if (inert) return inert;
+    const names = publishedNames(scope.listed, await publishedAliases(ids));
+    return inert = (text) => inertUnpublishedWikilinks(text, names, scope.privateText);
+  };
   let baseData: Promise<BaseData> | null = null;
   for (const note of notes) {
     const blocks = queryBlocksIn(note.markdown);
@@ -77,6 +81,8 @@ export async function freezeQueryBlocks(
 }
 
 type Frozen = Pick<FrozenQueryBlock, "rows" | "more" | "problem">;
+/** A frozen text with its links to pages not listed made inert (redaction.ts). */
+type Inert = (text: string) => string;
 
 /** What the app shows for a block it can't read (OndenQueryBlock). */
 function queryProblem(parsed: Extract<ParsedQuery, { ok: false }>): string {
@@ -89,7 +95,7 @@ function queryProblem(parsed: Extract<ParsedQuery, { ok: false }>): string {
 
 async function frozenQuery(
   workspaceId: string, source: string, actor: ActorCtx | null, ids: string[], listed: ReadonlyMap<string, ListedPage>,
-  names: readonly PublishedName[],
+  inert: Inert,
 ): Promise<Frozen> {
   const parsed = parseQuerySpec(source);
   if (!parsed.ok) return { rows: [], more: 0, problem: queryProblem(parsed) };
@@ -104,7 +110,7 @@ async function frozenQuery(
     const page = listed.get(row.id);
     if (!page) continue;
     // A block's row names the block, under its note's page; its label is the block's text as typed.
-    rows.push("block" in row ? { id: page.id, title: inertUnpublishedWikilinks(row.block.label, names), slug: page.slug, note: page.title } : { id: page.id, title: page.title, slug: page.slug });
+    rows.push("block" in row ? { id: page.id, title: inert(row.block.label), slug: page.slug, note: page.title } : { id: page.id, title: page.title, slug: page.slug });
   }
   return { rows, more: Math.max(0, result.total - result.rows.length) };
 }
@@ -152,7 +158,7 @@ async function loadBaseData(workspaceId: string, actor: ActorCtx | null, ids: st
 
 async function frozenBase(
   workspaceId: string, source: string, hostTitle: string, data: BaseData, listed: ReadonlyMap<string, ListedPage>,
-  names: readonly PublishedName[],
+  inert: Inert,
 ): Promise<Pick<FrozenQueryBlock, "columns"> & Frozen> {
   let spec;
   try {
@@ -204,7 +210,7 @@ async function frozenBase(
     if (!page) return [];
     return [{
       id: page.id, title: page.title, slug: page.slug,
-      ...(columns.length ? { values: columns.map((key) => inertUnpublishedWikilinks(String(n.frontmatter?.[key] ?? ""), names)) } : {}),
+      ...(columns.length ? { values: columns.map((key) => inert(String(n.frontmatter?.[key] ?? ""))) } : {}),
     }];
   });
   return { columns, rows: shown, more: Math.max(0, rows.length - FROZEN_ROWS_MAX) };

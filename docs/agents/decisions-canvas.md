@@ -147,7 +147,9 @@
 - 單位是一塊矩形區域，不是一組筆畫：筆畫留在原頁，之後補寫的也會出現。語法 `![[筆記|ink=頁@x,y,w,h]]`，解析與序列化在 `@onden/markdown` 的 `inkRegion.ts`
   （前端、後端發布、網站共用）；頁用 page key，座標是頁內單位的整數，最小邊 `INK_REGION_MIN`（24）。標題不能當名字時改用 `onden://node/<id>`（`titleNamesNote`，與解析同一個規則）。
 - 畫區域與畫整張圖共用 `@onden/markdown` `inkSvg.ts` 的 `drawDocument(ink, within?)`；app 內只用讀得到的筆記解析，讀不到＝「找不到」，不露筆畫。
-- 發布時 `drawingEmbeds.ts` 只在已發布筆記嵌入已發布筆記時凍結成圖（`drawing_regions`）；未發布的由 `redaction.ts` 變 label 或「(private)」，區域參數不當成 label。
+- 發布時（業主 2026-11-20，參考 Quartz）：已發布筆記嵌入的手寫（整張或一塊區域）**跟著嵌入它的筆記**凍結成圖，即使手寫所在的空間不發布；
+  只出去嵌入的那一張圖（區域外的筆畫、其他頁、標題、名字都不出去），手寫本身沒有頁面也沒有連結。手寫自己標「不發布」、被刪、在別人的個人空間、發布者讀不到，就不帶圖，
+  由 `redaction.ts` 變 label 或網站語言的佔位字（中文網站「（未公開）」），區域參數不當成 label。規則與下架見 [網站的呈現模型](../architecture/site-render-model.md)〈嵌入的圖跟著筆記走〉（`drawingEmbeds.ts`）。
   純文字讀法（摘要、搜尋片段、反向連結前後文、閱讀時間、AI 面板）一律不顯示區域參數（`splitWikilink`、`blankInkRegionSyntax`）。
 - 本機存檔與別台同步來的變化（`announceDrawingChangesOf`）都讓區域嵌入重畫；同一來源被引用多次共用一次讀取（`drawingChangeSerial`）。手寫頁工具列的「引用」是 `QUOTE_TOOL`。
 

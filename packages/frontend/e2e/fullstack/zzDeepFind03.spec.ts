@@ -60,7 +60,7 @@ test("FIND-03: link forms across preview, publish, rename and missing target", a
   await expect(page.locator(".obsidian-preview .wikilink-token").filter({ hasText: `Ghost${s}` }).first(), "the link resolves once the note exists").toHaveClass(/known/);
 
   // Publish: the public HTML links point at the target page, the heading anchor survives (with the prefix the sanitizer puts before ids,
-  // markdown/src/sanitizeSchema.ts DOM_ID_PREFIX), an alias keeps its words (a part link on the site is the FINDING test below), and a link to a note that is not on the site reads 「(private)」 (docs/architecture/site-render-model.md).
+  // markdown/src/sanitizeSchema.ts DOM_ID_PREFIX), an alias keeps its words (a part link on the site is the FINDING test below), and a link to a note that is not on the site reads the site's placeholder word, 「（未公開）」 on a zh-TW site (docs/architecture/site-render-model.md).
   await publishSite(page.request);
   const anon = await pwRequest.newContext({ baseURL: BASE, storageState: { cookies: [], origins: [] } });
   const srcSlug = (await (await page.request.get(`/api/nodes/${src.id}`, H)).json()).slug;
@@ -71,7 +71,7 @@ test("FIND-03: link forms across preview, publish, rename and missing target", a
   expect(anchors.find((a) => a.text === "Nice Name"), "an alias keeps its words and points at the target").toMatchObject({ href: `/site/${tgtSlug}` });
   expect(anchors.find((a) => a.text === `Tgt${s}#Deep Section`), "the heading anchor survives").toMatchObject({ href: `/site/${tgtSlug}#user-content-deep-section` });
   expect(html, "the link to a note that is not on the site is hidden").not.toContain(`Ghost${s}`);
-  expect(html).toContain("(private)");
+  expect(html).toContain("（未公開）");
   expect(anchors.some((a) => a.href.toLowerCase().includes("ghost")), "and is no link").toBe(false);
   await anon.dispose();
 
@@ -141,7 +141,7 @@ test("FINDING: a part link in the preview scrolls the part into view", async ({ 
 
 // FINDING: a part link `[[筆記/段落開頭]]` to a published note reads 「Note › start」 and opens that page on the site
 // (packages/markdown/src/servedPartLink.ts: "the served page it opens and the words it shows"; htmlUtils.ts partLink).
-// What the site does instead: it reads 「(private)」 with no link, because modules/website/publishing/redaction.ts runs first and takes
+// What the site does instead: it reads the placeholder 「（未公開）」 with no link, because modules/website/publishing/redaction.ts runs first and takes
 // `Note/start` (wikilinkTarget) for a note title that no note has.
 test("FINDING: a part link to a published note is a link on the site", async ({ page }) => {
   test.fail();

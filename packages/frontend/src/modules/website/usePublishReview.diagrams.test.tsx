@@ -44,4 +44,22 @@ describe("usePublishReview diagrams", () => {
     expect(precompile).toHaveBeenCalledWith([]);
     expect(publish).toHaveBeenCalledWith({ ...body, preview_hash: "h".repeat(64) });
   });
+
+  it("keeps the dialog open after the publish with how it ended: when it went out, or why not", async () => {
+    precompile.mockResolvedValue([]);
+    const writer = { previewPublish: vi.fn(async () => previewOf([])), publish: vi.fn(async () => ({ url: "/site/" })) };
+    const { result } = renderHook(() => usePublishReview(writer));
+    await act(async () => { await result.current.start(async () => body); });
+    await act(async () => { await result.current.confirm(); });
+    expect(result.current.pending).not.toBeNull();
+    expect(result.current.outcome).toEqual({ kind: "published", url: "/site/", at: expect.any(String) });
+    act(() => result.current.cancel());
+    expect(result.current.pending).toBeNull();
+    expect(result.current.outcome).toBeNull();
+
+    writer.publish.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => { await result.current.start(async () => body); });
+    await act(async () => { await result.current.confirm(); });
+    expect(result.current.outcome).toEqual({ kind: "failed", message: expect.any(String) });
+  });
 });

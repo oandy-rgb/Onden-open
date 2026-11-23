@@ -158,6 +158,9 @@ test("publish shows the what's-public list before running", { tag: "@critical" }
   await expect(dialog.locator(".publish-preview-list li", { hasText: `PrivNote ${stamp}` })).toHaveCount(0);
 
   await dialog.locator(".publish-preview-confirm").click();
+  // The dialog says it went out (and where) until it is closed.
+  await expect(dialog.locator(".publish-review-done")).toBeVisible();
+  await dialog.locator('[data-action="close-published"]').click();
   await expect(dialog).toHaveCount(0);
   // The confirm actually published: the served set contains the public note.
   await expect.poll(async () => (await siteNodes(page)).some((n) => n.id === pub.id), { timeout: 15_000 }).toBe(true);

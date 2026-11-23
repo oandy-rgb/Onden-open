@@ -29,7 +29,7 @@ describe("export [[links]] resolve against the served site", () => {
   it("bug 1: [[My Alias]] opens the note with that alias, not a page slugified from the text", () => {
     // The snapshot keeps the link (the alias names a published note) and
     // names the note by its served slug, keeping the text the reader sees.
-    expect(inertUnpublishedWikilinks("see [[My Alias]]", publishedWith(aliases))).toBe("see [[My Alias]]");
+    expect(inertUnpublishedWikilinks("see [[My Alias]]", publishedWith(aliases), "(private)")).toBe("see [[My Alias]]");
     expect(served.find((p) => p.id === "l1")!.markdown).toBe("[[target|My Alias]], [[Plan]], [[Nowhere]] and [[Target#^b1]]");
     const html = md2html(served.find((p) => p.id === "l1")!.markdown, { pages: served, from: "l1" });
     expect(html).toContain('href="/site/target">My Alias</a>');

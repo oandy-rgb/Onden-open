@@ -1,10 +1,12 @@
 // What Publish → shows before anything goes out (W38b): the candidate built by
 // the same code a publish stores — what changes against the last publish, the
-// links readers will see as "(private)", media they won't get — and the site
-// itself as it will look. Confirming publishes that candidate by its hash.
+// pictures that go out with the notes that embed them, the links readers will
+// see as private, media they won't get — and the site itself as it will look.
+// Confirming publishes that candidate by its hash; the dialog then says how it
+// ended (when, and a way to the site) until it is closed.
 import { Suspense, useState } from "react";
 import ShellDialog from "../../components/ShellDialog";
-import { Button } from "../../components/ui";
+import { Button, FieldError, Link, buttonClass } from "../../components/ui";
 import { getNode, hasChildNote, useAllNodes } from "../../lib/appStore";
 import { listsAsNote } from "../../lib/nodeTags";
 import { lazyWithReload } from "../../lib/lazyWithReload";
@@ -12,6 +14,8 @@ import { useT } from "../../lib/i18n";
 import { useSpaces } from "../../lib/spaces";
 import { dateLabel } from "../../lib/timeLabels";
 import PublishLeftOut from "./PublishLeftOut";
+import PublishPictures from "./PublishPictures";
+import type { PublishOutcome } from "./usePublishReview";
 import { previewHasChanges, type PendingPublish } from "./publishPreview";
 import { blockedNotes } from "./studio/editorData";
 import { PUBLISHED_ATTR, siteStanding } from "./publishBlocker";
@@ -28,8 +32,10 @@ const PublishedHomePreview = lazyWithReload(() => import("./studio/PublishedHome
 
 type CandidateNode = { id: string; title?: string };
 
-export default function PublishPreviewDialog({ pending, publishing, online, onConfirm, onCancel, onInclude, onChanged }: {
+export default function PublishPreviewDialog({ pending, outcome, publishing, online, onConfirm, onCancel, onInclude, onChanged }: {
   pending: PendingPublish;
+  /** How the confirmed publish ended (usePublishReview): shown in place of the review until the dialog is closed. */
+  outcome?: PublishOutcome | null;
   publishing: boolean;
   online: boolean;
   /** Resolves true when the site went out (the one-time rule hint is then marked seen, not before). */
@@ -76,6 +82,25 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
     </ul>
   );
 
+  if (outcome?.kind === "published") {
+    return (
+      <ShellDialog label={t("Published")} className="publish-review publish-preview-dialog" onClose={onCancel}>
+        <h2 className="publish-review-title">{t("Published")}</h2>
+        <p className="publish-review-done" role="status">{t("Published · {time}", { time: dateLabel(outcome.at, "dateTime") })}</p>
+        <div className="publish-review-actions">
+          <Link className={buttonClass("secondary")} href={outcome.url} target="_blank" rel="noreferrer" data-action="open-site">{t("Open the site")}</Link>
+          <span className="publish-review-spacer" />
+          <Button variant="primary" data-action="close-published" onClick={onCancel}>{t("Close")}</Button>
+        </div>
+      </ShellDialog>
+    );
+  }
+
+  const pictures = preview.embedded_pictures ?? [];
+  // What else this publish applies when no note changed: said instead of a bare "nothing changed" above long lists.
+  const checksFollow = pictures.length > 0 || preview.private_links.length > 0 || refs.length > 0 || leftOut.length > 0
+    || preview.blocked_media.length > 0 || (preview.new_media ?? []).length > 0 || (preview.large_videos ?? []).length > 0;
+
   if (showSite) {
     return (
       <ShellDialog label={t("The site as it will publish")} className="publish-review publish-review-site" busy={publishing} onClose={() => setShowSite(false)}>
@@ -110,7 +135,11 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
               : t("Publishing now would produce an empty site. The notes have not reached the server yet; wait for them to sync, then try again.")}
         </p>
       ) : !previewHasChanges(preview) ? (
-        <p className="publish-review-hint">{t("Nothing has changed since the last publish.")}</p>
+        <p className="publish-review-hint">
+          {checksFollow
+            ? t("No note changed since the last publish. Publishing again keeps the site as it is, with the points below.")
+            : t("Nothing has changed since the last publish.")}
+        </p>
       ) : (
         <>
           {showRuleHint && (
@@ -180,13 +209,18 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
           onChanged={() => onChanged?.()} onClose={onCancel} />
       )}
 
+      {pictures.length > 0 && (
+        <PublishPictures pictures={pictures} titleOf={titleOf} online={online} busy={publishing}
+          onChanged={() => onChanged?.()} />
+      )}
+
       {preview.private_links.length > 0 && (
         <section className="publish-review-warn">
           <h3>{t("Links to private notes ({n})", { n: preview.private_links.length })}</h3>
           <p className="publish-review-hint">{t("Readers see the text below instead of a link; the private note stays private.")}</p>
           <ul className="publish-review-list">
             {preview.private_links.map((l, i) => (
-              <li key={i}>{t("In “{note}”: [[{target}]] reads “{shown}”", { note: displayTitle(l.node_title), target: l.target, shown: l.shown_as })}</li>
+              <li key={i}>{t("In “{note}”, the link to “{target}” reads “{shown}”", { note: displayTitle(l.node_title), target: l.target, shown: l.shown_as })}</li>
             ))}
           </ul>
         </section>
@@ -238,7 +272,11 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
         </section>
       )}
 
-      <div className="publish-review-actions">
+      {outcome?.kind === "failed" && (
+        <p className="publish-review-failed"><FieldError>{t("The site was not published: {reason}", { reason: outcome.message })}</FieldError></p>
+      )}
+
+      <div className="publish-review-actions publish-review-actions-sticky">
         <Button onClick={() => setShowSite(true)} disabled={nodes.length === 0}>{t("See the site")}</Button>
         <span className="publish-review-spacer" />
         <Button variant="ghost" onClick={onCancel} disabled={publishing}>{t("Cancel")}</Button>

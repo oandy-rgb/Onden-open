@@ -1,6 +1,7 @@
 // What the api runtime may spend, and when it can run at all (proposal §3.1, §7.3).
 import { q } from "../../../db.js";
-import { anyLiveCredential, credentialLive, secretKeyConfigured } from "../../aiCredentials.js";
+import { anyLiveCredential, credentialLive } from "../../aiCredentials.js";
+import { secretKeyConfigured } from "../../serverSecret.js";
 import type { AiRole, Availability } from "../types.js";
 
 /** Model turns one session may take (each turn is one paid call). */

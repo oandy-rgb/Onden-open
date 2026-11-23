@@ -17,11 +17,11 @@
 
 ## 狀況頁
 
-`GET /api/review/status`，畫面 `ReviewStatusPage.tsx`：今天要複習幾張、逾期的與未來七天分開、常忘的卡（按鈕帶去改那一段，不是停用）、已停用的卡（可恢復）、每人每天上限。上限是帳號偏好 `reviewsPerDay`，到期與新卡合起來算（`reviewCapPref.ts`）。
+`GET /api/review/status`（接受與佇列相同的範圍，2026-11-20 起狀況頁跟著複習頁的「範圍」），畫面 `ReviewStatusPage.tsx`：今天要複習幾張、逾期的與未來七天分開、常忘的卡（按鈕帶去改那一段，不是停用）、已停用的卡（可恢復）、每人每天上限。上限是帳號偏好 `reviewsPerDay`，到期與新卡合起來算（`reviewCapPref.ts`）。
 
 ## 以範圍練習
 
-- `GET /api/review/queue` 接受三種範圍之一：`root`（一棵樹）、`tag_id`（一個標籤）、`untagged`（沒有被任何標籤分組的卡）；同時給兩種回 400。`/api/review/groups` 與 `/decks` 給「依標籤」「依樹」的清單，畫面 `ReviewGroups.tsx` 由那裡開始練。
+- `GET /api/review/queue` 接受三種範圍之一：`root`（一棵樹）、`tag_id`（一個標籤）、`untagged`（沒有被任何標籤分組的卡）；同時給兩種回 400。`/api/review/groups` 與 `/decks` 給「依標籤」「依樹」的清單，畫面 `ReviewGroups.tsx` 由那裡開始練；複習主頁標題下的「範圍」選擇器（`ReviewScopePicker.tsx`，業主 2026-11-20）用同樣的列與同一個 `placeOfGroup`，細節見 [decisions-ui.md](../../agents/decisions-ui.md)「複習按分組練」。
 - 標籤範圍的規則（`modules/review/service.ts` 的 `tagScope`）：筆記掛著該標籤或其子標籤、延伸它的標籤（`tagHierarchy.memberTagIds`），範圍內的筆記與這些筆記的段落、以及自己掛著這些標籤的段落都算；子筆記不算。樹範圍是該筆記與底下所有 live 的子筆記。
 - 筆記的「複習這篇下面的卡片」指令開啟樹範圍（`modules/review/index.tsx` 的 `a-review-here`）。
 - 範圍練習現在仍只出範圍內到期與新卡，並受每天上限限制（`queue` 經 `planSession`）；提案的「不看到期日、整個過一遍」沒有做（`deck` 能列出範圍內全部卡片，但沒有練習入口）。

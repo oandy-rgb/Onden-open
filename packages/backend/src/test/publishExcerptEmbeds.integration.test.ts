@@ -83,7 +83,7 @@ describe.skipIf(!isTestDb)("published ![[excerpt]] embeds (DB)", () => {
     expect(md).toContain("[An Article](https://example.com/post#:~:text=");
     expect(md).toContain("Some Feed");
     // The paragraph that is not an excerpt keeps the old rule: inert text.
-    expect(md).toContain("(private)");
+    expect(md).toContain("（未公開）");
     const json = JSON.stringify(c.payload);
     for (const leak of ["Secret Diary", "secret-diary", "My secret thought", "Private day", "Another private paragraph", diary]) {
       expect(json, leak).not.toContain(leak);
@@ -95,7 +95,7 @@ describe.skipIf(!isTestDb)("published ![[excerpt]] embeds (DB)", () => {
     const c = await buildCandidate(WS, { title: "Site" });
     const md = nodesOf(c.payload).find((n) => n.id === home)!.markdown;
     expect(md).not.toContain("A quiet sentence");
-    expect(md.match(/\(private\)/g)).toHaveLength(2);
+    expect(md.match(/（未公開）/g)).toHaveLength(2);
   });
 
   it("the published site is a snapshot: editing the diary afterwards changes nothing", async () => {

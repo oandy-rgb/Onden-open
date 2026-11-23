@@ -9,6 +9,8 @@ import { apiOnError } from "../httpError.js";
 import { q, getWorkspaceId } from "../db.js";
 import router from "../modules/external_calendars/routes.js";
 import { __setCalendarFetchForTests } from "../modules/external_calendars/refresh.js";
+import { loadCalendarUrl } from "../modules/external_calendars/store.js";
+import { legacySealed, openAsPreviousDeploy, purposeSealed } from "./helpers/legacySealed.js";
 import { persistActor } from "./helpers/persistActor.js";
 import type { ActorCtx } from "../types.js";
 import { seedQ } from "./helpers/seedQ.js";
@@ -77,6 +79,27 @@ describe.skipIf(!isTestDb)("external calendars", () => {
     // Nothing about it reached the event log.
     const logged = await q(`SELECT 1 FROM domain_events WHERE payload::text LIKE '%TOKEN-9f8e7d6c%' OR payload::text LIKE '%calendar.example.com%' LIMIT 1`);
     expect(logged.rows).toHaveLength(0);
+  });
+
+  it("an address is stored in the form the previous deploy reads; one it saved still opens, and reading changes nothing", async () => {
+    const { id } = await addCalendar();
+    const key = process.env.ONDEN_SECRET_KEY!;
+    const stored = (await q<{ s: Buffer }>(`SELECT url_ciphertext AS s FROM external_calendars WHERE id = $1`, [id])).rows[0]!.s;
+    expect(openAsPreviousDeploy(key, id, stored)).toBe(SECRET_URL);
+    const old = legacySealed(key, id, SECRET_URL);
+    await seedQ(`UPDATE external_calendars SET url_ciphertext = $2 WHERE id = $1`, [id, old]);
+    expect(await loadCalendarUrl(id)).toBe(SECRET_URL);
+    const after = (await q<{ s: Buffer }>(`SELECT url_ciphertext AS s FROM external_calendars WHERE id = $1`, [id])).rows[0]!.s;
+    expect(Buffer.from(after).equals(old)).toBe(true);
+  });
+
+  it("a version 2 secret sealed as an API key under the same id does not open as a calendar address", async () => {
+    const { id } = await addCalendar();
+    const key = process.env.ONDEN_SECRET_KEY!;
+    await seedQ(`UPDATE external_calendars SET url_ciphertext = $2 WHERE id = $1`, [id, purposeSealed(key, "ai-credential", id, "https://evil.example/x.ics")]);
+    expect(await loadCalendarUrl(id).then(() => null, (e: { code?: string }) => e.code)).toBe("credential_unreadable");
+    await seedQ(`UPDATE external_calendars SET url_ciphertext = $2 WHERE id = $1`, [id, purposeSealed(key, "external-calendar", id, SECRET_URL)]);
+    expect(await loadCalendarUrl(id)).toBe(SECRET_URL);
   });
 
   it("is personal: another person sees nothing and cannot change or refresh it", async () => {

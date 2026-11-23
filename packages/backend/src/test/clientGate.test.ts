@@ -35,10 +35,20 @@ describe("client protocol gate", () => {
   });
   it("does not ask routes that carry no note text, tokens, or no actor", async () => {
     expect((await write(appFor(person), "/api/me/prefs")).status).toBe(200);
-    expect((await write(appFor(person), "/api/nodes/abc", { authorization: "Bearer t" })).status).toBe(200);
+    // A request authenticated by a token is not a page: decided from the verified actor, not from a header.
+    const tokenActor: ActorCtx = { ...person, tokenScope: { tokenId: "t", allowedTools: null, access: "write", writeMode: "direct", expiresAt: null } as unknown as ActorCtx["tokenScope"] };
+    expect((await write(appFor(tokenActor), "/api/nodes/abc", { authorization: "Bearer t" })).status).toBe(200);
     expect((await write(appFor(null), "/api/nodes/abc")).status).toBe(200);
     // A script or curl sends no Origin: not a page.
     expect((await appFor(person).request("/api/nodes/abc", { method: "PATCH", body: "{}" })).status).toBe(200);
+  });
+
+  it("asks a person's page even when the request carries an Authorization header (a proxy's Basic, a stray Bearer)", async () => {
+    for (const authorization of ["Basic dXNlcjpwYXNz", "Bearer t"]) {
+      const res = await write(appFor(person), "/api/nodes/abc", { authorization });
+      expect(res.status).toBe(426);
+      expect(await res.json()).toEqual({ error: "client_too_old" });
+    }
   });
 
   describe("one policy for every request that sends the protocol header", () => {

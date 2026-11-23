@@ -199,7 +199,10 @@ test("publish with a note that is not published: the review lists it and 一起�
   await expect(refs).toHaveCount(0, { timeout: 15_000 });
 
   await dialog.locator(".publish-preview-confirm").click();
-  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+  // The dialog says it went out (and where) until it is closed.
+  await expect(dialog.locator(".publish-review-done")).toBeVisible({ timeout: 30_000 });
+  await dialog.locator('[data-action="close-published"]').click();
+  await expect(dialog).toHaveCount(0);
   await expect.poll(async () => {
     const site = (await (await page.request.get("/api/site")).json()) as { payload?: { nodes?: Array<{ id: string }> } };
     return (site.payload?.nodes ?? []).some((n) => n.id === draft.id);

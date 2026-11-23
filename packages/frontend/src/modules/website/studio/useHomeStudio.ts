@@ -113,7 +113,7 @@ export function useSiteWork({ data, online, refresh }: Options) {
     bodies, wantBodies,
     save: { status: saveStatus, retry: () => autosave.flush() },
     publish: {
-      start: startPublish, pending: review.pending, loading: review.loading, confirm: confirmPublish,
+      start: startPublish, pending: review.pending, outcome: review.outcome, loading: review.loading, confirm: confirmPublish,
       cancel: review.cancel, status: publishStatus, url: publishUrl, include: includeNotes, refresh: review.refresh,
     },
     publishNote, unpublishNote,

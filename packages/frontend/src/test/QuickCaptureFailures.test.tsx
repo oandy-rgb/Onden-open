@@ -32,6 +32,7 @@ import QuickCapture from "../modules/capture/QuickCapture";
 import { ApiError } from "../lib/api";
 import { getAppState, resetAppState } from "../lib/appStore";
 import { INBOX_TAG_ID, captureProps } from "./helpers/captureProps";
+import { knowPersonalSpace } from "./helpers/knownSpaces";
 
 function renderCapture(draft: string) {
   render(<QuickCapture {...captureProps()} initialDraft={draft} />);
@@ -41,7 +42,8 @@ const posts = () => sendOrQueue.mock.calls.filter(([method, path]) => method ===
 const taskPosts = () => sendOrQueue.mock.calls.filter(([method, path]) => method === "POST" && path === "/api/tasks")
   .map(([, , body]) => JSON.parse(body as string) as { title: string; when_date?: string; into?: { note_id: string } });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await knowPersonalSpace(); // today's diary is the home of a task with no note
   resetAppState();
   localStorage.clear();
   sendOrQueue.mockReset().mockResolvedValue(undefined);

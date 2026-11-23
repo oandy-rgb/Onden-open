@@ -7,6 +7,7 @@ import type { PendingPublish } from "./publishPreview";
 import type { PublishPreview } from "@onden/contract";
 import { noWorkspaceData, type ContentNode } from "../../lib/api";
 import { resetAppState } from "../../lib/appStore";
+import { propertyWriter } from "../../lib/data";
 import { hintsSeenStore } from "../../lib/hintsSeenStore";
 import { setLocalePref } from "../../lib/i18n";
 import type { Space } from "../../lib/spaces";
@@ -68,7 +69,7 @@ describe("publish preview dialog", () => {
     expect(screen.getByText("Changed (1)")).toBeInTheDocument();
     expect(screen.getByText("Leaving the site (1)")).toBeInTheDocument();
     expect(screen.getByText(/already hidden from readers/)).toBeInTheDocument();
-    expect(screen.getByText("In “Home”: [[Secret]] reads “(private)”")).toBeInTheDocument();
+    expect(screen.getByText("In “Home”, the link to “Secret” reads “(private)”")).toBeInTheDocument();
     expect(screen.getByText("a.png: it belongs to a private note")).toBeInTheDocument();
     expect(screen.getByText("b.png: the file is missing on the server")).toBeInTheDocument();
   });
@@ -96,6 +97,56 @@ describe("publish preview dialog", () => {
     rerender(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={() => {}}
       pending={pending({ ...base, live: null, site: { ...base.site, payload: { nodes: [] } } })} />);
     expect(screen.getByRole("button", { name: "Confirm & publish →" })).toBeDisabled();
+  });
+
+  it("says the notes did not change but the checks below still apply, instead of a bare “nothing changed” above lists", () => {
+    render(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={() => {}}
+      pending={pending({ ...base, diff: { ...nothing } })} />);
+    expect(screen.queryByText("Nothing has changed since the last publish.")).not.toBeInTheDocument();
+    expect(screen.getByText("No note changed since the last publish. Publishing again keeps the site as it is, with the points below.")).toBeInTheDocument();
+  });
+
+  it("shows the pictures that go out with the notes, as the preview lists them, each with its notes and 「不公開」 (owner 2026-11-20)", async () => {
+    const pictures: NonNullable<PublishPreview["embedded_pictures"]> = [
+      { source_id: "d1", node_ids: ["n1", "n2"], picture: "data:image/svg+xml;base64,PHN2Zy8+" },
+      { source_id: "d1", node_ids: ["n2"], picture: "data:image/svg+xml;base64,PHN2ZyAvPg==", pages_not_shown: 2 },
+    ];
+    const set = vi.spyOn(propertyWriter, "set").mockResolvedValue(undefined as never);
+    const onChanged = vi.fn();
+    render(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={() => {}} onChanged={onChanged}
+      pending={pending({ ...base, embedded_pictures: pictures })} />);
+    expect(screen.getByText("Pictures published with the notes (2)")).toBeInTheDocument();
+    const section = screen.getByText("Pictures published with the notes (2)").closest("section")!;
+    // One thumbnail per picture the snapshot will hold, the same image readers get.
+    expect([...section.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual(pictures.map((p) => p.picture));
+    expect(within(section).getByText("In 「Home」、「Notes」")).toBeInTheDocument();
+    expect(within(section).getByText(/^In 「Notes」/)).toBeInTheDocument();
+    // A drawing of several pages: the site draws its first page, as the note does, and says so.
+    expect(within(section).getByText("· Only the first page is shown, as in the note; 2 more pages stay off the site.", { exact: false })).toBeInTheDocument();
+    // No "(private)" line for an embed that goes out as a picture: only the plain link is listed.
+    expect(screen.getAllByText(/the link to/)).toHaveLength(1);
+    fireEvent.click(within(section).getAllByRole("button", { name: "Don't make public" })[0]!);
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(set).toHaveBeenCalledWith("d1", "_published", "false", expect.objectContaining({ value_type: "bool" }));
+    set.mockRestore();
+  });
+
+  it("after the publish, says it went out and when, with a way to the site; Close closes", () => {
+    const onCancel = vi.fn();
+    render(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={onCancel}
+      pending={pending()} outcome={{ kind: "published", url: "/site/", at: "2026-11-20T08:00:00.000Z" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/^Published · .+$/);
+    expect(screen.getByRole("link", { name: "Open the site" })).toHaveAttribute("href", "/site/");
+    expect(screen.queryByRole("button", { name: "Confirm & publish →" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it("a publish that failed says so in the dialog, which keeps the review and its buttons (pinned at the bottom)", () => {
+    render(<PublishPreviewDialog online publishing={false} onConfirm={() => {}} onCancel={() => {}}
+      pending={pending()} outcome={{ kind: "failed", message: "Can't reach the server." }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The site was not published: Can't reach the server.");
+    expect(screen.getByRole("button", { name: "Confirm & publish →" }).closest(".publish-review-actions-sticky")).not.toBeNull();
   });
 
   it("lists notes taken off earlier as coming back with this publish (owner 2026-11-14)", () => {

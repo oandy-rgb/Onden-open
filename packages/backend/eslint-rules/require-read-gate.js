@@ -42,6 +42,7 @@ const GATED = {
   "services/harness/noteSkills.ts": /readableScopeSql/, // #技能 catalogue: read scope in SQL, then external_ai filter
   "modules/website/publishing/queryBlocks.ts": /readableScopeSql/, // D113 frozen query results: the evaluating actor's read scope in SQL, rows only from the listed (published) pages
   "modules/website/publishing/excerptEmbeds.ts": /readableScopeSql/, // 2026-10-29 excerpt embeds: source notes read as the publishing actor (SQL scope); only the excerpt paragraph is copied out
+  "modules/website/publishing/drawingEmbeds.ts": /readableAmong/, // 2026-11-20 embedded drawings: candidates read as the publishing actor (readableAmong) and filtered by pictureSourceIds; only the embedded picture is copied out, never a title
   "services/sync/bootstrap.ts": /readableNodeIdSet/,     // /api/bootstrap payload
   "services/nodeReads.ts": /canReadNode/,                 // per-node GETs (ink versions, history, export row, node row, attributes): each checks canReadNode and answers null when unreadable
   "services/history/recentVersions.ts": /readableNotesSql/, // /recent feed, combined read set pushed into SQL before LIMIT

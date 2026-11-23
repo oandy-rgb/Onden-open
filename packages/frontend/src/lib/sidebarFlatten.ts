@@ -10,19 +10,23 @@ export type FlatRow =
   | { kind: "node"; item: ContentNode; depth: number }
   | { kind: "pointer"; pointer: NotePointer; depth: number }
   // A space heading above that space's top-level notes (spaces on).
-  | { kind: "space"; spaceId: string; label: string; depth: 0 };
+  | { kind: "space"; spaceId: string; label: string; depth: 0 }
+  // Under the heading of a space that has no notes yet: 「還沒有筆記」 and the ＋ that makes the first one.
+  | { kind: "spaceEmpty"; spaceId: string; depth: 0 };
 
 /** Top-level notes grouped under their space, in the given space order
- *  (notes whose space is not listed go last, under `otherLabel`). */
+ *  (notes whose space is not listed go last, under `otherLabel`).
+ *  A space with no notes is dropped, unless it is one of `keepEmpty` (the spaces a
+ *  note may be made in): a space just made must show, or there is nowhere to start. */
 export type SpaceGroup = { spaceId: string; label: string; roots: ContentNode[] };
 export function groupRootsBySpace(
-  roots: ContentNode[], spaces: Array<{ id: string; label: string }>, otherLabel: string,
+  roots: ContentNode[], spaces: Array<{ id: string; label: string }>, otherLabel: string, keepEmpty: ReadonlySet<string> = new Set(),
 ): SpaceGroup[] {
   const known = new Set(spaces.map((s) => s.id));
   const groups: SpaceGroup[] = spaces.map((s) => ({ spaceId: s.id, label: s.label, roots: roots.filter((r) => r.space_id === s.id) }));
   const rest = roots.filter((r) => !r.space_id || !known.has(r.space_id));
   if (rest.length) groups.push({ spaceId: "", label: otherLabel, roots: rest });
-  return groups.filter((g) => g.roots.length > 0);
+  return groups.filter((g) => g.roots.length > 0 || keepEmpty.has(g.spaceId));
 }
 
 export function flattenSidebarTree(
@@ -48,6 +52,7 @@ export function flattenSidebarTree(
   if (spaceGroups) {
     for (const g of spaceGroups) {
       out.push({ kind: "space", spaceId: g.spaceId, label: g.label, depth: 0 });
+      if (g.roots.length === 0) out.push({ kind: "spaceEmpty", spaceId: g.spaceId, depth: 0 });
       for (const root of g.roots) visit(root, 0, seen);
     }
     return out;

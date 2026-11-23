@@ -13,7 +13,7 @@ import { Pressable } from "../../components/ui";
 import { BUILT_IN_FIELDS, mediaSrc, graphemes, isImageName, isSafeImageSrc, SAFE_DATA_IMAGE_SRC } from "@onden/markdown";
 import { getApiBase } from "../../lib/api";
 import type { ExecResponse } from "../../lib/viewExec";
-import { fieldValue } from "../../components/viewLayoutKit";
+import { fieldDisplayName, fieldValue } from "../../components/viewLayoutKit";
 import { useT } from "../../lib/i18n";
 import { dateLabel } from "../../lib/timeLabels";
 import { displayTitle } from "../../lib/noteLabel";
@@ -114,8 +114,8 @@ export default function GalleryLayout({ exec, onSelectNode }: Props) {
                     const v = badgeValue(row, f);
                     if (!v) return null;
                     return (
-                      <span key={f} className="cv-gallery-badge" title={f}>
-                        <span className="cv-gallery-badge-key">{f}</span>
+                      <span key={f} className="cv-gallery-badge" title={fieldDisplayName(f, t)}>
+                        <span className="cv-gallery-badge-key">{fieldDisplayName(f, t)}</span>
                         <span className="cv-gallery-badge-val">{v}</span>
                       </span>
                     );

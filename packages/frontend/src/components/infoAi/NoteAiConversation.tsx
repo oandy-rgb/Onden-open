@@ -93,7 +93,7 @@ export function NoteAiConversation({ node, ai, onSelectNode, onRevealNote }: {
       {chat.entry.blocked && (
         <div className="note-ai-blocked" role="note">
           <p>{chat.entry.blocked}</p>
-          {online && <Button size="sm" variant="secondary" onClick={() => openSpacesAndMembers()}>{t("Open AI settings")}</Button>}
+          {online && <Button size="sm" variant="secondary" onClick={() => openSpacesAndMembers(node.space_id ?? undefined)}>{t("Open AI settings")}</Button>}
         </div>
       )}
 

@@ -63,6 +63,8 @@
 - **畫面重量測的鍵含實際文字**（不只區塊數）：刪字後縮小的投影片會回到原大小。
 - **後端也擋**：標籤的視角不收「簡報」（`assertLayoutForTag`，422 `view_layout_not_for_tags`；建立與改版型都擋）；模組關掉時筆記新增／改成簡報視角仍是 409 `module_not_imported`。
 - **手機直向**：播放時偵測窄螢幕直向（`usePresentLandscape`），盡力要求全螢幕與橫向鎖定（失敗不顯示錯誤），並提示「把手機轉成橫向」。
+- **版面看窗格自己的寬度**：`.sp` 是 `container: sp`，窄於 720px（手機、或平板三欄都開的中欄）縮圖變橫排、「換成…」清單變成釘在窗格底部的不透明面板（選項橫排，投影片留在上方看得到預覽）；
+  三欄要約 720px，在 435px 時清單曾疊在投影片上、說明擠成一字一行。見 `test/guards/narrowColumn.guard.test.ts` 與 `e2e/browser-app/tabletViews.mjs`。
 - **鍵盤**：簡報分頁內 ←／→ 換頁，縮圖列（桌面直排、窄螢幕橫排）都吃四個方向鍵；`ReplaceWith` 在桌面按 Esc 關閉。
 - **延遲載入的字典只有一套機制**：`registerDictionary`（相加不覆蓋）；`extendDictionary` 已刪。
 

@@ -6,6 +6,7 @@ import { VIEW_MODULES, type ViewModuleSpec } from "../../modules";
 import type { ViewChanges } from "../../lib/data";
 import { paramOptions } from "./paramOptions";
 import { Pressable, Select } from "../ui";
+import "./LayoutChooser.css";
 
 // The one place a view's layout is chosen: the list of layouts, then (for a
 // calendar, board or cards) the one field it needs. Both 「＋」 (a new view)
@@ -73,9 +74,12 @@ type Props = {
   onChoose: (choice: LayoutChoice, field: string) => void;
   /** A tag's fields can be edited here (the person may change the tag). */
   onEditFields?: () => void;
+  /** A board with nothing to split by can be given one right here: adds a 「狀態」 select field to the tag and returns its
+   *  name (null: it was not added, and the writer said why). Only a tag's page has it. */
+  onAddStatusField?: () => Promise<string | null>;
 };
 
-export default function LayoutChooser({ choices, fields, ownerKind, busy, submitLabel, initial, onBack, onChoose, onEditFields }: Props) {
+export default function LayoutChooser({ choices, fields, ownerKind, busy, submitLabel, initial, onBack, onChoose, onEditFields, onAddStatusField }: Props) {
   const t = useT();
   const options = (param: LayoutParam) =>
     paramOptions(param, fields).map((o) => (o.builtIn ? { ...o, label: t(o.label) } : o));
@@ -83,11 +87,19 @@ export default function LayoutChooser({ choices, fields, ownerKind, busy, submit
   const [choice, setChoice] = useState<LayoutChoice | null>(initial ?? null);
   const [field, setField] = useState(initial?.param ? start(initial) : "");
 
+  // Choosing from the list only asks when there is no answer to give: a calendar with a date to use, cards that
+  // pick their own cover and a board with a select field already have one, so the view is made at once and the
+  // field is changed later in the view's settings.
   function pick(next: LayoutChoice) {
-    if (!next.param || next.present) { onChoose(next, ""); return; }
+    const first = next.param && !next.present ? start(next) : "";
+    if (!next.param || next.present || first || next.param.optional) { onChoose(next, first); return; }
     setChoice(next);
-    setField(start(next));
+    setField(first);
   }
+  const addStatusField = async () => {
+    const name = await onAddStatusField?.();
+    if (name && choice) onChoose(choice, name);
+  };
 
   if (!choice) {
     return (
@@ -113,7 +125,12 @@ export default function LayoutChooser({ choices, fields, ownerKind, busy, submit
       </Pressable>
       {hint && <p className="cv-add-view-note" role="note">{t(hint)}</p>}
       {choiceOptions.length === 0 && !param.optional ? (
-        onEditFields && <Pressable type="button" className="cv-add-view-create" onClick={onEditFields}>{t("Edit fields")}</Pressable>
+        <>
+          {onAddStatusField && param.key === "group_by" && (
+            <Pressable type="button" className="cv-add-view-create" disabled={busy} onClick={() => void addStatusField()}>{t("Add a “Status” field")}</Pressable>
+          )}
+          {onEditFields && <Pressable type="button" className="cv-add-view-back" onClick={onEditFields}>{t("Edit fields")}</Pressable>}
+        </>
       ) : (
         <>
           <label className="cv-add-view-field">

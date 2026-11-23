@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import type { FitViewOptions, Node, ReactFlowInstance } from "@xyflow/react";
 import { readViewport, writeViewport } from "../lib/canvasViewport";
-import { DEFAULT_CARD_W } from "../lib/cardGeometry";
+import { openViewport, type FitPadding } from "../lib/boardFit";
+import { DEFAULT_CARD_H, DEFAULT_CARD_W } from "../lib/cardGeometry";
 import { FOCUS_ZOOM } from "../lib/cardDisplay";
 import { observeSize } from "../lib/observeSize";
 import { flingVelocity, pushFlingSample, startGlide, type FlingSample } from "../lib/ink";
@@ -15,17 +16,22 @@ type Options = {
   displayNodes: Node[];
   /** The board's container, watched while a card is edited. */
   wrapRef: RefObject<HTMLDivElement | null>;
-  /** How the first fit leaves room for the controls floating over the board. */
+  /** How the first fit leaves room for the controls floating over the board (`fitOptions` for React Flow's own fit,
+   *  `openPadding` the same room in px for the first view, which never drops below a readable scale). */
   fitOptions: FitViewOptions;
+  openPadding: FitPadding;
+  /** A touch screen: the first view keeps a readable scale (lib/boardFit.ts); otherwise it fits everything. */
+  readableOpen: boolean;
 };
 
 /**
  * Where the whiteboard camera points, and when it moves on its own.
  *
  * - Each board reopens at the viewport it was left at (per session); only a
- *   board without one fits to its content: `fitOnOpen` for the cards there at
+ *   board without one opens on its content: `fitOnOpen` for the cards there at
  *   the first render, and once more when its first cards arrive later (the
- *   sub-note tree is drawn from notes that may not have loaded yet).
+ *   sub-note tree is drawn from notes that may not have loaded yet). That view
+ *   fits everything, but on a touch screen never below a readable scale (lib/boardFit.ts).
  * - A card focused from outside the board (tree, graph, palette) is centred
  *   once; later content or display updates keep the camera where it is.
  * - A card clicked on the board stays where it is. A title clicked in far zoom
@@ -40,7 +46,7 @@ type Options = {
  *
  * The camera never writes board geometry: display sizes stay display-only.
  */
-export function useBoardCamera({ rfInstance, boardId, selectedNodeId, displayNodes, wrapRef, fitOptions }: Options) {
+export function useBoardCamera({ rfInstance, boardId, selectedNodeId, displayNodes, wrapRef, fitOptions, openPadding, readableOpen }: Options) {
   // Browsing keeps the chosen overview scale; beginning an edit explicitly
   // asks for readable text. Both use the same camera operation.
   const centerCardForReading = useCallback((node: Node, minimumZoom = 0) => {
@@ -114,12 +120,19 @@ export function useBoardCamera({ rfInstance, boardId, selectedNodeId, displayNod
   const fittedBoard = useRef<string | null>(null);
   const fitOptionsRef = useRef(fitOptions);
   fitOptionsRef.current = fitOptions;
+  const openingRef = useRef({ openPadding, displayNodes });
+  openingRef.current = { openPadding, displayNodes };
   const hasCards = displayNodes.length > 0;
   useEffect(() => {
     if (!rfInstance || !boardId || hasStash || !hasCards || fittedBoard.current === boardId) return;
     fittedBoard.current = boardId;
-    void rfInstance.fitView({ ...fitOptionsRef.current, duration: 0 });
-  }, [rfInstance, boardId, hasStash, hasCards]);
+    const box = wrapRef.current?.getBoundingClientRect();
+    const bounds = cardsBounds(openingRef.current.displayNodes);
+    // A mouse (readableOpen off) keeps React Flow's own fit of everything, measured from the real cards; so does a
+    // board that is not on screen to measure (a hidden pane), where it waits for a size.
+    if (!readableOpen || !box || box.width === 0 || box.height === 0 || !bounds) { void rfInstance.fitView({ ...fitOptionsRef.current, duration: 0 }); return; }
+    void rfInstance.setViewport(openViewport(bounds, box, openingRef.current.openPadding), { duration: 0 });
+  }, [rfInstance, boardId, hasStash, hasCards, wrapRef, readableOpen]);
 
   const saveViewport = useCallback(() => {
     if (!rfInstance || !boardId) return;
@@ -200,4 +213,17 @@ export function useBoardCamera({ rfInstance, boardId, selectedNodeId, displayNod
   }, [selectedNodeId, rfInstance, displayNodes, boardId, centerCardForReading]);
 
   return { fitOnOpen: !hasStash, onMoveStart, onMove, onMoveEnd, stopGlide, onNodeEditStart, cardClicked, focusCard };
+}
+
+/** The box around the cards as stored: their positions and sizes (a card not measured yet has the default size). */
+function cardsBounds(nodes: readonly Node[]): { x: number; y: number; width: number; height: number } | null {
+  if (nodes.length === 0) return null;
+  let left = Infinity; let top = Infinity; let right = -Infinity; let bottom = -Infinity;
+  for (const node of nodes) {
+    const width = node.measured?.width ?? (typeof node.style?.width === "number" ? node.style.width : DEFAULT_CARD_W);
+    const height = node.measured?.height ?? (typeof node.style?.height === "number" ? node.style.height : DEFAULT_CARD_H);
+    left = Math.min(left, node.position.x); top = Math.min(top, node.position.y);
+    right = Math.max(right, node.position.x + width); bottom = Math.max(bottom, node.position.y + height);
+  }
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }

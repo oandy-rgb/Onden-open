@@ -73,7 +73,7 @@ await page.locator(".phone-view-tabs").getByRole("tab", { name: /第6個檢視�
 {
   const y0 = (await rect(".phone-view-tabs")).top;
   await shot("phone-many-tabs");
-  const list = await page.evaluate(() => { const e = document.querySelector(".phone-view-tabs .view-tabs"); return { scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollLeft: e.scrollLeft }; });
+  const list = await page.evaluate(() => { const e = document.querySelector(".phone-view-tabs .view-tabs-list"); return { scrollWidth: e.scrollWidth, clientWidth: e.clientWidth, scrollLeft: e.scrollLeft }; });
   check(list.scrollWidth > list.clientWidth, "swipe: many tabs make the row scroll sideways", JSON.stringify(list));
   // one tap switches
   await page.locator(".phone-view-tabs").getByRole("tab", { name: /第1個檢視分頁/ }).tap();
@@ -87,22 +87,22 @@ await page.locator(".phone-view-tabs").getByRole("tab", { name: /第6個檢視�
   await page.locator(".phone-view-tabs").getByRole("tab", { name: "內容" }).tap();
   await page.waitForSelector(".obsidian-title-input");
   // swipe: finger moves sideways along the row
-  const box = await page.locator(".phone-view-tabs .view-tabs").boundingBox();
+  const box = await page.locator(".phone-view-tabs .view-tabs-list").boundingBox();
   const y = box.y + box.height / 2;
   const scrollY0 = await page.evaluate(() => window.scrollY);
   await touch("touchStart", [{ x: box.x + box.width - 20, y }]);
   for (let i = 1; i <= 12; i++) { await touch("touchMove", [{ x: box.x + box.width - 20 - i * 14, y }]); await page.waitForTimeout(16); }
   await touch("touchEnd", []);
   await page.waitForTimeout(500);
-  const swiped = await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs").scrollLeft);
+  const swiped = await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs-list").scrollLeft);
   check(swiped > 0, "swipe: a sideways swipe scrolls the row", `scrollLeft ${swiped}`);
   check((await page.locator('[role="menu"]').count()) === 0, "swipe: a swipe opens no menu");
   check((await page.evaluate(() => window.scrollY)) === scrollY0, "swipe: the page itself did not move");
   // hold: a still finger for longer than the lift opens the menu when it lifts, and the row does not scroll
-  await page.evaluate(() => { document.querySelector(".phone-view-tabs .view-tabs").scrollLeft = 0; });
+  await page.evaluate(() => { document.querySelector(".phone-view-tabs .view-tabs-list").scrollLeft = 0; });
   await page.waitForTimeout(300);
   const tabBox = await page.locator(".phone-view-tabs").getByRole("tab", { name: /第1個檢視分頁/ }).boundingBox();
-  const holdLeft = await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs").scrollLeft);
+  const holdLeft = await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs-list").scrollLeft);
   const hx = tabBox.x + tabBox.width / 2;
   const hy = tabBox.y + tabBox.height / 2;
   if (hx > 0 && hx < 390) {
@@ -112,7 +112,7 @@ await page.locator(".phone-view-tabs").getByRole("tab", { name: /第6個檢視�
     await page.waitForSelector('[role="menu"]', { timeout: 5000 }).catch(() => {});
     check((await page.locator('[role="menu"]').count()) === 1, "swipe: holding a tab opens its menu");
     check((await page.getByRole("menuitem", { name: "重新命名" }).count()) === 1 && (await page.getByRole("menuitem", { name: "刪除檢視" }).count()) === 1, "swipe: the menu has rename and delete");
-    check((await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs").scrollLeft)) === holdLeft, "swipe: holding does not scroll the row");
+    check((await page.evaluate(() => document.querySelector(".phone-view-tabs .view-tabs-list").scrollLeft)) === holdLeft, "swipe: holding does not scroll the row");
     await shot("phone-tab-menu");
     await page.keyboard.press("Escape");
   } else {

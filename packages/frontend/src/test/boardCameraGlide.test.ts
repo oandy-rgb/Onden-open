@@ -24,7 +24,7 @@ describe("useBoardCamera glide", () => {
     const rf = { getViewport: () => view, setViewport: (v: typeof view) => { view = v; return Promise.resolve(true); }, getZoom: () => 1, fitView: vi.fn(), getNode: vi.fn() };
     const { result } = renderHook(() => useBoardCamera({
       rfInstance: rf as never, boardId: "b", selectedNodeId: null, displayNodes: [],
-      wrapRef: { current: null }, fitOptions: {},
+      wrapRef: { current: null }, fitOptions: {}, openPadding: { top: 0, right: 0, bottom: 0, left: 0 }, readableOpen: true,
     }));
     let now = 0;
     vi.spyOn(performance, "now").mockImplementation(() => now);

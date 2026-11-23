@@ -557,3 +557,87 @@ describe("放在: one row, one picker grouped by space", () => {
     expect(within(sheet).getByRole("combobox", { name: "Search tags…" })).toBeInTheDocument();
   });
 });
+
+const BIG3 = space("sp-big3", "大三");
+
+describe("a space with no notes yet (new user's first note)", () => {
+  beforeEach(() => { resetSpacesForTest(); });
+  afterEach(() => { vi.restoreAllMocks(); resetSpacesForTest(); });
+
+  it("shows in the sidebar with 「還沒有筆記」 and a ＋ that makes the first note at its top level", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    withNotes();
+    const props = sidebarGroups();
+    render(<OverviewSidebar {...props} />);
+    const heading = await screen.findByRole("heading", { name: /大三/ });
+    const row = heading.parentElement!.querySelector<HTMLElement>("[data-sb-space-none]")!;
+    expect(within(row).getByText("No notes yet")).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "New note in 大三" }));
+    expect(props.create).toHaveBeenCalledWith("note", { spaceId: "sp-big3" });
+  });
+
+  it("does not say 「還沒有筆記」 of a space whose only note is one the tree leaves out", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    resetAppState({
+      data: { ...noWorkspaceData, nodes: [note("n1", "Mine", { space_id: "sp-me" }), note("rss1", "Feed item", { space_id: "sp-big3", source_type: "rss" })], tags: [], actor_is_owner: true },
+      online: true,
+    });
+    const props = sidebarGroups();
+    render(<OverviewSidebar {...props} />);
+    const heading = await screen.findByRole("heading", { name: /大三/ });
+    const row = heading.parentElement!.querySelector<HTMLElement>("[data-sb-space-none]")!;
+    expect(row).not.toBeNull();
+    expect(within(row).queryByText("No notes yet")).toBeNull();
+    expect(within(row).getByRole("button", { name: "New note in 大三" })).toBeInTheDocument();
+  });
+
+  it("does not say 「還沒有筆記」 of a space whose only note is hidden, or carries a hidden tag", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    const hiddenTag = { id: "t-h", name: "h", color: "", schema_id: null, hidden: true } as Tag;
+    const rowOf = async () => {
+      const heading = await screen.findByRole("heading", { name: /大三/ });
+      return heading.parentElement!.querySelector<HTMLElement>("[data-sb-space-none]");
+    };
+    // A hidden note (a row the tree never lists): the space still holds a note.
+    resetAppState({ data: { ...noWorkspaceData, nodes: [note("n1", "Mine", { space_id: "sp-me" }), note("h1", "Kept out", { space_id: "sp-big3", hidden: true })], tags: [], actor_is_owner: true }, online: true });
+    const first = render(<OverviewSidebar {...sidebarGroups()} />);
+    const row = await rowOf();
+    expect(row).not.toBeNull();
+    expect(within(row!).queryByText("No notes yet")).toBeNull();
+    first.unmount();
+    // A note carrying a hidden tag is listed as any note: the space has a top-level row, so no empty line at all.
+    resetAppState({ data: { ...noWorkspaceData, nodes: [note("n1", "Mine", { space_id: "sp-me" }), note("t1", "Tagged", { space_id: "sp-big3", label_tag_ids: ["t-h"] })], tags: [hiddenTag], actor_is_owner: true }, online: true });
+    render(<OverviewSidebar {...sidebarGroups()} />);
+    expect(await rowOf()).toBeNull();
+    expect(screen.getByText("Tagged")).toBeInTheDocument();
+  });
+
+  it("says 「還沒有筆記」 when the space's only rows are the app's own hidden machinery", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    resetAppState({ data: { ...noWorkspaceData, nodes: [note("n1", "Mine", { space_id: "sp-me" }), note("tasks", "任務", { space_id: "sp-big3", hidden: true, source_type: "system" })], tags: [], actor_is_owner: true }, online: true });
+    render(<OverviewSidebar {...sidebarGroups()} />);
+    const heading = await screen.findByRole("heading", { name: /大三/ });
+    expect(within(heading.parentElement!.querySelector<HTMLElement>("[data-sb-space-none]")!).getByText("No notes yet")).toBeInTheDocument();
+  });
+
+  it("is found in the place list by its name, as 「空間 › 最上層」", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    withNotes();
+    render(<OverviewSidebar {...sidebarGroups()} />);
+    const sheet = await openSheet();
+    fireEvent.click(placeButton(sheet));
+    fireEvent.change(within(sheet).getByRole("combobox"), { target: { value: "大三" } });
+    expect(optionLabels(sheet)).toEqual(["大三 › Top level"]);
+    expect(within(sheet).queryByText("No places match")).toBeNull();
+  });
+
+  it("a space whose notes exist is found by its name too (the name is matched like a title)", async () => {
+    await loadSpaces([PERSONAL, BIG3]);
+    resetAppState({ data: { ...noWorkspaceData, nodes: [note("n9", "Syllabus", { space_id: "sp-big3" })], tags: [], actor_is_owner: true }, online: true });
+    render(<OverviewSidebar {...sidebarGroups()} />);
+    const sheet = await openSheet();
+    fireEvent.click(placeButton(sheet));
+    fireEvent.change(within(sheet).getByRole("combobox"), { target: { value: "大三" } });
+    expect(optionLabels(sheet)).toEqual(["大三 › Top level"]);
+  });
+});

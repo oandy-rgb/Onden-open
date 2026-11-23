@@ -3,8 +3,6 @@ import {
   Background,
   BackgroundVariant,
   MiniMap,
-  NodeToolbar,
-  Position,
   ConnectionMode,
   BaseEdge,
   getBezierPath,
@@ -55,6 +53,7 @@ import { captureCanvasPositions, type CanvasPositions } from "../lib/sectionCarr
 import { heldMoves, holdCardsAt, releaseCards } from "../lib/cardLift";
 import { pressedOnScreen } from "../lib/ink";
 import { useBoardCamera } from "../hooks/useBoardCamera";
+import type { FitPadding } from "../lib/boardFit";
 import { alignCanvasCards, type CanvasAlignment } from "../lib/canvasAlignment";
 import { layoutSectionHeadings } from "../lib/sectionHeadings";
 import { GraphCallbacksContext } from "./graphCallbacks";
@@ -115,11 +114,14 @@ const CHILDLESS_NOTE_MS = 5000;
 /** Fitting the board leaves room for what floats over it — the buttons across
  *  the top, the tool bar along the bottom (and the minimap in the corner; a phone has none) — so
  *  no card starts out hidden underneath. */
-function fitPadding(minimap: boolean): NonNullable<FitViewOptions["padding"]> {
+function fitPaddingPx(minimap: boolean): FitPadding {
   const phone = isMobileLayout();
-  return phone
-    ? { top: "64px", x: "16px", bottom: "96px" }
-    : { top: "64px", x: "24px", bottom: minimap ? "184px" : "96px" };
+  const side = phone ? 16 : 24;
+  return { top: 64, right: side, left: side, bottom: !phone && minimap ? 184 : 96 };
+}
+function fitPadding(minimap: boolean): NonNullable<FitViewOptions["padding"]> {
+  const { top, right, bottom, left } = fitPaddingPx(minimap);
+  return { top: `${top}px`, right: `${right}px`, bottom: `${bottom}px`, left: `${left}px` };
 }
 
 export type { BoardView, BoardActions } from "../hooks/boardWorkspaceTypes";
@@ -335,7 +337,7 @@ function KnowledgeWorkspace({
   const camera = useBoardCamera({
     rfInstance, boardId: activeCanvasId, selectedNodeId,
     displayNodes: displayGraphNodes, wrapRef: canvasWrapRef,
-    fitOptions: { padding: fitPadding(minimapShown) },
+    fitOptions: { padding: fitPadding(minimapShown) }, openPadding: fitPaddingPx(minimapShown), readableOpen: touchPrimary,
   });
   const { onNodeEditStart } = camera;
 
@@ -833,7 +835,7 @@ function KnowledgeWorkspace({
         />
 
         <BoardCornerControls
-          phone={phone} zoomButtons={!(phone && touchPrimary)}
+          phone={phone} zoomButtons={!(phone && touchPrimary)} penInHand={canvasMode === "pen"}
           canUndo={canvasUndo.canUndo} canRedo={canvasUndo.canRedo}
           onUndo={() => runBackgroundWrite(canvasUndo.undo())} onRedo={() => runBackgroundWrite(canvasUndo.redo())}
           zoom={headingZoom}
@@ -845,6 +847,22 @@ function KnowledgeWorkspace({
           <CanvasNotePicker key={activeCanvasId} canvasId={activeCanvasId} onAdd={onAddToCanvas}
             onClose={closeAddPicker}
             onAdded={(id) => { closeAddPicker(); setCanvasSearch(""); onSelectNode(id); }} />
+        )}
+
+        {/* The selected card's bar sits at a fixed place at the top of the board, where a several-card selection's bar does
+            (they never show together). Over the card it used to follow, it covered the cards above it. */}
+        {focusedCardId && !edgeFocus && multiSel.length < 2 && canvasMode !== "pen" && (
+          <div className="board-selection-dock">
+            <BoardSelectionBar
+              onOpen={() => onOpenCard(focusedCardId)}
+              onColor={(color) => onSetNodesColor([focusedCardId], color)}
+              onCenter={tree?.mode === "auto" ? () => onCenterBoard(focusedCardId) : undefined}
+              branch={focusedBranch ? { expanded: focusedBranch.expanded, onToggle: () => onToggleBranch(focusedCardId) } : undefined}
+              fold={{ folded: allFolded([focusedCardId]), onToggle: () => setCardsFolded([focusedCardId], !allFolded([focusedCardId])) }}
+              onResetSize={hasOwnSize([focusedCardId]) ? () => onResetCardSize([focusedCardId]) : undefined}
+              onMore={({ x, y }) => onNodeContextMenu(focusedCardId, x, y)}
+            />
+          </div>
         )}
 
         {multiSel.length >= 2 && (
@@ -963,10 +981,10 @@ function KnowledgeWorkspace({
               // React Flow snaps while dragging; here the grid applies on drop (handleNodeDragStop), so a held
               // card follows the finger and does not jump from grid line to grid line.
               snapToGrid={false}
-              // P0-5 縮放定位: auto-fit ONLY on a cold open (no saved viewport).
-              // When a stash exists the restore effect drives the camera, so
-              // the prop's onInit-fit must be off or it races the restore.
-              fitView={camera.fitOnOpen}
+              // P0-5 縮放定位: the first view is set ONLY on a cold open (no saved viewport); when a stash exists
+              // its restore effect drives the camera. A touch screen's first view is useBoardCamera's own (readable
+              // scale); a mouse keeps React Flow's fit of everything.
+              fitView={camera.fitOnOpen && !touchPrimary}
               fitViewOptions={{ padding: fitPadding(minimapShown) }}
               // NB: onlyRenderVisibleElements was tried and reverted — these
               // cards don't carry a measured height (style.height is usually
@@ -1005,20 +1023,6 @@ function KnowledgeWorkspace({
                   className="kw-canvas-minimap"
                   ariaLabel={t("Canvas minimap")}
                 />
-              )}
-              {/* The selected card's own bar follows it as the board pans and zooms. */}
-              {focusedCardId && !edgeFocus && multiSel.length < 2 && canvasMode !== "pen" && (
-                <NodeToolbar nodeId={focusedCardId} position={Position.Top} offset={12} isVisible>
-                  <BoardSelectionBar
-                    onOpen={() => onOpenCard(focusedCardId)}
-                    onColor={(color) => onSetNodesColor([focusedCardId], color)}
-                    onCenter={tree?.mode === "auto" ? () => onCenterBoard(focusedCardId) : undefined}
-                    branch={focusedBranch ? { expanded: focusedBranch.expanded, onToggle: () => onToggleBranch(focusedCardId) } : undefined}
-                    fold={{ folded: allFolded([focusedCardId]), onToggle: () => setCardsFolded([focusedCardId], !allFolded([focusedCardId])) }}
-                    onResetSize={hasOwnSize([focusedCardId]) ? () => onResetCardSize([focusedCardId]) : undefined}
-                    onMore={({ x, y }) => onNodeContextMenu(focusedCardId, x, y)}
-                  />
-                </NodeToolbar>
               )}
               {/* Ink layer — child of ReactFlow so useViewport keeps the ink
                   camera on the store. keyed per canvas: each named

@@ -12,6 +12,8 @@ import { compareChildren } from "../lib/childOrder";
 import { noteLabel, untitledTitle } from "../lib/noteLabel";
 import { spaceLabel, useSpaces } from "../lib/spaces";
 import SpaceHeading from "./SpaceHeading";
+import SpaceEmptyRow from "./SpaceEmptyRow";
+import { writableSpaces } from "../lib/newNoteTarget";
 import { t, useT, tn } from "../lib/i18n";
 import { useOverviewSearch } from "../hooks/useOverviewSearch";
 import { useAppSelector, setOverviewPane, setOverviewSearch, openOverviewSearch, closeOverviewSearch, consumeOverviewSearchFocus, selectOverviewNodes, selectOverviewSelectedNode, useOnline, useTagRows, useAllNodes } from "../lib/appStore";
@@ -239,12 +241,22 @@ function OverviewSidebar({ nav, actions, rename, tree, create, onCreateTag }: Pr
   // 「介面」): personal first, then shared ones — once more than one space has
   // notes (a single group needs no heading).
   const sharedSpaceIds = useMemo(() => new Set(mySpaces.filter((sp) => sp.kind === "shared").map((sp) => sp.id)), [mySpaces]);
+  // A space where a note may be made shows even with no notes in it yet (「還沒有筆記」 and a ＋).
+  const writableSpaceIds = useMemo(() => new Set(writableSpaces(mySpaces).map((sp) => sp.id)), [mySpaces]);
   const spaceGroups = useMemo(() => {
     const bySpace = spacesLoaded
-      ? groupRootsBySpace(rootNodes, mySpaces.map((sp) => ({ id: sp.id, label: spaceLabel(sp) })), t("Other"))
+      ? groupRootsBySpace(rootNodes, mySpaces.map((sp) => ({ id: sp.id, label: spaceLabel(sp) })), t("Other"), writableSpaceIds)
       : [];
     return bySpace.length > 1 ? bySpace : null;
-  }, [spacesLoaded, rootNodes, mySpaces]);
+  }, [spacesLoaded, rootNodes, mySpaces, writableSpaceIds]);
+  // 「還沒有筆記」 is said of a space that holds no note at all — not of one whose notes the tree leaves out (hidden,
+  // made by a module, pending). Only the app's own hidden machinery (the 任務 note…) does not count as a note.
+  const spacesWithNotes = useMemo(
+    () => new Set(allNodes.filter((n) => !isTag(n) && !(n.hidden && n.source_type === "system")).map((n) => n.space_id)),
+    [allNodes],
+  );
+  const spaceLabels = useMemo(() => new Map(mySpaces.map((sp) => [sp.id, spaceLabel(sp)])), [mySpaces]);
+  const createInSpace = useCallback((spaceId: string) => { void create("note", { spaceId }); }, [create]);
   const flatRows = useMemo(
     () => flattenSidebarTree(rootNodes, childrenByParent, pointersByParent, expandedGroups, spaceGroups),
     [rootNodes, childrenByParent, pointersByParent, expandedGroups, spaceGroups],
@@ -676,6 +688,8 @@ function OverviewSidebar({ nav, actions, rename, tree, create, onCreateTag }: Pr
                 {flatRows.slice(start, end).map((row: FlatRow) =>
                   row.kind === "space"
                     ? row.label ? <SpaceHeading key={`space-${row.spaceId}`} spaceId={row.spaceId} label={row.label} shared={sharedSpaceIds.has(row.spaceId)} dropping={tree.dropSpaceId === row.spaceId} /> : null
+                    : row.kind === "spaceEmpty"
+                    ? <SpaceEmptyRow key={`empty-${row.spaceId}`} spaceId={row.spaceId} label={spaceLabels.get(row.spaceId) ?? ""} noNotes={!spacesWithNotes.has(row.spaceId)} dropping={tree.dropSpaceId === row.spaceId} onCreate={createInSpace} />
                     : row.kind === "pointer"
                     ? renderPointerRow(row.pointer, row.depth)
                     : renderItem(row.item, row.depth, new Set(), true))}
@@ -700,6 +714,7 @@ function OverviewSidebar({ nav, actions, rename, tree, create, onCreateTag }: Pr
               return <>{spaceGroups.map((g) => (
                 <div key={`space-${g.spaceId}`} className="sb-space-group">
                   {g.label && <SpaceHeading spaceId={g.spaceId} label={g.label} shared={sharedSpaceIds.has(g.spaceId)} dropping={tree.dropSpaceId === g.spaceId} />}
+                  {g.roots.length === 0 && <SpaceEmptyRow spaceId={g.spaceId} label={g.label} noNotes={!spacesWithNotes.has(g.spaceId)} dropping={tree.dropSpaceId === g.spaceId} onCreate={createInSpace} />}
                   {g.roots.map((item) => renderItem(item, 0, new Set()))}
                 </div>
               ))}</>;

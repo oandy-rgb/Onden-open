@@ -146,7 +146,7 @@ export default function KanbanLayout({ exec, onSelectNode, onMutated }: Props) {
             onDrop={(e) => { e.preventDefault(); onDrop(col.key); }}
           >
             <header className="cv-kanban-col-head">
-              <span className="cv-kanban-col-title" title={`${groupField}: ${colLabel(col)}`}>
+              <span className="cv-kanban-col-title" title={`${fieldDisplayName(groupField, t)}: ${colLabel(col)}`}>
                 {colLabel(col)}
               </span>
               <span className="cv-kanban-col-count">{col.rows.length}</span>

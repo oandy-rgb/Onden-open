@@ -6,7 +6,8 @@
   flex-direction: column;
   gap: 8px;
   width: min(360px, 95vw);
-  max-height: min(560px, 80dvh);
+  /* The popover's room is the height that can be seen above the on-screen keyboard (usePopover). */
+  max-height: min(560px, var(--popover-room, 80dvh));
   overflow-y: auto;
   box-sizing: border-box;
   padding: 14px;

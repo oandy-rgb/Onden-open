@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { keepFocus as keepFocusOnPress } from "./keepFocus";
 import { isEscapeKey } from "../../lib/keys";
 import { useDismiss } from "../../hooks/useEscapeKey";
@@ -67,7 +67,13 @@ const FOCUSABLE = "button:not(:disabled), a[href]";
 
 export function usePopover<A extends HTMLElement = HTMLDivElement>({ open, onClose, placement = "bottom-end", at, keepFocus }: PopoverOptions): PopoverState<A> {
   const anchor = useRef<A>(null);
-  const popup = useRef<HTMLDivElement>(null);
+  // The surface can mount after `open` turns true (a lazily loaded body renders it on its first open): placing it
+  // must wait for the element, or it stays at the corner it started in until something else moves it.
+  const [mounted, setMounted] = useState(false);
+  const popup = useMemo<React.RefObject<HTMLDivElement | null>>(() => {
+    let element: HTMLDivElement | null = null;
+    return { get current() { return element; }, set current(next) { element = next; setMounted(next !== null); } };
+  }, []);
   const close = useRef(onClose);
   close.current = onClose;
   const [position, setPosition] = useState<PopoverState["position"]>({ left: at?.x ?? MARGIN, top: at?.y ?? MARGIN });
@@ -128,7 +134,7 @@ export function usePopover<A extends HTMLElement = HTMLDivElement>({ open, onClo
       window.removeEventListener("resize", place);
       if (follows) window.removeEventListener("scroll", place, true);
     };
-  }, [open, placement, atX, atY, lineTop]);
+  }, [open, placement, atX, atY, lineTop, mounted, popup]);
 
   useEffect(() => {
     if (!open) return;
@@ -139,7 +145,7 @@ export function usePopover<A extends HTMLElement = HTMLDivElement>({ open, onClo
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Node;
       if (pressedInside.current) { pressedInside.current = false; return; }
-      if (!anchor.current?.contains(target) && !element?.contains(target)) close.current();
+      if (!anchor.current?.contains(target) && !popup.current?.contains(target)) close.current();
     };
     document.addEventListener("pointerdown", onPointer);
     return () => {
@@ -151,7 +157,7 @@ export function usePopover<A extends HTMLElement = HTMLDivElement>({ open, onClo
         : trigger?.matches(FOCUSABLE) ? trigger : trigger?.querySelector<HTMLElement>(FOCUSABLE);
       target?.focus({ preventScroll: true });
     };
-  }, [open, keepFocus]);
+  }, [open, keepFocus, popup]);
 
   // Back (and Esc when focus is not on the surface) closes the newest surface only: a menu inside a modal first.
   useDismiss(() => { close.current(); }, open);

@@ -11,11 +11,11 @@
   min-height: 0;
   flex: 1;
 }
-/* A desktop card has only a max-height, so the list can't take "the rest" of
- * it: the list carries its own cap, or a long list stretches the card past the
- * window (every caller: Move to…, 放在…, quick capture, quick-add task). On a
- * phone the steady sheet bounds it and the list takes what is left. */
-@media (width > 600px) { .place-picker-options { max-height: min(400px, calc(80dvh - 150px)); } }
+/* On a wide screen the card around the picker has only a max-height (the create popover's and Move to…'s),
+ * so the list is a flex item that shrinks into what the card leaves, never a height guessed from the card's
+ * chrome: with the keyboard up the card is short and the list takes what is left and scrolls inside, under
+ * the search. The ceiling only stops a long list from stretching a card with no bound of its own. */
+@media (width > 600px) { .place-picker-options { max-height: min(400px, 60dvh); } }
 .place-picker-heading {
   display: flex;
   align-items: center;

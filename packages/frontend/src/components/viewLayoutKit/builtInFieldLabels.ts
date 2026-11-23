@@ -4,6 +4,8 @@ import { TASK_ATTR } from "@onden/markdown/contract";
 // the view stores). Any other field is the user's own: its name is its label.
 const BUILT_IN_FIELD_LABELS: Record<string, string> = {
   title: "Title", slug: "Slug", updated_at: "Updated at", created_at: "Created at", sort_order: "Manual order",
+  // The same columns as an imported Obsidian base names them.
+  "file.name": "Title", "file.ctime": "Created at", "file.mtime": "Updated at",
   // A task's own properties (a sync conflict names the one that clashed).
   [TASK_ATTR.status]: "Status", [TASK_ATTR.when]: "Planned day", [TASK_ATTR.evening]: "Evening", [TASK_ATTR.someday]: "Someday",
   [TASK_ATTR.deadline]: "Deadline", [TASK_ATTR.recur]: "Repeat", [TASK_ATTR.recurMode]: "How it repeats",

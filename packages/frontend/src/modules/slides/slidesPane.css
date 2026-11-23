@@ -1,7 +1,7 @@
 /* The 「簡報」 tab of a note: thumbnails, the large slide, its controls. Chrome
    uses the app's tokens; the slides themselves wear the deck's theme (slideView.css). */
 .view-pane-note { padding-top: var(--ac-space-2); }
-.sp { display: flex; flex-direction: column; gap: var(--ac-space-3); min-width: 0; }
+.sp { display: flex; flex-direction: column; gap: var(--ac-space-3); min-width: 0; container: sp / inline-size; }
 .sp-title { margin: 0; font-size: var(--ac-fs-title-sm); font-family: var(--ac-font-display); }
 .sp-main { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--ac-space-4); align-items: start; }
 .sp-main.has-replace { grid-template-columns: 168px minmax(0, 1fr) 248px; }
@@ -41,8 +41,12 @@
 .sp-notes summary { cursor: pointer; color: var(--ac-muted); }
 .sp-check-gap { display: inline-block; width: 14px; }
 
-/* Phone: the large slide on top, the thumbnails in a row under it. */
-@media (max-width: 900px) {
+/* A narrow pane (a phone, or a tablet's centre column with both side panes open): the large slide on top, the thumbnails
+   in a row under it. The three columns (thumbnails, slide, 「換成…」) need about 720px; in less the list would sit on top
+   of the slide and the note under the slide would be squeezed to a word a line. This follows the pane's own width, not
+   the window's. The 「換成…」 list is then a panel docked to the bottom of the pane: opaque, over what scrolls under it,
+   with its choices in a row, so the slide above it stays visible while one is tried. */
+@container sp (max-width: 719px) {
   .sp-main, .sp-main.has-replace { grid-template-columns: minmax(0, 1fr); }
   .sp-side { order: 2; }
   .sp-thumbs { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; align-items: stretch; }
@@ -51,5 +55,12 @@
   .sp-tools .ui-btn { min-width: var(--ac-tap); min-height: var(--ac-tap); }
   .sp-thumb { flex-direction: column; align-items: stretch; width: 112px; }
   .sp-thumb-n { width: auto; text-align: left; }
-  .sp-bar .ui-btn { min-height: 44px; }
+  .sp-replace {
+    order: 3; position: sticky; bottom: var(--ac-space-2); z-index: var(--z-local-1);
+    padding: var(--ac-space-2) var(--ac-space-3); border: var(--ac-border-thin) solid var(--ac-line); border-radius: var(--ac-radius-lg);
+    background: var(--ac-elevated); box-shadow: var(--ac-shadow-float);
+  }
+  .sp-replace .ui-replace-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; padding-bottom: var(--ac-space-1); }
+  .sp-replace .ui-replace-item { flex: none; width: 128px; grid-template-columns: minmax(0, 1fr); text-align: center; }
 }
+@media (pointer: coarse) { .sp-bar .ui-btn, .sp-replace .ui-replace-actions .ui-btn { min-height: var(--ac-tap); } }

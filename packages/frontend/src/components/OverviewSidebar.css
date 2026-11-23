@@ -291,6 +291,13 @@
 
 .sb-untitled { color: var(--ac-muted); }
 
+/* A space with no notes yet: a quiet line under its heading (EmptyState, inline) and the ＋ that makes the first note there. */
+.sb-space-none { display: flex; align-items: center; justify-content: space-between; gap: var(--ac-space-4); padding: 0 var(--ac-space-4); }
+.sb-space-none .onden-empty-state--inline { min-width: 0; padding: 0; text-align: start; }
+.sb-space-none__add { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 32px; min-height: 32px; border: 0; background: none; border-radius: var(--ac-radius-sm); color: var(--ac-muted); cursor: pointer; }
+.sb-space-none__add:hover { color: var(--ac-ink); background: var(--ac-overlay-hover); }
+@media (pointer: coarse) { .sb-space-none__add { min-width: var(--ac-tap); min-height: var(--ac-tap); } }
+
 /* Touch screen of any width (a tablet in landscape is wider than the phone list level above): the tree's rows, the
  * ▸ toggles and the bar buttons reach 44px, by the row's own height where the row is full width, by an invisible reach
  * where the control is a few px of glyph. The mouse layout above 900px is untouched. */

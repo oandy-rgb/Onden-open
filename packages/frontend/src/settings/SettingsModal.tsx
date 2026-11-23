@@ -23,6 +23,8 @@ interface Props {
   /** Close settings and open a tag's page. */
   onOpenTag?: (id: string) => void;
   onOpenNote?: (id: string) => void;
+  /** Make a note at the top level of a space and open it (the workspace owns note creation). */
+  onNewNoteInSpace?: (spaceId: string) => void;
   /** The tab to open on (default: the list), or a feature's page. */
   initialTab?: SettingsTab;
 }
@@ -47,7 +49,7 @@ interface Props {
 //
 // Reference: project_b_scope_substrate.md for the broader B-phase audit
 // pattern this aligns with (data-driven over hand-written JSX).
-export default function SettingsModal({ online, onClose, onImportDone, onConnect, onOpenTag, onOpenNote, initialTab }: Props) {
+export default function SettingsModal({ online, onClose, onImportDone, onConnect, onOpenTag, onOpenNote, onNewNoteInSpace, initialTab }: Props) {
   // An old id (a link to 「寫作」) opens the page its settings moved to.
   const [requestedTab, setTab] = useState<SettingsTab>(() => (initialTab && resolveSettingsTab(initialTab)) || TABS[0].id);
   const [query, setQuery] = useState("");
@@ -124,7 +126,8 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
   }, [tab, phone]);
   const openTag = onOpenTag && ((id: string) => { onClose(); onOpenTag(id); });
   const openNote = onOpenNote && ((id: string) => { onClose(); onOpenNote(id); });
-  const ctx: SettingContext = { online, onClose, onImportDone, onConnect, openTab: openFromPage, openTag, openNote };
+  const newNoteInSpace = onNewNoteInSpace && ((spaceId: string) => { onClose(); onNewNoteInSpace(spaceId); });
+  const ctx: SettingContext = { online, onClose, onImportDone, onConnect, openTab: openFromPage, openTag, openNote, newNoteInSpace };
   const listed = (s: SettingDef) => (!s.show || s.show(ctx)) && (!s.desktopOnly || !phone) && (!s.ownerOnly || isOwner);
   const visible = SETTINGS.filter((s) => listed(s) && listedTabs.some((spec) => spec.id === s.tab));
   const searching = query.trim() !== "";

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { ActorCtx } from "../types.js";
+import { eventActorType, type ActorCtx } from "../types.js";
 import { event } from "../db.js";
 import { callTool, registerTool } from "../services/agentTools/index.js";
 import { assertCurrentToolAllowed, ScopeError, withToolAuthority } from "../spine/toolScope.js";
@@ -8,6 +8,14 @@ import { assertCurrentToolAllowed, ScopeError, withToolAuthority } from "../spin
 vi.mock("../db.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../db.js")>(),
   event: vi.fn(async () => "1"),
+}));
+// No database here: the audit record's re-read of the actor under the event lock (appendEventAsCurrentActor) is tested on a real database
+// in removedActorCredentialConcurrent.integration.test.ts; this file is about the tool grant, so the audit goes straight to the mocked event().
+vi.mock("../spine/currentActor.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../spine/currentActor.js")>(),
+  appendEventAsCurrentActor: vi.fn(async (actor: ActorCtx, workspaceId: string, eventType: string, targetType: string, targetId: string,
+    payload: Record<string, unknown>, options?: Parameters<typeof event>[7]) =>
+    event(workspaceId, eventType, targetType, targetId, payload, eventActorType(actor.type), actor.id, options)),
 }));
 
 function tokenActor(allowedTools: string[] | null): ActorCtx {

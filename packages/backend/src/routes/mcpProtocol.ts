@@ -6,12 +6,14 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { getWorkspaceId } from "../services/workspaceId.js";
 import type { ActorCtx } from "../types.js";
 import { toolsAllowedFor, callTool, callPrompt } from "../services/agentTools/index.js";
-import { RateLimitError, mcpSafeError } from "../services/agentTools/index.js";
+import { RateLimitError, mcpSafeError, isCallerFacingFailure } from "../services/agentTools/index.js";
 import type { AgentTool } from "../services/agentTools/index.js";
 import { prompt, skills, InvalidSkillRequest, ScopeUnavailable, type Scope } from "../services/harness/index.js";
 import type { SkillSummary } from "@onden/contract";
 import { ScopeError } from "../spine/toolScope.js";
 import { AuthorityError } from "../spine/mutate.js";
+import { ActorGoneError } from "../spine/actor.js";
+import { actorGoneDuring } from "../spine/currentActor.js";
 export { mcpSafeError };
 
 // MCP-protocol surface (JSON-RPC over Streamable HTTP) alongside the
@@ -29,7 +31,11 @@ export { mcpSafeError };
 // each tool handler reads the store. Async chains preserve the context;
 // concurrent requests don't bleed.
 
-const requestCtx = createContextSlot<{ actor: ActorCtx; workspaceId: string }>();
+// `actorGone`: a callback failed because this request's identity is gone since it signed in (spine/currentActor.ts actorGoneDuring). The
+// SDK turns a callback's failure into a tool error inside a 200, so the route reads it here once the answer is complete and refuses the
+// request 401 instead, the answer every other entry gives (httpError.ts).
+type RequestCtx = { actor: ActorCtx; workspaceId: string; actorGone: boolean };
+const requestCtx = createContextSlot<RequestCtx>();
 
 // Extract the underlying ZodObject's raw shape — registerTool's
 // `inputSchema` field expects ZodRawShape.
@@ -75,7 +81,13 @@ export function promptScope(skill: Pick<SkillSummary, "scopes" | "name">, args: 
 }
 
 const guarded = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
-  async (...args: A): Promise<R> => { try { return await fn(...args); } catch (err) { throw mcpSafeError(err); } };
+  async (...args: A): Promise<R> => {
+    try { return await fn(...args); } catch (err) {
+      const ctx = requestCtx.getStore();
+      if (ctx && !isCallerFacingFailure(err) && await actorGoneDuring(ctx.actor, err)) ctx.actorGone = true;
+      throw mcpSafeError(err);
+    }
+  };
 
 const promptName = (skill: SkillSummary) => (skill.kind === "builtin" ? skill.id : `skill-${skill.id}`);
 
@@ -151,6 +163,7 @@ async function gatePromptsList(calls: RpcCall[], ctx: { actor: ActorCtx; workspa
     await callPrompt("list", ctx, async () => undefined);
     return null;
   } catch (err) {
+    if (!isCallerFacingFailure(err) && await actorGoneDuring(ctx.actor, err)) throw new ActorGoneError();
     return { jsonrpc: "2.0", id: list.id ?? null, error: { code: -32001, message: err instanceof RateLimitError ? err.message : "not allowed" } };
   }
 }
@@ -178,9 +191,16 @@ router.all("/", async (c) => {
     sessionIdGenerator: undefined,
   });
   await server.connect(transport);
-  return requestCtx.run({ actor, workspaceId }, () =>
-    transport.handleRequest(c.req.raw),
-  );
+  const ctx: RequestCtx = { actor, workspaceId, actorGone: false };
+  return requestCtx.run(ctx, async () => {
+    const res = await transport.handleRequest(c.req.raw);
+    if (c.req.method !== "POST" || !res.body) return res;
+    // Stateless: the answer to a POST (JSON, or an event stream that closes once every response in it is written) is read to its end
+    // before it is sent, so a callback that found the identity gone can still turn the whole request into the 401.
+    const body = await res.arrayBuffer();
+    if (ctx.actorGone) throw new ActorGoneError();
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+  });
 });
 
 export default router;

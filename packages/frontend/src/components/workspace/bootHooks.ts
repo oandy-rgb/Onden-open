@@ -8,6 +8,7 @@ export function useWorkspaceChunks() {
   useEffect(() => {
     Promise.all([
       import("../KnowledgeWorkspace"),
+      import("../BoardController"),
       import("../OverviewEditorHost"),
       import("../NodeInspector"),
     ]).finally(() => setReady(true));

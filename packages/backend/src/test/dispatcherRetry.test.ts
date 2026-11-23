@@ -10,6 +10,9 @@ const eventFn = vi.fn(async (
 const poolQuery = vi.fn(async (_text: string, _params?: unknown[]) => ({ rows: [] as unknown[] }));
 
 vi.mock("../db.js", () => ({ pool: { query: poolQuery }, q: vi.fn(async () => ({ rows: [] })), event: eventFn }));
+// The failure audit is written under the event lock (withEventTransaction); there is no database here, so the lock is the call itself.
+// The actor ids here are not uuid-shaped, so signatureForCapturedActor signs with them as given and reads nothing.
+vi.mock("../spine/eventTransaction.js", () => ({ withEventTransaction: async (_ws: string, fn: () => Promise<unknown>) => fn() }));
 
 const { queueDispatcher, _resetDispatcherQueueForTests } = await import("../services/dispatcherQueue.js");
 

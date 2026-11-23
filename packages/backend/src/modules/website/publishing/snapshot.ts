@@ -6,8 +6,9 @@
 
 import { BLOCK_ID_CHARS, PUBLISHED_EDGE_TYPES, stripLegacyIds, writeLegacyIds } from "@onden/markdown";
 import { validAnchorRangesByNote } from "../../../services/blockAnchors/index.js";
-import { event, q, withTransaction } from "../../../db.js";
-import { eventActorType, type ActorCtx } from "../../../types.js";
+import { q, withTransaction } from "../../../db.js";
+import type { ActorCtx } from "../../../types.js";
+import { appendEventAsCurrentActor } from "../../../spine/currentActor.js";
 import { CodedStatusError } from "../../../statusError.js";
 import { enqueueSiteOutput } from "../../../services/outbox.js";
 import { staticSiteUrl } from "./cname.js";
@@ -305,10 +306,11 @@ export async function buildAndEnqueueSnapshot(
     await recordSnapshotMedia(snap.id, candidate.payload);
     await forgetReplacedPages(workspaceId, new Set(candidate.handwritingPages.keys()));
     // ER4: external=true — restore must NOT try to "undo" a publish.
-    const eventId = await event(
-      workspaceId, "PUBLISH_SNAPSHOT_CREATED", "publish_snapshot", snap.id,
+    // The actor is re-read under the event lock (appendEventAsCurrentActor): one removed after the route's site-admin check is refused
+    // 401 and this whole transaction — snapshot row, pages push — rolls back, instead of the database's actor check answering 500.
+    const eventId = await appendEventAsCurrentActor(asReader(actor), workspaceId,
+      "PUBLISH_SNAPSHOT_CREATED", "publish_snapshot", snap.id,
       { artifact_ref: artifactRef, home_node_id: homeNodeId, side_effects: opts.sideEffects ?? {} },
-      eventActorType(actor.type), actor.id,
       { external: true, txMeta: { ui_context: opts.uiContext ?? "publish.dialog" } },
     );
     await enqueueSiteOutput({ workspaceId, snapshotId: snap.id, triggeredByEventId: eventId });

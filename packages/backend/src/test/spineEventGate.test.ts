@@ -29,7 +29,8 @@ const ALLOWED: Record<string, string> = {
   "services/attributeWrites.ts": "system — ATTRIBUTE_CONFLICT server-detected, triggered_by-linked",
   "services/adminAccounts.ts": "system — ADMIN_PASSWORD_RESET / ADMIN_SESSIONS_REVOKED from the container admin CLI (no signed-in actor); written in the same transaction as the auth-table change",
   "services/nodeUpdate.ts": "system — BODY_CONFLICT moved from the node PATCH; recorded inside the authorized NODE_UPDATED transaction",
-  "modules/website/publishing/snapshot.ts": "external — PUBLISH_SNAPSHOT_CREATED: external=true (ER4: restore must not undo a publish) AND the DB-minted id → event → outbox-enqueue(triggered_by=eventId) atomic chain doesn't fit mutate's before/after timing (P3.3 audit)",
+  // modules/website/publishing/snapshot.ts left this list (PR #1875): PUBLISH_SNAPSHOT_CREATED goes through appendEventAsCurrentActor,
+  // inside the same transaction as the snapshot row and the pages push (external=true is an event option, not a reason to bypass).
   // P3.2: the cascade category is now EMPTY. tagDispatcher / builtinHandlers /
   // fieldDefaults / templateExpander / tagHierarchy all route their events
   // through spine mutate (runCascade + {kind:"cascade"}, or {open} for genuine
@@ -37,12 +38,13 @@ const ALLOWED: Record<string, string> = {
   // stays a direct emitter but is NOT a cascade: it only mints DISPATCHER_FAILED
   // with actor_type='system' (a post-commit / catch-up failure with no acting
   // user), which is the spine's documented system carve-out, so it's recategorized.
-  "services/dispatcherQueue.ts": "system — DISPATCHER_FAILED, actor_type='system' post-commit/catch-up failure audit, no acting user",
+  "services/dispatcherQueue.ts": "system — DISPATCHER_FAILED, actor_type='system' post-commit/catch-up failure audit, no acting user; signed by the queued actor, or REMOVED_ACTOR_REF when that actor was removed since (spine/currentActor.ts signatureForCapturedActor, under the event lock)",
   "services/blockAnchors/store.ts": "audit — BLOCK_ANCHOR_* records of an anchor created or changing state, written inside the transaction of the save (or the caller) that caused it, attributed to that actor; deliberately not triggered_by the edit, so undoing the edit neither lists nor undoes them (the restore moves the anchors itself)",
   "services/blockNodes.ts": "cascade — BLOCK_NODE_* events derived from a note's body, recorded inside that save's transaction, triggered_by its event",
   "services/agentSessionStore.ts": "system — AGENT_SESSION_ENDED, a server-detected fact (timeout sweep, kill switch, cancel, finish) emitted in the same transaction as the status change",
-  "services/agentTools/registry.ts": "audit — TOOL_CALL trail for every MCP invocation",
-  "services/tagPacks.ts": "approved-effect — TAG_IMPORTED from the outbox drain; authorization is the principal admin's EFFECT_APPROVED, attributed to the proposing agent. Also installTagPack's TAG_DEPENDENCY_MISSING warnings ('system'), inside its principal_admin mutate (moved from routes/tags.ts, D13)",
+  // services/agentTools/registry.ts left this list (PR #1875): its tool-call audit records go through spine/currentActor.ts
+  // appendEventAsCurrentActor, which re-reads the actor under the event lock like mutate() does.
+  "services/tagPacks.ts": "approved-effect — TAG_IMPORTED from the outbox drain; authorization is the principal admin's EFFECT_APPROVED, attributed to the proposing agent, or to the system (REMOVED_ACTOR_REF, the agent's id in the payload) when the agent was removed after proposing (spine/currentActor.ts signatureForCapturedActor, under the event lock). Also installTagPack's TAG_DEPENDENCY_MISSING warnings ('system'), inside its principal_admin mutate (moved from routes/tags.ts, D13)",
 };
 
 function walk(dir: string): string[] {

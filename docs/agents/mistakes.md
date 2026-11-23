@@ -60,6 +60,8 @@
 | 跨時區比較日曆日 | 把兩個沒有（或不同）時區的日期字串互相比較，來決定「誰先誰後」；差一天的那幾個小時就判錯 |
 | 只擋了一個案例、沒擋整類 | 保護規則針對看到的那一個（某個模組、某個標籤）寫，同類的其他成員沒被涵蓋 |
 | 散布的東西沒帶授權 | 隨軟體或 repo 散布的第三方檔案沒有授權聲明，或用了沒人看過條款的授權 |
+| 寫入沒有在鎖後重讀身分 | 驗證時讀到的 actor／token 直接被拿去寫（事件、紀錄），沒有在取得事件鎖之後重讀；驗證與寫入之間身分消失或變了，錯誤從資料庫冒出來 |
+| 請求中途消失的身分，各入口各答各的 | 請求登入之後、執行之中，它的操作者被移除（或憑證被撤、臨時工作階段結束）；每個入口在不同的步驟撞上，答成不同的東西（500、包在 200 裡的工具錯誤、401），沒有一個地方統一決定 |
 | 寫入在送出途中只記在活不過頁面的儲存 | 一筆還沒被確認的寫入，唯一的副本放在記憶體、sessionStorage 這類頁面一結束就沒的地方，或本機副本先存了它、待送紀錄卻沒有 |
 | 串成一條序列的步驟裡有一步沒有期限 | 把好幾件事排成一條鏈（promise 鏈、鎖、佇列），其中一步等的東西（別的分頁的鎖、沒有期限的請求）可能很久或永遠不來，後面的全部跟著停 |
 | 同一個資源的兩個持有者共用一格簿記 | 以一個鍵記「誰拿著什麼」（鎖、進行中的請求、一列），同一個鍵的第二個持有者蓋掉第一個的紀錄，第一個再也放不掉或被當成別人 |
@@ -74,6 +76,25 @@
 
 ## 紀錄
 
+### 2026-11-22　被移除的 agent 的權杖在正式站上仍時有 500；協定端點答 200；端對端等的是畫面上的列，不是伺服器確認移除（請求中途消失的身分，各入口各答各的；測試的模型錯了；同時進行太多、整合落後）
+- **發生了什麼**：#1875 第一輪修了 REST 工具的稽核紀錄之後停在草稿四天，main（正式站 4906f855）上 `zzDeepToken01.spec.ts:45` 持續時紅時綠（`expected 401, received 500`，伺服器記錄 `insertEvent` ← `callTool`，訊息含 agent 的 id）。接手時用擁有者真的移除流程（`DELETE /api/actors/:id`）在請求等鎖時提交，發現三個入口三種答案：REST 讀與寫是 500、MCP 協定端點的 `tools/call` 是 200（SDK 把失敗包成「伺服器出錯」的工具結果）、一個人自己的 PATCH 是 401。第一輪的修法是「每條寫入路徑各自先重讀」，協定端點和任何之後漏掉重讀的寫入都沒有被涵蓋。另外端對端在按下「移除」之後等的是「名單裡沒有那一列」：窄的設定頁打開某人時根本沒有名單列，所以這個等待立刻成立，權杖的呼叫跟移除賽跑——修好伺服器之後它也可能拿到 200（呼叫比移除早到，答 200 是對的），仍會時紅時綠。
+- **證據**：`actorRemovedMidRequest.integration.test.ts` 在 main 的產品程式上 4 紅（`expected 500 to be 401` ×3、`expected 200 to be 401`），在第一輪的修法上 2 紅（協定端點 200、邊界案例 500），本 PR 上 6 綠、連跑 5 次都綠（PR #1875 的留言貼了輸出）；公開 CI run 45067542756、45073008452 的 fullstack 記錄。
+- **發現者**：測試（完整端對端）。
+- **為什麼沒擋到**：「身分不見了答 401」只在走過重讀的路上成立，邊界（`apiOnError`、協定端點）沒有自己的判斷；兩條連線的並行測試用的是 `DELETE FROM actors`，不是擁有者真的移除，也沒有走協定端點。端對端的等待條件沒有對應到伺服器的提交。修正卡在草稿 PR，main 照樣紅。
+- **類別**：請求中途消失的身分，各入口各答各的；測試的模型錯了（等的訊號不是要證明的事）；同時進行太多、整合落後。
+- **機制**：〔第 1 層〕`spine/currentActor.ts` 的 `actorGoneDuring` 是「身分在請求中途不見了」的唯一判斷，看身分現在解不解得開（重讀），不看錯誤形狀；`httpError.ts` 的 `apiOnError` 在答 500 之前問它，`routes/mcpProtocol.ts` 在回呼失敗時問它並把整個請求答 401。`actorRemovedMidRequest.integration.test.ts` 用真的移除流程釘住 REST 讀、寫、協定端點、一個人自己的寫入四個入口，並釘住「身分還在時同一個資料庫錯誤仍是 500」。端對端改成等 `DELETE /api/actors/:id` 的回應成功，才用權杖。
+- **還沒擋住的**：沒有守門擋「新的 HTTP 入口自己另設錯誤處理、不經 `apiOnError`」（目前只有 `app.ts`、`routes/mcp.ts`、`routes/mcpSessions.ts` 三處 `onError`，都經它）；伺服器自己用 API 金鑰跑的 AI 工作階段（`services/agentRuntime/api/tools.ts`）在身分不見時把失敗當成工具結果交給模型，不是請求，不在這個判斷裡（尚無機制）。其他端對端裡「按了之後等畫面變化，再用 API 驗結果」的寫法沒有逐支盤點（尚無機制）。
+
+### 2026-11-18　被移除的 agent 的 token 偶爾得到 500 而不是 401；前一輪六個依序的案例都是 401，結論寫成「重現不了」（寫入沒有在鎖後重讀身分；測試的模型錯了）
+- **發生了什麼**：`POST /api/mcp/tools/searchNodes` 在請求進行中、成員被移除時：驗證那時移除還沒提交，請求通過；工具呼叫的稽核事件（`services/agentTools/registry.ts` 的 `callTool`、`callPrompt`、`admitCall`）直接用驗證時的 `ctx.actor.id` 呼叫 `db.ts` 的 `event()`，排在事件鎖後面；移除提交之後它拿到鎖，資料庫的 `domain_events.actor_id` 檢查（migration 071）拒絕，沒有東西把它對應成 401，回 500。工具本身的寫入（經 `mutate`）有在鎖後重讀並得到 401，但接著寫「失敗」稽核事件時同樣撞上資料庫檢查，也變成 500。PR #1875 第一輪只加了「先移除、再發請求」的六個案例，全部 401，就回報重現不了。
+- **證據**：擁有者提供的伺服器堆疊（`insertEvent` ← `withTxHookScope` ← `callTool`）；`removedActorCredentialConcurrent.integration.test.ts` 在修正前的真 Postgres 上兩個案例都是 `expected 500 to be 401`，修正後綠；六個依序的案例在修正前後的真 Postgres 上都綠（所以不是「提交後仍查得到 actor」）。
+- **發現者**：測試（完整端對端，三輪紅兩輪）。
+- **為什麼沒擋到**：「根寫入在事件鎖後經 `currentActor.ts` 重讀」只是文字規則，`mutate` 以外直接呼叫 `event()` 的寫入沒有東西檢查；第一輪的測試只走「移除已提交」的路，沒有兩條連線的並行案例。
+- **類別**：寫入沒有在鎖後重讀身分；測試的模型錯了（測試沒走到真正的路徑）。
+- **機制**：〔第 1 層〕`spine/currentActor.ts` 的 `appendEventAsCurrentActor`（鎖 → `resolveCurrentActor` → 寫入）是不經 `mutate`、以請求 actor 名義寫事件的唯一入口，工具稽核全部改走它；兩條連線的並行測試釘住「回應和從沒發出過的 token 完全相同（狀態、本文、標頭），且什麼都沒寫」。`spineEventGate.test.ts` 的允許清單拿掉 `registry.ts`（它不再直接呼叫 `event()`），之後想直接呼叫要過那份清單。〔第 4 層〕`backend-rules.md` 寫明這條。
+- **還沒擋住的**：尚無機制——沒有守門找出「`mutate` 以外、用請求 actor 的 id 直接呼叫 `event()`」的其他地方（例如發布快照、區塊錨點的事件，要逐一確認是否已在重讀過的交易內）；MCP 協定端點（`/api/mcp/protocol`）上同一情形會變成 200 的工具錯誤，不是 401。（協定端點這一條在 2026-11-22 那筆處理：`actorGoneDuring`。）
+- 再次出現：2026-11-18，安全審查（PR #1875 的留言）點名 `services/tagPacks.ts` 的 `TAG_IMPORTED` 後，逐條走 `spineEventGate` 允許清單又找到三處同形狀：核准的標籤包在提案的代理被移除後重試一天再埋掉（核准的匯入遺失）、派生工作補跑的「操作者已不在→丟棄並留紀錄」那筆紀錄本身寫不進去（意圖永遠留著、每次補跑重來）、即時派生失敗的紀錄寫不進去（promise 被拒）；另外 `POST /api/publish` 的 `PUBLISH_SNAPSHOT_CREATED` 和原本的稽核紀錄同形狀（回 500）。證據：`capturedActorRemoved.integration.test.ts` 四個案例在修正前全紅（`expected 1 to be +0`、`promise rejected "error: domain_events.actor_id = …"`、`expected { status: 'pending' } to match { status: 'done' }`、`expected error: domain_events.actor_id … to be an instance of UnauthorizedError`），修正後綠。發現者：審查。上一筆寫「發布快照要逐一確認」卻沒在同一個 PR 確認，是這次的原因。機制：〔第 1 層〕請求路徑走 `appendEventAsCurrentActor`（發布快照因此離開允許清單），背景工作走 `signatureForCapturedActor`（`spine/currentActor.ts`），兩者都有測試；允許清單每一條的說明寫明它屬於哪一種。還沒擋住的：仍沒有守門檢查「新的直接 `event()` 呼叫用的 actor id 是不是在鎖後確認過」，允許清單只擋新檔案、不擋既有檔案裡的新呼叫（尚無機制）。
+- 同一個 PR 第一輪說明寫「500 的伺服器記錄不帶 actor id」（未查證就回報）：migration 071 的拒絕訊息本身就含 actor id 與 workspace id，`apiOnError` 把整個錯誤記下來。證據：在 main 的產品程式上讓工具寫完後刪掉自己的操作者，記錄是 `unhandled route error err=error: domain_events.actor_id = <uuid> is uuid-shaped but resolves to no actor in workspace <uuid>`。發現者：審查之後的實測。機制：上一行的兩個入口讓這條路徑不再走到資料庫的拒絕；其他仍可能撞上 migration 071 的寫入，記錄照樣會帶出 id（尚無機制）。
 ### 2026-11-20　測試世界（happy-dom）同步送 selectionchange，升級 CodeMirror 之後 52 則編輯器測試紅；補丁讓測試世界與真瀏覽器的時序又差了一處
 - **發生了什麼**：`@codemirror/view` 升到 6.43.15 後，happy-dom 在「移動選取」的那次呼叫裡同步送出 `selectionchange`，CodeMirror 把它當成更新中的更新（「Calls to EditorView.update are not allowed…」），52 則編輯器測試紅。真瀏覽器的 `selectionchange` 是事後的獨立任務、且合併。`test/setup.ts` 因此只在「編輯器更新中」把它事後送達並合併，其他時候維持同步（第一版全域改成事後，讓依賴同步讀選取的 rssQuote 11 則紅、worker 記憶體爆掉）。
 - **證據**：全套 vitest 紅 52 → 補丁後 9800 過；第一版補丁的 rssQuote 11 則與 OOM。

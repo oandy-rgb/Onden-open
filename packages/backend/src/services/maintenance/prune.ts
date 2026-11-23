@@ -73,6 +73,15 @@ export async function collectOrphanBlobs(): Promise<{ blobs: number; blobBytesFr
     inkChunks += removed.rows.length;
     inkChunkBytesFreed += removed.rows.reduce((sum, r) => sum + Number(r.size_bytes), 0);
   }
+  // Chunks that no manifest of their note lists at all, older than the grace: a received drawing's chunks whose manifest never came (a snapshot's history part
+  // cut between its chunks and its manifest, then given up; review of PR #1988 point 4), or a save that died between its chunks and its manifest. The test is
+  // the chunk's 32 bytes inside one of the note's manifests: a chunk is listed at a multiple of 32, and 32 random bytes are not found elsewhere by chance.
+  const strays = await sql<{ size_bytes: number }>`
+    DELETE FROM ink_chunks c WHERE c.created_at < now() - ${BLOB_GC_GRACE}::interval
+       AND NOT EXISTS (SELECT 1 FROM ink_manifests m WHERE m.node_id = c.node_id AND position(decode(c.hash, 'hex') IN m.chunks) > 0)
+    RETURNING c.size_bytes`.execute(db);
+  inkChunks += strays.rows.length;
+  inkChunkBytesFreed += strays.rows.reduce((sum, r) => sum + Number(r.size_bytes), 0);
   return {
     blobs: parseInt(orphanResult.rows[0]?.count ?? "0", 10),
     blobBytesFreed: parseInt(orphanResult.rows[0]?.freed_bytes ?? "0", 10),

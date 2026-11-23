@@ -365,7 +365,9 @@ async function answer(running: Running, message: BridgeRequest): Promise<void> {
 /** Take the file another device made into this copy: POST /api/snapshot with the file read as a stream (a piece at a time; the
  *  bridge's ordinary request would gather the whole body first). Holds the queue until it ends, so nothing else writes during it
  *  (the backend refuses ordinary writes meanwhile too: workspace_joining). A taken file is saved to the browser's storage before
- *  "done" is said; a refused or cut-off one leaves the empty copy the backend guarantees. */
+ *  "done" is said; a file refused or cut off before its notes are all in leaves the empty copy the backend guarantees. Once the notes are
+ *  in, the answer is a success that says where their earlier versions are (`history`; a refusal of those does not undo the notes), and
+ *  the same file again brings in the rest of them (services/stampedSnapshotStream.ts). */
 async function joinFile(running: Running, id: number, file: Blob): Promise<void> {
   let readBytes = 0;
   let saidAt = 0;
@@ -384,7 +386,7 @@ async function joinFile(running: Running, id: number, file: Blob): Promise<void>
         method: "POST", headers: { "content-type": "application/x-ndjson" }, body: counted, duplex: "half",
       } as RequestInit);
       const response = await running.session.fetchAsLocalUser(request);
-      const body = (await response.json().catch(() => ({}))) as { error?: string; detail?: string; pages?: number; rows?: number };
+      const body = (await response.json().catch(() => ({}))) as { error?: string; detail?: string; pages?: number; rows?: number; history?: "done" | "arriving" | "missing"; historyScope?: "all" | "body"; historyLeftOut?: number; historyRefused?: string | null };
       if (response.ok) {
         await running.saveLoop.afterJob();
         await running.saveLoop.flushInJob();
@@ -393,7 +395,8 @@ async function joinFile(running: Running, id: number, file: Blob): Promise<void>
         // The page starts again from what is stored, which is the empty copy.
         result = !copyIsStored(running.saveLoop.state())
           ? { t: "join-result", id, ok: false, status: 507, error: "join_not_kept", detail: null }
-          : { t: "join-result", id, ok: true, pages: body.pages ?? 0, rows: body.rows ?? 0 };
+          : { t: "join-result", id, ok: true, pages: body.pages ?? 0, rows: body.rows ?? 0, history: body.history ?? "done", historyScope: body.historyScope ?? "all",
+              historyLeftOut: body.historyLeftOut ?? 0, historyRefused: body.historyRefused ?? null };
       } else {
         await running.saveLoop.afterJob();
         result = { t: "join-result", id, ok: false, status: response.status, error: body.error ?? null, detail: body.detail ?? null };

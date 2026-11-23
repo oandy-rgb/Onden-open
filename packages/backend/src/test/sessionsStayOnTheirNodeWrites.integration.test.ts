@@ -497,6 +497,9 @@ describe.skipIf(!isTestDatabase())("a temporary session's writes carry its id no
       ownerStatus = ownerSave.status;
       await ownerSave.arrayBuffer();
     } finally { signedIn.as = ""; }
+    // the stand-in join the world wrote for POST /api/snapshot/history/stop (helpers/sweepWriteWorld.ts historyArriving) is no join of this workspace: taken away,
+    // so the snapshot read below is of the workspace as the session's writes left it (a workspace whose earlier versions are arriving makes no snapshot)
+    await q(`DELETE FROM sync_join WHERE workspace_id = $1`, [D.ws]);
   }, 900_000);
 
   afterAll(async () => {

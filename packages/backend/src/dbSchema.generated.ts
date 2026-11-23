@@ -951,6 +951,13 @@ export interface SyncJoin {
   applied_through: Generated<number>;
   cut_seq: Int8;
   finished_at: Timestamp | null;
+  history_from: Json | null;
+  history_hashes: Generated<Json>;
+  history_left_out: Generated<number>;
+  history_scope: Generated<string>;
+  history_skipped: Generated<Json>;
+  history_state: Generated<string>;
+  history_through: Generated<number>;
   import_batches: Generated<Int8>;
   page_hashes: Generated<Json>;
   person_actor_id: string | null;

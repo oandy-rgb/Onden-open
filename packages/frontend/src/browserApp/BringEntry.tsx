@@ -28,6 +28,10 @@ export default function BringEntry({ client, onClose }: { client: WorkerClient; 
   }
 
   const inProgress = readiness !== null && readiness !== "unknown" && !readiness.ready && readiness.code === "join_in_progress";
+  // the notes of a file are here and their earlier versions are not all here: going on is the same file again, NOT erasing this copy
+  const arriving = readiness !== null && readiness !== "unknown" && !readiness.ready && readiness.code === "join_history_arriving";
+  // the notes of a file are here and none of their earlier versions: going on is a file of the device they came from, which brings only those in; nothing is erased
+  const noHistory = readiness !== null && readiness !== "unknown" && !readiness.ready && readiness.code === "join_history_missing";
   const found = isNotEmpty(readiness) ? holdsSummary(readiness.holds) : null;
   return (
     <Modal label={t("Bring notes from another device")} busy={busy} onClose={onClose}>
@@ -36,7 +40,18 @@ export default function BringEntry({ client, onClose }: { client: WorkerClient; 
         {readiness === null && <p>{t("Starting…")}</p>}
         {inProgress && <p>{t("Notes are already being brought to this device.")}</p>}
         {readiness === "unknown" && <p>{t("This device could not be checked right now. Try again in a moment.")}</p>}
-        {readiness !== null && readiness !== "unknown" && !inProgress && (
+        {(arriving || noHistory) && (
+          <>
+            <p>{arriving
+              ? t("The notes from your other device are here, but their earlier versions have not all arrived. Continue to choose the same file again, or to stop waiting for them.")
+              : t("This device has no earlier versions of its notes. Continue to choose a file made on the device the notes came from: only the earlier versions are taken from it.")}</p>
+            <div className="trial-dialog-actions">
+              <Button type="button" onClick={() => { setBusy(true); writeBringState("pending"); reloadPage(); }} disabled={busy}>{t("Continue")}</Button>
+              <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+            </div>
+          </>
+        )}
+        {readiness !== null && readiness !== "unknown" && !inProgress && !arriving && !noHistory && (
           <>
             {readiness.ready
               ? <p>{t("This device has nothing of its own on it yet, so it can take the file you made on your other device.")}</p>

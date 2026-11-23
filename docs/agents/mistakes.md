@@ -1232,6 +1232,7 @@
 - **為什麼沒擋到**：成本只用整包的總比值量，沒有拆到步驟；比值在上限內就沒有再往下一層找；統計刷新（ANALYZE）以為會讓規劃器走索引，沒有驗證。
 - **類別**：成本只看總數、不看哪一步；註解和程式不符。
 - **機制**：〔第 1 層〕`wikilinkRelinkIndex.integration.test.ts`「six times the targets look the link index up no more often」：數 `relinkTarget` 對連結索引的掃描次數（與測試資料庫裡還有什麼無關），六倍的目標不能多於 2 次；修前兩種引擎都紅。另一則確認跨批的連結兩種讀法都找得到。
+- 2026-11-23 再出現一次（PR #1988 第 1 輪，自己的新測試先發現）：快照的歷史部分依鍵分批取版本、內容與手寫清單，用 `JOIN unnest(…)`；表小的時候規劃器每一批都掃整張表。`snapshotHistoryCost.integration.test.ts` 在 120 與 480 則筆記比讀的列數：8.2 倍（`note_versions` 每批掃一次）。改成 `spine/historyLayer.ts` 的 `byKey`（`CROSS JOIN LATERAL … LIMIT 1`，一個鍵一次索引查找）後 3.7 倍。第一版的這個測試用 30 與 120 則，比值是 0.22，看起來通過：尺寸太小，規劃器兩邊都掃表，比值沒有意義。依鍵分批讀的地方尚無共用的守門，靠各自數列數的測試；這類測試的兩個尺寸要大到規劃器會走索引。
 
 ### 2026-11-23　抽出函式改了寫入所在的函式名，只跑了改到的測試就推（PR #1941 第 3 輪，公開 CI）
 - **發生了什麼**：`relinkTarget` 的每批工作抽成 `relinkBatch`，寫入與刪除的語句跟著搬過去。`spineGate.test.ts`（寫入只能在列出的函式裡）與 `guards/sessionDeletes.guard.test.ts`（刪除要宣告或列出）兩張清單都還寫著 `relinkTarget`。我只跑了 `wikilink*`、收包與成本那幾檔就推了。
@@ -1240,6 +1241,7 @@
 - **為什麼沒擋到**：把「改到的行為的測試都綠」當成完成，沒有想到搬動語句也會動到以函式名登記的靜態清單；`spineGate.test.ts` 不在 guards 資料夾，只跑守門通道也抓不到。
 - **類別**：驗證範圍比改動的影響小（同 2026-11-22 那一條）。
 - **機制**：〔第 1 層〕改寫入、刪除或交易邊界的提交，推之前在 packages/backend 跑一次 `npm run test:no-db`（所有不需資料庫的測試，含這兩張清單），再跑 `scripts/guard-lane.sh`。尚無自動機制擋「只跑了一部分」。
+- 2026-11-23 再出現一次（PR #1988，公開 run 45143756361 的 `unusedCode.guard`，擁有者先指出）：把 `inkChunker.ts` 的 `MAX_CHUNK` 改成匯出、只給測試用，推之前沒有跑 `scripts/guard-lane.sh`（守門通道就含這個檢查）。同一次修時還找到六個只給測試用的新匯出，與基準裡一個因為搬檔而失效的條目。機制還是同一條，沒有被執行；尚無自動機制擋「推之前沒跑守門通道」。
 - 2026-11-23 再一次（PR #1989，公開 CI run 45164436079）：`nodeTrash.ts` 不再讀事件，`readGuard.test.ts` 的 `EVENT_READS` 清單還列著它；我跑了 `src/test/guards/` 與改到的檔，沒有跑 `npm run test:no-db`，而這則守門不在 guards 資料夾。機制已寫在上一行，這次是沒照做；「只跑 guards 資料夾」不夠，這一條仍尚無自動機制。
 ### 2026-11-23　合併核心的說明寫「兩台標記相同」，其實不同（「round 10, 4」，分支 fix/sync-valueless-heads-follow-row）
 - **發生了什麼**：`spine/stampedMerge/README.md` 對「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」寫「兩台標記相同，只有位置不同」。釘住的測試只比位置，沒有比標記。三台隨機測試的種子 989453 紅在這個情境：清空的那一台留著子筆記 `parent` 的一列標記（帶著被刪父層的 id），之後才建出子筆記的那一台沒有。

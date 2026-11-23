@@ -3,7 +3,7 @@ import { attachmentHeaders } from "../downloadHeaders.js";
 import { requireActor } from "../spine/mutate.js";
 import { getWorkspaceId } from "../services/workspaceId.js";
 import { FRESH_PROOF_HEADER } from "../services/freshProof.js";
-import { exportSnapshotStream, importSnapshotStream, snapshotReadiness } from "../services/stampedSnapshotStream.js";
+import { exportSnapshotStream, importSnapshotStream, snapshotReadiness, stopWaitingForSnapshotHistory } from "../services/stampedSnapshotStream.js";
 import type { ActorCtx } from "../types.js";
 
 // /api/snapshot: copy the workspace to an empty database with every row's write stamp kept (services/stampedSnapshot.ts and
@@ -11,7 +11,8 @@ import type { ActorCtx } from "../types.js";
 // GET streams the snapshot out as lines of JSON; it needs a ticket from a fresh confirmation in the X-Onden-Fresh-Proof header (POST /api/fresh-proof,
 // services/freshProof.ts), spent by this request, so a request that only holds the owner's session gets nothing. POST takes the same lines into this
 // database's empty workspace and answers when it is complete (the two digests agree) or refuses and leaves the empty database. GET /readiness
-// says, changing nothing, whether POST would be accepted now and what it would delete.
+// says, changing nothing, whether POST would be accepted now and what it would delete. POST /history/stop: the owner stops waiting for the earlier versions
+// of a file whose notes came in (services/stampedSnapshotStream.ts stopWaitingForSnapshotHistory).
 //
 // THE LINES: every line starts with `{"kind":` (the stream's own `line()` writes it first and a test fails if one does not), so a reader may tell a line's
 // kind from its first bytes. The first line, the hello, names the data shape of the pages (spine/syncDataShape.ts); another one is refused.
@@ -34,6 +35,11 @@ router.get("/", async (c) => {
 
 router.post("/", async (c) => {
   return c.json(await importSnapshotStream(requireActor(c.get("actor")), c.req.raw.body));
+});
+
+// The notes came, their earlier versions did not all come: the owner stops waiting for them (what had arrived of them goes; the notes stay).
+router.post("/history/stop", async (c) => {
+  return c.json(await stopWaitingForSnapshotHistory(requireActor(c.get("actor")), await getWorkspaceId()));
 });
 
 export default router;

@@ -8,7 +8,8 @@
 import { useEffect, useState } from "react";
 import { ApiError } from "../lib/api";
 import { useT } from "../lib/i18n";
-import { sizeLabel } from "../lib/data";
+import { deviceFileHistory, reads, sizeLabel } from "../lib/data";
+import { confirmDialog } from "../components/ConfirmDialog";
 import { makeDeviceFile, type DeviceFileWrite } from "../lib/deviceFile";
 import { useLocalOnlyStatus } from "../lib/localOnlyStatus";
 import { warnBeforeLeaving } from "../lib/pageHide";
@@ -27,8 +28,18 @@ type Step =
 
 export function DeviceFileSetting() {
   const tr = useT();
-  const withoutPassword = useLocalOnlyStatus()?.signsInWithoutPassword === true;
+  const localOnly = useLocalOnlyStatus();
+  const withoutPassword = localOnly?.signsInWithoutPassword === true;
   const [step, setStep] = useState<Step>({ kind: "closed" });
+  // This device took its notes from a file and has none of their earlier versions: said on the row itself, before anyone tries (the owner's decision of 2026-11-23).
+  // Asked of the backend (owner only; anyone else is simply not told here).
+  const [noHistory, setNoHistory] = useState(false);
+  const closed = step.kind === "closed";
+  useEffect(() => {
+    let current = true;
+    reads.workspace.snapshotReadiness().then((r) => { if (current) setNoHistory(!r.ready && r.code === "join_history_missing"); }, () => undefined);
+    return () => { current = false; };
+  }, [closed]);
 
   // A page that closes half way leaves a file that is not whole; the browser asks first.
   useEffect(() => (step.kind === "making" ? warnBeforeLeaving(() => true) : undefined), [step.kind]);
@@ -50,11 +61,24 @@ export function DeviceFileSetting() {
   }
 
   const close = () => setStep({ kind: "closed" });
+  // This device took its notes from a file whose earlier versions have not all arrived: it cannot make a file until they have, or until the person stops waiting.
+  async function stopWaiting() {
+    if (!(await confirmDialog(tr("Stop waiting for the earlier versions? Your notes stay as they are. The earlier versions that have arrived so far are removed from this device; the other device still has all of them, and a file from it can bring them in later. Until then this device can't make a file for another one."), { confirmLabel: tr("Stop waiting") }))) return;
+    try {
+      await deviceFileHistory.stopWaiting();
+      // the device has no earlier versions now: no file can be made until they are brought in, which the row and the refusal say
+      close();
+    } catch (error) {
+      setStep({ kind: "failed", message: error instanceof ApiError ? error.message : tr("That did not work. Try again."), code: null });
+    }
+  }
   return (
     <DataRow
       title={tr("Take your notes to another device")}
       hint={tr("Saves all your notes in one file that you open on a new device of yours. The two devices will not update each other afterwards.")}
-      note={tr("Pictures and files added to notes, and the version history, are not in the file yet.")}
+      note={noHistory
+        ? `${tr("This device has no earlier versions of its notes, so it can't make a file for another device yet.")} ${tr("Pictures and files added to notes are not in the file yet.")}`
+        : tr("Pictures and files added to notes are not in the file yet.")}
       action={<Button type="button" variant="secondary" onClick={() => setStep({ kind: "reconfirm" })}>{tr("Make the file…")}</Button>}
     >
       {step.kind === "reconfirm" && (
@@ -71,7 +95,7 @@ export function DeviceFileSetting() {
               <p>{tr("It is a copy: after that the two devices do not update each other. A note you change on one stays as it was on the other.")}</p>
               <p>{tr("The file is not encrypted: anyone who has it can read everything in it. Keep it like a backup, and delete it when you are done.")}</p>
               {!withoutPassword && <p>{tr("On a server with other people it also holds what you can read in shared spaces, including notes other people put there, and the members' names.")}</p>}
-              <p className="device-file-fine">{tr("Pictures and files added to notes, and the version history, are not in the file yet.")}</p>
+              <p className="device-file-fine">{tr("Pictures and files added to notes are not in the file yet.")}</p>
               {withoutPassword && <p>{tr("Press the button to confirm that you want all your notes in one file.")}</p>}
             </>
           )}
@@ -101,8 +125,28 @@ export function DeviceFileSetting() {
               <>
                 <FieldError>{step.message}</FieldError>
                 {step.code === "snapshot_foreign_origin" && <p>{tr("Make the file on the device your notes came from first.")}</p>}
+                {step.code === "snapshot_source_history_missing" && (
+                  <>
+                    <p>{localOnly?.bringNotes
+                      ? tr("Bring in the earlier versions from a file made on the device the notes came from. Then the file can be made.")
+                      : tr("Once the earlier versions are brought in from the device the notes came from, the file can be made.")}</p>
+                    {localOnly?.bringNotes && <div className="device-file-actions"><Button type="button" onClick={() => { close(); localOnly.bringNotes?.(); }}>{tr("Bring in the earlier versions…")}</Button></div>}
+                  </>
+                )}
+                {step.code === "snapshot_source_history_incomplete" && (
+                  <>
+                    <p>{localOnly?.bringNotes
+                      ? tr("Give this device the same file again to bring in the rest of the earlier versions, or stop waiting for them. Then the file can be made.")
+                      : tr("Once the rest of the earlier versions are here, or once you stop waiting for them, the file can be made.")}</p>
+                    <div className="device-file-actions">
+                      {localOnly?.bringNotes && <Button type="button" onClick={() => { close(); localOnly.bringNotes?.(); }}>{tr("Bring in the earlier versions…")}</Button>}
+                      <Button type="button" variant="secondary" onClick={() => void stopWaiting()}>{tr("Stop waiting for the earlier versions")}</Button>
+                    </div>
+                  </>
+                )}
                 <div className="device-file-actions">
-                  <Button type="button" onClick={() => setStep({ kind: "reconfirm" })}>{tr("Confirm again")}</Button>
+                  {/* confirming again cannot help while the earlier versions are still arriving: the two ways out are above */}
+                  {step.code !== "snapshot_source_history_incomplete" && step.code !== "snapshot_source_history_missing" && <Button type="button" onClick={() => setStep({ kind: "reconfirm" })}>{tr("Confirm again")}</Button>}
                   <Button type="button" variant="secondary" onClick={close}>{tr("Cancel")}</Button>
                 </div>
               </>

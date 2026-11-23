@@ -17,7 +17,7 @@ import { allowUnstampedWrite, dbDriver, q, withTransaction } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { openNode } from "./helpers/stampedWorld.js";
 import { seedQ } from "./helpers/seedQ.js";
-import { legacyVersionKey } from "../spine/noteVersions.js";
+import { legacyVersionKey } from "../spine/versionIdentity.js";
 import { PREVIEW_SQL } from "./helpers/versionsPreview.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");

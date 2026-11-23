@@ -7,8 +7,9 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { q } from "../db.js";
-import { legacyVersionKey, type VersionUnit } from "../spine/noteVersions.js";
-import { isImportedAt } from "../spine/importedHistory.js";
+import type { VersionUnit } from "../spine/noteVersions.js";
+import { baselineVersionKey, legacyVersionKey } from "../spine/versionIdentity.js";
+import { isImportedAt } from "../spine/versionIdentity.js";
 import { checkAsync } from "./helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
@@ -60,5 +61,14 @@ describe.skipIf(!isTestDb)("a version key, SQL and JS", () => {
         const input: Input = { unit: "body", kind: "updated", hash, title, at: "2026-11-21T08:00:00.123456Z" };
         expect(await sqlKey(input)).toBe(legacyVersionKey(NOTE, "body", "updated", hash, title, input.at));
       }), 60);
+  });
+
+  it("property: a baseline's key is the same in SQL and JS (a receiver works it out again to check a copy)", async () => {
+    await checkAsync(fc.asyncProperty(
+      fc.constantFrom("body", "ink_data", "board_ink", "note_ink"), fc.option(fc.string({ maxLength: 70 }), { nil: null }),
+      async (unit, hash) => {
+        const sql = (await q<{ k: string }>(`SELECT note_version_baseline_key($1::uuid, $2, $3) AS k`, [NOTE, unit, hash])).rows[0]!.k;
+        expect(sql).toBe(baselineVersionKey(NOTE, unit, hash));
+      }), 40);
   });
 });

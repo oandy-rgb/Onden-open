@@ -217,6 +217,7 @@ const BODY_FILL: Record<string, BodyFill> = {
   "POST /api/backup/restore/upload": none,
   "POST /api/fresh-proof": json(() => ({ purpose: "snapshot_export", evidence: { kind: "acknowledgement" } })),
   "POST /api/snapshot": none,
+  "POST /api/snapshot/history/stop": none,
   "POST /api/bookmark": json((g) => ({ url: "https://example.invalid/", space_id: g.space })),
   "POST /api/bookmark/preview": json(() => ({ url: "https://example.invalid/" })),
   "POST /api/capture/inbox": json(() => ({})),

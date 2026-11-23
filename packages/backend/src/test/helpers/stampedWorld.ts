@@ -19,9 +19,10 @@ import canvasRouter from "../../routes/canvases.js";
 import boardRouter from "../../routes/boards.js";
 import { withRequestDevice } from "../../requestContext.js";
 import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
-import { readStampedPages } from "../../services/stampedSnapshot.js";
+import { readHistoryPages, readStampedPages } from "../../services/stampedSnapshot.js";
 import type { StampedPage } from "../../spine/snapshotSql.js";
-import { abandonJoin, applyJoinPage, finishJoin, startJoin } from "../../services/stampedJoin.js";
+import type { HistoryPage } from "../../spine/historyLayer.js";
+import { abandonJoin, applyJoinPage, finishHistory, finishJoin, startJoin } from "../../services/stampedJoin.js";
 import { FRESH_PROOF_HEADER } from "../../services/freshProof.js";
 import { ticketWithoutEvidence } from "./freshProofTicket.js";
 import type { ActorCtx } from "../../types.js";
@@ -164,20 +165,22 @@ export function buildSourceWorld(node: RealNode | null): Promise<SourceWorld> {
   });
 }
 
-/** What a copy needs besides the pages: where it came from and the source's digest. */
-export type Capture = { pages: StampedPage[]; summary: Awaited<ReturnType<typeof readStampedPages>> };
+/** What a copy needs besides the pages: where it came from and the source's digest; `history`, the history part read at the same cut (absent: a copy of the rows only,
+ *  whose joiner stays without its earlier versions and is no snapshot source). */
+export type Capture = { pages: StampedPage[]; summary: Awaited<ReturnType<typeof readStampedPages>>; history?: HistoryCapture };
 
-/** Read the snapshot on `node` as an owner would send it: every page goes through JSON, as it would on the wire. */
-export function capture(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, pageBytes?: number): Promise<Capture> {
-  return onNode(node, async () => {
+/** Read the snapshot on `node` as an owner would send it: every page goes through JSON, as it would on the wire; the history part after the rows, at their cut, as the file has it. */
+export async function capture(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, pageBytes?: number): Promise<Capture> {
+  const rows = await onNode(node, async () => {
     const pages: StampedPage[] = [];
     const summary = await readStampedPages(world.owner, world.ws, { since: null, layer: "rows", pageBytes }, async (page) => { pages.push(JSON.parse(JSON.stringify(page))); });
     return { pages, summary };
   });
+  return { ...rows, history: await captureHistory(node, world, rows.summary.cut, pageBytes) };
 }
 
-/** Fill the empty database `node` from a capture, the way the service does (start, every page, finish). */
-export function fillFrom(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, cap: Capture, options: { localLogin?: string | null } = {}): Promise<void> {
+/** Fill the empty database `node` from a capture, the way the service does (start, every page, finish; then the history part, when the capture has it). */
+export function fillFrom(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, cap: Capture, options: { localLogin?: string | null; /** the notes only: the history part is left for the test */ rowsOnly?: boolean } = {}): Promise<void> {
   return onNode(node, async () => {
     await startJoin({ workspaceId: world.ws, sourceNode: cap.summary.source, cutSeq: cap.summary.cut, personActorId: world.owner.id, former: cap.summary.former, brought: cap.summary.brought });
     try {
@@ -187,6 +190,7 @@ export function fillFrom(node: RealNode | null, world: Pick<SourceWorld, "ws" | 
       await abandonJoin(world.ws);
       throw e;
     }
+    if (cap.history && !options.rowsOnly) await fillHistoryFrom(null, world, cap.history);
   });
 }
 
@@ -260,4 +264,22 @@ export function notCarriedOnPurpose(world: Pick<SourceWorld, "secretNote" | "sec
     // a suggestion that was decided has nothing left to merge
     ai_edit_suggestion_items: `t.status <> 'pending'`,
   };
+}
+
+/** The history part of a snapshot read on `node` at `cut` (services/stampedSnapshot.ts readHistoryPages), every page through JSON as on the wire. */
+export type HistoryCapture = { pages: HistoryPage[]; summary: Awaited<ReturnType<typeof readHistoryPages>> };
+export function captureHistory(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, cut: number, pageBytes?: number): Promise<HistoryCapture> {
+  return onNode(node, async () => {
+    const pages: HistoryPage[] = [];
+    const summary = await readHistoryPages(world.owner, world.ws, { cut, pageBytes }, async (page) => { pages.push(JSON.parse(JSON.stringify(page))); });
+    return { pages, summary };
+  });
+}
+
+/** Take the history part on `node` (its notes are in: fillFrom), every page in order, then finish it. */
+export function fillHistoryFrom(node: RealNode | null, world: Pick<SourceWorld, "ws">, cap: HistoryCapture): Promise<void> {
+  return onNode(node, async () => {
+    for (const page of cap.pages) await applyJoinPage(page);
+    await finishHistory({ workspaceId: world.ws, pages: cap.pages.length, digests: cap.summary.digests });
+  });
 }

@@ -4,6 +4,9 @@
 //   const join = await startJoin({ workspaceId, sourceNode, cutSeq, personActorId, shellPersonId });
 //   for each page, in the order the source made them: await applyJoinPage(page)   // a page again with the same content is a no-op
 //   await finishJoin({ workspaceId, pages, digest, localLogin})    // every page in, digests equal → the workspace is the database's
+//   for each page of the history part, in order: await applyJoinPage(page)   // the workspace is in use meanwhile; a page again is a no-op
+//   await finishHistory({ workspaceId, pages, digests })           // the earlier versions are all in → this node may be a snapshot source
+//   (or) await stopWaitingForHistory(actor, workspaceId)                 // the person gives the earlier versions up; the notes stay
 //   (or) await abandonJoin(workspaceId)                  // nothing of the snapshot stays; the empty database, with the same person, is usable at once
 //
 // A BROWSER SHELL as the receiver (browser/prepareSnapshot.ts's database, the test in stampedSnapshot.integration.test.ts): the join is
@@ -14,12 +17,14 @@
 //
 // A finish whose digests differ throws and leaves the join open: the caller abandons it (a half-filled workspace is never used).
 
+import type { ActorCtx } from "../types.js";
 import { db } from "../dbKysely.js";
 import { withTransaction } from "../db.js";
-import { applyStampedPage, beginJoin, cancelJoin, decideJoin, joinRefused, markJoinDone, readJoinProgress, readJoinRemoval, type JoinInput, type JoinRemoval } from "../spine/stampedImport.js";
+import { applyStampedPage, beginHistoryRefill, beginJoin, cancelJoin, decideJoin, giveUpHistory, joinRefused, markHistoryDone, markJoinDone, readJoinProgress, readJoinRemoval, rowsPageAlreadyApplied, type JoinInput, type JoinRemoval } from "../spine/stampedImport.js";
 import type { StampedPage, TableDigest } from "../spine/snapshotSql.js";
+import type { HistoryDigests, HistoryPage } from "../spine/historyLayer.js";
 
-export type { StampedPage, JoinInput, JoinRemoval };
+export type { StampedPage, HistoryPage, JoinInput, JoinRemoval };
 export { joinRefused };
 
 /** The sign-in this person uses on this device (the snapshot names the person's row, never a login: it cannot make anyone else's). Without one
@@ -37,7 +42,11 @@ export async function joinLoginOf(actorId: string): Promise<string | null> {
 export type JoinReadiness =
   | { ready: true; holds: JoinRemoval }
   | { ready: false; code: "join_in_progress" }
-  | { ready: false; code: string; kind: string | null; holds: JoinRemoval };
+  | { ready: false; code: string; kind: string | null; holds: JoinRemoval; history?: JoinedHistory };
+
+/** For a finished join whose earlier versions are all in (`join_already_done`): what of them it holds, so a screen opened again says what the one
+ *  that saw the join end said (the handwriting's left out, versions incomplete on the source), not a guess. */
+type JoinedHistory = { scope: "all" | "body"; leftOut: number };
 
 /** The database's own answer, whoever asks: what the join would decide and what it would delete (services/stampedSnapshotStream.ts adds who may ask). */
 export async function databaseJoinReadiness(): Promise<JoinReadiness> {
@@ -45,12 +54,17 @@ export async function databaseJoinReadiness(): Promise<JoinReadiness> {
     const decision = await decideJoin(null);
     if (decision.ready) return { ready: true, holds: await readJoinRemoval() };
     if (decision.code === "join_in_progress") return { ready: false, code: decision.code };
-    return { ready: false, code: decision.code, kind: decision.kind, holds: await readJoinRemoval() };
+    const holds = await readJoinRemoval();
+    if (decision.code !== "join_already_done") return { ready: false, code: decision.code, kind: decision.kind, holds };
+    const joined = await db.selectFrom("sync_join").select(["history_scope", "history_left_out"]).where("state", "=", "done").executeTakeFirst();
+    return { ready: false, code: decision.code, kind: decision.kind, holds, ...(joined ? { history: { scope: joined.history_scope === "body" ? "body" : "all", leftOut: joined.history_left_out } } : {}) };
   });
 }
 
 export const startJoin = (input: JoinInput): Promise<void> => beginJoin(input);
-export const applyJoinPage = (page: StampedPage): Promise<{ applied: boolean }> => applyStampedPage(page);
+export const applyJoinPage = (page: StampedPage | HistoryPage): Promise<{ applied: boolean }> => applyStampedPage(page);
+/** A rows page of a file sent again (to bring in the rest of its history part) is the one this join already holds: nothing of it is written again. */
+export const rowsPageHeld = (page: StampedPage): Promise<boolean> => rowsPageAlreadyApplied(page);
 export const abandonJoin = (workspaceId: string): Promise<void> => cancelJoin(workspaceId);
 export const joinProgress = readJoinProgress;
 
@@ -58,3 +72,15 @@ export const joinProgress = readJoinProgress;
  *  (spine/stampedImport.ts markJoinDone), so this service reads nothing of its own. */
 export const finishJoin = (input: { workspaceId: string; pages: number; digest: TableDigest[]; localLogin: string | null }): Promise<void> =>
   markJoinDone(input.workspaceId, { pages: input.pages, digest: input.digest }, input.localLogin);
+
+/** Every page of the history part is in and what this database received equals what the source said it sent: the join's history is done (spine/stampedImport.ts
+ *  markHistoryDone, one transaction). */
+export const finishHistory = (input: { workspaceId: string; pages: number; digests: HistoryDigests }): Promise<void> =>
+  markHistoryDone(input.workspaceId, { pages: input.pages, digests: input.digests });
+
+/** A device without the earlier versions of its notes takes only the history part of a file of the same source (spine/stampedImport.ts beginHistoryRefill). */
+export const startHistoryRefill = (workspaceId: string, file: { source: string; cut: number; former?: Record<string, number>; brought?: Record<string, Record<string, number>> }): Promise<void> =>
+  beginHistoryRefill(workspaceId, file);
+
+/** The person stops waiting for the earlier versions (what had arrived of them is removed; the notes stay): spine/stampedImport.ts giveUpHistory. */
+export const stopWaitingForHistory = (actor: ActorCtx, workspaceId: string): Promise<{ removed: number }> => giveUpHistory(actor, workspaceId);

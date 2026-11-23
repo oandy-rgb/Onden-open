@@ -7,7 +7,7 @@ import { migrate, pool, q } from "../db.js";
 import { listMigrations, useMigrationSource } from "../dbMigrations.js";
 import { mutate } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
-import { standAsideForImport } from "../spine/stamps.js";
+import { localNodeId, standAsideForImport } from "../spine/stamps.js";
 import { countVersionMisses, recordVersion } from "../spine/noteVersions.js";
 import { updateNode } from "../services/nodeUpdate.js";
 import { putBlob } from "../services/blobs.js";
@@ -341,14 +341,19 @@ describe.skipIf(!isTestDb)("nothing is minted where nothing is written by this n
     });
   }, 60_000);
 
-  it("a snapshot join mints none (the joined node holds no version it did not write); a received bundle mints none; minting inside an import is refused", async () => {
+  it("a snapshot join mints none (the joined node holds only the versions it received, batch 3); a received bundle mints none; minting inside an import is refused", async () => {
     const [na, nb] = [await node("source"), await node("joiner")];
     const world = await buildSourceWorld(na);
     const sourceVersions = await onNode(na, () => count(`SELECT count(*)::text AS n FROM note_versions WHERE workspace_id = $1`, [world.ws]));
     expect(sourceVersions).toBeGreaterThan(0);
     await fillFrom(nb, world, await capture(na, world));
     const a = peerOf("A", na, world), b = peerOf("B", nb, world);
-    expect(await onNode(nb, () => count(`SELECT count(*)::text AS n FROM note_versions`))).toBe(0);
+    // the versions of the joined node are the ones the snapshot's history part brought (snapshotHistory.integration.test.ts compares them field by field): none is its own
+    const minted = () => onNode(nb, async () => count(`SELECT count(*)::text AS n FROM note_version_positions WHERE origin = $1`, [await localNodeId()]));
+    const held = () => onNode(nb, () => count(`SELECT count(*)::text AS n FROM note_versions`));
+    const received = await held();
+    expect(received).toBeGreaterThan(0);
+    expect(await minted()).toBe(0);
     // the join wrote every note and drawing, and minted nothing: the check stood aside (note_version_exempt 'import'), it counted no miss
     expect(await onNode(nb, misses)).toBe(0);
     await admit(a, b);
@@ -358,7 +363,8 @@ describe.skipIf(!isTestDb)("nothing is minted where nothing is written by this n
     });
     const taken = await exchange(a, b);
     expect(taken.rejected).toEqual([]);
-    expect(await onNode(nb, () => count(`SELECT count(*)::text AS n FROM note_versions`))).toBe(0);
+    expect(await held()).toBe(received); // a bundle carries no version before batch 4
+    expect(await minted()).toBe(0);
     expect(await onNode(nb, () => count(`SELECT count(*)::text AS n FROM content_nodes WHERE title = 'After the join'`))).toBe(1);
     expect(await onNode(nb, misses)).toBe(0); // the received bundle wrote a note and two saves of it: no miss either
     // the joined node's own writes mint as any node's do

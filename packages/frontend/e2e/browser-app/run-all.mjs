@@ -63,6 +63,11 @@ for (const engine of ["chromium", "mobile-chrome"]) {
   const run = spawnSync(process.execPath, [join(dirname(smoke), "addDeviceFile.mjs"), engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
   summary.push([`add device ${engine}`, run.status === 0 ? "passed" : run.status === 2 ? "SKIPPED (browser not available)" : "FAILED"]);
 }
+// A file whose earlier versions did not all come: the screens that say so, the way back from Settings, the same file again, stopping waiting (historyArrives.mjs).
+for (const engine of ["chromium", "mobile-chrome"]) {
+  const run = spawnSync(process.execPath, [join(dirname(smoke), "historyArrives.mjs"), engine, ...passthrough.filter((arg, i, all) => arg === "--dir" || all[i - 1] === "--dir")], { stdio: "inherit" });
+  summary.push([`history arrives ${engine}`, run.status === 0 ? "passed" : run.status === 2 ? "SKIPPED (browser not available)" : "FAILED"]);
+}
 const chromiumRan = !summary.some(([engine, result]) => engine === "chromium" && result.startsWith("SKIPPED"));
 for (const script of chromiumRan ? ["handwritingTab.mjs"] : []) {
   const run = spawnSync(process.execPath, [join(dirname(smoke), script), ...passthrough], { stdio: "inherit" });

@@ -135,7 +135,7 @@
 | `kind` | `created`／`updated`／`restored`／`merged`／`baseline`／`set_aside`；手寫多一個 `removed`（整份移除） | 和備份格式 3 同一組字，加上新的 |
 | `title` | 存檔當時的標題；手寫是 null | — |
 | `content_hash` | 內文：`blobs.hash`。手寫：整份值的 sha256，也就是今天的 `value_ref`；它存在 `blobs`，或存在 `ink_manifests`（`203_ink_chunks.sql:24-36`） | 刪除的版本是 null |
-| `at` | 寫的那台記下的時間，存成微秒文字 | 格式沿用 `importedHistory.ts:46` 的 `IMPORTED_AT` |
+| `at` | 寫的那台記下的時間，存成微秒文字 | 格式沿用 `spine/versionIdentity.ts` 的 `IMPORTED_AT`（原本在 `importedHistory.ts`，第 3 批搬出來） |
 | `clock_wall`、`clock_counter` | 那筆交易的邏輯時鐘；舊版本是 null | 排序用（第 5 節） |
 | `ordinal` | 同一個時間點裡的先後。`s:`：`<第幾次>`。`g:`：這則筆記、這個 unit 的事件依 `(created_at, id)` 排的名次（4.4 第 3 點） | 鑄的那台決定，別台照抄 |
 | `recorded_by` | 鑄造它的節點 id | 只拿來判斷「另一台」；**裝置 id（`device_id`）不離開那台**。這是這台的紀錄，不是身分（2.5） |
@@ -560,7 +560,7 @@ ROLLBACK;
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 新表、本機寫入、遷移 | `services/history/versions.ts` 的 `recordVersion` 與提交時檢查的觸發器（第 4.1 節的丙）、`updateNode`／`createNote`／`setNodeAttribute` 與直接寫內文的三處（`tasksStore.ts`、`canvasNodes.ts`）、`db.ts` 的 `migrate()` 與空殼（`onden.no_versions`）、`spine/importedHistory.ts`、`services/attributeWrites.ts` 與 `services/nodeUpdate.ts` 的衝突紀錄（`set_aside`）、新的 `services/history/versions.ts`、`spine/syncClasses.json`（新表分類為 `separate`，附說明）、`maintenance/prune.ts`、`purgedContent.ts` | 一個：`note_versions`、`note_version_positions`、`note_version_events`（這台自己的）、提交時的檢查、算鍵的函式、第 8 節第 1–5 步 | 不升（還不傳） | **每一筆改到內文、標題或手寫值的本機寫入剛好一個版本**：守門從寫 `content_nodes.markdown`／`title` 與手寫屬性的地方數，帶內容建立任務、週期任務滾下一筆都要有測試；一筆交易裡同一則筆記寫兩次（連鎖還原）得到兩個不同的鍵；收包的路徑不呼叫 `updateNode`／`createNote`（守門）；遷移後的數目等於預覽；加入的節點遷移後沒有任何 `b:`；同一份資料庫的兩份拷貝各自遷移，身分欄位相同；清理不刪任何版本指到的內容；永久刪除會連同版本一起刪；**第 4.4 節十二點各自的測試**（含 SQL 對 JS 的鍵、同一交易的先後、空殼 0 個版本與 0 個 blob、`joining` 中的工作區、資料 migration 不鑄、遷移重跑不再取 s0）；每次存檔多出的時間與列數 | **已做（#1938，4c66a2eae，migration 220）** |
 | 2 | 讀者改讀新表 | 1.2 的讀者、前端歷史元件（`version_key`、「在另一台裝置上」）、`changes/` 一則 | 無 | 不升 | 舊的清單與新的清單在同一份資料上逐列相同（作者、時間、合併）；數字網址的還原在過渡期仍可用；手機與桌面截圖 | 現在 |
-| 3 | 快照帶歷史層與內容層 | `services/stampedSnapshot.ts`、`stampedSnapshotStream.ts`、`spine/snapshotSql.ts`、`spine/stampedImport.ts`（同一個入口）、`sync_join` 的歷史狀態 | 一個（`sync_join` 加欄位） | 升 | 用快照加入的第三台，版本集合與來源相同；傳到一半中斷再續傳，結果相同而且不重寫；雜湊不符整頁拒收、資料庫不變；歷史沒收完就能用；歷史沒收完的那台不能當快照來源 | 現在（#1907 已合併） |
+| 3 | 快照帶歷史層與內容層 | `services/stampedSnapshot.ts`、`stampedSnapshotStream.ts`、`spine/snapshotSql.ts`、`spine/stampedImport.ts`（同一個入口）、`sync_join` 的歷史狀態 | 一個（`sync_join` 加欄位） | 升 | 用快照加入的第三台，版本集合與來源相同；傳到一半中斷再續傳，結果相同而且不重寫；雜湊不符整頁拒收、資料庫不變；歷史沒收完就能用；歷史沒收完的那台不能當快照來源 | **已做（issue #1971，migration 229，資料形狀 9）**，和本文不同的地方見下 |
 | 4 | 修改包帶版本、歷史的數字、依雜湊取內容 | `spine/stampedBundle.ts`、`services/stampedBundle.ts`、`spine/stampedImport.ts`、`sync_origins` 的歷史標籤 | 視需要 | 升 | 兩台、兩種到達順序，版本集合相同；整份重送什麼都不存；第 3.3 節那個情形（C 歷史不完整時轉給 D）不會讓 D 漏版本；內容還沒到的版本不會讓數字越過它；第 2.5 節那個「兩個位置」的反例；已加入節點的歷史數字從 0 起；性質測試：任意順序與重送後，每台集合＝聯集；收件檢查每一項各一個拒收測試；切點的兩條連線測試 | 現在（#1907 已合併） |
 | 5 | 「一起刪除的」改用標記與舊分組 | `services/nodeTrash.ts`（#1907 也改了它）、`eventRestore/restore.ts` | 無（表在第 1 批建好） | 不升（不改單位）；分組的傳送在第 3、4 批已含 | 兩台：A 刪一棵樹、B 收到後「連同一起還原」結果和 A 相同；單獨刪的子孫不跟著回來；舊刪除走分組 | **已做（migration 230；和本文不同的地方在表下）** |
 | 6 | 合併結果的版本（`m:`，`merged` 與 `conflict` 兩種） | 跟 2b-2b 一起 | — | 跟 2b-2b | 兩台各自算出同一個 `m:`；兩台用不同基底或不同規則版本算出不同的字時，得到兩個不同的鍵，不拒收；只收到後來寫入的第三台也有它（性質測試） | 等 2b-2b |
@@ -582,6 +582,28 @@ ROLLBACK;
 - `trash_groups` 移到第 5 批，也就是讀它的那一批。
 - 範圍＝筆記與白板：`note_version_in_scope` 是節點種類 `content`、`canvas`，而且不是系統筆記（migration 220）。標籤不在內。
 - 復原手寫事件還沒鑄版本（計數），由第 1b 批補。
+
+**第 3 批（issue #1971，PR #1988）和本文不同的地方**（以程式為準：`spine/historyLayer.ts`、`services/stampedSnapshot.ts` `readHistoryPages`、`spine/stampedImport.ts` `applyStampedPage`／`markHistoryDone`／`giveUpHistory`、`services/stampedSnapshotStream.ts`）：
+- **一個「歷史部分」，不是兩個各自續傳的層**：頁有 `blobs`（內容）與 `history`（版本）兩種，編號從 1 接著算；**內容在版本之前**（和[加入裝置的快照](add-device-snapshot-2026-11-15.md)排的 ②內容 → ③其餘版本歷史 同序）。所以版本到的時候內容已經在，migration 220 的提交時檢查照常成立，收的一端不必讓開。
+- **歷史部分在自己的唯讀快照裡讀**，在筆記列之後、用筆記列的切點，不是和筆記列同一個快照（3.1 寫的）。理由：檔案要先送「筆記到齊」那一行，新裝置才能先用；續傳也要能再讀一次。為什麼集合不會變：版本和它那筆寫入的標記同一筆交易、同一個序號，序號依序提交（`spine/stampedBundle.ts` 的 THE CUT），所以「這台自己的位置不超過切點、或是別的來源的位置」這個集合在之後的任何快照都相同；唯一的例外是中間有筆記被永久刪除（它的版本跟著走）。
+- **成本**：要送的集合只算一次（一個語句掃一遍版本），之後每一批都依鍵一筆一筆取（`CROSS JOIN LATERAL … LIMIT 1`：表小的時候規劃器會改成每批掃整張表，讀的量就比版本數長得快；`snapshotHistoryCost.integration.test.ts` 在 120 與 480 則筆記比讀的列數，修之前是 8.2 倍、修之後 3.7 倍）。收的一端的比對也一樣依鍵取。
+- **歷史部分的頁比筆記列的頁小**（約 1 MB，筆記列 4 MB；單一項目不拆）：歷史部分是在裝置已經在用的時候收的，每一頁寫入時握著工作區的事件鎖，一般的儲存要等它。合成資料（1,046 則筆記、3,636 個版本、其中 900 個手寫，來源資料庫約 800 MB）量到：一頁握鎖中位數 66 ms、最長約 1.2 秒（4 MB 頁時是 0.9 秒與 2.5 秒）。
+- **來源缺內容的版本不送，但數出來**（`leftOut`，兩邊都看得到，存在 `sync_join.history_left_out`、畫面上說）。「歷史收完」的意思是「來源送得出來的都到了」。
+- **`sync_join` 加七欄**：`history_hashes`、`history_through`、`history_state`（`arriving`／`done`／`given_up`／`missing`，取代本文的 `history_done`）、`history_scope`（`all`／`body`）、`history_left_out`、`history_skipped`、`history_from`（補收時那個較新的檔案的切點與擔保）。同一頁再來、內容相同＝不寫新東西（內容頁會補回這段期間被清掉的內容）；內容不同＝`join_page_changed`；不照順序＝`join_history_order`。
+- **續傳＝把同一個檔案再上傳一次**：筆記列的頁只和已收的雜湊比對、不再寫；已收的歷史頁不重寫；從斷掉的那頁接著收。別的檔（另一個切點）不能接著收（`join_history_other_file`）。
+- **筆記到了以後，歷史部分的拒絕不是上傳的錯誤**：回應是 200，說筆記都在、舊版本為什麼沒到（`historyRefused`）。畫面上從不說「完成」，一定有兩條路：同一個檔再給一次、或不再等（`giveUpHistory`：已到的舊版本移除，筆記與這台自己的版本留著；之後這台算「沒有舊版本」〔`given_up`〕，**不能做檔**，要先補收，見下面 `missing` 那一點）。
+- **摘要不分順序**：每個版本自己的摘要（SQL `note_version_digest`，migration 229，兩邊同一個定義）排序後雜湊，加上內容、`leftOut`、`dangling`（`restored_from` 指到集合外的數目）。收的那台在歷史還在傳時永久刪除一則筆記，被連帶刪掉或之後略過的版本的摘要存在 `history_skipped`（刪除前的觸發器 `note_versions_keep_skipped`），所以照樣收得完。
+- **誠實的來源不會讓歷史卡住**：寫的人之後被移出工作區（`author_id` 沒有外鍵）——收件時只拒絕「是這台的別種操作者」的 id，這台已經沒有的人照收；兩頁之間清理把內容清掉——同一個檔再給一次就補回；沒有清單的孤兒塊——清理照 1 天的寬限清掉。
+- **收件檢查**（信任界線第一層，每一項有拒收測試）：欄位只准格式裡有的；`s:` 鍵的來源與序號必須是它的一個傳送位置、`<第幾次>`＝`ordinal`；`g:`、`b:` 鍵從版本本身重算（`spine/versionIdentity.ts`，和 migration 220 的 SQL 同一套編碼；備份帶進來的基準用它送來時的 `created` 算）；`b:` 只能是基準；`m:` 拒收（第 6 批）；版本只能掛在有版本清單的筆記上；位置的來源必須被快照擔保，而且不超過它握有的（來源：切點；舊編號：報的號碼；帶來的來源：它在任何標籤下報的最大號碼）；內容的大小上限（塊 64 KB；其他 64 MiB，也就是一行的上限；內文的舊版本不超過一則筆記的上限）；清單先加總大小再組合。
+- **第 10 節第 4 題的門**：瀏覽器版、歷史部分裡手寫的量（塊＋清單＋只有手寫用到的 blob，`HistoryPage.inkBytes`）超過 50 MB 時，只收內文歷史（`history_scope = 'body'`），和來源的「只有內文」摘要比對，畫面說明。伺服器一律全收。**正式機沒有量**（沒有正式機的存取）；PR 裡有合成資料的量測。
+- **第 3.3 節的歷史標籤數字（`sync_origins.have` 的 `note_versions`）這批不寫**：那是修改包讀的，題目要求不動修改包。第 4 批從 `sync_join.history_state` 寫它。
+- **migration 229 之前就加入完成的節點**記成 `missing`（業主 2026-11-23 的決定：它們沒有收過歷史，不標成「歷史已完整」）。「不再等」之後的 `given_up` 也一樣。這兩種裝置：畫面明說「這台沒有舊版本」；不能當快照來源（`snapshot_source_history_missing`），理由用白話說；**補收**＝再拿一個從同一台來源做的檔案，只收它的歷史部分，筆記一列都不讀也不比（`spine/stampedImport.ts` `beginHistoryRefill`）。檔案可以比當初加入時新：歷史頁的標頭與位置的擔保改用那個檔的（`history_from`），這台沒有的筆記（來源後來才寫的）它們的版本算作略過，和「中途永久刪除」同一個機制，所以照樣收得完。別台做的檔（`join_history_other_source`）、比當初還舊的檔（`join_history_other_file`）不收。
+- **畫面說的＝資料庫裡實際的狀態**（第 2 輪審查第 1、3 點）：筆記到了以後（`rows-done` 之後，或這台本來就有筆記：`arriving`／`missing`／`given_up`），任何失敗——檔案在一行的中間斷掉（`join_history_file_cut`）、另一個版本的檔（`join_data_shape`）、來源中途停了（`join_history_source_failed`）——都回 200 加 `historyRefused`，不回錯誤，筆記不動。瀏覽器的畫面失敗之後一律再問資料庫一次（`GET /api/snapshot/readiness`，`browserApp/bringNotes.ts` `joinedDevicePhase`）再決定說什麼；重新打開時，已完成的加入照資料庫說手寫的舊版本有沒有留、有幾個沒帶（readiness 的 `history`）。測試在每一行的中間各切一次。
+- **只留文字舊版本的裝置當來源**（第 2 輪審查第 2 點；選「檔案照實標示」而不是「不能當來源」，因為手機超過門檻是常態，不能當來源就等於手機永遠不能把筆記交出去）：它做的歷史頁帶 `textOnly: true`（它自己的 `sync_join.history_scope = 'body'`），收的那台不論伺服器或瀏覽器都只記 `body`、和「只有內文」的摘要比對，畫面說手寫的舊版本沒帶。
+- **檔案的最後一行帶各部分的位元組數**（`bytes: { rows, history }`，第 2 輪審查第 4 點）：瀏覽器檢查空間時用「實際會留下的大小」＝筆記部分（這台已有筆記就不算）＋歷史部分－超過門檻時手寫的那一份（門檻 `BROWSER_INK_HISTORY_LIMIT_BYTES` 移到 `@onden/markdown`，前後端同一個數）；沒有這一行的檔（斷掉的、舊的）照整個檔案算。只給畫面估，收的一端不拿它比對任何東西。
+- **`restored_from` 指到集合外不拒收，只計數**（`dangling`）：來源自己的版本本來就可能這樣（被還原的那一版後來隨筆記永久刪除、或來源缺內容沒送：`leftOut`），拒收會讓誠實的來源永遠收不完；它進摘要，兩邊數字必須相同，所以偽造的數字也會被摘要擋下。
+- **`IMPORTED_AT`、`isImportedAt`、`legacyVersionKey`** 從 `spine/importedHistory.ts`／`spine/noteVersions.ts` 搬到 `spine/versionIdentity.ts`，並加上 `b:` 的 JS 版 `baselineVersionKey`：收的路徑要檢查時間與鍵，但不能碰到鑄版本的程式（`receiveMintsNoVersion` 守門）。
+- **沒做的**：第 3.5 節「還剩 N 個」的數字（畫面只說「舊版本還沒全部到」）；帶來的來源的位置只用它的最大號碼當上界，第 4 批換成歷史標籤的數字。
 
 **第 5 批和本文不同的地方**（以程式為準：`services/nodeTrash.ts` 的 `deletedTogether`，migration 230）：
 - **要 migration**（230）。表格寫「無（表在第 1 批建好）」，但 `trash_groups` 移到了這一批（上面第 1 批的第三點），所以由這批建表、寫舊分組。

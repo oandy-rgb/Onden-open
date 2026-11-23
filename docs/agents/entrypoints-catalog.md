@@ -512,7 +512,7 @@ export const dialog = ReconfirmDialog;`
 - 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
 - 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
 
-## 共用邏輯（121）
+## 共用邏輯（122）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 

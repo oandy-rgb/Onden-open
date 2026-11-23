@@ -182,8 +182,8 @@ export type SnapshotItem =
   | { kind: "refs"; table: string; key: Record<string, unknown>; values: Record<string, unknown> };
 
 export type StampedPage = {
-  /** `rows` is done; `history` and `blobs` are in the format so a later stage needs no new page shape, and are refused until then. */
-  layer: "rows" | "history" | "blobs";
+  /** The rows. The history part of a snapshot (layers `blobs` and `history`) has pages of its own: spine/historyLayer.ts HistoryPage. */
+  layer: "rows";
   /** SYNC_DATA_SHAPE_VERSION of the node that made the page (spine/syncDataShape.ts): another version is refused. */
   dataShape: number;
   page: number;

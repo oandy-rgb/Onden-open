@@ -19,18 +19,11 @@ import { awaitCountsOfEveryConnection } from "./helpers/statisticsOfEveryConnect
 const BUNDLE_READ_TABLES = ["sync_stamps", "sync_stamp_heads", ...new Set(UNIT_SOURCES.map((s) => s.table))];
 import { cpuMs } from "../../../markdown/src/linearTiming.testing.js";
 
+import { rowsRead } from "./helpers/rowsRead.js";
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? ""); // both engines: a node is a PGlite, or a database of the real server (helpers/distSim/postgresNodes.ts)
 const open: RealNode[] = [];
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); });
 
-/** The rows the database says it read (sequential and index fetches, every table) so far: a count of work that does not depend on how busy the machine is.
- *  Every connection's counts are in first (helpers/statisticsOfEveryConnection.ts), so the number is as of now. */
-async function rowsRead(node: RealNode): Promise<number> {
-  return onNode(node, async () => {
-    await awaitCountsOfEveryConnection();
-    return Number((await q<{ r: string }>(`SELECT (sum(seq_tup_read) + sum(COALESCE(idx_tup_fetch, 0)))::text AS r FROM pg_stat_user_tables`)).rows[0]!.r);
-  });
-}
 
 /** `readRows` / `applyRows`: rows the database read while the bundle was read on A / taken on B (rowsRead). `applyCpuMs` is this thread's CPU time (PGlite runs in this thread, so it is the merge's and the database's work); a busy machine stretches only the wall clock (`applyMs`). */
 type Cost = { stamps: number; readMs: number; readRows: number; applyMs: number; applyCpuMs: number; applyRows: number; peakMb: number };

@@ -6,17 +6,17 @@ import type { JoinFileResult, WorkerClient } from "../lib/browserAppWorker";
 
 const mocks = vi.hoisted(() => ({
   readiness: vi.fn(), erase: vi.fn(), reload: vi.fn(), confirm: vi.fn(),
-  storage: vi.fn(),
+  storage: vi.fn(), stopWaiting: vi.fn(),
 }));
 vi.mock("../lib/browserAppBridge", () => ({ eraseBrowserCopy: mocks.erase }));
-vi.mock("../lib/data", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/data")>()), reads: { workspace: { snapshotReadiness: mocks.readiness } } }));
+vi.mock("../lib/data", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/data")>()), reads: { workspace: { snapshotReadiness: mocks.readiness } }, deviceFileHistory: { stopWaiting: mocks.stopWaiting } }));
 vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/api")>()), reloadPage: mocks.reload }));
 vi.mock("../components/ConfirmDialog", () => ({ confirmDialog: mocks.confirm }));
 vi.mock("../lib/storagePersist", () => ({ storageStatus: mocks.storage }));
 
 import BringNotes from "../browserApp/BringNotes";
 import BringEntry from "../browserApp/BringEntry";
-import { readBringState, writeBringState } from "../browserApp/bringNotes";
+import { keptBytesOf, readBringState, roomNeeded, writeBringState } from "../browserApp/bringNotes";
 
 const file = (text: string) => new File([text], "from-the-other-device.ndjson");
 const NONE = { own_notes: 0, trash: 0, own_tags: 0, spaces: 0, files: 0, prefs: 0 };
@@ -31,6 +31,9 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, content = hello)
   await user.upload(input, file(content));
 };
 const refused = (error: string | null, detail: string | null = null, status = 409): JoinFileResult => ({ ok: false, status, error, detail });
+/** The notes are in; `over` says where their earlier versions are. */
+const taken = (over: Partial<Extract<JoinFileResult, { ok: true }>> = {}): JoinFileResult =>
+  ({ ok: true, pages: 3, rows: 120, history: "done", historyScope: "all", historyLeftOut: 0, historyRefused: null, ...over });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,6 +78,38 @@ describe("an empty copy asking for the file", () => {
     expect(join).not.toHaveBeenCalled();
   });
 
+  it("the room asked for is for what is kept, read from the file's last line: not the notes again on a device that has them, not the drawings' history over the threshold", async () => {
+    const MB = 1024 * 1024;
+    const manifest = (rows: number, history: number, inkBytes: number) => `${hello}{"kind":"manifest","pages":1,"digest":[],"history":{"pages":1,"digests":{},"inkBytes":${inkBytes}},"bytes":{"rows":${rows},"history":${history}}}\n`;
+    expect(await keptBytesOf(file(manifest(100 * MB, 300 * MB, 10 * MB)), false)).toBe(400 * MB);
+    expect(await keptBytesOf(file(manifest(100 * MB, 300 * MB, 10 * MB)), true)).toBe(300 * MB);
+    expect(await keptBytesOf(file(manifest(100 * MB, 300 * MB, 280 * MB)), false)).toBe(120 * MB); // over 50 MB of drawings: the browser keeps the text history only
+    expect(await keptBytesOf(file(manifest(100 * MB, 300 * MB, 50 * MB)), false)).toBe(400 * MB); // at the threshold it keeps all of it
+    // a file without that line (cut short, or of an older version): counted whole
+    const cut = file(`${hello}{"kind":"page","page":`);
+    expect(await keptBytesOf(cut, false)).toBe(cut.size);
+    // and the screen asks for that much, not three times the whole file
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_missing", kind: null, holds: NONE });
+    mocks.storage.mockResolvedValue({ persistent: true, usedBytes: 0, quotaBytes: roomNeeded(300) + 1 });
+    join.mockResolvedValue(taken({ pages: 0 }));
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await screen.findByRole("heading", { name: "This device has no earlier versions" });
+    await choose(user, manifest(10 ** 9, 300, 0));
+    await waitFor(() => expect(join).toHaveBeenCalled());
+  });
+
+  it("a device that has its notes and too little room is told so on its own screen, never the empty device's", async () => {
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_missing", kind: null, holds: NONE });
+    mocks.storage.mockResolvedValue({ persistent: true, usedBytes: 0, quotaBytes: 10 });
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await choose(user);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/does not have room/);
+    expect(screen.getByRole("heading").textContent).toBe("This device has no earlier versions");
+    expect(join).not.toHaveBeenCalled();
+  });
+
   it("warns when the browser has not promised to keep its data", async () => {
     mocks.storage.mockResolvedValue({ persistent: false, usedBytes: 0, quotaBytes: 10 ** 12 });
     render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
@@ -93,7 +128,7 @@ describe("taking the file in", () => {
       await choose(user);
       expect((await screen.findByRole("status")).textContent).toMatch(/50% of the file read/);
       expect(readBringState()).toBe("joining"); // a page killed now finds this at the next start
-      finish({ ok: true, pages: 3, rows: 120 });
+      finish(taken());
       expect((await screen.findByText(/everything up to the moment the file was made/)).textContent).toMatch(/do not update each other yet/);
       expect(readBringState()).toBeNull();
       await vi.advanceTimersByTimeAsync(4000);
@@ -209,6 +244,14 @@ describe("a copy that is not empty when this screen opens", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("a copy a join filled, opened again, says what of the earlier versions the database holds (not a fixed 'all of them')", async () => {
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_already_done", kind: null, holds: NONE, history: { scope: "body", leftOut: 2 } });
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    expect(await screen.findByText(/earlier versions of handwriting were left out/)).toBeTruthy();
+    expect(screen.getByText(/2 earlier versions were not complete on your other device/)).toBeTruthy();
+    expect(mocks.reload).not.toHaveBeenCalled();
+  });
+
   it("the backend's counts are what the screen says", async () => {
     mocks.readiness.mockResolvedValue(HOLDING);
     render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
@@ -220,6 +263,185 @@ describe("a copy that is not empty when this screen opens", () => {
     mocks.readiness.mockRejectedValue(new Error("offline"));
     render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
     expect(await screen.findByRole("button", { name: "Choose the file from your other device…" })).toBeTruthy();
+  });
+});
+
+// Review of PR #1988, round 1, point 1: the notes in and their earlier versions not all in is never "done"; there is always a way on (the same file again)
+// and a way out (stop waiting), and no step lets one think everything came over when it did not.
+describe("the notes came, their earlier versions did not all come", () => {
+  it("says so plainly, does not open the notes by itself, and the same file again brings in the rest", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      join.mockResolvedValueOnce(taken({ history: "arriving" }));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+      await choose(user);
+      expect((await screen.findByRole("heading")).textContent).toMatch(/earlier versions are not all here/);
+      const text = document.body.textContent ?? "";
+      expect(text).toMatch(/All your notes came over/);
+      expect(text).toMatch(/does not yet have every earlier version/);
+      expect(text).not.toMatch(/everything up to the moment the file was made/);
+      expect(text).not.toMatch(/snapshot|ndjson|json|stamp|join_|_/i);
+      expect(readBringState()).toBeNull(); // the notes ARE here: a later start is not "nothing was kept"
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(mocks.reload).not.toHaveBeenCalled();
+      join.mockResolvedValueOnce(taken());
+      await user.click(screen.getByRole("button", { name: "Choose the same file again…" }));
+      await choose(user);
+      expect(await screen.findByText(/everything up to the moment the file was made, with the notes' earlier versions/)).toBeTruthy();
+      expect(join).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a refusal of the earlier versions is said in words with a way on, and the notes are said to be here", async () => {
+    join.mockResolvedValue(taken({ history: "arriving", historyRefused: "join_history_hash" }));
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await choose(user);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/damaged on the way/);
+    expect(alert.textContent).toMatch(/Your notes are here/);
+    expect(alert.textContent).not.toMatch(/join_|_|hash/);
+    expect(screen.queryByText("Nothing was kept: this device is empty again.")).toBeNull();
+  });
+
+  it("any refusal once the notes are in (a file cut in a line, another file): the screen asks the database and says the notes are here, never 'not brought over'", async () => {
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    for (const [status, code] of [[422, "join_bad_line"], [409, "join_history_other_file"], [409, null]] as const) {
+      mocks.readiness.mockResolvedValue(EMPTY);
+      join.mockImplementationOnce(async () => { mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_arriving", kind: null, holds: NONE }); return refused(code, null, status); });
+      await choose(user);
+      expect((await screen.findByRole("heading")).textContent, String(code)).toBe("Your notes are here, their earlier versions are not all here");
+      expect(document.body.textContent, String(code)).not.toMatch(/were not brought over|Nothing was kept|this device is empty/);
+      expect(screen.getByRole("alert").textContent, String(code)).not.toMatch(/join_|json/i);
+      expect(readBringState(), String(code)).toBeNull();
+    }
+  });
+
+  it("a refusal before the notes are in still says nothing was kept: the database is the empty one", async () => {
+    join.mockResolvedValue(refused("join_bad_line", null, 422));
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await choose(user);
+    expect((await screen.findByRole("heading")).textContent).toBe("The notes were not brought over");
+    expect(document.body.textContent).toMatch(/Nothing was kept: this device is empty again/);
+  });
+
+  it("stopping the wait asks first, keeps the notes, and says where the earlier versions are", async () => {
+    join.mockResolvedValue(taken({ history: "arriving" }));
+    mocks.stopWaiting.mockResolvedValue({ removed: 4 });
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await choose(user);
+    mocks.confirm.mockResolvedValueOnce(false);
+    await user.click(await screen.findByRole("button", { name: "Stop waiting for the earlier versions" }));
+    expect(mocks.stopWaiting).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Stop waiting for the earlier versions" }));
+    expect(await screen.findByText(/no longer waits for the earlier versions/)).toBeTruthy();
+    expect(mocks.stopWaiting).toHaveBeenCalledTimes(1);
+    expect(String(mocks.confirm.mock.calls[0]![0])).toMatch(/Your notes stay as they are/);
+  });
+
+  it("opened again on such a copy, the screen comes back to the same question", async () => {
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_arriving", kind: null, holds: NONE });
+    render(<BringNotes client={client} interrupted onLeave={() => {}} />);
+    expect((await screen.findByRole("heading")).textContent).toMatch(/earlier versions are not all here/);
+    expect(screen.queryByText(/Nothing was kept/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose the same file again…" })).toBeTruthy();
+  });
+
+  it("all of it came except what this browser does not keep, and what the other device did not hold whole: each is said, and the screen waits", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      join.mockResolvedValue(taken({ historyScope: "body", historyLeftOut: 2 }));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+      await choose(user);
+      expect(await screen.findByText(/earlier versions of handwriting were left out/)).toBeTruthy();
+      expect(screen.getByText(/2 earlier versions were not complete on your other device/)).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(mocks.reload).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("the way in from Settings on such a copy never offers to erase it: it goes on with the same file", async () => {
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_arriving", kind: null, holds: { ...NONE, own_notes: 12 } });
+    const user = userEvent.setup();
+    render(<BringEntry client={client} onClose={() => {}} />);
+    expect(await screen.findByText(/their earlier versions have not all arrived/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Erase/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(mocks.reload).toHaveBeenCalled());
+    expect(mocks.erase).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(readBringState()).toBe("pending");
+  });
+});
+
+// The owner's decision of 2026-11-23 (PR #1988 round 1 point 8): a copy that has its notes and none of their earlier versions says so, and a file of the device the
+// notes came from brings only those in; the notes are never in question on these screens (no erase, no "nothing was kept").
+describe("a copy whose notes have no earlier versions", () => {
+  const NO_HISTORY = { ready: false, code: "join_history_missing", kind: null, holds: NONE };
+
+  it("says so in words, and what to do; it never offers to erase", async () => {
+    mocks.readiness.mockResolvedValue(NO_HISTORY);
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    expect((await screen.findByRole("heading")).textContent).toBe("This device has no earlier versions");
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/Your notes are here, but this device has none of their earlier versions/);
+    expect(text).toMatch(/Only the earlier versions are taken from it: your notes here are not changed/);
+    expect(text).toMatch(/a file for another device cannot be made from this one: it would carry notes without their history/);
+    expect(text).not.toMatch(/snapshot|json|join_|Erase|Nothing was kept/i);
+    expect(screen.getByRole("button", { name: "Choose the file from your other device…" })).toBeTruthy();
+  });
+
+  it("a file that brings them says that only the earlier versions came, not that everything did", async () => {
+    mocks.readiness.mockResolvedValue(NO_HISTORY);
+    join.mockResolvedValue(taken({ pages: 0 }));
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await choose(user);
+    expect(await screen.findByText("The earlier versions of your notes are here now. Your notes themselves were not changed.")).toBeTruthy();
+    expect(screen.queryByText(/everything up to the moment the file was made/)).toBeNull();
+  });
+
+  it("a file of another device, or one that ended before them, leaves the same screen with the reason; nothing is said to be lost", async () => {
+    mocks.readiness.mockResolvedValue(NO_HISTORY);
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    join.mockResolvedValueOnce(refused("join_history_other_source"));
+    await choose(user);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/made on another device than the one this device took its notes from/);
+    expect((await screen.findByRole("heading")).textContent).toBe("This device has no earlier versions");
+    expect(document.body.textContent).not.toMatch(/Nothing was kept|were not brought over/);
+    join.mockResolvedValueOnce(taken({ pages: 0, history: "missing", historyRefused: "join_incomplete" }));
+    await choose(user);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/cut short/);
+    expect((await screen.findByRole("heading")).textContent).toBe("This device has no earlier versions");
+  });
+
+  it("the way in from Settings goes on to that screen without erasing anything", async () => {
+    mocks.readiness.mockResolvedValue({ ...NO_HISTORY, holds: { ...NONE, own_notes: 12 } });
+    const user = userEvent.setup();
+    render(<BringEntry client={client} onClose={() => {}} />);
+    expect(await screen.findByText(/has no earlier versions of its notes. Continue to choose a file made on the device the notes came from/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Erase/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(mocks.reload).toHaveBeenCalled());
+    expect(mocks.erase).not.toHaveBeenCalled();
+    expect(readBringState()).toBe("pending");
+  });
+
+  it("after stopping waiting, the screen says a file cannot be made from this device until they are brought in", async () => {
+    mocks.readiness.mockResolvedValue({ ready: false, code: "join_history_arriving", kind: null, holds: NONE });
+    mocks.stopWaiting.mockResolvedValue({ removed: 2 });
+    const user = userEvent.setup();
+    render(<BringNotes client={client} interrupted={false} onLeave={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "Stop waiting for the earlier versions" }));
+    expect(await screen.findByText(/no longer waits for the earlier versions/)).toBeTruthy();
+    expect(screen.getByText(/Until they are brought in, a file for another device cannot be made from this one/)).toBeTruthy();
+    expect(String(mocks.confirm.mock.calls[0]![0])).toMatch(/a file from it can bring them in later. Until then this device can't make a file for another one/);
   });
 });
 

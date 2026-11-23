@@ -24,12 +24,16 @@
 // must be cut by the reader's scope (they name ids of rows the reader cannot read) and a row whose foreign key names a row the reader
 // cannot read must be left out or its key emptied (today the receiver cannot apply it and the whole join rolls back).
 //
-// What it refuses: a non-null `since` and the `history` / `blobs` layers (not done); an operator that is a delegated token; a source that cannot
+// THE HISTORY PART (history-replication proposal §3.1, batch 3): readHistoryPages, after the rows, in a read snapshot of its own at the rows' cut (spine/historyLayer.ts says
+// why that set does not move): the content of the versions by hash (layer `blobs`), then the versions (layer `history`), with a digest of its own.
+//
+// What it refuses: a non-null `since`, and the `history` / `blobs` layers here (they are readHistoryPages'); an operator that is a delegated token; a source that cannot
 // vouch for every stamp it holds (`snapshotSourceNode`). A node that holds other nodes' writes (it was filled from another, or took bundles) IS a source
 // (own-node-transport proposal §3.4, batch 2): the snapshot names those origins and how far it holds each, per label (`brought`), and the joining node holds
 // exactly that afterwards. It never reads structure_log or domain_events.
 
 import { CodedStatusError } from "../statusError.js";
+import { db } from "../dbKysely.js";
 import { requirePerson } from "../spine/authority.js";
 import { stampUnstampedRowsAsGenesis } from "../spine/stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
@@ -39,10 +43,14 @@ import { withActorReadSnapshot } from "./actorReadSnapshot.js";
 import { snapshotScopeFor } from "./readPolicy.js";
 import { SNAPSHOT_SPECS } from "../spine/snapshotTables.js";
 import { computeSnapshotDigest, snapshotRows, readRefsChunk, readRowChunk, readStampsOf, readTombstoneChunk, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "../spine/snapshotSql.js";
+import { planHistory, readHistoryItems, sentHistoryDigests, type HistoryDigests, type HistoryItem, type HistoryPage } from "../spine/historyLayer.js";
 import type { ActorCtx } from "../types.js";
 
 /** A page holds about this many bytes before it is closed (before compression; a single row is never split). */
 const SNAPSHOT_PAGE_BYTES = 4 * 1024 * 1024;
+/** A page of the history part is smaller: it is taken in while the device is already in use, and each page holds the workspace's event lock while it is
+ *  written, so ordinary saves wait that long (measured for PR #1988: about a second per 4 MB page of drawings' history; a single item is never split). */
+const HISTORY_PAGE_BYTES = 1024 * 1024;
 const CHUNK_ROWS = 200; // rows read per query: each query has a fixed cost (the reader's scope is worked out in it), so more rows per query is much faster; a chunk is in memory once
 
 type SnapshotSummary = { source: string; former: Record<string, number>; brought: Have; cut: number; pages: number; digest: TableDigest[] };
@@ -57,7 +65,7 @@ type ReadStampedPagesOptions = {
 class SnapshotNotDone extends CodedStatusError {}
 class SnapshotSourceRefused extends CodedStatusError {}
 
-const sizeOf = (item: SnapshotItem) => new TextEncoder().encode(JSON.stringify(item)).length;
+const sizeOf = (item: SnapshotItem | HistoryItem) => new TextEncoder().encode(JSON.stringify(item)).length;
 
 type OriginRow = { origin: string; vouched_by: string; have: Record<string, number> };
 
@@ -66,6 +74,11 @@ type OriginRow = { origin: string; vouched_by: string; have: Record<string, numb
  * one of them and afterwards hold exactly what this node holds (spine/stampedImport.ts checkPage refuses a stamp of an origin nobody vouched for, or past the
  * number given for it). Refused, 409, nothing read:
  *   snapshot_source_joining     the workspace is being filled from a snapshot itself (sync_join 'joining'): half a copy is no source
+ *   snapshot_source_history_incomplete   it was filled from a snapshot whose earlier versions are not all in yet (sync_join.history_state 'arriving', migration 229): a third
+ *                               device joining from it would never get them (history-replication proposal §10 question 5)
+ *   snapshot_source_history_missing      it was filled from a snapshot and has none of their earlier versions (history_state 'missing': joined before migration 229;
+ *                               'given_up': the person stopped waiting): no source of an incomplete history (the owner's decision of 2026-11-23 on PR #1988), until a file
+ *                               of its source brings them in (spine/stampedImport.ts beginHistoryRefill)
  *   snapshot_foreign_origin     a stamp (or another head of a unit) of an origin this node has no sync_origins row for: it cannot say how far it holds it
  *   snapshot_source_unsettled   a stamp of an origin beyond what this node says it holds of it (per label; a former id: the least over the labels its row names): a merge whose
  *                               progress was not written with it. A joiner would refuse it (join_stamp_beyond_brought / _former); refused here, before the read
@@ -86,6 +99,12 @@ export async function snapshotSourceNode(workspaceId: string): Promise<string> {
   if (!node) throw new Error("this database has no node id yet");
   if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE workspace_id = $1 AND state = 'joining'`, [workspaceId])).rows.length > 0) {
     throw new SnapshotSourceRefused(409, "snapshot_source_joining", "this workspace is being filled from a snapshot; a snapshot of it cannot be made until that is done");
+  }
+  if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE workspace_id = $1 AND state = 'done' AND history_state = 'arriving'`, [workspaceId])).rows.length > 0) {
+    throw new SnapshotSourceRefused(409, "snapshot_source_history_incomplete", "the earlier versions of this workspace are still being copied here; a snapshot of it cannot be made until that is done");
+  }
+  if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE workspace_id = $1 AND state = 'done' AND history_state IN ('missing', 'given_up')`, [workspaceId])).rows.length > 0) {
+    throw new SnapshotSourceRefused(409, "snapshot_source_history_missing", "this workspace was copied here without its earlier versions; a snapshot of it cannot be made until they are brought in");
   }
   const origins = new Map((await originRows(workspaceId)).map((r) => [r.origin, r] as const));
   // per origin and label, the highest number of it this node holds (a stamp, or another head of a unit)
@@ -131,7 +150,7 @@ export async function readStampedPages(
   authenticated: ActorCtx, workspaceId: string, options: ReadStampedPagesOptions, emit: (page: StampedPage) => Promise<void>,
 ): Promise<SnapshotSummary> {
   if (options.since !== null) throw new SnapshotNotDone(422, "snapshot_since_not_done", "reading only what changed since a cut is not done yet");
-  if (options.layer !== "rows") throw new SnapshotNotDone(422, "snapshot_layer_not_done", `the ${options.layer} layer of a snapshot is not done yet`);
+  if (options.layer !== "rows") throw new SnapshotNotDone(422, "snapshot_layer_not_done", `the ${options.layer} layer of a snapshot is read with readHistoryPages`);
   requirePerson(authenticated, "export a snapshot");
   const budget = options.pageBytes ?? SNAPSHOT_PAGE_BYTES;
   // Before the read snapshot opens (it is read-only): a row nothing has stamped yet gets the genesis stamp, so the copy carries one for every row.
@@ -205,5 +224,54 @@ export async function readStampedPages(
     await flush();
     const digest = await computeSnapshotDigest(workspaceId, scopeOf);
     return { source: node, former, brought, cut, pages, digest };
+  });
+}
+
+/**
+ * The HISTORY PART of the snapshot whose rows were read at `cut` (spine/historyLayer.ts): the content the versions name (pages of layer `blobs`), then the versions
+ * (layer `history`), each page with the rows pages' header and numbered from 1, and the digest of what the pages hold, taken in the same read snapshot. The same cut
+ * gives the same pages whenever it is read (a note deleted for good in between takes its versions with it), so a receiver whose transfer was cut takes the pages again
+ * and finds the ones it holds unchanged. A cut beyond this node's own is refused (`snapshot_history_cut`): there is no such snapshot. The same operator rule and the same
+ * source check as the rows.
+ *
+ *   const rows = await readStampedPages(owner, ws, { since: null, layer: "rows" }, send);
+ *   const history = await readHistoryPages(owner, ws, { cut: rows.cut }, send);   // → { pages, digests, inkBytes }
+ */
+export async function readHistoryPages(
+  authenticated: ActorCtx, workspaceId: string, options: { cut: number; pageBytes?: number }, emit: (page: HistoryPage) => Promise<void>,
+): Promise<{ pages: number; digests: HistoryDigests; inkBytes: number }> {
+  requirePerson(authenticated, "export a snapshot");
+  const budget = options.pageBytes ?? HISTORY_PAGE_BYTES;
+  return withActorReadSnapshot(authenticated, workspaceId, async (actor) => {
+    await snapshotRows(`SELECT set_config('TimeZone', 'UTC', true)`);
+    const node = await snapshotSourceNode(workspaceId);
+    const now = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
+    if (!Number.isSafeInteger(options.cut) || options.cut < 0 || options.cut > now) throw new SnapshotNotDone(422, "snapshot_history_cut", "there is no snapshot of this node at that cut");
+    const former = await formerIdsOf(workspaceId);
+    const brought = broughtOf(await originRows(workspaceId));
+    const scopeOf = await snapshotScopeFor(actor);
+    // the set is worked out once; every page after it is read by key (spine/historyLayer.ts, COST)
+    const plan = await planHistory(workspaceId, scopeOf, { source: node, cut: options.cut });
+    // a device that kept only the text history of the notes it took cannot hand on the drawings' one: the file says so (HistoryPage.textOnly)
+    const textOnly = (await db.selectFrom("sync_join").select("history_scope").where("workspace_id", "=", workspaceId).executeTakeFirst())?.history_scope === "body";
+    let items: HistoryItem[] = [];
+    let layer: HistoryPage["layer"] = "blobs";
+    let bytes = 0;
+    let pages = 0;
+    const flush = async () => {
+      if (items.length === 0) return;
+      pages += 1;
+      const page: HistoryPage = { layer, dataShape: SYNC_DATA_SHAPE_VERSION, page: pages, cut: options.cut, source: node, former, brought, workspaceId, inkBytes: plan.inkBytes, textOnly, items };
+      items = []; bytes = 0;
+      await emit(page);
+    };
+    await readHistoryItems(plan, async (itemLayer, item) => {
+      if (itemLayer !== layer) { await flush(); layer = itemLayer; } // a page holds one layer
+      items.push(item);
+      bytes += sizeOf(item);
+      if (bytes >= budget) await flush();
+    });
+    await flush();
+    return { pages, digests: await sentHistoryDigests(plan), inkBytes: plan.inkBytes };
   });
 }

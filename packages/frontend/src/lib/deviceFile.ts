@@ -3,8 +3,8 @@
 // receives it is browserApp/BringNotes.tsx (the browser version only).
 //
 // What the file holds today: the notes with their tags, properties, links, tasks, views, handwriting and layout — every row's
-// source mark included. NOT yet: pictures and files added to notes, the version history, and the operation log (the backend's
-// "rows" layer, services/stampedSnapshot.ts). Screens say so (sentences in DeviceFileSetting).
+// source mark included — and then their earlier versions (the backend's "rows" layer and its history part, services/stampedSnapshot.ts).
+// NOT yet: pictures and files added to notes, and the operation log. Screens say so (sentences in DeviceFileSetting).
 
 import { t } from "./i18n";
 import { todayId } from "./localDate";
@@ -79,6 +79,24 @@ const DEVICE_FILE_REFUSALS = [
   "snapshot_since_not_done",
   "snapshot_layer_not_done",
   "snapshot_failed",
+  "join_history_hash",
+  "join_history_shape",
+  "join_history_clash",
+  "join_history_unknown_note",
+  "join_history_order",
+  "join_history_digest_mismatch",
+  "snapshot_source_history_incomplete",
+  "snapshot_history_cut",
+  "join_history_content_gone",
+  "join_history_other_file",
+  "join_history_not_arriving",
+  "join_history_arriving",
+  "snapshot_source_history_missing",
+  "join_history_missing",
+  "join_history_other_source",
+  "join_history_not_missing",
+  "join_history_file_cut",
+  "join_history_source_failed",
 ] as const;
 
 export type DeviceFileWrite = { bytes: number; how: "chosen-place" | "download" };
@@ -194,7 +212,7 @@ export type JoinHolds = { own_notes: number; trash: number; own_tags: number; sp
 export type SnapshotReadiness =
   | { ready: true; holds: JoinHolds }
   | { ready: false; code: "join_in_progress" }
-  | { ready: false; code: string; kind: string | null; holds: JoinHolds };
+  | { ready: false; code: string; kind: string | null; holds: JoinHolds; history?: { scope: "all" | "body"; leftOut: number } };
 
 /** The readiness that says "not ready, because of what is on this device" (not "a join is running"): the one that carries the counts. */
 type NotEmptyReadiness = Extract<SnapshotReadiness, { holds: JoinHolds; ready: false }>;

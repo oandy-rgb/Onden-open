@@ -107,6 +107,10 @@ export function newNoteSiteDefault(parentAttrs: Readonly<Record<string, string>>
     : null;
 }
 
+/** Over this much of the drawings' earlier versions (their chunks, manifests and the blobs only they name), the browser version taking a file from another
+ *  device keeps the earlier versions of text only (the backend decides, spine/stampedImport.ts applyHistoryPage; the screen estimates the room it needs with it). */
+export const BROWSER_INK_HISTORY_LIMIT_BYTES = 50 * 1024 * 1024;
+
 /** Most notes one "rewind the workspace to a day" may touch. */
 export const REWIND_MAX_NOTES = 2000;
 

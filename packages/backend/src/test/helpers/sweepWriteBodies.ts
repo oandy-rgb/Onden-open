@@ -200,6 +200,9 @@ export const WRITE_CONTENT: Record<string, SweepContent> = {
 
   // ── backup and restore ───────────────────────────────────────────────────
   "POST /api/fresh-proof": () => ({ json: { purpose: "snapshot_export", evidence: { kind: "acknowledgement" } } }),
+  // the caller's own workspace with earlier versions still arriving (sweepWriteWorld.ts historyArriving); a session or a token is refused first (403: requirePerson)
+  // (reading the field is what makes the world build it: helpers/sweepWriteWorld.ts fieldsUsed)
+  "POST /api/snapshot/history/stop": (own) => (own.historyArriving ? { json: {} } : { json: {} }),
   "POST /api/snapshot": () => ({ raw: { bytes: Buffer.from('{"kind":"hello","dataShape":1,"workspaceId":"00000000-0000-4000-8000-000000000001","source":"sweep-source","cut":0,"person":"00000000-0000-4000-8000-000000000002"}\n'), contentType: "application/x-ndjson" } }),
   "POST /api/backup/restore/upload": (o) => ({ raw: { bytes: Buffer.from(o.backupZipBase64, "base64"), contentType: "application/zip" } }),
   "POST /api/backup/restore/:id/apply": (o, r) => ({ params: { id: o.upload }, json: { space_id: r.space, mode: "empty" } }),

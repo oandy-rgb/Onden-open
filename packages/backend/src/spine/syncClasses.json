@@ -275,7 +275,7 @@
  },
  "note_versions": {
   "class": "separate",
-  "note": "a note's versions (body: title and text; a drawing: its attribute key), one row each, keyed by (note, unit, version_key); minted once by the node that wrote it and never changed, so copies cannot conflict (the set is the union). Batch 1 of docs/architecture/proposals/history-replication-2026-11-22.md (migration 220): minted and kept here, not carried yet; the snapshot's history layer and the bundles' versions are batches 3 and 4"
+  "note": "a note's versions (body: title and text; a drawing: its attribute key), one row each, keyed by (note, unit, version_key); minted once by the node that wrote it and never changed, so copies cannot conflict (the set is the union). Batch 1 of docs/architecture/proposals/history-replication-2026-11-22.md (migration 220): minted and kept here; a snapshot carries them after its rows from batch 3 (spine/historyLayer.ts, migration 229), a change bundle from batch 4"
  },
  "trash_groups": {
   "class": "separate",
@@ -283,7 +283,7 @@
  },
  "note_version_positions": {
   "class": "separate",
-  "note": "where each version travels from: (origin, seq), a set that only grows (proposal §2.5); this node's record, not part of a version's identity. Carried with note_versions from batch 4"
+  "note": "where each version travels from: (origin, seq), a set that only grows (proposal §2.5); this node's record, not part of a version's identity. Carried with note_versions: by a snapshot from batch 3, by a change bundle from batch 4"
  },
  "media_uploads": {
   "class": "separate",

@@ -98,6 +98,8 @@ export type SweepObjects = {
   block: string;
   /** a keyword mute of the owner's */
   mute: string;
+  /** the workspace, filled from a device file whose earlier versions are still arriving (its sync_join row: the notes are in, the history part is not) */
+  historyArriving: string;
 };
 
 export const SWEEP_ATTR_KEY = "sweepattr";
@@ -164,7 +166,7 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
     tag: "", otherTag: "", task: "", edge: "", canvas: id("canvas"), event: "", noteView: "", tagView: "", space: "", moduleTag: "", placedTask: "",
     pointer: "", deleteEvent: "", focus: "", reviewNote: id("reviewNote"), fnTag: "", agent: "", handle: "", aiNote: id("aiNote"), credential: "", member: "", memberToken: "", feed: "", article: "", media: "",
     temporarySession: "", openSessionTicket: "", session: "", endedSession: "", suggestion: "", agentNote: id("agentNote"), agentEvent: "", agentRun: "", approval: "", deadEffect: "", deadKind: need.has("deadKind") ? `sweepdead${canary.toLowerCase()}` : "",
-    conflictEvent: "", calendar: "", upload: "", backupZipBase64: "", rewindNote: id("rewindNote"), rewindId: "", inkEvent: "", block: "", mute: "",
+    conflictEvent: "", calendar: "", upload: "", backupZipBase64: "", rewindNote: id("rewindNote"), rewindId: "", inkEvent: "", block: "", mute: "", historyArriving: "",
   };
   let agentActor: ActorCtx | undefined;
   if (need.has("tag")) o.tag = (await createTag({ actor, workspaceId: ws, name: c("Tag"), parentId: null })).id;
@@ -330,6 +332,13 @@ export async function buildSweepObjects(side: SweepSide, label: string, wanted?:
     await grade(actor, blockNote, 3, new Date(), { kind: "block", id: o.block }); // so there is a grade to undo
   }
   if (need.has("mute")) o.mute = await muteKeyword(actor, ws, c("MutedWord"));
+  if (need.has("historyArriving")) {
+    // what a join leaves when the notes are in and the earlier versions are still on the way (spine/stampedImport.ts markJoinDone, migration 229): written as
+    // that state, since a real join needs an empty database of its own (snapshotHistory.integration.test.ts goes through one)
+    await q(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state, history_state) VALUES ($1, $2, 1, 'done', 'arriving')
+             ON CONFLICT (workspace_id) DO UPDATE SET state = 'done', history_state = 'arriving'`, [ws, randomUUID()]);
+    o.historyArriving = ws;
+  }
   if (need.has("credential")) {
     o.credential = (await addCredential(ws, { label: c("Key"), apiKey: SWEEP_API_KEY, baseUrl: "https://api.example.test/v1", protocol: "v1_messages" }, { actor })).id;
   }

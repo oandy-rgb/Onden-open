@@ -25,13 +25,13 @@ import { isWorkspaceOwner } from "./authority.js";
 import { AuthorityError } from "./authorityError.js";
 import { StatusError } from "../statusError.js";
 import { acquireEventAppendLock } from "./eventLock.js";
-import { legacyVersionKey } from "./noteVersions.js";
+import { isImportedAt, legacyVersionKey } from "./versionIdentity.js";
 
 export type ImportedVersion = {
   /** The version's name in the source: its `version_key`, or the number of its event (a file from before the version tables; text of a bigint). The idempotency key and what a restore points at. */
   sourceEventId: string;
   kind: "created" | "updated" | "restored";
-  /** UTC time the source recorded, `YYYY-MM-DDTHH:MM:SS.ffffffZ` (IMPORTED_AT). */
+  /** UTC time the source recorded, `YYYY-MM-DDTHH:MM:SS.ffffffZ` (spine/versionIdentity.ts IMPORTED_AT). */
   at: string;
   title: string | null;
   /** SHA-256 hex the source stored; the text must hash to it. */
@@ -45,15 +45,6 @@ export type ImportedVersion = {
   baseline?: true;
 };
 
-/** The only shape of a version's time: what the export writes (microseconds, UTC). Passed on as text, never through Date. */
-export const IMPORTED_AT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.\d{6}Z$/;
-/** Whether `at` is a real calendar time in that shape (not 2026-02-31, not hour 25). */
-export function isImportedAt(at: string): boolean {
-  const whole = IMPORTED_AT.exec(at)?.[1];
-  if (!whole) return false;
-  const parsed = new Date(`${whole}.000Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === `${whole}.000Z`;
-}
 
 /** Never shown as such: the restore catches it and lists the note's title (a note's history fails alone). */
 export class ImportedHistoryError extends StatusError {

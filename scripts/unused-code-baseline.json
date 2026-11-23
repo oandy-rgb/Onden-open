@@ -237,7 +237,6 @@
       "packages/backend/src/spine/attributeSource.ts": ["PERSON_AUTHORED_SOURCES", "SOURCE_PRIORITY"],
       "packages/backend/src/spine/authority.ts": ["Operation"],
       "packages/backend/src/spine/eventLock.ts": ["eventAppendLockKey"],
-      "packages/backend/src/spine/importedHistory.ts": ["IMPORTED_AT"],
       "packages/backend/src/spine/mutate.ts": ["Mutation"],
       "packages/backend/src/spine/nodeHooks.ts": ["NodeAttributeWrite", "NodeLifecycleCommit", "NodeSnapshotPurge", "NodeVisibilityCommit", "SpaceAudienceCommit"],
       "packages/backend/src/spine/reservedTagKeys.ts": ["ReservedTagLifecycle"],

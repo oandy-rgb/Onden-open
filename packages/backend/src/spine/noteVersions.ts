@@ -18,7 +18,6 @@
 // already stored the content and computed its hash, so minting here adds rows, not hashing.
 import { sql } from "kysely";
 import { db } from "../dbKysely.js";
-import { sha256Hex } from "../utils.js";
 import { countSyncClockExceptions } from "./stamps.js";
 
 /** What a version is of: the note's body (title and text) or one of its drawings, by attribute key. */
@@ -145,16 +144,6 @@ export async function loadBodyVersion(workspaceId: string, nodeId: string, id: s
 export async function versionBeforeEvent(noteId: string, unit: VersionUnit, undoneEventId: string, contentHash: string | null): Promise<string | null> {
   if (!/^\d{1,18}$/.test(undoneEventId)) return null;
   return (await sql<{ key: string | null }>`SELECT note_version_before_event(${noteId}::uuid, ${unit}, ${undoneEventId}::bigint, ${contentHash}) AS key`.execute(db)).rows[0]?.key ?? null;
-}
-
-// The key encoding of migration 220 (note_version_field): every field `<UTF-8 bytes>:<text>`, a missing one `-`, in this order.
-const field = (value: string | null): string => (value === null ? "-" : `${Buffer.byteLength(value, "utf8")}:${value}`);
-
-/** `g:` — a version recorded as an event (here, or carried in from a backup), from what it is. `at`: UTC microseconds (IMPORTED_AT).
- *  The same function as SQL note_version_legacy_key (versionKeys.integration.test.ts). A `b:` baseline is minted only by migration 220
- *  (SQL note_version_baseline_key), so it has no JS twin. */
-export function legacyVersionKey(noteId: string, unit: VersionUnit, kind: string, contentHash: string | null, title: string | null, at: string): string {
-  return `g:${sha256Hex(`onden version 1${[noteId, unit, kind, contentHash, title, at].map(field).join("")}`)}`;
 }
 
 /** Root writes that changed a note's title or text, or a drawing, without minting its version (migration 220's deferred checks count them in

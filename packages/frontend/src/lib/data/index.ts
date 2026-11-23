@@ -7,6 +7,7 @@ export { backgroundWrite, runBackgroundWrite } from "./backgroundWrite";
 export { backupRestore } from "./backupRestore";
 export { backupLimits, sizeLabel } from "./backupLimits";
 export { freshProof } from "./freshProof";
+export { deviceFileHistory } from "./deviceFileHistory";
 export type { FreshProofPurpose } from "./freshProof";
 export type { UploadedBackup } from "./backupRestore";
 export { importCanvasFile } from "./canvasImport";

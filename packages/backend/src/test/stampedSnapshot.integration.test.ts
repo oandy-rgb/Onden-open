@@ -563,7 +563,9 @@ describe.skipIf(!isTestDb)("the snapshot routes", () => {
     const lines = text.trim().split("\n").map((l) => JSON.parse(l) as { kind: string });
     expect(lines[0]!.kind).toBe("hello");
     expect(lines.at(-1)!.kind).toBe("manifest");
-    expect(lines.slice(1, -1).every((l) => l.kind === "page")).toBe(true);
+    // the rows, `rows-done`, the history part (history-replication batch 3), the manifest
+    expect(lines.slice(1, -1).every((l) => l.kind === "page" || l.kind === "rows-done")).toBe(true);
+    expect(lines.filter((l) => l.kind === "rows-done")).toHaveLength(1);
     expect(lines[0]).toMatchObject({ workspaceId: world.ws, person: world.owner.id });
   });
 
@@ -584,7 +586,8 @@ describe.skipIf(!isTestDb)("the snapshot routes", () => {
       await seedQ(`UPDATE actors SET external_id = 'login-of-local-first' WHERE id = $1`, [actor.id]);
       return { ws, actor };
     });
-    const cutOff = text.slice(0, text.indexOf("\n", Math.floor(text.length / 2)) + 1); // no manifest
+    const rowsPart = text.slice(0, text.indexOf('{"kind":"rows-done"'));
+    const cutOff = rowsPart.slice(0, rowsPart.indexOf("\n", Math.floor(rowsPart.length / 2)) + 1); // half of the notes: no end of the notes, no manifest
     const half = await onNode(dst, async () => appFor(local.actor).request("/api/snapshot", { method: "POST", body: cutOff }));
     expect(half.status).toBe(422);
     expect(((await half.json()) as { error: string }).error).toBe("join_incomplete");

@@ -1,6 +1,6 @@
 # 同步的信任界線：收到的一律檢查；不被信任的電腦只當工作階段；不防「已接納的節點說謊」
 
-> 狀態：現行（最後確認 2026-11-22）
+> 狀態：現行（最後確認 2026-11-23）
 > 涵蓋：packages/backend/src/spine/stampedImport.ts, packages/backend/src/services/stampedSnapshot.ts
 
 | 項目 | 內容 |
@@ -47,6 +47,7 @@
   來源自己的標記不得超過切點（`join_stamp_beyond_cut`）；來源那一端在讀之前先確認自己擔保得了握有的每一個標記（`snapshot_foreign_origin`、`snapshot_source_unsettled`、`snapshot_source_joining`、`snapshot_too_many_origins`）。
   `have` 與包頭的 `base`／`upTo`／`holds` 改成每個標籤一個，舊形狀以 `bundle_have_per_origin` 拒收。每一種拒絕在 `snapshotBrought.integration.test.ts` 有測試，拒絕後資料庫沒有變。
   同步 4a 批（2026-11-22）起：收下的列寫完之後、同一個交易裡，由 `spine/receivedDerivation.ts` 這個插槽（`services/receivedDerivation.ts` 填）算出衍生資料（連結、段落列的顯示欄位、永久刪除的清理、空間與 slug、型別、網站重建、成員 epoch），它不寫任何單位；插槽是空的就整包拒收（`bundle_no_derivation`），所以收包永遠不會只寫了列、沒有衍生。
+  版本歷史第 3 批（2026-11-23，migration 229，PR #1988）起：快照在筆記之後帶「歷史部分」（`packages/backend/src/spine/historyLayer.ts`：先是內容、依雜湊，再是版本與它們的傳送位置）。收件檢查和筆記同一套原則，整頁先查完再寫：只准格式裡有的欄位；內容的 sha256 必須等於它說的雜湊、不超過大小上限，手寫的塊組回來的整份值必須等於清單的雜湊、清單先加總大小（`join_history_hash`、`join_history_shape`）；版本的每一欄是它的種類、時間是合法的時間、時鐘不超前上限、鍵就是它本身算出來的鍵（`s:` 指到它的一個傳送位置，`g:`／`b:` 重算），傳送位置只能是快照擔保的來源而且不超過它握有的、作者是這個工作區的人或這台已經沒有的人、筆記要有版本清單（`join_history_shape`）；指到這台從沒有過的筆記（`join_history_unknown_note`）；這台已經有的版本帶著不同的身分（`join_history_clash`）；頁不照順序（`join_history_order`）；全部到齊後的摘要和來源的不同（`join_history_digest_mismatch`）。筆記已經到了，所以這些拒絕不撤回筆記，回應說明舊版本為什麼沒到。歷史部分還在到的那台不能當快照來源（`snapshot_source_history_incomplete`）。沒有舊版本的那台（229 之前加入的、或不再等的）也不能（`snapshot_source_history_missing`，業主 2026-11-23 的決定：不能帶出不完整的歷史）；它補收時只收同一台來源做的檔案（`join_history_other_source`）、不比當初的檔案舊（`join_history_other_file`），筆記頁不讀；歷史頁的標頭與位置的擔保用那個檔的切點（`sync_join.history_from`），這台沒有的筆記的版本算作略過、不寫。每一種拒絕在 `snapshotHistory.integration.test.ts` 有測試，拒絕後資料庫的每一列都沒有變。
 - 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）。「工作階段的任何東西不離開這一台」（PR #1856）現在檢查的：
   工作階段的 `actors` 與 `space_members` 列、它們的標記與墓碑不進快照、修改包與摘要（`snapshotTables.ts` `stampMayLeaveSql`；兩節點測試 `sessionsStayOnTheirNode.integration.test.ts`）；
   判斷所靠的工作階段 `actors` 列，在它的工作區還在時，**資料庫**拒絕刪除與改 id、工作區、種類（migration 217 的觸發器；`sessionActorKept.integration.test.ts`），`removeActor` 也拒絕；

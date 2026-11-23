@@ -78,7 +78,10 @@ export type FromWorker =
   /** While a file is being taken in: how much of it has been read. */
   | { t: "join-progress"; id: number; readBytes: number; totalBytes: number }
   /** The end of a `join-file`: taken in and saved here, or refused (`error` is the backend's code, null when it gave none). */
-  | { t: "join-result"; id: number; ok: true; pages: number; rows: number }
+  /** `history`: where the notes' earlier versions are (`arriving`: not all in: the same file again goes on; `missing`: this device has none, the file did not bring them); `historyScope`: `body` when only the text history is
+   *  kept (the browser version over the drawings' threshold); `historyLeftOut`: versions the other device holds without their content; `historyRefused`: why the
+   *  earlier versions stopped coming (a code; the notes are in either way). Backend services/stampedSnapshotStream.ts SnapshotTaken. */
+  | { t: "join-result"; id: number; ok: true; pages: number; rows: number; history: "done" | "arriving" | "missing"; historyScope: "all" | "body"; historyLeftOut: number; historyRefused: string | null }
   | { t: "join-result"; id: number; ok: false; status: number; error: string | null; detail: string | null };
 
 /** Temporary mode: the page is opened with `?temp=1` and hands the same parameter to the worker. Nothing of the session

@@ -1,11 +1,12 @@
 // How a big drawing value is cut into chunks (services/inkChunks.ts): at object boundaries chosen from the text itself, so
 // the chunks around a change are the only ones that differ. Pure; the chunks join back to the text exactly.
+import { MAX_INK_CHUNK_CHARS } from "../spine/historyLayer.js";
 
 /** The average chunk: a stroke changes about 4 places of a PDF's value, so about 4 chunks are written per save, against
  *  a manifest that grows with value/target (32 bytes per chunk). */
 const TARGET_CHUNK = 8 * 1024;
-/** No chunk is longer than this, whatever the text looks like. */
-const MAX_CHUNK = 64 * 1024;
+/** No chunk is longer than this, whatever the text looks like: the bound a device receiving the chunks checks (spine/historyLayer.ts). */
+const MAX_CHUNK = MAX_INK_CHUNK_CHARS;
 
 /** FNV-1a over `text[from, to)`: cheap, and only used to pick boundaries (the chunk's identity is its sha256). */
 function fnv1a(text: string, from: number, to: number): number {

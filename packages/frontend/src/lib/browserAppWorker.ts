@@ -3,7 +3,9 @@
 
 import type { BootFailureKind, BridgeSaveState, FromWorker, ToWorker } from "@onden/markdown";
 
-export type JoinFileResult = { ok: true; pages: number; rows: number } | { ok: false; status: number; error: string | null; detail: string | null };
+export type JoinFileResult =
+  | { ok: true; pages: number; rows: number; history: "done" | "arriving" | "missing"; historyScope: "all" | "body"; historyLeftOut: number; historyRefused: string | null }
+  | { ok: false; status: number; error: string | null; detail: string | null };
 export type ReadyInfo = Extract<FromWorker, { t: "ready" }>;
 
 /** The worker ended while a file was being taken in (it crashed or the system took it): no answer will come. The screen goes through the same

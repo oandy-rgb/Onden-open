@@ -30,18 +30,23 @@
 import { discardUnfinishedJoins, ensureShellWorkspace, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
 import { nativeBypassEnabled } from "../nativeBypass.js";
 import { isUuid } from "@onden/markdown";
+import { BROWSER_INK_HISTORY_LIMIT_BYTES } from "@onden/markdown/contract";
 import { CodedStatusError } from "../statusError.js";
+import type { ActorCtx } from "../types.js";
 import { sha256Hex } from "../utils.js";
+import { requirePerson } from "./authority.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { CARRIED_LABELS, UNIT_SOURCES, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { CARRIED_LABELS, UNIT_SOURCES, rowMatchOf, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
 import { BUNDLE_SCOPE, MAX_BROUGHT_ORIGINS, broughtBound, bundleRefused, haveAt, haveOfAll, normalizeHave, originsOf, type Have } from "./stampedBundle.js";
-import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
+import { carriedColumns, carriedKeys, compareDigests, readCarriedRows, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
 import { deriving, receivedDerivation } from "./receivedDerivation.js";
+import { checkHistoryItems, notesNamedBy, receivedHistoryDigests, writeHistoryItems, type HistoryDigests, type HistoryPage, type HistoryScope, type SkippedVersion } from "./historyLayer.js";
+import { config } from "../config.js";
 
 class JoinRefused extends CodedStatusError {}
 const refuse = (code: string, message: string, status: 400 | 409 | 413 | 422 = 422) => new JoinRefused(status, code, message);
@@ -56,7 +61,19 @@ export const joinRefused = refuse;
  *  `brought`: the other origins the source holds, per label and origin as far as it holds them (StampedPage.brought, a Have of spine/stampedBundle.ts). Absent or `{}`: none. */
 export type JoinInput = { workspaceId: string; sourceNode: string; cutSeq: number; personActorId: string; shellPersonId?: string | null; former?: Record<string, number>; brought?: Have };
 
-type JoinRow = { workspace_id: string; source_node: string; cut_seq: string; source_former: Record<string, number>; source_brought: Record<string, Record<string, number>>; state: "joining" | "done"; person_actor_id: string | null; page_hashes: Record<string, string>; applied_through: number };
+type JoinRow = {
+  workspace_id: string; source_node: string; cut_seq: string; source_former: Record<string, number>; source_brought: Record<string, Record<string, number>>; state: "joining" | "done"; person_actor_id: string | null;
+  page_hashes: Record<string, string>; applied_through: number;
+  /** The history part (migration 229): its pages' hashes, how far it is in, its state, what is kept of it, what the source left out, what this node skipped. */
+  history_hashes: Record<string, string>; history_through: number; history_state: HistoryState; history_scope: HistoryScope; history_left_out: number; history_skipped: SkippedVersion[];
+  /** The file the history part comes from when it is not the join's own (a refill, beginHistoryRefill): its cut, former ids and other origins. */
+  history_from: HistoryFrom | null;
+};
+type HistoryFrom = { cut: number; former: Record<string, number>; brought: Record<string, Record<string, number>> };
+/** What the pages of the history part must say they are of, and what vouches for its positions: the join's own file, or the newer file of a refill. */
+const historyHeader = (join: JoinRow) => ({
+  source: join.source_node, cut: join.history_from?.cut ?? Number(join.cut_seq), former: join.history_from?.former ?? join.source_former, brought: join.history_from?.brought ?? join.source_brought,
+});
 
 /** A node id as sync_take_node_id (migration 213) and db.ts make it: gen_random_uuid() as text. The one check for an id a snapshot or a change bundle
  *  names (its source or sender, its former ids, the origins it holds): `sync_origins.vouched_by` also holds the words 'snapshot', 'admitted' and
@@ -167,12 +184,16 @@ const REMOVAL_COUNTS: { key: keyof JoinRemoval; of: string; and?: () => string }
  *  A screen words it from the code; the code is never shown. The counts of JoinRemoval use the same codes (`trash` is the notes of `own_notes` in the trash). */
 type JoinDecision =
   | { ready: true; shellIds: string[] }
-  | { ready: false; code: "join_in_progress" | "join_already_done" | "join_from_self" | "join_not_empty"; kind: string | null; message: string };
+  | { ready: false; code: "join_in_progress" | "join_history_arriving" | "join_history_missing" | "join_already_done" | "join_from_self" | "join_not_empty"; kind: string | null; message: string };
 
 export async function decideJoin(incoming: { sourceNode: string } | null): Promise<JoinDecision> {
   const no = (code: Extract<JoinDecision, { ready: false }>["code"], message: string, kind: string | null = null): JoinDecision => ({ ready: false, code, kind, message });
   if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE state = 'joining'`)).rows.length > 0) return no("join_in_progress", "a join is already running");
   // ANY finished join, not only this snapshot's workspace: a database that was joined holds a working workspace, never an empty shell.
+  // The notes of a join are in and its earlier versions are not: the same file again brings in the rest (services/stampedSnapshotStream.ts), or the person stops waiting (giveUpHistory).
+  if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE history_state = 'arriving'`)).rows.length > 0) return no("join_history_arriving", "the notes are in, their earlier versions are not all in yet");
+  // joined before a snapshot carried any history, or the person stopped waiting for it: a file of the same source brings in only its history part (beginHistoryRefill)
+  if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE state = 'done' AND history_state IN ('missing', 'given_up')`)).rows.length > 0) return no("join_history_missing", "this device has no earlier versions of its notes");
   if ((await snapshotRows(`SELECT 1 FROM sync_join`)).rows.length > 0) return no("join_already_done", "this database was already joined");
   if (incoming && incoming.sourceNode === (await localNodeId().catch(() => null))) return no("join_from_self", "a snapshot made on this node is not joined to this node");
   const shells = (await snapshotRows<{ id: string }>(`SELECT id::text FROM workspaces`)).rows;
@@ -295,15 +316,22 @@ function keptProblem(st: WireStamp): string | null {
   return src.check?.row({ texts: { [st.field]: kept.text }, values: undefined, bodyLength: () => undefined }) ?? null;
 }
 
+/** The header of a page, of the rows or of the history part: the data shape this node speaks, and the same workspace, source, cut, former ids and other origins as the
+ *  snapshot's first line. */
+function checkPageHeader(page: StampedPage | HistoryPage, join: JoinRow, of = { source: join.source_node, cut: Number(join.cut_seq), former: join.source_former, brought: join.source_brought }): void {
+  if (page.dataShape !== SYNC_DATA_SHAPE_VERSION) throw refuse("join_data_shape", `the page has data shape ${String(page.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: upgrade the older node first`, 409);
+  if (page.workspaceId !== join.workspace_id) throw refuse("join_wrong_workspace", "the page is of another workspace");
+  if (page.source !== of.source) throw refuse("join_wrong_source", "the page was made on another node");
+  if (page.cut !== of.cut) throw refuse("join_wrong_cut", "the page belongs to another export of the source (a different cut)");
+  if (sortedJson(page.former ?? {}) !== sortedJson(of.former)) throw refuse("join_wrong_former", "the page names other former ids of the source than the snapshot's first line");
+  if (sortedJson(page.brought ?? {}) !== sortedJson(of.brought)) throw refuse("join_wrong_brought", "the page names other origins of the source than the snapshot's first line");
+  if (!Number.isInteger(page.page) || page.page < 1) throw refuse("join_bad_page", "a page number is a whole number from 1");
+}
+
 /** Everything about the page that can be checked without writing: shape, tables, columns, workspace, stamps. Returns the readings. */
 async function checkPage(page: StampedPage, join: JoinRow, local: string, spacesAlreadyIn: boolean): Promise<ClockReading[]> {
-  if (page.dataShape !== SYNC_DATA_SHAPE_VERSION) throw refuse("join_data_shape", `the page has data shape ${String(page.dataShape)}, this node has ${SYNC_DATA_SHAPE_VERSION}: upgrade the older node first`, 409);
   if (page.layer !== "rows") throw refuse("join_layer_not_done", `the ${String(page.layer)} layer is not done yet`);
-  if (page.workspaceId !== join.workspace_id) throw refuse("join_wrong_workspace", "the page is of another workspace");
-  if (page.source !== join.source_node) throw refuse("join_wrong_source", "the page was made on another node");
-  if (page.cut !== Number(join.cut_seq)) throw refuse("join_wrong_cut", "the page belongs to another export of the source (a different cut)");
-  if (sortedJson(page.former ?? {}) !== sortedJson(join.source_former)) throw refuse("join_wrong_former", "the page names other former ids of the source than the snapshot's first line");
-  if (sortedJson(page.brought ?? {}) !== sortedJson(join.source_brought)) throw refuse("join_wrong_brought", "the page names other origins of the source than the snapshot's first line");
+  checkPageHeader(page, join);
   // the origins the snapshot vouches for: the source, the ids it had before it was restored, the other origins it holds, and the genesis stamp
   const brought = join.source_brought;
   const broughtOrigins = originsOf(brought);
@@ -317,7 +345,6 @@ async function checkPage(page: StampedPage, join: JoinRow, local: string, spaces
     if (broughtOrigins.has(w.origin) && w.seq > broughtBound(brought, label, w.origin)) return refuse("join_stamp_beyond_brought", "a stamp of another origin the source holds is beyond what the source says it holds of it");
     return null;
   };
-  if (!Number.isInteger(page.page) || page.page < 1) throw refuse("join_bad_page", "a page number is a whole number from 1");
   const seen = new Map<string, string>();
   const readings: ClockReading[] = [];
   // The order is part of the format: the rows of a table come after the rows of the tables before it in snapshotTables.json. It matters
@@ -427,14 +454,17 @@ async function clearWhatInsertTriggersMade(workspaceId: string): Promise<void> {
 
 async function lockJoin(workspaceId: string): Promise<JoinRow> {
   const row = (await snapshotRows<JoinRow>(
-    `SELECT workspace_id::text, source_node, cut_seq::text, source_former, source_brought, state, person_actor_id::text, page_hashes, applied_through FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
+    `SELECT workspace_id::text, source_node, cut_seq::text, source_former, source_brought, state, person_actor_id::text, page_hashes, applied_through,
+            history_hashes, history_through, history_state, history_scope, history_left_out, history_skipped, history_from
+       FROM sync_join WHERE workspace_id = $1 FOR UPDATE`, [workspaceId])).rows[0];
   if (!row) throw refuse("join_not_started", "no join was started for this workspace", 409);
   return row;
 }
 
 /** Write one page. Applying a page again with the same content changes nothing; with other content it is refused. Returns whether
- *  anything was written now. */
-export async function applyStampedPage(page: StampedPage): Promise<{ applied: boolean }> {
+ *  anything was written now. A page of the history part (layer `blobs` or `history`) goes to applyHistoryPage. */
+export async function applyStampedPage(page: StampedPage | HistoryPage): Promise<{ applied: boolean }> {
+  if (page.layer !== "rows") return applyHistoryPage(page);
   return withEventTransaction(page.workspaceId, async () => {
     const join = await lockJoin(page.workspaceId);
     if (join.state !== "joining") throw refuse("join_already_done", "this join is finished", 409);
@@ -479,11 +509,169 @@ export async function applyStampedPage(page: StampedPage): Promise<{ applied: bo
   });
 }
 
-/** The join record of a workspace, as the caller may show it (page numbers and counts only). */
-export async function readJoinProgress(workspaceId: string): Promise<{ state: "joining" | "done"; sourceNode: string; cutSeq: number; appliedThrough: number; pages: number[]; rowsApplied: number } | null> {
-  const row = (await snapshotRows<{ state: "joining" | "done"; source_node: string; cut_seq: string; applied_through: number; page_hashes: Record<string, string>; rows_applied: string }>(
-    `SELECT state, source_node, cut_seq::text, applied_through, page_hashes, rows_applied::text FROM sync_join WHERE workspace_id = $1`, [workspaceId])).rows[0];
-  return row ? { state: row.state, sourceNode: row.source_node, cutSeq: Number(row.cut_seq), appliedThrough: row.applied_through, pages: Object.keys(row.page_hashes).map(Number).sort((a, b) => a - b), rowsApplied: Number(row.rows_applied) } : null;
+/** Where a join's history part is (migration 229 sync_join.history_state). */
+type HistoryState = "arriving" | "done" | "given_up" | "missing";
+// BROWSER_INK_HISTORY_LIMIT_BYTES (@onden/markdown, shared with the screen's room estimate): the threshold of the proposal's §10 question 4, decided 2026-11-22
+// ("都按建議"): "在 50 MB 以內，瀏覽器版就全部存。超過的話，先只存內文歷史，並在畫面上說明。" Measured as the question says, by the drawings' chunks and manifests
+// (and the blobs only drawings name): HistoryPage.inkBytes.
+
+/** The join record of a workspace, as the caller may show it (page numbers and counts only). `historyState`: where its history part is (`arriving`: the notes are in,
+ *  the history part is not; `done`; `given_up`: the person stopped waiting for it; `missing`: joined before a snapshot carried any; given_up and missing: this device
+ *  has no earlier versions of the source, is no snapshot source, and a file of the same source brings them in); `historyCut`: the cut of the file the history part comes
+ *  from (the join's, or a refill's newer one); `historyThrough`: the
+ *  history part is in up to that page; `historyScope`: `body` when only the text history is kept (the browser version over the threshold); `historyLeftOut`: versions
+ *  the source holds without their content, so not sent. `historyDone`: the history part is no longer arriving. */
+export async function readJoinProgress(workspaceId: string): Promise<{
+  state: "joining" | "done"; sourceNode: string; cutSeq: number; appliedThrough: number; pages: number[]; rowsApplied: number;
+  historyState: HistoryState; historyCut: number; historyRefill: boolean; historyThrough: number; historyScope: HistoryScope; historyLeftOut: number; historyDone: boolean;
+} | null> {
+  const row = (await snapshotRows<{ state: "joining" | "done"; source_node: string; cut_seq: string; applied_through: number; page_hashes: Record<string, string>; rows_applied: string;
+    history_state: HistoryState; history_through: number; history_scope: HistoryScope; history_left_out: number; history_from: HistoryFrom | null }>(
+    `SELECT state, source_node, cut_seq::text, applied_through, page_hashes, rows_applied::text, history_state, history_through, history_scope, history_left_out, history_from
+       FROM sync_join WHERE workspace_id = $1`,
+    [workspaceId])).rows[0];
+  return row ? {
+    state: row.state, sourceNode: row.source_node, cutSeq: Number(row.cut_seq), appliedThrough: row.applied_through, pages: Object.keys(row.page_hashes).map(Number).sort((a, b) => a - b),
+    rowsApplied: Number(row.rows_applied), historyState: row.history_state, historyCut: row.history_from?.cut ?? Number(row.cut_seq), historyRefill: row.history_from !== null, historyThrough: row.history_through, historyScope: row.history_scope,
+    historyLeftOut: row.history_left_out, historyDone: row.history_state !== "arriving",
+  } : null;
+}
+
+/** Whether a rows page is the one this join applied under its number (a file sent again to bring in the rest of its history part: its rows are not written again). */
+export async function rowsPageAlreadyApplied(page: StampedPage): Promise<boolean> {
+  const row = (await snapshotRows<{ page_hashes: Record<string, string> }>(`SELECT page_hashes FROM sync_join WHERE workspace_id = $1`, [page.workspaceId])).rows[0];
+  return row?.page_hashes[String(page.page)] === sha256Hex(sortedJson(page));
+}
+
+/**
+ * Take one page of the HISTORY PART (spine/historyLayer.ts): after the notes are in (markJoinDone; the workspace is in use meanwhile), while it is arriving. Pages
+ * come in order, from 1 (`join_history_order` otherwise); a page again with the same content writes nothing new, with other content it is refused
+ * (`join_page_changed`), so a transfer cut at any page is resumed by sending the pages again (from the start or from the next one) and rewrites nothing. A content
+ * page again writes what of its content is not there any more (the cleanup may have taken it while its versions had not arrived: review of PR #1988 point 4c), so
+ * sending the same file again is always a way on. The header is the rows pages' (the same source, cut, former and brought). The first page decides what is kept
+ * (`history_scope`): the text history only when the source holds no more (HistoryPage.textOnly), or on the browser version when the drawings' history is over
+ * BROWSER_INK_HISTORY_LIMIT_BYTES. A page is checked whole
+ * and written in one transaction: a refusal (`join_history_*`) leaves the database as it was.
+ */
+async function applyHistoryPage(page: HistoryPage): Promise<{ applied: boolean }> {
+  return withEventTransaction(page.workspaceId, async () => {
+    const join = await lockJoin(page.workspaceId);
+    if (join.state !== "done") throw refuse("join_history_order", "the earlier versions come after the notes, and the notes are not all in yet", 409);
+    const header = historyHeader(join);
+    checkPageHeader(page, join, header);
+    if (!Number.isSafeInteger(page.inkBytes) || page.inkBytes < 0) throw refuse("join_history_shape", "a page says what the drawings' history takes, as a whole number");
+    if (typeof page.textOnly !== "boolean") throw refuse("join_history_shape", "a page says whether its source holds the text history only");
+    if (page.page > 1 && page.textOnly && join.history_scope !== "body") throw refuse("join_history_shape", "a page says its source holds the text history only, and the first page did not");
+    const hash = sha256Hex(sortedJson(page));
+    const before = join.history_hashes[String(page.page)];
+    if (before !== undefined && before !== hash) throw refuse("join_page_changed", "this page number was already applied with other content", 409);
+    if (join.history_state !== "arriving") {
+      if (before !== undefined) return { applied: false };
+      throw refuse("join_page_extra", "the earlier versions are not arriving any more", 409);
+    }
+    const vouch = { ...header, local: await localNodeId() };
+    const refill = join.history_from !== null;
+    if (before !== undefined) {
+      // a content page again: what of its content the cleanup took since is written again (only what is missing: nothing is rewritten)
+      if (page.layer === "blobs") {
+        checkHistoryItems(page, vouch);
+        await writeHistoryItems(page.workspaceId, page.items, await notesHeldHere(page.workspaceId, notesNamedBy(page.items), refill), join.history_scope);
+      }
+      return { applied: false };
+    }
+    if (page.page !== join.history_through + 1) throw refuse("join_history_order", "the parts of the earlier versions come in order", 409);
+    // the text history only: the source holds no more (textOnly), or this is the browser version and the drawings' history is over its threshold
+    const scope: HistoryScope = page.page === 1 ? (page.textOnly || (config.is("ONDEN_BROWSER_APP", "1") && page.inkBytes > BROWSER_INK_HISTORY_LIMIT_BYTES) ? "body" : "all") : join.history_scope;
+    checkHistoryItems(page, vouch);
+    const { skipped } = await writeHistoryItems(page.workspaceId, page.items, await notesHeldHere(page.workspaceId, notesNamedBy(page.items), refill), scope);
+    await snapshotRows(`UPDATE sync_join SET history_hashes = history_hashes || $2::jsonb, history_through = $3, history_scope = $4, history_skipped = history_skipped || $5::jsonb WHERE workspace_id = $1`,
+      [page.workspaceId, JSON.stringify({ [String(page.page)]: hash }), page.page, scope, JSON.stringify(skipped)]);
+    return { applied: true };
+  });
+}
+
+/** Of `ids`, the notes this database holds that have a version list, those it holds that have none (a system note: note_version_in_scope),
+ *  and those it deleted for good (a `*` tombstone of the row): what a page of the history part may name. In a refill (`notesMayBeNewer`: the file is newer than the
+ *  notes this device took) a note it never had is one the source wrote since: its versions are skipped like those of a note deleted here, never refused. */
+async function notesHeldHere(workspaceId: string, ids: string[], notesMayBeNewer = false) {
+  if (ids.length === 0) return { held: new Set<string>(), withoutVersions: new Set<string>(), goneForGood: new Set<string>() };
+  // by the table list (the copy names no core table in SQL text: guards/nodeStoreOwnership.guard.test.ts), the whole workspace: live or in the trash
+  const rows = await readCarriedRows("content_nodes", workspaceId, rowMatchOf(UNIT_SOURCES.find((src) => src.table === "content_nodes")!, ids), "'{}'::jsonb", () => wholeWorkspace());
+  const held = new Set<string>(), withoutVersions = new Set<string>();
+  // which of them have a version list: the database's one rule (note_version_in_scope, migrations 220 and 231), asked, not copied
+  const found = [...rows];
+  const inScope = new Set(found.length === 0 ? [] : (await snapshotRows<{ id: string }>(
+    `SELECT r.id FROM unnest($1::text[], $2::text[], $3::text[]) AS r(id, node_type, source_type) WHERE note_version_in_scope(r.node_type, r.source_type)`,
+    [found.map(([id]) => id), found.map(([, row]) => String(row.v.node_type)), found.map(([, row]) => (row.v.source_type === null || row.v.source_type === undefined ? null : String(row.v.source_type)))])).rows.map((r) => r.id));
+  for (const [id] of found) (inScope.has(id) ? held : withoutVersions).add(id);
+  const missing = ids.filter((n) => !rows.has(n));
+  if (notesMayBeNewer) return { held, withoutVersions, goneForGood: new Set(missing) };
+  const goneForGood = new Set(missing.length === 0 ? [] : (await snapshotRows<{ id: string }>(
+    `SELECT row_key AS id FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = ANY($2::text[]) AND field = '*' AND deleted`, [workspaceId, missing])).rows.map((r) => r.id));
+  return { held, withoutVersions, goneForGood };
+}
+
+/** Every page of the history part is in and the versions this node received (their identity, positions and content, with those it skipped because it deleted
+ *  their note for good meanwhile) equal what the source said it sent: the join's history part is done, and this node may be a snapshot source again
+ *  (services/stampedSnapshot.ts snapshotSourceNode). Compared with the source's digest of what this node keeps (all, or the text history only). ONE transaction under
+ *  the event lock. Not arriving any more: nothing to do. Refuses (nothing changes) otherwise: `join_page_missing`, `join_page_extra`, `join_history_digest_mismatch`. */
+export async function markHistoryDone(workspaceId: string, expected: { pages: number; digests: HistoryDigests }): Promise<void> {
+  await withEventTransaction(workspaceId, async () => {
+    const join = await lockJoin(workspaceId);
+    if (join.state !== "done") throw refuse("join_history_order", "the earlier versions come after the notes, and the notes are not all in yet", 409);
+    if (join.history_state !== "arriving") return;
+    for (let p = 1; p <= expected.pages; p++) if (join.history_hashes[String(p)] === undefined) throw refuse("join_page_missing", `page ${p} of the earlier versions did not arrive`, 409);
+    if (Object.keys(join.history_hashes).length !== expected.pages) throw refuse("join_page_extra", "more pages of the earlier versions arrived than the snapshot has", 409);
+    const want = expected.digests[join.history_scope];
+    if (!want) throw refuse("join_history_shape", "the end of the earlier versions does not say what they add up to");
+    const leftOut = { all: expected.digests.all.leftOut, body: expected.digests.body.leftOut };
+    const held = (await receivedHistoryDigests(workspaceId, await localNodeId(), join.history_skipped, leftOut))[join.history_scope];
+    if (sortedJson(held) !== sortedJson(want)) {
+      throw refuse("join_history_digest_mismatch", `the earlier versions differ from the source's (versions ${held.versions - want.versions >= 0 ? "+" : ""}${held.versions - want.versions}, content ${held.contents - want.contents >= 0 ? "+" : ""}${held.contents - want.contents}, restored from ${held.dangling - want.dangling})`, 409);
+    }
+    await snapshotRows(`UPDATE sync_join SET history_state = 'done', history_left_out = $2 WHERE workspace_id = $1`, [workspaceId, want.leftOut]);
+  });
+}
+
+/** The person stops waiting for the earlier versions of a join (review of PR #1988 point 1 (ii)): what had arrived of them is removed (the versions this node
+ *  received; their content goes with the next cleanup), and the join's history part is `given_up`: like a join before migration 229 (`missing`), this device has
+ *  no earlier versions of the source, so it is no snapshot source until a file of the source brings them in (beginHistoryRefill). Nothing of this node's own
+ *  versions is touched. Only while it is arriving (`join_history_not_arriving` otherwise). */
+export async function giveUpHistory(actor: ActorCtx, workspaceId: string): Promise<{ removed: number }> {
+  // a person, never a temporary session: what is removed comes back only with the file again (sessionDeletes.guard.test.ts)
+  requirePerson(actor, "stop waiting for the earlier versions of a snapshot");
+  return withEventTransaction(workspaceId, async () => {
+    const join = await lockJoin(workspaceId);
+    if (join.state !== "done" || join.history_state !== "arriving") throw refuse("join_history_not_arriving", "the earlier versions of this device are not arriving", 409);
+    const local = await localNodeId();
+    // the state first: the trigger note_version_keep_skipped (migration 229) keeps a removed version's digest only while the history part is `arriving`, so
+    // deleting before would append one entry per removed row to history_skipped (each append rewriting the whole list) only to clear it after
+    await snapshotRows(`UPDATE sync_join SET history_state = 'given_up', history_skipped = '[]'::jsonb WHERE workspace_id = $1`, [workspaceId]);
+    const removed = (await snapshotRows<{ n: number }>(
+      `WITH gone AS (DELETE FROM note_versions v WHERE v.workspace_id = $1
+          AND NOT EXISTS (SELECT 1 FROM note_version_positions p WHERE p.note_id = v.note_id AND p.unit = v.unit AND p.version_key = v.version_key AND p.origin = $2)
+        RETURNING 1) SELECT count(*)::int AS n FROM gone`, [workspaceId, local])).rows[0]!.n;
+    return { removed };
+  });
+}
+
+/** A device without the earlier versions of its notes (`missing`: joined before migration 229; `given_up`) takes them from a file of the SAME source
+ *  (the owner's decision of 2026-11-23 on PR #1988): only the file's history part, never its rows (the notes stay as they are). The file may be newer than the
+ *  notes this device took: its header (cut, former ids, other origins) is what its history pages must carry and what vouches for their positions
+ *  (`history_from`), and a version of a note this device never had is skipped, counted in the digest like one deleted here meanwhile (notesHeldHere). The
+ *  history part starts again from page 1 and is `arriving`. Refuses: `join_history_not_missing` (this device is not without its history), `join_history_other_source`
+ *  (a file of another device), `join_history_other_file` (a file older than the notes this device took). */
+export async function beginHistoryRefill(workspaceId: string, file: { source: string; cut: number; former?: Record<string, number>; brought?: Record<string, Record<string, number>> }): Promise<void> {
+  await withEventTransaction(workspaceId, async () => {
+    const join = await lockJoin(workspaceId);
+    if (join.state !== "done" || (join.history_state !== "missing" && join.history_state !== "given_up")) throw refuse("join_history_not_missing", "this device is not without its earlier versions", 409);
+    if (file.source !== join.source_node) throw refuse("join_history_other_source", "the file was made on another device than the one this device took its notes from", 409);
+    if (!Number.isSafeInteger(file.cut) || file.cut < Number(join.cut_seq)) throw refuse("join_history_other_file", "the file is older than the notes this device took", 409);
+    const from: HistoryFrom = { cut: file.cut, former: file.former ?? {}, brought: file.brought ?? {} };
+    await snapshotRows(
+      `UPDATE sync_join SET history_state = 'arriving', history_from = $2::jsonb, history_hashes = '{}'::jsonb, history_through = 0, history_scope = 'all', history_left_out = 0,
+              history_skipped = '[]'::jsonb WHERE workspace_id = $1`, [workspaceId, JSON.stringify(from)]);
+  });
 }
 
 /** The two databases hold different things: which tables, rows or stamps, and by how many (counts only, never content). */

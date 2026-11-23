@@ -3934,6 +3934,7 @@ INSERT INTO schema_migrations (version) VALUES ('223_text_attributes_stamped') O
 INSERT INTO schema_migrations (version) VALUES ('224_sync_restore_kept_node_id') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('225_analyze_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('229_sync_join_history') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
 
@@ -7535,6 +7536,41 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 229: the join remembers how far the history part of a snapshot has arrived (db/migrations/229_sync_join_history.sql)
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_hashes jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_through integer NOT NULL DEFAULT 0;
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_scope text NOT NULL DEFAULT 'all' CHECK (history_scope IN ('all', 'body'));
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_left_out integer NOT NULL DEFAULT 0;
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_skipped jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_from jsonb;
+ALTER TABLE sync_join ADD COLUMN IF NOT EXISTS history_state text NOT NULL DEFAULT 'arriving' CHECK (history_state IN ('arriving', 'done', 'given_up', 'missing'));
+CREATE OR REPLACE FUNCTION note_version_digest(p_note uuid, p_unit text, p_key text, p_kind text, p_title text, p_hash text, p_at text, p_wall bigint, p_counter int,
+                                               p_ordinal int, p_author_kind text, p_author uuid, p_restored text, p_source text, p_positions jsonb) RETURNS text AS $$
+  SELECT encode(sha256(convert_to(jsonb_build_array(p_note, p_unit, p_key, p_kind, p_title, p_hash, CASE WHEN p_key LIKE 'b:%' THEN NULL ELSE p_at END, p_wall, p_counter,
+                                                    p_ordinal, p_author_kind, p_author, p_restored, p_source, COALESCE(p_positions, '[]'::jsonb))::text, 'UTF8')), 'hex');
+$$ LANGUAGE sql IMMUTABLE;
+
+-- A version this node received is removed while the history part is arriving (its note deleted for good here meanwhile, by the cascade): its digest is kept in
+-- history_skipped, so the history part still completes (review of PR #1988 point 4b). Before the row goes, so its positions are still there.
+CREATE OR REPLACE FUNCTION note_version_keep_skipped() RETURNS trigger AS $$
+DECLARE v_local text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM sync_join j WHERE j.workspace_id = OLD.workspace_id AND j.state = 'done' AND j.history_state = 'arriving') THEN RETURN OLD; END IF;
+  SELECT node_id INTO v_local FROM sync_node WHERE singleton;
+  IF NOT EXISTS (SELECT 1 FROM note_version_positions p WHERE p.note_id = OLD.note_id AND p.unit = OLD.unit AND p.version_key = OLD.version_key AND p.origin IS DISTINCT FROM v_local) THEN RETURN OLD; END IF;
+  UPDATE sync_join SET history_skipped = history_skipped || jsonb_build_array(jsonb_build_object(
+      'k', OLD.note_id::text || '/' || OLD.unit || '/' || OLD.version_key, 'nu', OLD.note_id::text || '/' || OLD.unit, 'unit', OLD.unit, 'restoredFrom', OLD.restored_from,
+      'h', note_version_digest(OLD.note_id, OLD.unit, OLD.version_key, OLD.kind, OLD.title, OLD.content_hash, OLD.at, OLD.clock_wall, OLD.clock_counter, OLD.ordinal, OLD.author_kind,
+             OLD.author_id, OLD.restored_from, OLD.source_name,
+             (SELECT jsonb_agg(jsonb_build_array(p.origin, p.seq) ORDER BY p.origin COLLATE "C", p.seq) FROM note_version_positions p
+               WHERE p.note_id = OLD.note_id AND p.unit = OLD.unit AND p.version_key = OLD.version_key AND p.origin IS DISTINCT FROM v_local)),
+      'c', CASE WHEN OLD.content_hash IS NULL THEN NULL WHEN OLD.unit = 'body' THEN 'body:' || OLD.content_hash ELSE 'ink:' || OLD.note_id || ':' || OLD.content_hash END))
+   WHERE workspace_id = OLD.workspace_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS note_versions_keep_skipped ON note_versions;
+CREATE TRIGGER note_versions_keep_skipped BEFORE DELETE ON note_versions FOR EACH ROW EXECUTE FUNCTION note_version_keep_skipped();
 -- 230: "deleted together" is judged from stamps and a small group table, not from this node's events (db/migrations/230_trash_groups.sql)
 CREATE OR REPLACE FUNCTION trash_deleted_stamp(p_workspace uuid, p_note uuid) RETURNS text
 LANGUAGE sql STABLE AS $$

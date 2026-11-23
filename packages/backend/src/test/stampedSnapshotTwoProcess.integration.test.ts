@@ -112,7 +112,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
 
   it("fills the empty database through POST /api/snapshot, and that database is done", () => {
     expect(receiver.status).toBe(200);
-    const sent = source.stream.trim().split("\n").filter((line) => (JSON.parse(line) as { kind: string }).kind === "page").length;
+    const sent = source.stream.trim().split("\n").filter((line) => { const m = JSON.parse(line) as { kind: string; page?: { layer: string } }; return m.kind === "page" && m.page!.layer === "rows"; }).length;
     expect(sent).toBeGreaterThan(0);
     expect(receiver.answer.pages).toBe(sent);
     expect(receiver.join).toEqual([{ state: "done", applied_through: sent }]);
@@ -206,7 +206,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(lines.length).toBeGreaterThan(2);
       for (const line of lines) expect(line.startsWith('{"kind":"'), line.slice(0, 60)).toBe(true);
       expect(JSON.parse(lines[0]!)).toMatchObject({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION });
-      expect(SYNC_DATA_SHAPE_VERSION).toBe(8); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived), 6 since migration 222 (`have` per label; a snapshot brings the other origins its source holds), 7 with no migration (a row that is not on a node keeps only its `*`), 8 since migration 223 (text-made attribute values are units): spine/syncDataShape.ts
+      expect(SYNC_DATA_SHAPE_VERSION).toBe(9); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived), 6 since migration 222 (`have` per label; a snapshot brings the other origins its source holds), 7 with no migration (a row that is not on a node keeps only its `*`), 8 since migration 223 (text-made attribute values are units), 9 since migration 229 (a snapshot carries the earlier versions): spine/syncDataShape.ts
     });
 
     it("an importer refuses a file whose first line has no data shape, or another one, with join_data_shape, before a join starts; the empty database is still ready", () => {

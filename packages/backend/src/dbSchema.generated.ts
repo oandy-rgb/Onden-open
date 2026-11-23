@@ -1022,6 +1022,16 @@ export interface SyncStamps {
   workspace_id: string;
 }
 
+export interface TrashGroups {
+  note_id: string;
+  note_stamp: string;
+  ordinal: number;
+  retired: Generated<boolean>;
+  root_id: string;
+  root_stamp: string;
+  workspace_id: string;
+}
+
 export interface Workspaces {
   created_at: Generated<Timestamp>;
   day_start_hour: Generated<number>;
@@ -1128,5 +1138,6 @@ export interface DB {
   sync_restore_kept_node_id: SyncRestoreKeptNodeId;
   sync_stamp_heads: SyncStampHeads;
   sync_stamps: SyncStamps;
+  trash_groups: TrashGroups;
   workspaces: Workspaces;
 }

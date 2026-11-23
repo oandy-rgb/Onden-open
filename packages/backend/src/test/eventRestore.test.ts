@@ -213,8 +213,9 @@ describe("ER6 restoreEvent — NODE_DELETED", () => {
     primeEvent({ event_type: "NODE_DELETED", target_id: "n-1" });
     // Idempotency probe: node row, deleted_at non-null.
     resultQueue.push({ rows: [{ deleted_at: "2026-06-05T00:00:00Z", title: "Trashed" }], rowCount: 1 });
-    // restoreLive's plan: no deleted note above it, none deleted with it.
-    resultQueue.push({ rows: [], rowCount: 0 }, { rows: [], rowCount: 0 });
+    // restoreLive's plan: no deleted note above it, none deleted with it (the note's row and stamp are not found: nothing comes with it);
+    // then no note left behind (nodeTrash.ts markLeftBehind).
+    resultQueue.push({ rows: [], rowCount: 0 }, { rows: [], rowCount: 0 }, { rows: [], rowCount: 0 });
     // markLive reads the row its slug follows (the slug lookups and the UPDATE
     // then get the empty default).
     resultQueue.push({ rows: [{ id: "n-1", title: "Trashed", node_type: "content", slug: "trashed", reserved_key: null }], rowCount: 1 });

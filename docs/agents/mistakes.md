@@ -1223,6 +1223,7 @@
 - **為什麼沒擋到**：把「改到的行為的測試都綠」當成完成，沒有想到搬動語句也會動到以函式名登記的靜態清單；`spineGate.test.ts` 不在 guards 資料夾，只跑守門通道也抓不到。
 - **類別**：驗證範圍比改動的影響小（同 2026-11-22 那一條）。
 - **機制**：〔第 1 層〕改寫入、刪除或交易邊界的提交，推之前在 packages/backend 跑一次 `npm run test:no-db`（所有不需資料庫的測試，含這兩張清單），再跑 `scripts/guard-lane.sh`。尚無自動機制擋「只跑了一部分」。
+- 2026-11-23 再一次（PR #1989，公開 CI run 45164436079）：`nodeTrash.ts` 不再讀事件，`readGuard.test.ts` 的 `EVENT_READS` 清單還列著它；我跑了 `src/test/guards/` 與改到的檔，沒有跑 `npm run test:no-db`，而這則守門不在 guards 資料夾。機制已寫在上一行，這次是沒照做；「只跑 guards 資料夾」不夠，這一條仍尚無自動機制。
 ### 2026-11-23　合併核心的說明寫「兩台標記相同」，其實不同（「round 10, 4」，分支 fix/sync-valueless-heads-follow-row）
 - **發生了什麼**：`spine/stampedMerge/README.md` 對「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」寫「兩台標記相同，只有位置不同」。釘住的測試只比位置，沒有比標記。三台隨機測試的種子 989453 紅在這個情境：清空的那一台留著子筆記 `parent` 的一列標記（帶著被刪父層的 id），之後才建出子筆記的那一台沒有。
 - **證據**：`anchorsReplicated.integration.test.ts`「round 10, 4 (stamps)」兩則（一則斷言今天的差別、一則 `it.fails` 斷言相同）；修正前與修正後的程式都重現。

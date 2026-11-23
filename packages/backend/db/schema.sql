@@ -3934,6 +3934,7 @@ INSERT INTO schema_migrations (version) VALUES ('223_text_attributes_stamped') O
 INSERT INTO schema_migrations (version) VALUES ('224_sync_restore_kept_node_id') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('225_analyze_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -7532,3 +7533,21 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 230: "deleted together" is judged from stamps and a small group table, not from this node's events (db/migrations/230_trash_groups.sql)
+CREATE OR REPLACE FUNCTION trash_deleted_stamp(p_workspace uuid, p_note uuid) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT s.origin || '/' || s.seq::text FROM sync_stamps s
+   WHERE s.workspace_id = p_workspace AND s.table_name = 'content_nodes' AND s.row_key = p_note::text AND s.field = 'deleted' AND s.origin <> 'genesis'
+$$;
+CREATE TABLE IF NOT EXISTS trash_groups (
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  root_id uuid NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
+  note_id uuid NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
+  ordinal integer NOT NULL,
+  root_stamp text NOT NULL,
+  note_stamp text NOT NULL,
+  retired boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (root_id, root_stamp, note_id)
+);
+CREATE INDEX IF NOT EXISTS trash_groups_note_idx ON trash_groups (note_id);

@@ -58,6 +58,7 @@ export const BACKUP_COVERAGE: Record<string, BackupCoverage> = {
   // (spine/importedHistory.ts). Not carried: a drawing's earlier versions and their positions, the loss already listed
   // under ink_manifests / ink_chunks, and where each version was first written (the move records it as written here).
   note_versions: { carried: { by: "history" } },
+  trash_groups: left("which notes went to the trash together; a restore deletes the backup's deleted notes again (services/backupRestore.ts), and those deletes write their own stamps and groups"),
   note_version_positions: { carried: { by: "history" } },
   media_uploads: { carried: { by: "attachments" } },
   // ── The person's own state (a workspace move) ──

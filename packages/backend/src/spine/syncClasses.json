@@ -277,6 +277,10 @@
   "class": "separate",
   "note": "a note's versions (body: title and text; a drawing: its attribute key), one row each, keyed by (note, unit, version_key); minted once by the node that wrote it and never changed, so copies cannot conflict (the set is the union). Batch 1 of docs/architecture/proposals/history-replication-2026-11-22.md (migration 220): minted and kept here, not carried yet; the snapshot's history layer and the bundles' versions are batches 3 and 4"
  },
+ "trash_groups": {
+  "class": "separate",
+  "note": "\"deleted together\" groups the stamps cannot tell (services/nodeTrash.ts deletedTogether): those deleted before migration 230, written there from this node's event chain, and a transaction that deleted a subtree inside another one; each row names the stamps it holds for and is never changed. History batch 5 of docs/architecture/proposals/history-replication-2026-11-22.md: kept here, not carried yet; the snapshot's history layer and the bundles carry it with note_versions (batches 3 and 4)"
+ },
  "note_version_positions": {
   "class": "separate",
   "note": "where each version travels from: (origin, seq), a set that only grows (proposal §2.5); this node's record, not part of a version's identity. Carried with note_versions from batch 4"

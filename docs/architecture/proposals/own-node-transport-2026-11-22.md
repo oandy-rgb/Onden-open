@@ -327,7 +327,7 @@
 | 地方 | 今天讀什麼 | 改成 |
 | --- | --- | --- |
 | `services/tasksStore.ts:403-409` `taskMintedNextOccurrence` | `NODE_CREATED … rolled_from` | 讀複製的狀態：下一筆的 id 是算出來的（`:411-414`），這台握有它的建立標記或墓碑＝建過 |
-| `services/nodeTrash.ts:100-106` `restorePlan` 的子樹 | `deleted_by_event_id` 串起同一次刪除的事件 | 讀 `deleted` 單位：同一次刪除寫的那幾列共用寫入的標記【沒驗證：一個交易裡的寫入是否共用同一個 (來源, 序號)】；這一點和歷史提案第 5 批重疊，**由本提案 4b 做**，歷史提案沿用 |
+| `services/nodeTrash.ts:100-106` `restorePlan` 的子樹 | `deleted_by_event_id` 串起同一次刪除的事件 | 讀 `deleted` 單位：同一次刪除寫的那幾列共用寫入的標記【沒驗證：一個交易裡的寫入是否共用同一個 (來源, 序號)】；這一點和歷史提案第 5 批重疊，**由本提案 4b 做**，歷史提案沿用。**更新（2026-11-23）**：業主改派給歷史提案第 5 批做（`deletedTogether`，migration 230；一個交易的寫入確實共用一個標記，有測試）；4b 不必再做這一列 |
 | `modules/importers/shared/identity.ts:28-45` | 本機的 `NODE_CREATED` 的 `tx_meta`（`import.obsidian`）與來源 `derived` 的 `_import_path` | 匯入的身分（`_import_path`、`_import_baseline`、`_import_folder_path`）改成帶標記的來源、跟著包走；不再要求本機的建立事件——否則在另一台重新匯入會整批重複 |
 | `services/harness/noteSkills.ts:80-89` | 事件的 `actor_id` | 不改讀法；收包事件的 `actor_id` 是標記的作者（上面） |
 | `services/patchedValue.ts:32-40` `keptText` | 這則筆記歷史裡提到的 blob | 不改讀法；收包事件帶 `body_hash` 與 blob（上面） |

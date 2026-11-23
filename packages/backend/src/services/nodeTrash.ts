@@ -10,7 +10,10 @@
 //   - trashLive deletes a note with its live subtree, each descendant with its
 //     own NODE_DELETED chained (triggered_by) to the note's.
 //   - restoreLive brings a note back with the subtree deleted together with it
-//     (that chain) and, first, every deleted note above it.
+//     and, first, every deleted note above it. "Together" is read from facts
+//     every node holds — the delete's write stamp, or a group of
+//     trash_groups (deletedTogether, migration 230) — never from the chain,
+//     which only this node has.
 // Every delete and every way back goes through these two: the delete route
 // (trashNode), the undo toast (undeleteNode) and History's restore of a
 // NODE_DELETED / NODE_UNDELETED / NODE_CREATED event
@@ -33,6 +36,8 @@
 // with the change. A purge does not: the note was already deleted, so off the
 // site, and the stored snapshots are rewritten in the purge itself.
 
+import { sql, type OnConflictBuilder } from "kysely";
+import type { DB } from "../dbSchema.generated.js";
 import { db } from "../dbKysely.js";
 import { q } from "../db.js";
 import { mutate, runCascade } from "../spine/mutate.js";
@@ -84,9 +89,9 @@ type TitledNode = { id: string; title: string };
  *  itself).
  *   - `ancestors`: the deleted notes above it, top first. Without them it
  *     would come back under a deleted parent.
- *   - `subtree`: the notes deleted together with it — each one's delete
- *     chained to the delete that holds `nodeId` — in delete order. A
- *     descendant deleted on its own before or after stays deleted. */
+ *   - `subtree`: the notes deleted together with it (deletedTogether), in
+ *     delete order. A descendant deleted on its own before or after stays
+ *     deleted. */
 export async function restorePlan(
   workspaceId: string, nodeId: string,
 ): Promise<{ ancestors: TitledNode[]; subtree: TitledNode[] }> {
@@ -98,17 +103,98 @@ export async function restorePlan(
   )).rows;
   const titleOf = new Map(deletedAbove.map((row) => [row.id, row.title]));
   const ancestors = above.filter((id) => titleOf.has(id)).reverse().map((id) => ({ id, title: titleOf.get(id)! }));
-  const subtree = (await q<TitledNode>(
-    `SELECT n.id::text, n.title FROM content_nodes root
-       JOIN domain_events e ON e.triggered_by_event_id = root.deleted_by_event_id
-                           AND e.event_type = 'NODE_DELETED'
-       JOIN content_nodes n ON n.deleted_by_event_id = e.id AND n.workspace_id = root.workspace_id
-      WHERE root.workspace_id = $1 AND root.id = $2 AND root.deleted_at IS NOT NULL
-        AND n.deleted_at IS NOT NULL AND n.id <> root.id
-      ORDER BY e.id`,
-    [workspaceId, nodeId],
-  )).rows;
+  const subtree = await deletedTogether(workspaceId, nodeId);
   return { ancestors, subtree };
+}
+
+/** `trash_deleted_stamp` (migration 230): the write stamp of a note's `deleted` unit, '' when it has none (or the genesis one). */
+const deletedStamp = (workspaceId: string, nodeId: string | ReturnType<typeof sql.ref>) =>
+  sql<string>`COALESCE(trash_deleted_stamp(${workspaceId}::uuid, ${nodeId}::uuid), '')`;
+
+/** The notes deleted together with the deleted `nodeId`, in delete order, judged from facts every node holds (migration 230; proposal
+ *  docs/architecture/proposals/history-replication-2026-11-22.md §7), never from this node's events:
+ *   1. an explicit group of `nodeId` in trash_groups whose stamps still hold: its listed notes that are still deleted;
+ *   2. else, unless its parent is deleted with the same stamp (then it was taken along: nothing comes with it), its descendants still
+ *      deleted whose `deleted` unit has its stamp — one delete is one transaction, one stamp, on every node.
+ *  Ids and titles only, no read policy. */
+async function deletedTogether(workspaceId: string, nodeId: string): Promise<TitledNode[]> {
+  const root = await db.selectFrom("content_nodes as r").where("r.workspace_id", "=", workspaceId).where("r.id", "=", nodeId).where("r.deleted_at", "is not", null)
+    .select((eb) => [
+      "r.node_type", deletedStamp(workspaceId, sql.ref("r.id")).as("stamp"),
+      eb.exists(eb.selectFrom("content_nodes as p").whereRef("p.id", "=", "r.parent_id").where("p.deleted_at", "is not", null)
+        .where(sql<boolean>`${deletedStamp(workspaceId, sql.ref("p.id"))} = ${deletedStamp(workspaceId, sql.ref("r.id"))}`).select("p.id")).as("taken_along"),
+    ]).executeTakeFirst();
+  if (!root) return [];
+  if (await hasExplicitGroup(workspaceId, nodeId)) {
+    return groupRows(workspaceId).innerJoin("content_nodes as n", "n.id", "g.note_id").where("g.ordinal", ">", 0).where("n.deleted_at", "is not", null)
+      .where(sql<boolean>`g.note_stamp = ${deletedStamp(workspaceId, sql.ref("n.id"))}`)
+      .where("g.root_id", "=", nodeId).select(["n.id", "n.title"]).orderBy("g.ordinal").execute();
+  }
+  if (root.stamp === "" || root.taken_along) return [];
+  const below = await subtreeIds(workspaceId, nodeId, { lifecycle: "all", skipTagDefinitions: !isTag(root) });
+  return sameStamp(workspaceId, below, root.stamp);
+}
+
+/** The rows of trash_groups that still hold: written for `root_id` while it had the stamp it has now, and not retired (forgetGroupsOf). */
+const groupRows = (workspaceId: string) => db.selectFrom("trash_groups as g").where("g.workspace_id", "=", workspaceId).where("g.retired", "=", false)
+  .where(sql<boolean>`g.root_stamp = ${deletedStamp(workspaceId, sql.ref("g.root_id"))}`).select("g.note_id");
+
+/** Whether `nodeId` has an explicit group that still holds (its marker row: root and note both `nodeId`). */
+const hasExplicitGroup = async (workspaceId: string, nodeId: string): Promise<boolean> =>
+  !!(await groupRows(workspaceId).where("g.root_id", "=", nodeId).where("g.note_id", "=", nodeId).executeTakeFirst());
+
+/** Of `ids` (in that order), the deleted notes whose `deleted` unit carries `stamp`. */
+async function sameStamp(workspaceId: string, ids: string[], stamp: string): Promise<TitledNode[]> {
+  if (ids.length === 0 || stamp === "") return [];
+  const rows = await db.selectFrom("content_nodes as n").where("n.workspace_id", "=", workspaceId).where("n.id", "in", ids).where("n.deleted_at", "is not", null)
+    .where(sql<boolean>`${deletedStamp(workspaceId, sql.ref("n.id"))} = ${stamp}`).select(["n.id", "n.title"]).execute();
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
+/** Before restoreLive brings notes back: a child of one of them that was deleted with it (the same stamp) and stays in the trash was taken
+ *  along by that delete, not deleted itself, and nothing comes back with it later. Once its parent's stamp changes, the stamps can no longer
+ *  tell that, so it gets an empty group (its marker in trash_groups). Who is left behind: the other children of an ancestor that comes back
+ *  on its own, and the children of the note itself when it was taken along (its own History delete restored: nothing comes with it). */
+async function markLeftBehind(workspaceId: string, plan: { ancestors: TitledNode[]; subtree: TitledNode[] }, nodeId: string): Promise<void> {
+  const coming = [...plan.ancestors.map((a) => a.id), nodeId, ...plan.subtree.map((d) => d.id)];
+  const left = await db.selectFrom("content_nodes as c").innerJoin("content_nodes as p", "p.id", "c.parent_id")
+    .where("c.workspace_id", "=", workspaceId).where("p.id", "in", coming).where("c.deleted_at", "is not", null).where("c.id", "not in", coming)
+    .where(sql<boolean>`${deletedStamp(workspaceId, sql.ref("c.id"))} <> ''`)
+    .where(sql<boolean>`${deletedStamp(workspaceId, sql.ref("c.id"))} = ${deletedStamp(workspaceId, sql.ref("p.id"))}`).select("c.id").execute();
+  for (const { id } of left) {
+    if (await hasExplicitGroup(workspaceId, id)) continue;
+    await db.insertInto("trash_groups").values({ workspace_id: workspaceId, root_id: id, note_id: id, ordinal: 0, root_stamp: deletedStamp(workspaceId, id), note_stamp: deletedStamp(workspaceId, id) })
+      .onConflict(writtenAgain).execute();
+  }
+}
+
+/** After trashLive deleted `nodeId` with `taken` (its live subtree, in delete order): when this transaction deleted another subtree under it
+ *  earlier (a child, then its parent: one stamp for both), the stamps alone would put that one in this group. Then the groups are written
+ *  down (trash_groups, migration 230): this one, and each earlier one under it that has none yet. Nothing in the common case. */
+async function recordGroupsSharingStamp(workspaceId: string, nodeId: string, taken: string[]): Promise<void> {
+  const root = await db.selectFrom("content_nodes as r").where("r.id", "=", nodeId).select(["r.node_type", deletedStamp(workspaceId, nodeId).as("stamp")]).executeTakeFirst();
+  if (!root || root.stamp === "") return;
+  const { stamp } = root;
+  const skipTagDefinitions = !isTag(root);
+  const takenSet = new Set(taken);
+  const earlier = (await sameStamp(workspaceId, await subtreeIds(workspaceId, nodeId, { lifecycle: "all", skipTagDefinitions }), stamp))
+    .map((row) => row.id).filter((id) => !takenSet.has(id));
+  if (earlier.length === 0) return;
+  const earlierSet = new Set(earlier);
+  const groups: Array<{ root: string; notes: string[] }> = [{ root: nodeId, notes: taken }];
+  const parents = await db.selectFrom("content_nodes").where("id", "in", earlier).select(["id", "parent_id"]).execute();
+  for (const { id } of parents.filter((row) => !row.parent_id || !earlierSet.has(row.parent_id))) {
+    if (await hasExplicitGroup(workspaceId, id)) continue;
+    const under = new Set(await subtreeIds(workspaceId, id, { lifecycle: "all", skipTagDefinitions }));
+    groups.push({ root: id, notes: earlier.filter((other) => under.has(other)) });
+  }
+  for (const group of groups) {
+    await db.insertInto("trash_groups").values([group.root, ...group.notes].map((note, ordinal) => ({
+      workspace_id: workspaceId, root_id: group.root, note_id: note, ordinal,
+      root_stamp: deletedStamp(workspaceId, group.root), note_stamp: deletedStamp(workspaceId, note),
+    }))).onConflict(writtenAgain).execute();
+  }
 }
 
 /** Delete a live note with its live subtree, inside the caller's event
@@ -143,6 +229,7 @@ export async function trashLive(
         apply: async ({ eventId }) => { await markTrashed(workspaceId, id, eventId); },
       });
     }
+    await recordGroupsSharingStamp(workspaceId, nodeId, ids);
   });
   // In the same transaction: modules record their follow-up durably.
   await nodeLifecycleCommitted({ workspaceId, actor, nodeIds: [nodeId, ...ids], change: "trashed" });
@@ -167,6 +254,7 @@ export async function restoreLive(
   await runCascade({
     actor, workspaceId, authority: { kind: "retained_node", nodeId, op: "write_node" }, causeEventId: opts.causeEventId,
   }, async () => {
+    await markLeftBehind(workspaceId, plan, nodeId);
     // Top first, so each ancestor returns under a live parent.
     for (const a of plan.ancestors) {
       await mutate({
@@ -498,7 +586,22 @@ export async function markTrashed(workspaceId: string, nodeId: string, eventId: 
   );
   // A trashed tag's fields govern nothing any more (D94).
   if (isTag(trashed.rows[0])) await retypeGoverned(workspaceId, { tagIds: [nodeId] });
+  await forgetGroupsOf(workspaceId, nodeId);
 }
+
+/** The note's deletion was just written again (markTrashed, markLive): every trash_groups row that names it, as a group or as a member, was
+ *  about an earlier deletion. A later transaction gives the note a new stamp, so those rows would no longer count anyway; inside the SAME
+ *  transaction (delete, bring back and delete again: one stamp) only retiring them keeps an old group from claiming the new delete. Rows are
+ *  retired, never deleted (the table only grows; a purge's cascade is the one removal). The writers of the groups (trashLive, restoreLive) run
+ *  after the notes are stamped, so what they write is about this deletion, and a row they write again is live again (writtenAgain). */
+async function forgetGroupsOf(workspaceId: string, nodeId: string): Promise<void> {
+  await db.updateTable("trash_groups").set({ retired: true }).where("workspace_id", "=", workspaceId).where("retired", "=", false)
+    .where((eb) => eb.or([eb("root_id", "=", nodeId), eb("note_id", "=", nodeId)])).execute();
+}
+
+/** A group row written again under the same key (the same transaction groups the note anew): what it says now, live again. */
+const writtenAgain = (oc: OnConflictBuilder<DB, "trash_groups">) => oc.columns(["root_id", "root_stamp", "note_id"])
+  .doUpdateSet((eb) => ({ retired: false, ordinal: eb.ref("excluded.ordinal"), note_stamp: eb.ref("excluded.note_stamp") }));
 
 /** Bring one row back inside the caller's event transaction. Its slug
  *  re-enters the live unique index as its title gives it (services/nodes.ts
@@ -522,6 +625,7 @@ export async function markLive(workspaceId: string, nodeId: string): Promise<voi
   );
   // A tag back from the trash governs its notes' values again (D94).
   if (isTag(restored.rows[0])) await retypeGoverned(workspaceId, { tagIds: [nodeId] });
+  await forgetGroupsOf(workspaceId, nodeId);
   await syncWikilinkEdges(workspaceId, nodeId, current.markdown ?? "");
   await relinkTarget(workspaceId, [nodeId]);
 }

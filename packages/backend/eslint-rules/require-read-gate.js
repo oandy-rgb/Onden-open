@@ -239,7 +239,6 @@ const EVENT_READS = {
   "modules/website/publishing/snapshot.ts": "MAX(id) cursor for the publish snapshot; no event data",
   "services/tagPacks.ts": "EXISTS probe for an install event inside the owner-only pack install",
   "services/nodeUpdate.ts": "version restore reads the version it restores (an event of that note) only after the note's write_node authority under the event lock; the body becomes the note's own",
-  "services/nodeTrash.ts": "undelete finds the subtree trashed by the same delete event (triggered_by); ids only, nothing served",
   "services/purgedContent.ts": "a purge reads its notes' events for the blobs they reference and erases them; no event data served",
   "services/attributeWrites.ts": /canReadNode/,               // conflict revert reads its ATTRIBUTE_CONFLICT only for a note the actor can read
 };

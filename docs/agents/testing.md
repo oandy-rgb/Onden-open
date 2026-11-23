@@ -203,7 +203,7 @@ Astro node 伺服器 → 以 Node 內建 http 做同源轉發（取代 compose �
 ## WebKit／iPhone／iPad 掃描
 
 Safari 的引擎壞法和 Chromium 不同。設定檔是 `packages/frontend/e2e/playwright.webkit-scan.config.ts`（三個專案：桌面 Safari、iPhone 13、iPad Pro 11），
-spec 清單只有一份 `packages/frontend/e2e/webkitScanSpecs.ts`：`@critical` 的 spec、跨引擎 spec 與所有手寫／墨水 spec；清單裡有檔名不存在會在載入設定時直接拋錯。
+spec 清單只有一份 `packages/frontend/e2e/webkitScanSpecs.ts`：`@critical` 的 spec、跨引擎 spec 與所有手寫／墨水 spec；每個 spec 在同一張表裡寫明跑在哪些專案（webkit、mobile-safari、ipad；只依桌面版面的 spec 只跑 webkit），沒寫專案、寫了不存在的專案或檔名不存在，載入設定時直接拋錯，不會悄悄不跑。
 新增要掃的 spec 只改那個清單。
 
 - 跑：在 `packages/frontend` 執行 `npm run e2e:webkit-scan`（等於 `bash e2e/fullstack/run.sh --config playwright.webkit-scan.config.ts`，自己建隔離的堆疊並收掉）；需要 docker。

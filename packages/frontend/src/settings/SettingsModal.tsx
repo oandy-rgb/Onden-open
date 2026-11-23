@@ -203,6 +203,13 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
     );
   };
 
+  // What the little phone on a row means: said once under the list, not only to a screen reader.
+  const deviceLegend = sections.some((section) => section.rows.some((row) => row.deviceOnly)) ? (
+    <p className="settings-device-legend">
+      <Smartphone size={16} aria-hidden="true" /> {t("Pages marked like this keep their settings on this device only. Other devices keep their own.")}
+    </p>
+  ) : null;
+
   if (phone) {
     const closeButton = (
       <Pressable type="button" className="settings-header-icon" aria-label={t("Close")} onClick={onClose} {...DISMISS_PROPS}><X size={22} aria-hidden="true" /></Pressable>
@@ -246,6 +253,7 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
                     ))}
                   </ul>
                 ))}
+                {!searching && deviceLegend}
               </div>
             </>
           ) : (
@@ -287,6 +295,7 @@ export default function SettingsModal({ online, onClose, onImportDone, onConnect
                 }))}
               </div>
             ))}
+            {!searching && deviceLegend}
           </nav>
 
           <div className="settings-content">

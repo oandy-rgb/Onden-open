@@ -14,7 +14,7 @@ export function changeSummaryText(t: ReturnType<typeof useT>, s: ChangeSummary):
   ].filter(Boolean) as string[];
   if (parts.length === 0) return t("No change to the text");
   const joined = parts.join(t(", "));
-  return s.sections.length === 0 ? joined : t("{parts}, in “{sections}”", { parts: joined, sections: s.sections.slice(0, 2).join("”、“") });
+  return s.sections.length === 0 ? joined : t("{parts}, in {sections}", { parts: joined, sections: s.sections.slice(0, 2).map((name) => t("“{name}”", { name })).join(t(", ")) });
 }
 
 /** One line for a point on the timeline: what the text did, and a rename when the title moved.

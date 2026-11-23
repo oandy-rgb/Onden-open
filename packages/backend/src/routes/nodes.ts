@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { getWorkspaceId } from "../services/workspaceId.js";
 import { listInkVersionRows, listBodyHistoryRows, getNoteForExport, getLiveNodeRow, listNodeAttributeRows } from "../services/nodeReads.js";
-import { DraftNode, noNul } from "@onden/contract";
+import { DraftNode, DuplicateNoteRequest, noNul } from "@onden/contract";
 import { newNoteExtrasSchema } from "../utils.js";
 import { updateNode, restoreNodeVersion } from "../services/nodeUpdate.js";
 import { readEditorBodyChange } from "../services/blockAnchors/index.js";
@@ -117,11 +117,11 @@ router.post("/", async (c) => {
 // lost response or offline replay; authorization and all copied state share
 // the same event transaction.
 router.post("/:id/duplicate", async (c) => {
-  const input = z.object({ id: z.string().uuid().optional() }).strict().parse(await readJsonBody(c, { optional: true }));
+  const input = DuplicateNoteRequest.parse(await readJsonBody(c, { optional: true }));
   try {
     const result = await duplicateNote({
       workspaceId: await getWorkspaceId(), actor: requireActor(c.get("actor")),
-      sourceId: uuidParam(c, "id"), newNodeId: input.id,
+      sourceId: uuidParam(c, "id"), newNodeId: input.id, copySuffix: input.copy_suffix,
     });
     return c.json(result.node, 201);
   } catch (error) {

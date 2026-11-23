@@ -52,7 +52,7 @@ export default function LocalGraphLens({ selectedNodeId, nodes, edges, tags, onS
     <div className="node-lens-pane node-lens-graph">
       <header className="node-lens-header">
         <h2 className="node-lens-title">
-          {center ? t("Relations · {title}", { title: displayTitle(center.title) }) : t("Links")}
+          {center ? t("Relations · {title}", { title: displayTitle(center.title) }) : t("Graph")}
         </h2>
         {center ? (
           <div className="node-lens-actions">

@@ -117,6 +117,8 @@
    device-only page, the 「新」 of unread updates. */
 .settings-list-value { flex: 0 1 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ac-fs-caption); color: var(--ac-muted); }
 .settings-device-mark { flex-shrink: 0; color: var(--ac-muted); }
+.settings-device-legend { display: flex; gap: var(--ac-space-2); align-items: flex-start; margin: 0; padding: var(--ac-space-3) var(--ac-space-4); font-size: var(--ac-fs-caption); color: var(--ac-muted); }
+.settings-device-legend svg { flex-shrink: 0; margin-top: var(--ac-space-1); }
 .settings-new { flex-shrink: 0; }
 .settings-list-row--account { min-height: 64px; }
 .settings-list-row--account .settings-list-label { font-weight: 600; }

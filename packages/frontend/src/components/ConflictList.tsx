@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { isInkPageAttr } from "@onden/markdown/ink";
+import { isSystemAttr } from "@onden/markdown";
 import { X } from "lucide-react";
 import type { ContentNode } from "../lib/api";
 import type { LiveEvent } from "../lib/liveEvent";
@@ -7,6 +8,7 @@ import type { ConflictPayload } from "../hooks/useAttributeConflicts";
 import { useT, tn } from "../lib/i18n";
 import { dayLabel, timeLabel } from "../lib/timeLabels";
 import { Pressable } from "./ui";
+import { fieldDisplayName } from "./viewLayoutKit";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -84,7 +86,7 @@ export default function ConflictList({ conflicts, nodes, onOpenNode, onRevert, o
               <Pressable className="conflict-item-node" onClick={() => node && onOpenNode(node.id)} title={t("Open node")} disabled={!node}>
                 {node?.title ?? t("(deleted note)")}
               </Pressable>
-              <span className="conflict-item-key">{pageText ? t("Text on pages") : pageImages ? t("Pictures on pages") : `#${p.key}`}</span>
+              <span className="conflict-item-key">{pageText ? t("Text on pages") : pageImages ? t("Pictures on pages") : isSystemAttr(p.key) ? (fieldDisplayName(p.key, t) === p.key ? t("A built-in property") : fieldDisplayName(p.key, t)) : `#${p.key}`}</span>
               <time className="conflict-item-time">{`${dayLabel(e.created_at)} ${timeLabel(e.created_at)}`}</time>
             </div>
             <div className="conflict-item-values">

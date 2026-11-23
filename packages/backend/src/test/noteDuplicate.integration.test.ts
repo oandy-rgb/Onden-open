@@ -27,9 +27,9 @@ async function node(title: string, markdown = "", parentId: string | null = null
   return (await seedQ<{ id: string }>(`INSERT INTO content_nodes(workspace_id,source_type,node_type,title,slug,markdown,parent_id)
     VALUES($1,'manual',$2,$3,$4,$5,$6) RETURNING id`, [workspaceId, type, title, randomUUID(), markdown, parentId])).rows[0]!.id;
 }
-function copy(source: string, id = randomUUID()) {
+function copy(source: string, id = randomUUID(), copy_suffix?: string) {
   return app.request(`/api/nodes/${source}/duplicate`, { method: "POST",
-    headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+    headers: { "content-type": "application/json" }, body: JSON.stringify({ id, ...(copy_suffix === undefined ? {} : { copy_suffix }) }) });
 }
 async function state(id: string) {
   const [nodes, attrs, tags, events] = await Promise.all([
@@ -76,6 +76,14 @@ describe.skipIf(!/^\/[^/]*_test$/.test(dbName))("NOTE-11/PER-02 atomic note copy
     expect(actual.events.map(row => row.event_type)).toEqual(["NODE_CREATED", "TAG_APPLIED", "ATTRIBUTE_SET", "ATTRIBUTE_SET"]);
     expect(actual.events[1]!.payload.membership_change).toMatchObject({ after_state_id: expect.any(String) });
     expect((await q("SELECT 1 FROM node_edges WHERE source_node_id=$1 OR target_node_id=$1", [id])).rows).toHaveLength(0);
+  });
+
+  it("ends the copy's title with the ending the client sent (the person's language), within the cap", async () => {
+    const source = await node("手寫筆記");
+    const response = await copy(source, randomUUID(), " 副本");
+    expect(response.status, await response.clone().text()).toBe(201);
+    expect(await response.json()).toMatchObject({ title: "手寫筆記 副本" });
+    for (const bad of ["a\nb", "\t", "   ", "", "a\u200bb", "x".repeat(21)]) expect((await copy(source, randomUUID(), bad)).status, JSON.stringify(bad)).toBe(400);
   });
 
   it("a hidden 「內容」 tab is copied with the text, in its place among the tabs; a note with no record gets none", async () => {

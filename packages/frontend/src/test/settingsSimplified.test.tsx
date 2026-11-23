@@ -32,6 +32,13 @@ const row = (tab: string) => document.querySelector<HTMLElement>(`.settings-side
 beforeEach(() => { localStorage.clear(); resetShortcuts(); resetAppState(); unseen.list = []; document.documentElement.removeAttribute("data-theme"); });
 afterEach(() => cleanup());
 
+describe("the phone mark on a settings row", () => {
+  it("is explained once under the list, in words", () => {
+    open();
+    expect(screen.getByText("Pages marked like this keep their settings on this device only. Other devices keep their own.")).toBeTruthy();
+  });
+});
+
 describe("every setting keeps a home and stays findable", () => {
   const all = [...SETTINGS, ...MODULE_SETTINGS];
   const tabLabelOf = (def: (typeof all)[number]) => ("moduleId" in def && def.moduleId

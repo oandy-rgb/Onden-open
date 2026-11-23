@@ -16,11 +16,15 @@ vi.mock("../lib/spaces", async (importOriginal) => ({
     { id: "s-view", name: "Read only", kind: "shared", is_default: false, owner_actor_id: null, capabilities: {}, permission: "view", can_manage: false },
   ] }),
 }));
+const files = vi.hoisted(() => ({ apiFetch: vi.fn(), downloadBlob: vi.fn() }));
+vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/api")>()), apiFetch: files.apiFetch }));
 const confirm = vi.hoisted(() => vi.fn());
 vi.mock("../components/ConfirmDialog", () => ({ confirmDialog: confirm }));
 
 import { FullBackupDownload, FullBackupRestore } from "../settings/FullBackupSetting";
 import type { RestoreReport } from "@onden/contract";
+import { getAppState, resetAppState } from "../lib/appStore";
+const toastTexts = () => getAppState().toasts.map((toast) => toast.message);
 
 const ctx: SettingContext = { online: true, onClose: vi.fn(), onImportDone: vi.fn(), onConnect: vi.fn() };
 
@@ -62,13 +66,34 @@ describe("Settings › Your Data › full backup", () => {
 
   it("downloads the full backup and says what it leaves out", () => {
     render(<FullBackupDownload ctx={ctx} />);
-    const link = within(screen.getByRole("group", { name: "Full backup" })).getByRole("link", { name: "Download" });
-    expect(link).toHaveAttribute("href", expect.stringContaining("/api/backup/full.zip"));
-    expect(link).toHaveAttribute("download");
+    expect(within(screen.getByRole("group", { name: "Full backup" })).getByRole("link", { name: "Download" })).toHaveAttribute("download");
     expect(screen.getByText(/other members' private notes/i)).toBeInTheDocument();
   });
 
-  it("offers version history as one switch with its size, on by default, and the download link follows it", async () => {
+  it("downloads straight to disk through a link, never through the page's memory", () => {
+    render(<FullBackupDownload ctx={ctx} />);
+    const link = within(screen.getByRole("group", { name: "Full backup" })).getByRole("link", { name: "Download" });
+    expect(link).toHaveAttribute("href", expect.stringContaining("/api/backup/full.zip"));
+    expect(link).toHaveAttribute("download");
+    expect(files.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("says it is preparing when pressed, and does not start a second copy while it waits", async () => {
+    const user = userEvent.setup();
+    resetAppState();
+    render(<FullBackupDownload ctx={ctx} />);
+    const group = within(screen.getByRole("group", { name: "Full backup" }));
+    group.getByRole("link", { name: "Download" }).addEventListener("click", (event) => event.preventDefault()); // jsdom does not navigate
+    await user.click(group.getByRole("link", { name: "Download" }));
+    expect(toastTexts().join(" ")).toMatch(/Preparing your backup/);
+    expect(getAppState().toasts[0]).toMatchObject({ working: true });
+    const waiting = group.getByRole("link", { name: "Preparing…" });
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    await user.click(waiting);
+    expect(getAppState().toasts).toHaveLength(1);
+  });
+
+  it("offers version history as one switch with its size, on by default, and the link follows it", async () => {
     const user = userEvent.setup();
     api.historySize.mockResolvedValue({ notes: 12, versions: 340, bytes: 7 * 1024 * 1024 });
     render(<FullBackupDownload ctx={ctx} />);

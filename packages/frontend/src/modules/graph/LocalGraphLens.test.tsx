@@ -23,6 +23,12 @@ beforeEach(() => { window.history.replaceState(null, "", "/?view=graph"); setGra
 afterEach(cleanup);
 
 describe("the graph page", () => {
+  it("without focus the header says 'Graph', the name the menu uses", () => {
+    lens();
+    expect(screen.getByRole("heading", { name: "Graph" })).toBeInTheDocument();
+    expect(screen.queryByText("Links")).toBeNull();
+  });
+
   it("without focus draws the whole workspace, as before", () => {
     lens();
     expect(graph.props.nodes).toHaveLength(nodes.length);

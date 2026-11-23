@@ -3,11 +3,11 @@
 > 狀態：現行（最後確認 2026-11-19）
 > 涵蓋：packages/backend/src/services/noteDuplicate.ts, packages/frontend/src/lib/data/nodeActions.ts
 
-普通複製使用 `POST /api/nodes/:id/duplicate`，JSON 可帶穩定的客戶端 UUID `{ "id": "…" }`，重試沿用 `Idempotency-Key`。首次成功回 `201` 與完整新節點；同鍵已提交的重送沿用共用 `200 { "deduped": true }`，客戶端以該 UUID 讀取或同步結果。只接受 live content 筆記；class tag、媒體、白板與帶 `#task` 身分的節點回 `422`。來源不可讀或已不存在時拒絕，拒絕不留下副本、標籤關係、成功事件或已提交的冪等鍵。
+普通複製使用 `POST /api/nodes/:id/duplicate`，JSON 可帶穩定的客戶端 UUID `{ "id": "…" }`，以及副本標題的結尾 `copy_suffix`（使用者語言的「 副本」，一行、最多 20 字、不含控制或零寬字元；形狀在 `@onden/contract` 的 `DuplicateNoteRequest`，舊的伺服器對這個欄位回 400，所以後端要先上或同時上），重試沿用 `Idempotency-Key`。首次成功回 `201` 與完整新節點；同鍵已提交的重送沿用共用 `200 { "deduped": true }`，客戶端以該 UUID 讀取或同步結果。只接受 live content 筆記；class tag、媒體、白板與帶 `#task` 身分的節點回 `422`。來源不可讀或已不存在時拒絕，拒絕不留下副本、標籤關係、成功事件或已提交的冪等鍵。
 
 後端 `duplicateNote` 在同一事件交易內讀取來源，核對來源讀取、editor 建立角色、目前父層的 read／write_node、每個目前直接標籤的 apply 政策，再建立副本。即使後續屬性權限拒絕，整筆交易也回滾。直接標籤仍附在新節點，並各自有 `TAG_APPLIED` 歷史與關係狀態識別；該內部紀錄不執行欄位 default 或 template。複製的明確屬性產生各自 `ATTRIBUTE_SET` 事件。
 
-普通副本的標題加 `(Copy)`；歷史 `as_new_node` 維持原 API wire shape 與 `[Restored]` 標題，用該事件 `body_hash` 的正文及 inverse patch 重建歷史內容，再搭配來源**目前**的父層、直接標籤與明確屬性。缺少可信的歷史正文或標題回 `history_incomplete`，不以今天的正文冒充歷史。歷史另存可以從保留的軟刪除來源讀取，仍要求新的 live 父層和現行標籤權限；它不修改原節點或撤回原事件的子操作。
+普通副本的標題加請求帶來的 `copy_suffix`，沒帶就是 ` (Copy)`（前端用使用者語言的字並一起送出，離線先畫的標題與伺服器建的一致）；歷史 `as_new_node` 維持原 API wire shape 與 `[Restored]` 標題，用該事件 `body_hash` 的正文及 inverse patch 重建歷史內容，再搭配來源**目前**的父層、直接標籤與明確屬性。缺少可信的歷史正文或標題回 `history_incomplete`，不以今天的正文冒充歷史。歷史另存可以從保留的軟刪除來源讀取，仍要求新的 live 父層和現行標籤權限；它不修改原節點或撤回原事件的子操作。
 
 副本也帶「內容」分頁的紀錄（連同 `hidden` 與位置）與「手寫」分頁的位置；沒有別的分頁可顯示時，伺服器把「內容」清回顯示（`functionRefs` 的 `keepContentTabShowing`，見 [decisions-ui.md](../agents/decisions-ui.md)）。
 

@@ -61,9 +61,16 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
   const ruleHint = useHintOnce("publish-by-space-rule");
   const showRuleHint = ruleHint.show && diff.added.some((n) => getNode(n.id)?.attrs?.[PUBLISHED_ATTR] !== "true");
   // Seen only once the publish went out: after a stale preview or a network failure the next preview says it again.
-  const confirm = async () => { if ((await onConfirm()) === true && showRuleHint) ruleHint.markSeen(); };
+  // After a publish that did not go out the same button says so: the dialog stays open and pressing it again is the retry.
+  const [failedOnce, setFailedOnce] = useState(false);
+  const confirm = async () => {
+    const sent = (await onConfirm()) === true;
+    setFailedOnce(!sent);
+    if (sent && showRuleHint) ruleHint.markSeen();
+  };
   const noneOnSite = !allNodes.some((n) => listsAsNote(n) && siteStanding(n, spaces, hasChildNote(n.id)).on);
   const refs = preview.unpublished_refs ?? [];
+  const hasStanding = refs.length > 0 || leftOut.length > 0 || preview.private_links.length > 0 || preview.blocked_media.length > 0;
   const titleOf = (id: string) => displayTitle(nodes.find((n) => n.id === id)?.title);
   const list = (items: PreviewNote[], extra?: (n: PreviewNote) => string | null) => (
     <ul className="publish-review-list publish-preview-list">
@@ -94,6 +101,7 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
 
   return (
     <ShellDialog label={t("Publish the site")} className="publish-review publish-preview-dialog" busy={publishing} onClose={onCancel}>
+      <div className="publish-review-body">
       <h2 className="publish-review-title">{t("Publish the site")}</h2>
       <p className="publish-review-hint">
         {preview.live
@@ -159,39 +167,6 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
         </>
       )}
 
-      {refs.length > 0 && (
-        <section className="publish-review-warn">
-          <h3>{t("On the home page but not published ({n})", { n: refs.length })}</h3>
-          <p className="publish-review-hint">{t("Readers see nothing in these places unless the notes are published with the site.")}</p>
-          <ul className="publish-review-list">
-            {refs.map((ref) => <li key={`${ref.componentId}:${ref.noteId}`}>{displayTitle(ref.title)}</li>)}
-          </ul>
-          {onInclude && (
-            <Button className="publish-preview-include" disabled={!online || publishing}
-              onClick={() => onInclude([...new Set(refs.map((r) => r.noteId))])}>
-              {t("Publish together")}
-            </Button>
-          )}
-        </section>
-      )}
-
-      {leftOut.length > 0 && (
-        <PublishLeftOut items={leftOut} online={online} busy={publishing}
-          onChanged={() => onChanged?.()} onClose={onCancel} />
-      )}
-
-      {preview.private_links.length > 0 && (
-        <section className="publish-review-warn">
-          <h3>{t("Links to private notes ({n})", { n: preview.private_links.length })}</h3>
-          <p className="publish-review-hint">{t("Readers see the text below instead of a link; the private note stays private.")}</p>
-          <ul className="publish-review-list">
-            {preview.private_links.map((l, i) => (
-              <li key={i}>{t("In “{note}”: [[{target}]] reads “{shown}”", { note: displayTitle(l.node_title), target: l.target, shown: l.shown_as })}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {(preview.new_media ?? []).length > 0 && (
         <section>
           <h3>{t("Newly public files ({n})", { n: preview.new_media!.length })}</h3>
@@ -222,6 +197,47 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
         </section>
       )}
 
+      {hasStanding && (
+        <div className="publish-review-standing" role="group" aria-labelledby="publish-review-standing-title">
+          <h3 id="publish-review-standing-title" className="publish-review-group">{t("What readers will and won't see")}</h3>
+          <p className="publish-review-hint">
+            {previewHasChanges(preview)
+              ? t("This is about the site as it stands, apart from the changes above.")
+              : t("This is the same as last time. It is about what the site shows, not about this publish.")}
+          </p>
+      {refs.length > 0 && (
+        <section className="publish-review-warn">
+          <h3>{t("On the home page but not published ({n})", { n: refs.length })}</h3>
+          <p className="publish-review-hint">{t("Readers see nothing in these places unless the notes are published with the site.")}</p>
+          <ul className="publish-review-list">
+            {refs.map((ref) => <li key={`${ref.componentId}:${ref.noteId}`}>{displayTitle(ref.title)}</li>)}
+          </ul>
+          {onInclude && (
+            <Button className="publish-preview-include" disabled={!online || publishing}
+              onClick={() => onInclude([...new Set(refs.map((r) => r.noteId))])}>
+              {t("Publish together")}
+            </Button>
+          )}
+        </section>
+      )}
+
+      {leftOut.length > 0 && (
+        <PublishLeftOut items={leftOut} online={online} busy={publishing}
+          onChanged={() => onChanged?.()} onClose={onCancel} />
+      )}
+
+      {preview.private_links.length > 0 && (
+        <section className="publish-review-warn">
+          <h3>{t("Links to private notes ({n})", { n: preview.private_links.length })}</h3>
+          <p className="publish-review-hint">{t("Readers see the text below instead of a link; the private note stays private.")}</p>
+          <ul className="publish-review-list">
+            {preview.private_links.map((l, i) => (
+              <li key={i}>{t("In “{note}”: [[{target}]] reads “{shown}”", { note: displayTitle(l.node_title), target: l.target, shown: l.shown_as === "(private)" ? t("(private)") : l.shown_as })}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {preview.blocked_media.length > 0 && (
         <section className="publish-review-warn">
           <h3>{t("Images readers won't see ({n})", { n: preview.blocked_media.length })}</h3>
@@ -237,13 +253,17 @@ export default function PublishPreviewDialog({ pending, publishing, online, onCo
           </ul>
         </section>
       )}
+        </div>
+      )}
+
+      </div>
 
       <div className="publish-review-actions">
         <Button onClick={() => setShowSite(true)} disabled={nodes.length === 0}>{t("See the site")}</Button>
         <span className="publish-review-spacer" />
         <Button variant="ghost" onClick={onCancel} disabled={publishing}>{t("Cancel")}</Button>
         <Button variant="primary" className="publish-preview-confirm" disabled={!online || publishing || nodes.length === 0} onClick={confirm}>
-          {publishing ? t("Publishing…") : t("Confirm & publish →")}
+          {publishing ? t("Publishing…") : failedOnce ? t("Try publishing again →") : t("Confirm & publish →")}
         </Button>
       </div>
     </ShellDialog>

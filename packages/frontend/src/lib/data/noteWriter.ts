@@ -207,8 +207,10 @@ export function makeNoteWriter(ctx: DataCtx) {
       reportWriteFailure(error, ctx.addToast);
       throw error;
     }
-    // The server's copy title (services/noteDuplicate.ts): it fits the cap.
-    const title = `${clampNoteTitle(source.title, NODE_TITLE_MAX - " (Copy)".length)} (Copy)`;
+    // The server's copy title (services/noteDuplicate.ts): it fits the cap. The
+    // ending is in the person's language and is sent along, so both agree.
+    const suffix = ` ${t("(Copy)")}`;
+    const title = `${clampNoteTitle(source.title, NODE_TITLE_MAX - suffix.length)}${suffix}`;
     const node: ContentNode = {
       id: randomUUID(), title, markdown: source.markdown,
       slug: slugify(title),
@@ -217,7 +219,7 @@ export function makeNoteWriter(ctx: DataCtx) {
     ctx.setData(state => addNode(state, node));
     return commit(node.id, node, {
       method: "POST", path: `/api/nodes/${source.id}/duplicate`,
-      body: JSON.stringify({ id: node.id }),
+      body: JSON.stringify(suffix === " (Copy)" ? { id: node.id } : { id: node.id, copy_suffix: suffix }),
     }, () => ctx.setData(state => dropNode(state, node.id)), { created: true });
   }
 

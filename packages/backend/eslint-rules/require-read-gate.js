@@ -97,6 +97,7 @@ const GATED = {
 // relative path → documented reason the FROM/JOIN content_nodes is NOT a served,
 // actor-facing read (so it's exempt from a read-policy primitive).
 const INTERNAL = {
+  "spine/noteSlugs.ts": "write path of a slug (a move, a restore, a change bundle): looks up which live note of a space holds a slug, to give the writing note a free one; serves nothing",
   "services/history/bodyEvents.ts": "saveOnDaySql joins content_nodes only to tell a tag's or system note's saves (events) from a note's (versions: spine/noteVersions.ts hasVersionList's rule); the day lens that uses it scopes the notes itself (readableScopeSql); serves nothing",
   "spine/noteVersions.ts": "write path: recordVersion reads the note's node kind (whether it has a version list) inside the write that changes it; serves nothing",
   "spine/stampedMerge/dbRows.ts": "write path of a change bundle (the one taking entry in spine/stampedImport.ts, under the event lock with the stamp triggers standing aside): reads the notes of the bundle's rows to give them their slug; serves nothing",

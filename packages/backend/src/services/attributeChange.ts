@@ -25,7 +25,7 @@ import { withEventTransaction } from "../spine/eventTransaction.js";
 import { assertAuthority, isPerson, requirePerson, type Authority } from "../spine/authority.js";
 import { PUBLISHED_KEY } from "./systemAttributes.js";
 import { provesNewNote, type NewNoteProof } from "./newNoteProof.js";
-import { incomingWins, PERSON_SOURCE, writableSource, type AttributeSource, type AttributeWriteSource } from "../spine/attributeSource.js";
+import { incomingWins, PERSON_SOURCE, STAMPED_ATTRIBUTE_SOURCES, writableSource, type AttributeSource, type AttributeWriteSource } from "../spine/attributeSource.js";
 import { encodeSnapshot, type AttributeSnapshot, type AttributeState } from "./eventLog/index.js";
 import { isVersionedInkKey, recordVersion, type VersionUnit } from "../spine/noteVersions.js";
 import { ATTRIBUTE_KEY_RULE, governingField, isSettableAttributeKey, normalize, normalizeText, type AttributeValueType } from "@onden/markdown";
@@ -106,8 +106,8 @@ export type AttributeChange = {
   }) => Promise<void>;
 };
 
-/** The sources the stamp trigger stamps by itself (migration 194, sync_stamp_attribute_trigger). */
-const STAMPED_SOURCES: readonly string[] = ["ui", "explicit", "dispatcher"];
+/** The sources the stamp trigger stamps by itself (migration 223, sync_stamp_attribute_trigger). */
+const STAMPED_SOURCES = STAMPED_ATTRIBUTE_SOURCES;
 
 const stampRowKey = (nodeId: string, key: string) => `${nodeId}/${key}`;
 
@@ -288,6 +288,9 @@ async function recordDrawingVersion(
  *  trash and restore (test/retypeWriters.test.ts holds the list). */
 export async function retypeGoverned(
   workspaceId: string, scope: { nodeIds?: readonly string[]; tagIds?: readonly string[] },
+  /** `unstamped`: only the rows whose type is no unit (their source is not one of STAMPED_ATTRIBUTE_SOURCES). A node that took the governing change by
+   *  change bundle (services/receivedDerivation.ts) retypes only these: a stamped row's type is a unit, which the writer's node retyped and the bundle carried. */
+  rows: { unstamped?: true } = {},
 ): Promise<number> {
   const tagRows = await loadTagFieldRows(workspaceId);
   const tagIds = new Set(scope.tagIds ?? []);
@@ -308,8 +311,9 @@ export async function retypeGoverned(
   const attrs = (await q<{ id: string; node_id: string; key: string; value: string; value_type: string }>(
     `SELECT id::text, node_id::text, key, value, value_type FROM node_attributes
       WHERE workspace_id = $1
-        AND (node_id = ANY($2::uuid[]) OR node_id IN (SELECT node_id FROM node_tags WHERE tag_id = ANY($3::uuid[])))`,
-    [workspaceId, nodeIds, [...tagIds]],
+        AND (node_id = ANY($2::uuid[]) OR node_id IN (SELECT node_id FROM node_tags WHERE tag_id = ANY($3::uuid[])))
+        AND (NOT $5::boolean OR source <> ALL($4::text[]))`,
+    [workspaceId, nodeIds, [...tagIds], STAMPED_ATTRIBUTE_SOURCES, rows.unstamped === true],
   )).rows;
   if (!attrs.length) return 0;
   const tagsOf = new Map<string, string[]>();

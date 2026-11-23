@@ -41,6 +41,7 @@ import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, ty
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
+import { deriving, receivedDerivation } from "./receivedDerivation.js";
 
 class JoinRefused extends CodedStatusError {}
 const refuse = (code: string, message: string, status: 400 | 409 | 413 | 422 = 422) => new JoinRefused(status, code, message);
@@ -698,7 +699,11 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
  *   stamp_clock_ahead        a clock further ahead than the bound (spine/stamps.ts): offer it again later
  *   merge_not_open           this workspace is being joined, or has no clock
  * Taken a second time, a bundle changes nothing. The same stamp with the same content is skipped (re-delivery); knowledge only moves forward.
- * Not done here, on purpose: who may send (`admitSyncNode`'s caller), the tables not carried yet (NOT_CARRIED_YET in test/stampedBundleSources.integration.test.ts), what is derived from a row's text and domain events (batch 2b-2b), a transport.
+ *   bundle_no_derivation     nothing filled spine/receivedDerivation.ts (services/receivedDerivation.ts was not loaded): a bundle is never taken without what follows from it
+ *   bundle_derivation_failed (422) a step of what follows from the rows failed in a way the same bundle would fail again (services/receivedDerivation.ts names the step and notes)
+ * What follows from the rows (their links, paragraph rows' display, trash and purge, spaces, slugs, types, the website copy, the membership epoch) is derived in the same
+ * transaction once every row is in (spine/receivedDerivation.ts; batch 4a): it writes no unit.
+ * Not done here, on purpose: who may send (`admitSyncNode`'s caller), the tables not carried yet (NOT_CARRIED_YET in test/stampedBundleSources.integration.test.ts), domain events of a received change (batch 4b), a transport.
  */
 export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundle): Promise<BundleReport> {
   checkBundleShape(workspaceId, bundle);
@@ -723,12 +728,18 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
       const base = haveAt(bundle.base, label, origin) ?? 0, mine = heldHere(label, origin);
       if (base > mine && holds > mine) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin} (${label}): take a snapshot instead`);
     }
+    // what follows from the rows written here (spine/receivedDerivation.ts): never a bundle without it
+    const derivation = receivedDerivation();
+    if (!derivation) throw bundleRefused("bundle_no_derivation", "this node cannot work out what follows from received rows (services/receivedDerivation.ts is not loaded): nothing was taken");
+    const prepared = await derivation.before(workspaceId, bundle.items);
     const report = await storeMergedRows(workspaceId, bundle.items);
     if (report.rejected.length) {
       const clash = report.rejected.some((r) => r.reason === "same-stamp-different-content");
       const first = report.rejected[0]!;
       throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", `a write of the bundle is not in the format${first.reason === "malformed" && first.unit ? ` (${first.table ?? "?"}: ${first.unit})` : ""}`, 422);
     }
+    // the finishing step: links, paragraph rows, trash and purge, spaces, types, the site, the epoch (batch 4a), once every row of the bundle is in
+    await deriving("the finishing step", [], () => derivation.after(prepared, { workspaceId, units: report.events, followedSpaces: report.followedSpaces }));
     // knowledge only moves forward, label by label: an origin this node knew nothing of is written with every label the bundle names (vouched by the sender)
     const advanced: Record<string, Record<string, number>> = {};
     const moved = new Map<string, Record<string, number>>();

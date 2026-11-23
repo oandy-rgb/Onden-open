@@ -1111,6 +1111,13 @@
 - **類別**：未查證就回報；只驗自己要的出口、沒驗同一份輸入的其他讀者。
 - **機制**：守門通道本身（它擋下了）；改回設定、指令改用 `--quiet`。改共用設定檔前列出它的讀者：尚無機制。
 
+### 2026-11-22　改了合併的 slug 規則，只跑了新寫的測試就推上去；既有的收斂測試在併入 main 後才紅（PR #1941 第 1 輪後）
+- **發生了什麼**：回應審查第 1 點時把 `spine/noteSlugs.ts` `settleSlugs` 改成「較晚佔的讓位，拿第一個空的（`-2`）」，取代合併原本的「id 較大的拿 `-<id 前八碼>`」。新寫的三則 slug 測試在真 Postgres 通過就提交並推上去。兩台同時新建多則同名筆記時，「第一個空的」看的是各台自己的狀態，兩台的後綴不同。
+- **證據**：`stampedBundle.integration.test.ts`「two nodes colliding on titles, bundles in either order and a second round」固定種子 31，`expected [ …(27) ] to deeply equal [ …(27) ]`（PGlite，併入 main `2c5636804` 之後跑的那一組）。
+- **發現者**：我（併入 main 後跑的既有測試）。
+- **為什麼沒擋到**：改的是一條收斂規則，卻只跑了為這次改動寫的測試；釘著舊性質（多則同時新建也收斂）的測試在另一個檔，沒有在提交前跑。PR 說明還把這種情況寫成「沒解決的」，等於把既有測試保住的性質當成新的限制。
+- **類別**：改規則時沒有找出釘著那條規則的既有測試。
+- **機制**：〔第 1 層〕那則既有測試本來就在；規則改成「看佔的是名字還是位置」後它與新的三則都通過。「改了合併規則，提交前跑 `grep` 得到的所有呼叫者的測試」：尚無機制，靠完整套件（這次是在完整套件之前就推了）。
 ### 2026-11-22　交回前只跑改到的測試；本機有 git 身分、CI 沒有，新 CI job 第一次跑就紅（PR #1937 第 2 輪後）
 - **發生了什麼**：第 2 輪加了 migration 224 與一個會建／刪資料庫的真 Postgres 測試，交回 `b6a0d2023` 時只跑了改到的測試檔。公開 CI 紅了五個 job：`backupFidelity`（新表有 `node_id` 欄但沒進 `NODE_TABLES`）、`crossWorkspaceReadSweep`（新表沒有工作區欄）、`testDatabaseGate` 加上 unit lane 載不進檔（`restoreScript.postgres` 沒有 `isTestDatabase()` 關卡，沒有 `DATABASE_URL` 時 `new URL(undefined)` 在收集階段就丟錯），還有新的 restore-scripts job 裡演練自我測試的 8 個 `--commit` 案例：`fake_commit` 用 `git commit-tree`，runner 上沒有 git 身分，做出的 ref 是空的。
 - **證據**：CI run 44975964641；本機用 `HOME=/nonexistent GIT_CONFIG_GLOBAL=/dev/null` 跑 `restore-drill-selftest.sh` 重現，加上身分之後 14/14。
@@ -1143,6 +1150,21 @@
 - **類別**：限制值沒有跟著工作量重量；拿摘要當原始資料。
 - **機制**：〔第 1 層〕瀏覽器 job 拆成兩半（matrix：功能腳本；投影片、觸控、版面稽核、圖表），各自一小時。〔第 2 層〕判斷「是不是分支造成的」一律拿 main 分片的失敗名單全文比對，不用報告摘要：尚無機制，靠這條紀錄。
 
+### 2026-11-23　收包時連進來的連結每一批都掃一次整個連結索引；本機比值在上限內就當作已修（PR #1941 第 2 輪之後，公開 CI）
+- **發生了什麼**：第 2 輪把 `relinkTarget` 的候選改成「以目標的鍵當常數查連結索引」，但這一查仍在每一批（50 個目標）裡做。連結索引只有幾千列時，規劃器不管統計新不新都選整表掃描，所以收一包的讀取列數隨包的大小平方成長。本機 `stampedBundleScale` 的比值是 3.8（上限 4.6）就交回；公開 CI 上同一則是 4.61。那段註解還寫著「批次是 500」，實際是 50。
+- **證據**：CI run 45084455783（`taking: … apply 21746 rows；4003 stamps: … apply 100310 rows`）；本機按步驟與表分開算的讀取列數：`note_link_index` 小包 2,465、大包 36,465（14.8 倍，等於每一批讀一次整個表）。修後 `stampedBundleScale` 的比值與 main 相同（約 2.9）。
+- **發現者**：擁有者（公開 CI）。
+- **為什麼沒擋到**：成本只用整包的總比值量，沒有拆到步驟；比值在上限內就沒有再往下一層找；統計刷新（ANALYZE）以為會讓規劃器走索引，沒有驗證。
+- **類別**：成本只看總數、不看哪一步；註解和程式不符。
+- **機制**：〔第 1 層〕`wikilinkRelinkIndex.integration.test.ts`「six times the targets look the link index up no more often」：數 `relinkTarget` 對連結索引的掃描次數（與測試資料庫裡還有什麼無關），六倍的目標不能多於 2 次；修前兩種引擎都紅。另一則確認跨批的連結兩種讀法都找得到。
+
+### 2026-11-23　抽出函式改了寫入所在的函式名，只跑了改到的測試就推（PR #1941 第 3 輪，公開 CI）
+- **發生了什麼**：`relinkTarget` 的每批工作抽成 `relinkBatch`，寫入與刪除的語句跟著搬過去。`spineGate.test.ts`（寫入只能在列出的函式裡）與 `guards/sessionDeletes.guard.test.ts`（刪除要宣告或列出）兩張清單都還寫著 `relinkTarget`。我只跑了 `wikilink*`、收包與成本那幾檔就推了。
+- **證據**：CI run 45098149194；本機 `spineGate` 與 `sessionDeletes` 兩則紅，清單改名後 309 則過。
+- **發現者**：擁有者（公開 CI）。
+- **為什麼沒擋到**：把「改到的行為的測試都綠」當成完成，沒有想到搬動語句也會動到以函式名登記的靜態清單；`spineGate.test.ts` 不在 guards 資料夾，只跑守門通道也抓不到。
+- **類別**：驗證範圍比改動的影響小（同 2026-11-22 那一條）。
+- **機制**：〔第 1 層〕改寫入、刪除或交易邊界的提交，推之前在 packages/backend 跑一次 `npm run test:no-db`（所有不需資料庫的測試，含這兩張清單），再跑 `scripts/guard-lane.sh`。尚無自動機制擋「只跑了一部分」。
 ### 2026-11-23　合併核心的說明寫「兩台標記相同」，其實不同（「round 10, 4」，分支 fix/sync-valueless-heads-follow-row）
 - **發生了什麼**：`spine/stampedMerge/README.md` 對「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」寫「兩台標記相同，只有位置不同」。釘住的測試只比位置，沒有比標記。三台隨機測試的種子 989453 紅在這個情境：清空的那一台留著子筆記 `parent` 的一列標記（帶著被刪父層的 id），之後才建出子筆記的那一台沒有。
 - **證據**：`anchorsReplicated.integration.test.ts`「round 10, 4 (stamps)」兩則（一則斷言今天的差別、一則 `it.fails` 斷言相同）；修正前與修正後的程式都重現。

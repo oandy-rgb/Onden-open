@@ -228,6 +228,7 @@ Obsidian 不支援連到引用、提示框、表格的**局部**，所以引用�
 
 「不往下繼承」放在 `content_nodes.tag_is_inheritable`（class_tag 才有意義；NULL＝依種類：保留／模組標籤不繼承，其他繼承），和 `node_attributes.is_inheritable` 同名同義。2026-11-09 刪除（migration 185，§5）。不放在 `tag_schema`：`tag_schema IS NOT NULL` 目前代表「這是集合」，放進去會讓一般標籤變成集合。
 
+**一列裡哪些是複製、哪些是衍生**（2026-11-22，同步 4a 批）：列本身、它的 id、`note`、錨點（`anchor_id`）、`block_ref`、`task_id`、`detached_*` 與 `block_node_tags` 是**複製**的（每個都是單位，`spine/stampedMerge/dbUnits.ts`），由寫入那台的 `syncBlockNodes` 寫、跟著修改包走；`parent_block_id`、`kind`、`label`、`text_cache`、`hidden_at` 是**衍生**的：正文、筆記的錨點與這些列的純函式，由 `blockNodes.deriveBlockRows` 寫（經 `services/bodyDerivation.ts` `deriveFromBody`），本機存檔與收包的那一台跑同一個函式，所以兩台相同。每一段顯示哪一列，與 `syncBlockNodes` 給它的錨點相同：段落開頭第一個有效錨點；那個錨點若是別則筆記的列在用的（搬成子筆記後留下的），存檔替這段鑄了新的，於是顯示這段開頭、這則筆記有列的錨點裡最新的那個（PR #1941 審查第 1 輪第 5 點；`blockNodes.integration`「a block whose anchor another note's row answers to」）。收包絕不跑 `syncBlockNodes`（它會再鑄錨點、再建任務）。`_block_autotag`（區塊存檔建的標籤）在收包那台由 `markReceivedAutoTags` 依「標籤與那一列的建立標記相同」補上。
 **文字快取只是索引**：`block_nodes.text_cache` 的來源永遠是筆記正文。標籤查詢與標籤頁只回 `label`，不讀它；它**不進** git 備份、嵌入向量、發布集合、搜尋索引（正文本來就被備份、索引一次），目前只有錨點找回比對讀它（`services/blockAnchors/store.ts`）。之後要讓任何一處讀到子節點的文字，都要在那裡明確加入並寫進這份文件。
 
 **選 B 的後果**（2026-10-14 當時留待之後決定的兩件事，已各自決定；當時的原文見[歷史檔](block-nodes-history.md)）：任務行是子節點**包住**既有的任務節點（見「任務行」）；段落上的複習進度是複習模組自己的表、以目標（筆記或段落）為鍵，不另做一份 `node_attributes`（見「段落上的複習卡」）。
@@ -376,8 +377,8 @@ Obsidian 不支援連到引用、提示框、表格的**局部**，所以引用�
 4. 連結與嵌入照常顯示；嵌入底下的「— 筆記」小字與點擊都指向實際所在的筆記。編輯嵌入也改到實際所在的筆記。
 
 **索引**：`block_nodes` 只有升級（`{標籤}`）的段落，不能用。新增 `note_block_refs`（migration 143：筆記、`^id`），
-涵蓋所有 `^id`，由 `noteBlockRefs.syncNoteBlockRefs` 在每次寫正文時（`applyBodyChange`、`finishNewNote`，與 `syncBlockNodes`
-同兩處、同一個交易）依 `blockAnchors` 更新；筆記刪除時隨 FK 清除。它只是索引：查到候選後讀這幾篇的正文，用真正的解析器確認，
+涵蓋所有 `^id`，由 `noteBlockRefs.syncNoteBlockRefs` 在每次寫正文時（`applyBodyChange`、`finishNewNote`，經 `bodyDerivation.deriveFromBody`；
+收下修改包的那一台也經它，`services/receivedDerivation.ts`；同一個交易）依 `blockAnchors` 更新；筆記刪除時隨 FK 清除。它只是索引：查到候選後讀這幾篇的正文，用真正的解析器確認，
 所以舊資料的回填（migration 用正則，比解析器寬鬆，會多收程式碼區塊裡的 `^id`）多收的列只多花一次讀取，不會連錯。
 候選超過 20 篇（貼到處都是的樣板 id）直接當作找不到，不讀。
 

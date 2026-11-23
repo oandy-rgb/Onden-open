@@ -59,7 +59,8 @@ for h in "${heads[@]}"; do
   fi
   cur=$(git commit-tree "$tree" -p "$cur" -p "$h" -m gate)
 done
-mainonly=$(git log --format= --name-only "$tested..origin/main" | sort -u)
+# Files main changed since the tested commit's base, merge commits' own changes included (a `git log --name-only` would skip those).
+mainonly=$(git diff --name-only "$(git merge-base "$tested" origin/main)" origin/main)
 odd=$(git diff --name-only "$cur" "$tested" | grep -vE "$GENERATED" | grep -vxF -f <(printf '%s\n' "$mainonly" | sed '/^$/d'; echo /dev/null) || true)
 [ -z "$odd" ] || fail "今天的 main 加上這些 PR 和測過的不一樣（不是 main 自己改的檔）：$(echo $odd)"
 echo "ok 3  今天的 main 加上這些 PR = 測過的那一份（main 之後自己改的檔除外）"
@@ -92,7 +93,9 @@ for i in "${!prs[@]}"; do
   echo "merged #$n（先帶入 main）"
 done
 git fetch -q origin main
-mainonly=$(git log --format= --name-only "$tested..origin/main" | sort -u)
+# Main before these merges: the first parent, once per merged PR (each merge adds one; a PR brought up to main by --merge still adds one on main).
+before=$(git rev-parse "origin/main$(printf '^1%.0s' "${prs[@]}")")
+mainonly=$(git diff --name-only "$(git merge-base "$tested" "$before")" "$before")
 odd=$(git diff --name-only origin/main "$tested" | grep -vE "$GENERATED" | grep -vxF -f <(printf '%s\n' "$mainonly" | sed '/^$/d'; echo /dev/null) || true)
 [ -z "$odd" ] || fail "合完之後 main 和測過的不一樣：$(echo $odd)"
 echo "main $(git rev-parse --short origin/main) = 測過的那一份（main 之後自己改的檔除外）"

@@ -78,7 +78,7 @@ export default function DayNoteParentSetting(_props: { ctx: SettingContext }) {
         ? (usable
           ? t("New day notes go under “{title}”.", { title: parent?.title || t("Untitled") })
           : !spaceId
-            ? t("Your spaces have not loaded yet, so new day notes go at the top level for now.")
+            ? t("This device has not connected yet: today's diary is started under this note once it does.")
             : !parent && !bootstrapped
               ? t("New day notes go under the note you chose.")
               : t("The chosen note is gone or not in your personal space, so new day notes go at the top level."))

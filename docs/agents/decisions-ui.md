@@ -1,6 +1,6 @@
 # 邊界決定：介面（側欄與頂欄、指令面板、匯出、選位置、視角分頁、設定、編輯器）
 
-> 狀態：現行（最後確認 2026-11-20）
+> 狀態：現行（最後確認 2026-11-23）
 > 涵蓋：packages/frontend/src/components/AppTopbar.tsx, packages/frontend/src/hooks/useWorkspacePanes.ts, packages/frontend/src/hooks/useUrlLocation.ts, packages/frontend/src/lib/pageScrollRestore.ts, packages/frontend/src/hooks/usePageScrollRestore.ts, packages/frontend/src/hooks/useCommandPalette.ts, packages/frontend/src/hooks/useNoteExport.ts, packages/frontend/src/components/SidebarTagTree.tsx, packages/frontend/src/components/CreateSheet.tsx, packages/frontend/src/components/PlacePicker.tsx, packages/frontend/src/components/viewTabs/**, packages/frontend/src/components/ui/Sheet.tsx, packages/frontend/src/lib/splitViewStore.ts, packages/frontend/src/hooks/useEscapeKey.ts, packages/frontend/src/lib/editorKeyboard.ts, packages/frontend/src/lib/cardDisplay.ts, packages/frontend/src/settings/registry.tsx, packages/frontend/src/modules/review/reviewPlace.ts, packages/frontend/src/components/ui/initialFocus.ts, packages/frontend/src/components/tagPage/FieldPopover.tsx
 
 何時讀：改側欄與頂欄、寫作模式、指令面板、筆記匯出與剪貼簿、移動到…／選位置、筆記與標籤頁的視角分頁、並排、設定頁、編輯器的輸入與鍵盤行為之前。
@@ -101,7 +101,8 @@
 - **可拖曳清單與分頁的觸控手勢只有一套**（`lib/touchHold`）：按住 `HOLD_MS` 浮起、移動超過 `HOLD_SLOP` 是拖曳、原地放開開選單；新的可拖曳清單用 `beginTouchHold`／`createTouchPressGuard`，
   不自己寫計時；觸控時分頁不帶 `draggable`。滑鼠可拖、右鍵與 Shift+F10 開選單。
 - **「內容」分頁可以移除、從「＋」加回（2026-11-16，PDF 頁面提案步驟 1a，`docs/architecture/proposals/pdf-pages-in-note-2026-11-16.md` 第 2.5 節）**：
-  任何筆記都可以。「內容」有兩種樣子：**沒有紀錄**（所有既有筆記）＝內建分頁，固定第一個、不能移動或改名，與以前完全相同，選單多一項「移除分頁」；
+  任何筆記都可以。「內容」有兩種樣子：**沒有紀錄**（所有既有筆記）＝內建分頁，排第一個、不能改名，選單有「往左移／往右移」與「移除分頁」；
+  **「內容」不一定要在第一個（業主 2026-11-23）**：第一次把它移離最前面（或把別的分頁移到它前面）時建立它的紀錄（顯示、不隱藏、帶新位置，需要連線，離線說一句「第一次移動『內容』分頁需要連線」、什麼都不動），之後照紀錄排；沒離開最前面的移動不建紀錄，其他分頁照舊從 0 編號（`lib/viewTabs` 的 `reorderTabs`、`lib/contentTab` 的 `placeContentTab`）。標籤頁的第一個分頁（清單）沒有紀錄可存，不能移動；
   **有紀錄**（`collection_views` 一列，layout `content`，`CONTENT_LAYOUT` 在 `@onden/markdown/contract`，只給筆記、標籤的檢視會拒絕；一則筆記只有一列）＝照 `pin_order` 排、可移動，
   `layout_config.hidden` 控制顯示——與白板同一個機制，沒有第二套。**名字固定**：存 `"Content"`，畫面一律顯示當下語言的「內容」，不能改名（「＋」、確認訊息、詢問都這樣叫它）。
   移除＝寫一列 `hidden: true`（沒有紀錄就新建一列，需要連線，離線在確認前就擋掉），**不碰文字**，

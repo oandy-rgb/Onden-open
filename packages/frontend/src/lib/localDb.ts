@@ -281,6 +281,17 @@ export async function getMembershipEpoch(): Promise<number> {
   return call<number>("getMembershipEpoch");
 }
 
+/** The caller's spaces as this device last heard them from the server (lib/spaces.ts); null when none are kept
+ *  (a new device, or a copy whose MIRROR_SCHEMA_VERSION changed since). Rejects when there is no copy. */
+export async function loadSpaces(): Promise<unknown[] | null> {
+  return call<unknown[] | null>("loadSpaces");
+}
+
+/** Keep the server's list of the caller's spaces in this account's copy. */
+export async function storeSpaces(spaces: unknown[]): Promise<void> {
+  await call<void>("storeSpaces", [spaces]);
+}
+
 /** Keep a copy of server attribute values of a note this device holds but
  *  lacks those values of (a drawing read on open); existing copies win. */
 export async function fillNodeAttributes(nodeId: string, rows: Array<{ key: string; value: string; value_type?: string; is_inheritable?: boolean; source?: string }>): Promise<void> {

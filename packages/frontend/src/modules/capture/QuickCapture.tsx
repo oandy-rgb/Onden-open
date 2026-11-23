@@ -251,7 +251,7 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
   const baselineRef = useRef("");
   // Client ids for the capture being attempted; reused while the input is the
   // same so a retry cannot create a second note (see send below).
-  const attemptRef = useRef<{ key: string; captureId: string; dailyId: string } | null>(null);
+  const attemptRef = useRef<{ key: string; captureId: string } | null>(null);
 
   const speechAvailable = getRecognitionCtor() !== null;
 
@@ -315,13 +315,14 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
   /** Settles where a capture goes: the note it goes under (today's journal is
    *  found or started first), or the inbox. Needs the inbox tag's id for the
    *  inbox, which the server makes the first time. */
-  const landingFor = useCallback(async (place: CaptureDestination, dailyId: string): Promise<Landing & { tagId: string | null }> => {
+  const landingFor = useCallback(async (place: CaptureDestination): Promise<Landing & { tagId: string | null }> => {
     if (place.kind === "note") return { parentId: place.noteId, inbox: false, tagId: null };
     if (place.kind === "today") {
       // Found or started like the topbar's Today button: sent now when online,
       // queued otherwise; a refusal rejects (already reported by the writer).
-      // `dailyId` is only used before the personal space is known.
-      const today = await dayNotes.openToday({ fallbackId: dailyId });
+      // A device that does not know the personal space yet refuses with a
+      // sentence (dayNotes PersonalSpaceUnknownError); the text stays in the box.
+      const today = await dayNotes.openToday();
       return { parentId: today!.node.id, inbox: false, tagId: null };
     }
     return { parentId: null, inbox: true, tagId: await ensureInboxTagId(tags) };
@@ -390,11 +391,11 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
         // deduplicated by the server (the id doubles as the Idempotency-Key).
         const attemptKey = `${place.kind}:${place.kind === "note" ? place.noteId : ""}\u0000${reading.text}\u0000${embeds.join("\n")}`;
         if (attemptRef.current?.key !== attemptKey) {
-          attemptRef.current = { key: attemptKey, captureId: randomUUID(), dailyId: randomUUID() };
+          attemptRef.current = { key: attemptKey, captureId: randomUUID() };
         }
-        const { captureId, dailyId } = attemptRef.current;
+        const { captureId } = attemptRef.current;
         const hadInboxTag = inboxTagId(tags) !== null;
-        const landing = await landingFor(place, dailyId);
+        const landing = await landingFor(place);
         madeInboxTag = landing.inbox && !hadInboxTag;
         // #tags that exist are applied in the same request; the others stay text.
         const textTagIds = reading.tagPaths.flatMap((path) => {
@@ -434,7 +435,7 @@ export default function QuickCapture({ online, nodes, tags, create, kinds: allKi
     if (busy) return;
     setBusy(true);
     try {
-      const landing = await landingFor(destination, randomUUID());
+      const landing = await landingFor(destination);
       setOpen(false);
       const id = await create(kindId, { parentId: landing.parentId });
       if (id) {

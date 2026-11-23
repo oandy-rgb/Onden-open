@@ -27,19 +27,23 @@ export function dailyNotesEnabled(): boolean {
   return dailyNotesEnabledIn(getAppState().data.workspace?.modules);
 }
 
-/** The day note for `date` (today by default): a non-hidden node whose title
- *  or slug is that date. The one lookup behind dayNotes.openToday (the Today
- *  button, quick capture, the agenda quick-add, the daily template). */
+/** The day note for `date` (today by default) in the personal space: a node
+ *  whose title or slug is that date. Undefined while the personal space is not
+ *  known. The one lookup behind dayNotes.openToday (the Today button, quick
+ *  capture, the agenda quick-add, the daily template). */
 export function findDayNode<T extends { title?: string; slug?: string; hidden?: boolean; space_id?: string | null }>(
   nodes: readonly T[],
   date: string = todayId(),
   ownSpaceId: string | null = personalSpaceId(),
 ): T | undefined {
   // A daily note is someone's own: (owner, date), found in their personal
-  // space — a same-dated note someone shared elsewhere is not "today" for you.
-  // Before the spaces load, any day note matches (one person's workspace).
-  return nodes.find((n) => dayNoteDate(n) === date
-    && (!ownSpaceId || !n.space_id || n.space_id === ownSpaceId));
+  // space — a same-dated note someone shared elsewhere is not "today" for you,
+  // and writing a capture or a task into it would show it to that space.
+  // A row without a space is this device's own, not yet answered by the server.
+  // The personal space unknown (a device that never heard the server, see
+  // lib/spaces.ts): nothing is found — better than another space's note.
+  if (!ownSpaceId) return undefined;
+  return nodes.find((n) => dayNoteDate(n) === date && (!n.space_id || n.space_id === ownSpaceId));
 }
 
 /** Whether the workspace holds anything the user made beyond day notes (which

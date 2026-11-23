@@ -70,4 +70,8 @@ reset; : > "$FAKE_GH/comment"; expect refuse "no review verdict at all" "審查�
 reset; echo e > a.txt && git commit -qam "main moves on another file" && git push -q origin main
   expect pass "main moved on a file the PR does not touch"
   git reset -q --hard HEAD~1 && git push -q -f origin main
+reset; git checkout -qb side main && echo s > s.txt && git add s.txt && git commit -qm side && git checkout -q main \
+  && git merge -q --no-ff --no-commit side >/dev/null && echo m > m.txt && git add m.txt && git commit -qm "a merge that also changes a file of its own" && git push -q origin main
+  expect pass "main moved through a merge commit that changes a file itself (not only through its branch's commits)"
+  git reset -q --hard HEAD~1 && git push -q -f origin main && git branch -qD side
 [ "$failures" -eq 0 ] && echo "merge gate self-test passed" || { echo "merge gate self-test: $failures case(s) wrong"; exit 1; }

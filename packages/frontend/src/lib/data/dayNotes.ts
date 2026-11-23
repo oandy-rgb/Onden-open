@@ -10,8 +10,12 @@
 // from (personal space, date) — dayNoteId — and doubles as the create's
 // Idempotency-Key, so two devices that start today's note offline send the same
 // create and the server keeps one (the second is answered {deduped:true}).
-// Before the spaces have loaded (an offline boot) the personal space is
-// unknown; the id is then random, as before D68.
+// The personal space comes from lib/spaces.ts, which keeps the list in the
+// local copy, so an offline start knows it too. A device that has never heard
+// the server (new, or its data cleared) does not: then nothing is started —
+// PersonalSpaceUnknownError says, in plain words, to connect first — rather
+// than a random id at the top level (2026-11-21 on a phone: a day note outside
+// the chosen parent; two devices offline would each have started one).
 //
 // Every day note starts the same way: titled with its date and otherwise
 // empty. The "Daily note" template is an explicit choice to stamp a scaffold
@@ -47,7 +51,9 @@ import { ApiError, type ContentNode } from "../api";
 import { dailyNotesEnabledIn, dayNoteId, findDayNode, tasksNoteId } from "../dayNode";
 import { settledWithin } from "../syncedPrefStore";
 import { dayNoteParentStore } from "./dayNoteParentStore";
-import { personalSpaceId, refreshSpaces } from "../spaces";
+import { personalSpaceId, refreshSpaces, spacesHeardFromServer } from "../spaces";
+import { t } from "../i18n";
+import { WriteActionError } from "./writeErrors";
 import { randomUUID } from "../uuid";
 import { domainContext } from "./domainWriters";
 import { makeNoteWriter, type CreateNote } from "./noteWriter";
@@ -64,9 +70,6 @@ export type OpenToday = {
   /** Start today's note when there is none: `true` (empty), a seed, or
    *  `false` to only look. Default `true`. */
   create?: boolean | DayNoteSeed;
-  /** The id to start it with when the personal space is not known yet (no
-   *  deterministic id). A caller that retries passes the same one. */
-  fallbackId?: string;
 };
 
 /** Today's note. `created`: this call started it — "synced" when the server
@@ -82,6 +85,19 @@ export class InvalidDayNoteDateError extends Error {
 /** A day note's date: exactly YYYY-MM-DD and a real day (no time, no zone). */
 export function isDayNoteDate(date: unknown): date is string {
   return typeof date === "string" && isCalendarDay(date);
+}
+
+/** Starting a day note or a 任務 note on a device that does not know the
+ *  person's own space (it has never heard the server: lib/spaces.ts). Nothing
+ *  was written; the caller keeps what was typed. A WriteActionError, so
+ *  writeErrors.report shows its sentence. */
+export class PersonalSpaceUnknownError extends WriteActionError {
+  readonly code = "personal_space_unknown";
+  constructor(what: "day" | "tasks") {
+    super(what === "day"
+      ? t("Today's diary is started once this device has connected to the internet.")
+      : t("Tasks without a note can be saved once this device has connected to the internet."));
+  }
 }
 
 /** openToday while the daily-notes module is not imported. */
@@ -102,9 +118,9 @@ export const dayNoteParentSetting = {
 type NoteRow = Pick<ContentNode, "id" | "hidden" | "node_type" | "parent_id"> & { deleted_at?: string | null; space_id?: string | null };
 
 /** `parentId` when a day note may be created under it: a live, visible note
- *  in the personal space. Else null (top level) — also while the personal
- *  space is not known (an offline boot before the spaces load): a parent in
- *  another space would put the day note where findDayNode never looks. */
+ *  in the personal space. Else null (top level); null too while the personal
+ *  space is not known — no day note is started then (openDay refuses), and a
+ *  parent in another space would put it where findDayNode never looks. */
 export function usableDayNoteParent(nodes: readonly NoteRow[], parentId: string | null, spaceId: string | null): string | null {
   if (!parentId || !spaceId) return null;
   const parent = nodes.find((n) => n.id === parentId);
@@ -174,30 +190,29 @@ export function makeDayNotes(ctx: DataCtx, {
     if (found) return { node: found, created: false };
     if (create === false) return null;
     const spaceId = await personalSpaceWhenKnown();
+    if (!spaceId) throw new PersonalSpaceUnknownError("day");
     // The setting's parent, applied here only (callers never set it): a seed
     // may carry its own parent_id, which wins.
     const parent = await settingParent(spaceId);
     const seed: DayNoteSeed = { ...(parent ? { parent_id: parent } : {}), ...(create === true ? {} : create) };
-    const id = spaceId ? dayNoteId(spaceId, date) : options.fallbackId ?? randomUUID();
-    return startNote({ id, title: date, seed, find: () => findDayNode(ctx.data.nodes, date) });
+    return startNote({ id: dayNoteId(spaceId, date), title: date, seed, find: () => findDayNode(ctx.data.nodes, date, spaceId) });
   }
 
   /** The setting's parent when a note may go under it, else null. Online, a
    *  setting the server has not been asked for yet is waited for first. */
-  async function settingParent(spaceId: string | null): Promise<string | null> {
+  async function settingParent(spaceId: string): Promise<string | null> {
     if (ctx.online) await parentHeard();
     return usableDayNoteParent(ctx.data.nodes, parentSetting(), spaceId);
   }
 
-  /** The personal space, waiting a moment for the spaces list on a cold start.
-   *  The spaces load after the bootstrap (lib/spaces.ts), and a cold start
-   *  lands on today before they arrive: without the personal space the note
-   *  went to the top level, under a random id. Wait a moment for them when
-   *  online; offline (or a slow answer) null is returned and the caller falls
-   *  back to a random id. */
+  /** The personal space. Online, before the server has answered the spaces
+   *  request on this page, wait a moment for it: its answer is newer than the
+   *  copy this device kept (lib/spaces.ts restoreSpaces), which is used
+   *  otherwise — offline, or a slow answer. Null only on a device that has
+   *  never heard the server; callers refuse then (PersonalSpaceUnknownError). */
   async function personalSpaceWhenKnown(): Promise<string | null> {
     let spaceId = personalSpaceId();
-    if (!spaceId && ctx.online) {
+    if (ctx.online && !spacesHeardFromServer()) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([refreshSpaces(), new Promise((done) => { timer = setTimeout(done, SPACES_WAIT_MS); })]);
       clearTimeout(timer);
@@ -237,9 +252,10 @@ export function makeDayNotes(ctx: DataCtx, {
    *  day note of its own. */
   async function openTasksNote(spaceId?: string): Promise<OpenedDayNote> {
     const personal = await personalSpaceWhenKnown();
+    if (!personal) throw new PersonalSpaceUnknownError("tasks");
     const target = spaceId ?? personal;
-    const isPersonal = !target || target === personal;
-    const id = target ? tasksNoteId(target) : randomUUID();
+    const isPersonal = target === personal;
+    const id = tasksNoteId(target);
     // Wherever it sits: under the setting's parent it is still the one note.
     // A row without a space (an offline boot) can only be the personal one.
     const find = () => ctx.data.nodes.find((n) => isShownNote(n) && isNote(n)
@@ -248,7 +264,20 @@ export function makeDayNotes(ctx: DataCtx, {
     if (found) return { node: found, created: false };
     const parent = isPersonal && enabled() ? await settingParent(target) : null;
     const seed: DayNoteSeed = parent ? { parent_id: parent } : {};
-    return startNote({ id, title: TASKS_NOTE_TITLE, seed: !isPersonal && target ? { ...seed, space_id: target } : seed, find });
+    return startNote({ id, title: TASKS_NOTE_TITLE, seed: isPersonal ? seed : { ...seed, space_id: target }, find });
+  }
+
+  /** The note a task with no note of its own is written into (quick-add,
+   *  capture). In the personal space (`spaceId` absent or it): today's diary
+   *  while the module is on, else the personal 任務 note — diaries stay
+   *  personal. Another space: its 任務 note. Refuses with
+   *  PersonalSpaceUnknownError when the personal space is not known, so a
+   *  task never goes to a guessed note. */
+  async function openTaskHome(spaceId?: string | null): Promise<OpenedDayNote> {
+    const personal = await personalSpaceWhenKnown();
+    if (!personal) throw new PersonalSpaceUnknownError(enabled() ? "day" : "tasks");
+    if (spaceId && spaceId !== personal) return openTasksNote(spaceId);
+    return enabled() ? (await openDay(todayId()))! : openTasksNote(personal);
   }
 
   /** Today's note (in the workspace's zone), started when there is none and
@@ -261,7 +290,7 @@ export function makeDayNotes(ctx: DataCtx, {
     return openDay(todayId(), options);
   }
 
-  return { openToday, openDay, openTasksNote, enabled };
+  return { openToday, openDay, openTasksNote, openTaskHome, enabled };
 }
 
 /** Today's note over the live store — the instance every surface uses. */

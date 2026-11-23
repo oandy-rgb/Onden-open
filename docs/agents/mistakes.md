@@ -68,6 +68,7 @@
 | 新增的東西沒人核對它進了備份 | 新增資料表、模式或面（側欄捷徑、關係圖位置、訂閱）時，備份的寫出或還原沒跟上，也沒有任何清單會因此失敗；缺口只存在於 `it.fails` 的註解，沒人修 |
 | 註解裡的不變條件沒人檢查 | 註解或規則寫「只可能」「一定」「永遠不會」，程式裡有反例，也沒有測試或守門擋住反例 |
 | 不可信來源的值被記下 | 不被信任的那一端（臨時工作階段的電腦、請求的標頭或本文欄位）自己給的值，被這台當成事實記下，或跟著寫入送給別台 |
+| 未載入被當成一個答案 | 一份還沒拿到的資料（清單、設定、身分）在程式裡是 `null`／空陣列，被下游當成「沒有」「最上層」「任何一個都算」來做事，而不是「還不知道、先別做」 |
 | 比較的兩邊型別不同，索引用不上 | SQL 把有索引的欄位和另一個型別的值比（`text` 欄位對觸發器的 `TG_TABLE_NAME`（`name`）），規劃器只能整表讀；小資料庫看不出來，成本隨資料量成長 |
 | 實機操作碰到真實資料 | 在業主的裝置上量測或驗收時，模擬的點擊、按鍵落在真實筆記上（打了字、改了東西），而不是在測試空間 |
 | 同時進行太多、整合落後 | 開著的 PR 累積到審不完；修正卡在沒合併的 PR 裡，業主以為修好了的問題在正式站上還在 |
@@ -104,6 +105,28 @@
 - **還沒擋住的**：尚無機制——沒有守門找出「`mutate` 以外、用請求 actor 的 id 直接呼叫 `event()`」的其他地方（例如發布快照、區塊錨點的事件，要逐一確認是否已在重讀過的交易內）；MCP 協定端點（`/api/mcp/protocol`）上同一情形會變成 200 的工具錯誤，不是 401。（協定端點這一條在 2026-11-22 那筆處理：`actorGoneDuring`。）
 - 再次出現：2026-11-18，安全審查（PR #1875 的留言）點名 `services/tagPacks.ts` 的 `TAG_IMPORTED` 後，逐條走 `spineEventGate` 允許清單又找到三處同形狀：核准的標籤包在提案的代理被移除後重試一天再埋掉（核准的匯入遺失）、派生工作補跑的「操作者已不在→丟棄並留紀錄」那筆紀錄本身寫不進去（意圖永遠留著、每次補跑重來）、即時派生失敗的紀錄寫不進去（promise 被拒）；另外 `POST /api/publish` 的 `PUBLISH_SNAPSHOT_CREATED` 和原本的稽核紀錄同形狀（回 500）。證據：`capturedActorRemoved.integration.test.ts` 四個案例在修正前全紅（`expected 1 to be +0`、`promise rejected "error: domain_events.actor_id = …"`、`expected { status: 'pending' } to match { status: 'done' }`、`expected error: domain_events.actor_id … to be an instance of UnauthorizedError`），修正後綠。發現者：審查。上一筆寫「發布快照要逐一確認」卻沒在同一個 PR 確認，是這次的原因。機制：〔第 1 層〕請求路徑走 `appendEventAsCurrentActor`（發布快照因此離開允許清單），背景工作走 `signatureForCapturedActor`（`spine/currentActor.ts`），兩者都有測試；允許清單每一條的說明寫明它屬於哪一種。還沒擋住的：仍沒有守門檢查「新的直接 `event()` 呼叫用的 actor id 是不是在鎖後確認過」，允許清單只擋新檔案、不擋既有檔案裡的新呼叫（尚無機制）。
 - 同一個 PR 第一輪說明寫「500 的伺服器記錄不帶 actor id」（未查證就回報）：migration 071 的拒絕訊息本身就含 actor id 與 workspace id，`apiOnError` 把整個錯誤記下來。證據：在 main 的產品程式上讓工具寫完後刪掉自己的操作者，記錄是 `unhandled route error err=error: domain_events.actor_id = <uuid> is uuid-shaped but resolves to no actor in workspace <uuid>`。發現者：審查之後的實測。機制：上一行的兩個入口讓這條路徑不再走到資料庫的拒絕；其他仍可能撞上 migration 071 的寫入，記錄照樣會帶出 id（尚無機制）。
+### 2026-11-22　開機時「打開今天的日記」從立刻變成要等，晚到的結果蓋掉了使用者剛打開的筆記（零件對、組裝錯；#1953）
+- **發生了什麼**：#1953 讓 `findDayNode` 在個人空間未知時找不到任何筆記。全新的瀏覽器（e2e 每則都是）開機時空間還沒到，啟動落點（`useLandingNote`）因此不再立刻打開已存在的今天日記，改走 `openDailyNote`，它等空間清單（最多 3 秒）後才選取今天的日記；那時測試已經打開「Single …」，標題框變成今天的日期。同一個「晚到就蓋掉」在修正前也存在（今天的日記還不存在、要等空間才建的時候），只是很少走到。
+- **證據**：公開 run 45070671260，`inboxGovernance.spec.ts:118` `@critical`；分支 `fix/spaces-known-at-boot`，修正前 `firstRunLanding.test.tsx` 的 `leaves a note opened meanwhile alone` 與 `openDailyNote.test.ts` 的 `selects nothing when the caller no longer wants it` 紅。
+- **發現者**：審查（公開 CI 的關鍵路徑 e2e）。
+- **為什麼沒擋到**：PR 只跑了 vitest 與守門，沒跑 e2e（寫成「由審查者在公開 CI 跑」）；單元測試把落點與 `openDailyNote` 分開測，沒有一則讓「落點還在等」與「使用者打開別的」同時發生。
+- **類別**：零件對、組裝錯。
+- **機制**：〔第 1 層〕落點的非同步部分只在畫面沒被動過時生效：`openDailyNote` 的 `stillWanted`（選取與歷史項目都沒變），落點的後備也一樣；`firstRunLanding.test.tsx` 的「while today's note is still on its way」兩則。
+- **還沒擋住的**：其他開機後非同步才決定畫面的地方沒有盤點；改了「開機時找得到什麼」的 PR 沒有規則要求自己先跑 `--grep @critical`。
+
+### 2026-11-22　空間清單只在記憶體，離線冷開機時「個人空間不知道」被當成「放最上層、用隨機 id、任何空間都算」（未載入被當成一個答案）
+- **發生了什麼**：正式站 2026-11-21 的日記（手機 Brave PWA，台灣清晨 4:08 建立）落在個人空間最上層、id 是隨機的，其他天都在設定的上層底下、id 由（個人空間、日期）算出；11-15 也是隨機 id。`lib/spaces.ts` 的清單只在記憶體，冷開機到 `/api/spaces` 回答前、離線開機整段，`personalSpaceId()` 都是 null；`dayNotes.openDay` 因此用隨機 id、`usableDayNoteParent` 回最上層。同一個 null 還讓任務進了「任務」筆記而不是今天的日記（`createQuickTask` 把個人空間當成共用空間）、`openTasksNote` 可能建出第二篇、`findDayNode` 把任何空間同日期的筆記當今天的、`canEdit` 把「只能看」當可編輯。
+- **證據**：分支 `fix/spaces-known-at-boot`；修正前 `spacesKnownAtBoot.test.tsx` 13 則全紅（例：`expected { saved: 'queued', noteTitle: '任務' } to match object { … noteTitle: <今天> }`、`expected { id: 'team-day', … } to be undefined`）。
+- **發現者**：上線後（擁有者使用）。
+- **為什麼沒擋到**：`dayNotes` 的註解把「空間未載入時用隨機 id、最上層」寫成刻意的後退，測試也釘住它（`uses the caller's fallback id before the personal space is known`、`is skipped while the personal space is unknown: top level`）；沒有測試走「離線冷開機、本機有副本」這條真路徑。
+- **類別**：未載入被當成一個答案（新增）。
+- **機制**：
+  - 〔第 1 層〕清單存進本機副本（`sync_state` 的 `spaces`，`MIRROR_SCHEMA_VERSION` 5 起一變就作廢），開機在第一次畫面前讀回（`lib/spaces.ts` `restoreSpaces`、`syncEngine.runBoot`）；「不知道」只剩從沒聽過伺服器的裝置。
+  - 〔第 1 層〕會寫入的入口在「不知道」時拒絕而不猜：`dayNotes.openDay`／`openTasksNote`／`openTaskHome` 丟 `PersonalSpaceUnknownError`（一句白話、輸入保留）；`findDayNode` 不知道就找不到。`fallbackId` 選項刪除。
+  - 〔第 2 層〕`spacesKnownAtBoot.test.tsx`（只假 `lib/api`、`lib/localDb`）：離線冷開機、新裝置離線、伺服器換 id、共用空間同日期筆記（含隨機種子）、換帳號；`spacesKeptInCopy.test.ts` 用真的 worker；`mirrorSchemaVersion.test.ts` 驗作廢。
+- **還沒擋住的**：其他「未載入就是 null」的清單（偏好、標籤目錄等）沒有逐一盤點；這一類尚無通用守門，只能靠審查看到 `?? null` 之後的預設動作。
+
+
 ### 2026-11-20　測試世界（happy-dom）同步送 selectionchange，升級 CodeMirror 之後 52 則編輯器測試紅；補丁讓測試世界與真瀏覽器的時序又差了一處
 - **發生了什麼**：`@codemirror/view` 升到 6.43.15 後，happy-dom 在「移動選取」的那次呼叫裡同步送出 `selectionchange`，CodeMirror 把它當成更新中的更新（「Calls to EditorView.update are not allowed…」），52 則編輯器測試紅。真瀏覽器的 `selectionchange` 是事後的獨立任務、且合併。`test/setup.ts` 因此只在「編輯器更新中」把它事後送達並合併，其他時候維持同步（第一版全域改成事後，讓依賴同步讀選取的 rssQuote 11 則紅、worker 記憶體爆掉）。
 - **證據**：全套 vitest 紅 52 → 補丁後 9800 過；第一版補丁的 rssQuote 11 則與 OOM。

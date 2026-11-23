@@ -23,7 +23,7 @@ import {
 import { forgetVerifiedAccount } from "../accountStorage";
 import { canvasList } from "../canvasList";
 import { targetsEntity, withoutPendingCreates, type TargetedWrite } from "../pendingWriteTargets";
-import { noteMembershipEpoch } from "../spaces";
+import { noteMembershipEpoch, restoreSpaces } from "../spaces";
 import { bindDomainLifecycle, canvasWriter } from "./domainWriters";
 import { isBodyInUse } from "./draftActions";
 import { sendWrite } from "./onlineWrite";
@@ -1226,6 +1226,9 @@ async function runBoot(): Promise<{ endedOffline: boolean }> {
   // is still shown and saved to; only the offline copy is missing, and the
   // page says so (useMemoryOnlyLocalCopy).
   await initLocalDb().catch(() => useMemoryOnlyLocalCopy());
+  // The spaces this device last heard, before anything paints or starts today's note: an offline start knows the
+  // personal space too (lib/spaces.ts). The server's list replaces it when it answers.
+  await restoreSpaces();
   // The watermark survives a reload with the copy (lib/answerPositions.ts); the page starts from it.
   startWatermarkFrom(await getWatermark().catch(() => ({})));
   // Only a device without a cursor needs the bootstrap's. One that already

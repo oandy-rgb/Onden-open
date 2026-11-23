@@ -3,7 +3,7 @@ import { canvasWriter, viewWriter, type ViewInput, type ViewOwner } from "../../
 import { useT } from "../../lib/i18n";
 import { reloadOwnerViews, type SavedView } from "../../lib/ownerViews";
 import { useOnline } from "../../lib/appStore";
-import { freeViewName, isFixedFirstTab, reorderTabs, type ViewTab } from "../../lib/viewTabs";
+import { freeViewName, isUnstoredContent, reorderTabs, type ViewTab } from "../../lib/viewTabs";
 import { confirmDialog } from "../ConfirmDialog";
 import { whiteboardTabIn } from "../../lib/whiteboardNote";
 
@@ -107,18 +107,25 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storeWhiteboard only reads values already listed
   }, [owner, run, t, takenNames, tabs, online]);
 
-  /** Drop `tab` at `index` among the tabs after the built-in 「內容」. */
+  /** Drop `tab` at `index` among the tabs. 「內容」 leaving the front for the first time makes its record first (lib/contentTab:
+   *  that needs the server); without it nothing moves, so the row never shows an order half written. */
   const move = useCallback(async (tab: ViewTab, index: number) => {
     const changes = reorderTabs(tabs, tab.key, index);
     if (changes.length === 0) return;
+    const content = changes.find(({ tab: moved }) => isUnstoredContent(moved));
     await run(async () => {
+      if (content) {
+        const placed = await import("../../lib/contentTab").then((mod) => mod.placeContentTab({ owner, takenNames, pinOrder: content.pinOrder, online }));
+        if (!placed) return;
+      }
       for (const { tab: moved, pinOrder } of changes) {
+        if (moved === content?.tab) continue;
         if (moved.view) await viewWriter.update(owner, moved.view.id, { pin_order: pinOrder });
         else await storeWhiteboard({ pin_order: pinOrder });
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- storeWhiteboard only reads values already listed
-  }, [owner, run, tabs, takenNames]);
+  }, [owner, run, tabs, takenNames, online]);
 
   /** 「Make a variation…」: a copy of a view's settings, right after it, named
    *  as the original is (a free name; the settings rename it once they change
@@ -126,7 +133,8 @@ export function useViewTabActions(owner: ViewOwner, tabs: readonly ViewTab[], vi
   const duplicate = useCallback(async (tab: ViewTab): Promise<string | null> => {
     const source = tab.view;
     if (!source || tab.kind !== "view") return null;
-    const movable = tabs.filter((candidate) => !isFixedFirstTab(candidate));
+    // The tabs after the source make room; the unstored 「內容」 is always first, so it is never one of them.
+    const movable = tabs.filter((candidate) => !isUnstoredContent(candidate));
     const at = movable.findIndex((candidate) => candidate.key === tab.key) + 1;
     return run(async () => {
       const id = await viewWriter.create(owner, {

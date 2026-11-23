@@ -31,7 +31,6 @@ vi.mock("../lib/data", async (original) => {
   };
 });
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
-import { useGraphViewState } from "../hooks/useGraphViewState";
 
 const note = (id: string, parent: string | null, minute = 0, extra: Partial<ContentNode> = {}): ContentNode =>
   ({ id, title: id, slug: id, markdown: "", node_type: "content", source_type: "manual", parent_id: parent, hidden: false,
@@ -49,7 +48,7 @@ function mount(nodes: ContentNode[], canvas: Canvas) {
     menus: { canvasNavStack: [], setCanvasNavStack: vi.fn(), setCtxMenu: vi.fn() },
     createNodeRaw: vi.fn(), assignToGroup: vi.fn(), refresh: vi.fn(async () => {}),
   } as unknown as Parameters<typeof useBoardWorkspace>[0];
-  return renderHook(() => useBoardWorkspace({ ...options, graphView: useGraphViewState() }));
+  return renderHook(() => useBoardWorkspace(options));
 }
 const cardIds = (hook: ReturnType<typeof mount>) => hook.result.current.board.displayGraphNodes.filter((n) => n.type === "card").map((n) => n.id).sort();
 
@@ -265,7 +264,7 @@ describe("what is not a note's board", () => {
       menus: { canvasNavStack: [], setCanvasNavStack: vi.fn(), setCtxMenu: vi.fn() },
       createNodeRaw: vi.fn(), assignToGroup: vi.fn(), refresh: vi.fn(async () => {}),
     } as unknown as Parameters<typeof useBoardWorkspace>[0];
-    const hook = renderHook(() => useBoardWorkspace({ ...options, graphView: useGraphViewState() }));
+    const hook = renderHook(() => useBoardWorkspace(options));
     expect(hook.result.current.board.tree).toBeUndefined();
     expect(hook.result.current.board.displayGraphNodes.filter((n) => n.type === "card")).toEqual([]);
   });

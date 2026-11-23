@@ -15,7 +15,6 @@ import { canDelete, countsAsBacklink, drawsInGraph, drawsOnBoard, resetEdgeKinds
 import { reads, relationWriter } from "../lib/data";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
-import { useGraphViewState } from "../hooks/useGraphViewState";
 import AllCardsGraph from "../modules/graph/AllCardsGraph";
 import { noteLinks, noteNeighborhood } from "../lib/noteNeighborhood";
 import ContextMenu from "../components/ContextMenu";
@@ -123,7 +122,7 @@ function boardOptions() {
 describe("the D74 bugs", () => {
   it("(1) Delete on a [[link]]'s arrow removes nothing and says why; a drawn arrow is removed", async () => {
     const remove = vi.spyOn(relationWriter, "remove").mockResolvedValue(undefined as never);
-    const { result } = renderHook(() => useBoardWorkspace({ ...boardOptions(), graphView: useGraphViewState() }));
+    const { result } = renderHook(() => useBoardWorkspace(boardOptions()));
     await act(async () => { await result.current.actions.onEdgeDeleted("wikilink"); });
     expect(remove).not.toHaveBeenCalled();
     expect(getAppState().toasts.at(-1)?.message).toMatch(/comes from the note's text/);
@@ -145,7 +144,7 @@ describe("the D74 bugs", () => {
 
   it("(3) drawing A→B by hand when A's [[B]] already draws it adds no second arrow", async () => {
     const connect = vi.spyOn(relationWriter, "connect").mockResolvedValue(undefined as never);
-    const { result } = renderHook(() => useBoardWorkspace({ ...boardOptions(), graphView: useGraphViewState() }));
+    const { result } = renderHook(() => useBoardWorkspace(boardOptions()));
     await act(async () => { await result.current.actions.onConnect("a", "b"); });
     expect(connect).not.toHaveBeenCalled();
     expect(getAppState().toasts.at(-1)?.message).toMatch(/already linked/);

@@ -12,7 +12,6 @@ import { resetAppState, setAppState } from "../lib/appStore";
 import { resetEdgeKindsForTest } from "../lib/edgeKinds";
 import { reads } from "../lib/data";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
-import { useGraphViewState } from "../hooks/useGraphViewState";
 import { linkSuggestionsShown, moduleFilterFor, ALL_MODULES } from "../modules";
 import ModuleLibrary from "../components/ModuleLibrary";
 import { setLocalePref } from "../lib/i18n";
@@ -41,7 +40,7 @@ function workspace(modules: string[] | null) {
   resetAppState({ data: { ...noWorkspaceData, nodes: NODES, edges: EDGES, actor_role: "admin", actor_is_owner: true,
     workspace: { ...noWorkspaceData.workspace, modules } }, activeCanvas: BOARD });
 }
-const drawn = () => renderHook(() => useBoardWorkspace({ ...boardOptions(), graphView: useGraphViewState() })).result.current.board.displayGraphEdges
+const drawn = () => renderHook(() => useBoardWorkspace(boardOptions())).result.current.board.displayGraphEdges
   .map((e) => e.id).filter((id) => EDGES.some((s) => s.id === id)).sort();
 
 beforeEach(() => {

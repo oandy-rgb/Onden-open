@@ -21,7 +21,6 @@ vi.mock("../components/CardNode", () => ({ CardNode: () => null }));
 vi.mock("../components/SectionNode", () => ({ SectionNode: () => null }));
 import KnowledgeWorkspace from "../components/KnowledgeWorkspace";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
-import { useGraphViewState } from "../hooks/useGraphViewState";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { getAppState, resetAppState, setAppState } from "../lib/appStore";
 import { canvasWriter, nodeActions } from "../lib/data";
@@ -144,7 +143,7 @@ describe("removeCanvasCards", () => {
       return undefined;
     });
     const settle = vi.fn();
-    const hook = renderHook(() => useBoardWorkspace({ ...options(settle), graphView: useGraphViewState() }));
+    const hook = renderHook(() => useBoardWorkspace(options(settle)));
     let undo: (() => Promise<unknown>) | null = null;
     await act(async () => { undo = await hook.result.current.actions.onRemoveCards(["a", "b"]); });
     expect(save).toHaveBeenCalledOnce();
@@ -159,7 +158,7 @@ describe("removeCanvasCards", () => {
   it("leaves a tag's board alone", async () => {
     const save = vi.spyOn(canvasWriter, "save");
     resetAppState({ activeCanvas: board, data: { ...getAppState().data, tags: [{ id: "board", name: "t" } as Tag] } });
-    const hook = renderHook(() => useBoardWorkspace({ ...options(), graphView: useGraphViewState() }));
+    const hook = renderHook(() => useBoardWorkspace(options()));
     let undo: unknown = "unset";
     await act(async () => { undo = await hook.result.current.actions.onRemoveCards(["a"]); });
     expect(undo).toBeNull();

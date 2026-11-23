@@ -9,6 +9,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Connect to change the time settings.": "連上線才能更改時間設定。",
   "Content": "內容",
   "List": "列表",
+  "Image": "圖片",
   "Bookmark": "書籤",
   "Putting a task into a note needs a connection": "把任務放進筆記需要連線",
   "Taking a task out of a note needs a connection": "把任務從筆記拿出來需要連線",
@@ -26,6 +27,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Made {n} existing notes review cards": "已把 {n} 篇現有的筆記設成複習卡",
   "Display": "顯示",
   "This note": "這篇筆記",
+  "Go back to the board's own centre to change it.": "先回到白板原本的中心，才能修改。",
   "Account": "帳號",
   "Sign-out paused. Finish saving your edits, then try again.": "已暫停登出。請先處理未儲存的修改，再試一次。",
   "Could not confirm sign-out. Keep this page open and try again.": "尚未確認登出成功。請保留此頁面，再試一次。",
@@ -164,6 +166,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Delete tag": "刪除標籤",
   "Cancel": "取消",
   "Preparing export…": "正在準備匯出…",
+  "{n} connections to groups were not imported.": "有 {n} 條連到分組的連線沒有匯入。",
   "No Q:/A: blocks found — write questions as `Q:` lines with `A:` answers": "找不到 Q:/A: 區塊——請用「Q:」開頭寫題目、「A:」寫答案",
   "All {n} cards already extracted": "{n} 張卡片都已抽取過",
   "Extracted {n} review cards": "已抽出 {n} 張複習卡",
@@ -272,6 +275,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
 
   // ── Node / data-layer toasts ──
   "Node": "筆記",
+  "This section is no longer on the canvas.": "這個分組已不在白板上。",
   "\"{title}\" saved locally": "已將「{title}」儲存在本機",
   "\"{title}\" created": "已建立「{title}」",
   "\"{title}\" deleted locally": "已於本機刪除「{title}」",
@@ -335,6 +339,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   // group headers
   "Navigate": "導覽",
   "The canvas is no longer available. Your note has been kept.": "這張白板已無法使用，筆記仍保留。",
+  "New group": "新分組",
   "Created “{title}” from a link": "已從連結建立「{title}」",
   "Delete #{name}": "刪除 #{name}",
   "System tag — it can be renamed but not merged or deleted.": "系統標籤：可以改名，但不能合併或刪除。",
@@ -403,6 +408,8 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Pin to top": "釘選到最上面",
   // 2026-10-05：寫入失敗與待同步提示
   "The text contains a broken character that can't be saved. Remove it and try again.": "文字中有損壞而無法儲存的字元，請移除後再試。",
+  "This card follows a sub-note. To take it off, turn off “Follow sub-notes” in Display.": "這張卡是跟著子筆記排出來的。要拿掉它，請到「顯示」關閉「跟著子筆記」。",
+  "Opening a nested board needs a connection.": "開啟巢狀白板需要連線。",
   "Connect to change note structure.": "請先連線，再變更筆記結構。",
   "{n} new child notes could not be removed after the failure. Check this note's children.": "操作失敗後，有 {n} 篇新建的子筆記無法移除，請檢查這篇筆記的子筆記。",
   "The upload did not return a file address.": "上傳沒有回傳檔案位址。",
@@ -478,6 +485,8 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Unhide tag": "取消隱藏標籤",
   // Edge roles (lib/edgeRoles, D74)
   "This arrow comes from the note's text (a [[link]]). Edit the note to change or remove it.": "這條箭頭來自筆記內文（[[連結]]）。要改或移除，請編輯那則筆記。",
+  "These cards are already linked: the note's [[link]] draws this arrow.": "這兩張卡片已經相連：筆記裡的 [[連結]] 已畫出這條箭頭。",
+  "These cards are already connected.": "這兩張卡片已經相連。",
   "New inside": "在裡面新增",
   // The "Move to…" and 放在 place picker (components/PlacePicker, MoveToDialog)
   "Move “{title}” to…": "把「{title}」移到…",

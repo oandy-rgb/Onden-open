@@ -10,7 +10,6 @@ import { noWorkspaceData, type Canvas, type ContentNode } from "../lib/api";
 import { resetAppState } from "../lib/appStore";
 import { dataSync } from "../lib/data";
 import { useBoardWorkspace } from "../hooks/useBoardWorkspace";
-import { useGraphViewState } from "../hooks/useGraphViewState";
 
 const slim = (id: string): ContentNode =>
   ({ id, title: id, slug: id, markdown: "", body_len: 50, node_type: "content", source_type: "manual", parent_id: null }) as ContentNode;
@@ -36,7 +35,7 @@ describe("board card bodies in a slim workspace", () => {
   it("tasks (or any non-board page) never hydrates the workspace's notes", async () => {
     const nodes = Array.from({ length: 400 }, (_, i) => slim(`n${i}`));
     resetAppState({ data: { ...noWorkspaceData, nodes }, online: true, activeCanvas: null });
-    renderHook(() => useBoardWorkspace({ ...options("tasks", "canvas"), graphView: useGraphViewState() }));
+    renderHook(() => useBoardWorkspace(options("tasks", "canvas")));
     await new Promise((r) => setTimeout(r, 30));
     expect(hydrate).not.toHaveBeenCalled();
   });
@@ -44,7 +43,7 @@ describe("board card bodies in a slim workspace", () => {
   it("a board still loading (no canvas yet) hydrates nothing", async () => {
     const nodes = Array.from({ length: 50 }, (_, i) => slim(`n${i}`));
     resetAppState({ data: { ...noWorkspaceData, nodes }, online: true, activeCanvas: null });
-    renderHook(() => useBoardWorkspace({ ...options("notes", "canvas"), graphView: useGraphViewState() }));
+    renderHook(() => useBoardWorkspace(options("notes", "canvas")));
     await new Promise((r) => setTimeout(r, 30));
     expect(hydrate).not.toHaveBeenCalled();
   });
@@ -54,7 +53,7 @@ describe("board card bodies in a slim workspace", () => {
     const ids = Array.from({ length: total }, (_, i) => `n${i}`);
     // The mock never fills the body in, as if syncEngine evicted it right away.
     resetAppState({ data: { ...noWorkspaceData, nodes: ids.map(slim) }, online: true, activeCanvas: board(ids) });
-    const hook = renderHook((opts) => useBoardWorkspace({ ...opts, graphView: useGraphViewState() }), { initialProps: options("notes", "canvas") });
+    const hook = renderHook((opts) => useBoardWorkspace(opts), { initialProps: options("notes", "canvas") });
     await waitFor(() => expect(hydrate).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));
     hook.rerender(options("notes", "canvas"));

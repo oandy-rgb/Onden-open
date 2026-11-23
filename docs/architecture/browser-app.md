@@ -1,6 +1,6 @@
 # 瀏覽器版：不用伺服器的試用版（第 2、3、4 批）
 
-> 狀態：現行（最後確認 2026-11-02；盲測修正批見 §16）。第 2 批（能用）、第 3 批（可以給朋友用，§12）與第 4 批（圖片與檔案，§14）已實作並測試（Chromium 桌機與手機視窗實跑；WebKit／iOS 沒有跑，原因見 §15）。
+> 狀態：現行（最後確認 2026-11-23；盲測修正批見 §16；環境能做什麼見 §19）。第 2 批（能用）、第 3 批（可以給朋友用，§12）與第 4 批（圖片與檔案，§14）已實作並測試（Chromium 桌機與手機視窗實跑；WebKit／iOS 沒有跑，原因見 §15）。
 > 地基是[可攜後端](portable-backend.md)（第 1 批，PR #1157）；實驗與數字的來源是 [browser-trial](../research/browser-trial/README.md)。
 > iPhone 真機要做的檢查：[browser-app-ios-checklist.md](browser-app-ios-checklist.md)。第 4 批做了圖片與檔案（§14）；沒做的（WebKit 實跑等）在 §15。
 > 涵蓋：packages/backend/src/browser/**, packages/backend/browser-shims/**, packages/frontend/src/browserApp/**, packages/frontend/browser-sw/media-sw.js, scripts/build-browser.mjs, scripts/deploy-browser.mjs, scripts/browserReleaseScan.mjs
@@ -519,3 +519,23 @@ interface MediaFiles {
 - **檔案裡有什麼（今天）**：筆記、標籤、屬性、連結、任務、檢視、手寫、白板位置、各表的來源標記（後端的 `rows` 層，`spine/snapshotTables.json`）。**還沒有**：加在筆記裡的圖片與檔案、版本歷史、操作紀錄（`stampedSnapshot.ts` 的 `history`／`blobs` 層尚未做）。兩端的畫面都這樣說。
 - **驗證**：`src/test/deviceFile.test.ts`、`DeviceFileSetting.test.tsx`、`BringNotes.test.tsx`（元件）、`backend/src/test/browserBringNotes.integration.test.ts`（PGlite）、`e2e/browser-app/addDeviceFile.mjs`（Chromium 與 390×844 手機視窗：A 存、B 開、重新整理、節點身分不同；2,000 則筆記的檔案；頁面在帶入中途被關掉）。沒有真手機、沒有數 GB 的工作區。
 - **說明要照實（2026-11-18 審查）**：製作端對話框說檔案**沒有加密**，並在有其他人的伺服器上說明檔案也含擁有者讀得到的共用空間內容（含別人放的筆記）與成員名字（瀏覽器版是單人，不說這句）。接收端的 worker 若在回答前結束（被系統收掉），`joinFile` 以 `WorkerLost` 結束等待、頁面重新載入，走同一條「上次沒有帶完」路徑；偵測不到的「worker 靜默凍結」沒有處理。製作端選檔視窗在換憑證**之後**才開（網路慢時瀏覽器可能拒絕，退回把整份檔案以 Blob 片段交給下載；大檔的記憶體用量沒量過，只試過 3.5 MB），大工作區建議在電腦上做。
+
+## 19. 這個環境能做什麼：沒有帳號、成員、成員確認（2026-11-23）
+
+擁有者回報：在瀏覽器版按「登出」之後，每次重新整理都在幾秒內被擋回「正在確認工作區資料⋯」，「重新檢查」永遠無效。
+瀏覽器版沿用正式版的整個前端，卻沒有「這個環境能做什麼」的判斷，所以正式版的登出與成員確認閘門也跟著出現。
+
+- **一個入口**：`lib/hostCapabilities.ts` 的 `hostCan("accounts" | "members" | "membershipCheck")`。依據是殼在掛上 app **之前**
+  宣告的 `declareLocalOnlyHost()`（`lib/localOnlyStatus.ts`；`BrowserAppShell.tsx` 在接上 fetch 橋之後呼叫，一般與臨時使用都算）。
+  不用 `localOnlyStatus` 的狀態列本身：它要等 `TrialNotice` 延後載入後才設，同步引擎開機第一次檢查時還不知道。
+- **成員確認閘門：本機版不啟動**（不是「保證放得下來」）。理由：這裡只有一個人，沒有人的權限會變，閘門擋不住任何人；
+  而「保證放得下來」得證明每一條讓檢查失敗的路徑都會收斂，正是這次沒做到的事。做法是在閘門唯一的開關
+  `appStore.ts` 的 `setMembershipGated` 裡問 `hostCan("membershipCheck")`：同步引擎任何一條路徑要求升起閘門，本機版都不升；
+  檢查本身照跑，失敗仍回報（`sync()` 回 `ok: false`），只是不鎖畫面。正式版（有伺服器）行為不變，`serverRolledBack.test.tsx` 照舊全綠。
+- **登出**：帳號選單（`AccountPanel.tsx`）與設定 › 帳號（`SignOutSetting`）在本機版不出現。
+- **已經卡住的副本**：卡住的是畫面上的閘門，筆記一直在這個瀏覽器的資料庫裡；新版開機時閘門不再升起，直接進得去，不需要「重新開始」。
+- **為什麼會永遠做不完，沒有查明**：在 Chromium 用乾淨副本試了「忘掉驗證過的帳號後重新整理」、真的按登出、登出前先寫筆記、
+  把 worker 存的副本退回較舊的一份，閘門都會放下來。回歸測試因此直接做出「成員確認的請求一律被拒」的狀態
+  （`e2e/browser-app/localEditionNoGate.mjs`，Chromium 與 Pixel 5 視窗；修前紅、修後綠）。
+- **還沒接上的**（下一步）：設定裡的「空間與成員」頁內的成員、邀請、轉移擁有權（空間本身本機版仍要用，入口保留）；邀請連結的領取畫面；
+  側欄與空間晶片的「成員」按鈕；存取被移除的通知；推播提醒的設定列；伺服器網址設定；AI 的連線碼與 MCP。

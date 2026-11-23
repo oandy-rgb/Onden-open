@@ -46,6 +46,7 @@ import { BOOTSTRAP_HEADER_VALUE, decodeBootstrapWire } from "./bootstrapWire";
 import { assertBootstrapShape, assertSyncDeltaShape } from "./wireShape";
 import { later, readAgain, serverTruth, serverTruthOrTell } from "./serverTruthLoad";
 import { heldNotesNowSent } from "../localDb";
+import { hostCan } from "../hostCapabilities";
 
 // ── User-folder export (fs-access) ───────────────────────────────────────────
 
@@ -1168,6 +1169,9 @@ export function sync(): Promise<SyncResult> {
       // A fetch failure, a deadline or a gateway 502/503/504 (a deploy) means
       // the server was not reached — boot treats that as offline. Any other
       // answer, or a reconcile that could not finish, was reached.
+      // The local edition never shows the gate (lib/hostCapabilities.ts), so this line is the one trace a check that
+      // cannot finish leaves there (owner report 2026-11-23: its cause is still unknown).
+      if (!hostCan("membershipCheck")) console.warn("[onden] the workspace check did not finish", error instanceof Error ? error.name : typeof error, error);
       return { ok: false, unreachable: isServerUnreachable(error) };
     }
   })().then((result) => {

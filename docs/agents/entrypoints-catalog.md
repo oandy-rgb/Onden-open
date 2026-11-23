@@ -512,7 +512,7 @@ export const dialog = ReconfirmDialog;`
 - 取代：用登入一次來驗密碼，或自己寫一個「再輸入密碼」的對話框
 - 為什麼：給一個要做的事的說明句，成功時拿到憑證（lib/data/freshProof.ts → POST /api/fresh-proof）；呼叫者帶著它（X-Onden-Fresh-Proof）去要資料。拒絕只顯示伺服器代碼對應的白話，不顯示英文 detail。
 
-## 共用邏輯（121）
+## 共用邏輯（122）
 
 ### 要畫一頁簡報（視角的大圖、縮圖、播放）
 
@@ -1251,6 +1251,14 @@ const openPanel = () => {};
 setLocalOnlyStatus({ label: "只存在這個瀏覽器 · 已存好", trouble: null, open: openPanel });`
 - 取代：自己在畫面角落加一個常駐的提示按鈕，或讓 SyncStatus 直接 import 試用版的程式
 - 為什麼：同步狀態那一行（帳號選單、手機選單）與頭像上的問題標記是 App 說「存檔狀況」的唯一地方；試用版只把自己的說法填進來，核心元件不 import 試用版程式，開機 JS 也不變大。
+
+### 要判斷這個環境有沒有帳號（登入／登出）、其他成員或成員確認閘門——例如本機版（瀏覽器版：一個人、沒有伺服器）不該出現登出或「正在確認工作區資料⋯」
+
+- 入口：`frontend/src/lib/hostCapabilities.ts`（`hostCan`）　項目 `fe-host-capabilities`
+- 寫法：`import { hostCan } from "./lib/hostCapabilities";
+if (hostCan("accounts")) { /* 顯示登出 */ }`
+- 取代：在各畫面用 session?.user、網址或建置旗標各自猜是不是瀏覽器版
+- 為什麼：答案由殼在掛上 app 之前宣告（localOnlyStatus.ts 的 declareLocalOnlyHost），整頁不變；同步引擎開機時與各畫面讀到同一個答案。閘門唯一的開關 appStore.setMembershipGated 也問它。理由：docs/architecture/browser-app.md §19。
 
 ### 要在瀏覽器版（試用版）提醒使用者備份、把備份寫到使用者選的資料夾，或組出可貼進問題回報的診斷文字
 

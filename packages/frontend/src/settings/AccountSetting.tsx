@@ -7,6 +7,7 @@ import { useAccountSession } from "../lib/accountSession";
 import { writeErrors } from "../lib/data";
 import { useT } from "../lib/i18n";
 import { signOutOfAccount } from "../lib/signOut";
+import { hostCan } from "../lib/hostCapabilities";
 import { useOnline } from "../lib/appStore";
 import type { SettingContext } from "../lib/settingsTypes";
 
@@ -69,7 +70,8 @@ export function SignOutSetting() {
   const busy = useRef(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!session?.user) return null;
+  // The local edition has one person and nothing to sign out of (lib/hostCapabilities.ts).
+  if (!session?.user || !hostCan("accounts")) return null;
   async function signOut() {
     if (busy.current) return;
     busy.current = true; setWorking(true); setError(null);

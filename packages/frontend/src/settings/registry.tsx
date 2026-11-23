@@ -24,6 +24,7 @@ import NavigationSetting from "./NavigationSetting";
 import ToolbarSetting from "./ToolbarSetting";
 import { lazyWithReload } from "../lib/lazyWithReload";
 import AccountSetting, { SignOutSetting } from "./AccountSetting";
+import { hostCan } from "../lib/hostCapabilities";
 import AboutVersion from "./AboutVersion";
 import AppearancePreview from "./AppearancePreview";
 import NotePreview from "./NotePreview";
@@ -354,6 +355,8 @@ export const SETTINGS: SettingDef[] = [
     tab: "account",
     label: "",
     keywords: ["sign out", "log out", "logout", "登出"],
+    // Not in the local edition: nothing to sign out of, so a search for 登出 finds no empty row (lib/hostCapabilities.ts).
+    show: () => hostCan("accounts"),
     danger: true,
     type: "custom",
     component: SignOutSetting,

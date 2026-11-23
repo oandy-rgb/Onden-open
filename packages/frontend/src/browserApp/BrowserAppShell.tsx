@@ -14,6 +14,7 @@ import { reloadPage } from "../lib/api";
 import { holdTabLock } from "../lib/webLock";
 import { beginFirstRunLanding, finishFirstRunLanding, markSampleNotesMade } from "../lib/firstRunLanding";
 import { installFetchBridge } from "../lib/browserAppBridge";
+import { declareLocalOnlyHost } from "../lib/localOnlyStatus";
 import { answerMediaRequests, registerMediaServiceWorker, waitForMediaServing, type MediaServing } from "../lib/browserAppMedia";
 import { startWorkerClient, WorkerStartFailure, type WorkerClient } from "../lib/browserAppWorker";
 import { downloadBlob } from "../lib/download";
@@ -88,6 +89,8 @@ export default function BrowserAppShell() {
       // Started from the packaged database although this browser kept notes before: they went away (lib/browserAppDataMark.ts).
       const notesLost = !temporary && info.firstOpen && await notesWereLost();
       installFetchBridge(client);
+      // Before the app mounts: no accounts, members or membership gate here (lib/hostCapabilities.ts).
+      declareLocalOnlyHost();
       stopAnswering = answerMediaRequests(client);
       const media = await waitForMediaServing(mediaWorker);
       if (media === "reloading") return; // one ordinary reload hands the page to the Service Worker

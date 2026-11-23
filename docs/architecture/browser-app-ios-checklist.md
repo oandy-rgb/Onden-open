@@ -1,6 +1,6 @@
 # 瀏覽器版（試用版）iOS 真機檢查清單
 
-> 狀態：現行（最後確認 2026-11-01）。待在 iPhone 真機執行；WebKit 與 iPhone 在雲端環境裝不起來（見 [browser-app.md](browser-app.md) §14）。
+> 狀態：現行（最後確認 2026-11-23）。待在 iPhone 真機執行；WebKit 與 iPhone 在雲端環境裝不起來（見 [browser-app.md](browser-app.md) §14）。
 > 這份清單是要在業主的 iPhone／iPad（Safari 與「加到主畫面」）上手動做的。每項寫了怎麼做、預期看到什麼、不對的話代表什麼。
 > 做完在最下面的表格填結果（裝置、iOS 版本、通過／失敗、備註）。
 > 涵蓋：packages/frontend/src/browserApp/**, packages/backend/src/browser/journal.ts, packages/backend/src/browser/snapshotStore.ts, packages/frontend/browser-sw/media-sw.js
@@ -104,6 +104,12 @@
 - 做法：把檔案帶到 iPhone（AirDrop、檔案 App…），在選擇畫面或設定選「從另一台裝置帶過來」，選檔案，等到完成。
 - 預期：進度走完，說「這台裝置現在有檔案做好那一刻為止的全部內容」，重新載入後筆記都在；帶入中途切到別的 App 或鎖屏再回來，要嘛繼續要嘛說「上次沒有帶完，什麼都沒有留下」，都不會半套。Safari 沒有「選儲存位置」視窗，這台當**製作端**時檔案走瀏覽器下載（說「已交給瀏覽器下載」）。
 - 沒驗證過的：Wake Lock 是否讓螢幕保持亮著、大檔案在 iPhone 的記憶體、空間不夠時的訊息。
+
+## 13. 沒有登出、不會卡在「正在確認工作區資料」（2026-11-23）
+
+- 做法：按右上頭像、再開設定 › 帳號；在設定搜尋「登出」。之後重新整理幾次、點幾個按鈕。
+- 預期：三處都沒有「登出」；任何時候都不出現「正在確認工作區資料⋯」（[browser-app.md](browser-app.md) §19）。
+- 不對的話：出現登出或閘門，代表殼沒有在掛上 app 之前宣告本機版（`declareLocalOnlyHost`）。
 
 ## 結果表
 

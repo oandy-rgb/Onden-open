@@ -6,6 +6,7 @@ import { writeErrors } from "../lib/data";
 import { useT } from "../lib/i18n";
 import "./AccountPanel.css";
 import { useIsOwner } from "../lib/capabilities";
+import { hostCan } from "../lib/hostCapabilities";
 import { Button, FieldError } from "./ui";
 
 /** Shared account identity/actions inside a modal shell. The shell keeps the
@@ -42,9 +43,9 @@ export default function AccountPanel({ onOpenMembers, onBusyChange, children }: 
       {isOwner && onOpenMembers && <Button type="button" disabled={working} onClick={onOpenMembers}>
         <Users size={16} />{t("Spaces and members")}
       </Button>}
-      <Button type="button" onClick={() => void signOut()} aria-disabled={working}>
+      {hostCan("accounts") && <Button type="button" onClick={() => void signOut()} aria-disabled={working}>
         <LogOut size={16} />{working ? t("Saving and signing out…") : t("Sign out")}
-      </Button>
+      </Button>}
     </div>
     {error && <FieldError>{error}</FieldError>}
   </section>;

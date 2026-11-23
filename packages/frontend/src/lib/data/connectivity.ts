@@ -28,7 +28,7 @@
 
 import { getAppState, subscribeApp } from "../appStore";
 import { onAccessRevoked } from "../accessRevoked";
-import { onProtocolBlockChange } from "../protocolGate";
+import { currentProtocolBlock, onProtocolBlockChange } from "../protocolGate";
 import { installUnloadFlush } from "../localDb";
 import { boot, forgetWorkspace, reconnect, refreshIfStale, sync, wentOffline } from "./syncEngine";
 
@@ -95,9 +95,12 @@ function start(host: ConnectivityHost): () => void {
   // The one retry loop. Only while the browser itself is online: then only the
   // server is down and no 'online' event will come. Never doubled, never for a
   // removed member, never when the store is already online.
+  // Not while the protocol gate holds sync back either: an attempt then never leaves the page, and the gate's own change
+  // starts the next one (onProtocolBlockChange below; a page too old for the server waits for its reload).
   const scheduleRetry = () => {
     if (stopped || retry || attempting) return;
     if (!host.navigator?.onLine || getAppState().accessRevoked || getAppState().online) return;
+    if (currentProtocolBlock() !== null) return;
     retry = setTimeout(() => { retry = null; void handleOnline(); }, RECONNECT_RETRY_MS);
   };
 

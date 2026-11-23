@@ -1,6 +1,6 @@
 # 邊界決定：核心寫入、標籤同名、冪等、同步與 membership（第 10–15、17 批，2026-09-13）
 
-> 狀態：現行（最後確認 2026-11-22）
+> 狀態：現行（最後確認 2026-11-23）
 > 涵蓋：packages/backend/src/services/nodeUpdate.ts, packages/backend/src/services/orderKeys.ts, packages/backend/src/services/actorPrefs.ts, packages/backend/src/services/actorReadSnapshot.ts, packages/backend/src/spine/txHooks.ts, packages/backend/src/services/sync/membership.ts, packages/backend/src/services/eventLog/bodyMerge*.ts, packages/frontend/src/lib/data/syncEngine.ts, packages/frontend/src/lib/data/membershipReconcile.ts, packages/frontend/src/lib/pendingNoteProjection.ts, packages/frontend/src/lib/localCopyState.ts, packages/frontend/src/lib/accountPrefStore.ts
 
 何時讀：改 `updateNode`、標籤改名、交易／冪等、sync、membership、待同步文字之前。
@@ -344,6 +344,7 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **不放鬆**：沒有本機副本（`getLocalCopyState() === "none"`）的裝置連不到時仍停在遮罩後；`accessRevoked` 先判斷、不當離線；伺服器有回答時的檢查一字未動。
 - **現況**：重新核對的路徑——`reconnect()`（瀏覽器 `online`、伺服器更新後的 `protocolGate`、連不到後的重試）改用這條規則。SSE 成員資格通知（`membershipChanged`／`sync()` 的 `syncDirty` 重跑）是伺服器剛說過成員資格變了，連不到時維持遮罩（明確訊號，不是「連不到」）。
 - 測試：`src/test/properties/connectionLiveness.property.test.ts`（隨機序列含「恢復網路但伺服器不通」、開機與恢復連線參數化對照）、`src/test/serverUnreachable.test.ts`。
+- **協定閘門擋下的同步也算「沒問到」（2026-11-24 正式站）**：頁面和伺服器的同步協定不同時（`lib/protocolGate.ts`），同步請求根本不離開頁面，伺服器沒有回答任何事。`sync()` 在閘門關著時失敗，結果帶 `heldForUpdate`，`serverNotReached` 把它和連不到一樣看待：開機直接用本機副本、降遮罩、寫入進佇列，畫面上的「有新版，重新載入」是出口。`connectivity.ts` 在閘門關著時不排 5 秒重試（每次重試都會把狀態短暫切成連線、再升一次遮罩，畫面上列空間的元件又各問一次 `/api/spaces`）；閘門自己的變化（伺服器更新後 `onProtocolBlockChange(null)`）才開始下一次。頁面太舊時只等重新載入。測試：`src/test/firstOpenAfterUpdate.test.tsx`、`e2e/fullstack/firstOpenOfDay.spec.ts`。
 
 ## 晚到的回應不蓋掉已確認的保存：事件位置與水位（2026-11-16，取代 #1753 的 `updated_at` 規則；#1794 審查後定案）
 
@@ -357,7 +358,7 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
 - **不是退回去的情形**（每一條都有測試）：另一個身分（`sameServer` 為假，空的 delta 也算）走「換了伺服器」：忘掉水位、整份重建、不提示。第一次重建失敗也不會變成退回去：副本自己看到另一個身分時（`applySync`、`?nodes=none` 的 `persistBootstrap`）記下欠重建；頁面先看到時，下一回合開頭發現副本還算在另一份紀錄裡（`startWatermarkFrom` 回 false，不收它的位置），先重建，再拿副本的游標判斷。`?nodes=none` 不是整份狀態（`wholeState` 只給整份）；沒有 head 的回答不判；讀副本（read replica）延遲在這個部署不存在（單一 Postgres、每個回答都讀主庫）——將來若加讀副本，回答的 head 必須讀自主庫，否則這條規則會誤判；修剪不刪工作區最大的事件；一台伺服器只有一個工作區（`services/workspaceId.ts`），預設工作區被換掉等於伺服器的狀態換了，照退回去處理是對的。
 - **規則靠的前提**（`writePositions.ts` 檔頭）：一台伺服器一個工作區（水位只以身分為鍵；後端守門 `singleWorkspaceHead.guard`）；帶 head 的回答一律 `Cache-Control: no-store`（`app.ts`，`eventPositionHeader.integration` 釘住），被快取重放的舊回答會被當成退回去；單筆讀取也帶身分（`X-Onden-Read-Server`），換了身分之後的讀取走「換了伺服器」，不會拿舊紀錄的位置來判；副本拒收時附上它的水位與身分，頁面只在同一份紀錄裡學（`startWatermarkFrom`）。
 - **在同步迴圈外發現**：bootstrap 判出退回去時同樣把成員檢查設成從頭做（`reconciledRejectionRevision = null`）；單筆讀取判出來時先把證據留下（欠重建、提示）。判出來之後立刻要一回合（`serverLostItsWrites` → `later.again`）：沒有同步在跑就跑一回合，正在跑的（已經過了開頭的檢查）結束後再跑一回合（`markSyncDirty`，它也先把閘門升起來）。
-- **被拒之後**：bootstrap 在擋住新寫入的期間重新下載同一種，最多 3 次（`ASK_AGAIN_AT_MOST`，只是重問的上限，不是退回去的判斷）；單筆讀取（`serverTruth.ts readServerNode`）同樣再問，仍被拒就把筆記放進「再讀一次」的清單（`serverTruthLoad.ts readAgain`），2 秒後的同步讀它。閘門**只因成員檢查完成**而放下：被拒的回答（`RefusedAnswer`）不放它，成員頁被拒更不放。退回去之後進得去，靠的是恢復本身成功（清水位 → bootstrap 被收下 → 成員檢查照常跑完）。單筆讀取的重問有讀取期限（`readWithDeadline`，它握著新寫入）；重問逾時也把筆記放進「再讀一次」；一則一直被拒的筆記每一輪間隔加倍（2、4、8、16 秒），四輪後停，等它下一次改變或被打開；伺服器回「不在了／讀不到」（403／404／410）就清掉它的輪數。
+- **被拒之後**：bootstrap 在擋住新寫入的期間重新下載同一種，最多 3 次（`ASK_AGAIN_AT_MOST`，只是重問的上限，不是退回去的判斷）；單筆讀取（`serverTruth.ts readServerNode`）同樣再問，仍被拒就把筆記放進「再讀一次」的清單（`serverTruthLoad.ts readAgain`），2 秒後的同步讀它。閘門**只因成員檢查完成**而放下（本機版——瀏覽器版、一個人、沒有伺服器——不升這個閘門，`setMembershipGated` 問 `hostCan("membershipCheck")`；檢查照跑，做不完時只在 console 留一行，見 [browser-app.md](../architecture/browser-app.md) §19）：被拒的回答（`RefusedAnswer`）不放它，成員頁被拒更不放。退回去之後進得去，靠的是恢復本身成功（清水位 → bootstrap 被收下 → 成員檢查照常跑完）。單筆讀取的重問有讀取期限（`readWithDeadline`，它握著新寫入）；重問逾時也把筆記放進「再讀一次」；一則一直被拒的筆記每一輪間隔加倍（2、4、8、16 秒），四輪後停，等它下一次改變或被打開；伺服器回「不在了／讀不到」（403／404／410）就清掉它的輪數。
 - **已知、不擋的（第 4 輪起）**：(1) 兩個分頁可能各提示一次（甲判出、重建、記號清掉之後，乙還握著自己的水位，自己再判出一次）。(2) 這條規則只在 head 仍低於這台已知的位置時發現得了：快照把事件序號也還原，之後別台又寫到超過這台的游標，閒著的這台就分不出來，直到每日的整份更新（要關掉需要紀錄的指紋，另排）；走還原腳本的還原會換身分，不受影響。(3) 真的退回去時，這台的本機副本是遺失存檔唯一的持有者，重建會蓋掉它（main 上本來如此，另排：重建前把不同的本機內文留成救回的副本）。
 - **已知、不擋的**：水位寫進日誌是 `critical: false`、頁面不等它。確認之後幾毫秒內重新載入可能少了那一次提升，但同一個 worker 先寫提升、後寫「移除待送」，所以不是提升還在，就是那筆寫入還在佇列裡，重送會回原本的位置。
 - **分頁與帳號**：每個分頁一個 worker、一份記憶體副本，共用同一份 IndexedDB 快照與日誌（`localDb.ts` 每頁 `new Worker`；`localDbWorker.ts` `adoptStoredSnapshot`／`catchUpWithOtherTabs`）；水位經日誌在分頁間傳遞。副本依帳號分開（`accountStorage`），頁面一次只綁一個帳號。

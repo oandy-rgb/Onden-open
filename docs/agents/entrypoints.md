@@ -14,6 +14,7 @@
   寬入口 `getAppState`、`useAppSelector`、`setAppState`、`setData`、`subscribeApp` 由規則 `fe-app-store-reach` 管：`lib/appStore.ts` 與 `lib/data/**`（資料寫入層，擁有 store 的寫入）以外，
   既有檔案記在 `scripts/allowlist-baseline.json`（逐檔計數，只准減不准增，與 `be-raw-sql` 同為 `RATCHET_RULES`；外觀的 14 條規則也在其中，見 [appearance-rules.md](appearance-rules.md)），新檔案不能出現。
   需要的讀法沒有具名入口時，在 appStore 加一個**具名**窄 hook（如 `useSelectedId()`），不要在新檔案寫 `useAppSelector((s) => …)`。
+  成員確認閘門只由 `setMembershipGated` 設定；它問 `lib/hostCapabilities.ts` 的 `hostCan("membershipCheck")`，本機版（瀏覽器版）一律不升（[browser-app.md](../architecture/browser-app.md) §19）。
   目的：之後 `data.nodes` 的形狀（例如改成 `{ byId, order }`）只改 appStore 一處。降基準：改完後跑 `npm run allowlist:baseline`。
 - 同步路由：`packages/backend/src/routes/sync.ts`（寫入、讀取政策、復原、前端領域寫入的入口在清單的「後端」「共用邏輯」）。
 - 前後端共用的資料形狀（API 契約）：`packages/contract`（`@onden/contract`，zod 與純型別；用法與守門見 `packages/contract/AGENTS.md`）。

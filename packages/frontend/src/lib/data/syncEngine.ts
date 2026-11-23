@@ -39,6 +39,7 @@ import { webCryptoSha256 } from "./membershipDigest";
 import { mergeAttributeRows, mergeBootstrapRelations } from "./bootRest";
 import { projectBootstrapForPaint, reconcilePersistedBootstrap } from "./bootPaint";
 import { isServerUnreachable } from "./writeErrors";
+import { currentProtocolBlock } from "../protocolGate";
 import { bindDeviceStatus } from "./deviceStatus";
 import { isBrowserOnline, prefersSavedData } from "../browserNetwork";
 import { getLocalCopyState } from "../localCopyState";
@@ -46,6 +47,7 @@ import { BOOTSTRAP_HEADER_VALUE, decodeBootstrapWire } from "./bootstrapWire";
 import { assertBootstrapShape, assertSyncDeltaShape } from "./wireShape";
 import { later, readAgain, serverTruth, serverTruthOrTell } from "./serverTruthLoad";
 import { heldNotesNowSent } from "../localDb";
+import { hostCan } from "../hostCapabilities";
 
 // ── User-folder export (fs-access) ───────────────────────────────────────────
 
@@ -983,13 +985,21 @@ export function liveStreamReconnected(): void {
 /** `unreachable`: the pass failed because the server could not be reached
  *  (writeErrors.isServerUnreachable: network error, timeout, 502/503/504),
  *  not because it answered with a refusal or the membership check could not
- *  finish. */
-export type SyncResult = { ok: boolean; unreachable?: boolean; /** More events wait than one pass takes; the next pass resumes. Not a failure. */ partial?: boolean };
+ *  finish. `heldForUpdate`: the pass never left the page — this page and the
+ *  server speak different sync protocols (lib/protocolGate.ts), so nothing was
+ *  asked; a reload (page too old) or the server's update (server too old) ends it. */
+export type SyncResult = {
+  ok: boolean; unreachable?: boolean; heldForUpdate?: boolean;
+  /** More events wait than one pass takes; the next pass resumes. Not a failure. */ partial?: boolean;
+};
 
 /** The one rule for "the server did not answer" (owner decision 2026-11-15): a pass that failed because the server could
  *  not be reached is offline, never a lock. Boot and reconnect both ask this; only an answer from the server (a refusal,
- *  a membership change, a check that never converged) is fail-closed. */
-const serverNotReached = (result: SyncResult): boolean => !result.ok && result.unreachable === true;
+ *  a membership change, a check that never converged) is fail-closed. A pass the protocol gate held back is the same
+ *  case: the server was never asked, and the gate's own rule is that the page then shows its copy. Treating it as a
+ *  refusal left a device whose page was older than a just-updated server on 「正在確認工作區資料…」 until the page was
+ *  reloaded with the new version (production 2026-11-24, the first open after a deploy that changed the protocol). */
+const serverNotReached = (result: SyncResult): boolean => !result.ok && (result.unreachable === true || result.heldForUpdate === true);
 
 /** Offline mode with the cached copy usable: the indicator off and the membership gate down. Membership is re-checked on
  *  the next reconnect (a person removed meanwhile is told then, the copy wiped). */
@@ -1168,9 +1178,14 @@ export function sync(): Promise<SyncResult> {
       // A fetch failure, a deadline or a gateway 502/503/504 (a deploy) means
       // the server was not reached — boot treats that as offline. Any other
       // answer, or a reconcile that could not finish, was reached.
+      // The local edition never shows the gate (lib/hostCapabilities.ts), so this line is the one trace a check that
+      // cannot finish leaves there (owner report 2026-11-23: its cause is still unknown).
+      if (!hostCan("membershipCheck")) console.warn("[onden] the workspace check did not finish", error instanceof Error ? error.name : typeof error, error);
       return { ok: false, unreachable: isServerUnreachable(error) };
     }
-  })().then((result) => {
+  })().then((pass): SyncResult => {
+    // Whichever step stopped it: while the gate holds, no sync request leaves the page (lib/api.ts).
+    const result = !pass.ok && currentProtocolBlock() !== null ? { ...pass, heldForUpdate: true } : pass;
     // The sync status says when the server's newer content is not arriving (it still reads "connected").
     if (!result.partial) setIncomingProblem(result.ok ? null : result.unreachable ? "unreachable" : "refused");
     return result;

@@ -1,5 +1,5 @@
-import type { ActorCtx } from "../../types.js";
-import { appendEventAsCurrentActor } from "../../spine/currentActor.js";
+import { event } from "../../db.js";
+import { eventActorType, type ActorCtx } from "../../types.js";
 import type { AgentTool, ToolCtx } from "./types.js";
 import { assertToolAllowed, isToolAllowed, withToolAuthority, ScopeError } from "../../spine/toolScope.js";
 import { checkRateLimit, RateLimitError } from "./rateLimit.js";
@@ -148,11 +148,14 @@ async function admitCall(
     const reason = err instanceof ScopeError ? err.code : err instanceof RateLimitError ? "rate_limited" : "refused";
     const tokenKey = ctx.actor.tokenScope?.tokenId ?? ctx.actor.id;
     if (!auditRefusalOnce(tokenKey, reason)) throw err;
-    await appendEventAsCurrentActor(ctx.actor, ctx.workspaceId,
+    await event(
+      ctx.workspaceId,
       "AGENT_TOOL_FAILED",
       "tool",
       auditName,
       { ok: false, duration_ms: 0, scope_rejected: true, message: (err as Error).message },
+      eventActorType(ctx.actor.type),
+      ctx.actor.id,
       { txMeta: { tool_name: auditName, token_id: ctx.actor.tokenScope?.tokenId, ...(sessionId ? { session_id: sessionId } : {}) } },
     );
     throw err;
@@ -172,11 +175,13 @@ export async function callPrompt<T>(promptName: string, ctx: ToolCtx, render: ()
   const started = Date.now();
   try {
     const result = await render();
-    await appendEventAsCurrentActor(ctx.actor, ctx.workspaceId, "AGENT_TOOL_CALLED", "tool", auditName, { ok: true, duration_ms: Date.now() - started },
+    await event(ctx.workspaceId, "AGENT_TOOL_CALLED", "tool", auditName, { ok: true, duration_ms: Date.now() - started },
+      eventActorType(ctx.actor.type), ctx.actor.id,
       { txMeta: { tool_name: auditName, token_id: ctx.actor.tokenScope?.tokenId } });
     return result;
   } catch (err) {
-    await appendEventAsCurrentActor(ctx.actor, ctx.workspaceId, "AGENT_TOOL_FAILED", "tool", auditName, { ok: false, duration_ms: Date.now() - started, message: (err as Error).message },
+    await event(ctx.workspaceId, "AGENT_TOOL_FAILED", "tool", auditName, { ok: false, duration_ms: Date.now() - started, message: (err as Error).message },
+      eventActorType(ctx.actor.type), ctx.actor.id,
       { txMeta: { tool_name: auditName, token_id: ctx.actor.tokenScope?.tokenId } });
     throw err;
   }
@@ -210,11 +215,14 @@ export async function callTool(
       : tool.handler(args, ctx));
     // Skip audit on dry-run — the call didn't actually happen.
     if (!ctx.dryRun) {
-      await appendEventAsCurrentActor(ctx.actor, ctx.workspaceId,
+      await event(
+        ctx.workspaceId,
         "AGENT_TOOL_CALLED",
         "tool",
         toolName,
         { ok: true, duration_ms: Date.now() - started },
+        eventActorType(ctx.actor.type),
+        ctx.actor.id,
         { txMeta: { tool_name: toolName, token_id: ctx.actor.tokenScope?.tokenId, ...(sessionId ? { session_id: sessionId } : {}), args: auditedToolArgs(args) } },
       );
     }
@@ -222,11 +230,14 @@ export async function callTool(
   } catch (err) {
     // Always emit failures, even on dry-run — surfaces scope violations the
     // agent attempted to probe. Cleaner forensic signal than silence.
-    await appendEventAsCurrentActor(ctx.actor, ctx.workspaceId,
+    await event(
+      ctx.workspaceId,
       "AGENT_TOOL_FAILED",
       "tool",
       toolName,
       { ok: false, duration_ms: Date.now() - started, message: (err as Error).message, dry_run: ctx.dryRun ?? false },
+      eventActorType(ctx.actor.type),
+      ctx.actor.id,
       { txMeta: { tool_name: toolName, token_id: ctx.actor.tokenScope?.tokenId, ...(sessionId ? { session_id: sessionId } : {}), args: auditedToolArgs(args) } },
     );
     throw err;

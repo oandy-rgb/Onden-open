@@ -22,11 +22,11 @@ const SYSTEM_ACTOR_USERS: Record<string, string> = {
 
 // ratchet:list DIRECT_SYSTEM_EVENTS
 const DIRECT_SYSTEM_EVENTS: Record<string, string> = {
-  "services/dispatcherQueue.ts": "DISPATCHER_FAILED: the failure record of a person's or agent's operation whose follow-up work broke, signed with that actor's id (REMOVED_ACTOR_REF when that actor has been removed since: spine/currentActor.ts signatureForCapturedActor)",
+  "services/dispatcherQueue.ts": "DISPATCHER_FAILED: the failure record of a person's or agent's operation whose follow-up work broke, signed with that actor's id",
   "services/nodeUpdate.ts": "BODY_CONFLICT: the server noticed the save overwrote a newer edit; a note beside the person's NODE_UPDATED, linked triggered_by it",
   "services/attributeWrites.ts": "ATTRIBUTE_CONFLICT: same, beside the person's ATTRIBUTE_SET",
   "services/agentSessionStore.ts": "AGENT_SESSION_ENDED: a server-detected end (timeout, cap) of a session a person started; part of that session's story, not a job of its own",
-  "services/tagPacks.ts": "TAG_DEPENDENCY_MISSING: a note inside the person's pack install that a dependency was absent. (Its TAG_IMPORTED of an approved proposal is signed 'system' only when the proposing agent was removed after proposing: spine/currentActor.ts signatureForCapturedActor.)",
+  "services/tagPacks.ts": "TAG_DEPENDENCY_MISSING: a note inside the person's pack install that a dependency was absent",
   "services/adminAccounts.ts": "ADMIN_PASSWORD_RESET / ADMIN_SESSIONS_REVOKED: the self-host admin CLI (dist/admin.js, run inside the container, never over HTTP); the operator at the console has no Onden actor, so the audit record is signed ADMIN_CLI_ACTOR_ID",
 };
 

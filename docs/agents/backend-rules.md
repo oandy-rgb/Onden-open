@@ -1,6 +1,6 @@
 # 後端規則：事件、權限、交易與復原
 
-> 狀態：現行（最後確認 2026-11-22）
+> 狀態：現行（最後確認 2026-11-17）
 > 涵蓋：packages/backend/src/spine/mutate.ts, packages/backend/src/spine/authority.ts, packages/backend/src/spine/currentActor.ts, packages/backend/src/spine/systemJobs.ts, packages/backend/src/services/readPolicy.ts, packages/backend/src/services/tagMembershipWrites.ts, packages/backend/src/services/eventRestore/restore.ts, packages/backend/src/test/guards/systemActor.guard.test.ts, packages/backend/src/dbClose.ts, packages/backend/src/test/guards/backgroundWriters.guard.test.ts
 
 何時讀：改後端寫入、權限、事件、交易或復原的任何程式之前。硬規則的精簡版在 [AGENTS.md](../../AGENTS.md)。
@@ -26,17 +26,6 @@
 - actor/token ID 來自可信驗證情境，但驗證時的 role/scope 可能在等待期間過期。
   根寫入在事件鎖後經 `spine/currentActor.ts` 重讀；在 `mutate` 前還有來源、父層或
   建立範圍判斷的領域操作，也須在同一鎖內使用當前 actor。不要以找不到 actor 時沿用舊值作相容。
-  不經 `mutate` 而以請求的 actor 名義寫的事件（agent 工具呼叫的稽核紀錄）走 `currentActor.ts` 的
-  `appendEventAsCurrentActor`：同樣是鎖 → 重讀 → 寫入。驗證之後、寫入之前 actor 被移除（或 token 被撤）
-  就是 401 `{ error: "unauthorized" }`，和從沒發出過的憑證同一個回應；不得讓資料庫對 `domain_events.actor_id`
-  的檢查（migration 071）來拒絕而變成 500（PR #1875）。發布快照的 `PUBLISH_SNAPSHOT_CREATED` 也走這條。
-  這種 401（請求已登入、重讀時 actor／token／臨時工作階段不見了，`ActorGoneError`）由 `httpError.ts` 記一行 `[auth]` 警告
-  （token id、路徑、401；不記 token、actor id、參數；沒有 token 的人或臨時工作階段只記路徑）。
-  每個 HTTP 入口對「身分在請求執行中不見了」只有一個判斷：`currentActor.ts` 的 `actorGoneDuring`（`apiOnError` 在答 500 之前、
-  MCP 協定端點在回呼失敗時問它；看身分現在還解不解得開，不看錯誤的形狀）。新路由、新工具不要自己捕捉這種失敗。
-  背景工作（outbox 執行、派生工作）以「排進佇列時」抓到的 actor id 寫事件，不拒絕：在同一個事件鎖的交易裡先用
-  `signatureForCapturedActor` 決定簽名——actor 還在就照舊，被移除了就簽系統（`REMOVED_ACTOR_REF`），原 id 放 payload 的
-  `removed_actor_id`。工作照樣完成，不讓 outbox 重試一天後埋掉、不讓補跑每次重來、不讓派生佇列的 promise 被拒。
 - 一般標籤套用／移除使用 `services/tagMembershipWrites.ts`，共用目標與標籤的雙邊政策、
   human/token scope、事件及同步附帶效果；安全副本仍使用專用的複製操作。
   背景派生與重啟補跑須在寫第一個屬性前重驗權限；契約與工具縮權見

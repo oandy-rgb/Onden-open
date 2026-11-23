@@ -46,7 +46,7 @@
       "packages/backend/src/auth.ts": ["AuthSecretStore", "SignupMode", "assertSignupAllowed", "resolveAuthSecret", "resolveSignupMode"],
       "packages/backend/src/backgroundJobs.ts": ["PeriodicJob", "PeriodicJobOptions", "stopAllPeriodicJobs"],
       "packages/backend/src/coreWriteSql.ts": ["CORE_WRITE_TABLES", "STAMPED_ENTRY_TABLES", "STAMPED_WRITE_TABLES"],
-      "packages/backend/src/db.ts": ["DbDriver", "dbDriver", "observeCoreWritesWithoutEventLock", "unknownMigrationVersions"],
+      "packages/backend/src/db.ts": ["DbDriver", "EventOptions", "dbDriver", "observeCoreWritesWithoutEventLock", "unknownMigrationVersions"],
       "packages/backend/src/dbKysely.ts": ["qDialect"],
       "packages/backend/src/dbMigrations.ts": ["MigrationFile"],
       "packages/backend/src/dbPglite.ts": ["PgliteSettings", "openPglite"],

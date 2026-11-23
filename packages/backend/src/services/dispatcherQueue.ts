@@ -207,30 +207,23 @@ export function queueDispatcher(
         // next boot's catch-up replays the cascade.
         if (thrown === CLOSED_BEFORE_RETRY) return;
         const { original: err, attempts } = isAttempted(thrown) ? thrown : { original: thrown, attempts: 1 };
-        // Signed under the event lock: the actor may have been removed since the save that queued this (signatureForCapturedActor).
-        // Imported on use, the way replayIntent imports the spine.
-        const [{ withEventTransaction }, { signatureForCapturedActor }] = await Promise.all([
-          import("../spine/eventTransaction.js"), import("../spine/currentActor.js"),
-        ]);
-        await withEventTransaction(opts.workspaceId, async () => {
-          const sig = await signatureForCapturedActor(opts.workspaceId, opts.actorId, "system");
-          await event(
-            opts.workspaceId, "DISPATCHER_FAILED", "node", opts.nodeId,
-            {
-              label: opts.label,
-              attempts,
-              error: err instanceof Error ? err.message : String(err),
-              // Top 3 stack frames are usually enough to pinpoint;
-              // domain_events.payload is jsonb and we don't want bloat.
-              stack_head: err instanceof Error
-                ? (err.stack ?? "").split("\n").slice(0, 3).join("\n")
-                : undefined,
-              ...sig.payloadExtra,
-            },
-            "system", sig.actorId,
-            { txMeta: { ui_context: "dispatcher.post_commit_failed" } },
-          );
-        });
+        await event(
+          opts.workspaceId, "DISPATCHER_FAILED", "node", opts.nodeId,
+          {
+            label: opts.label,
+            attempts,
+            error: err instanceof Error ? err.message : String(err),
+            // Top 3 stack frames are usually enough to pinpoint;
+            // domain_events.payload is jsonb and we don't want bloat.
+            stack_head: err instanceof Error
+              ? (err.stack ?? "").split("\n").slice(0, 3).join("\n")
+              : undefined,
+          },
+          "system", opts.actorId,
+          {
+            txMeta: { ui_context: "dispatcher.post_commit_failed" },
+          },
+        );
       }
       // M1: the cascade SETTLED — completed, or failed-and-audited above.
       // Either way the durable intent is consumed: catch-up replays crash
@@ -372,7 +365,7 @@ async function replayIntent(intent: PendingIntent): Promise<void> {
   // trigger's identity survives a crash, but its old grants never do.
   const [
     { syncAttributesAndDispatch, syncFrontmatterAttributes },
-    { resolveCurrentActor, signatureForCapturedActor },
+    { resolveCurrentActor },
     { withEventTransaction },
     { assertAuthority },
     { UnauthorizedError },
@@ -393,12 +386,10 @@ async function replayIntent(intent: PendingIntent): Promise<void> {
     },
     () => withEventTransaction(intent.workspace_id, async () => {
       const discard = async (reason: string) => {
-        // "actor missing" is one of the reasons: the record cannot be signed by an actor who no longer exists (signatureForCapturedActor).
-        const sig = await signatureForCapturedActor(intent.workspace_id, intent.actor_id, "system");
         await event(
           intent.workspace_id, "DISPATCHER_FAILED", "node", intent.node_id,
-          { label: intent.label, error: `catchup: ${reason}`, ...sig.payloadExtra },
-          "system", sig.actorId,
+          { label: intent.label, error: `catchup: ${reason}` },
+          "system", intent.actor_id,
           { txMeta: { ui_context: "dispatcher.catchup_discarded" } },
         );
         await q(`DELETE FROM dispatcher_pending WHERE event_id = $1::bigint`, [intent.event_id]);

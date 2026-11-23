@@ -58,37 +58,6 @@ Onden 的 AI 只有兩條路，共用同一組工具、權限、寫入與紀錄�
 - 圖片經 MCP 回 `image` 內容區塊（加一段文字說明），REST 回 `data_base64`；非圖片只回中繼資料。超過 5 MB 的圖片縮到長邊 1600px 的 WebP，仍過大或無法解碼回 `error: "too_large"`。
 - 不增加 token 在 `/api/mcp/*` 以外的權限；呼叫與其他工具一樣寫入 `AGENT_TOOL_CALLED`／`AGENT_TOOL_FAILED`。
 
-每個工具呼叫的稽核紀錄（`AGENT_TOOL_CALLED`／`AGENT_TOOL_FAILED`，含被拒的嘗試）由 `services/agentTools/registry.ts` 經
-`spine/currentActor.ts` 的 `appendEventAsCurrentActor` 寫入：先取事件鎖，再重讀代理與 token，再寫。請求通過驗證之後代理被移除、
-或 token 被撤，這次呼叫回 401（和從沒發出過的 token 相同），不留稽核紀錄（資料庫不收指向不存在的操作者的事件），
-但伺服器記一行 `[auth]` 警告：token id、路徑（`/api/mcp/tools/<工具名>`）、401；不含 token 本身、代理的 id、參數與查詢字串
-（`httpError.ts` 的 `logActorGone`，測試：`actorGoneLog.test.ts`）。擁有者要看「被移除的代理最後一次還在打什麼」就看這一行（PR #1875）。
-
-**寫入已提交、回應卻是 401：會發生，只在這一種時機。** 工具自己的寫入（例如 `updateNode` 經 `mutate`）在它自己的交易裡提交；
-`callTool` 接著才在**另一個**交易裡寫 `AGENT_TOOL_CALLED`。代理若在這兩個交易之間被移除（或 token 被撤、過期），結果是：
-
-- 那次寫入成立：提交當下代理是成員、有權限，事件記在代理名下，和移除前的其他寫入一樣（要撤回就照一般復原）。
-- 沒有 `AGENT_TOOL_CALLED` 也沒有 `AGENT_TOOL_FAILED`：稽核的重讀找不到代理，失敗紀錄同理寫不進去。
-- 回應是 401 `{ "error": "unauthorized" }`；上面那一行 `[auth]` 警告會寫。呼叫端不能把這個 401 當成「什麼都沒發生」。
-- 一次工具呼叫裡有好幾次各自提交的寫入時，移除前已提交的那幾次成立，之後的那次在鎖後被拒（401）；每一次寫入本身不會只寫一半。
-  AI 工作階段裡的呼叫例外：工具的寫入全在 `runCascade` 的同一個交易裡，要嘛全部成立、要嘛全部不成立，但稽核紀錄仍在它之後另寫。
-
-其他時機都不會：驗證之前就移除的，在驗證就回 401，工具沒跑；工具的寫入在等鎖時移除的，`mutate` 鎖後重讀就拒絕，什麼都沒寫。
-測試：`toolWriteThenActorGone.integration.test.ts`（在兩個交易之間移除代理：筆記改了、沒有稽核紀錄、401、一行警告）、
-`removedActorCredentialConcurrent.integration.test.ts`（在等鎖時移除：什麼都沒寫、401）。
-
-**每個入口同一個答案。** 「請求登入時的身分在執行中不見了」由一個判斷決定：`spine/currentActor.ts` 的 `actorGoneDuring`。
-`httpError.ts` 的 `apiOnError`（所有 REST 路由、`/api/mcp/tools/*`）在把一個非預期的失敗答成 500 之前問它；MCP 協定端點
-（`routes/mcpProtocol.ts`）的工具與 prompt 回呼失敗時也問它，有一個是「身分不見了」就把整個請求答成 401，而不是 SDK 包成 200 的工具錯誤
-（協定端點的回應因此讀完才送出；無狀態的串流在所有回應寫完就關閉）。判斷看的是身分**現在**還解不解得開（重讀），不是錯誤長什麼樣：
-同一個資料庫錯誤，身分還在的請求照樣是 500。所以不管是哪一步撞上不存在的操作者（資料庫對事件的操作者檢查、外鍵、重讀），
-都不必在個別路由或工具裡另包 try。測試：`actorRemovedMidRequest.integration.test.ts`（擁有者真的走 `DELETE /api/actors/:id`、
-在請求等鎖時提交：REST 讀與寫、協定端點的 `tools/call`、一個人自己的寫入都是 401；邊界判斷本身在兩種資料庫上都測）。
-
-背景工作以「排進佇列時」的操作者名義寫事件（核准的標籤包 `TAG_IMPORTED`、派生工作的 `DISPATCHER_FAILED`）不拒絕：
-那個操作者已被移除時，工作照樣完成，紀錄改簽系統（`REMOVED_ACTOR_REF`，被移除者的 id 放在 payload 的 `removed_actor_id`），
-見 `spine/currentActor.ts` 的 `signatureForCapturedActor`，測試：`capturedActorRemoved.integration.test.ts`。
-
 ### 2. 長時間的代理任務（更遠，尚未做）
 
 「每週整理一次收件匣」「把整個資料夾的 PDF 讀完做成筆記」這種要跑很久、可能要排程的工作，交給代管的代理服務（例如 服務商提供的代管代理：自己的容器、可排程、可長時間執行）。

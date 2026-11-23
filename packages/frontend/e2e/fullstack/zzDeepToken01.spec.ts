@@ -40,11 +40,7 @@ test("TOKEN-01: space permission and removal in the UI, and the minted token fol
   await ready(page, "/?view=notes");
   const screen = await openMember(page, name);
   await screen.getByRole("button", { name: `Remove ${name}` }).click();
-  // The server's answer to the removal, not the list: on a narrow sheet the person's own page shows no list rows at all, so "no row"
-  // held at once and the token's call below raced the removal (a call sent before it commits is still the agent's, and answered).
-  const removal = page.waitForResponse((r) => r.request().method() === "DELETE" && new URL(r.url()).pathname === `/api/actors/${agent.id}`);
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove", exact: true }).click();
-  expect((await removal).ok(), "the server confirmed the removal").toBe(true);
   await expect(screen.locator("li.sm-row[data-person-type]", { hasText: name })).toHaveCount(0);
   expect((await token.post("/api/mcp/tools/searchNodes", { data: { args: { query: "x" } } })).status()).toBe(401);
   const actors = await (await page.request.get("/api/actors", H)).json() as Array<{ id: string }>;

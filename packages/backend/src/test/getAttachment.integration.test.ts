@@ -9,7 +9,6 @@ import { describe, it, expect, beforeAll } from "vitest";
 import sharp from "sharp";
 import { q } from "../db.js";
 import { callTool, toolsForAccess } from "../services/agentTools/index.js";
-import { createToken } from "../services/agentTokens.js";
 import { ATTACHMENT_MAX_BYTES } from "../services/agentTools/getAttachment.js";
 import { MEDIA_DIR } from "../services/mediaStore.js";
 import { ScopeError } from "../spine/toolScope.js";
@@ -37,9 +36,6 @@ describe("token access tool lists", () => {
 describe.skipIf(!isTestDb)("getAttachment via callTool (DB)", () => {
   let agent: ActorCtx = { id: "agent", name: "Bot", role: "editor", type: "agent" };
   let allowedSpace = "", otherSpace = "";
-  // A real token row: the audit record re-reads the token under the event lock (spine/currentActor.ts appendEventAsCurrentActor),
-  // so a made-up token id is refused like any unknown credential. The allow-list each case tests is the one on the request's actor.
-  let tokenId = "";
   let note = "", noteOtherSpace = "", noteNoRef = "", noteBorrowing = "";
   const shot = `${randomBytes(16).toString("hex")}.png`;
   const huge = `${randomBytes(16).toString("hex")}.png`;
@@ -47,7 +43,7 @@ describe.skipIf(!isTestDb)("getAttachment via callTool (DB)", () => {
   const url = (f: string) => `/api/media/${f}`;
   // The agent is a member of allowedSpace only, so that is all its token reaches.
   const scoped = (allowedTools: string[] | null = null): ActorCtx => ({
-    ...agent, tokenScope: { tokenId, allowedTools, access: "read", writeMode: "apply", expiresAt: null },
+    ...agent, tokenScope: { tokenId: "tk", allowedTools, access: "read", writeMode: "apply", expiresAt: null },
   });
   const ctx = (actor: ActorCtx) => ({ actor, workspaceId: WS, dryRun: false });
   const get = (actor: ActorCtx, nodeId: string, ref: string) => callTool("getAttachment", { nodeId, ref }, ctx(actor));
@@ -57,7 +53,6 @@ describe.skipIf(!isTestDb)("getAttachment via callTool (DB)", () => {
     await turnModuleOn(WS, "ai"); // the agent tools belong to the AI module
     await seedQ(`DELETE FROM content_nodes WHERE workspace_id = $1`, [WS]);
     agent = await persistActor(WS, agent);
-    tokenId = (await createToken(agent.id, { access: "read", allowedTools: null })).id;
     allowedSpace = await makeSpace(WS, `ga-allowed-${Date.now()}`, [{ id: agent.id, permission: "edit" }]);
     otherSpace = await makeSpace(WS, `ga-other-${Date.now()}`, []);
     mkdirSync(MEDIA_DIR, { recursive: true });

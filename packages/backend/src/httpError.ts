@@ -25,9 +25,6 @@ import { z } from "zod";
 import { log } from "./logger.js";
 import { spineErrorStatus, IdempotentReplay, AuthorityError } from "./spine/mutate.js";
 import { ScopeError } from "./spine/toolScope.js";
-import { ActorGoneError } from "./spine/actor.js";
-import { actorGoneDuring } from "./spine/currentActor.js";
-import type { ActorCtx } from "./types.js";
 import { WorkspaceBusyError } from "./spine/eventLock.js";
 import { RateLimitError } from "./services/agentTools/index.js";
 
@@ -55,7 +52,7 @@ import { BackupFileError, BackupRestoreRefusal, BackupUploadNotFound } from "./s
 import { InviteError } from "./services/actorInvites.js";
 import { AgentSessionError } from "./services/agentSessionError.js";
 
-export async function apiOnError(err: Error, c: Context): Promise<Response> {
+export function apiOnError(err: Error, c: Context): Response {
   // Idempotent replay is a SUCCESS, not an error: the original write already
   // committed, so re-running is a no-op. The claim now lives inside the route's
   // transaction (spine mutate()), so reaching here means the prior attempt
@@ -74,7 +71,6 @@ export async function apiOnError(err: Error, c: Context): Promise<Response> {
     c.header("Retry-After", String(err.retryAfterSeconds));
     return c.json({ error: err.code, retry_after_seconds: err.retryAfterSeconds }, 503);
   }
-  if (err instanceof ActorGoneError) logActorGone(c);
   const s = spineErrorStatus(err);
   if (s) {
     return c.json({ error: err.message || (s === 401 ? "unauthorized" : "forbidden") }, s);
@@ -130,10 +126,6 @@ export async function apiOnError(err: Error, c: Context): Promise<Response> {
   // writer, so it stays a failure; one line names the note (the error's DETAIL) and the route, so it can be found (review of PR #1853, round 5, point 2).
   const pg = err as { code?: unknown; hint?: unknown; detail?: unknown };
   if (pg.code === "OD215") log.error("anchors", String(pg.hint ?? "anchors"), { note: String(pg.detail ?? ""), route: `${c.req.method} ${c.req.routePath}` });
-  // A request whose identity vanished while it ran (removed, token revoked, session ended) is answered like one that never had it, whatever
-  // step tripped over the missing identity (spine/currentActor.ts actorGoneDuring). Not logged as unhandled: the database's actor check names
-  // the actor's id in its message.
-  if (await actorGoneDuring(c.get("actor") as ActorCtx | null | undefined, err)) return apiOnError(new ActorGoneError(), c);
   log.error("unhandled", "unhandled route error", { err });
   return c.json({ error: "internal" }, 500);
 }
@@ -142,24 +134,9 @@ export async function apiOnError(err: Error, c: Context): Promise<Response> {
  *  `error` — the authority reason (`tag_not_allowed`), the scope code
  *  (`tool_not_allowed`), `invalid_args` — where the app's routes answer with
  *  the message the frontend translates. Everything else is apiOnError's. */
-export function toolOnError(err: Error, c: Context): Response | Promise<Response> {
+export function toolOnError(err: Error, c: Context): Response {
   if (err instanceof ScopeError) return c.json({ error: err.code, detail: err.message }, 403);
   if (err instanceof AuthorityError) return c.json({ error: err.reason, detail: err.message }, 403);
   if (err instanceof z.ZodError) return c.json({ error: "invalid_args", detail: err.issues }, 400);
   return apiOnError(err, c);
-}
-
-/** One line for the owner when a request that signed in is refused 401 because its actor, token or temporary session is gone since it
- *  signed in (spine/currentActor.ts actorGoneDuring: a re-read found nothing, or a step failed and the identity no longer resolves) — a
- *  removed agent's token still calling tools, a write that waited on the event lock behind the removal: which token
- *  (a signed-in person or temporary session has none: the line then says only the route), which route (for an agent, `/api/mcp/tools/<tool>` names the tool) and the 401. Never the token itself, the actor's id (the
- *  token id ties it to the actor's TOKEN_CREATED record), arguments, the body or the query string. A request that never signed in is
- *  not logged here: app.ts answers it 401 before any route runs. */
-function logActorGone(c: Context): void {
-  const actor = c.get("actor") as ActorCtx | null | undefined;
-  if (!actor) return;
-  log.warn("auth", "refused: the actor or its credential is gone since this request signed in", {
-    ...(actor.tokenScope ? { token_id: actor.tokenScope.tokenId } : {}),
-    method: c.req.method, path: c.req.path, status: 401,
-  });
 }

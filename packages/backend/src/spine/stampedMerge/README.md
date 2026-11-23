@@ -192,6 +192,8 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 （PR「fix/merge-space-follows-parent」加的十三項在最前面；之前的照舊。）
 
+- **兩台各自建立同一個鍵的列（卡片位置），第三台已永久刪除它的筆記：第三台多留三個欄位單位**（`stampedSawThreeNodes` 種子 924487 的紅）：沒有那一列的 A 收到兩筆互不知道的建立（各帶值），欄位只存「沒有值」的副本（`dbRows.ts` `withoutValues`），`storeUnit` 因此分不出兩個建立值相同而把每個欄位都存成標記＋頭；握有那一列的 B、C 只存值不同的欄位，收到永久刪除時連鎖又清掉。三台都沒有那一列，標記永遠不同，只有整份重送會讓它們相同。決定性情境：`stampedCardTwiceOnPurgedNote.integration.test.ts`（`it.fails`）。
+
 - **誰可以成為寄件者還沒有撤銷，也有兩個邊角**（第 2 批審查第 1 輪 C；配對那一批，第 8 批，要定）：`admitSyncNode` 把 `vouched_by` 是某個節點編號的列升成寄件者——
   快照來源的**舊編號**（加入時以 `vouched_by` ＝ 來源記下）也是這種列，admit 它就會讓一個已經不用的編號變成寄件者；admit 一個 `self-restore` 的編號什麼都不做、不報錯，
   呼叫者之後才在收包時看到 `bundle_unknown_sender`；程式裡沒有撤銷，撤掉一台時「由那一台擔保的列」（它帶來的來源）怎麼辦也還沒定。

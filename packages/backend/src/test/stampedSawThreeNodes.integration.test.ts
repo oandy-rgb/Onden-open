@@ -5,13 +5,9 @@
 // resend stores nothing and nothing is refused. A fresh seed each run (ONDEN_SAW_SEED replays one); a red from a new seed is a finding, not a flake.
 // Excluded on purpose: the content of a column a re-made row's id names (item 11, pinned in anchorsReplicated "round 10, 4"): the stamps compared here agree there.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { q, withTransaction } from "../db.js";
-import { withEventTransaction } from "../spine/eventTransaction.js";
-import { stampTransaction } from "../spine/stamps.js";
+import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
-import { ALL_TABLES, admit, bundleFor, nodeIdOf, take, exchange, makeRng, markWorld, peerOf, peerStateOf, resendAll, resetRowTurns, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
-import { setModulesOn } from "./helpers/setModulesOn.js";
+import { ALL_TABLES, bundleFor, nodeIdOf, take, exchange, makeRng, peerStateOf, resendAll, resetRowTurns, threePeers, writeAsOwner, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
 const open: RealNode[] = [];
@@ -24,21 +20,6 @@ beforeEach(() => resetRowTurns());
 /** Every carried stamp and head of the workspace the owner's scope holds, with its saw and meta, byte for byte (stampedBundleWorld peerStateOf: the rows of spaces the
  *  owner is not a member of never travel). Kept values and the columns are not compared (item 11). */
 const sawsOf = async (p: Peer) => { const st = await peerStateOf(p); return [JSON.stringify(st.stamps), JSON.stringify(st.heads)]; };
-
-async function threeNodes(): Promise<Peer[] & { secretNote?: string }> {
-  const [na, nb, nc] = [await openNode("a"), await openNode("b"), await openNode("c")];
-  open.push(na, nb, nc);
-  const world = await buildSourceWorld(na);
-  const a = peerOf("A", na, world);
-  await markWorld(a);
-  const cap = await capture(na, world, 12_000);
-  await fillFrom(nb, world, cap);
-  await fillFrom(nc, world, cap);
-  const b = peerOf("B", nb, world), c = peerOf("C", nc, world);
-  for (const [x, y] of [[a, b], [a, c], [b, a], [b, c], [c, a], [c, b]] as const) await admit(x, y);
-  for (const p of [a, b, c]) await onNode(p.node, () => setModulesOn(p.ws, null));
-  return Object.assign([a, b, c], { secretNote: world.secretNote });
-}
 
 /** A note the generator made that both `x` and `y` hold alive: `y` makes a child under it and `x` deletes it for good (the product's way), before they exchange. When the
  *  delete reaches `y`, the foreign key empties the child's parent (its id kept on the stamp); later moves of the child write over that emptied column. */
@@ -71,10 +52,10 @@ async function orphanOne(x: Peer, y: Peer, rng: ReturnType<typeof makeRng>): Pro
 // carries A's sixth, above what B holds of A without a gap. Before, `holds` was that `have`, and C refused the bundle (bundle_stamp_beyond_cut), every time.
 describe.skipIf(!isTestDb)("a write relayed past a withheld one", () => {
   it("A withholds its fifth write from B, B relays A's sixth to C: C takes it; B's have of A stays before the withheld write; one more round stores nothing", async () => {
-    const peers = await threeNodes();
+    const peers = await threePeers(open);
     const [a, b, c] = peers;
     const notes = await onNode(a!.node, async () => (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND space_id = $2 AND deleted_at IS NULL AND node_type = 'content' ORDER BY id LIMIT 2`, [a!.ws, a!.space])).rows.map((r) => r.id));
-    const stamped = (sql: string, params: unknown[]) => onNode(a!.node, () => withTransaction(() => withEventTransaction(a!.ws, async () => { await stampTransaction(a!.ws, a!.owner.id); await q(sql, params); })));
+    const stamped = (sql: string, params: unknown[]) => onNode(a!.node, () => writeAsOwner(a!, sql, params));
     const seqOf = () => onNode(a!.node, async () => Number((await q<{ n: string }>(`SELECT (next_seq - 1)::text AS n FROM sync_clock WHERE workspace_id = $1`, [a!.ws])).rows[0]!.n));
     for (let k = 1; k <= 4; k++) await stamped(`UPDATE content_nodes SET title = $2 WHERE id = $1`, [notes[k % 2], `A write ${k}`]);
     const fourth = await seqOf();
@@ -98,7 +79,7 @@ describe.skipIf(!isTestDb)("saw on three nodes that write at random, emptied col
   // three fresh seeds, and 902 of base 900: the first that found a relayed write past a withheld one refused for ever (bundle_stamp_beyond_cut, fixed in this batch)
   for (const seed of [BASE, BASE + 1, BASE + 2, 902]) {
     it(`seed ${seed} (replay: ONDEN_SAW_SEED=${BASE}): the same stamps and heads with the same saw on all three; one more round and a full resend store nothing`, async () => {
-      const peers = await threeNodes();
+      const peers = await threePeers(open);
       const rng = makeRng(seed);
       // purges and children made under notes another node deletes for good are what empty a column; moves after that write on the emptied column
       const weights = { ...ALL_TABLES, create: 18, move: 16, purge: 10, recreate: 4, trash: 6, undelete: 3 };

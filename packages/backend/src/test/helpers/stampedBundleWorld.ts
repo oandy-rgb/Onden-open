@@ -12,7 +12,8 @@ import { compareDigests, type ChangeBundle, type TableDigest } from "../../spine
 import type { ActorCtx } from "../../types.js";
 import { onNode, type RealNode } from "./distSim/realNode.js";
 import { makeRng, type Rng } from "./distSim/rng.js";
-import { digestAs, headsOfWorkspace, makeCaller, outOfScopeIds, stampsOfWorkspace } from "./stampedWorld.js";
+import { buildSourceWorld, capture, digestAs, fillFrom, headsOfWorkspace, makeCaller, openNode, outOfScopeIds, stampsOfWorkspace } from "./stampedWorld.js";
+import { setModulesOn } from "./setModulesOn.js";
 import { localNodeId, stampTransaction } from "../../spine/stamps.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { CARRIED_LABELS } from "../../spine/stampedMerge/dbUnits.js";
@@ -197,13 +198,15 @@ const ROW_TURNS = new Map<string, number>();
 /** Forget whose turn each row kind is (ROW_TURNS is kept per peer NAME, across tests): a test that calls this first draws the same writes for a seed whatever ran before it
  *  in its file (the shuffled order otherwise changes them: review of the snapshot-source batch, round 1, A3). */
 export function resetRowTurns(): void { ROW_TURNS.clear(); }
+/** A local write as the owner, in one stamped transaction (what mutate gives a root write; a stamped table refuses a write without one), on the database this
+ *  process is on (wrap it in `onNode`). Returns the rows the statement touched. */
+export const writeAsOwner = (peer: Peer, sql: string, params: unknown[]): Promise<number> => withTransaction(() => withEventTransaction(peer.ws, async () => {
+  await stampTransaction(peer.ws, peer.owner.id);
+  return (await q(sql, params)).rowCount ?? 0;
+}));
 async function writeOtherRow(peer: Peer, rng: Rng, mine: string[], only?: (typeof ROW_KINDS)[number]): Promise<boolean> {
   const n = nextN(peer), owner = peer.owner.id;
-  // a local write as the owner, in one stamped transaction (what mutate gives a root write; a stamped table refuses a write without one)
-  const one = async (sql: string, params: unknown[]) => withTransaction(() => withEventTransaction(peer.ws, async () => {
-    await stampTransaction(peer.ws, owner);
-    return (await q(sql, params)).rowCount ?? 0;
-  }));
+  const one = (sql: string, params: unknown[]) => writeAsOwner(peer, sql, params);
   // the kinds take turns (each peer goes through all ten every ten row writes), so a run with a handful of row writes per peer reaches every table; what is written is random
   const turn = ROW_TURNS.get(peer.name) ?? 0;
   if (!only) ROW_TURNS.set(peer.name, turn + 1);
@@ -256,6 +259,23 @@ async function writeOtherRow(peer: Peer, rng: Rng, mine: string[], only?: (typeo
       return (await one(`UPDATE workspaces SET modules_off = CASE WHEN modules_off ? $2 THEN modules_off - $2 ELSE modules_off || to_jsonb($2::text) END WHERE id = $1`, [peer.ws, id])) > 0;
     }
   }
+}
+
+/** Three nodes A, B, C holding one workspace: A is the source world (`markWorld`), B and C joined from A's snapshot, each admits the other two as senders, every module
+ *  on. The nodes are pushed onto `open` for the caller to close. `secretNote`: a note of a space the owner is not a member of (what a bundle withholds). */
+export async function threePeers(open: RealNode[]): Promise<Peer[] & { secretNote?: string }> {
+  const [na, nb, nc] = [await openNode("a"), await openNode("b"), await openNode("c")];
+  open.push(na, nb, nc);
+  const world = await buildSourceWorld(na);
+  const a = peerOf("A", na, world);
+  await markWorld(a);
+  const cap = await capture(na, world, 12_000);
+  await fillFrom(nb, world, cap);
+  await fillFrom(nc, world, cap);
+  const b = peerOf("B", nb, world), c = peerOf("C", nc, world);
+  for (const [x, y] of [[a, b], [a, c], [b, a], [b, c], [c, a], [c, b]] as const) await admit(x, y);
+  for (const p of [a, b, c]) await onNode(p.node, () => setModulesOn(p.ws, null));
+  return Object.assign([a, b, c], { secretNote: world.secretNote });
 }
 
 /** A bundle from `from` for `to`: what `to` holds is asked of `to`, the bundle is read on `from`, and goes through JSON as it would on the wire. */

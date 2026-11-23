@@ -198,7 +198,10 @@ const r = mergeUnit(local, incoming, { nowWall: Date.now(), maxSkewMs: DEFAULT_M
 
 ### 接上傳輸前必須完成
 
-（PR「fix/merge-space-follows-parent」加的十三項在最前面；之前的照舊。）
+（issue #1976 的兩項在最前面，其次是 PR「fix/merge-space-follows-parent」加的十三項；之前的照舊。）
+
+- **每一個交換測試的結尾（issue #1976）抓到的、已釘住的**：`test/helpers/stampedBundleWorld.ts` 的交換一律記下，測試結束前（或關掉節點前）自動把交換過的節點互相認可、交換到不再存東西，再交換一輪、整份重送一次，斷言什麼都沒存、沒有拒收，標記、其他頭與每個單位的值每台相同（`test/helpers/stampedEnding.ts`；負向對照 `stampedEndingControl`）。結尾不過的測試記在唯一一份只准減少的清單 `test/helpers/stampedEndingExceptions.ts`：`fails` 是缺陷（結尾必須還是紅的，修好就要拿掉），`skipped` 是刻意讓兩台不同的測試（偽造的包、只留在本台的暫時工作階段、時鐘超前 30 分鐘、從備份還原的節點、故意植入的錯）。已知、這次結尾也撞到的三項：「筆記以同一個 id 重建時，掛在它上面的列…」（`stampedCardTwiceOnPurgedNote`「a day's note made again」，整份重送存 6）、「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」（`anchorsReplicated`「round 10, 4 (stamps)」）、「永久刪除後以同一個 id 再建，對上另一台已被結掉的 `deleted` 頭」（`stampedBundlePlanted`「the finding, named」，整份重送存 1）。「筆記以外的帶標記的表，`updated_at` 不是標記的函式」不會讓結尾紅：結尾比的是單位的值，`updated_at`、錨點的 `moved_how`／`moved_at`、段落列的 `label`／`text_cache` 不是單位（各自的測試自己比）。
+- **段落列與它的任務在同一個交易裡建立時，寫的那台多一個 `task` 欄位標記，收的那台沒有**（issue #1976 的結尾找到，新的）：A 寫一行任務（`- [ ] …`），段落列（`block_nodes`）在同一個交易裡建立並連上任務筆記，A 握有 `*` 與一個 `task` 標記，兩者是同一個（來源、序號）、同一個時鐘與作者；B 收包時把那個欄位併進建立（欄位跟著 `*`），只握有 `*`。值相同、標記集合不同，整份重送存 0，再交換也不變。和下面「重建的列在收件那台多一個欄位標記，寫的那台沒有」是同一類（欄位標記是建立標記的複本，留不留取決於哪一台、哪個順序），方向相反。決定性情境：`stampedFieldCopyOfCreation`（一則斷言今天的差別、一則 `it.fails`）。結尾比對前在每台都拿掉「與同一列的 `*` 完全相同的欄位標記」，只拿掉這一種（`stampedEnding.ts` `withoutCopiesOfCreation`）：它出現在一個檔裡哪一則測試，取決於測試的順序（共用世界的檔，第一個跑的那則交換），沒有辦法逐則釘。修法方向：寫的一方在同一個交易裡建立的列不另寫欄位標記，或收的一方照樣存下，兩邊同一條規則；修好時拿掉 `withoutCopiesOfCreation` 和那則 `it.fails`。
 
 - **筆記以同一個 id 重建時，掛在它上面的列在沒握有它的節點永遠回不來**（PR #1965 第 1 輪審查第 1 點）：A 永久刪除日記 D；C 收到刪除後重開同一天（同一個 id）；B 一直離線，放了 D 的卡片又移動它。B 的寫入到 A 時 A 沒有 D（只留卡片的 `*`）；C 的新 D 到 B 時是蓋過舊建立的建立，B 的 D 被覆寫而不是移除，卡片留著；之後 D 到 A，沒有東西在 A 建出卡片（那些寫入在 A 的 `have` 以下，交換不再送），C 又先從 A 收到只有標記的卡片。結果 A、C 有 D 沒卡片，B 有卡片：**值本來就不同**（這條規則之前就是，之前沒有列在清單上）；這條規則之後連標記也不同（B 多一個 `position` 單位）。B 下次再寫那張卡片、整列一起送，三台就相同。日記天天會碰到（某天的筆記被永久刪除後又重開）。方向和「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」相同：之後建出的列（這裡是筆記）要把掛在它上面、這台只握有標記的列補上——但這台沒有值，要由握有的一台整列送來，所以是傳輸那一層的事（例如重建的筆記到達時，向握有的一台要掛在它上面的列）。決定性情境：`stampedCardTwiceOnPurgedNote`「a day's note made again under its id」（一則斷言今天的差別、一則 `it.fails`）。
 - **誰可以成為寄件者還沒有撤銷，也有兩個邊角**（第 2 批審查第 1 輪 C；配對那一批，第 8 批，要定）：`admitSyncNode` 把 `vouched_by` 是某個節點編號的列升成寄件者——

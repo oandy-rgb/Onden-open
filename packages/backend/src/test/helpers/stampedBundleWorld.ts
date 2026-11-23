@@ -17,6 +17,7 @@ import { setModulesOn } from "./setModulesOn.js";
 import { localNodeId, stampTransaction } from "../../spine/stamps.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { CARRIED_LABELS } from "../../spine/stampedMerge/dbUnits.js";
+import { exchanged } from "./stampedEnding.js";
 
 export type Peer = { name: string; node: RealNode | null; ws: string; owner: ActorCtx; space: string; call: ReturnType<typeof makeCaller> };
 
@@ -280,6 +281,7 @@ export async function threePeers(open: RealNode[]): Promise<Peer[] & { secretNot
 
 /** A bundle from `from` for `to`: what `to` holds is asked of `to`, the bundle is read on `from`, and goes through JSON as it would on the wire. */
 export async function bundleFor(from: Peer, to: Peer, options: { pageBytes?: number } = {}): Promise<ChangeBundle> {
+  await exchanged(from, to);
   const have = await onNode(to.node, () => readHave(to.ws));
   const pages = await onNode(from.node, () => readChangeBundle(from.owner, from.ws, have, options));
   return bundleOf(JSON.parse(JSON.stringify(pages)));
@@ -287,11 +289,12 @@ export async function bundleFor(from: Peer, to: Peer, options: { pageBytes?: num
 
 /** Everything `from` holds, sent again as if `to` held nothing (`have` empty), through JSON: what a node that exchanged to the end must take without a change or a refusal. */
 export async function resendAll(from: Peer, to: Peer) {
+  await exchanged(from, to);
   return take(to, bundleOf(JSON.parse(JSON.stringify(await onNode(from.node, () => readChangeBundle(from.owner, from.ws, {}))))));
 }
 
 /** Take a bundle at `to`. */
-export const take = (to: Peer, bundle: ChangeBundle) => onNode(to.node, () => applyChangeBundle(to.ws, bundle));
+export const take = async (to: Peer, bundle: ChangeBundle) => { await exchanged(null, to); return onNode(to.node, () => applyChangeBundle(to.ws, bundle)); };
 
 /** `to` takes everything `from` has that it lacks. */
 export async function exchange(from: Peer, to: Peer, options: { pageBytes?: number } = {}) {

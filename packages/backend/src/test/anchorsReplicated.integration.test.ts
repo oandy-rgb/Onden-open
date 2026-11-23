@@ -439,7 +439,7 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     for (const [x, y] of pairs) expect(said(await exchange(x, y)), `${x.name} to ${y.name}, one more round`).toEqual(none);
     // round 9, point 5 d: once settled, the sender's WHOLE state sent again (an empty `have`): the receiver takes it, nothing is refused, no row is made or removed,
     // no event, and the stamps and heads of the three tables (values and marks included) are what they were. That round sends what each node stored, not an empty
-    // bundle, so it tests that what was stored can be sent as it is. (One unit of another table is stored again, node_attributes: pinned in "round 10, 7".)
+    // bundle, so it tests that what was stored can be sent as it is. (Another table's units, node_attributes, were stored again before a row that is not on a node kept only its `*`: "round 10, 7".)
     for (const [x, y] of pairs) {
       const before = await threeTables(y);
       const r = await resendAll(x, y);
@@ -806,12 +806,11 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     }, 600_000);
   }
 
-  // Round 10, point 7 (pinned, before the transport): the one unit of another table a full resend stores again in these tests (a probe of every table's stamps around
-  // `resendAll`, rounds 5 to 10). B sets an attribute of N and changes it; A deletes N for good; B's writes reach A after (B first). A holds no row for them and keeps
-  // their stamps without values (round 9, point 2). B, taking A's delete in a merge, loses the row by the cascade, and the delete trigger clears the row's field stamps
-  // (a merge writes no tombstone of its own: sync_stamp_put_over); its creation stamp stays. So A holds B's value stamp and B does not. The exchange never sends it again
-  // (below B's `have`); the whole state sent again does, and B stores it, without a value. Nothing is refused and no text stays; the two nodes hold different stamps.
-  it.fails("round 10, 7: an attribute written on B, its note deleted for good on A (B first): both nodes hold the same node_attributes stamps, and a full resend stores none", async () => {
+  // Round 10, point 7: the one unit of another table a full resend stored again in these tests (a probe of every table's stamps around `resendAll`, rounds 5 to 10).
+  // B sets an attribute of N and changes it; A deletes N for good; B's writes reach A after (B first). B, taking A's delete in a merge, loses the row by the cascade,
+  // and the delete trigger clears the row's field stamps; its creation stamp stays. A never holds the row, and keeps of it only its `*` too (dbRows.ts
+  // `dropFieldUnits`; before, A kept B's value stamps without values and B did not, and only a full resend made B store them). Both hold the same; a resend stores none.
+  it("round 10, 7: an attribute written on B, its note deleted for good on A (B first): both nodes hold the same node_attributes stamps, and a full resend stores none", async () => {
     const { a, b } = await threeNodes(48);
     const note = await newNote(a, "f9f2f9f2-f9f2-4f9f-8f9f-f9f2f9f2f9f2", "Its attribute");
     await exchange(a, b);
@@ -821,6 +820,7 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     const attrs = (p: Peer) => onNode(p.node, async () => (await q<{ r: string }>(
       `SELECT row_key || ' ' || field || ' ' || deleted || ' ' || origin || ':' || seq AS r FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'node_attributes' ORDER BY 1`, [p.ws])).rows.map((x) => x.r));
     expect(await attrs(a)).toEqual(await attrs(b));
+    expect((await attrs(a)).filter((r) => r.startsWith(`${note}/`)).map((r) => r.split(" ")[1]), "of the attribute's row, only its `*`").toEqual(["*"]);
     expect((await resendAll(a, b)).stored).toBe(0);
   }, 600_000);
 
@@ -838,6 +838,15 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
       await purge(a, note);
       await settle(a, b, order); await settle(a, c, order); await settle(b, c, order);
       for (const p of [a, b, c]) expect(await wordsOn(p, "the words of"), p.name).toBe(0);
+      // review of PR #1965, round 1, point 2: the key's units are their own (not a field that follows `*`), and they are the same on A, which took the key's
+      // writes only after it had deleted the note (a row it does not hold: copies without values), as on B and C, which lost the note to the purge
+      const keyUnits = (p: Peer) => onNode(p.node, async () => (await q<{ r: string }>(
+        `SELECT 's ' || field || ' ' || deleted || ' ' || origin || ':' || seq || ' ' || saw::text || ' ' || COALESCE(kept_value::text, '-') AS r FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes.tag_schema' AND row_key = $2
+         UNION ALL SELECT 'h ' || field || ' ' || deleted || ' ' || origin || ':' || seq || ' ' || COALESCE(value, '-') || ' ' || valueless FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = 'content_nodes.tag_schema' AND row_key = $2 ORDER BY 1`, [p.ws, note])).rows.map((x) => x.r));
+      const onA = await keyUnits(a);
+      expect(onA.length, "the key keeps its units").toBeGreaterThan(0);
+      expect(await keyUnits(b), "B against A").toEqual(onA);
+      expect(await keyUnits(c), "C against A").toEqual(onA);
     }, 600_000);
   }
 
@@ -875,6 +884,37 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     await exchange(b, a); await exchange(a, b);
     const parentOf = (x: Peer) => onNode(x.node, async () => (await q<{ p: string | null }>(`SELECT parent_id::text AS p FROM content_nodes WHERE id = $1`, [k])).rows[0]?.p ?? null);
     expect(await parentOf(b)).toBe(await parentOf(a));
+  }, 600_000);
+
+  // The same case, as the random test of three nodes found it (stampedSawThreeNodes, seed 989453 of base 989452; red before and after the fix of a row that is not on a
+  // node, so not caused by it): besides the place, the STAMPS of K differ. B's K lost its parent to the cascade while P was gone, so B keeps a stamp row for K's
+  // `parent` holding P's id (sync_keep_emptied_id; the field otherwise follows K's creation). A makes K when P is back, so the column holds P and storeUnit keeps no
+  // stamp row for a field that follows its creation (dbUnits.ts `namesMissingRow` finds P). Whether that row exists depends on whether P was on the node when K's unit
+  // was stored: the order of arrival. No exchange sends it again (it is a copy of K's creation stamp, below every `have`). The direction is round 10, 4's: a row made
+  // later fills in the column its stamps kept the id of, and drops the stamp row; not done in this batch (README 「接上傳輸前必須完成」).
+  const parentStamps = (x: Peer, k: string) => onNode(x.node, async () => (await q<{ r: string }>(
+    `SELECT field || ' ' || origin || ':' || seq || ' ' || saw::text || ' ' || COALESCE(kept_value::text, '-') AS r FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = 'parent'`, [x.ws, k])).rows.map((r) => r.r));
+  const emptiedThenMadeAgain = async () => {
+    const { a, b } = await threeNodes(49);
+    const p = await newNote(a, "f9d2f9d2-f9d2-4f9d-8f9d-f9d2f9d2f9d2", "A day");
+    await exchange(a, b);
+    const k = await onNode(b.node, async () => (await b.call("POST", "/api/nodes", { title: "Made offline", markdown: "", space_id: b.space, parent_id: p })).id as string);
+    await purge(a, p);
+    await exchange(a, b);
+    await newNote(a, p, "The same day again");
+    for (let r = 0; r < 3; r++) { await exchange(b, a); await exchange(a, b); }
+    return { a, b, k, p };
+  };
+  it("round 10, 4 (stamps): what differs today: B keeps a stamp row of K's parent holding P's id, A none", async () => {
+    const { a, b, k, p } = await emptiedThenMadeAgain();
+    expect(await parentStamps(a, k), "A made K under P: the field follows K's creation").toEqual([]);
+    const onB = await parentStamps(b, k);
+    expect(onB, "B: one stamp row, keeping P's id").toHaveLength(1);
+    expect(onB[0]).toContain(p);
+  }, 600_000);
+  it.fails("round 10, 4 (stamps): a parent emptied, then made again with the same id before the child arrives elsewhere: both nodes hold the same stamps of K's parent", async () => {
+    const { a, b, k } = await emptiedThenMadeAgain();
+    expect(await parentStamps(b, k)).toEqual(await parentStamps(a, k));
   }, 600_000);
 
   // Round 10, point 5 (pinned, before the transport): a row older than the stamps (genesis: every row on the production server today) whose task follows its creation. Moved

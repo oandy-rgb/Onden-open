@@ -21,4 +21,8 @@
 // origin ({ label: { origin: n } }, spine/stampedBundle.ts Have) instead of one number per origin (the least over every label); a snapshot page and the hello of a
 // snapshot stream carry `brought`, the other origins the source holds with those numbers, and a joiner takes stamps of them. A node of version 5 would read a
 // per-label header as origins named like labels, and refuse a snapshot's brought stamps one by one (`join_stamp_origin`) instead of saying why.
-export const SYNC_DATA_SHAPE_VERSION = 6;
+// 7 (a row that is not on a node keeps only its `*`; no migration): a node that does not hold a row of a table that keeps no values (dbRows.ts `dropFieldUnits`,
+// stampedMerge/README 「沒有那一列的欄位跟著 `*`」) stores no field unit of it, so neither its snapshot nor its bundles carry one. The wire types are unchanged, but a
+// node of version 6 stores, and sends, a stamp and a head for each field of such a row: the two would hold different units of the same writes for ever, with
+// nothing refused.
+export const SYNC_DATA_SHAPE_VERSION = 7;

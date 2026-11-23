@@ -181,6 +181,9 @@ describe.skipIf(!isTestDb)("migration 220 on existing history", () => {
       await seedQ(`INSERT INTO sync_join (workspace_id, source_node, cut_seq, state) VALUES ($1, 'elsewhere', 1, 'done'), ($2, 'elsewhere', 1, 'joining')`, [joined.ws, joining.ws]);
       // what the shell and the template left are not this test's: start from no versions at all
       await seedQ(`DELETE FROM note_versions`);
+      // migration 220 ran before 231 gave tags a version list: the pass is checked against the rule it had (a tag's own pass is noteVersionsTags.integration.test.ts)
+      await seedQ(`CREATE OR REPLACE FUNCTION note_version_in_scope(p_node_type text, p_source_type text) RETURNS boolean AS $$
+        SELECT p_node_type IN ('content', 'canvas') AND p_source_type IS DISTINCT FROM 'system'; $$ LANGUAGE sql IMMUTABLE`);
       return { root, joined, joining, r };
     });
     const b = await RealNode.open("history-b", a); open.push(b); // a second copy of the same database, migrated by itself

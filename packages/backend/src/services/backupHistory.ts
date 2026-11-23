@@ -59,7 +59,7 @@ export async function measureHistory(workspaceId: string, noteIds: readonly stri
   let notes = 0, versions = 0, bytes = 0;
   for (let at = 0; at < noteIds.length; at += ID_CHUNK) {
     const ids = noteIds.slice(at, at + ID_CHUNK);
-    // the versions of notes and boards, and the saves of what has no versions yet (a tag's description, a system note)
+    // the versions of notes, boards and tag descriptions, and the saves of what has no versions (a system note)
     const versioned = await notesWithVersionLists(workspaceId, ids);
     const [withVersions, withEvents] = [ids.filter((id) => versioned.has(id)), ids.filter((id) => !versioned.has(id))];
     const r = await sql<{ notes: string; versions: string; bytes: string }>`
@@ -117,7 +117,7 @@ async function writeVersionPages(workspaceId: string, noteId: string, path: stri
   return { versions, bytes };
 }
 
-/** A tag's description or a system note: no versions yet, so the saves in the event log (as before). */
+/** A system note: no versions, so the saves in the event log (as before). */
 async function writeEventPages(workspaceId: string, noteId: string, path: string): Promise<{ versions: number; bytes: number }> {
   let versions = 0, bytes = 0, cursor: { at: string; id: string } | null = null;
   for (;;) {

@@ -56,7 +56,7 @@
 
 ## 版本歷史（備份格式 3）
 
-「版本」寫備份時讀版本表（`note_versions`，migration 220；一篇筆記的內文與標題，內文在 `blobs`；`services/history/storedVersions.ts` 的順序）；標籤說明與系統筆記還沒有版本，仍讀帶 `body_hash` 的 `NODE_CREATED`／`NODE_UPDATED`／`NODE_RESTORED` 事件（`bodyEventSql`）。
+「版本」寫備份時讀版本表（`note_versions`，migration 220；一篇筆記的內文與標題，內文在 `blobs`；`services/history/storedVersions.ts` 的順序）；標籤說明（migration 231）一樣讀版本表；只有系統筆記沒有版本，仍讀帶 `body_hash` 的 `NODE_CREATED`／`NODE_UPDATED`／`NODE_RESTORED` 事件（`bodyEventSql`）。
 搬它＝在新工作區寫出同樣的事件，並把版本鑄成 `g:` 版本（`spine/importedHistory.ts`）。**不需要 migration。**
 
 | 項目 | 規則 |

@@ -230,11 +230,19 @@ async function compareInk(c: Ctx, noteId: string, label: string) {
     }
     // the raw drawing versions: the same drawings in the same order (a repeat of the drawing before has no version)
     const rawBefore = ((await legacyInkVersionRows(c.ws, noteId, kind)) as Row[]).filter((r) => typeof r.ink_data === "string" && r.ink_data.length > 0);
-    const rawNow = (((await listInkVersionRows(c.actor, c.ws, noteId, kind)) ?? []) as Row[]).filter((r) => typeof r.ink_data === "string" && r.ink_data.length > 0);
+    // a drawing no save event names (a baseline: the drawing the note held when its history began): the old reader had no row for it
+    const baselines = new Set((await q<{ version_key: string }>(
+      `SELECT v.version_key FROM note_versions v WHERE v.note_id = $1 AND v.unit = $2 AND v.kind = 'baseline'
+          AND NOT EXISTS (SELECT 1 FROM note_version_events ve WHERE ve.note_id = v.note_id AND ve.unit = v.unit AND ve.version_key = v.version_key)`, [noteId, unit])).rows.map((r) => r.version_key));
+    const rawAll = (((await listInkVersionRows(c.actor, c.ws, noteId, kind)) ?? []) as Row[]).filter((r) => typeof r.ink_data === "string" && r.ink_data.length > 0);
+    if (rawAll.some((r) => baselines.has(r.id as string))) intended("noSaveEvent");
+    const rawNow = rawAll.filter((r) => !baselines.has(r.id as string));
     const dedup = rawBefore.filter((r, i) => !(i + 1 < rawBefore.length && rawBefore[i + 1]!.ink_data === r.ink_data));
     if (dedup.length !== rawBefore.length) intended("repeatInk");
     expect(rawNow.map((r) => r.ink_data), `${label}: ${kind} drawings`).toEqual(dedup.map((r) => r.ink_data));
     expect(rawNow.map((r) => [r.actor_kind, r.actor_type]), `${label}: ${kind} authors`).toEqual(dedup.map((r) => [r.actor_kind, r.actor_type]));
+    expect(rawNow.map((r) => day(r.changed_at)), `${label}: ${kind} times`).toEqual(dedup.map((r) => day(r.changed_at)));
+    expect(rawNow.map((r) => r.actor_name), `${label}: ${kind} author names`).toEqual(dedup.map((r) => r.actor_name));
   }
 }
 

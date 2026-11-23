@@ -42,7 +42,7 @@ type NewVersion = {
   restoredFrom?: string | null;
 };
 
-/** Whether this note has a version list: a note or a board, not a tag and not a system note (migration 220 note_version_in_scope, the one rule).
+/** Whether this note has a version list: a note, a board or a tag's description, not a system note (migration 220 note_version_in_scope, widened to tags by 231: the one rule).
  *  What the writer mints and what History reads from the version tables (services/history/storedVersions.ts) is exactly these notes. */
 export async function hasVersionList(workspaceId: string, noteId: string): Promise<boolean> {
   const row = (await sql<{ scoped: boolean }>`
@@ -59,8 +59,8 @@ export async function notesWithVersionLists(workspaceId: string, noteIds: readon
 }
 
 /** Mint one version of this transaction's write: `s:<origin>:<seq>:<n>`, n = its place among the transaction's versions of that note and
- *  unit (a cascade undo that writes one note twice gets two). Returns the key, or null for a note that has no version list (a tag, a system
- *  note: migration 220 note_version_in_scope, the one rule). Call inside the root write, after the content is stored. */
+ *  unit (a cascade undo that writes one note twice gets two). Returns the key, or null for a note that has no version list (a system
+ *  note: migration 220 note_version_in_scope, the one rule). A tag's version is its description's (its name is written apart and is no version). Call inside the root write, after the content is stored. */
 export async function recordVersion(v: NewVersion): Promise<string | null> {
   if (v.contentHash === null && v.kind !== "removed") throw new Error("a version names its content");
   if (!(await hasVersionList(v.workspaceId, v.noteId))) return null;

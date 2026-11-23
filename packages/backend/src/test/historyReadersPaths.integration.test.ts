@@ -127,32 +127,39 @@ describe.skipIf(!isTestDatabase())("History reads the version tables (batch 2): 
     expect((await q<{ restored_from: string }>(`SELECT restored_from FROM note_versions WHERE note_id = $1 AND kind = 'restored'`, [id])).rows[0]!.restored_from).toBe(key);
   }, 120_000);
 
-  it("a tag's description keeps its history list exactly as the event log gave it, and has no version rows", async () => {
+  it("a tag's description has version rows (batch 8) and its history list is the one the event log gave, row for row", async () => {
     const c = ctxOf(here);
     const tag = (await c.call("POST", "/api/tags", { name: `described-${randomUUID().slice(0, 6)}` })).id as string;
     for (const markdown of ["a tag is a word", "a tag is a word that groups notes", "a tag is a word that groups notes together"]) await c.call("PATCH", `/api/nodes/${tag}`, { markdown });
     const firstSave = (await q<{ id: string }>(`SELECT min(id)::text AS id FROM domain_events WHERE target_id = $1 AND payload ? 'body_hash'`, [tag])).rows[0]!.id;
     await c.call("POST", `/api/nodes/${tag}/versions/${firstSave}/restore`, {}); // by the number of an event, as for a tag always
     await c.call("PATCH", `/api/nodes/${tag}`, { markdown: "after the restore" });
-    expect(Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [tag])).rows[0]!.n)).toBe(0);
-    for (const raw of [false, true]) {
-      const before = await legacyListNoteVersions(here.ws, tag, { raw });
-      const now = (await listNoteVersions(here.ws, here.owner, tag, { raw }))!;
-      expect(before.length).toBeGreaterThanOrEqual(3);
-      expect(now, raw ? "raw list" : "merged list").toEqual(before); // every field, ids included: the numbers of events
-      expect(now.every((r) => /^\d+$/.test(String(r.id)))).toBe(true);
-      expect(now.every((r) => !("on_another_device" in r))).toBe(true);
-    }
-    // the other readers of a tag's description keep reading its events: the light history, the recent feed, a day's edits
+    expect(Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [tag])).rows[0]!.n), "one version per description save").toBe(5);
+    // the lists, row by row, with the restore of every version by number and by key: the proof of batch 2, run on the tag (the address of a row, its key against the
+    // number of its event, is the one difference it expects, and it names the row a restore points at by that row's time)
+    await proof(ctxOf(here), [tag], "tag description");
+    // the other readers, exact: the light history and the recent feed give the saves the event log gave, title and time, in the same order
+    const eventHeads = (await q<{ title: string | null; at: Date }>(`SELECT e.payload->>'title' AS title, e.created_at AS at FROM domain_events e WHERE e.target_id = $1 AND ${bodyEventSql("e")} ORDER BY e.created_at DESC, e.id DESC LIMIT 50`, [tag])).rows;
+    expect(eventHeads.length).toBe(5);
+    // every field but the address (`id`: the version's key now, the event's number before): a row of the light history is exactly a title and a time
     const heads = await listBodyHistoryRows(here.owner, here.ws, tag);
-    const eventHeads = (await q<{ id: string; title: string | null }>(`SELECT e.id::text AS id, e.payload->>'title' AS title FROM domain_events e WHERE e.target_id = $1 AND ${bodyEventSql("e")} ORDER BY e.created_at DESC, e.id DESC LIMIT 50`, [tag])).rows;
-    expect(heads!.map((r) => [String(r.id), r.title]), "/:id/history of a tag").toEqual(eventHeads.map((r) => [r.id, r.title]));
-    expect(eventHeads.length).toBeGreaterThanOrEqual(3);
-    const recent = await recentVersions(here.owner, here.ws, { limit: 200, offset: 0 }) as unknown as { rows: Array<{ id: string; node_id: string }> };
-    expect(recent.rows.filter((r) => r.node_id === tag).map((r) => r.id).sort(), "the recent feed lists a tag's saves by event number").toEqual(eventHeads.map((r) => r.id).sort());
-    const today = (await q<{ d: string }>(`SELECT current_date::text AS d`)).rows[0]!.d;
-    expect((await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, today, tag])).rows.length, "a day's edits count a tag's saves").toBeGreaterThanOrEqual(3);
-    // a system note (a content note the system owns): no version rows either; its saves are events
+    expect(heads!.map(({ id: _id, ...row }) => ({ ...row, changed_at: new Date(row.changed_at as string).toISOString() })), "/:id/history of a tag")
+      .toEqual(eventHeads.map((r) => ({ title: r.title, changed_at: r.at.toISOString() })));
+    // a row of the recent feed: title, time, the tag's current name and slug, and no mark of another device (a version minted here is this device's)
+    const recent = await recentVersions(here.owner, here.ws, { limit: 200, offset: 0 }) as unknown as { rows: Array<{ id: string; node_id: string; title: string | null; changed_at: string; current_title: string; slug: string; on_another_device: boolean }> };
+    const tagNow = (await q<{ title: string; slug: string }>(`SELECT title, slug FROM content_nodes WHERE id = $1`, [tag])).rows[0]!;
+    expect(recent.rows.filter((r) => r.node_id === tag).map(({ id: _id, node_id: _node, ...row }) => ({ ...row, changed_at: new Date(row.changed_at).toISOString() })), "the recent feed lists a tag's saves")
+      .toEqual(eventHeads.map((r) => ({ title: r.title, changed_at: r.at.toISOString(), current_title: tagNow.title, slug: tagNow.slug, on_another_device: false })));
+    for (const raw of [false, true]) expect((await listNoteVersions(here.ws, here.owner, tag, { raw }))!.every((r) => !("on_another_device" in r)), `the ${raw ? "raw" : "merged"} list marks no version as made on another device`).toBe(true);
+    // a day's edits: every save is on exactly one day. The days are those around the saves' own times, never today's date (a test that counted "today" fails around UTC midnight).
+    const first = eventHeads[eventHeads.length - 1]!.at.getTime();
+    let onDays = 0;
+    for (const offset of [-1, 0, 1]) {
+      const day = new Date(first + offset * 86_400_000).toISOString().slice(0, 10);
+      onDays += (await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, day, tag])).rows.length;
+    }
+    expect(onDays, "a day's edits count each of a tag's saves once").toBe(eventHeads.length);
+    // a system note (a content note the system owns): no version rows; its saves are events
     const sys = (await seedQ<{ id: string }>(`INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown) VALUES ($1, 'system', 'content', 'System text', $2, 'second') RETURNING id::text`, [here.ws, `sys-${randomUUID()}`])).rows[0]!.id;
     for (const text of ["first", "second"]) {
       const hash = await putBlob(text);
@@ -162,7 +169,10 @@ describe.skipIf(!isTestDatabase())("History reads the version tables (batch 2): 
     expect(Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_versions WHERE note_id = $1`, [sys])).rows[0]!.n)).toBe(0);
     const sysRecent = (await recentVersions(here.owner, here.ws, { limit: 200, offset: 0 }) as unknown as { rows: Array<{ node_id: string }> }).rows.filter((r) => r.node_id === sys);
     expect(sysRecent, "the recent feed lists a system note's saves").toHaveLength(2);
-    expect((await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, today, sys])).rows.length, "a day's edits count a system note's saves").toBe(2);
+    const sysFirst = (await q<{ at: Date }>(`SELECT min(created_at) AS at FROM domain_events WHERE target_id = $1 AND payload ? 'body_hash'`, [sys])).rows[0]!.at.getTime();
+    let sysOnDays = 0;
+    for (const offset of [-1, 0, 1]) sysOnDays += (await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, new Date(sysFirst + offset * 86_400_000).toISOString().slice(0, 10), sys])).rows.length;
+    expect(sysOnDays, "a day's edits count a system note's saves").toBe(2);
     const sysList = await listNoteVersions(here.ws, here.owner, sys, { raw: true });
     if (sysList !== null) expect(sysList, "a system note's list").toEqual(await legacyListNoteVersions(here.ws, sys, { raw: true }));
     expect((await listBodyHistoryRows(here.owner, here.ws, sys))?.length ?? 2, "/:id/history of a system note").toBe(2);

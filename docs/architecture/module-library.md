@@ -56,7 +56,7 @@
   升級不會關掉正在用的 RSS、網站、語意搜尋。
 - **關著的模組不留痕跡**（業主規則 2026-11-01，`packages/backend/src/test/moduleOffNoTrace.test.ts` 與前端同名測試守）：
   `routePrefixes` 底下的寫入回 409 `module_not_imported`（讀取照開，因為關掉保留資料）；agent 工具不提供、呼叫即拒絕；
-  節點掛鉤不跑（`nodeHooksWhenOff` 只給只會移除的掛鉤）；`retrievalSource` 回空；背景工作暫停。
+  節點掛鉤不跑（`nodeHooksWhenOff` 只給只會移除的掛鉤；另一台送來的修改只通知宣告 `nodeHooksOnReceive` 的模組）；`retrievalSource` 回空；背景工作暫停。
   語意搜尋的例子：關著時內容變動不排 `embed`、`POST /api/nodes/:id/suggested-links` 回 409、白板不畫建議連結；已存的 embedding 保留。
 - **模組的啟動工作**：`library.whenTurnedOn` 在擁有者打開的同一交易內執行，只准寫 outbox 意圖（語意搜尋開始為既有筆記建索引）。
 

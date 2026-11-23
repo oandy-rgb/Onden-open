@@ -8,9 +8,9 @@
 // text the user had just taken back.
 
 import type { ActorCtx } from "../types.js";
-import { relinkTarget, syncWikilinkEdges, syncAuthorizedNodeAttributes } from "./nodes.js";
+import { relinkTarget, syncAuthorizedNodeAttributes } from "./nodes.js";
 import { syncBlockNodes } from "./blockNodes.js";
-import { syncNoteBlockRefs } from "./noteBlockRefs.js";
+import { deriveFromBody } from "./bodyDerivation.js";
 import { enqueueBackup } from "./outbox.js";
 import { queueDispatcher, enqueueCascadeIntent } from "./dispatcherQueue.js";
 import { afterCommit } from "../spine/txHooks.js";
@@ -62,7 +62,6 @@ export async function applyBodyChange(change: BodyChange): Promise<void> {
   // No path stores a note REST would refuse (services/noteSize.ts); thrown
   // inside the write transaction, so the UPDATE rolls back with it.
   assertNoteSize({ title, markdown });
-  await syncWikilinkEdges(workspaceId, nodeId, markdown);
   if (change.renamed) await relinkTarget(workspaceId, [nodeId]);
   // The anchors first, in the same transaction as the body: a block's identity is its anchor, so the block nodes
   // below read the positions that just followed this change (services/blockAnchors, services/blockNodes.ts).
@@ -74,9 +73,10 @@ export async function applyBodyChange(change: BodyChange): Promise<void> {
   }
   if (change.adoptAnchors?.length) await adoptAnchorsInto(workspaceId, nodeId, markdown, change.adoptAnchors, { actor, eventId });
   await anchorExcerpts(workspaceId, nodeId, markdown, { actor, eventId });
-  await syncBlockNodes({ workspaceId, noteId: nodeId, markdown, actor, eventId });
+  const { retagged } = await syncBlockNodes({ workspaceId, noteId: nodeId, markdown, actor, eventId });
   await linkBlockNodeAnchors({ workspaceId, noteId: nodeId });
-  await syncNoteBlockRefs(workspaceId, nodeId, markdown);
+  // The derived half, after every replicated write above: the one function a node that takes this body by bundle runs too (services/bodyDerivation.ts).
+  await deriveFromBody(workspaceId, nodeId, markdown, retagged);
   await enqueueBackup({ workspaceId, nodeId, markdown, message: `${backupPrefix}: ${title}`, triggeredByEventId: eventId });
   await nodeContentCommitted({ workspaceId, nodeId, text: `${title}\n\n${markdown}`, triggeredByEventId: eventId, actor, markdown });
   // A system job (spine/systemJobs.ts) holds no authority to write attributes, and what it changes in a body

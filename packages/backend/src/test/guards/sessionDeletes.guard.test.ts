@@ -116,7 +116,7 @@ const LISTED: Record<string, string> = {
   "services/functionRefs.ts#deleteOwnRefViaWord": "a card mark read from the text (`#review`): the word was removed by a save",
   "services/noteBlockRefs.ts#syncNoteBlockRefs": "block references read from the text",
   "services/wikilinkEdges.ts#syncWikilinkEdges": "link edges read from the text",
-  "services/wikilinkEdges.ts#relinkTarget": "link edges re-resolved after a rename or move",
+  "services/wikilinkEdges.ts#relinkBatch": "link edges re-resolved after a rename or move (one batch of relinkTarget)",
   "services/spaces.ts#relinkAfterMove": "link edges re-resolved after a space move",
   "services/embeddings.ts#writeSuggestedLinks": "suggested links, recomputed from embeddings",
   "modules/importers/shared/identity.ts#stampImportedNote": "an import's own bookkeeping attributes (`_import_*`, the kept-off stamp)",

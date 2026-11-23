@@ -19,6 +19,8 @@ const MAY_NAME_THEM = new Set([
   "spine/stampedImport.ts", // the one entry that writes a snapshot's stamps as received into a database that is joining (sync_join, migration 204)
   "spine/stampedMerge/dbUnits.ts", // reads and writes the stamps and other heads of a unit for the merge core; never sends them (the snapshot is the only wire form)
   "spine/stampedBundle.ts", // reads the stamps a change bundle carries and this node's knowledge of each origin (sync_origins); the bundle is the second wire form, owner-only like the snapshot
+  "spine/receivedDerivation.ts", // reads two rows' creation stamps to tell that a tag and a paragraph's mark of it were one write (a block save made the tag: `_block_autotag` on a node that took it by bundle); never sends them
+  "spine/noteSlugs.ts", // reads the stamps of what put a note where it is under its name (claimOf), so two notes that want one slug are settled the same way on every node; never sends them
   "spine/stampedMerge/dbRows.ts", // creates and removes rows for the merge core and writes the structure_log line of a change that came from another device; never sends them
   "services/stampedSnapshot.ts", // names sync_stamps only to refuse a snapshot of a database that holds stamps of another node; never sends one but through the owner-only snapshot route
   "dbSchema.generated.ts", // generated column types

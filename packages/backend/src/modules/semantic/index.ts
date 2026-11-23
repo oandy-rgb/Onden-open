@@ -59,6 +59,8 @@ export const semanticModule: ModuleDefinition = {
       drain: async () => { clearTimeout(start); await resuming; handled = true; },
     });
   },
+  // A body taken from another node is indexed here too (each node keeps its own embeddings: node_embeddings is derived).
+  nodeHooksOnReceive: true,
   nodeHooks: {
     // A PDF's text is part of what the note says (indexing.ts withPdfText): the intent is filed again when it changes.
     attributeCommitted: async ({ workspaceId, nodeId, key }) => {

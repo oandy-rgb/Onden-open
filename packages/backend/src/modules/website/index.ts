@@ -50,6 +50,8 @@ export const websiteModule: ModuleDefinition = {
   // (republishSite adds nothing), so they also run with the module off: taking
   // content down must never depend on the switch.
   nodeHooksWhenOff: true,
+  // ... and for a change taken from another node: a note unpublished, hidden or trashed there must leave this node's static copy too (a leak otherwise).
+  nodeHooksOnReceive: true,
   // Each hook runs inside the writing transaction and only requests a
   // rebuild (an outbox intent that runs after commit, spine/nodeHooks.ts).
   nodeHooks: {

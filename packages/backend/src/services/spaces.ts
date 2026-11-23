@@ -9,7 +9,8 @@
 // itself lives in spaceScope.ts.
 
 import { q } from "../db.js";
-import { relinkTarget, syncWikilinkEdges, uniqueSlug } from "./nodes.js";
+import { relinkTarget, syncWikilinkEdges } from "./nodes.js";
+import { settleSlugs } from "../spine/noteSlugs.js";
 import { canReadNode } from "./readPolicy.js";
 import { canWriteSomewhere, spaceReadableNodeIds, spaceScopeSql } from "../spine/spaceScope.js";
 import { hasTaskRefSql } from "../spine/taskIdentity.js";
@@ -292,21 +293,12 @@ export async function moveToSpace(
       apply: async ({ eventId: id }) => {
         eventId = id;
         await q(`UPDATE content_nodes SET parent_id = $2, updated_at = now() WHERE id = $1`, [nodeId, parentAfter]);
-        // Slugs are unique per space: a moved note whose slug is taken in the
-        // target space gets the next free one there. The slug and the space
-        // change in one statement, so the note never holds the new slug while
-        // still in the old space (where that slug may be another note's).
+        // Slugs are unique per space. Every moved note holds `~<id>` while the space changes (in one statement, so a note never holds a slug in a space
+        // where it may be another note's), then takes its slug by the rule a node that takes this move by bundle runs too (spine/noteSlugs.ts settleSlugs):
+        // this move is the newest write here, so a moved note whose slug a note of the target space holds takes the next free one, and that note keeps its own.
         const movedSlugs = await q<{ id: string; slug: string }>(
           `SELECT id::text, slug FROM content_nodes WHERE id = ANY($1::uuid[]) AND ${liveNodeSql()}`, [ids]);
-        const assigned = new Set<string>();
-        const slugs = new Map<string, string>();
-        for (const row of movedSlugs.rows) {
-          // Two moved notes may want one free slug (a-2 for "a" and the other's own "a-2").
-          let free = await uniqueSlug(workspaceId, row.slug, { spaceId: toSpaceId, excludeId: row.id });
-          for (let i = 2; assigned.has(free); i++) free = await uniqueSlug(workspaceId, `${row.slug}-${i}`, { spaceId: toSpaceId, excludeId: row.id });
-          assigned.add(free);
-          slugs.set(row.id, free);
-        }
+        const slugs = new Map(movedSlugs.rows.map((row) => [row.id, `~${row.id}`] as const));
         // Only the root is written (its space; migration 218): the notes under it are in the target space because of where they are, so their
         // `updated_at`, a function of their own writes (migration 206 sync_touch_updated_at), stays as it was, on this node as on every node that takes the move.
         await q(
@@ -315,6 +307,7 @@ export async function moveToSpace(
              LEFT JOIN unnest($3::uuid[], $4::text[]) AS v(id, slug) ON v.id = i.id
             WHERE c.id = i.id`,
           [ids, toSpaceId, [...slugs.keys()], [...slugs.values()], nodeId]);
+        await settleSlugs(workspaceId, movedSlugs.rows);
         await relinkAfterMove(workspaceId, ids);
         // One observation per moved descendant, chained to this move: the sync
         // re-ships every node an event targets, so other devices learn each
@@ -341,8 +334,9 @@ export async function moveToSpace(
 
 /** [[title]] links resolve within a space: after a move, drop wikilink edges
  *  that now cross spaces and resolve the moved notes' links (out and in) in
- *  their new space. */
-async function relinkAfterMove(workspaceId: string, ids: string[]): Promise<void> {
+ *  their new space. Also what a node runs for the notes whose space a change
+ *  bundle changed (services/receivedDerivation.ts): derived edges only. */
+export async function relinkAfterMove(workspaceId: string, ids: string[]): Promise<void> {
   await q(
     `DELETE FROM node_edges e
       USING content_nodes s, content_nodes t

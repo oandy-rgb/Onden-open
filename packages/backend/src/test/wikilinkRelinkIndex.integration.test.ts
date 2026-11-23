@@ -15,6 +15,7 @@ import { indexMissingNoteLinks, relinkTarget, syncWikilinkEdges } from "../servi
 import type { ActorCtx } from "../types.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { makeSpace } from "./helpers/spaceFixtures.js";
+import { relinkAfterMove } from "../services/spaces.js";
 import { seedQ } from "./helpers/seedQ.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
@@ -168,5 +169,87 @@ describe.skipIf(!isTestDb)("relinkTarget through the link index equals reading t
     const { markdown } = (await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [src])).rows[0]!;
     await withTransaction(() => syncWikilinkEdges(workspaceId, src, markdown));
     expect((await q(`SELECT 1 FROM note_link_index WHERE note_id = $1`, [src])).rowCount).toBe(1);
+  });
+  /** `n` notes titled `Many <i> <s>` in space A (bulk, as a change bundle makes them), their ids in title order. */
+  const manyNotes = async (n: number, s: string): Promise<string[]> => (await seedQ<{ id: string }>(
+    `INSERT INTO content_nodes (workspace_id, source_type, node_type, title, slug, markdown, space_id)
+     SELECT $1, 'manual', 'content', 'Many ' || g || ' ' || $2, 'many-' || g || '-' || $2, 'plain body ' || g, $3 FROM generate_series(0, $4::int - 1) g
+     ORDER BY g RETURNING id::text`, [workspaceId, s, spaceA, n],
+  )).rows.map((r) => r.id);
+
+  /** The edges `run` leaves from the edges `before`, then put `before` back. */
+  async function edgesAfter(before: EdgeRow[], run: () => Promise<void>): Promise<EdgeRow[]> {
+    await putEdges(before);
+    await run();
+    const after = await edges();
+    await putEdges(before);
+    return after;
+  }
+
+  it("many targets at once (worked out a batch at a time) give the edges one call per target gives, both ways: titles, slugs, aliases, a tag from another space, case and NFD", async () => {
+    const s = stamp();
+    const many = await manyNotes(130, s);
+    const aliased = await note(`Aliased ${s}`, "a target named by its alias");
+    await seedQ(`INSERT INTO node_attributes (workspace_id, node_id, key, value, value_type, source) VALUES ($1,$2,'aliases',$3,'text','ui')`,
+      [workspaceId, aliased, JSON.stringify([`Other Name ${s}`])]);
+    const tag = await tagNote(`Batched Tag ${s}`);
+    const accented = await note(`Café Ünï ${s}`, "a title in NFC"); // linked below in NFD and another case
+    const ids = [...many, aliased, tag, accented]; // three batches, in id order
+    const sources = {
+      across: await note(`Across ${s}`, `[[Many 0 ${s}]] and [[Many 129 ${s}]]`),
+      slug: await note(`By slug ${s}`, `see [[many-70-${s}]]`),
+      alias: await note(`By alias ${s}`, `see [[other name ${s}]]`),
+      tag: await note(`Tag from B ${s}`, `see [[batched tag ${s}]]`, spaceB),
+      nfd: await note(`By NFD ${s}`, `see [[${`CAFÉ ünï ${s}`.normalize("NFD")}]]`),
+      far: await note(`Far ${s}`, `[[Many 5 ${s}]] is in another space`, spaceB),
+    };
+    await seedQ(`DELETE FROM node_edges WHERE workspace_id = $1 AND origin = 'wikilink'`, [workspaceId]);
+    const before = await edges();
+    const batched = await edgesAfter(before, () => withTransaction(() => relinkTarget(workspaceId, ids)));
+    const single = await edgesAfter(before, async () => { for (const id of ids) await withTransaction(() => relinkTarget(workspaceId, [id])); });
+    expect(batched).toEqual(single);
+    const pairs = batched.map((e) => `${e.source_node_id}>${e.target_node_id}`);
+    expect(pairs).toEqual(expect.arrayContaining([
+      `${sources.across}>${many[0]}`, `${sources.across}>${many[129]}`, `${sources.slug}>${many[70]}`,
+      `${sources.alias}>${aliased}`, `${sources.tag}>${tag}`, `${sources.nfd}>${accented}`,
+    ]));
+    expect(pairs).not.toContain(`${sources.far}>${many[5]}`); // a title resolves within its space
+    const { viaIndex, viaText } = await bothWays(ids);
+    expect(viaIndex).toEqual(viaText);
+    expect(viaIndex).toEqual(batched);
+  }, 120_000);
+
+  it("a move of more than one batch of notes into another space (spaces.relinkAfterMove) gives the edges one move per note gives", async () => {
+    const s = stamp();
+    const moved: string[] = [];
+    for (let i = 0; i < 60; i++) moved.push(await note(`Moved ${i} ${s}`, `next: [[Moved ${(i + 1) % 60} ${s}]], stay: [[Stay ${s}]]`));
+    const stay = await note(`Stay ${s}`, `back to [[Moved 3 ${s}]]`);
+    const waiting = await note(`Waiting ${s}`, `in B: [[Moved 40 ${s}]] and [[Moved 7 ${s}]]`, spaceB);
+    await seedQ(`UPDATE content_nodes SET space_id = $2 WHERE id = ANY($1::uuid[])`, [moved, spaceB]);
+    const before = await edges();
+    const batched = await edgesAfter(before, () => withTransaction(() => relinkAfterMove(workspaceId, moved)));
+    const single = await edgesAfter(before, async () => { for (const id of moved) await withTransaction(() => relinkAfterMove(workspaceId, [id])); });
+    expect(batched).toEqual(single);
+    const pairs = batched.map((e) => `${e.source_node_id}>${e.target_node_id}`);
+    expect(pairs).toEqual(expect.arrayContaining([`${moved[0]}>${moved[1]}`, `${waiting}>${moved[40]}`, `${waiting}>${moved[7]}`]));
+    expect(pairs.some((p) => p.startsWith(`${stay}>`) || p.endsWith(`>${stay}`))).toBe(false); // now across spaces
+  }, 120_000);
+
+  it("six times the targets look the link index up no more often (once for all the batches, not once a batch)", async () => {
+    // Per batch, a look-up of the index was a scan of the whole index whenever the planner judged it small, so a change bundle's rows read grew with its square
+    // (PR #1941 CI, stampedBundleScale on a real Postgres). Counted as scans of the table, which does not depend on what else the test database holds.
+    const scans = async (ids: string[]) => withTransaction(async () => {
+      const count = async () => Number((await q<{ n: string }>(
+        `SELECT (COALESCE(seq_scan, 0) + COALESCE(idx_scan, 0))::text AS n FROM pg_stat_xact_user_tables WHERE relname = 'note_link_index'`)).rows[0]?.n ?? 0);
+      const before = await count();
+      await relinkTarget(workspaceId, ids);
+      const scanned = (await count()) - before;
+      if (process.env.ONDEN_RELINK_SCANS === "1") console.log(`[relink scans] ${ids.length} targets: ${scanned}`);
+      return scanned;
+    });
+    // 2 batches and 8: one look-up a batch was 6 more scans. A plan may answer one look-up with both GIN indexes (two scans), hence the 2.
+    const small = await scans(await manyNotes(60, stamp()));
+    const large = await scans(await manyNotes(360, stamp()));
+    expect(large, `index scans: ${small} for 60 targets, ${large} for 360`).toBeLessThanOrEqual(small + 2);
   });
 });

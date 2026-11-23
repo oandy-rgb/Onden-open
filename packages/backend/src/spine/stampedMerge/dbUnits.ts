@@ -25,6 +25,7 @@ import { chooseAnchorHead, parseAnchorUnit } from "./anchorUnit.js";
 import { BLOCK_ID, NODE_MARKDOWN_MAX, TAG_NAME_MAX, hasLoneSurrogate, isUuid } from "@onden/markdown";
 import { isValidOrderKey } from "@onden/markdown/contract";
 import { sha256Hex } from "../../utils.js";
+import { STAMPED_ATTRIBUTE_SOURCES, stampedAttributeSourceSql } from "../attributeSource.js";
 
 /** One column of a row key, in the order `sync_key` (migration 194) joins them with '/'. Every part but the last is a uuid (36 characters), so a key is split without guessing. */
 type KeyPart = { column: string; type: "uuid" | "text" };
@@ -158,6 +159,13 @@ function checkParagraph(r: ReceivedRow): string | null {
   if (v) for (const c of ["label", "text_cache"]) if (v[c] !== undefined && (typeof v[c] !== "string" || (v[c] as string).length > PARAGRAPH_TEXT_MAX)) return `a paragraph row's ${c} is not a text of at most ${PARAGRAPH_TEXT_MAX} characters`;
   return null;
 }
+/** An attribute row is a unit only when its source is one that travels (spine/attributeSource.ts STAMPED_ATTRIBUTE_SOURCES; since migration 223 also the values a
+ *  note's text gives it, `markdown` and `frontmatter`): a row of another source (`derived`) carried in would plant a value no stamp watches, here only. */
+function checkAttribute(r: ReceivedRow): string | null {
+  const source = r.values?.source;
+  if (source !== undefined && !(STAMPED_ATTRIBUTE_SOURCES as readonly unknown[]).includes(source)) return "an attribute row's source is not one that travels";
+  return null;
+}
 /** A table whose values the database's own type, NOT NULL and CHECK hold (checkReceived checks those for every table): no writer rule beyond them. */
 const NO_RULES_OF_ITS_OWN: RowSource["check"] = { row: () => null };
 /** A note's title and body, and a space's name: text a database can keep (no NUL, no lone surrogate: PostgreSQL text holds neither, so no honest node holds one).
@@ -200,7 +208,7 @@ export const UNIT_SOURCES: readonly RowSource[] = [
     fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "written_space_id", deleted: "deleted_at" }, rows: true,
     bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] }, check: { row: (r) => noteRules(r) ?? checkOrderKey(r) } },
   { label: "node_attributes", table: "node_attributes", key: [{ column: "node_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(),
-    fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: "t.source IN ('ui', 'explicit', 'dispatcher')", rows: true, check: NO_RULES_OF_ITS_OWN },
+    fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: stampedAttributeSourceSql("t"), rows: true, check: { row: checkAttribute } },
   { label: "node_tags", table: "node_tags", key: [{ column: "node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "node_id" }, fields: {}, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "node_edges", table: "node_edges", key: [{ column: "source_node_id", type: "uuid" }, { column: "target_node_id", type: "uuid" }, { column: "edge_type", type: "text" }], workspace: ws(),
     fields: { status: "status" }, where: "t.origin = 'manual'", rows: true, check: NO_RULES_OF_ITS_OWN },

@@ -233,7 +233,7 @@ const SERVICE_WRITE_HELPERS: Record<string, { why: string; functions: string[] }
   "services/blobs.ts": { why: "the content-addressed blob store (events → hash → blobs); idempotent by hash", functions: ["putBlob"] },
   "services/blockAnchors/store.ts": { why: "block_anchors: where a paragraph is, moved inside the transaction that wrote the body (applyBodyChange) so text and positions commit together; creation (insertAnchors, via ensureBlockAnchor / linkBlockNodeAnchors) runs in its caller's transaction. Anchor events (create / confirm / lose) come with the batch that shows anchors (proposal §2.3)", functions: ["insertAnchors", "confirmAnchorCandidate", "moveAnchorsForBodyChange", "restoreBackupAnchors"] },
   "services/blockLinks.ts": { why: "block_link_bindings: which anchor a [[筆記/段落]] link means. Written by createBlockLink inside withEventTransaction (with the anchor and the BLOCK_ANCHOR_LINKED record); a backup restore puts a note's bindings back after the notes exist, like the anchors", functions: ["restoreBackupBindings"] },
-  "services/blockNodes.ts": { why: "block_nodes / block_node_tags: derived from a note's {…} block tags, rebuilt inside the save that changed the text (docs/architecture/block-nodes.md)", functions: ["resolveTagNames", "setTags", "syncBlockNodes"] },
+  "services/blockNodes.ts": { why: "block_nodes / block_node_tags: derived from a note's {…} block tags, rebuilt inside the save that changed the text (docs/architecture/block-nodes.md); deriveBlockRows writes the rows' display columns (no unit), in that save and in the finishing step of a change bundle (services/receivedDerivation.ts); markAutoTags the derived `_block_autotag` mark; syncBlockNodes writes its rows through db (since PR #1940) and its display columns through deriveBlockRows", functions: ["deriveBlockRows", "markAutoTags", "setTags"] },
   "modules/tasks/blockTasks.ts": { why: "block_nodes.task_id: links a task line to its task node inside the note's save; the task itself is created, updated and trashed through the spine (createTaskNode, updateTask, trashNode) — block-nodes.md B4", functions: ["syncBlockTasks"] },
   "services/boardStore.ts": { why: "board layout rows (positions, sections). writeSections and clearSurface run inside the board's own CANVAS/BOARD_UPDATED mutate(); setNodePosition is also called by PUT /api/nodes/:id/position, which deliberately records no event (a drag is not history, routes/nodes.ts)", functions: ["clearSurface", "setNodePosition", "writeSections"] },
   "services/dispatcherQueue.ts": { why: "dispatcher_pending: the post-commit work queue (a delivery intent, not domain state), enqueued with the event that caused it", functions: ["enqueueCascadeIntent", "queueDispatcher"] },
@@ -262,7 +262,7 @@ const SERVICE_WRITE_HELPERS: Record<string, { why: string; functions: string[] }
   "services/tagMembershipWrites.ts": { why: "attachTagInTx: the tag link row, inside the TAG_APPLIED mutate()", functions: ["attachTagInTx"] },
   "services/tagWrites.ts": { why: "insertTagRow / writeTagSchema: the tag definition row (and ensureModuleSelfRef: a module tag's own function reference, written with it), inside the caller's principal_admin mutate() (or event restore)", functions: ["ensureModuleSelfRef", "insertTagRow", "writeTagSchema"] },
   "services/tasksStore.ts": { why: "task node rows (node, #task link, _task_* attributes), inside the caller's mutate() or the scheduler's per-task event transaction", functions: ["insertTaskNodeTx", "setTaskAttrTx", "setTaskTitleTx"] },
-  "services/wikilinkEdges.ts": { why: "wikilink edges derived from note text (both directions), rebuilt inside the write that changed the text, title, aliases, space or trash state; plus the note's link index (note_link_index), a derived lookup written beside them (and filled at start-up)", functions: ["<module>", "indexMissingNoteLinks", "indexNoteLinks", "relinkTarget", "syncWikilinkEdges"] },
+  "services/wikilinkEdges.ts": { why: "wikilink edges derived from note text (both directions), rebuilt inside the write that changed the text, title, aliases, space or trash state; plus the note's link index (note_link_index), a derived lookup written beside them (and filled at start-up)", functions: ["<module>", "indexMissingNoteLinks", "indexNoteLinks", "relinkBatch", "syncWikilinkEdges"] }, // relinkBatch: one batch of relinkTarget (its writes; both take the caller's transaction)
 };
 
 /** A call into the spine: mutate( / mutate<T>( (generics may nest),
@@ -277,7 +277,7 @@ const SERVICE_GUARDED_HELPERS = [
   "services/embeddings.ts#writeSuggestedLinks",
   "services/siteConfig.ts#patchSiteConfig", "services/siteConfig.ts#setChromeBlocks",
   "services/tagWrites.ts#insertTagRow", "services/wikilinkEdges.ts#syncWikilinkEdges",
-  "services/wikilinkEdges.ts#relinkTarget",
+  "services/wikilinkEdges.ts#relinkBatch",
 ];
 
 // pool.query cannot join mutate()'s transaction, so a write through it is never

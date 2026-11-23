@@ -221,5 +221,23 @@ describe.skipIf(!isTestDb)("block nodes follow the note's text (DB)", () => {
     expect((await send(`/nodes/${id}`, "PATCH", { markdown: "p {exam}", base_markdown: `p {${stray}要}` })).status).toBe(200);
     expect((await q(`SELECT 1 FROM content_nodes WHERE workspace_id = $1 AND node_type = 'class_tag' AND title = 'exam' AND deleted_at IS NULL`, [workspaceId])).rows).toHaveLength(1);
   });
+
+  it("a block whose anchor another note's row answers to gets a fresh anchor on each save; the row shown is the one the save just wrote (review of PR #1941, round 1, point 5)", async () => {
+    const res = await send("/nodes", "POST", { title: `Lent ${randomUUID().slice(0, 6)}`, markdown: "lent paragraph {lent}\n" });
+    const parent = ((await res.json()) as { id: string }).id;
+    const child = ((await (await send("/nodes", "POST", { title: `Child ${randomUUID().slice(0, 6)}`, markdown: "" })).json()) as { id: string }).id;
+    // what 搬成子筆記 leaves: the paragraph's row answers to the child note, its anchor is still the parent's, at the paragraph's start
+    await seedQ(`UPDATE block_nodes SET note_id = $2 WHERE note_id = $1`, [parent, child]);
+    const shown = async () => (await q<{ id: string; hidden: boolean; anchor: string }>(
+      `SELECT b.id::text, b.hidden_at IS NOT NULL AS hidden, b.anchor_id AS anchor FROM block_nodes b JOIN block_anchors a ON a.anchor_id = b.anchor_id
+        WHERE b.note_id = $1 ORDER BY a.created_at, a.anchor_id`, [parent])).rows;
+    for (const text of ["lent paragraph {lent}\n\nmore", "lent paragraph {lent}\n\nmore and more", "lent paragraph {lent}\n\nmore, more and more"]) {
+      expect((await send(`/nodes/${parent}`, "PATCH", { markdown: text })).status).toBe(200);
+      const rows = await shown();
+      // one row shown for the one paragraph: the newest, the one this save made (a task or review mark the save puts on is on it)
+      expect(rows.filter((r) => !r.hidden)).toHaveLength(1);
+      expect(rows.at(-1)!.hidden).toBe(false);
+    }
+  });
 });
 

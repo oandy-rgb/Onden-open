@@ -49,7 +49,7 @@ import { taskNodeIdsAmong } from "./tasksStore.js";
 import { taskSeam } from "./taskSeam.js";
 import { MEDIA_TYPES } from "@onden/markdown";
 import {
-  deleteUnreferencedBlobs, dropQueuedWorkAbout, eraseEventsAbout, forgetNodesInSnapshots, forgetUnreferencedMedia, mediaStillReferenced, purgedContent,
+  deleteUnreferencedBlobs, dropQueuedWorkAbout, eraseEventsAbout, forgetNodesInSnapshots, forgetUnreferencedMedia, mediaStillReferenced, purgedContent, type PurgedContent,
 } from "./purgedContent.js";
 import type { PurgeItemResult, PurgePreview, PurgeResult } from "@onden/contract";
 import { liveNodeSql, notTagNodeSql } from "../spine/nodeSql.js";
@@ -448,19 +448,34 @@ async function purgeRows(
     apply: async () => {
       // Read what they hold elsewhere before anything goes.
       const content = await purgedContent(workspaceId, ids);
-      await eraseEventsAbout(workspaceId, ids);
-      await dropQueuedWorkAbout(workspaceId, ids);
       // node_positions has no foreign key on `surface` / `sub_canvas_id`: a purged board's placements and
-      // the sub-board links other boards hold to it go here.
+      // the sub-board links other boards hold to it go here. (Stamped rows: a node that takes this purge by bundle takes these writes with it.)
       await db.deleteFrom("node_positions").where("workspace_id", "=", workspaceId).where("surface", "in", ids).execute();
       await db.updateTable("node_positions").set({ sub_canvas_id: null }).where("workspace_id", "=", workspaceId).where("sub_canvas_id", "in", ids).execute();
       const deleted = await q(`DELETE FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, ids]);
-      const goneHashes = await deleteUnreferencedBlobs(content.hashes);
-      const mediaRemoved = await forgetUnreferencedMedia(workspaceId, content.mediaFiles, ids, goneHashes);
-      await forgetNodesInSnapshots(workspaceId, ids);
+      const mediaRemoved = await forgetPurgedNotes(workspaceId, ids, content);
       return { purged: deleted.rowCount ?? ids.length, media_removed: mediaRemoved };
     },
   });
+}
+
+/** What the notes `ids` hold outside their rows (services/purgedContent.ts), read while their rows are still here: the purge above reads it first, and so does a
+ *  node that takes another node's permanent delete by change bundle (services/receivedDerivation.ts), before the bundle's rows are written. */
+export const contentOfNotesToPurge = purgedContent;
+export type { PurgedContent };
+
+/** Everything a permanent delete erases beyond the note rows and what cascades from them, ONE function for the purge above and for a permanent delete taken by
+ *  change bundle (services/receivedDerivation.ts, once the merge removed the rows): the events about them (erased in place), the queued work about them, the blobs
+ *  and uploaded files nothing else references, and their copy in stored publish snapshots. Every one of these is this node's own (node-local or separate:
+ *  spine/syncClasses.json), so each node erases its own. `content` was read before the rows went (contentOfNotesToPurge). Returns how many uploads were removed. */
+export async function forgetPurgedNotes(workspaceId: string, ids: readonly string[], content: PurgedContent): Promise<number> {
+  if (ids.length === 0) return 0;
+  await eraseEventsAbout(workspaceId, ids);
+  await dropQueuedWorkAbout(workspaceId, ids);
+  const goneHashes = await deleteUnreferencedBlobs(content.hashes);
+  const mediaRemoved = await forgetUnreferencedMedia(workspaceId, content.mediaFiles, ids, goneHashes);
+  await forgetNodesInSnapshots(workspaceId, ids);
+  return mediaRemoved;
 }
 
 const sameIds = (a: readonly string[], b: readonly string[]) =>

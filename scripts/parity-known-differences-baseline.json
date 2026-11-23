@@ -34,11 +34,6 @@
       "step": "備份：下載完整備份（還原用）", "host": "browser", "paths": [".entries..onden/extras.json.modules"],
       "reason": "同上（browser-extras-modules-off），出現在還原用的第二次備份下載。",
       "doc": "docs/architecture/browser-app.md#7-各模組在試用版的狀態"
-    },
-    "browser-revoked-token-falls-back-to-local-owner": {
-      "step": "權杖：撤銷後再用（拒絕）", "host": "browser", "paths": ["status", ".status", ".error", ".ok", ".result", ".title"],
-      "reason": "瀏覽器版 worker 替每個請求補本機登入的 cookie（只有一個人）；Bearer 權杖認不得（撤銷、偽造）時依既有順序退回登入身分＝本機擁有者，所以回 200 而不是 401。伺服器版與桌面版這一步劇本不帶 cookie（權杖本來是另一個身分）才看到 401。瀏覽器版沒有對外的網址，拿得到權杖的只有頁面自己。",
-      "doc": "docs/architecture/browser-app.md#2-fetch-橋為什麼放在頁面的-fetch不用-service-worker"
     }
   }
 }

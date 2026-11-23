@@ -217,6 +217,34 @@
   - 〔第 1 層〕`saveTiming` 的重新整理重新載入 app 的模組（`vi.resetModules`，同 `tabWorld`），舊頁面的請求變成沒人聽的請求（`saveWorld.pageDied`），監聽與計時器移除；清的範圍由「重新載入」決定，不是清單。開機順序由「the boot order is syncEngine's」對照 `syncEngine.runBoot` 原始碼。
   - 〔第 1 層〕產品一條規則、三處各一個入口：被拒的文字不當 base（`writeRecovery.withoutRefusedBase`，`writeQueue` 送出的兩處）；救回副本只依伺服器回的內文丟；開機先收上一頁留下的（`writeQueue.takeInLeftWrites`）。`saveTiming` 的具名案例與每種情況（拒絕、逾時、關頁、重新整理、改名、切換筆記）各一則。
 - **還沒擋住的**：重新整理後打出與被拒文字一模一樣的內容會再送一次（seed 432211385，釘成預期失敗）；e2e `faults/refusedAcrossReload.spec.ts` 由擁有者送公開 CI 前沒在真瀏覽器跑過的話，真瀏覽器的部分仍未驗證（見 PR）。
+### 2026-11-20　「密文貼到別列解不開」只在一張表裡成立：同一把伺服器金鑰後來也加密行事曆網址（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`aiCredentials.ts` 寫「The row id is the cipher's associated data, so a ciphertext copied onto another row does not decrypt」。後來外部行事曆用同一個函式（`sealText`）以同一把 `ONDEN_SECRET_KEY` 加密網址，附加資料仍只有列 id：API 金鑰的密文搬到 `external_calendars` 同一個 id 的列（或反過來）解得開。另外截斷的密文丟 `TypeError`（500），不是「讀不到」。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`src/test/serverSecret.test.ts`「a value sealed for one purpose does not open for the other…」與「…or a cut value does not open」修前紅、修後綠；`externalCalendars.integration.test.ts`「a secret sealed as an API key under the same id does not open as a calendar address」修前紅。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的斷言只對「一種秘密、一張表」測過（`aiRuntimeApi` 的「moved to another row id」）；第二個用途加進來時沒有人回頭看那句話還成不成立，也沒有測試把一種秘密放進另一種的表。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕`services/serverSecret.ts` 是唯一加解密的地方（`serverSecret.guard.test.ts` 擋第二個呼叫 `createCipheriv`／讀金鑰的檔、擋用途由別的檔或執行時決定）；第 2 版的值綁 `<用途>:<列 id>`，跨用途、跨列、竄改、截斷各有測試。分兩次部署（擁有者審查，#1923）：這一版能讀第 2 版、仍寫第 1 版、不改寫；`serverSecret.test.ts`「writes the form the previous deploy reads」用前一版的讀法讀新寫的值。
+- **還沒擋住的**：**第二步尚未做**：寫第 2 版、把第 1 版的列重封（讀到時與開機時）、全部重封後拒絕第 1 版。在那之前存著的值都是第 1 版，用途不保護任何東西：第 1 版的值以任一用途都打得開（`serverSecret.test.ts` 把這件事寫成測試，第二步要把它改成拒絕）。
+- 第一版修法本身又犯了一次（#1923 擁有者審查）：一部署就把所有 API 金鑰重封成新格式，回滾到前一版映像就全部讀不出來。資料格式的改變沒有先問「退回一版還讀得到嗎」。機制：〔第 1 層〕上面那則「前一版讀得到」的測試；〔第 4 層〕改存放格式時，先出「能讀新格式、仍寫舊格式」的一版。
+
+### 2026-11-20　「瀏覽器頁面設不了 bearer 標頭」所以看到 bearer 就跳過來源檢查，認不得的 bearer 又退回 cookie（註解裡的不變條件沒人檢查）
+- **發生了什麼**：`app.ts` 的來源檢查（CSRF）只要看到 `Authorization: Bearer` 就跳過，理由寫「a page in a victim's browser can set neither a bearer header nor a forged Origin」；之後的身分解析在 bearer 解析不到時，照樣用同一個請求的登入 cookie。結果別的網站帶著亂寫的 bearer 與那個人的 cookie 送寫入，伺服器會以那個人的身分接受（修前實測：外來 Origin 的 `PUT /api/me/prefs/nav` 回 200 並寫入）。真正擋住的只剩瀏覽器的 CORS 預檢。
+- **證據**：唯讀掃描（擁有者要求「都修」）；`bearerNeverFallsBackToCookie.integration.test.ts` 的「an unknown bearer with a valid cookie is refused…」「a bearer header that does not parse is refused too…」修前紅（200）、修後綠。
+- **發現者**：審查。
+- **為什麼沒擋到**：註解的理由是「頁面設不了標頭」，但頁面可以設（只是要過預檢）；跳過檢查依據的是「有沒有標頭」，不是「標頭有沒有驗證通過」。`originGuard.test.ts` 只用一個假的 bearer 檢查「沒被來源檢查擋」，沒有檢查那個請求之後被當成誰。
+- **類別**：註解裡的不變條件沒人檢查。
+- **機制**：〔第 1 層〕bearer 在來源檢查之前解析一次；帶 bearer 的請求只能由那個 bearer 認證，解析不到（含格式錯）一律 401，不看 cookie；來源檢查只對真的解析成功的 bearer 讓開。上面的測試加上「bearer＋cookie 時是 bearer 的身分」「沒有 bearer 的外來寫入照舊 403」。
+- **還沒擋住的**：無已知的同類入口（`clientGate.ts` 見下一行）；「看到某個標頭就跳過檢查」沒有掃描式的守門。
+- 同類又一次（#1923 擁有者審查）：`clientGate.ts` 只要有任何 `Authorization` 標頭（含代理的 `Basic`）就不檢查頁面的協定版本；修前實測一個不帶協定標頭的舊頁面帶著 `Basic` 與 cookie 建了一則筆記（201）。改成看已驗證的 actor（`spine/authority.ts` `isPerson`）；`clientGate.test.ts`「asks a person's page even when the request carries an Authorization header」與 `bearerNeverFallsBackToCookie`「a page's note write with a proxy's Basic header」修前紅。同一輪也發現 bearer 的 401 排在協定標頭與請求紀錄之前、沒有那個標頭（測試「the 401 for a bearer says the server's protocol」修前紅），已移到它們之後。
+
+### 2026-11-22　四個 agent 權杖的測試從來沒有拿到權杖，靠的正是 #1923 拿掉的退回才是綠的；我自己的回報也把其中一則說成「沒重跑、無關」（測試的模型錯了；未查證就回報）
+- **發生了什麼**：#1923 併入 main 後，公開 run 45030945350 的真 Postgres 有測試回 401（`fieldSchema`、`fieldNameGate`、`tagModuleSwitchGate`）。原因不在權杖：這三個檔建 agent 時還帶著已移除的 `role`（回 400 `role_removed`），建權杖用已移除的 `template`（回 500），所以送出的是 `Authorization: Bearer undefined`。在 main 上它退回成原生來源的管理員，測試以管理員身分通過；#1923 讓認不得的 bearer 一律 401，測試才露出來。正式站的權杖走同一個 `resolveBearerActor`，沒有變。另外，我第一輪回報裡寫「import, an approved proposal and the schema PATCH store the same behaviour 紅，沒有重跑」，那一則就是 `fieldSchema` 的這個失敗，是這個 PR 造成的，我沒有查就當成無關。
+- **證據**：#1923 留言 7080893024；在 main `886242fe3` 上實測 `POST /api/actors`（帶 `role`）400、`/tokens` 500、`GET /api/mcp/tools` 帶 `Bearer undefined` 回 200；修正後三個檔 17 則全綠，且建立步驟有斷言（權杖要是 `ondt_` 開頭）。
+- **發現者**：測試（公開 CI，合併前）。
+- **為什麼沒擋到**：測試的準備步驟沒有檢查回應，拿到 `undefined` 也照樣往下；API 改版（移除 `role`、`template`）時這些檔沒有紅，因為退回把錯蓋住了。我在本機只跑了自己挑的檔與一部分完整套件，那一部分裡紅的一則被我放進「沒重跑」而不是先查。
+- **類別**：測試的模型錯了（測試走的不是它以為的那條認證路徑）；未查證就回報。
+- **機制**：〔第 1 層〕三個檔的準備步驟斷言建立成功、權杖形狀是 `ondt_…`；認不得的 bearer 一律 401（`bearerNeverFallsBackToCookie`），以後同樣的錯會在準備步驟或第一個請求就紅，不會再被退回蓋住。〔第 4 層〕回報時，完整套件裡紅的測試若沒有查過原因，不得寫成「和這個 PR 無關」，要寫「沒查」。
+- **還沒擋住的**：沒有守門找出「測試拿 `undefined` 當憑證」這種準備步驟；同一輪公開 CI 上另外三則紅（`sessionReadsOwn.property`、端對端 `zzDeepSys03`、`zzDeepToken01` 的 500）後來確認都不是 #1923 造成的：沒有 #1923 的 run 也紅（擁有者 2026-11-22 留言 7084235814、7084955629、7086572174；`zzDeepToken01` 是 #1875 的競態，我在真 Postgres 上的乾淨 `main` 重現 8 次 2 紅）。
 
 ### 2026-11-19　「內容」能不能收，畫面與伺服器各算一次，兩個答案在「算出來的白板分頁」上不同（零件對、組裝錯）
 - **發生了什麼**：#1767 的再審（note-ed，讀程式）發現：只有「畫面依卡片算出來的白板分頁」（沒有白板檢視紀錄）時，畫面認為「內容」可以收（分頁多於一個），伺服器的 `keepContentTabShowing` 只數檢視紀錄、看不到白板，確認後立刻把 `hidden` 清掉：人按了確認、「內容」還在。第二輪審查已要求「由伺服器保證」，我把保證放在伺服器，卻沒有把「能不能收」這個**答案**也只放一處，畫面仍自己用分頁數量算。

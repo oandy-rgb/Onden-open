@@ -295,6 +295,7 @@ GAP-06 的重現、領域入口與故障驗證見 [外層回滾與冪等修復](
   閱讀位置（`rssReadingPosition`）、上次打開閱讀的時間（`rssLastVisit`）。
   共用 `lib/accountPrefStore.ts` 的 `createAccountPref`（`syncedPrefStore` 加 serverKey、本機副本 `…Copy`、parser、搬遷）；
   後端 key 與形狀在 `services/actorPrefs.ts`（map 最多 500／50 筆、字串長度有限、形狀不對 400）。
+- **複習頁的「範圍」**（`reviewScope`，頁面位址文字：全部、筆記、標籤或沒有標籤；`reviewScopePref`）同樣走 `createAccountPref`；內含筆記與標籤 id，所以臨時工作階段讀成「沒設過」。
 - **搬遷**：舊本機值在第一次同步成功後才處理——伺服器沒有值才送上去一次，有值就用伺服器的（上次打開閱讀的時間改比「較新」：
   `isNewer`，相等不算較新）；之後舊 key 刪除（`PREFS` 標 Retired，仍留著讓搬遷讀得到）。同步前頁面先顯示舊值，離線也能用。
 - **「較新」**：`rssLastVisit` 儲存時若伺服器的比較新就保留伺服器的，舊裝置不會把時間往回寫。

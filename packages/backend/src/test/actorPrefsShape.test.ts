@@ -274,3 +274,12 @@ describe("reviewsPerDay", () => {
     for (const bad of [0, -1, 5001, 2.5, "20", { limit: 20 }]) expect(parsePref("reviewsPerDay", bad), JSON.stringify(bad)).toEqual({ ok: false });
   });
 });
+
+describe("reviewScope", () => {
+  const id = "123e4567-e89b-12d3-a456-426614174000";
+  it("is the review page's scope text (a note, a tag or untagged); null clears it", () => {
+    expect(isPrefKey("reviewScope")).toBe(true);
+    for (const good of ["all", "untagged", `root.${id}`, `tag.${id}`, null]) expect(parsePref("reviewScope", good), String(good)).toEqual({ ok: true, value: good });
+    for (const bad of ["status", "root.x", `root.${id}.x`, 1, {}]) expect(parsePref("reviewScope", bad), JSON.stringify(bad)).toEqual({ ok: false });
+  });
+});

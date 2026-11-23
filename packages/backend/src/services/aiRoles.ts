@@ -16,7 +16,8 @@ import { mutate } from "../spine/mutate.js";
 import { AuthorityError, isWorkspaceOwner, requirePerson } from "../spine/authority.js";
 import { AgentSessionError } from "./agentSessionError.js";
 import { loadRunner, setRunnerEnabled, type AgentRunner } from "./agentSessions.js";
-import { credentialLive, secretKeyConfigured } from "./aiCredentials.js";
+import { credentialLive } from "./aiCredentials.js";
+import { secretKeyConfigured } from "./serverSecret.js";
 import {
   isRuntimeKind, listModels, monthTokensUsed, runtimeAvailability,
   type ApiModel, type RuntimeKind, type UnavailableReason,

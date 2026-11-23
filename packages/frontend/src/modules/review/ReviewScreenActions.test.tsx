@@ -225,7 +225,7 @@ describe("a note's own review: cards stopped in it", () => {
   it("reads the stopped cards once when it opens and offers each one back", async () => {
     stopped = inNote;
     queued = [];
-    render(<ReviewPanel online onOpenNode={() => {}} rootId="note-root" rootTitle="Textbook" />);
+    render(<ReviewPanel online onOpenNode={() => {}} scope={{ kind: "root", id: "note-root" }} />);
     const here = await screen.findByRole("region", { name: "Stopped in this note" });
     expect(within(here).getByText("2 cards in this note are stopped.")).toBeInTheDocument();
     expect(calls.filter(call => call.url.endsWith("/api/review/note-root/stopped"))).toHaveLength(1);
@@ -243,7 +243,7 @@ describe("a note's own review: cards stopped in it", () => {
 
   it("shows nothing when none are stopped, and reads nothing for the all-cards review", async () => {
     queued = [];
-    const { unmount } = render(<ReviewPanel online onOpenNode={() => {}} rootId="note-root" rootTitle="Textbook" />);
+    const { unmount } = render(<ReviewPanel online onOpenNode={() => {}} scope={{ kind: "root", id: "note-root" }} />);
     await act(async () => {});
     expect(screen.queryByRole("region", { name: "Stopped in this note" })).toBeNull();
     unmount();
@@ -255,7 +255,7 @@ describe("a note's own review: cards stopped in it", () => {
 
   it("offline it cannot start them again, and shows no ids", async () => {
     stopped = inNote;
-    render(<ReviewPanel online={false} onOpenNode={() => {}} rootId="note-root" rootTitle="Textbook" />);
+    render(<ReviewPanel online={false} onOpenNode={() => {}} scope={{ kind: "root", id: "note-root" }} />);
     const here = await screen.findByRole("region", { name: "Stopped in this note" });
     for (const button of within(here).getAllByRole("button", { name: "Start reviewing again" })) expect(button).toBeDisabled();
     expect(here.textContent).not.toMatch(/blk-9|ref-9|note-5/);

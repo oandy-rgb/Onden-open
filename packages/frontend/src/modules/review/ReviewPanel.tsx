@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { GraduationCap, ExternalLink } from "lucide-react";
 import type { ReviewCard as WireCard, ReviewGradeRequest, ReviewGradeResult, ReviewRating, ReviewUndoRequest } from "@onden/contract";
 import { ApiError } from "../../lib/api";
@@ -23,6 +23,7 @@ import { cardKey, cardPath } from "./cardKey";
 import { intervalLabel } from "./intervalLabel";
 import { ReviewActions, ReviewContextBlock } from "./ReviewCardExtras";
 import StoppedInNote from "./StoppedInNote";
+import { formatPlace, scopeQuery, type ReviewScope } from "./reviewPlace";
 import { useHasKeyboard } from "../../hooks/useKbdHint";
 
 // The review drawer — one card at a time, four plain buttons. Deliberately
@@ -49,17 +50,14 @@ type Props = {
   /** Called after a grading session changes counts (lets the host refresh
    *  any due-count surfaces). */
   onGraded?: () => void;
-  /** Optional subtree scope — review only the cards under this note (its
-   *  deck), without the tag filter. "卡片長在空間結構上". */
-  rootId?: string;
-  rootTitle?: string;
-  /** Direct members of a tag that provides review; independent of tree scope. */
-  tagId?: string;
-  tagName?: string;
-  /** Only the cards no tag group covers (the status page's 「沒有標籤」 group). */
-  untagged?: boolean;
-  /** Leave the group for all cards; shown beside the line that says which group this is. */
+  /** The 範圍 the session covers (reviewPlace); default all cards. The queue, the remaining count and the empty state follow it. */
+  scope?: ReviewScope;
+  /** The picker that changes the scope, shown under the title (ReviewScopePicker). */
+  scopePicker?: ReactNode;
+  /** Leave the scope for all cards: the way back from an empty scope. */
   onShowAll?: () => void;
+  /** The scope no longer exists or is no longer visible (its tag was deleted): the host returns to all cards. */
+  onScopeGone?: () => void;
   /** Open the status page (the full page only; a tag's own session has none). */
   onOpenStatus?: () => void;
 };
@@ -72,10 +70,14 @@ const GRADES: Array<{ rating: Rating; label: string }> = [
 ];
 
 export default function ReviewPanel(props: Props) {
-  return <ReviewSession key={JSON.stringify([props.rootId ?? null, props.tagId ?? null, props.untagged ?? false])} {...props} />;
+  return <ReviewSession key={formatPlace(props.scope ?? ALL)} {...props} />;
 }
 
-function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitle, tagId, tagName, untagged, onShowAll, onOpenStatus }: Props) {
+const ALL: ReviewScope = { kind: "all" };
+
+function ReviewSession({ online, onClose, onOpenNode, onGraded, scope = ALL, scopePicker, onShowAll, onScopeGone, onOpenStatus }: Props) {
+  const rootId = scope.kind === "root" ? scope.id : undefined;
+  const scopeKey = formatPlace(scope);
   const hasKeyboard = useHasKeyboard();
   // Offer the one-step setup only while no tag gives Review.
   const [cards, setCards] = useState<Card[] | null>(null);
@@ -110,7 +112,7 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
   const [revealed, setRevealed] = useState(false);
   // How many new cards today's cap still allows, made legible: it explains why fewer new cards surface than exist.
   // Tick-driven, so it follows along as grading uses the cap.
-  const { stats } = useReviewStats();
+  const { stats } = useReviewStats(scope);
   // The paragraph being edited in place (the editor's own sheet; see ReviewEditSheet).
   const [editing, setEditing] = useState(false);
 
@@ -123,8 +125,7 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
     let controller: AbortController | null = null;
     let remainingIds: string[] | null = null;
     const completed = new Set<string>();
-    const url = untagged ? "/api/review/queue?untagged=true" : tagId ? `/api/review/queue?tag_id=${encodeURIComponent(tagId)}`
-      : rootId ? `/api/review/queue?root=${encodeURIComponent(rootId)}` : "/api/review/queue";
+    const url = `/api/review/queue${scopeQuery(scope)}`;
 
     async function readQueue() {
       if (!alive || inFlight || gated || gradeBusy.current || !dirty) return;
@@ -146,6 +147,8 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
         if (!alive || readingRevision !== revision || gated) return;
         // Never fall back to an old body after a refused/failed authority read.
         // Keep only session IDs, so a later retry can recover its place.
+        // A remembered tag that is gone or no longer visible: the page leaves it for all cards instead of showing an error.
+        if (scope.kind === "tag" && e instanceof ApiError && e.status === 404 && onScopeGone) { onScopeGone(); return; }
         setCards([]);
         setQueueError(writeErrors.requestMessage(e, t("Could not load the review queue")));
       } finally {
@@ -201,7 +204,7 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
       unsubscribeStore(); unregisterChanged(); unregisterMembership();
       queue.current = null;
     };
-  }, [rootId, tagId, untagged]);
+  }, [scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps -- the scope's text is its identity: an equal scope in a new object must not restart the session
 
   const previousOnline = useRef(online);
   useEffect(() => {
@@ -398,21 +401,12 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
         )}
         {onOpenStatus && <Button type="button" variant="ghost" size="sm" className="review-status-link" onClick={onOpenStatus}>{t("Review status")}</Button>}
       </PanelHeader>
-      {queueChecked && !membershipGated && (rootId || tagId || untagged) && (
-        <div className="review-scope-row">
-          <p className="review-scope" title={rootId ? t("Reviewing only the cards under this note") : undefined}>
-            {untagged ? t("Practising cards with no tag")
-              : tagId ? t("Reviewing notes tagged #{name}", { name: displayTitle(tagName) })
-              : t("Studying {title}", { title: displayTitle(rootTitle) })}
-          </p>
-          {onShowAll && <Button type="button" variant="ghost" size="sm" onClick={onShowAll}>{t("All cards")}</Button>}
-        </div>
-      )}
+      {scopePicker}
       {rootId && !membershipGated && (
         <StoppedInNote rootId={rootId} online={online} onOpenNode={onOpenNode} onResumed={(key) => { queue.current?.restore(key); onGraded?.(); }} />
       )}
 
-      {queueChecked && !membershipGated && !tagId && !untagged && typeof stats?.new_available === "number" && stats.new_available > 0 && (
+      {queueChecked && !membershipGated && typeof stats?.new_available === "number" && stats.new_available > 0 && (
         <p className="review-budget" title={t("New cards are introduced gradually so reviews stay manageable")}>{t("{n} new cards available today", { n: stats.new_available })}</p>
       )}
 
@@ -520,12 +514,11 @@ function ReviewSession({ online, onClose, onOpenNode, onGraded, rootId, rootTitl
         <div className="review-empty">
           {done > 0 ? (
             <p className="review-done">{t("Done — {n} reviewed. See you next time.", { n: done })}</p>
-          ) : untagged ? (
-            <p>{t("Nothing to review in cards with no tag right now.")}</p>
-          ) : tagId ? (
-            <p>{t("Nothing to review with this tag right now.")}</p>
-          ) : rootId ? (
-            <p>{t("Nothing to review under this note right now.")}</p>
+          ) : scope.kind !== "all" ? (
+            <>
+              <p>{t("Nothing to review in this scope today.")}</p>
+              {onShowAll && <Button type="button" variant="ghost" onClick={onShowAll}>{t("Review all cards")}</Button>}
+            </>
           ) : (
             <p>{t("Nothing to review right now. On a paragraph, choose “Make this block a review card” to add one.")}</p>
           )}

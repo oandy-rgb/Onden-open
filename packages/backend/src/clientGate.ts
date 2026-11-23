@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { CLIENT_PROTOCOL, CLIENT_PROTOCOL_HEADER, SERVER_PROTOCOL_HEADER, isSyncPath, protocolMismatch } from "@onden/markdown";
 import type { ActorCtx } from "./types.js";
+import { isPerson } from "./spine/authority.js";
 
 /** Says which protocol this server speaks, on every response (refusals and 401s too), so a client can tell whether
  *  the server is too old for it. See CLIENT_PROTOCOL in @onden/markdown for when the number changes. */
@@ -39,11 +40,12 @@ export function clientProtocolGate(): MiddlewareHandler<{ Variables: { actor: Ac
       return next();
     }
     if (isRead || !underPrefix(path, NOTE_WRITE_PREFIXES)) return next();
-    // A bearer request is a token (agents, MCP), not a page; only a person's session is asked. And only a page: a
-    // browser always sends Origin on a write (the CSRF guard in app.ts counts on it), a script or curl does not.
-    if (c.req.header("authorization") || !c.req.header("origin")) return next();
+    // Only a page is asked: a browser always sends Origin on a write (the CSRF guard in app.ts counts on it), a script or curl does not.
+    if (!c.req.header("origin")) return next();
+    // Only a person's own session: a request authenticated by a token or a temporary session's credential is not a page. Decided from the
+    // verified actor (app.ts refuses a bearer that does not resolve), never from the mere presence of an Authorization header.
     const actor = c.get("actor");
-    if (!actor || actor.type !== "human") return next();
+    if (!actor || actor.type !== "human" || !isPerson(actor)) return next();
     return c.json({ error: "client_too_old" }, 426);
   };
 }

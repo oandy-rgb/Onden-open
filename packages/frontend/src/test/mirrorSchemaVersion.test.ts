@@ -35,6 +35,22 @@ describe("mirror schema version", () => {
     expect(state(db, "full_refresh_at")).toBeNull();
     db.close();
   });
+  // The personal space's id is the server's (random, and renumbered before: its migration 201). The kept spaces list
+  // (lib/spaces.ts) goes with every schema change, so a renumbering that raises the version cannot leave a stale one.
+  it("a schema change drops the kept spaces list; the same version keeps it", async () => {
+    const SQL = await initSqlJs();
+    const db = new SQL.Database();
+    prepareLocalDatabase(db);
+    db.run("INSERT INTO sync_state (key, value) VALUES ('spaces', '[{\"id\":\"old\",\"kind\":\"personal\"}]')");
+    prepareLocalDatabase(db);
+    expect(state(db, "spaces")).not.toBeNull();
+    db.run("UPDATE sync_state SET value = ? WHERE key = 'mirror_schema_version'", [String(MIRROR_SCHEMA_VERSION - 1)]);
+    prepareLocalDatabase(db);
+    expect(state(db, "spaces")).toBeNull();
+    expect(MIRROR_SCHEMA_VERSION).toBeGreaterThanOrEqual(5); // 5: the copy started keeping the list
+    db.close();
+  });
+
   // The server's migration 194 replaced every sidebar pointer's id. A device that already holds the old ids must read
   // them again (a whole bootstrap) rather than keep a pin the server can no longer find.
   it("a copy from before the pointer ids were rewritten (version 1) holds its old pointer until the whole bootstrap it now asks for", async () => {

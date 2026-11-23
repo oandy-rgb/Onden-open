@@ -1,20 +1,16 @@
-// Quick-add writes a task as a line of a note: the one it named, else today's
-// diary (the 日記 module on) or the 任務 note. A clock time with the day is the
-// time at the start of the line (`time`), not a reminder.
+// Quick-add writes a task as a line of a note: the one it named, else the note dayNotes.openTaskHome
+// picks for the chosen space (today's diary, the 任務 note, a shared space's 任務 note — its rules are
+// tested in dailyModule.test.tsx). A clock time with the day is the time at the start of the line
+// (`time`), not a reminder.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createStandaloneTask = vi.hoisted(() => vi.fn());
-const openToday = vi.hoisted(() => vi.fn());
-const openTasksNote = vi.hoisted(() => vi.fn());
-const dailyNotesEnabled = vi.hoisted(() => vi.fn());
+const openTaskHome = vi.hoisted(() => vi.fn());
 vi.mock("../lib/data", async (original) => ({
   ...await original<typeof import("../lib/data")>(),
   taskWriter: { createStandaloneTask },
-  dayNotes: { openToday, openTasksNote },
+  dayNotes: { openTaskHome },
 }));
-const personal = vi.hoisted(() => ({ id: "sp-me" as string | null }));
-vi.mock("../lib/spaces", async (original) => ({ ...await original<typeof import("../lib/spaces")>(), personalSpaceId: () => personal.id }));
-vi.mock("../lib/dayNode", async (original) => ({ ...await original<typeof import("../lib/dayNode")>(), dailyNotesEnabled }));
 
 import { createQuickTask, type QuickTaskFields } from "../modules/tasks/createQuickTask";
 
@@ -25,15 +21,14 @@ const base: QuickTaskFields = {
 
 beforeEach(() => {
   createStandaloneTask.mockReset().mockResolvedValue({ status: "synced" });
-  openToday.mockReset().mockResolvedValue({ node: { id: "day-note", title: "2026-10-24" }, created: false });
-  openTasksNote.mockReset().mockResolvedValue({ node: { id: "tasks-note", title: "任務" }, created: false });
-  dailyNotesEnabled.mockReset().mockReturnValue(true);
+  openTaskHome.mockReset().mockResolvedValue({ node: { id: "day-note", title: "2026-10-24" }, created: false });
 });
 
 describe("createQuickTask", () => {
-  it("writes into today's diary with the day, evening, deadline and repeat", async () => {
+  it("writes into the space's home note with the day, evening, deadline and repeat", async () => {
     expect(await createQuickTask({ ...base, when_date: "2026-10-25", evening: true, deadline: "2026-10-30", recur: "1w", recur_mode: "after" }))
       .toEqual({ saved: "saved", noteTitle: "2026-10-24" });
+    expect(openTaskHome).toHaveBeenCalledWith(undefined);
     expect(createStandaloneTask).toHaveBeenCalledWith("回覆提案", expect.objectContaining({
       when: "2026-10-25", evening: true, deadline: "2026-10-30", recur: "1w", recurMode: "after", remindAt: null, into: "day-note",
     }));
@@ -46,32 +41,20 @@ describe("createQuickTask", () => {
     expect(createStandaloneTask.mock.calls[1]![1]).toMatchObject({ when: "2026-10-25", time: "15:00", remindAt: null });
   });
 
-  it("goes where it was told: the named note, else the 任務 note while the diary is off", async () => {
+  it("goes where it was told: the named note, else the chosen space's home note", async () => {
     await createQuickTask({ ...base, note: { id: "n1", title: "專題" } });
     expect(createStandaloneTask.mock.calls[0]![1]).toMatchObject({ into: "n1" });
-    expect(openToday).not.toHaveBeenCalled();
+    expect(openTaskHome).not.toHaveBeenCalled();
 
-    dailyNotesEnabled.mockReturnValue(false);
-    expect(await createQuickTask(base)).toEqual({ saved: "saved", noteTitle: "任務" });
-    expect(createStandaloneTask.mock.calls[1]![1]).toMatchObject({ into: "tasks-note" });
-  });
-
-  it("writes a shared space's task into that space's 任務 note, diary or not, and the personal space as before", async () => {
-    openTasksNote.mockResolvedValue({ node: { id: "shared-tasks", title: "任務" }, created: true, status: "synced" });
+    openTaskHome.mockResolvedValue({ node: { id: "shared-tasks", title: "任務" }, created: true, status: "synced" });
     expect(await createQuickTask({ ...base, spaceId: "sp-shared" })).toEqual({ saved: "saved", noteTitle: "任務" });
-    expect(openTasksNote).toHaveBeenCalledWith("sp-shared");
-    expect(openToday).not.toHaveBeenCalled();
-    expect(createStandaloneTask.mock.calls[0]![1]).toMatchObject({ into: "shared-tasks" });
-
-    openTasksNote.mockClear();
-    await createQuickTask({ ...base, spaceId: "sp-me" }); // personal: today's diary while the module is on
-    expect(openToday).toHaveBeenCalledTimes(1);
-    expect(openTasksNote).not.toHaveBeenCalled();
+    expect(openTaskHome).toHaveBeenCalledWith("sp-shared");
+    expect(createStandaloneTask.mock.calls[1]![1]).toMatchObject({ into: "shared-tasks" });
   });
 
   it("lets a named note win over the chosen space", async () => {
     await createQuickTask({ ...base, spaceId: "sp-shared", note: { id: "n1", title: "專題" } });
-    expect(openTasksNote).not.toHaveBeenCalled();
+    expect(openTaskHome).not.toHaveBeenCalled();
     expect(createStandaloneTask.mock.calls[0]![1]).toMatchObject({ into: "n1" });
   });
 
@@ -79,7 +62,7 @@ describe("createQuickTask", () => {
     createStandaloneTask.mockResolvedValue({ status: "queued" });
     expect((await createQuickTask(base)).saved).toBe("queued");
     createStandaloneTask.mockClear();
-    openToday.mockRejectedValue(new Error("refused"));
+    openTaskHome.mockRejectedValue(new Error("refused"));
     await expect(createQuickTask(base)).rejects.toThrow("refused");
     expect(createStandaloneTask).not.toHaveBeenCalled();
   });

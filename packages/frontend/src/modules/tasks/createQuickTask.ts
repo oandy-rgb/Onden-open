@@ -5,9 +5,7 @@
 // `- [ ] 15:00 title {task}` into it as it makes the task, in one request. A
 // clock time given with the day is the time at the start of that line.
 
-import { dailyNotesEnabled } from "../../lib/dayNode";
 import { dayNotes, taskWriter } from "../../lib/data";
-import { personalSpaceId } from "../../lib/spaces";
 
 export type QuickTaskFields = {
   title: string;
@@ -39,15 +37,15 @@ export type QuickTaskSaved = "saved" | "queued";
 /** Where the line went: the note's title (empty for an untitled one). */
 export type QuickTaskResult = { saved: QuickTaskSaved; noteTitle: string };
 
-/** The note a task with no named note is written into. Personal space: today's
- *  diary while the 日記 module is on, else its 任務 note (diaries stay personal).
- *  A shared space: its 任務 note. Starting it can be refused (the note writer
- *  has already said so once). */
+/** The note a task with no named note is written into (dayNotes.openTaskHome:
+ *  personal space → today's diary or its 任務 note; a shared space → its 任務
+ *  note). Starting it can be refused (the note writer has already said so
+ *  once), and on a device that does not know the personal space yet it
+ *  refuses with a plain sentence (PersonalSpaceUnknownError): the caller keeps
+ *  the typed words. */
 async function defaultNote(spaceId: string | null | undefined): Promise<{ id: string; title: string }> {
-  const shared = spaceId && spaceId !== personalSpaceId() ? spaceId : null;
-  const opened = shared ? await dayNotes.openTasksNote(shared)
-    : dailyNotesEnabled() ? await dayNotes.openToday() : await dayNotes.openTasksNote();
-  return { id: opened!.node.id, title: opened!.node.title };
+  const opened = await dayNotes.openTaskHome(spaceId);
+  return { id: opened.node.id, title: opened.node.title };
 }
 
 // The task writer reports a refusal itself, once (a quiet writer would mark the

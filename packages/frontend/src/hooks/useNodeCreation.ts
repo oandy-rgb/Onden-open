@@ -1,7 +1,7 @@
 import { randomUUID } from "../lib/uuid";
 import { boardSpaceId } from "../lib/boardLayout";
 import { markdownExportUrl, nodeNeedsBody, type Bootstrap, type Canvas, type ContentNode } from "../lib/api";
-import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, captureWriter, writeErrors, pins } from "../lib/data";
+import { canvasWriter, dayNotes, nodeActions, noteWriter, propertyWriter, resolveTagPaths, tagWriter, uploadMedia, captureWriter, writeErrors, pins, PersonalSpaceUnknownError } from "../lib/data";
 import type { CreateNote, DayNoteSeed } from "../lib/data";
 import { addToast, getAppState, getNode } from "../lib/appStore";
 import { t } from "../lib/i18n";
@@ -145,10 +145,18 @@ export function useNodeCreation({
   // palette and the landing all come through here.
   // `announce: false` is for the app opening on its own (useLandingNote): the person did nothing,
   // so a 「已建立」 note would be noise. Anything they pressed announces.
-  async function openDailyNote(options?: { announce?: boolean }): Promise<string | null> {
+  // `stillWanted`: asked once today's note is found or started, which can take a while (starting it
+  // may wait for the spaces list); false leaves the screen as it is and resolves null. The landing
+  // passes it so that a note the person (or a link) opened meanwhile is not taken over.
+  async function openDailyNote(options?: { announce?: boolean; stillWanted?: () => boolean }): Promise<string | null> {
     if (!dailyNotesEnabled()) return null;
-    const opened = await dayNotes.openToday().catch(() => null);
-    if (!opened) return null;
+    // A refusal was already reported by the note writer; a device that does not know the person's own
+    // space yet says so here (even on the app's own landing): nothing was started.
+    const opened = await dayNotes.openToday().catch((error: unknown) => {
+      if (error instanceof PersonalSpaceUnknownError) writeErrors.report(error, addToast);
+      return null;
+    });
+    if (!opened || options?.stillWanted?.() === false) return null;
     if (opened.created && options?.announce !== false) {
       const title = opened.node.title;
       addToast(t(opened.status === "synced" ? '"{title}" created' : '"{title}" saved locally', { title }));

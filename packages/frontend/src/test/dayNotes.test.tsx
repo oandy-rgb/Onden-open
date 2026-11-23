@@ -38,7 +38,7 @@ import { captureProps } from "./helpers/captureProps";
 import { bindAccountStorage } from "../lib/accountStorage";
 import { noWorkspaceData, type Bootstrap, type ContentNode } from "../lib/api";
 import { getAppState, resetAppState, setData, setOnline } from "../lib/appStore";
-import { dayNotes } from "../lib/data";
+import { dayNotes, PersonalSpaceUnknownError } from "../lib/data";
 import { dayNoteId, makeDayNotes } from "../lib/data/dayNotes";
 import type { DataCtx } from "../lib/data/types";
 import { nameBasedUUID } from "../lib/uuid";
@@ -182,10 +182,11 @@ describe("dayNotes.openToday", () => {
     expect(opened).toMatchObject({ created: true, status: "queued", node: { id: posted[1]!.id, title: today() } });
   });
 
-  it("uses the caller's fallback id before the personal space is known", async () => {
+  // 2026-11-21 (a phone, offline): a random id at the top level. Unknown now refuses and writes nothing.
+  it("starts nothing while the personal space is unknown", async () => {
     space.id = null;
-    await dayNotes.openToday({ fallbackId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" });
-    expect(nodePosts().map((p) => p.id)).toEqual(["aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"]);
+    await expect(dayNotes.openToday()).rejects.toBeInstanceOf(PersonalSpaceUnknownError);
+    expect(nodePosts()).toEqual([]);
   });
 
   it("only looks with create: false", async () => {

@@ -13,10 +13,14 @@
 //     sourceAuthority, a space check) — and the move also writes the note, so
 //     callers check canEdit too; into: who can write the target space;
 //   • deleting a deleted note for good (History's 永久刪除, backend
-//     nodeTrash.ts purgeDeleted): who manages its space — the space check. Unknown (spaces not loaded, a space this
+//     nodeTrash.ts purgeDeleted): who manages its space — the space check. Unknown (spaces not known, a space this
 //     person is not in) answers NO: a destructive control is never guessed.
-// Unknown (offline, spaces still loading, a note without a space yet) answers
-// yes for notes — the server still refuses, and the write is kept for retry.
+// The spaces come from the server or, offline and before it answers, the list
+// this device kept with its local copy (lib/spaces.ts), so a 只能看 note reads
+// as such offline too. Unknown — only a device that has never heard the server,
+// or a note without a space yet (this device's own, not yet answered) —
+// answers yes for notes, as before: the server still refuses, and the write is
+// kept for retry.
 // `actor_is_owner` and `can_review` are read only here.
 
 import { useMemo } from "react";

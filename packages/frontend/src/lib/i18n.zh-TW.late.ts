@@ -2492,7 +2492,7 @@ export const ZH_TW_LATE: Record<string, string> = {
   "Which day": "哪一天",
   "New day notes go under “{title}”.": "新的日記會放在「{title}」底下。",
   "The chosen note is gone or not in your personal space, so new day notes go at the top level.": "選的筆記已不存在或不在你的個人空間，所以新日記會放在最上層。",
-  "Your spaces have not loaded yet, so new day notes go at the top level for now.": "你的空間還沒載入，新的日記暫時放在最上層。",
+  "This device has not connected yet: today's diary is started under this note once it does.": "這台裝置還沒連上網路，連上後今天的日記會建在這則筆記底下。",
   "New day notes go at the top level of your personal space.": "新的日記會放在個人空間的最上層。",
   "Change note…": "換一篇筆記…",
   "Use the top level": "改放最上層",

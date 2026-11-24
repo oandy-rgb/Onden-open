@@ -7,6 +7,7 @@
 // dependency. Anything unrecognised keeps its text and loses its markup.
 
 import { isHttpUrl } from "@onden/markdown";
+import { endWithoutUnfinishedTag } from "./sanitize.js";
 
 type El = { tag: string; attrs: Record<string, string>; children: Node[] };
 type Node = El | string;
@@ -42,7 +43,17 @@ function parseAttrs(source: string): Record<string, string> {
   return attrs;
 }
 
-function parse(html: string): El {
+/** "<!--" after the page's last "-->" (and "<![CDATA[", in any case as the parser reads it, after the last "]]>") can never end: written as text before parsing,
+ *  so the parser does not search from each one to the end of the page (it read them as text already). */
+function openersThatNeverEnd(html: string, open: RegExp, close: string): string {
+  const last = html.lastIndexOf(close);
+  const from = last < 0 ? 0 : last + close.length;
+  return html.slice(0, from) + html.slice(from).replace(open, (opener) => `&lt;${opener.slice(1)}`);
+}
+
+function parse(page: string): El {
+  // Linear on unfinished markup: sanitize.ts endWithoutUnfinishedTag, and the comments and CDATA that never end.
+  const html = openersThatNeverEnd(openersThatNeverEnd(endWithoutUnfinishedTag(page), /<!--/g, "-->"), /<!\[CDATA\[/gi, "]]>");
   const root: El = { tag: "#root", attrs: {}, children: [] };
   const stack: El[] = [root];
   const re = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<!doctype[^>]*>|<\s*(\/)?\s*([a-zA-Z][\w:-]*)([^>]*?)(\/)?\s*>/gi;

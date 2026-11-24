@@ -187,7 +187,21 @@ try {
   const needle = "試用版的測試筆記";
   const inDatabase = await until(page, async () => (await search(page, needle)) > 0);
   check("the new note is in the database", inDatabase);
-  if (!inDatabase) await shot(page, "note");
+  if (!inDatabase) {
+    await shot(page, "note");
+    // CI keeps no images: say in words where the typing went (only this script's own words are on the page's editors).
+    console.log("      where:", JSON.stringify(await page.evaluate(() => {
+      const describe = (el) => el ? `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).slice(0, 3).join(".") : ""}` : null;
+      return {
+        address: location.search,
+        welcomeStillOpen: [...document.querySelectorAll("h1, h2")].some((h) => h.textContent.includes("歡迎來到 Onden 試用版")),
+        focus: describe(document.activeElement),
+        dialogs: [...document.querySelectorAll("[role=dialog], [role=alertdialog]")].map((d) => d.getAttribute("aria-label")),
+        editors: [...document.querySelectorAll(".cm-content")].map((e) => e.textContent.slice(0, 60)),
+        title: document.querySelector(".obsidian-title-input")?.value ?? null,
+      };
+    })));
+  }
   check("the browser's storage has caught up", await savedAll(page));
   const store = (await saveState(page)).store;
   check("a saved copy exists", wantedStore ? store === wantedStore : store === "opfs" || store === "indexeddb", `store: ${store}`);

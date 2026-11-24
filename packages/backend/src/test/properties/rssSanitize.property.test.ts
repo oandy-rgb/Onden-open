@@ -91,7 +91,7 @@ const WORKING: Array<(label: string) => Part> = [
 
 /** Markup the cleaner lets through today; each is one KNOWN defect. */
 const DEFECTS: Array<{ defect: Defect; make: (label: string) => Part }> = [
-  // sanitize.ts:17-18 look for a closing tag; without one the opening tag stays.
+  // sanitize.ts replaceTagBlocks looks for a closing tag; without one the opening tag stays.
   { defect: "unclosed", make: () => ({ html: "<script>alert(1)", visible: "", last: true }) },
   { defect: "unclosed", make: () => ({ html: "<IFRAME src=https://evil.example/x>", visible: "", last: true }) },
   { defect: "unclosed", make: () => ({ html: "<embed src=x.swf>", visible: "", last: true }) },
@@ -100,17 +100,17 @@ const DEFECTS: Array<{ defect: Defect; make: (label: string) => Part }> = [
   { defect: "recombine", make: () => ({ html: "<scr<script></script>ipt>alert(1)</script>", visible: "" }) },
   { defect: "recombine", make: () => ({ html: "<ifr<iframe></iframe>ame src=https://evil.example/x></iframe>", visible: "" }) },
   { defect: "recombine", make: (l) => ({ html: `<a href="javasjavascript:cript:alert(1)">${esc(l)}</a>`, visible: l }) },
-  // sanitize.ts:20 wants whitespace before `on…`; a browser also starts an attribute after `/`.
+  // the on… rule in sanitizeFeedHtml wants whitespace before `on…`; a browser also starts an attribute after `/`.
   { defect: "slash-handler", make: () => ({ html: "<img/onerror=alert(1) src=x>", visible: "" }) },
   { defect: "slash-handler", make: () => ({ html: "<svg/onload=alert(1)>", visible: "" }) },
   { defect: "slash-handler", make: (l) => ({ html: `<a/href="#"/onclick=alert(1)>${esc(l)}</a>`, visible: l }) },
-  // sanitize.ts:21-22 compare the raw attribute text; a browser decodes character references and drops tabs and line breaks first.
+  // the javascript: rules in sanitizeFeedHtml compare the raw attribute text; a browser decodes character references and drops tabs and line breaks first.
   { defect: "obfuscated-js", make: (l) => ({ html: `<a href="java&#115;cript:alert(1)">${esc(l)}</a>`, visible: l }) },
   { defect: "obfuscated-js", make: (l) => ({ html: `<a href="&#106;avascript:alert(1)">${esc(l)}</a>`, visible: l }) },
   { defect: "obfuscated-js", make: (l) => ({ html: `<a href="java&#x09;script:alert(1)">${esc(l)}</a>`, visible: l }) },
   { defect: "obfuscated-js", make: (l) => ({ html: `<a href="java\tscript:alert(1)">${esc(l)}</a>`, visible: l }) },
   { defect: "obfuscated-js", make: (l) => ({ html: `<a href="jav&#x0A;ascript:alert(1)">${esc(l)}</a>`, visible: l }) },
-  // sanitize.ts:20 is not tag-aware: it cuts ` onclick=b` out of the middle of an attribute value, taking the closing quote with it.
+  // the on… rule in sanitizeFeedHtml is not tag-aware: it cuts ` onclick=b` out of the middle of an attribute value, taking the closing quote with it.
   { defect: "attr-corrupt", make: (l) => ({ html: `<p title="a onclick=b">${esc(l)}</p>`, visible: l }) },
   { defect: "attr-corrupt", make: (l) => ({ html: `<a href="/x" title='the onload="y" attribute'>${esc(l)}</a>`, visible: l }) },
   // Nothing in sanitize.ts looks at an image's size.
@@ -194,14 +194,14 @@ describe("1-3. cleaned bodies are safe, keep every visible word, and cleaning tw
   }, 120_000);
 
   const KNOWN: Array<[Defect, string]> = [
-    ["unclosed", "an opening <script>, <iframe>, <embed> or <object> with no closing tag (sanitize.ts:17-18)"],
-    ["recombine", "markup that a removal joins into new markup, e.g. <scr<script></script>ipt> (sanitize.ts:17-22, one pass)"],
-    ["slash-handler", "an event handler after `/` instead of a space, e.g. <img/onerror=…> (sanitize.ts:20)"],
-    ["obfuscated-js", "javascript: written with character references, a tab or a line break (sanitize.ts:21-22)"],
-    ["attr-corrupt", " onclick=… inside an attribute value cut out together with the closing quote (sanitize.ts:20)"],
+    ["unclosed", "an opening <script>, <iframe>, <embed> or <object> with no closing tag (sanitize.ts replaceTagBlocks)"],
+    ["recombine", "markup that a removal joins into new markup, e.g. <scr<script></script>ipt> (sanitizeFeedHtml, one pass)"],
+    ["slash-handler", "an event handler after `/` instead of a space, e.g. <img/onerror=…> (the on… rule in sanitizeFeedHtml)"],
+    ["obfuscated-js", "javascript: written with character references, a tab or a line break (the javascript: rules in sanitizeFeedHtml)"],
+    ["attr-corrupt", " onclick=… inside an attribute value cut out together with the closing quote (the on… rule in sanitizeFeedHtml)"],
     ["pixel", "a 1×1 tracking image (no rule in sanitize.ts)"],
-    ["text-on", "code and prose with ` onClick={…}` lose it (sanitize.ts:20 is not tag-aware)"],
-    ["text-js", "the word JavaScript: is deleted from prose (sanitize.ts:22 is not tag-aware)"],
+    ["text-on", "code and prose with ` onClick={…}` lose it (the on… rule in sanitizeFeedHtml is not tag-aware)"],
+    ["text-js", "the word JavaScript: is deleted from prose (the last javascript: rule in sanitizeFeedHtml is not tag-aware)"],
   ];
   for (const [defect, what] of KNOWN) {
     it.fails(`KNOWN ${defect}: ${what}`, async () => {
@@ -282,18 +282,20 @@ afterAll(() => {
   if (timings.length > 0) process.stderr.write(`\n[rssSanitize.property] timings of unclosed-tag inputs (bound: ×10 input must cost < ×${BOUND} time)\n${"function".padEnd(20)} ${"input unit".padEnd(20)} ${"10 KB".padStart(10)} ${"100 KB".padStart(10)} ${"1 MB".padStart(10)}\n${timings.sort().join("\n")}\n`);
 });
 
+// The runs that were quadratic until 2026-11-24 (an opener with no closer scanned to the end of the input from every opener;
+// sanitize.ts endWithoutUnfinishedTag, comments that run to the end, articleExtract.ts' tag strip) are the last ones in each list.
 const LINEAR: Record<keyof typeof FNS, string[]> = {
-  sanitize: ["<p>", "<b>", "<div>", "<li>", '<a href="x', "<img src=x ", "<", " onx ", "javascript ", "<table><tr><td>", "[", "< ", "<img "],
-  extract: ["<p>", "<b>", "<div>", "<li>", " onx ", "[", "<table><tr><td>", "<em><b>", "<ul><li>", "<blockquote>", "<span>", "<p><b>", "<td>", "<script>", "<style>", "</div>"],
-  toMarkdown: ["<li>", "<", " onx ", "[", "< ", "</div>"],
+  sanitize: ["<p>", "<b>", "<div>", "<li>", '<a href="x', "<img src=x ", "<", " onx ", "javascript ", "<table><tr><td>", "[", "< ", "<img ",
+    "<script ", "<iframe ", "<!--"],
+  extract: ["<p>", "<b>", "<div>", "<li>", " onx ", "[", "<table><tr><td>", "<em><b>", "<ul><li>", "<blockquote>", "<span>", "<p><b>", "<td>", "<script>", "<style>", "</div>",
+    "<script ", "<iframe ", "<!--", "<", "< ", "<img ", "<img src=x ", '<a href="x'],
+  toMarkdown: ["<li>", "<", " onx ", "[", "< ", "</div>",
+    '<a href="x', "<img src=x ", "<img ", "<script ", "<iframe ", "<!--"],
 };
-const QUADRATIC: Record<keyof typeof FNS, string[]> = {
-  sanitize: ["<script ", "<iframe ", "<!--"],
-  extract: ["<script ", "<iframe ", "<!--", "<", "< ", "<img ", "<img src=x ", '<a href="x'],
-  toMarkdown: ['<a href="x', "<img src=x ", "<img ", "<script ", "<iframe ", "<!--"],
-};
+/** Runs followed by "</p>" in the test: openers that share one later ">", and closing tags that never come. */
+const BEFORE_MORE = ["<script ", "<script>", "<iframe ", "<iframe>", "<style ", "<object ", "<embed ", "<form ", "<!--", "<![CDATA[", "<![cdata[", "<img ", "<", '<a href="x'];
 /** Deep nesting: htmlToMarkdown walks the tree recursively. */
-const DEEP = ["<b>", "<div>", "<span>", "<blockquote>", "<ul><li>", "<table><tr><td>", "<em><b>", "<p><b>", "<td>"];
+const DEEP = ["<b>", "<div>", "<span>", "<blockquote>", "<ul><li>", "<table><tr><td>", "<em><b>", "<p><b>", "<td>", "<iframe>", "<object>"];
 
 describe("4. time grows about linearly with the input (unclosed tags, 10 KB / 100 KB / 1 MB)", () => {
   for (const key of ["sanitize", "extract", "toMarkdown"] as const) {
@@ -303,15 +305,15 @@ describe("4. time grows about linearly with the input (unclosed tags, 10 KB / 10
     }, 300_000);
   }
 
-  // KNOWN: sanitize.ts:17 `<\s*(script|…)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>` (and :19 for comments, keepVideoEmbeds :32 for iframes, and
-  // articleExtract.ts' scanners) look for a closing token from every opening one; with N openers and no closer each scans to the
-  // end of the input, N × N. 100 KB of `<script ` costs seconds; 1 MB costs minutes, and a feed may be 25 MB (FEED_MAX_BYTES).
+  // The same runs with more markup after them: a later ">" or closing tag of another kind must not make them quadratic again
+  // (review of #2016: "<script " repeated and then ">" was still N × N).
   for (const key of ["sanitize", "extract", "toMarkdown"] as const) {
-    for (const unit of QUADRATIC[key]) {
-      it.fails(`KNOWN: ${FNS[key].name} on a run of ${JSON.stringify(unit)} is not quadratic`, () => {
-        expect(growth(FNS[key], unit)).toEqual([]);
-      }, 300_000);
-    }
+    it(`${FNS[key].name}: kinds of unclosed markup followed by more markup stay linear`, () => {
+      const fn: Fn = { name: FNS[key].name, run: (html) => FNS[key].run(`${html}</p>`) };
+      // "<iframe>" and "<object>" are containers htmlToMarkdown nests once per opener: the KNOWN deep-nesting throw below.
+      const units = key === "toMarkdown" ? BEFORE_MORE.filter((u) => u !== "<iframe>" && u !== "<object>") : BEFORE_MORE;
+      expect(units.flatMap((unit) => growth(fn, unit))).toEqual([]);
+    }, 300_000);
   }
 
   // KNOWN: htmlToMarkdown.ts parse() builds one nested element per unclosed tag and textOf / blocks / inline recurse
@@ -359,9 +361,9 @@ describe("5. saving as a note keeps the article's words as literal text", () => 
 
   // The three the app's Markdown reads as syntax when they are plain text in the article.
   const TRIGGERS: Array<[string, fc.Arbitrary<string>, string]> = [
-    ["<", fc.constantFrom("<div>", "<b>", "<span>", "<tag>", "<img>", "<a>"), "an angle-bracket word such as <div> is read as an HTML tag and disappears (htmlToMarkdown.ts:78 escapeInline)"],
-    ["$", fc.constantFrom("$5 and $10", "$x$", "cost $3, then $4"), "two dollar signs make math (htmlToMarkdown.ts:78 escapeInline)"],
-    ["[", fc.constantFrom("[x](y)", "[link](https://example.com)", "![img](u)"), "[text](url) becomes a link (htmlToMarkdown.ts:78 escapeInline only escapes [[)"],
+    ["<", fc.constantFrom("<div>", "<b>", "<span>", "<tag>", "<img>", "<a>"), "an angle-bracket word such as <div> is read as an HTML tag and disappears (htmlToMarkdown.ts escapeInline)"],
+    ["$", fc.constantFrom("$5 and $10", "$x$", "cost $3, then $4"), "two dollar signs make math (htmlToMarkdown.ts escapeInline)"],
+    ["[", fc.constantFrom("[x](y)", "[link](https://example.com)", "![img](u)"), "[text](url) becomes a link (htmlToMarkdown.ts escapeInline only escapes [[)"],
   ];
   for (const [name, trigger, what] of TRIGGERS) {
     it.fails(`KNOWN ${name}: ${what}`, async () => {
@@ -380,7 +382,7 @@ describe("5. saving as a note keeps the article's words as literal text", () => 
     ["~~not struck~~", "~~ is strikethrough"],
     ["H~2~O", "single ~ pairs are strikethrough"],
     ["use &amp; for an ampersand", "an entity written as text is decoded once more"],
-    ["1. not a list", "a line that starts like a list gets a visible backslash (escapeLineStart, htmlToMarkdown.ts:88, writes \\1.)"],
+    ["1. not a list", "a line that starts like a list gets a visible backslash (htmlToMarkdown.ts escapeLineStart writes \\1.)"],
     ["---", "a paragraph of three dashes is a thematic break"],
     [">quoted-looking", "a line that starts with > and no space is a quote"],
     ["a \\\\ b and \\*", "a backslash before punctuation is eaten"],

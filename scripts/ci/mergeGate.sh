@@ -13,6 +13,7 @@
 #     the generated files (entrypoints catalog, notices; the guard lane checks those are fresh);
 #  4. each PR's newest comment with a 「審查結論：」 line says 可合併, and its 「已知缺口：」 line says 無 or names the owner's
 #     approval (「擁有者放行：」 with a link to where the owner said so).
+# After --merge, main's generated files are made the tested ones (check 5): one more PR, opened and merged by the gate.
 # The full-stack e2e is not a required job (it has a known-red baseline): read it before merging a train.
 # A local Claude Code hook refuses a bare `gh pr merge`, so this script is the way PRs get merged.
 # When GitHub refuses a merge that git can do (it happens with mistakes.md insertions), --merge merges origin/main into the
@@ -106,3 +107,25 @@ mainonly=$(allowed)
 odd=$(git diff --name-only origin/main "$tested" | grep -vE "$GENERATED" | grep -vxF -f <(printf '%s\n' "$mainonly" | sed '/^$/d'; echo /dev/null) || true)
 [ -z "$odd" ] || fail "合完之後 main 和測過的不一樣：$(echo $odd)"
 echo "main $(git rev-parse --short origin/main) = 測過的那一份（main 之後自己改的檔除外）"
+
+# 5. The generated files. Each PR carries its own copy, so merged one by one main keeps one PR's version, while the train
+# regenerated them over all its PRs and its guard lane checked that (2026-11-23: main's catalog said 121 where the code has
+# 122, and main's guard lane went red). Bring the tested copies to main as one more PR, when nothing else on main changed.
+gen=$(git diff --name-only origin/main "$tested" | grep -E "$GENERATED" || true)
+if [ -n "$gen" ]; then
+  [ -z "$mainonly" ] || fail "main 的生成檔和測過的不一樣，而 main 另外改過 $(echo $mainonly)：在今天的 main 上跑 node scripts/catalog.mjs 與 npm run notices，開 PR 補上"
+  idx=$(mktemp); trap 'rm -f "$idx"' EXIT
+  GIT_INDEX_FILE=$idx git read-tree origin/main
+  for f in $gen; do GIT_INDEX_FILE=$idx git update-index --cacheinfo "$(git ls-tree "$tested" -- "$f" | awk '{print $1","$3}')","$f"; done
+  m=$(git commit-tree "$(GIT_INDEX_FILE=$idx git write-tree)" -p origin/main -m "生成檔跟上合併（測過的 ${tested:0:9} 那一份）：$(echo $gen)")
+  b="gate/generated-${tested:0:9}"
+  git push -q origin "$m:refs/heads/$b" || fail "生成檔的分支推不上去"
+  url=$(gh pr create -R "$PRIVATE" --base main --head "$b" --title "生成檔跟上合併（${tested:0:9}）" \
+    --body "合併閘門開的：$(echo $gen) 換成測過的 ${tested:0:9} 那一份（那一批的守門檢查過它和程式一致）。不需要更新說明") || fail "生成檔的 PR 開不起來"
+  gh pr merge "${url##*/}" -R "$PRIVATE" --merge --delete-branch --match-head-commit "$m" >/dev/null || fail "生成檔的 PR 合不進去：$url"
+  git fetch -q origin main
+  echo "merged ${url##*/}（生成檔：$(echo $gen)）"
+fi
+left=$(git diff --name-only origin/main "$tested" | grep -E "$GENERATED" || true)
+[ -z "$left" ] || fail "合完之後 main 的生成檔和測過的不一樣：$(echo $left)"
+echo "ok 5  main 的生成檔 = 測過的那一份"

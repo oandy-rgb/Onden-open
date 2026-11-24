@@ -30,7 +30,13 @@ case "$*" in
   *"actions/runs/1/jobs"*) cat "$d/jobs" ;;
   "pr view 7 "*"headRefOid,state"*) cat "$d/head" ;;
   *"issues/7/comments"*) cat "$d/comment" ;;
-  "pr merge"*) echo merged >> "$d/merges" ;;
+  # A merge really merges on the fake origin (the gate runs from the repository): PR 7 is pull/7/head, any other one the branch
+  # the last `pr create` named.
+  "pr merge"*) echo merged >> "$d/merges"
+    n=$(printf '%s\n' "$*" | awk '{print $3}'); ref=refs/pull/7/head; [ "$n" = 7 ] || ref="refs/heads/$(cat "$d/created")"
+    git fetch -q origin main "+$ref:refs/fake/merging" && t=$(git merge-tree --write-tree origin/main refs/fake/merging) \
+      && git push -q origin "$(git commit-tree "$t" -p origin/main -p refs/fake/merging -m "merge $n"):refs/heads/main" ;;
+  "pr create"*) prev=; for a; do [ "$prev" = --head ] && echo "$a" > "$d/created"; prev=$a; done; echo "https://github.com/x/y/pull/8" ;;
   *) echo "fake gh: unexpected: $*" >&2; exit 1 ;;
 esac
 EOF
@@ -81,4 +87,15 @@ reset; printf 'one\n2\n3\n4\n5\nsix\n' > shared.txt && git add shared.txt && git
   saved=$tested; tested=$t2
   expect refuse "main and the PR both changed one file without a conflict: the merged file was never tested" "不一樣"
   tested=$saved; git reset -q --hard HEAD~2 && git push -q -f origin main && git push -q -f origin "$head:refs/pull/7/head"
+# --merge: the PR goes in, then the train's regenerated catalog reaches main as one more PR (check 5). Each PR carries its own
+# catalog, so without check 5 main keeps the PR's copy (2026-11-23: main's guard lane red on a stale catalog).
+reset; mkdir -p docs/agents && echo v0 > docs/agents/entrypoints-catalog.md && git add -A && git commit -qm catalog && git push -q origin main \
+  && git checkout -q -B pr2 main && echo g > g.txt && echo v-pr > docs/agents/entrypoints-catalog.md && git add -A && git commit -qm pr2 \
+  && git push -q -f origin "HEAD:refs/pull/7/head" && git rev-parse HEAD > "$FAKE_GH/head" \
+  && git checkout -q -B train2 main && git merge -q --no-edit pr2 && echo v-train > docs/agents/entrypoints-catalog.md && git commit -qam regen \
+  && t3=$(git rev-parse HEAD) && git checkout -q main
+  out=$(bash scripts/ci/mergeGate.sh --merge "$t3" 7 2>&1); code=$?; git fetch -q origin main
+  if [ $code -eq 0 ] && [ "$(git show origin/main:g.txt)" = g ] && [ "$(git show origin/main:docs/agents/entrypoints-catalog.md)" = v-train ] \
+    && printf '%s' "$out" | grep -q "ok 5"; then echo "ok   --merge brings the train's regenerated catalog to main after the PR"
+  else echo "FAIL --merge brings the train's regenerated catalog to main after the PR (exit $code)"; printf '%s\n' "$out" | sed 's/^/     /'; failures=$((failures + 1)); fi
 [ "$failures" -eq 0 ] && echo "merge gate self-test passed" || { echo "merge gate self-test: $failures case(s) wrong"; exit 1; }

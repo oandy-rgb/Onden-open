@@ -132,8 +132,12 @@ describe.skipIf(!isTestDatabase())("a text a conflict put aside is in no History
     expect((await listNoteVersions(here.ws, here.owner, note, { raw: true }))!.map((r) => (r as { markdown: string }).markdown)).toEqual([...REAL].reverse());
     expect((await measureHistory(here.ws, [note])).versions).toBe(REAL.length);
     expect(((await recentVersions(here.owner, here.ws, { limit: 200, offset: 0 }) as unknown as { rows: Array<{ node_id: string }> }).rows.filter((r) => r.node_id === note))).toHaveLength(REAL.length);
-    const day = (await q<{ d: string }>(`SELECT current_date::text AS d`)).rows[0]!.d;
-    expect((await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, day, note])).rows.length).toBe(REAL.length);
+    // the saves were moved to before T (an hour ago and earlier): in the first hours of a day some of them are on the day before, so the days are
+    // counted together (public runs 45300077488 and 45300161640 at 01:05 UTC: 1 of the 3 was on the current day)
+    const days = (await q<{ d: string }>(`SELECT (current_date - n)::text AS d FROM generate_series(0, 2) AS n`)).rows.map((r) => r.d);
+    let onThoseDays = 0;
+    for (const day of days) onThoseDays += (await q(`SELECT 1 FROM ${saveOnDaySql("$1", "$2::date")} e WHERE e.target_id = $3`, [here.ws, day, note])).rows.length;
+    expect(onThoseDays).toBe(REAL.length);
     const states = (await noteStatesAt(here.owner, here.ws, new Date(Date.now() + 2 * HOUR), {}, note)).find((s) => s.id === note);
     expect(states?.body_hash_then, "the newest state is the last real save").toBe(sha256Hex(REAL[2]!));
   });

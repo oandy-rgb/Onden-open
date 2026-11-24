@@ -263,6 +263,11 @@ const JSON_SOURCES: readonly JsonSource[] = [
 
 /** The units of a note whose stamps do NOT count for its `updated_at` (migration 206 sync_touch_updated_at; a stamp with `meta.quiet` does not count either). Today's write path (services/nodeUpdate.ts applyNodeColumns) keeps `updated_at` for a position among siblings only; a creation's value is carried as a column. A test compares this list with the function in the database. */
 export const NOT_AN_EDIT_FIELDS: readonly string[] = ["*", "sort"];
+/** The stamped tables whose `updated_at` is a function of the row's counting stamps (migration 232 sync_updated_at_wall; notes since 206), with the JSON column whose keys count
+ *  too. The node that writes sets it by the stamp triggers; a merge sets it after it wrote a counting unit of a row that was here (dbRows.ts). */
+export const UPDATED_AT_OF_STAMPS: Readonly<Record<string, string | null>> = {
+  content_nodes: "content_nodes.tag_schema", node_attributes: null, node_positions: null, block_nodes: null, function_refs: "function_refs.config", actor_module_settings: null,
+};
 
 export const sourceOf = (label: string): RowSource => {
   const s = UNIT_SOURCES.find((u) => u.label === label);

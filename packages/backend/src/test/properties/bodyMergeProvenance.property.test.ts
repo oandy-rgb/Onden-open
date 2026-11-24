@@ -52,6 +52,14 @@ describe("mergeBody: every merged line was written by someone", () => {
     });
   });
 
+  // FOUND by a fresh seed (520056918, issue #1974's full run; shrunk by fast-check), pinned: B splits base's one line in two and both writers add inside it at
+  // the same place; the merge makes a line nobody wrote ("乙0很甲0很ad the p": B's first half of the split line with A's addition inside it). Not a defect of
+  // the stamped merge's units; the body merge's own (README of spine/stampedMerge 「接上傳輸前必須完成」).
+  it.fails("1, pinned: a writer splits the line both writers add to: no merged line is one nobody wrote", () => {
+    const base = "Read the paper. 1\n", a = "Re甲0很ad the paper. 1\n", b = "Re\n乙0很ad the p\naper. 1\n";
+    for (const [x, y] of [[a, b], [b, a]]) expect(unwrittenLines(base, x!, y!, mergeBody(base, x!, y!).merged)).toEqual([]);
+  });
+
   it("2. nothing a writer wrote disappears: it is in the body or in a conflict", () => {
     check(({ base, a, b }) => {
       for (const [x, y] of [[a, b], [b, a]]) {

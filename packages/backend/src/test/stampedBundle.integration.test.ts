@@ -417,13 +417,13 @@ describe.skipIf(!isTestDb)("a parent deleted for good while another node moves a
   }, 300_000);
 });
 
-/** The stamps that count as an edit for `updated_at` (migration 206 sync_touch_updated_at): not the creation, not a position among siblings, not a write that said it is housekeeping. */
+/** The stamps that count as an edit for `updated_at` (migration 232 sync_updated_at_wall, for notes since 206): not the creation, not a position among siblings, not a write that said it is housekeeping. */
 const COUNTS = (alias: string) => `${alias}.field NOT IN (${NOT_AN_EDIT_FIELDS.map((f) => `'${f}'`).join(", ")}) AND COALESCE(${alias}.meta->>'quiet', '') <> 'true'`;
 
 describe.skipIf(!isTestDb)("updated_at is a function of the stamps", () => {
   it("the fields that do not count are one constant, and the function in the database names exactly them (and the quiet mark)", async () => {
     const { a } = await cluster(19);
-    const def = await onNode(a.node, async () => (await q<{ d: string }>(`SELECT pg_get_functiondef('sync_touch_updated_at(uuid, text)'::regprocedure) AS d`)).rows[0]!.d);
+    const def = await onNode(a.node, async () => (await q<{ d: string }>(`SELECT pg_get_functiondef('sync_updated_at_wall(uuid, text, text)'::regprocedure) AS d`)).rows[0]!.d);
     expect(def).toContain(`field NOT IN (${NOT_AN_EDIT_FIELDS.map((f) => `'${f}'`).join(", ")})`);
     expect(def).toContain("meta->>'quiet'");
     expect(NOT_AN_EDIT_FIELDS).toEqual(["*", "sort"]);
@@ -691,10 +691,10 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     expect(await heads(a)).toBeGreaterThan(0); // B and C wrote the value without seeing each other: one wins, the other stays a head (the same on all three, expectSame)
   }, 600_000);
 
-  // FOUND in round 2 of the review, pinned until it is decided (PR, 需要決定): `updated_at` of a row of node_attributes, node_positions, function_refs or actor_module_settings
-  // is set by the writer (`now()`), it is no unit and no function of the stamps, and a merge that changes the row's units leaves the receiver's own. So once a second node
-  // changes a row, the two hold different `updated_at`. (The random writes above never showed it: each node changes only rows on notes it made itself.)
-  it.fails("a row a second node changes (an attribute, a card's position): the same digest on both (fails today: `updated_at` stays each node's own)", async () => {
+  // FOUND in round 2 of the review, fixed by migration 232: `updated_at` of a row of node_attributes, node_positions, block_nodes, function_refs or actor_module_settings
+  // is a function of the row's counting stamps, as a note's is, so a merge that changes the row's units sets the receiver's to what the writer holds. (The random writes
+  // above never showed it: each node changes only rows on notes it made itself.)
+  it("a row a second node changes (an attribute, a card's position): the same digest on both, updated_at too", async () => {
     let a!: Peer, b!: Peer;
     try {
       ({ a, b } = await cluster(41));
@@ -707,7 +707,7 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
       await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/attributes/probe`, { value: "from B" }));
       await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/position`, { surface: "graph", x: 2, y: 2 }));
       await exchange(b, a);
-    } catch (error) { console.error("[second writer] setup failed", error); return; } // only the comparison may fail: an `it.fails` that returns is red
+    } catch (error) { console.error("[second writer] setup failed", error); throw error; }
     await expectSame(a, b, "A and B");
   }, 300_000);
 

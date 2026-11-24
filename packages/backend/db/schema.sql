@@ -3936,6 +3936,7 @@ INSERT INTO schema_migrations (version) VALUES ('225_analyze_note_versions') ON 
 INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('232_updated_at_follows_stamps') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -7534,6 +7535,140 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 232: updated_at of the stamped tables other than notes is a function of the row's stamps, as a note's is (db/migrations/232_updated_at_follows_stamps.sql)
+CREATE OR REPLACE FUNCTION sync_updated_at_wall(p_ws uuid, p_table text, p_key text) RETURNS bigint AS $$
+  WITH l AS (SELECT CASE p_table WHEN 'content_nodes' THEN ARRAY['content_nodes', 'content_nodes.tag_schema'] WHEN 'function_refs' THEN ARRAY['function_refs', 'function_refs.config']
+                                  ELSE ARRAY[p_table] END AS labels)
+  SELECT max(w) FROM (
+    SELECT hlc_wall AS w FROM sync_stamps, l WHERE workspace_id = p_ws AND table_name = ANY(l.labels) AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort')
+       AND COALESCE(meta->>'quiet', '') <> 'true'
+    UNION ALL SELECT hlc_wall FROM sync_stamp_heads, l WHERE workspace_id = p_ws AND table_name = ANY(l.labels) AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort')
+       AND COALESCE(meta->>'quiet', '') <> 'true') x
+$$ LANGUAGE sql STABLE;
+
+-- A row's key as its stamps name it: the id, or "<node id>/<key or surface>" (src/spine/snapshotTables.json rowKey). The UPDATE matches it as the table's key columns.
+-- `p_else`: the value when no stamp counts (a write that changed no unit keeps what the row held: the caller passes it), else nothing is written.
+CREATE OR REPLACE FUNCTION sync_touch_row_updated_at(p_ws uuid, p_table text, p_key text, p_else timestamptz DEFAULT NULL) RETURNS void AS $$
+DECLARE v_wall bigint := sync_updated_at_wall(p_ws, p_table, p_key); v_at timestamptz;
+BEGIN
+  v_at := CASE WHEN v_wall IS NOT NULL AND v_wall > 0 THEN to_timestamp(v_wall / 1000.0) ELSE p_else END;
+  IF v_at IS NULL THEN RETURN; END IF;
+  -- this write of the column is the rule's own: the two triggers below stand aside for it (else a row with no counting stamp would be put back and forth for ever)
+  PERFORM set_config('onden.updated_at_touch', 'on', true);
+  IF p_table IN ('content_nodes', 'function_refs', 'block_nodes') THEN
+    EXECUTE format('UPDATE %I SET updated_at = $3 WHERE id = $2::uuid AND workspace_id = $1 AND updated_at IS DISTINCT FROM $3', p_table) USING p_ws, p_key, v_at;
+  ELSIF p_table = 'node_attributes' THEN
+    UPDATE node_attributes SET updated_at = v_at WHERE node_id = split_part(p_key, '/', 1)::uuid AND key = substr(p_key, 38) AND workspace_id = p_ws AND updated_at IS DISTINCT FROM v_at;
+  ELSIF p_table = 'node_positions' THEN
+    UPDATE node_positions SET updated_at = v_at WHERE node_id = split_part(p_key, '/', 1)::uuid AND surface = substr(p_key, 38) AND workspace_id = p_ws AND updated_at IS DISTINCT FROM v_at;
+  ELSIF p_table = 'actor_module_settings' THEN -- "<actor id>/<tag id>"; the workspace is the tag's
+    UPDATE actor_module_settings SET updated_at = v_at WHERE tag_id = right(p_key, 36)::uuid AND actor_id = left(p_key, length(p_key) - 37) AND updated_at IS DISTINCT FROM v_at;
+  END IF;
+  PERFORM set_config('onden.updated_at_touch', '', true);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sync_touch_updated_at(p_ws uuid, p_key text) RETURNS void AS $$
+BEGIN
+  PERFORM sync_touch_row_updated_at(p_ws, 'content_nodes', p_key);
+END;
+$$ LANGUAGE plpgsql;
+
+-- What one statement does to a row of the tables below (the trigger arguments, the same for the BEFORE and the AFTER trigger): TG_ARGV[0] the row's key columns
+-- (sync_key, as the table's stamp trigger names them); TG_ARGV[1] its units ("field=column[+column]", sync_stamp_trigger's spec); TG_ARGV[2] its JSON column
+-- ("label=column=prefix") or ''; TG_ARGV[3] its workspace (sync_workspace: a column, or via:<note column>).
+-- The statement MOVES `updated_at` when it changes it, or sets it to now() (the start of the transaction: a row this transaction made or touched holds that already).
+CREATE OR REPLACE FUNCTION sync_updated_at_moved(o anyelement, n anyelement) RETURNS boolean AS $$
+  SELECT (sync_column(o, 'updated_at'))::timestamptz IS DISTINCT FROM (sync_column(n, 'updated_at'))::timestamptz
+      OR (sync_column(n, 'updated_at'))::timestamptz = transaction_timestamp()
+$$ LANGUAGE sql STABLE;
+
+-- The (label, field) of every unit the statement changes: the fields, and the keys of the JSON column whose values differ.
+CREATE OR REPLACE FUNCTION sync_units_changed(p_table text, o anyelement, n anyelement, p_fields text, p_json text) RETURNS TABLE (label text, field text) AS $$
+DECLARE spec text; v_col text; v_old jsonb; v_new jsonb;
+BEGIN
+  FOREACH spec IN ARRAY string_to_array(p_fields, ',') LOOP
+    IF sync_column_changed(o, n, split_part(spec, '=', 1), split_part(spec, '=', 2)) THEN label := p_table; field := split_part(spec, '=', 1); RETURN NEXT; END IF;
+  END LOOP;
+  IF p_json <> '' THEN
+    v_col := split_part(p_json, '=', 2);
+    v_old := COALESCE((sync_column(o, v_col))::jsonb, '{}'::jsonb); v_new := COALESCE((sync_column(n, v_col))::jsonb, '{}'::jsonb);
+    RETURN QUERY SELECT split_part(p_json, '=', 1), split_part(p_json, '=', 3) || k FROM (SELECT jsonb_object_keys(v_old) AS k UNION SELECT jsonb_object_keys(v_new)) x
+                  WHERE v_old -> x.k IS DISTINCT FROM v_new -> x.k;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- BEFORE the statement's stamps are written: of the units it changes without moving `updated_at`, those an earlier statement of this transaction already wrote while
+-- moving it (their stamp is this transaction's and is not quiet: a statement that does not move it marks its units quiet) are remembered for the transaction
+-- (`onden.updated_at_counted`, local to it), so the AFTER trigger does not mark them quiet: a unit counts when ANY statement of its transaction wrote it while moving
+-- `updated_at`, whatever the order. Empty in nearly every transaction: only a unit written twice in one transaction, once each way, is ever in it.
+CREATE OR REPLACE FUNCTION sync_updated_at_counted_before() RETURNS trigger AS $$
+DECLARE v_key text; s jsonb; v_ws uuid := sync_workspace(NEW, TG_ARGV[3]); v_add jsonb;
+BEGIN
+  IF v_ws IS NULL OR sync_import_active(v_ws) OR current_setting('onden.updated_at_touch', true) = 'on' OR sync_updated_at_moved(OLD, NEW) THEN RETURN NEW; END IF;
+  s := NULLIF(current_setting(sync_stamp_setting(v_ws), true), '')::jsonb;
+  IF s IS NULL THEN RETURN NEW; END IF; -- nothing of this transaction is stamped yet
+  v_key := sync_key(NEW, TG_ARGV[0]);
+  SELECT jsonb_object_agg(st.table_name || '/' || st.row_key || '/' || st.field, true) INTO v_add
+    FROM sync_units_changed(TG_TABLE_NAME, OLD, NEW, TG_ARGV[1], TG_ARGV[2]) u
+    JOIN sync_stamps st ON st.workspace_id = v_ws AND st.table_name = u.label AND st.row_key = v_key AND st.field = u.field
+   WHERE st.origin = s->>'origin' AND st.seq = (s->>'seq')::bigint AND COALESCE(st.meta->>'quiet', '') <> 'true';
+  IF v_add IS NOT NULL THEN
+    PERFORM set_config('onden.updated_at_counted', (COALESCE(NULLIF(current_setting('onden.updated_at_counted', true), ''), '{}')::jsonb || v_add)::text, true);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- AFTER the table's stamp triggers (AFTER triggers run in name order): a statement that moved `updated_at` and changed a unit leaves the function of the row's
+-- counting stamps in it (one that changed no unit leaves what it wrote); one that did not move it marks this transaction's stamps of the units it changed quiet,
+-- except those an earlier statement of the transaction counted (above).
+CREATE OR REPLACE FUNCTION sync_updated_at_follows_stamps() RETURNS trigger AS $$
+DECLARE v_key text; s jsonb; v_ws uuid := sync_workspace(NEW, TG_ARGV[3]); v_counted jsonb;
+BEGIN
+  IF v_ws IS NULL OR sync_import_active(v_ws) OR current_setting('onden.updated_at_touch', true) = 'on' THEN RETURN NULL; END IF;
+  v_key := sync_key(NEW, TG_ARGV[0]);
+  IF sync_updated_at_moved(OLD, NEW) THEN
+    -- a statement that moves the column and changes no unit (a value no stamp covers: a derived attribute, a paragraph row's text, a card put down where it
+    -- was) leaves what it wrote, as before this migration: no stamp says anything about it (README 「接上傳輸前必須完成」: such a write is not carried)
+    IF NOT EXISTS (SELECT 1 FROM sync_units_changed(TG_TABLE_NAME, OLD, NEW, TG_ARGV[1], TG_ARGV[2])) THEN RETURN NULL; END IF;
+    PERFORM sync_touch_row_updated_at(v_ws, TG_TABLE_NAME, v_key);
+    RETURN NULL;
+  END IF;
+  s := NULLIF(current_setting(sync_stamp_setting(v_ws), true), '')::jsonb;
+  IF s IS NULL THEN RETURN NULL; END IF; -- nothing was stamped in this transaction
+  v_counted := COALESCE(NULLIF(current_setting('onden.updated_at_counted', true), ''), '{}')::jsonb;
+  UPDATE sync_stamps st SET meta = COALESCE(st.meta, '{}'::jsonb) || '{"quiet": true}'::jsonb
+    FROM sync_units_changed(TG_TABLE_NAME, OLD, NEW, TG_ARGV[1], TG_ARGV[2]) u
+   WHERE st.workspace_id = v_ws AND st.table_name = u.label AND st.row_key = v_key AND st.field = u.field
+     AND st.origin = s->>'origin' AND st.seq = (s->>'seq')::bigint AND COALESCE(st.meta->>'quiet', '') <> 'true'
+     AND NOT v_counted ? (u.label || '/' || v_key || '/' || u.field);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER node_attributes_updated_at_counted BEFORE UPDATE ON node_attributes FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_counted_before('node_id,key', 'value=value,type=value_type,inheritable=is_inheritable', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER node_attributes_updated_at_follows AFTER UPDATE ON node_attributes FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_follows_stamps('node_id,key', 'value=value,type=value_type,inheritable=is_inheritable', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER node_positions_updated_at_counted BEFORE UPDATE ON node_positions FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_counted_before('node_id,surface', 'position=x+y,look=width+height+color+folded,sub_canvas=sub_canvas_id', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER node_positions_updated_at_follows AFTER UPDATE ON node_positions FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_follows_stamps('node_id,surface', 'position=x+y,look=width+height+color+folded,sub_canvas=sub_canvas_id', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER block_nodes_updated_at_counted BEFORE UPDATE ON block_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_counted_before('id', 'note=note_id,anchor=anchor_id,ref=block_ref,task=task_id,detached=detached_note_id+detached_tags', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER block_nodes_updated_at_follows AFTER UPDATE ON block_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_follows_stamps('id', 'note=note_id,anchor=anchor_id,ref=block_ref,task=task_id,detached=detached_note_id+detached_tags', '', 'workspace_id');
+CREATE OR REPLACE TRIGGER function_refs_updated_at_counted BEFORE UPDATE ON function_refs FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_counted_before('id', 'function=function_id,instance=instance,holder=holder_node_id,space=holder_space_id', 'function_refs.config=config=key:', 'workspace_id');
+CREATE OR REPLACE TRIGGER function_refs_updated_at_follows AFTER UPDATE ON function_refs FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_follows_stamps('id', 'function=function_id,instance=instance,holder=holder_node_id,space=holder_space_id', 'function_refs.config=config=key:', 'workspace_id');
+CREATE OR REPLACE TRIGGER actor_module_settings_updated_at_counted BEFORE UPDATE ON actor_module_settings FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_counted_before('actor_id,tag_id', 'settings=settings', '', 'via:tag_id');
+CREATE OR REPLACE TRIGGER actor_module_settings_updated_at_follows AFTER UPDATE ON actor_module_settings FOR EACH ROW
+  EXECUTE FUNCTION sync_updated_at_follows_stamps('actor_id,tag_id', 'settings=settings', '', 'via:tag_id');
 
 -- 230: "deleted together" is judged from stamps and a small group table, not from this node's events (db/migrations/230_trash_groups.sql)
 CREATE OR REPLACE FUNCTION trash_deleted_stamp(p_workspace uuid, p_note uuid) RETURNS text

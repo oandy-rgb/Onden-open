@@ -28,7 +28,7 @@ import { type SpaceTreeRow, cutParents, notesOnLoops, spacesOfTree } from "./rul
 import { type MergedRef, mergeDuplicateRefs } from "./rules/functionRefs.js";
 import { type Cell, type Json, type Rejection, type Stamp, type Unit, GENESIS_STAMP_ORIGIN, canonical, compareStamps, stampKey } from "./unit.js";
 import {
-  NOT_AN_EDIT_FIELDS, STAMP_COLS, STAR_PRESENT, UNIT_SOURCES, addressOfUnit, cellMetaOf, jsonSourceOf, jsonSourcesOf, labelsOf, quote, rowMatchOf, sourceOf, stampOf, storeUnit, unitName, unitTextsSql,
+  NOT_AN_EDIT_FIELDS, STAMP_COLS, STAR_PRESENT, UNIT_SOURCES, UPDATED_AT_OF_STAMPS, addressOfUnit, cellMetaOf, jsonSourceOf, jsonSourcesOf, labelsOf, quote, rowMatchOf, sourceOf, stampOf, storeUnit, unitName, unitTextsSql,
   clearMissingRefs, clearedOf, headValue, stampValue, type HeadRow, type KeptValue, type RowSource, type StampRow,
 } from "./dbUnits.js";
 import { STAR, type StoreEvent } from "./store.js";
@@ -633,7 +633,14 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     const shape = (u: Unit | undefined): Unit | undefined => (u && !here && !keeps ? withoutValues(u) : u);
     const fresh = madeHere.has(i.row) && !l.state; // made here from the carried values, nothing of it held before: only stamps to write (storeUnit)
     if (m.exists) {
-      let counted = false; // a unit that counts as an edit was written to a note that was here: only then can `updated_at` change (a row made here carries the sender's `updated_at`, which is the same function of the same stamps)
+      // a unit that counts as an edit was written to a row that was here: only then can `updated_at` change (a row made here carries the sender's `updated_at`, which is
+      // the same function of the same stamps). It counts when it brings a write this node did not hold that is no housekeeping (`meta.quiet`, migrations 206 and 232)
+      let counted = false;
+      const touches = Object.hasOwn(UPDATED_AT_OF_STAMPS, src.table);
+      const counts = (f: string, after: Unit, prior: Unit | undefined) =>
+        touches && l.exists && (!isJson(f) || f.startsWith(`${UPDATED_AT_OF_STAMPS[src.table]}:`)) && !NOT_AN_EDIT_FIELDS.includes(f)
+        && after.some((c) => (c.meta as { quiet?: boolean } | undefined)?.quiet !== true && c.stamp.origin !== GENESIS_STAMP_ORIGIN
+          && !(prior ?? []).some((p) => stampKey(p.stamp) === stampKey(c.stamp)));
       if (!l.state || m.starChanged) { await storeUnit(workspaceId, address(i.row, STAR), m.star, undefined, fresh); report.stored++; }
       // the same row made twice (two nodes made the same id, or this node still holds a row that another deleted and made again): the creation that wins is the row, on every node
       const from = carriedFrom(src, { i, l, m });
@@ -651,12 +658,12 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
         }
         if ((here && !l.exists) || m.starChanged || !prior || canonical(shape(after)) !== canonical(prior)) {
           await storeUnit(workspaceId, a, shape(after)!, creation, fresh, keeps); report.stored++;
-          if (notes && l.exists && (!isJson(f) || f.startsWith("content_nodes.tag_schema:")) && !NOT_AN_EDIT_FIELDS.includes(f)) counted = true;
+          if (counts(f, after, prior)) counted = true;
         }
       }
       // What the write path derives from a unit travels with the unit that won: the slug of a title, the time a note was deleted; `updated_at` of a note that is only touched is a function of the stamps (sync_touch_updated_at); a creation that wins brings its own
       if (l.exists && i.values) await followCarriedColumns(src.table, workspaceId, match(i.row), i.values, from.copy.filter((c) => c !== "slug"), []);
-      if (counted) await snapshotRows(`SELECT sync_touch_updated_at($1::uuid, $2)`, [workspaceId, i.row]); // updated_at is a function of the stamps now written
+      if (counted) await snapshotRows(`SELECT sync_touch_row_updated_at($1::uuid, $2, $3)`, [workspaceId, src.table, i.row]); // updated_at is a function of the stamps now written
       if (notes && here) {
         for (const f of STRUCTURE_FIELDS) {
           const before = l.exists ? textOf(m.before.get(f)) : null, now = textOf(m.fields.get(f));

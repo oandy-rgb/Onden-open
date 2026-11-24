@@ -145,7 +145,8 @@ await open(`view=notes&node=${MANY}&lens=canvas`, ".react-flow__pane");
   await shot("phone-board-title-sheet");
   await page.locator(".board-note-sheet").getByRole("tab", { name: "內容" }).tap();
   await page.waitForSelector(".phone-view-tabs", { timeout: 20_000 });
-  check(!(await page.$(".react-flow__pane")), "board: the title sheet switches back to 內容");
+  const stillBoard = !!(await page.$(".react-flow__pane"));
+  check(!stillBoard, "board: the title sheet switches back to 內容", stillBoard ? `address ${new URL(page.url()).search}, board ${JSON.stringify(await page.evaluate(() => { const p = document.querySelector(".react-flow__pane"); const r = p?.getBoundingClientRect(); return p && { visible: !!p.offsetParent, w: Math.round(r.width), h: Math.round(r.height), inside: p.parentElement?.closest("[class]")?.className.split(" ")[0] }; }))}, editor: ${(await page.locator(".cm-content").first().innerText().catch(() => "(no editor)")).replace(/\n/g, "⏎").slice(0, 120)}` : "");
 }
 
 await context.close();

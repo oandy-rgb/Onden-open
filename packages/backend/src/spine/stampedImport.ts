@@ -702,8 +702,9 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
  *   bundle_no_derivation     nothing filled spine/receivedDerivation.ts (services/receivedDerivation.ts was not loaded): a bundle is never taken without what follows from it
  *   bundle_derivation_failed (422) a step of what follows from the rows failed in a way the same bundle would fail again (services/receivedDerivation.ts names the step and notes)
  * What follows from the rows (their links, paragraph rows' display, trash and purge, spaces, slugs, types, the website copy, the membership epoch) is derived in the same
- * transaction once every row is in (spine/receivedDerivation.ts; batch 4a): it writes no unit.
- * Not done here, on purpose: who may send (`admitSyncNode`'s caller), the tables not carried yet (NOT_CARRIED_YET in test/stampedBundleSources.integration.test.ts), domain events of a received change (batch 4b), a transport.
+ * transaction once every row is in (spine/receivedDerivation.ts; batch 4a): it writes no unit. Its last step writes this node's own events of the received changes
+ * (services/receivedEvents.ts, marked by spine/receivedEvents.ts; batch 4b): node-local, never carried.
+ * Not done here, on purpose: who may send (`admitSyncNode`'s caller), the tables not carried yet (NOT_CARRIED_YET in test/stampedBundleSources.integration.test.ts), a transport.
  */
 export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundle): Promise<BundleReport> {
   checkBundleShape(workspaceId, bundle);

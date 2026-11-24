@@ -158,6 +158,7 @@ Migration `136` 只加兩個 partial index（`tx_meta ? 'rewind_id'`／`'undoes_
 - **復原是自己的一列**：清單認一個版本是不是復原，看版本的種類、`restored_from`，以及**鑄下這個版本的存檔**是不是版本還原或事件復原（`tx_meta.restored_from`）——`restored_from` 只有在結果和某個更早的版本內容相同時才有，只看它會讓「結果不同的復原」併進前後的段落（審查 #1948 第 3 輪）。近期變動與日視角不列重複存檔、基準與內文已不在 `blobs` 的存檔（和清單同一條規則）。
 - **統計**：migration 225 在升級時 `ANALYZE` 三張版本表；沒有 autovacuum 的節點（PGlite）由 `keepVersionStatisticsCurrent` 維持：讀取只**觸發**（十分鐘一次、不等、失敗只記一行，不進請求），分析用寄件統計的同一條規則 `spine/senderStatistics.ts`。
 - **標籤說明與標籤頁白板也有版本**（歷史第 8 批，migration 231；業主 2026-11-22 的另外決定）：`note_version_in_scope` 多收標籤，`hasVersionList` 因此對標籤說也是「有」，清單、還原、近期變動、這天改過、備份的歷史、手寫歷史都走上面同一條路，沒有為標籤另寫的分支。標籤的版本是它的**說明**（`markdown`）與頁面白板（`board_ink`）的版本：**建立標籤與改名都不鑄版本**（名字另外寫成 `TAG_UPDATED`，標籤沒有帶內文的建立事件，舊清單也不把這兩件算存檔），一個請求同時改說明與名字時，版本記存檔事件記的那個名字。升級時舊歷史由 `tag_versions_backfill` 補成版本（只動標籤，已對到版本的事件略過，所以可以再跑）；升級前後的清單逐列相同，差別只有列的位址（版本的 key，不再是事件編號；舊的數字網址仍可還原）。**只有系統筆記**仍沒有版本、仍讀事件（`noteVersions.ts` 最後一段是原來的查詢）。
+  系統筆記讀事件的那一份，從另一台收進來的修改（同步 4b 批，`spine/receivedEvents.ts`）排在**寫的時間**（`tx_meta.written_at`，`history/bodyEvents.ts` 的 `EVENT_WRITTEN_AT_SQL`），不是收到的時間。收包不鑄版本，所以收進來的修改不在有版本的清單裡（筆記、白板、標籤），由歷史提案第 4 批帶版本；收進來的事件不能單獨復原（`made_elsewhere`）。
 - **仍讀事件的**（本機的帳，不是版本）：AI 的工作與審閱（`agentRuns`、`agentRunUndo`）、一天的修改次數與「誰改了」（`activity.ts`，要看 `ui_context` 的系統整理）、倒回的事件列（`rewindEvents`）、
   事件復原（`eventRestore`）、贏了內文衝突的標記（`BODY_CONFLICT`，只用來斷列）。
 - **證明**：`historyReadersMatchEvents.integration.test.ts`——同一份資料庫（舊版拷貝 `makeOldCopy history`，加上遷移後的新存檔），舊的事件讀法（`helpers/legacyHistoryReaders.ts`，只在測試裡）與新讀法

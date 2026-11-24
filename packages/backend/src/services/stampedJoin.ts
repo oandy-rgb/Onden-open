@@ -16,7 +16,7 @@
 
 import { db } from "../dbKysely.js";
 import { withTransaction } from "../db.js";
-import { applyStampedPage, beginJoin, cancelJoin, decideJoin, joinRefused, markJoinDone, readJoinProgress, readJoinRemoval, type JoinInput, type JoinRemoval } from "../spine/stampedImport.js";
+import { applyStampedPage, beginJoin, resumeChangeBundles, cancelJoin, decideJoin, joinRefused, markJoinDone, readJoinProgress, readJoinRemoval, type JoinInput, type JoinRemoval } from "../spine/stampedImport.js";
 import type { StampedPage, TableDigest } from "../spine/snapshotSql.js";
 
 export type { StampedPage, JoinInput, JoinRemoval };
@@ -58,3 +58,8 @@ export const joinProgress = readJoinProgress;
  *  (spine/stampedImport.ts markJoinDone), so this service reads nothing of its own. */
 export const finishJoin = (input: { workspaceId: string; pages: number; digest: TableDigest[]; localLogin: string | null }): Promise<void> =>
   markJoinDone(input.workspaceId, { pages: input.pages, digest: input.digest }, input.localLogin);
+
+/** A change bundle a previous process was taking in segments goes on from the node-local inbox by itself, never waiting for its sender (spine/stampedImport.ts
+ *  resumeChangeBundles; migration 228). The node's start-up and a timer call it (server.ts): the operator is this node, going on with a bundle it already checked and
+ *  planned, as the inbox's system job. An empty inbox costs one SELECT. */
+export const resumeReceivedChangeBundles = (): ReturnType<typeof resumeChangeBundles> => resumeChangeBundles();

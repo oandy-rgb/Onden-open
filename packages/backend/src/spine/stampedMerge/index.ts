@@ -3,8 +3,8 @@
 // the rest of unit.ts) has no product caller yet and is registered in scripts/unused-code-baseline.json `intentional`, with a reason and an expiry:
 // do NOT add a name here to make unused:check pass; add the caller.
 export type { IncomingUnit, UnitMergeReport } from "./dbUnits.js";
-export { storeMergedUnits, UNIT_SOURCES, CARRIED_LABELS, labelsOf, rowMatchOf, unitTextsSql } from "./dbUnits.js";
+export { storeMergedUnits, UNIT_SOURCES, CARRIED_LABELS, jsonSourceOf, labelsOf, rowMatchOf, unitTextsSql } from "./dbUnits.js";
 export type { RowsReport } from "./dbRows.js";
-export { notesMovedWith, storeMergedRows } from "./dbRows.js";
+export { checkMergedRows, localSlugsOf, notesMovedWith, storeMergedRows } from "./dbRows.js";
 export type { SkewGate } from "./unit.js";
 export { GENESIS_STAMP_ORIGIN } from "./unit.js";

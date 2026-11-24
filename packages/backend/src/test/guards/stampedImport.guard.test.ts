@@ -31,6 +31,7 @@ const MAY_STAND_ASIDE: Record<string, string> = {
 // ratchet:list STAMPED_JOIN_SERVICE_CALLERS
 const MAY_CALL_THE_SERVICE: Record<string, string> = {
   "services/stampedSnapshotStream.ts": "the owner-only wire form: the snapshot stream out, and the upload into an empty workspace",
+  "server.ts": "the node's start-up and a five-minute timer go on with a change bundle left in the inbox (resumeReceivedChangeBundles): the operator is this node, going on with a bundle it already checked and planned, as the inbox's system job; it reaches no join",
 };
 // ratchet:list STAMPED_SNAPSHOT_ROUTES
 const MAY_CALL_THE_STREAM: Record<string, string> = {

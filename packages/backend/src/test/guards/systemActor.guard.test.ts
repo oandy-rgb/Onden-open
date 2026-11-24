@@ -18,6 +18,7 @@ const SYSTEM_ACTOR_USERS: Record<string, string> = {
   "spine/systemJobs.ts": "the one definition",
   "modules/tasks/scheduler.ts": "the task-scheduler job: a timer, no person behind it",
   "services/blockMarkerRepair.ts": "the block-marker-repair job: puts a tagged paragraph's `{…} ^id` back after typed-under text split it; a timer, no person behind it",
+  "spine/stampedImport.ts": "the change-bundle-inbox job: takes a bundle another node sent in segments, and goes on with it at start-up and on a timer; a node sends it, no person behind it; its one authority clears the inbox",
 };
 
 // ratchet:list DIRECT_SYSTEM_EVENTS

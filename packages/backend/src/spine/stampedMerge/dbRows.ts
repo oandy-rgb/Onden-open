@@ -205,33 +205,8 @@ type TreeWork = { seeds: string[]; made: Set<string>; slugs: Map<string, string>
  */
 export async function storeMergedRows(workspaceId: string, items: readonly BundleItem[]): Promise<RowsReport> {
   const report = emptyReport();
-  const byTable = new Map<string, Map<string, BundleItem[]>>();
-  for (const item of items) {
-    const src = sourceOfItem(item);
-    const key = item.kind === "row" ? String(item.stamps.find((s) => s.label === src.label)?.rowKey ?? "") : item.stamp.rowKey;
-    const rows = byTable.get(src.label) ?? byTable.set(src.label, new Map()).get(src.label)!;
-    (rows.get(key) ?? rows.set(key, []).get(key)!).push(item);
-  }
-  const plans: { src: RowSource; merged: Merged[] }[] = [];
-  for (const src of UNIT_SOURCES) {
-    const rows = byTable.get(src.label);
-    if (!rows) continue;
-    const incoming = [...rows].map(([key, its]) => incomingOf(src, key, its)).filter((i): i is Incoming => i !== null);
-    // a key the table cannot hold (not a uuid for a uuid key) fails the read here, before anything is written: refused with a code as a write's would be (round 8, point 4)
-    const local = await loadLocal(workspaceId, src, incoming.map((i) => i.row)).catch((e: unknown) => {
-      if (MALFORMED_CODES.has((e as { code?: string })?.code ?? "")) throw bundleRefused("bundle_malformed", `a row key of ${src.label} is not one this table holds`, 422);
-      throw e;
-    });
-    const merged: Merged[] = [];
-    for (const i of incoming) {
-      const l = local.get(i.row)!;
-      const m = mergeRow(l.state, i.state, clearedOf(src));
-      if ("rejected" in m) { report.rejected.push({ row: i.row, reason: m.rejected, table: src.label, ...(m.unit ? { unit: m.unit } : {}) }); continue; }
-      merged.push({ i, l, m });
-    }
-    plans.push({ src, merged });
-  }
-  if (!report.rejected.length) report.rejected.push(...await checkReceived(workspaceId, items, plans));
+  const { plans, rejected } = await planMergedRows(workspaceId, items);
+  report.rejected.push(...rejected);
   if (report.rejected.length) return report;
   const tree: TreeWork = { seeds: [], made: new Set(), slugs: new Map() };
   for (const { src, merged } of plans) {
@@ -271,6 +246,46 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
   await checkDeferredNow();
   return report;
 }
+/** What taking `items` works out before it writes anything: each table's merge (`plans`), and the refusals of the bundle (a row the merge or the checks of the received
+ *  rows refuse). Reads only. */
+async function planMergedRows(workspaceId: string, items: readonly BundleItem[]): Promise<{ plans: { src: RowSource; merged: Merged[] }[]; rejected: RowsReport["rejected"] }> {
+  const report = { rejected: [] as RowsReport["rejected"] };
+  const byTable = new Map<string, Map<string, BundleItem[]>>();
+  for (const item of items) {
+    const src = sourceOfItem(item);
+    const key = item.kind === "row" ? String(item.stamps.find((s) => s.label === src.label)?.rowKey ?? "") : item.stamp.rowKey;
+    const rows = byTable.get(src.label) ?? byTable.set(src.label, new Map()).get(src.label)!;
+    (rows.get(key) ?? rows.set(key, []).get(key)!).push(item);
+  }
+  const plans: { src: RowSource; merged: Merged[] }[] = [];
+  for (const src of UNIT_SOURCES) {
+    const rows = byTable.get(src.label);
+    if (!rows) continue;
+    const incoming = [...rows].map(([key, its]) => incomingOf(src, key, its)).filter((i): i is Incoming => i !== null);
+    // a key the table cannot hold (not a uuid for a uuid key) fails the read here, before anything is written: refused with a code as a write's would be (round 8, point 4)
+    const local = await loadLocal(workspaceId, src, incoming.map((i) => i.row)).catch((e: unknown) => {
+      if (MALFORMED_CODES.has((e as { code?: string })?.code ?? "")) throw bundleRefused("bundle_malformed", `a row key of ${src.label} is not one this table holds`, 422);
+      throw e;
+    });
+    const merged: Merged[] = [];
+    for (const i of incoming) {
+      const l = local.get(i.row)!;
+      const m = mergeRow(l.state, i.state, clearedOf(src));
+      if ("rejected" in m) { report.rejected.push({ row: i.row, reason: m.rejected, table: src.label, ...(m.unit ? { unit: m.unit } : {}) }); continue; }
+      merged.push({ i, l, m });
+    }
+    plans.push({ src, merged });
+  }
+  if (!report.rejected.length) report.rejected.push(...await checkReceived(workspaceId, items, plans));
+  return { plans, rejected: report.rejected };
+}
+
+/** The refusals taking `items` meets (what `storeMergedRows` returns in `rejected`, and then writes nothing), without writing anything: the segmented receive checks
+ *  every segment of a bundle with it before it takes the first (spine/stampedImport.ts `receiveChangeBundle`). Reads only, inside a transaction (the checks use savepoints). */
+export async function checkMergedRows(workspaceId: string, items: readonly BundleItem[]): Promise<RowsReport["rejected"]> {
+  return (await planMergedRows(workspaceId, items)).rejected;
+}
+
 /**
  * The checks the database runs at COMMIT (DEFERRED constraint triggers: a note in its parent's space, an anchors unit that is its rows), run NOW, so that a
  * bundle they refuse is refused with a code and a plain reason like every other refusal, and nothing of it is written (the caller's transaction rolls back).
@@ -1051,4 +1066,19 @@ async function showSpaceDeletions(workspaceId: string, touched: boolean): Promis
     `SELECT spaces_show_deleted($1::uuid, ARRAY(SELECT id FROM spaces WHERE workspace_id = $1 AND (written_deleted_at IS NOT NULL OR deleted_at IS NOT NULL))) AS n`, [workspaceId])).rows[0]?.n ?? 0;
   if (changed > 0) await bumpMembershipEpoch(workspaceId);
   return (await snapshotRows<{ id: string }>(`SELECT id::text FROM spaces WHERE workspace_id = $1 AND written_deleted_at IS NOT NULL AND deleted_at IS DISTINCT FROM written_deleted_at ORDER BY id`, [workspaceId])).rows.map((r) => r.id);
+}
+
+/** For each of `noteIds` this node holds: its slug (`own`), and for those in `under` also the slugs of every note under it here (`below`): what the plan of a segmented
+ *  receive ties notes by (spine/stampedInbox.ts planWithLeans). One statement; a loop of parents ends (UNION). */
+export async function localSlugsOf(workspaceId: string, noteIds: readonly string[], under: ReadonlySet<string>): Promise<Map<string, { own: string; below: string[] }>> {
+  const out = new Map<string, { own: string; below: string[] }>();
+  if (!noteIds.length) return out;
+  const rows = (await snapshotRows<{ root: string; id: string; slug: string }>(
+    `WITH RECURSIVE below(root, id) AS (
+       SELECT id, id FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])
+       UNION SELECT b.root, c.id FROM content_nodes c JOIN below b ON c.parent_id = b.id WHERE c.workspace_id = $1 AND b.root = ANY($3::uuid[]))
+     SELECT b.root::text, b.id::text, c.slug FROM below b JOIN content_nodes c ON c.id = b.id ORDER BY 1, 2`, [workspaceId, [...noteIds], [...under].filter((id) => noteIds.includes(id))])).rows;
+  for (const r of rows) if (r.root === r.id) out.set(r.root, { own: r.slug, below: [] });
+  for (const r of rows) if (r.root !== r.id) out.get(r.root)?.below.push(r.slug);
+  return out;
 }

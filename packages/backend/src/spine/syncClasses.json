@@ -417,5 +417,9 @@
  "sync_join": {
   "class": "node-local",
   "note": "the joining state of this database while it is filled from another node's stamped snapshot (migration 204): which node, the cut, the pages applied"
+ },
+ "sync_inbox": {
+  "class": "node-local",
+  "note": "a change bundle being taken in segments (migration 228, spine/stampedInbox.ts): its pages as they arrived, then the plan, until the last segment is taken; never in a snapshot or a bundle"
  }
 }

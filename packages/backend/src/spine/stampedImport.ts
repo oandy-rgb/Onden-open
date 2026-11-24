@@ -27,19 +27,22 @@
 // (a membership epoch, an invitation, a sealed address); a row of another workspace; a person that signs in through the
 // snapshot; a page whose number was applied with other content. The page is written in one savepoint: a refusal leaves nothing.
 
+import { randomUUID } from "node:crypto";
 import { discardUnfinishedJoins, ensureShellWorkspace, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
 import { nativeBypassEnabled } from "../nativeBypass.js";
-import { isUuid } from "@onden/markdown";
+import { cutToUnits, isUuid } from "@onden/markdown";
 import { CodedStatusError } from "../statusError.js";
 import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { CARRIED_LABELS, UNIT_SOURCES, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
-import { BUNDLE_SCOPE, MAX_BROUGHT_ORIGINS, broughtBound, bundleRefused, haveAt, haveOfAll, normalizeHave, originsOf, type Have } from "./stampedBundle.js";
-import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
+import { CARRIED_LABELS, UNIT_SOURCES, checkMergedRows, localSlugsOf, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { BUNDLE_SCOPE, MAX_BROUGHT_ORIGINS, broughtBound, bundleOf, bundleRefused, haveAt, haveOfAll, normalizeHave, originsOf, type Have } from "./stampedBundle.js";
+import { assertInboxEmpty, clearInbox, firstInboxSegment, writeInboxOutcome, inboxRowNumbers, lockInboxHeader, changesWhatIsHere, movesNote, planWithLeans, putInboxPage, readInboxPage, rowOfItem, workspacesWithInbox, writeInboxHeader, writeInboxSegment, type NoteHere, type SegmentLimits } from "./stampedInbox.js";
+import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type BundleItem, type ChangeBundle, type ChangeBundlePage, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./systemActor.js";
+import { systemActorFor } from "./systemJobs.js";
 import { SYNC_DATA_SHAPE_VERSION } from "./syncDataShape.js";
 import { deriving, receivedDerivation } from "./receivedDerivation.js";
 
@@ -708,56 +711,332 @@ function foreignWall(bundle: ChangeBundle, local: string): number {
 export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundle): Promise<BundleReport> {
   checkBundleShape(workspaceId, bundle);
   return withEventTransaction(workspaceId, async () => {
+    await assertInboxEmpty(workspaceId);
     await openMerge(workspaceId);
-    const local = await localNodeId();
-    if (bundle.sender === local) throw bundleRefused("bundle_from_self", "a bundle made by this node is not taken by this node");
-    assertForeignClockWithinBound(foreignWall(bundle, local));
-    const rows = (await snapshotRows<{ origin: string; vouched_by: string; have: Record<string, number> }>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
-    // what this node holds of each origin, per label (a label it never took: 0); an origin without a row is one it knows nothing of
-    const known = new Map(rows.map((r) => [r.origin, r.have] as const));
-    const heldHere = (label: string, origin: string): number => known.get(origin)?.[label] ?? 0;
-    // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
-    if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
-    const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
-    if (entriesOf(bundle.holds).some(([, o, n]) => o === local && n > ownMax)) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
-    if (entriesOf(bundle.base).some(([label, o, n]) => o === bundle.sender && n > (haveAt(bundle.upTo, label, o) ?? 0))) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
-    // (`holds`: what the sender has of the origin; its `upTo` can stop lower, below a write it withheld from this reader, and still bring writes past it). Label by label: a
-    // label this node holds less of than the bundle starts from is a gap even when every other label of that origin is not
-    for (const [label, origin, holds] of entriesOf(bundle.holds)) {
-      if (origin === local) continue;
-      const base = haveAt(bundle.base, label, origin) ?? 0, mine = heldHere(label, origin);
-      if (base > mine && holds > mine) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin} (${label}): take a snapshot instead`);
-    }
-    // what follows from the rows written here (spine/receivedDerivation.ts): never a bundle without it
-    const derivation = receivedDerivation();
-    if (!derivation) throw bundleRefused("bundle_no_derivation", "this node cannot work out what follows from received rows (services/receivedDerivation.ts is not loaded): nothing was taken");
-    const prepared = await derivation.before(workspaceId, bundle.items);
-    const report = await storeMergedRows(workspaceId, bundle.items);
-    if (report.rejected.length) {
-      const clash = report.rejected.some((r) => r.reason === "same-stamp-different-content");
-      const first = report.rejected[0]!;
-      throw clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", `a write of the bundle is not in the format${first.reason === "malformed" && first.unit ? ` (${first.table ?? "?"}: ${first.unit})` : ""}`, 422);
-    }
-    // the finishing step: links, paragraph rows, trash and purge, spaces, types, the site, the epoch (batch 4a), once every row of the bundle is in
-    await deriving("the finishing step", [], () => derivation.after(prepared, { workspaceId, units: report.events, followedSpaces: report.followedSpaces }));
-    // knowledge only moves forward, label by label: an origin this node knew nothing of is written with every label the bundle names (vouched by the sender)
-    const advanced: Record<string, Record<string, number>> = {};
-    const moved = new Map<string, Record<string, number>>();
-    for (const [label, origin, upTo] of entriesOf(bundle.upTo)) {
-      if (origin === local) continue;
-      const mine = known.get(origin)?.[label], next = Math.max(mine ?? 0, upTo);
-      if (!known.has(origin) || mine === undefined || next > mine) {
-        (advanced[label] ??= {})[origin] = next;
-        moved.set(origin, { ...moved.get(origin), [label]: next });
-      }
-    }
-    for (const [origin, have] of [...moved].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-      await snapshotRows(
-        `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb)
-         ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || $4::jsonb`, [workspaceId, origin, bundle.sender, JSON.stringify(have)]);
-    }
-    const readings = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]).flatMap((s) => [s, ...s.heads].filter((w) => w.origin !== local).map((w) => ({ wall: w.wall, counter: w.counter }))));
-    await advanceClockFor(workspaceId, readings);
+    const local = await checkBundleAgainstNode(workspaceId, bundle);
+    const report = await mergeBundleItems(workspaceId, bundle.items);
+    const advanced = await advanceAfterBundle(workspaceId, bundle, local, highestForeignReading(bundle.items, local));
     return { ...report, sender: bundle.sender, advanced };
   });
+}
+
+/** The refusals of a bundle against what this node holds of its sender and of the origins it names (inside the caller's transaction, before anything of it is written):
+ *  everything applyChangeBundle refuses besides the bundle's form (checkBundleShape) and its rows (mergeBundleItems). Returns this node's id. */
+async function checkBundleAgainstNode(workspaceId: string, bundle: ChangeBundle): Promise<string> {
+  const local = await localNodeId();
+  if (bundle.sender === local) throw bundleRefused("bundle_from_self", "a bundle made by this node is not taken by this node");
+  assertForeignClockWithinBound(foreignWall(bundle, local));
+  const rows = (await snapshotRows<{ origin: string; vouched_by: string; have: Record<string, number> }>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;
+  // what this node holds of each origin, per label (a label it never took: 0); an origin without a row is one it knows nothing of
+  const known = new Map(rows.map((r) => [r.origin, r.have] as const));
+  const heldHere = (label: string, origin: string): number => known.get(origin)?.[label] ?? 0;
+  // a SENDER is a node this one was given by its snapshot or admitted; an origin another sender brought is accepted in stamps (it is vouched for) but is not a sender: star transport, a device exchanges with the centre only
+  if (!rows.some((r) => r.origin === bundle.sender && (r.vouched_by === "snapshot" || r.vouched_by === "admitted"))) throw bundleRefused("bundle_unknown_sender", "this workspace does not take bundles from that node (it was not admitted)");
+  const ownMax = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
+  if (entriesOf(bundle.holds).some(([, o, n]) => o === local && n > ownMax)) throw bundleRefused("bundle_own_origin_ahead", "the sender holds writes of this node that this node never made: it was restored from an older copy");
+  if (entriesOf(bundle.base).some(([label, o, n]) => o === bundle.sender && n > (haveAt(bundle.upTo, label, o) ?? 0))) throw bundleRefused("bundle_sender_restored", "the bundle claims less of its sender than this node holds of it: the sender was restored from an older copy");
+  // (`holds`: what the sender has of the origin; its `upTo` can stop lower, below a write it withheld from this reader, and still bring writes past it). Label by label: a
+  // label this node holds less of than the bundle starts from is a gap even when every other label of that origin is not
+  for (const [label, origin, holds] of entriesOf(bundle.holds)) {
+    if (origin === local) continue;
+    const base = haveAt(bundle.base, label, origin) ?? 0, mine = heldHere(label, origin);
+    if (base > mine && holds > mine) throw bundleRefused("bundle_gap", `the bundle starts after what this node holds of ${origin} (${label}): take a snapshot instead`);
+  }
+  return local;
+}
+
+/** THE SEAM both ways of taking a bundle write through (the whole bundle in one transaction, or one segment of it: receiveChangeBundle): the merge of `items` and what is
+ *  derived from it (batch 4a: spine/receivedDerivation.ts, before and after the rows), inside the caller's transaction with the merge open (openMerge). So the derivation
+ *  of a segment commits with that segment's rows, once: no committed state holds received rows whose derived rows were not worked out, and a process that dies between
+ *  segments leaves nothing to derive later. A row the merge or its checks refuse refuses the bundle (the transaction rolls back). */
+async function mergeBundleItems(workspaceId: string, items: readonly BundleItem[]): Promise<RowsReport> {
+  // what follows from the rows written here (spine/receivedDerivation.ts): never rows without it
+  const derivation = receivedDerivation();
+  if (!derivation) throw noDerivation();
+  const prepared = await deriving("what is read before the rows are written", [], () => derivation.before(workspaceId, items));
+  const report = await storeMergedRows(workspaceId, items);
+  if (report.rejected.length) throw refusalOf(report.rejected);
+  // links, paragraph rows, trash and purge, spaces, types, the site, the epoch (batch 4a), once every row of `items` is in, in the same transaction
+  await deriving("the finishing step", [], () => derivation.after(prepared, { workspaceId, units: report.events, followedSpaces: report.followedSpaces }));
+  return report;
+}
+
+const noDerivation = () => bundleRefused("bundle_no_derivation", "this node cannot work out what follows from received rows (services/receivedDerivation.ts is not loaded): nothing was taken");
+
+/** The refusal a list of refused rows makes (the first names the row). */
+function refusalOf(rejected: RowsReport["rejected"]): CodedStatusError {
+  const clash = rejected.some((r) => r.reason === "same-stamp-different-content");
+  const first = rejected[0]!;
+  return clash ? bundleRefused("bundle_stamp_clash", `a stamp this node already holds is in the bundle with other content (unit ${first.unit ?? "?"} of row ${first.row} of ${first.table ?? "?"}): one of the two nodes was restored or copied`) : bundleRefused("bundle_malformed", `a write of the bundle is not in the format${first.reason === "malformed" && first.unit ? ` (${first.table ?? "?"}: ${first.unit})` : ""}`, 422);
+}
+
+/** The highest clock reading of another node among `items` (a row is sent whole: its stamps of this node are no foreign clock). The clock follows it once the bundle is taken. */
+function highestForeignReading(items: readonly BundleItem[], local: string): ClockReading | null {
+  let top: ClockReading | null = null;
+  for (const item of items) for (const s of item.kind === "row" ? item.stamps : [item.stamp]) for (const w of [s, ...s.heads]) {
+    if (w.origin === local) continue;
+    if (!top || w.wall > top.wall || (w.wall === top.wall && w.counter > top.counter)) top = { wall: w.wall, counter: w.counter };
+  }
+  return top;
+}
+
+/** The last step of taking a bundle (inside the caller's transaction, under the event lock): what this node holds moves forward to the bundle's `upTo`, label by label (never
+ *  back), and this node's clock follows the highest foreign reading. Returns what moved. */
+async function advanceAfterBundle(workspaceId: string, bundle: Pick<ChangeBundle, "upTo" | "sender">, local: string, highest: ClockReading | null): Promise<Record<string, Record<string, number>>> {
+  const known = new Map((await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows.map((r) => [r.origin, r.have] as const));
+  // knowledge only moves forward, label by label: an origin this node knew nothing of is written with every label the bundle names (vouched by the sender)
+  const advanced: Record<string, Record<string, number>> = {};
+  const moved = new Map<string, Record<string, number>>();
+  for (const [label, origin, upTo] of entriesOf(bundle.upTo)) {
+    if (origin === local) continue;
+    const mine = known.get(origin)?.[label], next = Math.max(mine ?? 0, upTo);
+    if (!known.has(origin) || mine === undefined || next > mine) {
+      (advanced[label] ??= {})[origin] = next;
+      moved.set(origin, { ...moved.get(origin), [label]: next });
+    }
+  }
+  for (const [origin, have] of [...moved].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    await snapshotRows(
+      `INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, $2, $3, $4::jsonb)
+       ON CONFLICT (workspace_id, origin) DO UPDATE SET have = sync_origins.have || $4::jsonb`, [workspaceId, origin, bundle.sender, JSON.stringify(have)]);
+  }
+  await advanceClockFor(workspaceId, highest ? [highest] : []);
+  return advanced;
+}
+
+/** What taking a bundle in segments did in this process: the reports of the segments it took (a segment taken before a restart reports nothing here), and at the end what moved. */
+type SegmentedReport = RowsReport & { sender: string; segments: number; advanced: Record<string, Record<string, number>> };
+/** `limits`: the size of a segment (stampedInbox.ts SEGMENT_LIMITS). Test seams: `afterSegment` runs after segment `n` was committed, and with 0 once the plan is (a
+ *  test throws there: the process died); `afterPlanStep` after each write of the plan; `inSegment` inside segment `n`'s transaction, before its rows are written. */
+type SegmentOptions = {
+  limits?: SegmentLimits; afterSegment?: (n: number) => Promise<void>; afterPlanStep?: (step: string) => Promise<void>; inSegment?: (n: number) => Promise<void>;
+  /** for tests: in each rehearsal's transaction before its merge, and after one that did not pass (with whether the segment leans on an earlier one) */
+  rehearsal?: { around?: (when: "start" | "end") => Promise<void>; before?: (n: number) => Promise<void>; refused?: (n: number, leans: boolean, error: unknown) => Promise<void> };
+};
+
+/** How many notes' slugs one statement of the plan reads. */
+const SLUG_READ_IDS = 2_000;
+
+/** How many times a segment may fail without a refusal (a lost connection, a lock that waited too long, an error of the database itself) before the inbox is given up. */
+const MAX_INBOX_ATTEMPTS = 5;
+/** Who takes a bundle through the inbox: no person, a node sends it and a timer goes on with it (spine/systemJobs.ts). */
+const INBOX_ACTOR = systemActorFor("change-bundle-inbox");
+/** What the person reads when a bundle was given up (a screen of a later batch shows it), in the words of the proposal's §5.1 (「收不下」): whether anything of it was
+ *  taken, and what to do next. Plain words, no code. */
+const GAVE_UP = {
+  /** refused, nothing taken: §5.1 「收不下」 as it is */
+  refused: "收不下另一台送來的內容，同步先停下。你的資料沒有變。",
+  /** refused after some segments were taken (what the rehearsal cannot see: README of spine/stampedMerge): what is in is whole, the rest waits for both to match */
+  refusedPart: "收不下另一台送來的內容，只收進了其中一部分，同步先停下。已收進的修改都是完整的，可以照常使用；請把兩台都更新到最新版本後再同步。",
+  /** not refused (it could not be finished: pages missing, too many failures, a restored copy): it comes again */
+  again: "另一台送來的內容沒能收完，這台先停下；下次和那台同步時會再收一次。你的資料沒有變。",
+  againPart: "另一台送來的內容只收進了其中一部分，這台先停下；下次和那台同步時會再收其餘的。已收進的修改都是完整的，可以照常使用。",
+} as const;
+/** The codes of a bundle given up that was not refused: the same bundle can be taken when it comes again. */
+const COMES_AGAIN = new Set(["inbox_attempts_spent", "inbox_node_changed", "bundle_page_missing"]);
+
+/**
+ * THE OTHER WAY to take a change bundle (proposal §2.10, batch 6): the same checks and the same merge as `applyChangeBundle`, in bounded transactions, through the inbox
+ * (spine/stampedInbox.ts, migration 228). Ends in the state taking it in one piece ends in. In order:
+ *   1. each page into the inbox, one short transaction each (a page of another bundle while one is here: `peer_busy`, nothing written; a page or a bundle past
+ *      INBOX_LIMITS: `bundle_too_large`, the inbox given up);
+ *   2. the plan, before anything is taken: the pages make one bundle (bundleOf), its form and its header against this node pass (the refusals of applyChangeBundle), the
+ *      segments are worked out (planWithLeans) and every segment's rows pass the merge's checks (checkMergedRows), each read in a short transaction; then the segments
+ *      are written, this node's clock catches up with the bundle's highest reading (so a save made between segments is stamped after every write of the bundle, as
+ *      it would be after the bundle in one piece) and the header is marked `planned`. A refusal here gives the inbox up: nothing of the bundle is taken, as in one piece;
+ *   3. each segment in a transaction of its own under the event lock, which also removes the segment's row; the finishing step (`have` moves to the bundle's `upTo`, the
+ *      inbox is emptied) in one more. A process that dies after any of them goes on at its next start, and a running one every few minutes (resumeChangeBundles), from
+ *      the inbox alone. A segment that fails without a refusal is tried again up to MAX_INBOX_ATTEMPTS times; then the inbox is given up.
+ * Before the first segment writes, each is REHEARSED (rehearseSegments: taken alone, rolled back): a refusal that only writing finds (a unique key, a CHECK, a deferred
+ * check, OD215, a derivation that fails) in a segment that leans on no earlier one refuses the whole bundle there, as in one piece. WHAT THE REHEARSAL CANNOT SEE is
+ * listed in the README of spine/stampedMerge (「接上傳輸前必須完成」), each kind pinned in test/stampedInbox.integration.test.ts: then the segments before the refusing
+ * one stay (each passed every check: what a smaller legal bundle leaves), `have` does not move, and the inbox is given up with a sentence that says not all was taken.
+ * Whether the trust line (docs/decisions/sync-trust-line.md: a refused bundle changes nothing) allows that is the owner's decision (not settled).
+ */
+export async function receiveChangeBundle(workspaceId: string, pages: readonly ChangeBundlePage[], options: SegmentOptions = {}): Promise<SegmentedReport> {
+  try {
+    for (const page of pages) await withEventTransaction(workspaceId, () => putInboxPage(workspaceId, page));
+  } catch (e) {
+    // a refused page of this bundle gives its inbox up (one of another bundle, `peer_busy`, wrote nothing and leaves the other bundle alone)
+    if (e instanceof CodedStatusError && e.code !== "peer_busy") await withTransaction(() => clearInbox(INBOX_ACTOR, workspaceId));
+    throw e;
+  }
+  await planInbox(workspaceId, options.limits, options.afterPlanStep, options.rehearsal);
+  await options.afterSegment?.(0);
+  return takeInbox(workspaceId, options);
+}
+
+/** For every workspace whose inbox holds a bundle (at start-up, and every few minutes while the server runs: server.ts): a bundle whose pages did not all arrive is
+ *  given up (nothing of it was taken, and its sender will send again), as is one planned on another node id (this database was restored); one that did arrive is
+ *  planned if it was not, and taken to the end. Returns what became of each. An error that is no refusal counts as an attempt (MAX_INBOX_ATTEMPTS) and is thrown. */
+export async function resumeChangeBundles(): Promise<{ workspaceId: string; outcome: "taken" | "given up"; code?: string }[]> {
+  const out: { workspaceId: string; outcome: "taken" | "given up"; code?: string }[] = [];
+  for (const workspaceId of await withTransaction(() => workspacesWithInbox())) {
+    try {
+      const held = await withTransaction(() => lockInboxHeader(workspaceId));
+      if (held?.node && held.node !== await localNodeId()) throw bundleRefused("inbox_node_changed", "the inbox was planned on another node id (this database was restored): it is given up", 409);
+      await planInbox(workspaceId);
+      await takeInbox(workspaceId);
+      out.push({ workspaceId, outcome: "taken" });
+    } catch (e) {
+      if (!(e instanceof CodedStatusError)) throw e;
+      await giveUp(workspaceId, e.code);
+      out.push({ workspaceId, outcome: "given up", code: e.code });
+    }
+  }
+  return out;
+}
+
+/** The inbox given up: every row of it gone, and the outcome kept with one plain sentence (writeInboxOutcome). The node takes and sends bundles again at once. */
+async function giveUp(workspaceId: string, code: string): Promise<void> {
+  await withTransaction(async () => {
+    const h = await lockInboxHeader(workspaceId);
+    // a segment taken: the plan was written, and fewer of its segments are left than it had
+    const part = h?.state === "planned" && (await inboxRowNumbers(workspaceId, "segment")).length < h.segments;
+    const sentence = COMES_AGAIN.has(code) ? (part ? GAVE_UP.againPart : GAVE_UP.again) : (part ? GAVE_UP.refusedPart : GAVE_UP.refused);
+    await clearInbox(INBOX_ACTOR, workspaceId);
+    await writeInboxOutcome(workspaceId, { code, sentence, at: new Date().toISOString() });
+  });
+}
+
+/** Thrown out of a rehearsal's transaction to roll it back: what it wrote, and what it queued for after the commit (the outbox's drain, realtime ticks:
+ *  spine/txHooks.ts runs no commit hook on a rollback), are gone. Not a failure. */
+const REHEARSED = "rehearsed";
+const rehearsed = () => Object.assign(new Error("a rehearsal is rolled back"), { [REHEARSED]: true });
+const isRehearsed = (e: unknown) => e instanceof Error && REHEARSED in e;
+
+/**
+ * Step 2b of receiveChangeBundle (review of PR #1987, round 1, point 1, option A): before the first segment writes, each segment is taken once ALONE, in an event
+ * transaction of its own that is then rolled back, as the segment would be taken (openMerge, mergeBundleItems: the merge, every write-time check, the derivation).
+ * A refusal of a segment that leans on no earlier one (planWithLeans) refuses the whole bundle here, with its own code, before anything of it is written. One that
+ * leans on an earlier segment ran without what it names (a child without its parent): it proves nothing and the bundle goes on (it is taken for real once the earlier
+ * segment is in). A failure that is no refusal proves nothing either: the real take meets it and counts it. Each rehearsal holds the event lock as long as the
+ * segment would (the same bound); the whole takes about twice the segments' time. What it cannot see is in the README of spine/stampedMerge (「接上傳輸前必須完成」).
+ */
+async function rehearseSegments(workspaceId: string, segments: readonly BundleItem[][], leans: readonly boolean[], rehearsal?: SegmentOptions["rehearsal"]): Promise<void> {
+  await rehearsal?.around?.("start");
+  for (const [i, items] of segments.entries()) {
+    try {
+      await withEventTransaction(workspaceId, async () => {
+        await openMerge(workspaceId);
+        await rehearsal?.before?.(i + 1);
+        await mergeBundleItems(workspaceId, items);
+        throw rehearsed();
+      });
+    } catch (e) {
+      if (isRehearsed(e)) continue;
+      await rehearsal?.refused?.(i + 1, leans[i]!, e);
+      if (e instanceof CodedStatusError && !leans[i]) throw e;
+    }
+  }
+  await rehearsal?.around?.("end");
+}
+
+/** Another runner took over the plan of this inbox (its token is in the header): this one stops and leaves the inbox to it. Not a refusal: nothing is given up. */
+const planTakenOver = () => new Error("another runner is planning this inbox");
+
+/** Step 2 of receiveChangeBundle (nothing to do when the inbox is empty or already planned). A refusal gives the inbox up and is thrown. One runner plans at a time:
+ *  the first transaction writes a token in the header, and every later write of the plan checks it under the header's lock (a second runner's token stops the first). */
+async function planInbox(workspaceId: string, limits?: SegmentLimits, afterPlanStep?: (step: string) => Promise<void>, rehearsal?: SegmentOptions["rehearsal"]): Promise<void> {
+  const token = randomUUID();
+  const held = await withTransaction(async () => {
+    const h = await lockInboxHeader(workspaceId);
+    if (h && h.state !== "planned") await writeInboxHeader(workspaceId, { ...h, plan: token });
+    return h;
+  });
+  if (!held || held.state === "planned") return;
+  // not a refusal of the bundle (it would give the inbox up): this process is missing a part of itself; the inbox waits for one that has it
+  if (!receivedDerivation()) throw new Error(noDerivation().message);
+  const mine = async <T>(fn: () => Promise<T>): Promise<T> => withTransaction(async () => {
+    if ((await lockInboxHeader(workspaceId))?.plan !== token) throw planTakenOver();
+    return fn();
+  });
+  try {
+    const numbers = await withTransaction(() => inboxRowNumbers(workspaceId, "page"));
+    const pages: ChangeBundlePage[] = [];
+    for (const n of numbers) pages.push(await withTransaction(() => readInboxPage(workspaceId, held.bundle, n)));
+    const bundle = bundleOf(pages);
+    checkBundleShape(workspaceId, bundle);
+    const local = await withEventTransaction(workspaceId, async () => { await openMerge(workspaceId); return checkBundleAgainstNode(workspaceId, bundle); });
+    const notes = [...new Set(bundle.items.map(rowOfItem).filter((r) => r.table === "content_nodes" && isUuid(r.key)).map((r) => r.key))];
+    const moving = new Set(bundle.items.filter((i) => movesNote(i, (label, origin) => haveAt(bundle.base, label, origin) ?? 0)).map((i) => rowOfItem(i).key));
+    const slugs = new Map<string, NoteHere>();
+    for (let at = 0; at < notes.length; at += SLUG_READ_IDS) {
+      for (const [k, v] of await withTransaction(() => localSlugsOf(workspaceId, notes.slice(at, at + SLUG_READ_IDS), moving))) slugs.set(k, { ...v, moves: moving.has(k) });
+    }
+    for (const k of moving) if (!slugs.has(k)) slugs.set(k, { own: null, below: [], moves: true });
+    const holds = (label: string, origin: string) => haveAt(bundle.base, label, origin) ?? 0;
+    const { segments, leans } = planWithLeans(bundle.items, slugs, limits, (item) => changesWhatIsHere(item, holds));
+    for (const items of segments) {
+      const rejected = await withTransaction(() => checkMergedRows(workspaceId, items));
+      if (rejected.length) throw refusalOf(rejected);
+    }
+    await rehearseSegments(workspaceId, segments, leans, rehearsal);
+    // a plan written before (a process that died while planning) goes first: its segments may be more than this one's
+    await mine(() => clearInbox(INBOX_ACTOR, workspaceId, { kind: "segment" }));
+    for (const [i, items] of segments.entries()) {
+      await mine(() => writeInboxSegment(workspaceId, i + 1, items));
+      await afterPlanStep?.(`segment ${i + 1}`);
+    }
+    const highest = highestForeignReading(bundle.items, local);
+    await withEventTransaction(workspaceId, async () => {
+      const h = await lockInboxHeader(workspaceId);
+      if (h?.plan !== token) throw planTakenOver();
+      await advanceClockFor(workspaceId, highest ? [highest] : []);
+      await writeInboxHeader(workspaceId, { ...h, state: "planned", segments: segments.length, highest, node: local });
+    });
+  } catch (e) {
+    // refused before anything of it was written: given up with the person's sentence (a sender that is there is answered with the code as well)
+    if (e instanceof CodedStatusError) await giveUp(workspaceId, e.code);
+    throw e;
+  }
+  // the pages are not needed once the plan is written (one transaction each: a page is up to a page's bytes)
+  for (const n of await withTransaction(() => inboxRowNumbers(workspaceId, "page"))) await withTransaction(() => clearInbox(INBOX_ACTOR, workspaceId, { kind: "page", n }));
+}
+
+/** Step 3 of receiveChangeBundle: every segment still in the inbox, then the finishing step. */
+async function takeInbox(workspaceId: string, options: SegmentOptions = {}): Promise<SegmentedReport> {
+  const total: SegmentedReport = { events: [], rejected: [], lateEdits: [], orphaned: [], hanging: [], duplicateRefs: [], duplicateRows: [], notices: [], followedSpaces: [], keptSpaces: [],
+    created: 0, removed: 0, stored: 0, structureLines: 0, sender: "", segments: 0, advanced: {} };
+  if (!receivedDerivation()) throw new Error(noDerivation().message);
+  for (;;) {
+    const step = await withEventTransaction(workspaceId, async () => {
+      const held = await lockInboxHeader(workspaceId);
+      if (!held || held.state !== "planned") return { done: true as const, sender: held?.bundle.sender ?? "", advanced: {} };
+      const segment = await firstInboxSegment(workspaceId);
+      if (!segment) {
+        // the finishing step: what this node holds moves, the inbox is empty (the checks of the header were made when it was planned: no other bundle can have moved
+        // what this node holds since, `peer_busy`; the clock caught up then)
+        const advanced = await advanceAfterBundle(workspaceId, held.bundle, await localNodeId(), null);
+        await clearInbox(INBOX_ACTOR, workspaceId);
+        return { done: true as const, sender: held.bundle.sender, advanced };
+      }
+      await openMerge(workspaceId);
+      await options.inSegment?.(segment.n);
+      const report = await mergeBundleItems(workspaceId, segment.items);
+      await clearInbox(INBOX_ACTOR, workspaceId, { kind: "segment", n: segment.n });
+      return { done: false as const, n: segment.n, report };
+    }).catch(async (e: unknown) => {
+      if (e instanceof CodedStatusError) {
+        await giveUp(workspaceId, e.code);
+        throw e;
+      }
+      // a failure that is no refusal: counted; past MAX_INBOX_ATTEMPTS the inbox is given up, else it waits for the next runner (server.ts, every few minutes)
+      const attempts = await withTransaction(async () => {
+        const h = await lockInboxHeader(workspaceId);
+        if (!h) return 0;
+        const n = (h.attempts ?? 0) + 1;
+        await writeInboxHeader(workspaceId, { ...h, attempts: n, failure: cutToUnits(e instanceof Error ? e.message : String(e), 500) });
+        return n;
+      });
+      if (attempts >= MAX_INBOX_ATTEMPTS) await giveUp(workspaceId, "inbox_attempts_spent");
+      throw e;
+    });
+    if (step.done) return { ...total, sender: step.sender, advanced: step.advanced };
+    for (const k of ["events", "lateEdits", "orphaned", "hanging", "duplicateRefs", "duplicateRows", "notices", "followedSpaces"] as const) (total[k] as unknown[]).push(...step.report[k]);
+    total.keptSpaces = step.report.keptSpaces.length ? step.report.keptSpaces : total.keptSpaces;
+    for (const k of ["created", "removed", "stored", "structureLines"] as const) total[k] += step.report[k];
+    total.segments++;
+    await options.afterSegment?.(step.n);
+  }
 }

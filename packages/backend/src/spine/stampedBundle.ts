@@ -41,6 +41,7 @@ const CHUNK_ROWS = 10_000;
 
 import { bundleRefused } from "./bundleRefusal.js";
 import { refreshSenderStatistics } from "./senderStatistics.js";
+import { assertInboxEmpty } from "./stampedInbox.js";
 
 /** Every table a bundle reads: the stamps, the other heads, and each carried table (their statistics are made current before the read: senderStatistics.ts). */
 const BUNDLE_READ_TABLES: readonly string[] = ["sync_stamps", "sync_stamp_heads", ...new Set(UNIT_SOURCES.map((s) => s.table))];
@@ -158,6 +159,8 @@ export async function readBundlePages(workspaceId: string, have: Have, scopeOf: 
     if ((await snapshotRows(`SELECT 1 FROM sync_join WHERE workspace_id = $1 AND state = 'joining'`, [workspaceId])).rows.length > 0) {
       throw bundleRefused("bundle_sender_joining", "this workspace is being filled from a snapshot; it has nothing to send yet");
     }
+    // a bundle half taken (spine/stampedInbox.ts): this node may hold stamps beyond its `have`, and would send them as its own knowledge; once it is taken, the read goes on
+    await assertInboxEmpty(workspaceId);
     // one snapshot: the cut and the stamps are read at the same moment (see the header)
     const cut = Number((await snapshotRows<{ next_seq: string }>(`SELECT next_seq FROM sync_clock WHERE workspace_id = $1`, [workspaceId])).rows[0]?.next_seq ?? 1) - 1;
     const origins = (await snapshotRows<{ origin: string; have: Record<string, number> }>(`SELECT origin, have FROM sync_origins WHERE workspace_id = $1`, [workspaceId])).rows;

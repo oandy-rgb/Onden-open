@@ -3934,6 +3934,7 @@ INSERT INTO schema_migrations (version) VALUES ('223_text_attributes_stamped') O
 INSERT INTO schema_migrations (version) VALUES ('224_sync_restore_kept_node_id') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('225_analyze_note_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('228_sync_inbox') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
 
@@ -7535,6 +7536,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 228: a change bundle is taken in bounded segments through a node-local inbox (db/migrations/228_sync_inbox.sql)
+CREATE TABLE IF NOT EXISTS sync_inbox (
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('header', 'page', 'segment', 'outcome')),
+  n integer NOT NULL CHECK (n >= 0),
+  content jsonb NOT NULL,
+  PRIMARY KEY (workspace_id, kind, n),
+  CHECK ((kind IN ('header', 'outcome')) = (n = 0))
+);
 -- 230: "deleted together" is judged from stamps and a small group table, not from this node's events (db/migrations/230_trash_groups.sql)
 CREATE OR REPLACE FUNCTION trash_deleted_stamp(p_workspace uuid, p_note uuid) RETURNS text
 LANGUAGE sql STABLE AS $$

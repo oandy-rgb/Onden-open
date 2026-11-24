@@ -69,6 +69,15 @@ export const SYSTEM_JOBS = {
     targets: [],
     module: null,
   },
+  // 2026-11-23 (PR #1987, transport batch 6): takes a change bundle in segments through the node-local inbox (spine/stampedInbox.ts, stampedImport.ts
+  // receiveChangeBundle / resumeChangeBundles). Its one authority clears the inbox's rows; the merge itself writes stamped rows, no event, and is not a mutate().
+  "change-bundle-inbox": {
+    actorId: "system-change-bundle-inbox",
+    name: "收件匣",
+    events: [],
+    targets: [],
+    module: null,
+  },
 } as const satisfies Record<string, SystemJobDeclaration>;
 
 export type SystemJobId = keyof typeof SYSTEM_JOBS;

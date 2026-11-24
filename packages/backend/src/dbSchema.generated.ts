@@ -947,6 +947,13 @@ export interface SyncClock {
   writes_without_mutate: Generated<Int8>;
 }
 
+export interface SyncInbox {
+  content: Json;
+  kind: string;
+  n: number;
+  workspace_id: string;
+}
+
 export interface SyncJoin {
   applied_through: Generated<number>;
   cut_seq: Int8;
@@ -1132,6 +1139,7 @@ export interface DB {
   spaces: Spaces;
   structure_log: StructureLog;
   sync_clock: SyncClock;
+  sync_inbox: SyncInbox;
   sync_join: SyncJoin;
   sync_node: SyncNode;
   sync_origins: SyncOrigins;

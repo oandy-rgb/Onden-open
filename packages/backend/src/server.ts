@@ -16,6 +16,9 @@ import { backfillModuleImports, startModuleBackground } from "./modules/index.js
 import { failInterruptedRestoreJobs } from "./services/backupRestoreJobs.js";
 import { expireOverdue } from "./services/agentSessions.js";
 import { failInterruptedApiSessions } from "./services/agentRuntime/index.js";
+import { resumeReceivedChangeBundles } from "./services/stampedJoin.js";
+// fills the slot of what a received change derives (spine/receivedDerivation.ts): a bundle left in the inbox is never taken without it
+import "./services/receivedDerivation.js";
 import { app } from "./app.js";
 
 // Node boot (the `npm start` / `npm run dev` entry). The assembled app is in
@@ -113,6 +116,12 @@ if (!isTest()) {
   // backstop interval. Must come after migrate() — it reads migration 065's
   // table.
   startDispatcherCatchup();
+  // A change bundle a previous process was taking in segments goes on from its inbox by itself, never waiting for its sender (spine/stampedInbox.ts, migration 228):
+  // at start, then every five minutes while the server runs (a segment that failed is tried again; after a few failures the inbox is given up). It takes the event
+  // lock one segment at a time, and saves go on between segments. An empty inbox costs one SELECT.
+  startPeriodicJob({ name: "resume-change-bundles", everyMs: 5 * 60 * 1000, runFirstAfterMs: 0, exclusive: true }, async () => {
+    for (const d of await resumeReceivedChangeBundles()) log[d.outcome === "taken" ? "info" : "warn"]("sync", `a change bundle left in the inbox was ${d.outcome}${d.code ? ` (${d.code})` : ""}`);
+  });
   // Module background loops (e.g. the RSS due-source sweep, which files
   // rss_fetch outbox intents for the reconciler above to perform; the tasks
   // module's D8 time-trigger that rolls unattended recurring tasks forward).

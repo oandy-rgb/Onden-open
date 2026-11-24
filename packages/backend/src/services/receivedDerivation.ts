@@ -122,7 +122,8 @@ async function after(prepared: Prepared, bundle: ReceivedBundle): Promise<void> 
   await step("the marks of tags a block save made", madeTags, async () => markReceivedAutoTags(workspaceId, await tagsMadeWithTheirMark(workspaceId, madeTags)));
   const tagRows = of("node_tags").map((r) => r.split("/"));
   const tagsChanged = idsOf([...of("content_nodes.tag_schema"), ...[...of(NOTES, "parent"), ...trashed, ...restored].filter((id) => now.get(id)?.tag)]);
-  const tagged = idsOf(tagRows.map(([n]) => n!));
+  // and the notes whose attributes came in: an attribute taken in a later transaction than the membership that governs its type (a later segment) is typed too
+  const tagged = idsOf([...tagRows.map(([n]) => n!), ...of("node_attributes").map((row) => row.slice(0, row.indexOf("/")))]);
   await step("the value types that follow tags", [...tagged, ...tagsChanged], () => retypeGoverned(workspaceId, { nodeIds: tagged, tagIds: tagsChanged }, { unstamped: true }));
 
   // 5. this node's own: the backup intent and the content hooks of each changed text; then the modules that hear received changes

@@ -515,6 +515,9 @@ describe.skipIf(!enabled)("cross-workspace read sweep (real app, DB)", { timeout
     // which nodes this node takes change bundles from (migration 206; no route reads it)
     await seedQ(`INSERT INTO sync_origins (workspace_id, origin, vouched_by, have) VALUES ($1, 'sweep-probe-node', 'snapshot', '{}'::jsonb)`, [A.ws]);
 
+    // a bundle this node gave up taking (migration 228; node-local, no route reads it). An outcome, not a header: a header would make A refuse every bundle (`peer_busy`)
+    await seedQ(`INSERT INTO sync_inbox (workspace_id, kind, n, content) VALUES ($1, 'outcome', 0, '{"code":"inbox_attempts_spent","sentence":"probe","at":0}'::jsonb)`, [A.ws]);
+
     // the other head of a unit (migration 205; nothing but the stamp merge writes it, no route reads it)
     await seedQ(`INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, content_hash, hlc_wall, hlc_counter, value) VALUES ($1, 'content_nodes', 'sweep-probe', 'title', 'genesis', 0, repeat('0', 64), 0, 0, 'probe')`, [A.ws]);
 

@@ -20,7 +20,8 @@
 //                           unpublished, hidden, trashed, deleted or changes space — a leak if missed; the semantic index embeds a body);
 //   a space, its switches or members changed, a note's space changed or a note was deleted for good
 //                         → the membership epoch (db.ts bumpMembershipEpoch), so mirror clients reconcile.
-// This node's own: the backup intent and the content hooks of a changed body (outbox rows, node-local). Domain events of a received change are batch 4b.
+// This node's own: the backup intent and the content hooks of a changed body (outbox rows, node-local), and the events of the received changes in its own log
+// (services/receivedEvents.ts: the kinds a local write records, marked as received by spine/receivedEvents.ts; batch 4b).
 // The derivation writes no unit: test/receivedDerivation.integration.test.ts compares every unit and stamp of the workspace before and after it.
 import type { BundleItem } from "../spine/snapshotSql.js";
 import { deriving as step, setReceivedDerivation, tagsMadeWithTheirMark, type ReceivedBundle } from "../spine/receivedDerivation.js";
@@ -37,12 +38,16 @@ import { markReceivedAutoTags, notesOfBlockRows } from "./blockNodes.js";
 import { retypeGoverned } from "./attributeChange.js";
 import { contentOfNotesToPurge, forgetPurgedNotes, type PurgedContent } from "./nodeTrash.js";
 import { enqueueBackup } from "./outbox.js";
+import { putBlob } from "./blobs.js";
 import { nodeAttributeCommitted, nodeContentCommitted } from "./nodeCommits.js";
+import { readBefore, receivedEventsOf, type EventsBefore, type MergedReads } from "./receivedEvents.js";
+import { encodeSnapshot, type AttributeSnapshot } from "./eventLog/index.js";
+import { appendReceivedEvents } from "../spine/receivedEvents.js";
 
 /** What the derivation reads of a note, before the merge and after it. */
 type NoteState = { live: boolean; space: string | null; hidden: boolean; title: string; slug: string; tag: boolean; markdown: string };
 /** `keys`: every note the bundle carries (held here or not); `notes`: those held here, as they were. */
-type Prepared = { workspaceId: string; keys: string[]; notes: Map<string, NoteState>; purging: { ids: string[]; content: PurgedContent } | null };
+type Prepared = { workspaceId: string; keys: string[]; notes: Map<string, NoteState>; purging: { ids: string[]; content: PurgedContent } | null; events: EventsBefore };
 
 const NOTES = "content_nodes";
 const RECEIVED = { received: true } as const;
@@ -64,7 +69,7 @@ async function before(workspaceId: string, items: readonly BundleItem[]): Promis
   // a note held here whose row a tombstone may take: what a permanent delete erases besides the row, read while the row is still here
   const going = items.filter((i) => i.kind === "tombstone" && i.table === NOTES && i.stamp.field === "*" && i.stamp.deleted).map(rowKeyOf).filter((k): k is string => !!k && notes.has(k));
   const purging = going.length ? { ids: going, content: await contentOfNotesToPurge(workspaceId, going) } : null;
-  return { workspaceId, keys, notes, purging };
+  return { workspaceId, keys, notes, purging, events: await readBefore(workspaceId, items, going) };
 }
 
 /** The workspace owner, as the hooks' actor: the one person a whole-workspace bundle is exchanged for (services/stampedBundle.ts). */
@@ -75,6 +80,31 @@ async function ownerOf(workspaceId: string): Promise<ActorCtx> {
   if (!row) throw new Error(`workspace ${workspaceId} has no owner: a received change cannot reach its hooks`);
   return { id: row.id, name: row.name, type: row.type as ActorType };
 }
+
+/** The merged state the events of the received changes name (services/receivedEvents.ts MergedReads): a value as it stands, a title. */
+/** The received values as they stand now, encoded as their events name them (a drawing's value is stored by encodeSnapshot: putBlob / putInkChunks). */
+async function receivedSnapshots(workspaceId: string, rows: readonly string[]): Promise<Map<string, AttributeSnapshot>> {
+  const pairs = rows.map((row) => ({ row, nodeId: row.slice(0, row.indexOf("/")), key: row.slice(row.indexOf("/") + 1) })).filter((p) => isUuid(p.nodeId));
+  const nodes = [...new Set(pairs.map((p) => p.nodeId))];
+  if (nodes.length === 0) return new Map();
+  const wanted = new Set(pairs.map((p) => p.row));
+  const out = new Map<string, AttributeSnapshot>();
+  for (const r of await db.selectFrom("node_attributes").select(["node_id", "key", "value", "value_type", "is_inheritable", "source"])
+    .where("workspace_id", "=", workspaceId).where("node_id", "in", nodes).execute()) {
+    const row = `${r.node_id}/${r.key}`;
+    if (wanted.has(row)) out.set(row, await encodeSnapshot(r.key, { value: r.value, value_type: r.value_type, is_inheritable: r.is_inheritable, source: r.source }, { workspaceId, nodeId: r.node_id }));
+  }
+  return out;
+}
+
+const mergedReads = (workspaceId: string, snapshots: ReadonlyMap<string, AttributeSnapshot>): MergedReads => ({
+  snapshots,
+  titles: async (ids) => {
+    const good = ids.filter(isUuid);
+    if (good.length === 0) return new Map();
+    return new Map((await db.selectFrom("content_nodes").select(["id", "title"]).where("workspace_id", "=", workspaceId).where("id", "in", good).execute()).map((r) => [r.id, r.title] as const));
+  },
+});
 
 const idsOf = (rows: Iterable<string>): string[] => [...new Set(rows)].filter(isUuid).sort();
 
@@ -95,8 +125,23 @@ async function after(prepared: Prepared, bundle: ReceivedBundle): Promise<void> 
   const moved = idsOf([...[...now].filter(([id, n]) => was.has(id) && was.get(id)!.space !== n.space).map(([id]) => id),
     ...[...followed.values()].filter((f) => f.from !== f.to && now.has(f.note)).map((f) => f.note)]);
 
-  // 1. a permanent delete: what it erases beyond the rows (the rows and what cascades from them went with the merge)
-  if (prepared.purging && gone.length) await step("the erasing of a permanent delete", gone, () => forgetPurgedNotes(workspaceId, gone, prepared.purging!.content));
+  // 0. the texts the received changes' events will name, stored now: before the sweep below (a permanent delete erases the blobs no event names, and the
+  // events are written last), and before this transaction holds a lock on any blob row (putBlob writes on its own connection: one waiting for a row this
+  // transaction deleted waits for ever, review of PR #1997: a statement timeout on real Postgres, stampedSawThreeNodes seed 171997)
+  const texts = new Set<string>();
+  for (const id of idsOf([...of(NOTES, "body"), ...made])) {
+    const n = now.get(id);
+    if (n) texts.add(await step("the stored text of a received change", [id], () => putBlob(n.markdown)));
+  }
+  // the same for the values: a drawing's snapshot stores its value (review of PR #1997, confirming round, point 1: a drawing shared with a note deleted for good)
+  const snapshots = await step("the stored values of the received changes", [], () => receivedSnapshots(workspaceId, [...new Set(of("node_attributes"))]));
+  for (const snap of snapshots.values()) if (typeof snap.value_ref === "string") texts.add(snap.value_ref);
+
+  // 1. a permanent delete: what it erases beyond the rows (the rows and what cascades from them went with the merge); a text a received change names stays
+  if (prepared.purging && gone.length) {
+    const content = { ...prepared.purging.content, hashes: prepared.purging.content.hashes.filter((h) => !texts.has(h)) };
+    await step("the erasing of a permanent delete", gone, () => forgetPurgedNotes(workspaceId, gone, content));
+  }
 
   // 2. the notes whose text, anchors or paragraph rows changed, that were made, or that came back: their own derived rows
   const bodyChanged = new Set([...of(NOTES, "body"), ...of(NOTES, "*")]);
@@ -160,6 +205,10 @@ async function after(prepared: Prepared, bundle: ReceivedBundle): Promise<void> 
 
   // 6. who may read what changed: the epoch, once (the merge moves it too where a note's space followed its tree or a space's shown deletion changed)
   if (audience || of("spaces").length || of("space_members").length) await bumpMembershipEpoch(workspaceId);
+
+  // 7. this node's own log: the events a local write of each change records, marked as received (services/receivedEvents.ts, spine/receivedEvents.ts; batch 4b)
+  await step("the events of the received changes", [], async () => appendReceivedEvents(workspaceId,
+    await receivedEventsOf(workspaceId, bundle.units, { was, now, made, gone, trashed, restored, moved, hiddenChanged }, prepared.events, mergedReads(workspaceId, snapshots))));
 }
 
 setReceivedDerivation({ before, after: (prepared, bundle) => after(prepared as Prepared, bundle) });

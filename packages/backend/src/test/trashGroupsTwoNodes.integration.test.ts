@@ -38,8 +38,10 @@ describe.skipIf(!isTestDb)("deleted together on a node that took the bundle", ()
     const onB = await onNode(nb, () => togetherIds(b.ws, ids.root));
     expect(onA, "A: the subtree of the delete, the note deleted earlier left out").toEqual([ids.child, ids.grandchild]);
     expect(onB, "B judges the same").toEqual(onA);
-    expect(await onNode(nb, () => q(`SELECT 1 FROM domain_events WHERE target_id = ANY($1::text[])`, [Object.values(ids)])).then((r) => r.rows.length),
-      "B holds none of the events A's judgement used to read").toBe(0);
+    // B records the received changes in its own log (own-node-transport batch 4b, spine/receivedEvents.ts), but none of A's events, and no chain of them: the
+    // judgement cannot have read one (every event B holds about these notes is a received one, linked to no other)
+    expect(await onNode(nb, () => q(`SELECT 1 FROM domain_events WHERE target_id = ANY($1::text[]) AND (NOT coalesce((tx_meta->>'received')::boolean, false) OR triggered_by_event_id IS NOT NULL)`,
+      [Object.values(ids)])).then((r) => r.rows.length), "B holds none of the events A's judgement used to read").toBe(0);
     expect(await onNode(na, () => chainedTogether(a.ws, ids.root)), "and on A it is what the event chain says").toEqual(onA);
 
     // "Restore together" itself, on each: the same notes come back, the one deleted alone stays in the trash.

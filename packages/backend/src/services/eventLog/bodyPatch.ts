@@ -36,6 +36,7 @@
 //     markdown.
 
 import DMP from "diff-match-patch";
+import { NO_INVERSE_PATCH } from "../../spine/inversePatch.js";
 
 const dmp = new DMP();
 
@@ -50,7 +51,7 @@ const dmp = new DMP();
  * @param oldBody  state to revert TO
  * @param newBody  state we're reverting FROM (the current/just-committed body)
  */
-export const NO_INVERSE_PATCH = "no-inverse-patch";
+export { NO_INVERSE_PATCH };
 
 export function makeInversePatch(oldBody: string, newBody: string): string {
   if (oldBody === newBody) return "";

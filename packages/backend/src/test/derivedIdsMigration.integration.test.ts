@@ -12,6 +12,7 @@ import { uuidV5 } from "../utils.js";
 import { pool, q } from "../db.js";
 import { derivedId } from "../services/derivedIds.js";
 import { appendToDayNote } from "../services/dayNotes.js";
+import { updateNode } from "../services/nodeUpdate.js";
 import { persistActor } from "./helpers/persistActor.js";
 import { rerunMigration } from "./helpers/rerunMigration.js";
 import { seedQ } from "./helpers/seedQ.js";
@@ -52,9 +53,14 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
   let untouchedBefore = "";
   let epochBefore: Record<string, string> = {};
   let contentBefore: Record<string, string> = {};
+  let versionsBefore: Record<string, { versions: number; positions: number; events: number }> = {};
 
   const idsOf = (obj: Record<string, string>) => Object.values(obj).filter((v) => v !== "");
   const epoch = async (ws: string) => (await q<{ e: string }>(`SELECT membership_epoch::text AS e FROM workspaces WHERE id = $1`, [ws])).rows[0]!.e;
+  // a note's history rows (migration 220): its versions, their sequence positions, and the events mapped to them
+  const versionRows = async (id: string) => (await q<{ versions: number; positions: number; events: number }>(
+    `SELECT (SELECT count(*)::int FROM note_versions WHERE note_id = $1) AS versions, (SELECT count(*)::int FROM note_version_positions WHERE note_id = $1) AS positions,
+            (SELECT count(*)::int FROM note_version_events WHERE note_id = $1) AS events`, [id])).rows[0]!;
   const dump = async (sql: string, params: unknown[] = []) => (await q<{ d: string }>(`SELECT COALESCE(md5(string_agg(x::text, '|' ORDER BY x::text)), '') AS d FROM (${sql}) x`, params)).rows[0]!.d;
 
   async function newWorkspace(name: string): Promise<string> {
@@ -126,6 +132,12 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
     // history that stays where it was written
     await seedQ(`INSERT INTO domain_events (workspace_id, actor_type, actor_id, event_type, target_type, target_id, payload) VALUES ($1, 'user', $2, 'NODE_UPDATED', 'node', $3, '{}'::jsonb)`,
       [wsA, ada.id, old.note]);
+
+    // saved once each, so they have history rows under the old id: the capture tag's description (a tag has versions since migration 231) and the tasks note's text
+    for (const id of [old.capture, dayId(old.personal, TASKS_NOTE_TITLE)]) {
+      await updateNode(wsA, id, { markdown: `saved before the rewrite ${tag}\n` }, { actor: ada });
+    }
+    versionsBefore = { capture: await versionRows(old.capture), tasks: await versionRows(dayId(old.personal, TASKS_NOTE_TITLE)) };
 
     // workspace B: two capture tags (which one is it?), a skills tag whose derived id belongs to something else
     bad.takenBy = derivedId(derivedIdName.moduleTag(wsB, "skills"));
@@ -220,6 +232,48 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
     for (const { t, c } of fks) if (!AFTER_201.has(t)) expect(header, `${t}.${c}`).toContain(`'${t}.${c}'`);
   });
 
+  it("every column named for a note, a tag or a space is followed by the rewrite or named here as not a reference, so a new one is never forgotten", async () => {
+    // Read from the schema, not listed by hand: a column of a note's, tag's or space's id (by its name) that no foreign key holds. One that a foreign key
+    // holds, directly or through another table's key (note_version_positions -> note_versions), is followed by the migration from pg_constraint (issue #2006).
+    const unheld = (await q<{ c: string }>(
+      `SELECT a.attrelid::regclass::text || '.' || a.attname AS c FROM pg_attribute a JOIN pg_class t ON t.oid = a.attrelid JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'public' AND t.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped AND format_type(a.atttypid, NULL) IN ('uuid', 'uuid[]', 'text')
+          AND a.attname ~ '(^|_)(node|note|tag|space)_ids?$'
+          AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.contype = 'f' AND k.conrelid = a.attrelid AND a.attnum = ANY (k.conkey))
+        ORDER BY 1`)).rows.map((r) => r.c);
+    // the migration's own list of references without a foreign key (its m201_other), read from its text: the test above sees them hold the new ids
+    const otherList = /CREATE TEMP TABLE m201_other[\s\S]*?\(VALUES([\s\S]*?)\) AS t\(tbl/.exec(sqlText)?.[1] ?? "";
+    const followed = [...otherList.matchAll(/\('(\w+)', '(\w+)'/g)].map((m) => `${m[1]}.${m[2]}`);
+    expect(followed).toEqual(expect.arrayContaining(["agent_sessions.scope_tag_ids", "node_event_meta.node_id"])); // (the parse found the list)
+    // ratchet:list derived-ids-not-a-reference
+    const notReference = [
+      "content_nodes.written_space_id", // migration 218, after 201: it copied space_id once 201 had run; this file's beforeAll does that copy for its fixture
+      "ds_node.node_id", "ds_peers.node_id", "sync_node.node_id", "sync_restore_kept_node_id.node_id", // a server's own id, not a note's
+      "ds_ops.space_id", "ds_projection_failures.note_id", "owner_member_migration_log.space_id", // records of what was true then (the migration's header)
+    ];
+    // every unheld column is followed or named; a name here is unheld (no stale entry) and not also followed
+    expect(unheld.filter((c) => !followed.includes(c) && !notReference.includes(c)), "followed by nothing and not named").toEqual([]);
+    expect(notReference.filter((c) => !unheld.includes(c) || followed.includes(c)), "named but not an unheld column, or followed after all").toEqual([]);
+  });
+
+  it("no foreign key that reaches the id is behind an ON UPDATE CASCADE one: the rewrite follows the chain only up to a cascade (it moves the rest itself)", async () => {
+    // The rewrite's chain search stops at ON UPDATE CASCADE (that table follows by itself). A NO ACTION key behind it would be missed, so this shape must not exist.
+    const behindCascade = (await q<{ c: string }>(
+      `WITH RECURSIVE held(tbl, attnum, cascaded, bad, conname) AS (
+         SELECT c.conrelid, c.conkey[k.i], c.confupdtype = 'c', false, c.conname
+           FROM pg_constraint c CROSS JOIN LATERAL generate_subscripts(c.confkey, 1) AS k(i)
+           JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = c.confkey[k.i] AND a.attname = 'id'
+          WHERE c.contype = 'f' AND c.confrelid IN ('content_nodes'::regclass, 'spaces'::regclass)
+         UNION
+         SELECT c.conrelid, c.conkey[k.i], h.cascaded OR c.confupdtype = 'c', h.cascaded AND c.confupdtype <> 'c', c.conname
+           FROM held h JOIN pg_constraint c ON c.contype = 'f' AND c.confrelid = h.tbl
+           CROSS JOIN LATERAL generate_subscripts(c.confkey, 1) AS k(i)
+          WHERE c.confkey[k.i] = h.attnum
+       )
+       SELECT DISTINCT tbl::regclass::text || '.' || conname AS c FROM held WHERE bad ORDER BY 1`)).rows.map((r) => r.c);
+    expect(behindCascade).toEqual([]);
+  });
+
   it("each purpose now has the derived id, the same one the TypeScript side computes", async () => {
     const at = async (table: string, id: string) => (await q(`SELECT 1 FROM ${table} WHERE id = $1`, [id])).rows.length;
     expect(await at("content_nodes", derivedId(derivedIdName.moduleTag(wsA, "capture")))).toBe(1);
@@ -288,6 +342,14 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
     expect(await one(`SELECT count(*)::int AS v FROM space_members WHERE space_id IN ($1, $2) AND actor_id = $3`, [def, personal, ada.id])).toBe(2);
   });
 
+  it("a rewritten tag's and note's history rows follow the id: versions, their positions and the events mapped to them", async () => {
+    expect(versionsBefore.capture).toEqual({ versions: 1, positions: 1, events: 1 });
+    expect(versionsBefore.tasks.versions).toBeGreaterThanOrEqual(1);
+    expect(await versionRows(derivedId(derivedIdName.moduleTag(wsA, "capture")))).toEqual(versionsBefore.capture);
+    expect(await versionRows(dayId(derivedId(derivedIdName.personalSpace(wsA, ada.id)), TASKS_NOTE_TITLE))).toEqual(versionsBefore.tasks);
+    for (const gone of [old.capture, dayId(old.personal, TASKS_NOTE_TITLE)]) expect(await versionRows(gone)).toEqual({ versions: 0, positions: 0, events: 0 });
+  });
+
   it("a space's tasks note follows the space (its id is what the NEW space id gives, a renamed one too); day notes stay, and are still found by title", async () => {
     const personal = derivedId(derivedIdName.personalSpace(wsA, ada.id));
     const def = derivedId(derivedIdName.defaultSpace(wsA));
@@ -346,8 +408,9 @@ describe.skipIf(!isTestDb)("migration 201: derived ids for what Onden makes by i
   });
 
   it("the foreign keys and triggers are back as they were: not deferrable, enabled, and a bad reference is refused again", async () => {
-    const deferrable = (await q<{ n: number }>(
-      `SELECT count(*)::int AS n FROM pg_constraint WHERE contype = 'f' AND condeferrable AND confrelid IN ('content_nodes'::regclass, 'spaces'::regclass)`)).rows[0]!.n;
+    // every foreign key, not only the ones to a note or a space: the ones that reach the id through another table's key (note_version_positions ->
+    // note_versions) are made deferrable too. (No foreign key of the schema is deferrable on its own.)
+    const deferrable = (await q<{ n: number }>(`SELECT count(*)::int AS n FROM pg_constraint WHERE contype = 'f' AND condeferrable`)).rows[0]!.n;
     expect(deferrable).toBe(0);
     // enabled = 'O' (origin and local) or 'A' (always: migration 217's triggers run under replica too); 'D' disabled, 'R' replica only
     const off = (await q<{ n: number }>(`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal AND tgenabled NOT IN ('O', 'A')`)).rows[0]!.n;

@@ -17,6 +17,8 @@
 // SAFETY: node databases (a PGlite each, or a database of the test server on a real Postgres), dropped after each test.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { q, withTransaction } from "../db.js";
+import { withEventTransaction } from "../spine/eventTransaction.js";
+import { stampTransaction } from "../spine/stamps.js";
 import { readChangeBundle } from "../services/stampedBundle.js";
 import { snapshotSourceNode } from "../services/stampedSnapshot.js";
 import { withActorReadSnapshot } from "../services/actorReadSnapshot.js";
@@ -29,7 +31,7 @@ import { RealNode, onNode } from "./helpers/distSim/realNode.js";
 import { needsSecondConnection } from "./helpers/pgliteSkips.js";
 import { seedQ } from "./helpers/seedQ.js";
 import { buildSourceWorld, capture, fillFrom, openNode, outOfScopeIds, type Capture, type SourceWorld } from "./helpers/stampedWorld.js";
-import { UPDATED_AT_OF_ATTRIBUTES, admit, bundleFor, exchange, expectSame, makeRng, markWorld, nodeIdOf, peerOf, resendAll, resetRowTurns, take, withOriginAt, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
+import { admit, bundleFor, exchange, expectSame, makeRng, markWorld, nodeIdOf, peerOf, resendAll, resetRowTurns, take, withOriginAt, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { PROPS_SEED } from "./helpers/propsConfig.js";
 
 const isTestDb = /_test\b/.test(process.env.DATABASE_URL ?? "");
@@ -203,7 +205,7 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     expect(fromSource.rejected).toEqual([]);
     expect(changedUnits(cBefore, await everyStamp(c))).toEqual(changedUnits(aBefore, await everyStamp(a)));
     expect(fromSource.stored).toBeGreaterThan(0);
-    await expectSame(a, c, "A and C after one bundle from A", [UPDATED_AT_OF_ATTRIBUTES]);
+    await expectSame(a, c, "A and C after one bundle from A");
     expect((await resendAll(a, c)).stored, "a full re-send from the source stores nothing").toBe(0);
 
     // from a third node: B, which C knew only as an origin A brought, is admitted by C and sends what C lacks of it (and nothing C has)
@@ -219,17 +221,17 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     const fromThird = await exchange(b, c);
     expect(fromThird.rejected).toEqual([]);
     expect(changedUnits(cBefore2, await everyStamp(c))).toEqual(changedUnits(bBefore, await everyStamp(b)));
-    await expectSame(b, c, "B and C after one bundle from B", [UPDATED_AT_OF_ATTRIBUTES]);
+    await expectSame(b, c, "B and C after one bundle from B");
     expect((await resendAll(b, c)).stored, "a full re-send from the third node stores nothing").toBe(0);
     expect((await resendAll(a, c)).stored).toBe(0);
   }, 900_000);
 
-  // Review of PR #1940 (CI, seed 142069): pinned before the transport (README "接上傳輸前必須完成"). The stamped tables other than notes keep `updated_at` as the time
-  // the node wrote the row (the writer's clock, or the receiver's when it took the bundle), not a function of the row's stamps as notes do (migrations 206 and 209,
-  // sync_touch_updated_at): two nodes that hold the same writes hold different `updated_at`. P2 above compares that column apart (expectSame's known difference),
-  // so it does not go red by when each bundle happened to be taken; this is the smallest case: B sets an attribute and A takes it (the same time: the row is made from B's values), B changes it and A takes that (the time A wrote it back).
-  /** B sets an attribute and A takes it, B changes it and A takes that: whether each exchange was taken, the value on A, and updated_at on both. */
-  async function attributeTwice(): Promise<{ refused: number; valueOnA: string | undefined; at: { a: string | undefined; b: string | undefined } }> {
+  // Review of PR #1940 (CI, seed 142069), fixed by migration 232: `updated_at` of the stamped tables other than notes is a function of the row's counting stamps, as a
+  // note's is (migrations 206 and 209): the node that writes and the node that takes the write back into a row it holds hold the same value. The smallest case: B sets an
+  // attribute and A takes it (a new row, made from B's values), B changes it and A takes that (a row A holds, written back); then B saves it without moving `updated_at`
+  // (a write that is housekeeping: its stamp says so) and A takes that too; and A, taking everything again, changes nothing.
+  /** B sets an attribute, changes it, and rewrites its type without moving updated_at; A takes each: what A refused, A's value, updated_at on both after each step. */
+  async function attributeThrice() {
     const [na, nb] = [await openNode("a"), await openNode("b")];
     open.push(na, nb);
     const world = await buildSourceWorld(na);
@@ -237,26 +239,35 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     const a = peerOf("A", na, world), b = peerOf("B", nb, world);
     await admit(a, b); await admit(b, a);
     const note = await onNode(b.node, async () => (await b.call("POST", "/api/nodes", { title: "Its attribute", markdown: "", space_id: b.space })).id as string);
+    const row = (p: Peer) => onNode(p.node, async () => (await q<{ t: string; v: string; ty: string }>(`SELECT updated_at::text AS t, value::text AS v, value_type AS ty FROM node_attributes WHERE node_id = $1 AND key = 'status'`, [note])).rows[0]);
+    const both = async () => ({ a: (await row(a))?.t, b: (await row(b))?.t });
     await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/attributes/status`, { value: "set on B" }));
-    const first = await exchange(b, a); // a new row is made from the values B carried: the same updated_at
+    let refused = (await exchange(b, a)).rejected.length;
+    const made = await both();
     await onNode(b.node, () => b.call("PUT", `/api/nodes/${note}/attributes/status`, { value: "changed on B" }));
-    const second = await exchange(b, a); // a row A holds, written back: the time A wrote it
-    const row = (p: Peer) => onNode(p.node, async () => (await q<{ t: string; v: string }>(`SELECT updated_at::text AS t, value::text AS v FROM node_attributes WHERE node_id = $1 AND key = 'status'`, [note])).rows[0]);
-    const [ra, rb] = [await row(a), await row(b)];
-    return { refused: first.rejected.length + second.rejected.length, valueOnA: ra?.v, at: { a: ra?.t, b: rb?.t } };
+    refused += (await exchange(b, a)).rejected.length;
+    const changed = await both();
+    // a statement that changes a unit (the type) and leaves updated_at as it is, as a retype does (services/attributeChange.ts retypeGoverned)
+    await onNode(b.node, () => withEventTransaction(b.ws, async () => { await stampTransaction(b.ws, b.owner.id); await q(`UPDATE node_attributes SET value_type = 'number' WHERE node_id = $1 AND key = 'status'`, [note]); }));
+    const retypedOnB = (await row(b))?.t;
+    refused += (await exchange(b, a)).rejected.length;
+    const retyped = await both();
+    const typeOnA = (await row(a))?.ty;
+    const again = await resendAll(b, a);
+    return { refused, valueOnA: (await row(a))?.v, typeOnA, made, changed, retyped, retypedOnB, storedAgain: again.stored, afterAgain: await both() };
   }
-  it("updated_at of an attribute (the finding, named): both exchanges taken, A holds B's last value, and A's updated_at is not B's", async () => {
-    const r = await attributeTwice();
+  it("updated_at of an attribute: B sets it, changes it, rewrites it without moving updated_at; A takes each, and both hold the same updated_at after each", async () => {
+    const r = await attributeThrice();
     expect(r.refused).toBe(0);
     expect(r.valueOnA).toContain("changed on B");
-    expect(r.at.a, "when A's updated_at is B's, the finding is fixed: turn the it.fails below into an it").not.toBe(r.at.b);
-  }, 300_000);
-  it.fails("updated_at of an attribute: B sets it and changes it, A takes both bundles: both hold the same updated_at", async () => {
-    // only the difference may make this fail: a throw or an unmet precondition returns, and an it.fails that returns is red ("expected to fail")
-    let r: Awaited<ReturnType<typeof attributeTwice>>;
-    try { r = await attributeTwice(); } catch { return; }
-    if (r.refused || !r.valueOnA?.includes("changed on B")) return;
-    expect(r.at.a).toBe(r.at.b);
+    expect(r.typeOnA, "the retype reached A").toBe("number");
+    expect(r.made.a, "a row made from B's values").toBe(r.made.b);
+    expect(r.changed.a, "a row A held, written back").toBe(r.changed.b);
+    expect(r.changed.b, "B's change moved updated_at").not.toBe(r.made.b);
+    expect(r.retypedOnB, "the write that left updated_at as it was left it on B").toBe(r.changed.b);
+    expect(r.retyped.a, "and on A").toBe(r.changed.a);
+    expect(r.storedAgain, "everything sent again stores nothing").toBe(0);
+    expect(r.afterAgain, "and changes no updated_at").toEqual(r.retyped);
   }, 300_000);
 
   it("P3: A→B snapshot, B→C snapshot, then bundles between C and A: the same on both, a full re-send stores 0 both ways", async () => {
@@ -284,14 +295,13 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
       expect((await exchange(a, c)).rejected).toEqual([]);
       expect((await exchange(c, a)).rejected).toEqual([]);
     }
-    // updated_at of an attribute is not a function of its stamps yet (the it.fails "updated_at of an attribute" above, README 「接上傳輸前必須完成」): compared apart, as in
-    // P2; take the known difference out of both comparisons when that is fixed (seeds 318921, 787109, 905894 went red on it, on main too: review of PR #1965)
-    await expectSame(a, c, "A and C", [UPDATED_AT_OF_ATTRIBUTES]);
+    // updated_at of every row is the same too (seeds 318921, 787109, 905894 went red on it before migration 232: review of PR #1965)
+    await expectSame(a, c, "A and C");
     expect((await resendAll(a, c)).stored).toBe(0);
     expect((await resendAll(c, a)).stored).toBe(0);
     // and B, which neither A nor C sent to in between, catches up from A and is the same too
     await exchange(a, b);
-    await expectSame(a, b, "A and B", [UPDATED_AT_OF_ATTRIBUTES]);
+    await expectSame(a, b, "A and B");
   }, 900_000);
 
   it("P4: a source with an unfinished join, with stamps past what it says it holds of an origin, or of an origin it has no row for, refuses with a code", async () => {
@@ -380,9 +390,8 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     expect([heldBefore, heldNow], JSON.stringify({ said, heldBefore, heldNow })).toContainEqual(said);
     const { peer: c } = await joinFrom("c", a, world, cap);
     expect((await exchange(a, c)).rejected).toEqual([]);
-    // updated_at of an attribute is not a function of its stamps yet (the it.fails "updated_at of an attribute" above, README 「接上傳輸前必須完成」): compared apart, as in
-    // P2; take the known difference out of both comparisons when that is fixed (seeds 318921, 787109, 905894 went red on it, on main too: review of PR #1965)
-    await expectSame(a, c, "A and C", [UPDATED_AT_OF_ATTRIBUTES]);
+    // updated_at of every row is the same too (seeds 318921, 787109, 905894 went red on it before migration 232: review of PR #1965)
+    await expectSame(a, c, "A and C");
     expect((await resendAll(a, c)).stored).toBe(0);
   }, 900_000);
 

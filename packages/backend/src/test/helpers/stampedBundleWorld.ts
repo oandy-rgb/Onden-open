@@ -311,30 +311,9 @@ export async function peerStateOf(p: Peer): Promise<{ digest: TableDigest[]; sta
   return { digest, stamps, heads, conflicts };
 }
 
-/** A column known to differ between two nodes that hold the same writes, pinned elsewhere by its own `it.fails` (README "接上傳輸前必須完成"): `expectSame` then compares
- *  that table's rows without the column, but only the rows it is known to differ in: those with a stamp of a unit (`field <> '*'`: a write after the row was made, which a
- *  receiver writes back into a row it holds). A row with only its creation's stamp is compared whole, the column too (review of PR #1940, round 2, point 1). The stamps
- *  of every table are compared as always, so a test that is about something else does not go red by chance and nothing else is let through. */
-export type KnownDifference = { table: "node_attributes"; column: string; rowKey: string };
-/** `updated_at` of the stamped tables other than notes is the time a node wrote the row, not a function of its stamps (pinned: snapshotBrought "updated_at of an attribute"). */
-export const UPDATED_AT_OF_ATTRIBUTES: KnownDifference = { table: "node_attributes", column: "updated_at", rowKey: "t.node_id::text || '/' || t.key" };
-
-export async function expectSame(a: Peer, b: Peer, label = "", known: readonly KnownDifference[] = []): Promise<{ a: Awaited<ReturnType<typeof peerStateOf>>; b: Awaited<ReturnType<typeof peerStateOf>> }> {
+export async function expectSame(a: Peer, b: Peer, label = ""): Promise<{ a: Awaited<ReturnType<typeof peerStateOf>>; b: Awaited<ReturnType<typeof peerStateOf>> }> {
   const [sa, sb] = [await peerStateOf(a), await peerStateOf(b)];
-  let diff = compareDigests(sa.digest, sb.digest);
-  if (diff.length && known.length && diff.every((d) => known.some((k) => k.table === d.table))) {
-    // only tables with a known difference differ: their rows in the owner's spaces (what travels) must be the same, without the known column where a unit was written
-    const rowsWithout = (p: Peer, k: KnownDifference) => onNode(p.node, async () => (await q<{ r: string }>(
-      `SELECT (CASE WHEN EXISTS (SELECT 1 FROM sync_stamps s WHERE s.workspace_id = t.workspace_id AND split_part(s.table_name, '.', 1) = '${k.table}' AND s.row_key = ${k.rowKey} AND s.field <> '*')
-                    THEN to_jsonb(t) - $2::text ELSE to_jsonb(t) END)::text AS r FROM "${k.table}" t WHERE t.workspace_id = $1
-          AND t.node_id IN (SELECT c.id FROM content_nodes c JOIN space_members m ON m.space_id = c.space_id AND m.actor_id = $3) ORDER BY 1`, [p.ws, k.column, p.owner.id])).rows.map((x) => x.r));
-    const still: typeof diff = [];
-    for (const d of diff) {
-      const k = known.find((x) => x.table === d.table)!;
-      if (JSON.stringify(await rowsWithout(a, k)) !== JSON.stringify(await rowsWithout(b, k))) still.push(d);
-    }
-    diff = still;
-  }
+  const diff = compareDigests(sa.digest, sb.digest);
   if (diff.length) {
     // name what differs: the rows (columns) and the stamps of the tables that differ, a few of each
     const detail: Record<string, unknown> = {};

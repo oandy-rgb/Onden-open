@@ -469,6 +469,26 @@ BEGIN
     RAISE EXCEPTION '201: a composite foreign key to content_nodes or spaces exists; this migration does not know how to move it';
   END IF;
 
+  -- The columns that hold the id because they point at one of the columns above (a key that includes it, at any depth):
+  -- note_version_positions and note_version_events -> note_versions (note_id, unit, version_key). Migration 220 made them, after
+  -- this one, so an upgrade finds none here; a rerun on today's schema (src/test/helpers/rerunMigration.ts) does, and without them
+  -- the version rows of a rewritten tag or note moved and their positions failed the foreign key (issue #2006).
+  DROP TABLE IF EXISTS pg_temp.m201_fk_via;
+  CREATE TEMP TABLE m201_fk_via ON COMMIT DROP AS
+  WITH RECURSIVE via(conname, tbl, attnum, to_space, condeferrable) AS (
+    SELECT c.conname, c.conrelid::regclass, c.conkey[k.i], f.to_space, c.condeferrable
+      FROM m201_fk f JOIN pg_constraint c ON c.contype = 'f' AND c.confrelid = f.tbl AND c.confupdtype <> 'c'
+      CROSS JOIN LATERAL generate_subscripts(c.confkey, 1) AS k(i)
+     WHERE c.confkey[k.i] = f.conkey[1]
+    UNION
+    SELECT c.conname, c.conrelid::regclass, c.conkey[k.i], v.to_space, c.condeferrable
+      FROM via v JOIN pg_constraint c ON c.contype = 'f' AND c.confrelid = v.tbl AND c.confupdtype <> 'c'
+      CROSS JOIN LATERAL generate_subscripts(c.confkey, 1) AS k(i)
+     WHERE c.confkey[k.i] = v.attnum
+  )
+  SELECT v.conname, v.tbl, a.attname AS col, v.to_space, v.condeferrable
+    FROM via v JOIN pg_attribute a ON a.attrelid = v.tbl AND a.attnum = v.attnum;
+
   -- The references that are not foreign keys: tbl, column, how it holds the id, what it names (node | space | any).
   DROP TABLE IF EXISTS pg_temp.m201_other;
   CREATE TEMP TABLE m201_other ON COMMIT DROP AS
@@ -495,7 +515,8 @@ BEGIN
     ('ai_suggestions', 'payload', 'json', 'any', true)
   ) AS t(tbl, col, how, kind, by_workspace);
 
-  FOR fk IN SELECT * FROM m201_fk WHERE NOT condeferrable LOOP
+  FOR fk IN SELECT DISTINCT tbl, conname FROM (SELECT tbl, conname, condeferrable FROM m201_fk UNION ALL SELECT tbl, conname, condeferrable FROM m201_fk_via) x
+             WHERE NOT condeferrable LOOP
     EXECUTE format('ALTER TABLE %s ALTER CONSTRAINT %I DEFERRABLE INITIALLY IMMEDIATE', fk.tbl, fk.conname);
     made_deferrable := made_deferrable || (fk.tbl::text || '|' || fk.conname);
   END LOOP;
@@ -506,7 +527,7 @@ BEGIN
   FOR trg IN
     SELECT g.tgname, g.tgrelid::regclass AS tbl FROM pg_trigger g
      WHERE NOT g.tgisinternal AND g.tgenabled = 'O'
-       AND g.tgrelid IN (SELECT tbl FROM m201_fk
+       AND g.tgrelid IN (SELECT tbl FROM m201_fk UNION SELECT tbl FROM m201_fk_via
                          UNION SELECT 'content_nodes'::regclass UNION SELECT 'spaces'::regclass UNION SELECT 'sync_stamps'::regclass
                          UNION SELECT o2.tbl::regclass FROM m201_other o2)
   LOOP
@@ -517,7 +538,7 @@ BEGIN
   -- The rows themselves, then everything that names them.
   UPDATE content_nodes c SET id = m.new_id FROM m201_map m WHERE m.verdict = 'rewrite' AND m.kind = 'node' AND c.id = m.old_id;
   UPDATE spaces s SET id = m.new_id FROM m201_map m WHERE m.verdict = 'rewrite' AND m.kind = 'space' AND s.id = m.old_id;
-  FOR fk IN SELECT * FROM m201_fk LOOP
+  FOR fk IN SELECT tbl, col, to_space FROM m201_fk UNION ALL SELECT tbl, col, to_space FROM m201_fk_via LOOP
     EXECUTE format('UPDATE %s t SET %I = m.new_id FROM m201_map m WHERE m.verdict = ''rewrite'' AND m.kind = %L AND t.%I = m.old_id',
                    fk.tbl, fk.col, CASE WHEN fk.to_space THEN 'space' ELSE 'node' END, fk.col);
   END LOOP;

@@ -575,7 +575,7 @@ describe.skipIf(!isTestDb)("slugs: the same writes, whatever the order they arri
   }, 600_000);
 });
 
-describe.skipIf(!isTestDb)("what a body written on one node derives there, and what a node that takes it by bundle derives (item by item; equal ones are plain tests, differing ones are it.fails: links and block refs turned around in batch 4a, domain events wait for 4b)", () => {
+describe.skipIf(!isTestDb)("what a body written on one node derives there, and what a node that takes it by bundle derives (item by item; equal ones are plain tests, differing ones are it.fails: links and block refs turned around in batch 4a, domain events in batch 4b)", () => {
   const BODY = "# Probe\n\nSee [[Target Note]] here {#probe-tag}\n\n- [ ] do a thing {task}\n\nlast paragraph {^para2}\n";
   const projections: Record<string, string> = {
     // [[links]]: services/linkIndex (note_link_index): what the note links to, by lower-cased title and by slug
@@ -625,7 +625,7 @@ describe.skipIf(!isTestDb)("what a body written on one node derives there, and w
   it("anchors: the receiver holds the writer's anchors, ids and places (they travel since migration 215)", same("anchors"), 300_000);
   it("task lines: the block that links a line to its task arrives with the task note (its `task` unit, migration 215)", same("taskLines"), 300_000);
   it("tag marks of blocks (`{#tag}`): arrive with their block rows", same("blockTagMarks"), 300_000);
-  it.fails("domain events (note-96 B3): the receiver records none for a change that came from another device (NODE_UPDATED, block and anchor events)", same("domainEvents"), 300_000);
+  it("domain events (note-96 B3; batch 4b): the receiver records the events of a change that came from another device, the kinds the writer recorded (NODE_UPDATED, block and anchor events)", same("domainEvents"), 300_000);
 });
 
 describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes, tags, pointers, a tag's schema keys, next to the notes)", () => {

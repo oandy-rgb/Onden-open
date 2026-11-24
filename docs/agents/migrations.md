@@ -25,6 +25,9 @@ migration 只能往前：回退映像不會讓資料庫退回去。所以安全�
    新版 `migrate()` 都要能一路跑完。不要求跳過發布版本；不得要求使用者先升到某個中間版本，除非 release notes 明寫。
 2. **只能新增，不可刪除或改名既有 migration 檔**。`schema_migrations` 記著已套用的檔名；檔案不見，已升級過的資料庫會被判成
    「比程式新」而拒絕啟動。要修正舊 migration 的錯，寫一個新的。`scripts/upgrade-drill.sh` 第 1 步會檢查。
+   例外：新的 migration 修不了的錯（例如只有測試重跑舊 migration 時才出現），可以改舊 migration 的內文，條件是三個都成立：
+   已跑過的資料庫不會再跑它（`migrate()` 只看名稱）、全新的資料庫在那個位置上結果逐位元相同、有測試證明這兩點。
+   改動與理由寫在 PR 說明裡。先例：201 的外鍵鏈查找（#2009）。
 3. **新增 migration 就要更新 `db/schema.sql` 的 `schema_migrations` 種子**（`schemaDrift.test.ts` 守門）。
 4. **破壞性資料變更**（刪表／刪欄／改寫或搬移使用者內容、DROP、不可逆的 UPDATE）：
    - 先有使用者（repo 擁有者）明確同意；

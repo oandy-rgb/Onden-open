@@ -242,3 +242,27 @@ describe("excerptsOfPage", () => {
     expect(excerptsOfPage("plain note", "https://example.com/a")).toEqual([]);
   });
 });
+
+// Pins today's behaviour for docs/architecture/proposals/pdf-highlights-as-excerpts-2026-11-17.md: a PDF highlight written by
+// hand as an excerpt (a quote, a blank line, a linked source line) is read as one with no change to the parser, and
+// excerptBlock cannot write the page number itself (it replaces the link's fragment with a Text Fragment).
+describe("a PDF-shaped source line (pinned for the PDF highlight proposal)", () => {
+  const pdf = (page: number) => `> the quoted sentence\n>\n> — [Paper](/api/media/paper.pdf#page=${page}) · p.${page}`;
+
+  it("parseExcerpts reads it: the link is kept whole (no Text Fragment, so no context), the quote is exact", () => {
+    const n = note({ id: "p1", block: pdf(12) });
+    expect(parseExcerpts(n.markdown, n.anchors)).toEqual([
+      { id: "p1", exact: "the quoted sentence", prefix: "", suffix: "", url: "/api/media/paper.pdf#page=12", title: "Paper", feed: "p.12" },
+    ]);
+  });
+
+  it("sameExcerpt counts the same quote of the same file as one passage whatever page the link names", () => {
+    expect(sameExcerpt({ url: "/api/media/paper.pdf#page=12", exact: "x" }, { url: "/api/media/paper.pdf#page=3", exact: "x" })).toBe(true);
+  });
+
+  it("excerptBlock replaces a page fragment: today it cannot write 'page 12' into the link", () => {
+    expect(excerptBlock({ exact: "x" }, { title: "Paper", url: "/api/media/paper.pdf#page=12", feed: "" })).toBe(
+      "> x\n>\n> — [Paper](/api/media/paper.pdf#:~:text=x)",
+    );
+  });
+});

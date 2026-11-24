@@ -17,8 +17,9 @@
 // upsert must commit on its own connection, services/blobs.ts) and would hash a drawing of up to 30 MB in SQL on every stroke; the writer has
 // already stored the content and computed its hash, so minting here adds rows, not hashing.
 import { sql } from "kysely";
+import { analyzeTablesOfLargeWrite, planThisTransactionForTablesAsTheyAre } from "../db.js";
 import { db } from "../dbKysely.js";
-import { sha256Hex } from "../utils.js";
+import { atDoubling, sha256Hex } from "../utils.js";
 import { countSyncClockExceptions } from "./stamps.js";
 
 /** What a version is of: the note's body (title and text) or one of its drawings, by attribute key. */
@@ -58,13 +59,24 @@ export async function notesWithVersionLists(workspaceId: string, noteIds: readon
   return new Set(rows.map((r) => r.id));
 }
 
+/** The versions one transaction mints before it counts as a large write (db.ts planThisTransactionForTablesAsTheyAre; its statistics are brought up to
+ *  date at 100, 200, 400 …, analyzeTablesOfLargeWrite): an ordinary save mints one or two; at 100, a plan cached while the version tables were small
+ *  has cost at most 100 reads of a small table. */
+const MANY_VERSIONS = 100;
+
 /** Mint one version of this transaction's write: `s:<origin>:<seq>:<n>`, n = its place among the transaction's versions of that note and
  *  unit (a cascade undo that writes one note twice gets two). Returns the key, or null for a note that has no version list (a system
  *  note: migration 220 note_version_in_scope, the one rule). A tag's version is its description's (its name is written apart and is no version). Call inside the root write, after the content is stored. */
 export async function recordVersion(v: NewVersion): Promise<string | null> {
   if (v.contentHash === null && v.kind !== "removed") throw new Error("a version names its content");
   if (!(await hasVersionList(v.workspaceId, v.noteId))) return null;
-  const why = (await sql<{ why: string | null }>`SELECT note_version_exempt(${v.workspaceId}::uuid) AS why`.execute(db)).rows[0]!.why;
+  // `minted`: this transaction's versions so far, this one included (a counter of the transaction, in this same statement: a save runs no more
+  // statements). At MANY_VERSIONS the transaction is a large write: the rest of it plans each statement for the tables as they are (db.ts).
+  const { why, minted: mintedSoFar } = (await sql<{ why: string | null; minted: number }>`
+    SELECT note_version_exempt(${v.workspaceId}::uuid) AS why,
+           set_config('onden.versions_minted', (COALESCE(NULLIF(current_setting('onden.versions_minted', true), ''), '0')::int + 1)::text, true)::int AS minted`.execute(db)).rows[0]!;
+  if (mintedSoFar === MANY_VERSIONS) await planThisTransactionForTablesAsTheyAre();
+  if (atDoubling(mintedSoFar, MANY_VERSIONS)) await analyzeTablesOfLargeWrite();
   // A join or a merge writes what it received, the shell and a data migration are no one's write: minting there is a bug of the caller
   // (an internal error, not a refusal a person could see).
   if (why === "off" || why === "import") throw new Error(`no version is minted here (${why})`);

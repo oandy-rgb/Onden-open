@@ -1283,6 +1283,14 @@
 - **為什麼沒擋到**：#1938 為 220 加這個測試時只斷言時間，而且 5,000 則在本機只要一兩秒；平方要到更大的量或忙的機器才看得出來，看出來時又被說成 CI 慢。
 - **類別**：成本只看時間、不看做了多少事。
 - **機制**：〔第 1 層〕`versionCommitCost` 改成數列數（`test/helpers/statisticsOfEveryConnection.ts` 等齊計數），「線性」那則釘成 `it.fails`，修好時翻成 `it`；15 秒只在 bench 單獨量（`scripts/bench/run.ts` `backend.commit_5000_notes`）。延後檢查成本的修正另一批（動 migration 與匯入的交易）：尚未修。〔第 2 層〕新的成本測試一律數列數、不斷言時間：尚無機制，靠審查。
+- **2026-11-23 原因查到、已修（issue #2001）**：不是交易開始前的統計，是**連線上快取的計畫**。`auto_explain` 在 COMMIT 裡抓到的計畫：`Seq Scan on note_versions (cost=0.00..1.38 rows=1)` 實際濾掉 905 列，`note_version_positions`、`note_version_events`、`content_nodes`（migration 093 的空間檢查）同樣是成本 1–4 的整表讀，外鍵檢查（`SELECT 1 FROM ONLY note_versions x …`）也是。這些計畫是表還幾乎是空的時候在同一條連線上做好、存起來的（PostgreSQL 執行五次之後改用存起來的通用計畫，只有 `ANALYZE` 或改表會讓它失效），之後表長大了還照舊整表讀；一筆一則的匯入在同一條連線上也一樣。修法（審查第 2 輪後）：**大量寫入**照表的現況規劃（`plan_cache_mode = force_custom_plan`），並在倍數點 `ANALYZE` 筆記寫入會填的表（`db.ts`）：匯入路由與備份還原用 `withBulkWrites`（其中每一筆寫入交易；第 32、64、128… 筆時分析）；一筆交易鑄到第 100 個版本時自己變成大量寫入（`spine/noteVersions.ts` `recordVersion`，計數放在它原本那一句裡；第 100、200、400… 個時分析）；合併（`openMerge`）與每個 migration 的交易也是。一般存檔**不變**：第一版讓每一筆寫入都重新規劃，PGlite 上單次存檔中位數慢約 5 %（200 次、各兩輪：32.5／33.8 → 35.2／34.6 ms），依審查改成只有大量寫入。修後 COMMIT 起讀的列線性（500 → 2,000 則 260,500 → 296,120），手寫的列鎖選錯索引那一項也因為分析而線性了。機制換成〔第 1 層〕`versionCommitCost` 的線性與每則上限斷言（`it`）。
+- **同一次量測找到、還沒修的（都在 `versionCommitCost.integration.test.ts` 釘成 `it.fails`，寫明讀的是什麼；擋住它們的機制：尚無）**：
+  1. 交易內的連結檢查（`services/wikilinkEdges.ts` `relinkBatch`：每建一則就讀這筆交易裡之前建的每一則）——4a 的範圍，另派。
+  2. ~~手寫存檔的列鎖選錯索引~~：大量寫入在倍數點分析之後已線性（`it`）。
+  3. 一次普通存檔的讀取檢查（`spine/spaceScope.ts`）在同樣情況選了 `content_nodes_space_idx`，每次存檔讀過整個空間的筆記：沒有 autovacuum 的桌面版與瀏覽器版（PGlite）會一直這樣。修前 2,000 則時每次存檔 29,046 列，修後約 8,000 列，仍隨筆記數成長。
+  4. 資料夾匯入整體：只剩上面第 1 項（`relinkBatch`）。依語句分開量（讀的區塊數）：500 → 2,000 個檔，`relinkBatch` 16,235 → 154,907（9.5 倍），其餘所有語句 273,139 → 1,145,722（4.2 倍，線性）。
+  5. 備份還原整體（連結檢查與每則一次的可讀筆記查詢）；還原寫入的版本表（`spine/importedHistory.ts`）是線性的，有斷言。
+  6. migration 220 與 231 的回填（`nv_candidates`／`tv_candidates` 把 `content_nodes` 估成幾列，巢狀迴圈每筆舊存檔整表讀一次；照表的現況規劃也一樣，是統計）：500 → 2,000 則各 15.4 與 15.6 倍。220 已經在正式站跑過；231 剛進 main。要不要改這兩個檔本身由擁有者決定（在回填前 `ANALYZE content_nodes, domain_events` 多半就夠，沒試）。
 ### 2026-11-23　手機上點最後一行下面的空白沒反應（#1931 拿掉結尾空間，分支 fix/tap-below-last-line）
 - **發生了什麼**：#1931 為了「打字時最下面不要突然塞空白」，在 Android（版面跟著鍵盤縮小）拿掉文字後面的結尾空間區塊。那個區塊同時負責另一件事：點最後一行下面的空白，游標去文件尾。拿掉後，點在編輯框外的空白（編輯框底下到鍵盤工具列）沒有任何東西接，游標不動、也不能接著打字。擁有者在正式站（Brave PWA）先發現。
 - **證據**：修正前 `node e2e/browser-app/tapBelowLastLine.mjs --profile pixel5` 在「從沒聚焦開始」點最後一行下 60 px 與可見區底部，各筆記都紅（見 PR 說明的輸出）；修正後全綠。

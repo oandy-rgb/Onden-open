@@ -1,8 +1,11 @@
 /* The bar of the selected card: docked at the top centre of the board (KnowledgeWorkspace), the same place as the
    several-card selection's bar, so it never lands on another card. */
 .board-selection-dock { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: var(--z-dropdown); max-width: calc(100% - 2 * var(--ac-space-5)); }
-/* A phone's board is full screen with its own row of buttons across the top (‹, undo, the title, 「顯示」): the bar goes under it. */
+/* A phone's board is full screen with its own row of buttons across the top (‹, undo, the title, 「顯示」): the bar goes under it.
+   Told by that row being there, not by the board's width: at 900 the full-screen board is wider than 600px and the bar sat on
+   the title (layout audit R1/R2, canvas @ 900, 2026-11-24). */
 @container board (max-width: 600px) { .board-selection-dock { top: 64px; } }
+.graph-panel:has(.board-note-title) .board-selection-dock { top: 64px; }
 .board-selection-bar {
   display: flex;
   align-items: center;

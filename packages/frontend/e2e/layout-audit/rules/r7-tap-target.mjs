@@ -33,7 +33,11 @@ export default {
             const x = cx + sign * d * dx, y = cy + sign * d * dy;
             if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) break;
             const at = document.elementFromPoint(x, y);
-            if (!A.hits(el, at) && !A.scrollsUnder(el, at)) break; // a toast or a fixed bar over part of it is R1/R4's, not its size
+            // A toast or a fixed bar over part of it is R1/R4's, not its size; but only where it really lies over the control:
+            // a bar beside a small button is not the button's reach (#1954 review: a 28px button flush against the top
+            // bar was measured as tall as the bar).
+            const overIt = x >= own.left - 0.5 && x <= own.right + 0.5 && y >= own.top - 0.5 && y <= own.bottom + 0.5;
+            if (!A.hits(el, at) && !(overIt && A.scrollsUnder(el, at))) break;
             n++;
             if (n >= MIN) return n; // big enough; no need to know how much bigger
           }

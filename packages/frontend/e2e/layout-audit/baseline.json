@@ -24,13 +24,6 @@
     },
     {
       "rule": "R7",
-      "screen": "canvas",
-      "viewport": "pixel5",
-      "element": "div.react-flow__renderer > div.react-flow__node-toolbar > div[role=toolbar].board-selection-bar.nodrag.nopan[aria-label=\"選取的卡片\"] > button.ui-btn.ui-btn--ghost.ui-btn--sm[aria-label=\"顏色\"]",
-      "reason": "白板上的按鈕在手機縮放後小於 44×44（卡片內的按鈕隨縮放變小；工具列與縮放鈕約 40px）。"
-    },
-    {
-      "rule": "R7",
       "screen": "tags-list",
       "viewport": "pixel5",
       "element": "div.tag-page-main > div.schema-lens-head > div.schema-lens-head-actions > button.schema-lens-icon-btn.schema-lens-pin[aria-label=\"釘選標籤\"]",

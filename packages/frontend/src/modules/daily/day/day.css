@@ -147,7 +147,8 @@
 .day-fold { position: absolute; top: var(--top); height: var(--h); left: var(--day-gutter); right: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px dashed var(--ac-line); border-radius: var(--ac-radius-md); background: transparent; font: inherit; font-size: var(--ac-fs-caption); color: var(--ac-muted); cursor: pointer; font-variant-numeric: tabular-nums; z-index: var(--z-local-1); }
 .day-fold:hover, .day-fold:focus-visible { color: var(--ac-ink); border-style: solid; }
 
-/* Touch: the fold bar (a stretch of empty hours) is at least a finger tall. */
+/* Touch: the fold bar (a stretch of empty hours) answers a finger over 44px, by an invisible reach 4px above and below
+   its 36px slot (DayTimeline FOLD_PX). Stretching the drawn bar instead pushed it 8px into the next hour (#1954 review). */
 @media (pointer: coarse) {
-  .day-fold { min-height: var(--onden-tap); }
+  .day-fold::after { content: ""; position: absolute; inset: calc((var(--h) - var(--onden-tap)) / 2) 0; }
 }

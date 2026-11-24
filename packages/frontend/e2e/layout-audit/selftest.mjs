@@ -50,6 +50,8 @@ const CASES = [
     html: `<div style="height:2000px;position:relative"><button style="position:absolute;left:0;right:0;top:calc(100vh - 60px);height:44px">甲</button></div><nav style="position:fixed;left:0;right:0;bottom:0;height:120px;background:#ccc"></nav>` },
   { rule: "R7", name: "下半截被固定的提示蓋住的 44px 列：不是太小（被蓋住歸 R1／R4）", bad: false, vp: "mobile",
     html: `<button style="position:absolute;left:0;right:0;top:100px;height:44px">甲</button><div style="position:fixed;left:0;right:0;top:130px;height:40px;background:#333"></div>` },
+  { rule: "R7", name: "緊貼固定列、28px 高的按鈕：旁邊的固定列不算它的高度", bad: true, vp: "mobile",
+    html: `<div style="position:fixed;left:0;right:0;top:0;height:56px;background:#ccc"></div><button style="position:absolute;left:20px;top:56px;width:60px;height:28px;padding:0">x</button><div style="height:2000px"></div>` },
   { rule: "R7", name: "整個看得到、但只有 30px 高的列仍然算小", bad: true, vp: "mobile",
     html: `<div style="height:200px;overflow-y:auto"><button style="width:100%;height:30px">甲</button></div>` },
   { rule: "R8", name: "樹狀清單同層標題縮排不齊", bad: true, vp: "desktop",

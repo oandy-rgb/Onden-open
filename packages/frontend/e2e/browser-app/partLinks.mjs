@@ -77,13 +77,17 @@ try {
   await page.waitForTimeout(2500);
   await openNote(src.id, "看");
   await page.waitForTimeout(4000); // the sync delta that brings the anchors arrives a moment after the first paint
-  check("after the paragraph is reworded the link shows its new words", await until(async () => (await page.locator(".cm-content").first().innerText()).includes("吃飯，吃很久"), 90_000));
+  // On a failure, what the editor shows instead (only this script's own words): a stale draw and a wrong text differ.
+  const editorText = async () => (await page.locator(".cm-content").first().innerText().catch(() => "(no editor)")).replace(/\n/g, "⏎").slice(0, 160);
+  const reworded = await until(async () => (await page.locator(".cm-content").first().innerText()).includes("吃飯，吃很久"), 90_000);
+  check("after the paragraph is reworded the link shows its new words", reworded, reworded ? "" : `editor: ${await editorText()}`);
   await shot("3-reworded");
 
   // Offline: the words come from the copy on this device.
   await context.setOffline(true);
   await page.waitForTimeout(1500);
-  check("offline, the link still reads 「筆記 › 開頭」", await until(async () => (await page.locator(".cm-content").first().innerText()).includes("吃飯紀錄 › 17:45")));
+  const offlineReads = await until(async () => (await page.locator(".cm-content").first().innerText()).includes("吃飯紀錄 › 17:45"));
+  check("offline, the link still reads 「筆記 › 開頭」", offlineReads, offlineReads ? "" : `editor: ${await editorText()}`);
   await shot("4-offline");
   await context.setOffline(false);
 

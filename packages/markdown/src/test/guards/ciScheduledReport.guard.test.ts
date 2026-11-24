@@ -79,6 +79,11 @@ describe("the scheduled report", () => {
     expect(text).not.toContain("剛剛修改"); // the element's words stay in the log
   });
 
+  it("names every browser script run-all.mjs marks FAILED, also the ones whose names have spaces", () => {
+    const log = [at("chromium       passed"), at("webkit         FAILED"), at("refused save chromium FAILED"), at("dayWalk 1280   FAILED"), at("dayWalk 1280 --prefix /onden/ FAILED"), at("dayWalk tablet-landscape passed")].join("\n");
+    expect([...readJobLog(log).failed]).toEqual(["browser-app › webkit", "browser-app › refused save chromium", "browser-app › dayWalk 1280", "browser-app › dayWalk 1280 --prefix /onden/"]);
+  });
+
   it("says which branch ran; only main's report goes to the issue", () => {
     expect(compose({ ...base, branch: "acc-69-webkit", jobs: [], readLog: () => null })).toContain("· acc-69-webkit `0123456789`".slice(0, 26));
     expect(postsToIssue("main")).toBe(true);

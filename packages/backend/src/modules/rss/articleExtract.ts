@@ -356,7 +356,7 @@ export function pickArticleHtml(html: string, opts: ExtractOptions = {}): string
   let widest: { html: string; len: number } | null = null;
   for (const x of ladder) {
     const out = clean(x);
-    const len = out.replace(/<[^>]*>/g, "").replace(/\s+/g, "").length;
+    const len = out.replace(/<[^<>]*>/g, "").replace(/\s+/g, "").length;
     if (len === 0 && !/<(?:img|picture|video|audio)\b/i.test(out)) continue; // a picture-only article is still an article
     if (len >= floor) return out;
     if (!widest || len > widest.len) widest = { html: out, len };

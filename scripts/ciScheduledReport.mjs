@@ -32,7 +32,8 @@ export function readJobLog(log) {
     if ((m = / FAIL +(\S+) > (.+?)\s*$/.exec(text))) failed.add(`${m[1]} › ${m[2]}`);
     else if ((m = /^\s+\d+\) (\[[\w-]+\] › [^ ]+?):\d+:\d+ › (.+?)(?: \(retry #\d+\))?[\s─]*$/.exec(text))) failed.add(`${m[1]} › ${m[2].replace(/[\s─]+$/, "")}`);
     else if ((m = /^\s+✓\s+\d+ (\[[\w-]+\] › [^ ]+?):\d+:\d+ › (.+?)(?: \([\d.]+m?s\))?\s*$/.exec(text))) passed.add(`${m[1]} › ${m[2]}`);
-    else if ((m = /^(\S+)\s+FAILED$/.exec(text.trim()))) failed.add(`browser-app › ${m[1]}`);
+    // run-all.mjs ends with one row per script and engine; a name can have spaces ("refused save chromium", "dayWalk 1280 --prefix /onden/").
+    else if ((m = /^(\S.*?)\s+FAILED$/.exec(text.trim()))) failed.add(`browser-app › ${m[1]}`);
     // layout:audit names each violation outside its baseline, and a page it could not open; its selftest a failed case.
     else if ((m = /^新違規 (R\d+ \S+ @ \S+)\s*$/.exec(text))) failed.add(`layout-audit › ${m[1]}`);
     else if ((m = /^審核本身的問題：(.+?)：/.exec(text))) failed.add(`layout-audit › 打不開：${m[1]}`);

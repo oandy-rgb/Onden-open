@@ -21,6 +21,28 @@ describe("sanitizeFeedHtml", () => {
     const ok = `<h2>Title</h2><p>Body with <strong>bold</strong> and <a href="https://x.example">a link</a>.</p>`;
     expect(sanitizeFeedHtml(ok)).toBe(ok);
   });
+
+  // The blocks the one-pass scanner (replaceTagBlocks, withoutComments, endWithoutUnfinishedTag) removes and keeps: the same as
+  // the regular expressions it replaced, apart from the unfinished tail of the page.
+  it("removes blocks to their first closing tag in any case, and self-closed ones; leaves an opener with no closing tag", () => {
+    expect(sanitizeFeedHtml("a<SCRIPT>x</script>b<script >y</ script >c")).toBe("abc");
+    expect(sanitizeFeedHtml("a<script src=x />b<iframe/>c")).toBe("abc");
+    expect(sanitizeFeedHtml("<p>a</p><script>never closed</p>")).toBe("<p>a</p><script>never closed</p>");
+    expect(sanitizeFeedHtml('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>x')).toMatch(/^<p><a href="[^"]*dQw4w9WgXcQ[^"]*">.*<\/a><\/p>x$/);
+  });
+  it("removes comments only where they end: a \"<!--\" in an attribute does not take the rest of the page", () => {
+    expect(sanitizeFeedHtml("a<!-- x -->b<!--y-->c")).toBe("abc");
+    expect(sanitizeFeedHtml('<img alt="<!--" src="https://ok.example/i.png"><p>still here</p>')).toContain("still here");
+  });
+  it("after the page's last \">\": an unfinished comment goes, any other \"<\" is text", () => {
+    expect(sanitizeFeedHtml("<p>a</p>b <!-- never")).toBe("<p>a</p>b");
+    expect(sanitizeFeedHtml("<p>a</p>1 < 2 and <img src=x")).toBe("<p>a</p>1 &lt; 2 and &lt;img src=x");
+  });
+  it("cleaning a cleaned body changes nothing, also when a removal makes the page end in an unfinished tag", () => {
+    const once = sanitizeFeedHtml("<p>a</p><img src=x <script>x</script>");
+    expect(once).toBe("<p>a</p>&lt;img src=x");
+    expect(sanitizeFeedHtml(once)).toBe(once);
+  });
 });
 
 describe("extractArticleHtml", () => {

@@ -1,6 +1,6 @@
 # 讓 AI 在一台機器上自動領工作（MCP 角色）
 
-> 狀態：現行（最後確認 2026-11-16）
+> 狀態：現行（最後確認 2026-11-25）
 > 涵蓋：packages/ai-answerer/src/**
 
 「加入 AI 角色」有兩種方式：**API**（Onden 用你的金鑰呼叫 AI）與 **MCP**（你自己的 AI 用戶端連進來）。
@@ -34,9 +34,9 @@ node packages/ai-answerer/bin/onden-ai-answerer.mjs status
 node packages/ai-answerer/bin/onden-ai-answerer.mjs uninstall
 ```
 
-網址與連線碼檔案也可以用環境變數 `ONDEN_SERVER_URL`、`ONDEN_AI_KEY_FILE`；AI 工具不在 PATH 時用 `--tool-command`（`ONDEN_AI_TOOL_COMMAND`）。
+網址與連線碼檔案也可以用環境變數 `ONDEN_SERVER_URL`、`ONDEN_AI_KEY_FILE`；這台電腦裝了多個命令列 AI 工具時，可以用 `--tool`（`ONDEN_AI_TOOL`）指定要哪一個（沒指定就依序自動偵測）；AI 工具不在 PATH 時用 `--tool-command`（`ONDEN_AI_TOOL_COMMAND`）。
 網址必須是 `https://`；只有這台電腦或內網位址可以用 `http://`。找不到 AI 工具或它還沒登入時，程式會用白話說明並結束，不會空等。
-`install` 會把安裝當下找到的 AI 工具的**絕對路徑**寫進服務單元（背景服務拿不到你終端機的 PATH）。
+`install` 會把安裝當下選到的 AI 工具名稱與**絕對路徑**寫進服務單元（背景服務拿不到你終端機的 PATH）。
 macOS 與 Windows 目前只有前景執行；`install`／`status`／`uninstall` 會明說「還沒做」。
 
 ### 它怎麼運作、為什麼安全
@@ -52,7 +52,7 @@ macOS 與 Windows 目前只有前景執行；`install`／`status`／`uninstall` 
 領了的問題一定會有結果：答案太長或被伺服器拒絕時回報失敗、程式被停止時回報失敗（不會卡到期限）。
 背景服務的記憶體上限（768 MB）連 AI 工具一起算。2026-11-16 在一台筆電上量過：AI 工具單獨回答一句話、沒有呼叫筆記工具時，最高約 225 MB；長回答與多次工具呼叫時的用量沒有量過。
 連線碼只從檔案讀取：不會出現在命令列、記錄或其他檔案，權限比 600 寬的檔案會被拒絕。
-AI 工具輸出的過程不轉成進度（只回報「開始」）；Onden 目前不顯示 AI 工具內部的思考與步驟。
+支援串流協定的命令列 AI 工具會即時把正在呼叫的筆記工具步驟與回覆文字送到 `/events`，面板對話可直接看到即時進度；同一個空間、同一則筆記且同一段連續對話會透過僅限本機（`127.0.0.1`）的短期轉發代理複用熱行程與對話工作階段（每輪仍換上這題專屬的單次金鑰，結束立刻清除，換筆記或清空對話就重新開啟）。
 
 ## 領工作的協定
 

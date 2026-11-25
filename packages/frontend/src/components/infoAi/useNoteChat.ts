@@ -52,16 +52,19 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
     } catch { return []; /* offline for a moment: what was shown stays */ }
   }, []);
 
-  const follow = useCallback((sessionId: string) => {
+  const follow = useCallback((sessionId: string, opts: { eager?: boolean } = { eager: true }) => {
     stopRef.current();
-    setLive({ sessionId, text: "", step: null });
+    // For API runs the server starts streaming immediately; for MCP runs the computer may still be
+    // picking up the question (queued/delivered), so keep `live` null until the first real step/text
+    // arrives and let the truthful waiting status remain visible until then.
+    if (opts.eager !== false) setLive({ sessionId, text: "", step: null });
     const source = new EventSource(`${getApiBase()}/api/ai/selection-actions/${sessionId}/stream`, { withCredentials: true });
     let ended = false;
     const end = () => {
       ended = true;
       source.close();
       stopRef.current = () => {};
-      setLive(null);
+      setLive((current) => (current?.sessionId === sessionId ? null : current));
       void reloadThread().then((all) => {
         const turn = all.find((x) => x.session_id === sessionId);
         // The AI may have filed suggestions: the editor's bar reads them again.
@@ -73,12 +76,16 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
       try { frame = JSON.parse(message.data); } catch { return; }
       if (frame.kind === "text" && typeof frame.text === "string") {
         const delta = frame.text;
-        setLive((current) => (current?.sessionId === sessionId ? { ...current, text: current.text + delta, step: null } : current));
+        setLive((current) => (current?.sessionId === sessionId
+          ? { ...current, text: current.text + delta, step: null }
+          : { sessionId, text: delta, step: null }));
       } else if (frame.kind === "restart") {
         setLive((current) => (current?.sessionId === sessionId ? { ...current, text: "" } : current));
       } else if (frame.kind === "step" && frame.what) {
         const step = { what: frame.what, title: frame.title ?? null };
-        setLive((current) => (current?.sessionId === sessionId ? { ...current, step } : current));
+        setLive((current) => (current?.sessionId === sessionId
+          ? { ...current, step }
+          : { sessionId, text: "", step }));
       } else if (frame.kind === "end") end();
     };
     // A dropped connection: the browser retries by itself; a closed one means the thread is the truth now.
@@ -96,7 +103,7 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
     void reloadThread().then((all) => {
       // An answer still being written (this tab was closed, or another device asked): follow it.
       const open = all.find(turnIsOpen);
-      if (open && !cancelled && open.runtime === "api") follow(open.session_id);
+      if (open && !cancelled) follow(open.session_id, { eager: open.runtime === "api" });
     });
     return () => { cancelled = true; };
   }, [nodeId, online, reloadThread, follow]);
@@ -151,7 +158,7 @@ export function useNoteChat({ nodeId, online, canEdit, reasonText }: {
       if (override === undefined) setText("");
       if ("deduped" in result) { await reloadThread(); return true; }
       await reloadThread();
-      if (target.runtime === "api") follow(result.session_id);
+      follow(result.session_id, { eager: target.runtime === "api" });
       return true;
     } catch {
       return false; // the online write path already told the person why; the question stays in the box

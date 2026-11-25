@@ -22,6 +22,11 @@ export function beginLive(sessionId: string): AbortController {
   runs.set(sessionId, live);
   return live.abort;
 }
+/** Ensure an in-memory live preview channel exists (idempotent, used by MCP runner progress events). */
+export function ensureLive(sessionId: string): void {
+  const existing = runs.get(sessionId);
+  if (!existing || existing.ended) beginLive(sessionId);
+}
 export function pushPreview(sessionId: string, delta: string): void {
   const live = runs.get(sessionId);
   if (!live || live.ended) return;

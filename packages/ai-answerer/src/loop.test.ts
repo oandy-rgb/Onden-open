@@ -30,4 +30,45 @@ describe("loop states (what the desktop app shows)", () => {
     expect(states).toContain("unreachable");
     expect(waits.slice(0, 2)).toEqual([60_000, 15_000]);
   });
+
+  it("streams tool actions and text deltas via /events, passes threadKey, and disposes adapter on exit", async () => {
+    const controller = new AbortController();
+    const events: unknown[] = [];
+    let polls = 0;
+    let disposed = false;
+    let seenThreadKey: string | undefined;
+    const richClaim = {
+      ...claim,
+      note: { id: "n1", space_id: "sp1" },
+      agent: { actor_id: "ag1" },
+      initiator: { actor_id: "u1" },
+    };
+    const client = {
+      pending: async () => (++polls === 1 ? ["s1"] : (controller.abort(), [])),
+      claim: async () => richClaim,
+      event: async (_id: string, _key: string, ev: unknown) => { events.push(ev); return {}; },
+      status: async () => ({ status: "running" }),
+      finish: async () => ({}),
+    };
+    const adapter = {
+      id: "x", label: "x",
+      detect: async () => ({ ok: true as const, command: "x" }),
+      run: async (input: { threadKey?: string; onProgress?: (ev: { kind: "action" | "message"; tool?: string; text?: string }) => void }) => {
+        seenThreadKey = input.threadKey;
+        input.onProgress?.({ kind: "action", tool: "getNode" });
+        input.onProgress?.({ kind: "message", text: "Hello " });
+        input.onProgress?.({ kind: "message", text: "world" });
+        return { ok: true as const, text: "Hello world" };
+      },
+      dispose: async () => { disposed = true; },
+    };
+    await runLoop({ client: client as never, adapter, baseUrl: "http://127.0.0.1:1", signal: controller.signal, sleep: async () => {} });
+    expect(seenThreadKey).toBe(JSON.stringify(["sp1", "n1", "ag1", "u1", "S"]));
+    expect(events).toEqual([
+      { seq: 0, kind: "ack" },
+      { seq: 1, kind: "action", tool: "getNode" },
+      { seq: 2, kind: "message", text: "Hello world" },
+    ]);
+    expect(disposed).toBe(true);
+  });
 });

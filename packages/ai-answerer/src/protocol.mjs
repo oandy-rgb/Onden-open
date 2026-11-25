@@ -19,7 +19,14 @@ export class ProtocolError extends Error {
 export const endpoint = (baseUrl, path) => `${baseUrl.replace(/\/+$/, "")}${path}`;
 
 /** @typedef {{ system: string, messages: Array<{ role: string, content: string }> }} Rendered */
-/** @typedef {{ session: { id: string, deadline_at: string }, rendered: Rendered, mcp: { path: string, token: string } }} Claim */
+/** @typedef {{
+ *   session: { id: string, deadline_at: string },
+ *   note?: { id: string, space_id: string },
+ *   agent?: { actor_id: string },
+ *   initiator?: { actor_id: string },
+ *   rendered: Rendered,
+ *   mcp: { path: string, token: string },
+ * }} Claim */
 
 /**
  * @param {{ baseUrl: string, connectionCode: string, fetch?: typeof fetch, sleep?: (ms: number) => Promise<unknown> }} options
@@ -56,7 +63,7 @@ export function createClient({ baseUrl, connectionCode, fetch: doFetch = fetch, 
     },
     /** Take one. 409 = someone else holds it or it is closed. @param {string} id @returns {Promise<Claim>} */
     claim: (id) => call(`/api/mcp/sessions/${encodeURIComponent(id)}/claim`, connectionCode, { method: "POST", json: {} }),
-    /** @param {string} id @param {string} sessionKey @param {{ seq: number, kind: "ack" | "thought" | "action", text?: string, tool?: string }} event */
+    /** @param {string} id @param {string} sessionKey @param {{ seq: number, kind: "ack" | "thought" | "action" | "message", text?: string, tool?: string }} event */
     event: (id, sessionKey, event) => call(`/api/mcp/sessions/${encodeURIComponent(id)}/events`, sessionKey, { json: event }),
     /** @param {string} id @param {string} sessionKey @param {AbortSignal} [signal] @returns {Promise<{ status: string }>} */
     status: (id, sessionKey, signal) => call(`/api/mcp/sessions/${encodeURIComponent(id)}`, sessionKey, { signal }),

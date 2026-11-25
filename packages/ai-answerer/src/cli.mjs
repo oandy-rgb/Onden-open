@@ -1,6 +1,6 @@
 // onden-ai-answerer run | install | uninstall | status
 import { fileURLToPath } from "node:url";
-import { createAdapters } from "./adapters/index.mjs";
+import { ADAPTER_IDS, detectAdapter } from "./adapters/index.mjs";
 import { parseServerAddress } from "./address.mjs";
 import { readConnectionCode } from "./keyFile.mjs";
 import { runLoop } from "./loop.mjs";
@@ -18,7 +18,8 @@ const HELP = `用法：onden-ai-answerer <指令> [選項]
 選項
   --server <網址>        Onden 伺服器網址（或環境變數 ONDEN_SERVER_URL）
   --key-file <路徑>      存放這個 AI 連線碼的檔案（或 ONDEN_AI_KEY_FILE）；權限必須是 600
-  --tool-command <路徑>  AI 命令列工具的執行檔（預設用內建支援的工具；或 ONDEN_AI_TOOL_COMMAND）
+  --tool <名稱>          指定 AI 工具（${ADAPTER_IDS.join(" / ")}；預設自動偵測；或 ONDEN_AI_TOOL）
+  --tool-command <路徑>  AI 命令列工具的執行檔（預設依工具自動尋找；或 ONDEN_AI_TOOL_COMMAND）
 
 連線碼只從檔案讀取：不會出現在命令列、記錄或任何其他檔案。`;
 
@@ -45,6 +46,7 @@ function parseArgs(argv) {
 export async function main(argv, env, { out = console.log, err = console.error } = {}) {
   const { options, command } = parseArgs(argv);
   if (command === "help" || "help" in options || argv.includes("-h")) { out(HELP); return 0; }
+  const tool = options.tool || env.ONDEN_AI_TOOL || undefined;
   const toolCommand = options["tool-command"] || env.ONDEN_AI_TOOL_COMMAND || undefined;
 
   if (command === "status") {
@@ -68,10 +70,9 @@ export async function main(argv, env, { out = console.log, err = console.error }
   let connectionCode;
   try { connectionCode = await readConnectionCode(keyFile); } catch (error) { err(/** @type {Error} */ (error).message); return 1; }
 
-  const adapters = createAdapters({ command: toolCommand });
-  const adapter = adapters[0];
-  const detected = await adapter.detect();
+  const detected = await detectAdapter({ tool, command: toolCommand, env });
   if (!detected.ok) { err(detected.message); return 1; }
+  const adapter = detected.adapter;
 
   if (command === "install") {
     if (process.platform !== "linux") { err(service.NOT_SUPPORTED); return 2; }
@@ -79,6 +80,7 @@ export async function main(argv, env, { out = console.log, err = console.error }
     const file = await service.install({
       nodePath: process.execPath, cliPath: resolve(fileURLToPath(import.meta.url), "../../bin/onden-ai-answerer.mjs"),
       server: address.baseUrl, keyFile: resolve(keyFile),
+      tool: adapter.id,
       toolCommand: detected.command, // the absolute path found now: a background service does not get this shell's PATH
     });
     out(`已安裝並啟動背景服務（${file}）。看狀態：onden-ai-answerer status。\n若要在沒有登入桌面時也持續運作，請執行一次：loginctl enable-linger`);
@@ -88,7 +90,7 @@ export async function main(argv, env, { out = console.log, err = console.error }
   const controller = new AbortController();
   for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => controller.abort());
   const stamp = () => new Date().toISOString().slice(11, 19);
-  out(`開始等問題（${address.baseUrl}）。按 Ctrl+C 結束。`);
+  out(`開始等問題（${address.baseUrl}，使用 ${adapter.label}）。按 Ctrl+C 結束。`);
   await runLoop({
     client: createClient({ baseUrl: address.baseUrl, connectionCode }), adapter, baseUrl: address.baseUrl,
     log: (line) => out(`${stamp()} ${line}`), signal: controller.signal,

@@ -6,7 +6,17 @@ import { assemblePrompt } from "./prompt.mjs";
 export const MAX_RUN_MS = 10 * 60_000;
 /** The session key dies with the session at its deadline, so the tool is stopped a little earlier to leave time to say "failed". */
 export const DEADLINE_MARGIN_MS = 5000;
+const PROGRESS_FLUSH_MS = 300;
+const MAX_PROGRESS_SEQ = 1900;
 const OPEN = new Set(["queued", "delivered", "running"]);
+
+/** Build a strict conversation key (space + note + agent + initiator + system) for warm session reuse.
+ * @param {import("./protocol.mjs").Claim} claim @param {string} system @returns {string | undefined}
+ */
+function threadKeyFor(claim, system) {
+  if (!claim.note?.space_id || !claim.note?.id) return undefined;
+  return JSON.stringify([claim.note.space_id, claim.note.id, claim.agent?.actor_id ?? "", claim.initiator?.actor_id ?? "", system]);
+}
 
 /** @param {number} ms @param {AbortSignal} [signal] */
 export const sleepUnlessStopped = (ms, signal) => new Promise((resolve) => {
@@ -87,7 +97,55 @@ export async function runLoop({ client, adapter, baseUrl, log = () => {}, signal
       onState("answering");
       const { system, prompt } = assemblePrompt(claim.rendered);
       const mcpUrl = endpoint(baseUrl, claim.mcp.path);
-      const result = await adapter.run({ system, prompt, mcpUrl, sessionKey: key, deadline, signal: cancel.signal });
+
+      // Stream tool steps and throttled text deltas back to Onden's progress log (best-effort: never fails a turn).
+      let seq = 1;
+      let pendingText = "";
+      let progressChain = Promise.resolve();
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let flushTimer = null;
+      const pushEvent = (/** @type {{ kind: "action" | "message", tool?: string, text?: string }} */ ev) => {
+        if (cancel.signal.aborted || seq > MAX_PROGRESS_SEQ) return;
+        const mySeq = seq++;
+        progressChain = progressChain
+          .then(() => client.event(sessionId, key, { seq: mySeq, ...ev }))
+          .catch(() => {});
+      };
+      const flushText = () => {
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        if (!pendingText) return;
+        const chunk = pendingText;
+        pendingText = "";
+        pushEvent({ kind: "message", text: chunk });
+      };
+      /** @param {{ kind: "action" | "message", tool?: string, text?: string }} ev */
+      const onProgress = (ev) => {
+        if (ev.kind === "action" && ev.tool) {
+          flushText();
+          pushEvent({ kind: "action", tool: ev.tool });
+        } else if (ev.kind === "message" && ev.text) {
+          pendingText += ev.text;
+          if (!flushTimer) flushTimer = setTimeout(flushText, PROGRESS_FLUSH_MS);
+        }
+      };
+
+      let result;
+      try {
+        result = await adapter.run({
+          system,
+          prompt,
+          mcpUrl,
+          sessionKey: key,
+          deadline,
+          signal: cancel.signal,
+          threadKey: threadKeyFor(claim, system),
+          messages: claim.rendered.messages,
+          onProgress,
+        });
+      } finally {
+        flushText();
+        await progressChain;
+      }
       if (result.ok) outcome = { status: "completed", result_markdown: result.text };
       else if (result.reason === "cancelled") {
         // Stopped because the person cancelled (the server has already ended it) or because this program is shutting down (it has not).
@@ -122,23 +180,27 @@ export async function runLoop({ client, adapter, baseUrl, log = () => {}, signal
     }
   }
 
-  while (!stopped()) {
-    const started = now();
-    let ids;
-    try {
-      onState("waiting");
-      ids = await client.pending(waitSeconds, signal);
-    } catch (error) {
-      if (stopped()) break;
-      if (error instanceof ProtocolError && (error.status === 401 || error.status === 403)) {
-        onState("refused"); log("連線碼被拒絕（可能已撤銷或換過）；一分鐘後再試"); await sleep(60_000, signal);
-      } else {
-        onState("unreachable"); log("連不上伺服器；15 秒後再試"); await sleep(15_000, signal);
+  try {
+    while (!stopped()) {
+      const started = now();
+      let ids;
+      try {
+        onState("waiting");
+        ids = await client.pending(waitSeconds, signal);
+      } catch (error) {
+        if (stopped()) break;
+        if (error instanceof ProtocolError && (error.status === 401 || error.status === 403)) {
+          onState("refused"); log("連線碼被拒絕（可能已撤銷或換過）；一分鐘後再試"); await sleep(60_000, signal);
+        } else {
+          onState("unreachable"); log("連不上伺服器；15 秒後再試"); await sleep(15_000, signal);
+        }
+        continue;
       }
-      continue;
+      for (const id of ids) { if (stopped()) break; await answer(id); }
+      // A server that answers "nothing" at once (module off) must not become a tight loop.
+      if (ids.length === 0 && now() - started < 1000) await sleep(2000, signal);
     }
-    for (const id of ids) { if (stopped()) break; await answer(id); }
-    // A server that answers "nothing" at once (module off) must not become a tight loop.
-    if (ids.length === 0 && now() - started < 1000) await sleep(2000, signal);
+  } finally {
+    await adapter.dispose?.();
   }
 }

@@ -14,9 +14,13 @@ export const MEMORY_MAX = "768M";
 /** systemd quoting for one ExecStart word. @param {string} word */
 const quote = (word) => `"${word.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%").replace(/\$/g, "$$$$")}"`;
 
-/** The unit text. It names the key file's path, never the code. @param {{ nodePath: string, cliPath: string, server: string, keyFile: string, toolCommand?: string }} input */
-export function unitText({ nodePath, cliPath, server, keyFile, toolCommand }) {
-  const words = [nodePath, cliPath, "run", "--server", server, "--key-file", keyFile, ...(toolCommand ? ["--tool-command", toolCommand] : [])];
+/** The unit text. It names the key file's path, never the code. @param {{ nodePath: string, cliPath: string, server: string, keyFile: string, tool?: string, toolCommand?: string }} input */
+export function unitText({ nodePath, cliPath, server, keyFile, tool, toolCommand }) {
+  const words = [
+    nodePath, cliPath, "run", "--server", server, "--key-file", keyFile,
+    ...(tool ? ["--tool", tool] : []),
+    ...(toolCommand ? ["--tool-command", toolCommand] : []),
+  ];
   return `[Unit]
 Description=Onden: answer questions with the AI tool on this computer
 After=network-online.target

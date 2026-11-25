@@ -211,7 +211,7 @@ router.get("/selection-actions/:id/stream", async (c) => {
     let live = followPreview(sessionId, onEvent);
     for (let waited = 0; !live && !isClosed() && waited < 20; waited++) {
       const now = await loadSession(sessionId);
-      if (!now || !["queued", "running"].includes(now.status)) break;
+      if (!now || !["queued", "delivered", "running"].includes(now.status)) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
       live = followPreview(sessionId, onEvent);
     }

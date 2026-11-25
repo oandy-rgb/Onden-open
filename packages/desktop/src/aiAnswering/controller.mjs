@@ -21,7 +21,15 @@ export function createAiAnsweringController({ store, answerer, ownBaseUrl, toolC
   /** @type {Record<TargetKey, Phase>} */
   const phase = { own: "stopped", remote: "stopped" };
   const listeners = new Set(/** @type {Array<(s: ReturnType<typeof status>) => void>} */ ([]));
-  const adapter = () => answerer.createAdapters({ command: toolCommand })[0];
+  /** @type {import("../../../ai-answerer/src/adapters/index.mjs").Adapter | null} */
+  let activeAdapter = null;
+  const detectTool = () => answerer.detectAdapter({ command: toolCommand });
+  const resolveAdapter = async () => {
+    if (activeAdapter) return activeAdapter;
+    const found = await detectTool();
+    if (found.ok) { activeAdapter = found.adapter; return found.adapter; }
+    return answerer.createAdapters({ command: toolCommand })[0];
+  };
 
   function status() {
     const own = store.get("own"), remote = store.get("remote");
@@ -35,13 +43,16 @@ export function createAiAnsweringController({ store, answerer, ownBaseUrl, toolC
   /** @param {TargetKey} key @param {Phase} next */
   const setPhase = (key, next) => { if (phase[key] !== next) { phase[key] = next; notify(); } };
 
-  /** @param {TargetKey} key @param {string} baseUrl @param {string} code */
-  function start(key, baseUrl, code) {
+  /** @param {TargetKey} key @param {string} baseUrl @param {string} code @param {import("../../../ai-answerer/src/adapters/index.mjs").Adapter} [chosen] */
+  function start(key, baseUrl, code, chosen) {
     const abort = new AbortController();
-    const done = answerer.runLoop({
-      client: answerer.createClient({ baseUrl, connectionCode: code }), adapter: adapter(), baseUrl, signal: abort.signal,
-      onState: (state) => { if (!abort.signal.aborted) setPhase(key, state); },
-      log: (line) => log(`${key}: ${line}`),
+    const done = Promise.resolve(chosen ?? resolveAdapter()).then((adapter) => {
+      if (abort.signal.aborted) return;
+      return answerer.runLoop({
+        client: answerer.createClient({ baseUrl, connectionCode: code }), adapter, baseUrl, signal: abort.signal,
+        onState: (state) => { if (!abort.signal.aborted) setPhase(key, state); },
+        log: (line) => log(`${key}: ${line}`),
+      });
     }).catch((error) => log(`${key}: 回答迴圈結束了（${error instanceof Error ? error.name : "unknown"}）`))
       .finally(() => { if (running[key]?.abort === abort) running[key] = null; setPhase(key, "stopped"); });
     running[key] = { abort, done };
@@ -63,8 +74,9 @@ export function createAiAnsweringController({ store, answerer, ownBaseUrl, toolC
   /** @param {TargetKey} key @param {{ code: string, actorId?: string, codeId?: string, address?: string }} input */
   async function enableNow(key, { code, actorId, codeId, address }) {
     if (!store.available()) return { ok: false, reason: "no_secure_storage" };
-    const tool = await adapter().detect();
+    const tool = await detectTool();
     if (!tool.ok) return { ok: false, reason: tool.reason };
+    activeAdapter = tool.adapter;
     let baseUrl;
     if (key === "own") {
       baseUrl = ownBaseUrl();
@@ -82,7 +94,7 @@ export function createAiAnsweringController({ store, answerer, ownBaseUrl, toolC
     }
     await stop(key);
     store.saveEnabled(key, { code, actorId, codeId, address: key === "remote" ? baseUrl : undefined });
-    start(key, baseUrl, code);
+    start(key, baseUrl, code, tool.adapter);
     notify();
     return { ok: true };
   }
@@ -102,8 +114,9 @@ export function createAiAnsweringController({ store, answerer, ownBaseUrl, toolC
 
     /** 這台電腦上的 AI 工具能不能用。 */
     async detect() {
-      const result = await adapter().detect();
-      return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+      const result = await detectTool();
+      if (result.ok) { activeAdapter = result.adapter; return { ok: true }; }
+      return { ok: false, reason: result.reason };
     },
 
     /** 打開一個對象：先確認工具與安全儲存，存下碼，開始回答。回 { ok: true } 或 { ok: false, reason }。同時只做一件。 @param {TargetKey} key @param {{ code: string, actorId?: string, codeId?: string, address?: string }} input */

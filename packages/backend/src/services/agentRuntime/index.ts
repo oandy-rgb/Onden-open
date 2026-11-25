@@ -52,7 +52,7 @@ export async function chooseRuntime(
   return { runtime: "api", model: role.api_model };
 }
 
-export { abortLive, followPreview } from "./api/liveRun.js";
+export { abortLive, endLive, ensureLive, followPreview, pushPreview, pushStep } from "./api/liveRun.js";
 export type { LiveEvent, LiveStep } from "./api/liveRun.js";
 export { listModels, listModelsWithFormat, failInterruptedApiSessions } from "./api/index.js";
 export type { ApiModel } from "./api/index.js";

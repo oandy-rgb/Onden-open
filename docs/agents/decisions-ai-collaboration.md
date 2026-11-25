@@ -151,8 +151,8 @@ AI 工作階段的整組復原，或在 `mutate` 附近加「某種操作者只�
   - API：單次串流，結束才建立建議（原有）。
   - 訂閱／MCP：`kind='selection_action'` 的 session 排隊等領取，由 runner／使用者的 Claude 用同一個 `finish()` 回覆；`finish` 對選取動作改為建立同一種「替換選取文字」建議
     （`services/selectionDelivery.ts`，API 與這條路共用）。MCP 沒有可用 token 時拒絕（`runtime_unavailable`）。
-- **串流預覽**：`GET /api/ai/selection-actions/:id/stream`（SSE，只有發起人或擁有者）送 `{kind:"text"}` 片段，最後一個 `{kind:"end", status, fail_code}`。
-  預覽只存在這個 process 的記憶體（`agentRuntime/api/liveRun.ts`），不寫資料庫；建議的內容來自串流結束後的完整文字，所以預覽與建議一致。
+- **串流預覽**：`GET /api/ai/selection-actions/:id/stream`（SSE，只有發起人或擁有者）送 `{kind:"text"}` 片段與 `{kind:"step"}` 步驟，最後一個 `{kind:"end", status, fail_code}`。
+  預覽只存在這個 process 的記憶體（`agentRuntime/api/liveRun.ts`），不寫資料庫；API 跑法與 MCP runner（經 `POST /api/mcp/sessions/:id/events` 回報的 `action`／`message`）共用這條預覽通道，面板對話（`useNoteChat.ts`）兩者皆可即時串流。建議的內容仍來自結束後的完整文字，所以預覽與建議一致。
 - **取消**：`cancel()` 結束 session 後呼叫 `abortLive`，中止模型呼叫（不再計費）；交付前再檢查 session 還在執行，已取消就不建立建議。
   取消與完成同時發生時以先到者為準（取消回 `session_ended`＝建議已經產生，這是完成的結果，不是半則建議）。
 - **畫面**：結果浮動卡用 `ui/Popover`；訂閱／MCP 沿用 @ai 狀態卡的文字（`sessionCard`），輪詢同一個 session；失敗只顯示一句白話，不顯示代碼。

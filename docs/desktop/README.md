@@ -1,6 +1,6 @@
 # Onden 桌面版（試做）
 
-> 狀態：現行（試做 spike，2026-11-02 起；最後確認 2026-11-21）。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
+> 狀態：現行（試做 spike，2026-11-02 起；最後確認 2026-11-25）。業主決定：「Electron 試試看」，只做第一層——**在這台電腦雙擊就能用**。
 > 涵蓋：packages/desktop/src/**, packages/desktop/scripts/**, packages/desktop/package.json, scripts/desktopCheck.mjs
 > 已實作並測過的是下面「現在能做什麼」；「還沒做的」一節是刻意不做的範圍，不是漏掉。
 
@@ -33,7 +33,7 @@ Electron 主程序（packages/desktop/src/main.mjs）
 設定 › AI 的按鈕（前端 `lib/desktopBridge.ts`）透過 preload 呼叫主程序，開關「這台電腦上已登入的命令列 AI 工具替你回答筆記旁的問題」（設計：[提案](../architecture/proposals/desktop-ai-answering-2026-11-15.md)）：
 
 - 網頁能要求的動作只有 `src/aiAnswering/bridge.mjs` 的 `AI_CHANNELS` 那幾個（偵測、狀態、預覽位址、開關自己的／遠端的回答），`preload.cjs` 的清單要與它一致。主程序只回應 App 自己畫面的主框架（固定來源、不是 `/api/` 底下的內容）。
-- 回答程式是 `packages/ai-answerer`，`stage.mjs` 複製成 `ai-answerer/src` 隨安裝檔出貨；載入失敗不影響開機，按鈕只會停用。狀態與連線碼存在 `<userData>/ai-answering.json`（用系統的 `safeStorage` 加密）。關閉 App 時先停掉回答（`stopAll`）再關後端。
+- 回答程式是 `packages/ai-answerer`，`stage.mjs` 複製成 `ai-answerer/src` 隨安裝檔出貨；載入失敗不影響開機，按鈕只會停用。`src/aiAnswering/controller.mjs` 透過 `detectAdapter()` 自動偵測這台電腦上已安裝且登入的支援命令列 AI 工具。狀態與連線碼存在 `<userData>/ai-answering.json`（用系統的 `safeStorage` 加密）。關閉 App 時先停掉回答（`stopAll`）再關後端。
 - 瀏覽器版與伺服器版沒有這座橋（`window.ondenDesktop` 不存在）。
 
 ### 第一次打開

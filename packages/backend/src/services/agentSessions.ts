@@ -43,6 +43,8 @@ import { getWorkspaceId, q, withSavepoint, withTransaction } from "../db.js";
 import type { ActorCtx } from "../types.js";
 import { config } from "../config.js";
 import { AuthorityError, isWorkspaceOwner, reviewAuthority } from "../spine/authority.js";
+import { getTool } from "./agentTools/index.js";
+import { readableTitles } from "./agentSessionMemory.js";
 import { mutate, runCascade, UnauthorizedError } from "../spine/mutate.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { IdempotentReplay } from "../spine/idempotency.js";
@@ -60,7 +62,7 @@ import { AgentSessionError } from "./agentSessionError.js";
 import { createSuggestions, rejectSuggestionItems } from "./aiSuggestions.js";
 import { undoAgentRun } from "./history/index.js";
 import { CodedStatusError } from "../statusError.js";
-import { abortLive, chooseRuntime, runtimeFor } from "./agentRuntime/index.js";
+import { abortLive, chooseRuntime, endLive, ensureLive, pushPreview, pushStep, runtimeFor } from "./agentRuntime/index.js";
 import { deliverSelectionResult } from "./selectionDelivery.js";
 
 export { AgentSessionError };
@@ -73,6 +75,13 @@ import type { SessionStatus } from "@onden/contract";
 import { liveNodeSql } from "../spine/nodeSql.js";
 
 export { SESSION_STATUSES, LOG_TEXT_MAX, endSession, loadRunner, loadSession, runnerAvailable, renderSessionPrompt };
+
+/** End a session and close any in-memory SSE live preview channel for it (keeps agentSessionStore cycle-free). */
+async function closeSession(...args: Parameters<typeof endSession>): ReturnType<typeof endSession> {
+  const ended = await endSession(...args);
+  if (ended) endLive(args[1]);
+  return ended;
+}
 export type { AgentRunner, AgentSession };
 
 export const PROMPT_MAX = 4_000;
@@ -159,7 +168,7 @@ export async function setRunnerEnabled(
           `SELECT id::text FROM agent_sessions WHERE agent_actor_id = $1 AND status = ANY($2::text[]) ORDER BY created_at FOR UPDATE`,
           [agentActorId, OPEN]);
         for (const row of open.rows) {
-          if (await endSession(workspaceId, row.id, "cancelled", { failCode: "agent_disabled", endedBy: actor.id })) cancelled++;
+          if (await closeSession(workspaceId, row.id, "cancelled", { failCode: "agent_disabled", endedBy: actor.id })) cancelled++;
         }
       }
       return { runner: r.rows[0], cancelled };
@@ -184,7 +193,7 @@ export async function expireOverdue(): Promise<number> {
     `SELECT id::text, workspace_id::text FROM agent_sessions WHERE status = ANY($1::text[]) AND deadline_at < now()`, [OPEN]);
   let ended = 0;
   for (const row of overdue.rows) {
-    if (await endSession(row.workspace_id, row.id, "failed", { failCode: "timed_out" })) ended++;
+    if (await closeSession(row.workspace_id, row.id, "failed", { failCode: "timed_out" })) ended++;
   }
   return ended;
 }
@@ -347,7 +356,7 @@ async function createSession(workspaceId: string, input: StartInput, rootEventId
     for (const open of (await q<{ id: string }>(
       `SELECT id::text FROM agent_sessions WHERE workspace_id = $1 AND node_id = $2 AND anchor_block_id = $3 AND status = ANY($4::text[]) FOR UPDATE`,
       [workspaceId, nodeId, anchor, OPEN])).rows) {
-      await endSession(workspaceId, open.id, "cancelled", { failCode: "superseded", endedBy: actor.id });
+      await closeSession(workspaceId, open.id, "cancelled", { failCode: "superseded", endedBy: actor.id });
     }
   }
   const parent = (await q<{ id: string }>(
@@ -416,8 +425,23 @@ export async function appendEvent(
     const moved = await q<{ status: SessionStatus }>(
       `UPDATE agent_sessions SET status = 'running', acked_at = now() WHERE id = $1 AND status = 'delivered' RETURNING status`, [sessionId]);
     if (moved.rows[0]) status = "running";
+    if (session.runtime === "mcp") ensureLive(sessionId);
   }
-  return { status, deduped: (inserted.rowCount ?? 0) === 0 };
+  const deduped = (inserted.rowCount ?? 0) === 0;
+  if (!deduped && session.runtime === "mcp") {
+    if (entry.kind === "action") {
+      ensureLive(sessionId);
+      const tool = cutToUnits(entry.tool ?? "", 100);
+      const targetId = cutToUnits(entry.targetId ?? "", 100);
+      const title = targetId ? (await readableTitles(entry.actor, session.workspace_id, [targetId]).catch(() => new Map<string, string>())).get(targetId) ?? null : null;
+      const access = getTool(tool)?.access;
+      pushStep(sessionId, { what: access === "write" ? "write" : /^(search|query)/i.test(tool) ? "search" : "read", title });
+    } else if (entry.kind === "message" && entry.text) {
+      ensureLive(sessionId);
+      pushPreview(sessionId, cutToUnits(entry.text, LOG_TEXT_MAX));
+    }
+  }
+  return { status, deduped };
 }
 
 export type SessionLogEntry = { seq: number; kind: LogKind; body: Record<string, unknown>; created_at: string };
@@ -454,7 +478,7 @@ export async function finish(sessionId: string, input: FinishInput): Promise<Fin
     if (!sessionIsOpen(session.status)) throw new AgentSessionError("session_ended", `session is ${session.status}`, 409);
     if (input.status === "failed") {
       const code = input.failCode && FAIL_CODE.test(input.failCode) ? input.failCode : "agent_error";
-      return { session: (await endSession(workspaceId, sessionId, "failed", { failCode: code }))!, replayed: false };
+      return { session: (await closeSession(workspaceId, sessionId, "failed", { failCode: code }))!, replayed: false };
     }
     if (session.status === "queued") throw new AgentSessionError("not_claimable", "the session was never claimed", 409);
     const text = input.markdown.trim();
@@ -467,9 +491,9 @@ export async function finish(sessionId: string, input: FinishInput): Promise<Fin
         await withSavepoint(() => deliverSelectionResult(session, input.actor, text));
       } catch (error) {
         if (!(error instanceof AgentSessionError)) throw error;
-        return { session: (await endSession(workspaceId, sessionId, "failed", { failCode: error.code }))!, replayed: false };
+        return { session: (await closeSession(workspaceId, sessionId, "failed", { failCode: error.code }))!, replayed: false };
       }
-      const done = await endSession(workspaceId, sessionId, "completed");
+      const done = await closeSession(workspaceId, sessionId, "completed");
       if (!done) throw new AgentSessionError("session_ended", "session ended while finishing", 409);
       return { session: done, replayed: false };
     }
@@ -478,7 +502,7 @@ export async function finish(sessionId: string, input: FinishInput): Promise<Fin
     // info panel always waits there, whatever the agent is set to: it was never an @mention reply.
     if (session.kind === "panel_chat" || input.actor.tokenScope?.writeMode === "suggest") {
       await q(`UPDATE agent_sessions SET reply_markdown = $2 WHERE id = $1`, [sessionId, text]);
-      const done = await endSession(workspaceId, sessionId, "completed");
+      const done = await closeSession(workspaceId, sessionId, "completed");
       if (!done) throw new AgentSessionError("session_ended", "session ended while finishing", 409);
       return { session: { ...done, reply_markdown: text }, replayed: false };
     }
@@ -489,9 +513,9 @@ export async function finish(sessionId: string, input: FinishInput): Promise<Fin
       const refused = error instanceof AuthorityError || error instanceof ScopeError || error instanceof UnauthorizedError
         || (error instanceof NodeUpdateError && error.status === 404);
       if (!refused) throw error;
-      return { session: (await endSession(workspaceId, sessionId, "failed", { failCode: "reply_rejected" }))!, replayed: false };
+      return { session: (await closeSession(workspaceId, sessionId, "failed", { failCode: "reply_rejected" }))!, replayed: false };
     }
-    const done = await endSession(workspaceId, sessionId, "completed", { replyEventId });
+    const done = await closeSession(workspaceId, sessionId, "completed", { replyEventId });
     if (!done) throw new AgentSessionError("session_ended", "session ended while finishing", 409);
     if (replyEventId) await approveIfReplyOnly(session, replyEventId);
     return { session: done, replayed: false };
@@ -663,7 +687,7 @@ export async function claimSession(sessionId: string, { actor }: { actor: ActorC
   if (session.runtime === "api") throw new AgentSessionError("not_claimable", "this session runs on the server", 409);
 
   if (!(await agentCanWriteSpace(actor.id, session.space_id))) {
-    await endSession(workspaceId, sessionId, "failed", { failCode: "space_unavailable" });
+    await closeSession(workspaceId, sessionId, "failed", { failCode: "space_unavailable" });
     throw new AgentSessionError("space_unavailable", "the agent can no longer write in this note's space", 409);
   }
   const busy = await q<{ n: number }>(
@@ -695,7 +719,7 @@ export async function claimSession(sessionId: string, { actor }: { actor: ActorC
     if (delivered.skill_node_id) skill = { id: delivered.skill_node_id };
   } catch (error) {
     // The note cannot be sent (unreadable, external AI off): say so now.
-    await endSession(workspaceId, sessionId, "failed", { failCode: "cannot_read_note" });
+    await closeSession(workspaceId, sessionId, "failed", { failCode: "cannot_read_note" });
     throw new AgentSessionError("cannot_read_note", error instanceof Error ? error.message : "the note cannot be sent to the agent", 409);
   }
   return {
@@ -726,7 +750,7 @@ export async function cancel(sessionId: string, { actor }: { actor: ActorCtx }):
   return withEventTransaction(probe.workspace_id, async () => {
     const session = await mustLoad(sessionId, true);
     if (session.status === "cancelled") return { session, changed: false };
-    const ended = await endSession(probe.workspace_id, sessionId, "cancelled", { failCode: "cancelled_by_user", endedBy: actor.id });
+    const ended = await closeSession(probe.workspace_id, sessionId, "cancelled", { failCode: "cancelled_by_user", endedBy: actor.id });
     if (!ended) throw new AgentSessionError("session_ended", `session is ${session.status}`, 409);
     abortLive(sessionId); // an api run in this process stops paying for the answer nobody wants
     return { session: ended, changed: true };

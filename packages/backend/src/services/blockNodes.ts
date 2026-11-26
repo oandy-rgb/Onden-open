@@ -16,7 +16,7 @@
 // makes undo exact. Rows go only with their note (FK cascade on purge).
 
 import { randomUUID } from "node:crypto";
-import { trailingBlockId, blocksParsable, parseBlocks, type ParsedBlock, cutToUnits, derivedIdName } from "@onden/markdown";
+import { trailingBlockId, blocksParsable, parseBlocks, type ParsedBlock, cutToUnits, derivedIdName, isUuid } from "@onden/markdown";
 import { event, q } from "../db.js";
 import { db } from "../dbKysely.js";
 import { readableScopeSql } from "./readPolicy.js";
@@ -177,6 +177,7 @@ export async function syncBlockNodes(change: {
     const reattached = existing.detached_note_id !== null;
     if (reattached) {
       await db.updateTable("block_nodes").set({ detached_note_id: null, detached_tags: null }).where("id", "=", existing.id).execute();
+      retagged.add(existing.id); // taken back: its `updated_at` moves (as before the split) even when its display columns are as they were
     }
     const before = { parent_block_id: existing.parent_block_id, kind: existing.kind, tag_ids: existing.tag_ids, hidden: existing.hidden };
     const after = { parent_block_id: parentId, kind: b.kind, tag_ids: wantTags, hidden: false };
@@ -370,6 +371,24 @@ export async function notesOfBlockRows(workspaceId: string, ids: readonly string
   if (ids.length === 0) return [];
   return [...new Set((await db.selectFrom("block_nodes").select("note_id").where("workspace_id", "=", workspaceId).where("id", "in", [...ids]).execute()).map((r) => r.note_id))];
 }
+
+/** Paragraph rows as a received change names them (services/receivedEvents.ts): the rows `of.ids`, and every row of the notes `of.notes`, each with its
+ *  note, its own tags (sorted), its standing-alone child, its anchor and whether it is hidden. Rows not here are absent. */
+export async function paragraphRowsOf(workspaceId: string, of: { ids?: readonly string[]; notes?: readonly string[] }): Promise<Map<string, ParagraphRowState>> {
+  const ids = (of.ids ?? []).filter(isUuid), notes = (of.notes ?? []).filter(isUuid);
+  if (ids.length === 0 && notes.length === 0) return new Map();
+  const rows = await db.selectFrom("block_nodes").select(["id", "note_id", "detached_note_id", "anchor_id", "hidden_at"]).where("workspace_id", "=", workspaceId)
+    .where((eb) => eb.or([...(ids.length ? [eb("id", "in", ids)] : []), ...(notes.length ? [eb("note_id", "in", notes)] : [])])).execute();
+  const tagsOf = new Map<string, string[]>();
+  if (rows.length) {
+    for (const t of await db.selectFrom("block_node_tags").select(["block_node_id", "tag_id"]).where("block_node_id", "in", rows.map((r) => r.id)).execute()) {
+      tagsOf.set(t.block_node_id, [...(tagsOf.get(t.block_node_id) ?? []), t.tag_id]);
+    }
+  }
+  return new Map(rows.map((r) => [r.id, { note: r.note_id, detached: r.detached_note_id, anchor: r.anchor_id, hidden: r.hidden_at !== null,
+    tags: (tagsOf.get(r.id) ?? []).sort() }] as const));
+}
+export type ParagraphRowState = { note: string; tags: string[]; detached: string | null; anchor: string | null; hidden: boolean };
 
 /** Tags this save's blocks dropped that a block save created and nothing
  *  uses now (no note, no block, no child tag, no schema or page text): moved

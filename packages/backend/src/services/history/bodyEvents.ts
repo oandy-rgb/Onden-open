@@ -24,6 +24,13 @@ export function bodyEventSql(alias: string): string {
   return `${alias}.event_type IN (${BODY_EVENT_TYPES.map((t) => `'${t}'`).join(",")}) AND ${alias}.payload ? 'body_hash'`;
 }
 
+/** When the change an event records was MADE: for a change taken from another node (spine/receivedEvents.ts), the wall clock of its write
+ *  (`tx_meta.written_at`), not when it arrived here; for every other event, when it was recorded. A reader that shows or cuts by the time of a
+ *  save reads this, so a received change sits in the place of the list it was written (own-node-transport §2.12.5). Over `e` = domain_events. Not the
+ *  day page yet (saveOnDaySql): there a range of `created_at` is what an index serves, and this expression is not (review of PR #1997, round 1,
+ *  point 7: 7.8 ms → 38 ms over 200,000 events); an index of received events by the time they were written comes first (spine/stampedMerge/README.md). */
+export const EVENT_WRITTEN_AT_SQL = "coalesce((e.tx_meta->>'written_at')::timestamptz, e.created_at)";
+
 /** Who wrote a save, as the version list and a backup say it. A version carried in from another workspace is stored with
  *  actor_type 'user' (spine/importedHistory.ts): every reader that looks for AI work by actor_type (the review inbox,
  *  agent runs, the day lens) then leaves it out without a condition of its own; the source's kind rides in

@@ -336,6 +336,21 @@
 | `services/maintenance/prune.ts:29-42` `collectOrphanBlobs` | 沒有任何事件提到的 blob，過了寬限期就刪 | 不改讀法，但**收包事件一定要提到它帶來的 blob**（`body_hash`、`value_ref`）：否則收進來的內文的 blob 會被當成孤兒刪掉，版本歷史就斷了 |
 | `dayLens.ts` 與歷史清單 | `created_at` | `tx_meta.written_at`（上面） |
 
+**4b 做了什麼（和上文不同的地方）**：
+- 收尾的最後一步替每個勝出、帶著值的單位寫一筆本機寫入會寫的那種事件；逐標籤的對照在 `services/receivedEvents.ts` 的 `RECEIVED_EVENTS`（守門 `receivedEvents.test.ts`：包帶的每一個標籤都有一列，沒有多的）。怎麼標記只在 `spine/receivedEvents.ts` 一處：`tx_meta` 的 `received`、`written_at`、`origin`，內文事件的 `NO_INVERSE_PATCH` 與 `base_unknown`。丟進垃圾桶的事件寫在最後（之後的事件會讓 `/api/sync` 取消刪除）。內文讓段落隱藏或回來時（只有衍生的 `hidden_at` 變），照本機寫 `BLOCK_NODE_REMOVED`／`RESTORED`，標籤目錄的計數跟著重送。`note_anchor_places` 不寫自己的事件（和內文同一筆寫入），寫明在對照裡。
+- **「欄位 → 事件」守門是逐標籤，不是逐欄位**：一個標籤的處理看那一列所有變了的欄位，所以以標籤為單位登記；行為由鏡像比對證（同一串隨機寫入在寫的那台與收的那台，鏡像用戶端從 `/api/sync` 拿到的相同，標籤目錄含計數）。
+- **復原**：收進來的事件一律拒絕（`made_elsewhere`，不只內文；收進來的建立、丟垃圾桶、搬動也是）。其他讀 `domain_events` 的地方哪些已答、哪些還沒，列在 `spine/stampedMerge/README.md`「接上傳輸前必須完成」。
+- **`base_hash`：記「不知道」，沒有把寫的那台的基底放進內文寫入的 `meta`**（會改變包的形狀，由業主決定資料形狀編號）。不知道時 `base_hash` 為空、`tx_meta.base_unknown = true`，不退回本機上一筆（`db.ts` 的 `EventOptions.baseHash: null`）。**沒做**，進 README 清單。
+- **作者**：標記的作者是這台握有的人或 AI 時照記；臨時工作階段與找不到的，記成系統的 `another-device`（`domain_events.actor_id` 不能是空的）。
+- **時間**：讀事件的版本清單（歷史第 8 批之後只剩系統筆記）改讀 `written_at`（`history/bodyEvents.ts` `EVENT_WRITTEN_AT_SQL`）。**日記頁沒改**：那個運算式用不到索引（20 萬筆：7.8 ms → 38 ms），要先有新的索引，進 README 清單。筆記、白板、標籤的版本清單讀版本表，收包不鑄版本，所以收進來的修改**不在**那些清單裡，由歷史提案第 4 批帶版本；「證明 4b」的「歷史清單（時間是寫的時間）」因此釘成 `it.fails`，進 README 清單。
+- 表裡的各列：
+  - `taskMintedNextOccurrence`：**不改，維持 main**（業主 2026-11-23 決定：永久刪除下一筆不等於終止整個週期）。測試：單機永久刪除下一筆之後再完成一次會再長出一筆（同 main），收件那台照樣；同一筆完成在兩台各自發生時，下一筆只有一筆、同一個 id（衍生 id）。
+  - `restorePlan` 的子樹：**由歷史第 5 批（#1989 `deletedTogether`）完成**，這批不動。
+  - 匯入身分、`tagPacks` 的 `via_approval`：**沒做**（要新的帶標記屬性來源，migration），進 README 清單。
+  - `noteSkills`、`keptText`、`sessionNoteUntouched`、`collectOrphanBlobs`：不改讀法；收進來的內文事件帶 `body_hash` 與 blob（測試：孤兒清理不刪它）。
+- 4a 的兩個遺留：收包後段落標籤的變動（含內文讓帶標籤的段落隱藏或回來）讓 `/api/sync` 重送標籤目錄與計數；收回的段落沒有其他改變時仍推進 `block_nodes.updated_at`，並有測試釘住「收回時顯示出來」。
+- 鏡像比對找到的另一件事（不屬 4b）：快照加入的那台沒有它拿到的筆記的 `[[連結]]` 邊，記在 README「接上傳輸前必須完成」並釘成 `it.fails`。
+
 #### 2.12.6 slug 的兩種後綴（第 3 輪第 8 點）
 
 本機撞名用 `-2`（`services/nodes.ts:66`），收包撞名用 `-<id 前八碼>`（`dbRows.ts:651`）：寫的那台是 `x-2`，收的那台撞名時是 `x-<id8>`，`[[x-2]]` 只在一台解得出來。4a 要讓**連結解析不依賴撞名的後綴**（以標題與 `aliases` 解，slug 只當網址），或讓本機也用同一種確定的後綴；兩者擇一在 4a 定，並加一則兩台的測試。
@@ -695,7 +710,7 @@
 | 2 | **已做**（#1939，89abe46）：第 7 項：被收過包的節點可以被快照；快照帶「來源握有的其他來源」（第 3.4 節）；`have` 改成逐標籤（第 2.2 節） | `services/stampedSnapshot.ts`、`spine/stampedImport.ts`（`checkPage`、`markJoinDone`）、`spine/stampedBundle.ts` | 可能（`sync_join` 記那份清單；`SYNC_DATA_SHAPE_VERSION` 升版） | `anchorsReplicated:1035` 翻轉；中心收過一台的包後，第二台用快照加入、再收一包；清單的每一種拒絕（超過 32 個、頁與頁不同、標記超過報的號碼） | 同上 |
 | 3 | 第 18 項＋桌面版還原換號（已派：`fix/restore-always-renews-node-id`） | `scripts/upgrade.sh`、`scripts/restore.sh`、`packages/desktop` 的還原 | 否 | `restoreRenewsNodeId.guard.test.ts:141` 翻轉；桌面版還原後節點編號不同 | 同上 |
 | 4a | 衍生（第 2.12.1–2.12.4、2.12.6 節）：先定屬性規則（第 8 節第 12 題，建議 (b)）；拆出 `deriveFromBody` 共用（只含分割表的「衍生」）；內文以外的衍生（連結、型別、**網站重建**、永久刪除的清理、成員 epoch）；slug 後綴 | `services/bodySideEffects.ts`、`services/blockNodes.ts`、`services/wikilinkEdges.ts`、`services/nodeTrash.ts`、`modules/website/index.ts`、`services/attributeChange.ts`、`spine/stampedMerge/dbUnits.ts`、`dbRows.ts` | 要（`markdown`／`frontmatter` 來源的標記觸發器） | 第 2.12 節「證明 4a」；收包後每張帶標記的表 0 列寫入 | 同上 |
-| 4b | 事件（第 2.12.5 節）：收包事件與它的守門、`received`／`written_at`／`NO_INVERSE_PATCH`、搬走讀本機事件的判斷（表裡每一列）、`base_hash` 的 `meta`、匯入身分改成帶標記的來源 | `spine/stampedImport.ts`、`db.ts` 的事件寫入、`services/tasksStore.ts`、`services/nodeTrash.ts`、`modules/importers/shared/identity.ts`、`services/tagPacks.ts` | 可能（內文寫入 `meta` 的基底；匯入身分的來源） | 第 2.12 節「證明 4b」；`stampedBundle.integration.test.ts:603` 的事件 `it.fails` 翻轉；blob 清理不刪收進來的內文 | 同上 |
+| 4b | **已做大部分**（#1997；和上文不同的地方在第 2.12.5 節末「4b 做了什麼」）。**做了**：事件（第 2.12.5 節）：收包事件與它的守門、`received`／`written_at`／`NO_INVERSE_PATCH`、收進來的事件一律不准單獨復原；表裡讀本機事件的各列已有答案（垃圾桶由歷史第 5 批做、週期任務維持 main）。**沒做**（進 `spine/stampedMerge/README.md`「接上傳輸前必須完成」）：`base_hash` 的 `meta`、匯入身分改成帶標記的來源、`tagPacks` 的 `via_approval` | `spine/stampedImport.ts`、`db.ts` 的事件寫入、`services/tasksStore.ts`、`services/nodeTrash.ts`、`modules/importers/shared/identity.ts`、`services/tagPacks.ts` | 可能（內文寫入 `meta` 的基底；匯入身分的來源） | 第 2.12 節「證明 4b」；`stampedBundle.integration.test.ts:603` 的事件 `it.fails` 翻轉；blob 清理不刪收進來的內文 | 同上 |
 | 4c | 段落裡的任務（第 2.14 節） | `modules/tasks/blockTasks.ts`、編輯器、匯出、網站的讀出 | 否【推論】 | 第 2.14 節的證明 | 第 13 題已決定（甲）；排在 4b 之後 |
 | 5 | 8 張表跟著包走、`rss_staging` 宣告為衍生（N2、N6；`block_link_bindings` 第 8 節第 10 題已決定：先回答 5.3 第 4 題）＋逐標籤進度（N3）＋A6 的檢查與守門＋之後加標籤的「整份對齊」 | `dbUnits.ts` `UNIT_SOURCES`、各表的觸發器、`spine/stampedBundle.ts` `readHave`／`normalizeHave`、`spine/syncClasses.json` | 要（觸發器；`sync_labels`；`SYNC_DATA_SHAPE_VERSION` 升版） | 每張表的單位、合併、自然鍵、收件檢查各有測試；守門：快照帶的表＝包帶的表＋衍生清單；中心沒接好的表就拒絕加入（A6）；整份對齊：起始對起始相同不算衝突、不同留成衝突、多出來的列列出來；複習進度在兩台相同；AI 操作者的成員列到得了；裝置上建操作者被拒 | 同上 |
 | 6 | 分段收包（N7；第 5、6、21 項）：`sync_inbox` 收件匣、計畫（分段與 slug）、啟動時接著做、收尾 | `spine/stampedImport.ts`、`dbRows.ts`、啟動流程 | 要（`sync_inbox`，`node-local`） | 第 2.10 節的證明（任一段後殺掉收件那台、寄件那台不再回來，仍自己做完且逐位元相同；slug 跨段；收件匣不空時回 `peer_busy`）；第 5、6、21 項與收尾的數字在業主大小的資料上量 | 同上 |

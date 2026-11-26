@@ -39,6 +39,7 @@ export const SERVER_ERROR_MESSAGES: Record<string, string> = {
   reserved_tag: "System tag — it can be renamed but not merged or deleted.",
   module_tag: "This tag belongs to a built-in function. It can be renamed, but not deleted or merged while that function is on.",
   imported_history: "This version came from a backup or a workspace move and can't be undone as a change. Open the note's version list and restore that version instead.",
+  made_elsewhere: "This change was made on another of your devices and can't be undone here on its own. Open the note's version list and restore the version you want instead.",
   pages_version: "The pages of this note were changed by a newer version of Onden. Update the app before changing them; your change was not saved.",
   history_incomplete: "The history needed to undo this is no longer available.",
   irreversible: "This kind of change can't be undone.",

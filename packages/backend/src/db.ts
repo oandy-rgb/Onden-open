@@ -691,8 +691,12 @@ export interface EventOptions {
   triggeredBy?: string;
   /** sha256 hex of the body this write was made from (an editor's merge base).
    *  Only meaningful on an event carrying payload.body_hash; without it the base
-   *  is the body the note's previous body event left (see insertEvent). */
-  baseHash?: string;
+   *  is the body the note's previous body event left (see insertEvent). `null`:
+   *  the base is NOT KNOWN here (a write another node made, taken by bundle:
+   *  spine/receivedEvents.ts): none is recorded, never this node's previous body. */
+  baseHash?: string | null;
+  /** The device the write was made on, when it is not this request's: a write another node made names the device its stamp names. */
+  deviceId?: string | null;
 }
 
 /** Append one domain event. Ordering is guaranteed for every caller: outside a
@@ -752,7 +756,7 @@ async function insertEvent(
       (workspace_id, actor_type, actor_id, event_type, target_type, target_id,
        payload, tx_meta, external, triggered_by_event_id, body_hash, base_hash, device_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-       CASE WHEN $11::text IS NULL THEN NULL ELSE COALESCE($12::text,
+       CASE WHEN $11::text IS NULL OR $14::boolean THEN NULL ELSE COALESCE($12::text,
          (SELECT COALESCE(p.body_hash, p.payload->>'body_hash') FROM domain_events p
            WHERE p.target_type = $5 AND p.target_id = $6 AND p.payload ? 'body_hash'
            ORDER BY p.created_at DESC, p.id DESC LIMIT 1)) END,
@@ -768,7 +772,8 @@ async function insertEvent(
       bodyHash,
       options.baseHash ?? null,
       // A system event (background work) has no device even when a request started the job.
-      actorType === "system" ? null : currentDeviceId() ?? null,
+      options.deviceId !== undefined ? options.deviceId : actorType === "system" ? null : currentDeviceId() ?? null,
+      options.baseHash === null,
     ],
   );
   const id = result.rows[0]?.id ?? "";

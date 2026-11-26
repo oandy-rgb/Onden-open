@@ -90,6 +90,8 @@ export async function inboxQueue(actor: ActorCtx | null, workspaceId: string, fi
        LEFT JOIN actors a ON a.id::text = e.actor_id
       WHERE e.workspace_id = $1
         AND e.actor_type = 'ai_agent'
+        -- an AI's change made on another device and taken by bundle (spine/receivedEvents.ts) is reviewed on the device where the AI worked, not again here
+        AND NOT coalesce((e.tx_meta->>'received')::boolean, false)
         AND e.event_type <> ALL($2::text[])
         AND r.event_id IS NULL
         AND ${suggestionStillWaitingSql("e")}

@@ -22,5 +22,5 @@ export type LiveEvent = {
    *  who may delete it for good (lib/capabilities.ts canPurgeDeleted). */
   target_space_id?: string | null;
   /** Why restorable is false; null when it is true. */
-  restore_blocked_reason?: "external" | "irreversible" | "history_incomplete" | "unsupported" | "imported_history" | null;
+  restore_blocked_reason?: "external" | "irreversible" | "history_incomplete" | "unsupported" | "imported_history" | "made_elsewhere" | null;
 };

@@ -14,7 +14,7 @@
 // written into the envelope is the host's (`writePage`): the session knows pages only by key.
 
 import type { InkEngine } from "./engine";
-import type { InkDocument } from "./types";
+import type { InkDocument, InkShape, InkStroke } from "./types";
 
 /** Puts `doc` — page `key`, `ratio` = its height / width — into `envelope`; the same object when
  *  nothing needs writing. */
@@ -46,6 +46,9 @@ export class InkPageSession<Envelope> {
   /** Called when the strokes have settled (no pen down, debounce elapsed):
    *  the host commits then, so ink is saved without leaving drawing mode. */
   onSettled: (() => void) | null = null;
+  /** Strokes or shapes just committed on page `key` (pen-up; `ratio` = its height / width): the host keeps them on the
+   *  device at once (lib/ink/surfaceSaver keepAdded), before the settle commits the whole page. */
+  onAdded: ((key: string, added: { strokes: InkStroke[]; shapes: InkShape[] }, ratio: number) => void) | null = null;
   /** Undo / redo availability changed (any surface). */
   onHistoryChange: ((canUndo: boolean, canRedo: boolean) => void) | null = null;
 
@@ -56,6 +59,12 @@ export class InkPageSession<Envelope> {
     if (this.pointersDown > 0) { this.settlePending = true; return; }
     this.settlePending = false;
     this.onSettled?.();
+  }
+
+  /** A surface's engine committed new strokes or shapes (InkEngine onAdded). */
+  added(key: string, added: { strokes: InkStroke[]; shapes: InkShape[] }): void {
+    const surface = this.surfaces.get(key);
+    if (surface) this.onAdded?.(key, added, surface.ratio);
   }
 
   pointerDown(): void { this.pointersDown += 1; }
@@ -143,4 +152,4 @@ export class InkPageSession<Envelope> {
 }
 
 /** What a page's ink surface asks of the session whatever the envelope is (PageInkSurface). */
-export type PageSurfaceSession = Pick<InkPageSession<unknown>, "historyChanged" | "strokesChanged" | "pointerDown" | "pointerUp" | "touched" | "attach" | "detach">;
+export type PageSurfaceSession = Pick<InkPageSession<unknown>, "historyChanged" | "strokesChanged" | "added" | "pointerDown" | "pointerUp" | "touched" | "attach" | "detach">;

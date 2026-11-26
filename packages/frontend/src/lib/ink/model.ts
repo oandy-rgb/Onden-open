@@ -223,6 +223,11 @@ export class InkModel {
     return Math.max(minHeight, Math.ceil(maxY + margin));
   }
 
+  /** The page's settings as serialize() writes them, without the strokes (cheap: no stroke is copied). */
+  pageSettings(): InkDocument["page"] {
+    return { ...structuredClone(this.pageExtras), width: this.pageWidth, ...(this.background ? { background: this.background } : {}) };
+  }
+
   serialize(): InkDocument {
     const erased: ErasedIntervals = {};
     for (const [id, intervals] of Object.entries(this.erased)) {

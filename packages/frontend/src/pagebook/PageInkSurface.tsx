@@ -150,6 +150,8 @@ export function PageInkSurface({
       // Strokes are saved while drawing mode stays on, about a second after
       // the pen lifts (the session commits them).
       onChange: () => session.strokesChanged(),
+      // At pen-up, before that settle: the new strokes alone, kept on the device at once (lib/ink/surfaceSaver keepAdded).
+      onAdded: (added) => session.added(pageKey, added),
       changeDebounceMs: 1000,
     });
     engineRef.current = engine;

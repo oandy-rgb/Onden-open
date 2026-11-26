@@ -126,6 +126,28 @@ const idbSave = (buffer: ArrayBuffer, scope: string | null, options: { replace?:
 const idbStaleCheck = (scope: string | null): Promise<boolean> => (memoryOnly ? Promise.resolve(false) : idbIsStale(scope));
 let journalRecordsSinceSnapshot = 0;
 const COMPACT_AFTER_RECORDS = 200;
+/** Characters of queued request bodies journaled since the snapshot (journalChars), and the largest single record's. */
+let journalCharsSinceSnapshot = 0;
+let largestRecordSinceSnapshot = 0;
+/** Past either bound the snapshot is taken at once instead of after a quiet moment. Counting records alone is not enough:
+ *  a record of a large drawing's save is megabytes, and while a person writes (pen-ups, the drawing's saves at each short
+ *  pause) the debounced saves keep being re-armed, so a few hundred records could fill the device's quota (review of
+ *  #1958, item 2). The size bound is several times the largest record, never less than COMPACT_NOW_CHARS: one save of a
+ *  2,000-stroke PDF is 16 MB, and a bound that one save reaches would export the whole database at every pause, with the
+ *  next pen-ups' records waiting behind it (review of #1958, round 2). One forced save at a time (`snapshotForced`); the
+ *  journal stays within these bounds plus what arrives while that save is written. */
+const COMPACT_NOW_RECORDS = 1_000;
+const COMPACT_NOW_CHARS = 16_000_000;
+const COMPACT_NOW_LARGEST_RECORDS = 4;
+let snapshotForced = false;
+function journalOverBound(): boolean {
+  return journalRecordsSinceSnapshot >= COMPACT_NOW_RECORDS
+    || journalCharsSinceSnapshot >= Math.max(COMPACT_NOW_CHARS, COMPACT_NOW_LARGEST_RECORDS * largestRecordSinceSnapshot);
+}
+/** What a record weighs against COMPACT_NOW_CHARS: a queue row's body (a drawing's save is the large one); other records are small. */
+function journalChars(op: JournalOp): number {
+  return op.t === "pw.put" ? (op.row.body?.length ?? 0) : 0;
+}
 
 function journalKey(): string {
   return journalScopeKey(storageScope!);
@@ -182,6 +204,8 @@ function startSnapshotWrite(replace: boolean): Promise<void> | null {
     await idbSave(buf, storageScope!, { replace });
     journalApplied = applied;
     journalRecordsSinceSnapshot = 0;
+    journalCharsSinceSnapshot = 0;
+    largestRecordSinceSnapshot = 0;
     if (saveFailures) {
       saveFailures = 0;
       clearTimeout(backoffTimer);
@@ -302,16 +326,25 @@ async function saveSnapshot(replace = false, stale = false): Promise<void> {
   catch (error) { noteSaveFailed(); throw error; }
 }
 
-function queueSnapshot(): void {
-  if (backoffTimer !== undefined) return;
-  void enqueueDatabaseWork(async () => {
+/** Resolves once the snapshot write it started has ended (saved or not); never rejects. */
+function queueSnapshot(): Promise<void> {
+  if (backoffTimer !== undefined) return Promise.resolve();
+  return enqueueDatabaseWork(async () => {
     try {
-      startSnapshotWrite(false)?.catch((error) => {
+      const written = startSnapshotWrite(false)?.catch((error) => {
         if (isStale(error)) void enqueueDatabaseWork(() => saveSnapshot(false, true)).catch(() => {});
         else noteSaveFailed();
       });
-    } catch { noteSaveFailed(); }
-  }).catch(() => {});
+      return { written };
+    } catch { noteSaveFailed(); return { written: undefined }; }
+  }).then(({ written }) => written, () => {});
+}
+
+/** The snapshot now, once at a time (COMPACT_NOW_RECORDS / COMPACT_NOW_CHARS). */
+function forceSnapshot(): void {
+  if (snapshotForced) return;
+  snapshotForced = true;
+  void queueSnapshot().finally(() => { snapshotForced = false; });
 }
 
 const persist = createPersistScheduler({ doExport: queueSnapshot });
@@ -335,7 +368,12 @@ async function makeDurable(op: JournalOp, { critical = true, refuseWhileBackingO
     try {
       // A critical record can be the only copy of what a person typed (a save on its way, a queued edit): on the disk.
       await journalAppend(journalKey(), { session: journalSession, seq, op }, critical ? "strict" : undefined);
-      if (++journalRecordsSinceSnapshot >= COMPACT_AFTER_RECORDS) scheduleSave();
+      const chars = journalChars(op);
+      journalCharsSinceSnapshot += chars;
+      largestRecordSinceSnapshot = Math.max(largestRecordSinceSnapshot, chars);
+      ++journalRecordsSinceSnapshot;
+      if (journalOverBound()) forceSnapshot();
+      else if (journalRecordsSinceSnapshot >= COMPACT_AFTER_RECORDS) scheduleSave();
       else compact.schedule();
       return;
     } catch (error) {
@@ -1357,6 +1395,25 @@ async function addPendingWrite(method: string, path: string, body: string | null
   }
 }
 
+/** The body of a queued write that has not been sent yet, replaced in place (its key, place in the queue and attempts
+ *  stay): a drawing kept on the device from pen-up holds the newest strokes until its save goes out under the same key
+ *  (lib/data/writeQueue keepUnsentWrite). One journal record, like the row's own (journal replay folds by key). Queued
+ *  under the key when no row holds it (its first record failed, or it was cleared). */
+async function replacePendingWrite(method: string, path: string, body: string | null, idemKey: string): Promise<void> {
+  const row = queuedRowOf(idemKey);
+  if (!row) return addPendingWrite(method, path, body, idemKey);
+  if (row.method === method && row.path === path && row.body === body) return;
+  const targets = JSON.stringify(writeTargets({ method, path, body }));
+  run("UPDATE pending_writes SET method = ?, path = ?, body = ?, targets = ? WHERE id = ?", [method, path, body ?? null, targets, row.id]);
+  const updated = qry<JournalRow>(`${PENDING_ROW} WHERE id = ?`, [row.id])[0]!;
+  try { await makeDurable({ t: "pw.put", row: updated }, { refuseWhileBackingOff: true }); }
+  catch (error) {
+    // Not kept: the row goes back to what was durable, and the caller is told.
+    run("UPDATE pending_writes SET method = ?, path = ?, body = ?, targets = ? WHERE id = ?", [row.method, row.path, row.body, row.targets, row.id]);
+    throw error;
+  }
+}
+
 /** When the oldest queued write was queued (SQLite UTC, no zone), or null. */
 async function getOldestPendingWriteAt(): Promise<string | null> {
   return qry<{ at: string | null }>("SELECT MIN(created_at) AS at FROM pending_writes WHERE rejection IS NULL")[0]?.at ?? null;
@@ -1606,6 +1663,8 @@ async function importDatabase(data: ArrayBuffer): Promise<void> {
   compact.cancel();
   journalApplied = applied;
   journalRecordsSinceSnapshot = 0;
+  journalCharsSinceSnapshot = 0;
+  largestRecordSinceSnapshot = 0;
   await dropJournalUpTo(applied);
 }
 
@@ -1684,6 +1743,7 @@ const ops = {
   putCanvasMemberships,
   putGraphPosition,
   addPendingWrite,
+  replacePendingWrite,
   getPendingWrites,
   getOldestPendingWriteAt,
   clearPendingWrite,

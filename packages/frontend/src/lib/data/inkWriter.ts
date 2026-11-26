@@ -1,9 +1,11 @@
-import { isInkReadOnly, INK_DATA_ATTR, encodeInk, type InkMergeConflict } from "@onden/markdown/ink";
+import { isInkReadOnly, INK_DATA_ATTR, encodeInk, mergeInk, type InkMergeConflict } from "@onden/markdown/ink";
 import { upsertAttribute } from "../localDb";
 import { announceDrawingChange } from "../drawingChanges";
 import { domainContext } from "./domainWriters";
 import { makeWriteLifecycle } from "./writeLifecycle";
+import { keepUnsentWrite, type KeptWrite } from "./writeQueue";
 import { runBackgroundWrite } from "./backgroundWrite";
+import { classifyWriteFailure } from "./writeErrors";
 import { notifyInkVersionNotKept, type InkPageAttr } from "../ink/store";
 import { mergeDropsSent } from "./inkMergeLoss";
 import type { InkDocument } from "../ink/types";
@@ -29,6 +31,9 @@ export type InkSaveOptions = {
   /** Called with what the server stored and the text this save sent as its value, when the server answered (not when only
    *  the offline queue holds the save): a merge may have added another device's strokes to what it stored. */
   onServerAnswer?: (stored: string, sent: string) => void;
+  /** The change's kept row (keepUnsentInk): the save is made under its key, its row now holding this request, so a copy
+   *  the page left behind and this save are one write to the server. */
+  kept?: KeptWrite;
 };
 
 /** Save a note's drawing — a handwriting/canvas page or a PDF's envelope
@@ -57,17 +62,15 @@ export type InkSaveOptions = {
  *  saved: this is a no-op for it, whichever host asks. */
 export function saveInk(nodeId: string, doc: InkSaveBase, base?: InkSaveBase | null, options: InkSaveOptions = {}): Promise<boolean> {
   if (typeof doc !== "string" && isInkReadOnly(doc)) return Promise.resolve(false);
-  const attr = options.attr ?? INK_DATA_ATTR;
-  const value = typeof doc === "string" ? doc : encodeInk(doc);
-  const attribute = { value, value_type: "text", is_inheritable: false };
-  // The whole value and its base are kept (also in the offline queue); what
-  // goes over the wire is decided when it is sent (patchedBody.ts).
-  const body = JSON.stringify(base === undefined ? attribute : { ...attribute, base_value: base === null ? "" : typeof base === "string" ? base : encodeInk(base) });
+  const { attr, value, request } = inkRequest(nodeId, doc, base, options.attr);
+  // Before this write's own record (same chain): the kept row becomes this request, under the key it is sent with.
+  if (options.kept) void options.kept.rewrite(request, { asSave: true });
   // The local copy holds what the server stored once it answers: the merge
   // may have added another device's strokes.
   let mirrored = value;
   const write = commit<NodeAttribute>(`node:${nodeId}`, {
-    method: "PUT", path: `/api/nodes/${nodeId}/attributes/${attr}`, body,
+    ...request,
+    ...(options.kept ? { idemKey: options.kept.idemKey } : {}),
     ...(options.keepalive ? { init: { keepalive: true } } : {}),
   }, {
     mirror: () => upsertAttribute(nodeId, attr, mirrored, "text", false, "ui"),
@@ -83,8 +86,60 @@ export function saveInk(nodeId: string, doc: InkSaveBase, base?: InkSaveBase | n
     },
   });
   runBackgroundWrite(write);
+  // The write took its own share of the key's lock: the kept one goes once it has an outcome.
+  // Its answer (accepted, or queued: its row is durable; or refused) leaves nothing for the copy taken at pen-up to keep.
+  if (options.kept) {
+    const kept = options.kept;
+    void write.then(() => { kept.answered(); kept.release(); }, (error: unknown) => {
+      if (classifyWriteFailure(error) === "rejected") kept.answered();
+      kept.release();
+    });
+  }
   // Once, when the save has settled (the server has it, or it is queued and the local copy answers): pictures of this
   // drawing elsewhere read it again.
   const settled = () => { if (attr === INK_DATA_ATTR) announceDrawingChange(nodeId); };
   return write.then(() => { settled(); return true; }, () => { settled(); return false; });
+}
+
+/** Strokes the person added and that are not saved yet, kept on this device from now on (writeQueue.keepUnsentWrite):
+ *  `doc` holds only them (lib/ink/additions) and goes as a save made from nothing (`base` null: the server adds them to
+ *  what it holds and removes nothing), as a queue row under the key the save will use (`into`: the row kept since the last
+ *  save, written again with everything added since). Hand the row to the save (`saveInk`'s `kept`), or `drop()` it when no
+ *  save follows. The local copy is not touched: it holds whole drawings, and a read lays what is queued over it
+ *  (lib/data/reads attributeValues). `written` is false when storage could not take it. */
+export function keepUnsentInk(nodeId: string, doc: InkSaveBase, base: InkSaveBase | null | undefined, options: { attr?: InkPageAttr; into?: KeptWrite; holdOnly?: boolean } = {}): { kept: KeptWrite | null; written: Promise<boolean> } {
+  if (typeof doc !== "string" && isInkReadOnly(doc)) return { kept: options.into ?? null, written: Promise.resolve(false) };
+  const { request } = inkRequest(nodeId, doc, base, options.attr);
+  // `holdOnly`: a write into the row is on its way; only the synchronous copy now (KeptWrite.hold), the row after it.
+  if (options.into && options.holdOnly) { options.into.hold(request); return { kept: options.into, written: Promise.resolve(true) }; }
+  const kept = options.into ?? keepUnsentWrite(request);
+  const written = options.into ? options.into.rewrite(request) : kept.recorded;
+  return { kept, written };
+}
+
+/** The one request a drawing's save is: the whole value and its base (also in the queue); what goes over the wire is
+ *  decided when it is sent (patchedBody.ts). */
+function inkRequest(nodeId: string, doc: InkSaveBase, base: InkSaveBase | null | undefined, attrOption: InkPageAttr | undefined) {
+  const attr = attrOption ?? INK_DATA_ATTR;
+  const value = typeof doc === "string" ? doc : encodeInk(doc);
+  const attribute = { value, value_type: "text", is_inheritable: false };
+  const body = JSON.stringify(base === undefined ? attribute : { ...attribute, base_value: base === null ? "" : typeof base === "string" ? base : encodeInk(base) });
+  return { attr, value, request: { method: "PUT" as const, path: `/api/nodes/${nodeId}/attributes/${attr}`, body } };
+}
+
+/** A drawing as this device will have it once its queued saves are sent: `value` (the local copy) with each queued save
+ *  of `attr` on this note laid over it, in queue order, merged the way the server merges a save (mergeInk with its base;
+ *  a save made from nothing — strokes kept at pen-up — adds them). What a page opened after a kill shows, so strokes that
+ *  only the queue holds are on screen and not drawn again. A row that is not this writer's request is skipped. */
+export function withQueuedInk(nodeId: string, attr: string, value: string | null, rows: ReadonlyArray<{ method: string; path: string; body: string | null }>): string | null {
+  const path = `/api/nodes/${nodeId}/attributes/${attr}`;
+  let current = value;
+  for (const row of rows) {
+    if (row.method !== "PUT" || row.path !== path || !row.body) continue;
+    let fields: { value?: unknown; base_value?: unknown };
+    try { fields = JSON.parse(row.body) as typeof fields; } catch { continue; }
+    if (typeof fields.value !== "string") continue;
+    current = typeof fields.base_value === "string" ? mergeInk(fields.base_value, current, fields.value).value : fields.value;
+  }
+  return current;
 }

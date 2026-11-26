@@ -10,7 +10,7 @@
 export { createPdfNote, PDF_TEXT_FAILED_MESSAGE } from "./pdfNote";
 export { loadPdfCore, PDF_WORKER_SRC, type PdfJsCore } from "./pdfjs";
 export type { PageViewportLike } from "./coords";
-export { emptyPageDoc, pagesFromLegacy, pdfPageDoc, readPdfInk, recordFrame, setPdfPageDoc, withUnits } from "./pageUnits";
+export { emptyPageDoc, pagesFromLegacy, pdfPageDoc, pdfWithOnly, readPdfInk, recordFrame, setPdfPageDoc, withUnits } from "./pageUnits";
 export {
   addDrawingToPage,
   addShapeToPage,

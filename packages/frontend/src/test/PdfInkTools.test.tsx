@@ -726,3 +726,25 @@ describe("the page going away", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe("pen-up keeps only the new stroke (lib/ink/surfaceSaver keepAdded)", () => {
+  // Review of PR #1958 (property 1): at pen-up the view hands over the stroke just drawn — the envelope of only it, in both
+  // forms — and nothing that grows with the drawing; the whole envelope still waits for the settle.
+  it("at pen-up, onAdded gets an envelope with only the new stroke; onChange waits for the settle", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const onAdded = vi.fn();
+      const onChange = await renderView({ initialDoc: stored(), onAdded });
+      pick("pen");
+      drag("mouse", [[10, 10], [60, 40]]);
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      const only = onAdded.mock.calls[0]![0] as InkMultiPageDoc;
+      expect(pdfPageDoc(only, 1)!.strokes).toHaveLength(1); // the new one, not the stored d1
+      expect(only.annotations!.map((a) => a.id)).not.toContain("d1");
+      expect(onChange).not.toHaveBeenCalled();
+      act(() => { vi.advanceTimersByTime(1100); });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(pdfPageDoc(lastSaved(onChange), 1)!.strokes).toHaveLength(2);
+    } finally { vi.useRealTimers(); }
+  });
+});

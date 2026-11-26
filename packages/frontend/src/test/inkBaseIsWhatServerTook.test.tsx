@@ -21,6 +21,7 @@ vi.mock("../lib/localDb", async (original) => ({
   ...await original<typeof import("../lib/localDb")>(),
   storeRejectedWrite: async (request: import("../lib/localDb").RejectedRequest, rejection: string) => ({ ...request, id: 901, attempts: 0, rejection }),
   addPendingWrite: vi.fn(async () => null),
+  replacePendingWrite: vi.fn(async () => {}),
   getPendingWrites: vi.fn(async () => []),
   clearPendingWrite: vi.fn(async () => {}),
   bumpPendingWriteAttempt: vi.fn(async () => {}),
@@ -214,8 +215,8 @@ describe.each(HOSTS)("ink-1 走真的存檔路徑：%s", (_name, host) => {
   });
 
   it("伺服器一直沒回應（連線失敗）：兩次存檔都留在離線佇列，依序送出後兩筆都在", { timeout: 60_000 }, async () => {
-    const { addPendingWrite, getPendingWrites, clearPendingWrite } = await import("../lib/localDb");
-    const queue = memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    const { addPendingWrite, replacePendingWrite, getPendingWrites, clearPendingWrite } = await import("../lib/localDb");
+    const queue = memoryQueue({ addPendingWrite, replacePendingWrite, getPendingWrites, clearPendingWrite });
     wire(node.id, host.attr, B0);
     server.script = ["drop", "drop"];
     await host.mount();
@@ -235,8 +236,8 @@ describe.each(HOSTS)("ink-1 走真的存檔路徑：%s", (_name, host) => {
   // 被拒絕的那一筆的內容進了「被拒絕」區（使用者會看到「已排隊的變更被拒絕」），所以不是無聲地丟，但伺服器上少了那一筆、
   // 之後的存檔也不會補。修好後把 `.fails` 拿掉。修法要放在 InkSaver／writeQueue 的同一處，不要各入口補（見 PR #1910 說明）。
   it.fails("離線佇列送出時第一筆被拒絕、第二筆被收下：畫面上的兩筆都在伺服器上", { timeout: 60_000 }, async () => {
-    const { addPendingWrite, getPendingWrites, clearPendingWrite } = await import("../lib/localDb");
-    memoryQueue({ addPendingWrite, getPendingWrites, clearPendingWrite });
+    const { addPendingWrite, replacePendingWrite, getPendingWrites, clearPendingWrite } = await import("../lib/localDb");
+    memoryQueue({ addPendingWrite, replacePendingWrite, getPendingWrites, clearPendingWrite });
     // 被拒的那一列離開佇列、進「被拒絕」區（真的 localDb 在 worker 裡一起做）。
     const local = await import("../lib/localDb");
     vi.mocked(local.rejectPendingWrite).mockImplementation(async (write, reason) => {

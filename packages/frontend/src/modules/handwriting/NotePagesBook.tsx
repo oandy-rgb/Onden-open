@@ -19,6 +19,8 @@ type Props = {
   readOnly: boolean;
   readOnlyNotice?: string;
   save: (doc: NonNullable<ReturnType<typeof noteDoc>>, options?: InkSaveOptions) => void;
+  /** At pen-up: the note's drawing holding only the strokes just drawn, stored the way `save` stores (lib/ink/surfaceSaver keepAdded). */
+  keepAdded?: (doc: NonNullable<ReturnType<typeof noteDoc>>) => void;
 };
 
 type Opened = { state: FileState; pdf: LoadedPdf | null };
@@ -34,7 +36,7 @@ function PdfFile({ file, onOpened }: { file: string; onOpened: (file: string, op
   return null;
 }
 
-export default function NotePagesBook({ nodeId, list: initialList, listValue, stored, readOnly, readOnlyNotice, save }: Props) {
+export default function NotePagesBook({ nodeId, list: initialList, listValue, stored, readOnly, readOnlyNotice, save, keepAdded }: Props) {
   const t = useT();
   const [list, setList] = useState(initialList);
   const listValueRef = useRef(listValue);
@@ -53,6 +55,10 @@ export default function NotePagesBook({ nodeId, list: initialList, listValue, st
   const persist = (edited: InkPages, options?: InkSaveOptions) => {
     const doc = noteDoc(pagesToStore(edited, bookRef.current));
     if (doc && !readOnly) save(doc, options);
+  };
+  const keep = (added: InkPages) => {
+    const doc = noteDoc(pagesToStore(added, bookRef.current));
+    if (doc && !readOnly) keepAdded?.(doc);
   };
   // "+ Add page": the list is written first, then the page is added to the surface under the key the list gave it.
   const newPageKey = (pages: InkPages): string | null => {
@@ -74,6 +80,7 @@ export default function NotePagesBook({ nodeId, list: initialList, listValue, st
           key={nodeId}
           initialPages={laidOut.current.pages}
           onPagesChange={persist}
+          onAdded={keep}
           readOnly={readOnly}
           readOnlyNotice={readOnlyNotice}
           nodeId={nodeId}

@@ -3,7 +3,7 @@ import type { PageImagesDoc } from "@onden/markdown/page-images";
 import type { PageTextDoc } from "@onden/markdown/page-text";
 import { INK_PAGE_UNITS, INK_NOTE_MIN_HEIGHT, emptyInkPages, withPageAppended, withPageDoc, type InkPageRecord, type InkPages, type InkPageSize } from "@onden/markdown/ink";
 import { mintPageId } from "@onden/markdown/note-pages";
-import { emptyInkDocument, InkPageSession, usePenShortcutTool, type InkActiveTool } from "../lib/ink";
+import { emptyInkDocument, InkPageSession, notebookWithOnly, usePenShortcutTool, type InkActiveTool } from "../lib/ink";
 import type { InkSaveOptions } from "../lib/data";
 import InkToolbar, { INK_COLORS } from "./InkToolbar";
 import { INK_SIZES } from "../lib/inkSizes";
@@ -52,6 +52,9 @@ type Props = {
    *  when the page goes away) — the parent can persist immediately on every call. `keepalive` when
    *  the page is going away: the save must outlive it. */
   onPagesChange?: (pages: InkPages, options?: InkSaveOptions) => void;
+  /** At pen-up, before that settle: the pages holding only the strokes just drawn (lib/ink/additions), for the saver to
+   *  keep on the device at once (lib/ink/surfaceSaver keepAdded), stored the way the host stores onPagesChange's pages. */
+  onAdded?: (added: InkPages) => void;
   /** Made with a newer version (isInkReadOnly): shown, not editable. No page takes a stroke, and
    *  this swaps the toolbar for the notice. Scroll and zoom still work. */
   readOnly?: boolean;
@@ -121,7 +124,7 @@ function withSizes(pages: InkPages, sizes: Readonly<Record<string, InkPageSize>>
   return next;
 }
 
-export default function InkNodeView({ initialPages, onPagesChange, readOnly = false, readOnlyNotice, pageText, pageImages, nodeId, quoteAs, background, pageSizes, newPageKey, onBookReady }: Props) {
+export default function InkNodeView({ initialPages, onPagesChange, onAdded, readOnly = false, readOnlyNotice, pageText, pageImages, nodeId, quoteAs, background, pageSizes, newPageKey, onBookReady }: Props) {
   const t = useT();
   const pane = useExpandedPane(nodeId);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -215,6 +218,17 @@ export default function InkNodeView({ initialPages, onPagesChange, readOnly = fa
     return () => { session.onSettled = null; session.onHistoryChange = null; };
   }, [session, commitDrawSession]);
   useLayoutEffect(() => () => commitDrawSession(), [commitDrawSession]);
+  // At pen-up: only the new strokes, kept on the device now; the whole drawing follows at the settle.
+  const onAddedRef = useRef(onAdded);
+  useEffect(() => { onAddedRef.current = onAdded; }, [onAdded]);
+  useEffect(() => {
+    session.onAdded = (key, added) => {
+      if (readOnly) return;
+      const only = notebookWithOnly(pagesRef.current, key, added);
+      if (only) onAddedRef.current?.(only);
+    };
+    return () => { session.onAdded = null; };
+  }, [session, readOnly]);
   // The page going away (close, navigate, a phone switching apps) must not take strokes still
   // waiting for the debounce: save them now, as a save that outlives the page. visibilitychange
   // covers the app switch where pagehide may never fire.

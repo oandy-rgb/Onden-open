@@ -82,3 +82,4 @@ export { mergeIntervals, eraseStrokeWithTrail, visibleRuns, isFullyErased } from
 export { clamp01, invertLightness, themedStrokeColor } from "./color";
 export { inkReadOnlyMessage, isInkReadOnly, loadInkAttributes, notifyInkReadOnly } from "./store";
 export { InkSaver, useInkSurfaceSaver } from "./surfaceSaver";
+export { notebookWithOnly, pageWithOnly, type InkAdded } from "./additions";

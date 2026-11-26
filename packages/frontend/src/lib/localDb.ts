@@ -411,6 +411,11 @@ export async function addPendingWrite(method: string, path: string, body: string
   await call<void>("addPendingWrite", [method, path, body, idemKey]);
 }
 
+/** Replace the request of the queued, unsent write `idemKey` (or queue it): see the worker's replacePendingWrite. */
+export async function replacePendingWrite(method: string, path: string, body: string | null, idemKey: string): Promise<void> {
+  await call<void>("replacePendingWrite", [method, path, body, idemKey]);
+}
+
 export async function getPendingWrites(): Promise<PendingWrite[]> {
   if (getLocalCopyState() === "none") return [];
   return call<PendingWrite[]>("getPendingWrites");

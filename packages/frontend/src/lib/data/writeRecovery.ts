@@ -37,6 +37,9 @@ function preservePendingOnExit(): void {
  *  cannot be told by the clock: an entry says which page life made it instead. */
 const PAGE_LIFE = randomUUID();
 
+/** This page load's id (an entry's `life`). */
+export function thisPageLife(): string { return PAGE_LIFE; }
+
 /** Whether this page load made the entry (its write may still be on the wire) rather than an earlier one. */
 export function madeByThisPage(write: LostWrite): boolean { return write.life === PAGE_LIFE; }
 

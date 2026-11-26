@@ -88,6 +88,10 @@ export interface InkEngineOptions {
   /** Debounced document callback — fires after mutations settle. */
   onChange?: (doc: InkDocument) => void;
   changeDebounceMs?: number;
+  /** Strokes or shapes just committed (pen-up, a shape drag's end, a stroke snapped to a shape, a paste), at once and in
+   *  the same event, before the debounced onChange: the host keeps them on the device from this moment
+   *  (lib/ink/surfaceSaver keepAdded). Only what was added; erasing and undo arrive with onChange. */
+  onAdded?: (added: { strokes: InkStroke[]; shapes: InkShape[] }) => void;
   /** Page height (document units) after load and each growth step — a host
    *  that sizes its own scroll area follows it. */
   onPageHeightChange?: (docHeight: number) => void;
@@ -226,6 +230,9 @@ export class InkEngine {
   serialize(): InkDocument {
     return this.model.serialize();
   }
+
+  /** The page's settings without copying a stroke (what a drawing of only some strokes carries: lib/ink/additions). */
+  pageSettings(): InkDocument["page"] { return this.model.pageSettings(); }
 
   /** The loaded drawing needs a newer version to edit: shown, never changed
    *  or saved (InkModel.readOnly). */
@@ -444,6 +451,7 @@ export class InkEngine {
     const placed = placeInkClip(clip, dx, dy, randomUUID);
     for (const stroke of placed.strokes) this.model.addStroke(stroke);
     for (const shape of placed.shapes) this.model.addShape(shape);
+    this.reportAdded(placed.strokes, placed.shapes);
     this.afterEdit();
     return { strokeIds: placed.strokes.map((s) => s.id), shapeIds: placed.shapes.map((s) => s.id) };
   }
@@ -459,6 +467,11 @@ export class InkEngine {
   }
 
   // ── onChange plumbing ─────────────────────────────────────────────────────
+
+  private reportAdded(strokes: InkStroke[], shapes: InkShape[]): void {
+    if (this.model.readOnly || (strokes.length === 0 && shapes.length === 0)) return;
+    this.opts.onAdded?.({ strokes, shapes });
+  }
 
   private scheduleChange(): void {
     if (!this.opts.onChange) return;
@@ -888,7 +901,9 @@ export class InkEngine {
       this.shapeDrag = null;
       paintWet(this.wetCanvas, null, this.wetPaintOptions());
       if (shape && inkShapeIsDrawable(shape.kind, shape.start, shape.end)) {
-        this.model.addShape({ ...shape, id: randomUUID() });
+        const added = { ...shape, id: randomUUID() };
+        this.model.addShape(added);
+        this.reportAdded([], [added]);
         this.repaintCommitted();
         this.scheduleChange();
         this.notifyHistory();
@@ -903,11 +918,13 @@ export class InkEngine {
     paintWet(this.wetCanvas, null, this.wetPaintOptions());
     if (stroke && snapped && stroke.points.length > 0) {
       this.model.snapStrokeToShape(stroke, snapped);
+      this.reportAdded([], [snapped]);
       this.repaintCommitted();
       this.scheduleChange();
       this.notifyHistory();
     } else if (stroke && stroke.points.length > 0) {
       this.model.addStroke(stroke);
+      this.reportAdded([stroke], []);
       this.repaintCommitted();
       this.scheduleChange();
       this.notifyHistory();

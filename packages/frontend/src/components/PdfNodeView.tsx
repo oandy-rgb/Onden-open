@@ -50,6 +50,7 @@ import { createPdfDrawSession } from "../lib/pdf/drawSession";
 import {
   emptyMultiPageDoc,
   emptyPageDoc,
+  pdfWithOnly,
   withUnits,
   type InkMultiPageDoc,
 } from "../lib/pdf";
@@ -99,6 +100,9 @@ type Props = {
    *  (drawings arrive settled: the ink engine debounces). `keepalive` when the
    *  page is going away: the save must outlive it. */
   onChange?: (doc: InkMultiPageDoc, options?: InkSaveOptions) => void;
+  /** At pen-up, before that settle: the envelope holding only the strokes just drawn (lib/ink/additions), for the saver to
+   *  keep on the device at once (lib/ink/surfaceSaver keepAdded). */
+  onAdded?: (added: InkMultiPageDoc) => void;
   /** Made with a newer version (isInkReadOnly): shown, never edited or saved. */
   readOnly?: boolean;
   /** Why it is read-only when it is not the drawing's newer version (the person may not change this note). */
@@ -119,6 +123,7 @@ export default function PdfNodeView({
   nodeId,
   initialDoc = null,
   onChange,
+  onAdded,
   readOnly: readOnlyProp = false,
   readOnlyNotice,
   onTextHighlightCreated,
@@ -388,6 +393,17 @@ export default function PdfNodeView({
     session.onSettled = () => commitDrawSession();
     return () => { session.onSettled = null; };
   }, [session, commitDrawSession]);
+  // At pen-up: only the new strokes, kept on the device now; the whole envelope follows at the settle.
+  const onAddedRef = useRef(onAdded);
+  useEffect(() => { onAddedRef.current = onAdded; }, [onAdded]);
+  useEffect(() => {
+    session.onAdded = (key, added, ratio) => {
+      if (readOnly || isInkReadOnly(docRef.current)) return;
+      const only = pdfWithOnly(docRef.current, key, added, ratio);
+      if (only) onAddedRef.current?.(only);
+    };
+    return () => { session.onAdded = null; };
+  }, [session, readOnly]);
   useLayoutEffect(() => () => commitDrawSession(), [commitDrawSession]);
   // The page going away (close, navigate, a phone switching apps) must not
   // take strokes still waiting for the pen-up debounce: write them now, as a

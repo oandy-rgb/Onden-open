@@ -169,6 +169,10 @@ export const PREFS = {
   focusRun: { key: "onden.focusRun", scope: "account" },
   storagePref: { key: "onden-storage-pref", scope: "account" },
   lostWrites: { key: "onden.lostWrites", scope: "account" },
+  /** Strokes kept at pen-up whose queue row is not written yet (writeQueue.keepUnsentWrite): a keyed family
+   *  (keyedPref), one entry per row key, a synchronous copy the next page takes into the queue. Removed once the row is
+   *  durable or its save has an answer. */
+  keptWrites: { key: "onden.keptWrites", scope: "account" },
   frecency: { key: "onden.frecency", scope: "account", migrateUnscoped: true },
   /** Retired: pinned tags are now the synced sidebarTags; read once by
    *  hooks/useSidebarTagPrefs, then removed. */
@@ -299,6 +303,33 @@ export function removePref(pref: Pref): boolean {
   const at = resolve(pref);
   if (!at) return false;
   try { at.store.removeItem(at.key); return true; } catch { return false; }
+}
+
+/** One entry of a keyed family (`family.key` + ":" + `id`, same scope): many small values written independently, so
+ *  two tabs never read-modify-write one shared value and a write touches only its own entry. */
+export function keyedPref(family: Pref, id: string): Pref {
+  return { ...family, key: `${family.key}:${id}` } as Pref;
+}
+
+/** The ids of a keyed family's entries stored now (for this account when the family is an account key). */
+export function keyedPrefIds(family: Pref): string[] {
+  const store = storage();
+  // An account key carries the account after the entry's own key (accountStorageKey): split a probe entry's stored key
+  // around its id to get what every entry's stored key starts and ends with.
+  const MARK = "\u0000";
+  const probe = prefKey(keyedPref(family, MARK));
+  if (!store || probe === null) return [];
+  const [prefix, suffix] = probe.split(MARK) as [string, string];
+  const ids: string[] = [];
+  try {
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key && key.length > prefix.length + suffix.length && key.startsWith(prefix) && key.endsWith(suffix)) {
+        ids.push(key.slice(prefix.length, key.length - suffix.length));
+      }
+    }
+  } catch { return []; }
+  return ids;
 }
 
 /** The parsed JSON value, or null when missing or unreadable. Callers check

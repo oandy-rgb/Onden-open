@@ -573,6 +573,7 @@ export const ZH_TW_BOOT: Record<string, string> = {
   "Something went wrong on the server.": "伺服器發生錯誤。",
   "A tag name can't contain “/”. To make a nested tag, create it first, then pick its parent tag in “Edit structure” on its tag page.": "標籤名稱不能包含「/」。要建立子標籤，請先建好標籤，再到它的標籤頁，在「編輯結構」選上層標籤。",
   "This version came from a backup or a workspace move and can't be undone as a change. Open the note's version list and restore that version instead.": "這個版本是從備份或搬家帶過來的，不能當成一次修改來復原。請到筆記的版本清單，直接還原那一版。",
+  "This change was made on another of your devices and can't be undone here on its own. Open the note's version list and restore the version you want instead.": "這個修改是在你的另一台裝置上做的，不能在這裡單獨復原。請到筆記的版本清單，還原你要的那一版。",
   "The history needed to undo this is no longer available.": "復原所需的歷史紀錄已經不存在。",
   "The pages of this note were changed by a newer version of Onden. Update the app before changing them; your change was not saved.": "這則筆記的頁面是新版 Onden 改過的。請先更新 App 再修改；這次的修改沒有儲存。",
   "This kind of change can't be undone.": "這類修改無法復原。",

@@ -184,6 +184,19 @@ describe.skipIf(!isTestDb)("anchor batch 1 (DB)", () => {
       expect((await anchorRow(row.anchor_id!)).note_id).toBe(id);
     });
 
+    // Leftover of batch 4a (review of PR #1941): the display columns moved to deriveBlockRows, which wrote nothing for a row taken back with nothing else changed.
+    for (const hiddenMeanwhile of [false, true]) it(`a paragraph taken back is shown and its row's updated_at moves${hiddenMeanwhile ? " (its row was hidden while it stood alone, as an older save left it)" : " (nothing else of it changed)"}`, async () => {
+      const id = await create(`取回${hiddenMeanwhile ? "（隱藏）" : ""}`, "一段 {考點}\n\n另一段。\n");
+      const u1 = await refByLabel(id, "一段");
+      const row = await blockByRef(id, u1);
+      const done = await detach(id, u1);
+      await seedQ(`UPDATE block_nodes SET updated_at = '2000-01-01', hidden_at = ${hiddenMeanwhile ? "'2000-01-01'" : "NULL"} WHERE id = $1`, [row.id]);
+      await reattach(id, done.child_id);
+      expect(await blockByRef(id, u1)).toMatchObject({ id: row.id, detached_note_id: null, hidden: false });
+      const at = (await q<{ at: Date }>(`SELECT updated_at AS at FROM block_nodes WHERE id = $1`, [row.id])).rows[0]!.at;
+      expect(new Date(at).getFullYear()).toBeGreaterThan(2000);
+    });
+
     it("tagging the first line of a standing paragraph's note saves (the moved anchor stays its row's)", async () => {
       const id = await create("獨立後加標籤", "買牛奶 {考點}\n\n另一段。\n");
       const m1 = await refByLabel(id, "買牛奶");

@@ -52,7 +52,8 @@ export async function captureLocalWrites(node: SyncNode, workspaceId: string, { 
       const already = await db.selectFrom("ds_captured_events").select("event_id").where("event_id", "=", e.id).executeTakeFirst();
       if (already) continue;
       let count = 0;
-      if (typeof e.tx_meta?.ds_op_id === "string") report.skippedRemote += 1;
+      // a replayed op, or a change another node made and this one took by bundle (spine/receivedEvents.ts): neither is this node's own write to send
+      if (typeof e.tx_meta?.ds_op_id === "string" || e.tx_meta?.received === true) report.skippedRemote += 1;
       else {
         const planned = await opsOf(node, e, tagSpace);
         if (planned.kind === "ops" && e.target_type !== "space") touched.set(e.target_id, e.actor_id);

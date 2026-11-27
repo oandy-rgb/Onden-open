@@ -28,6 +28,7 @@ export const TS_FILES_EXTRA = [
   "packages/frontend/src/test/a11y/baseline.ts",
   "packages/backend/src/test/helpers/sweepWriteBodies.ts",
   "packages/backend/src/test/helpers/pgliteSkipList.ts",
+  "packages/backend/src/test/helpers/stampedEndingExceptions.ts",
   "packages/backend/src/test/crossWorkspaceReadSweep.integration.test.ts",
   "packages/backend/src/test/crossWorkspaceWriteSweep.integration.test.ts",
 ];

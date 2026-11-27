@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { getWorkspaceId, migrate } from "../../db.js";
 import { ensureOwnNodeId } from "../../browser/nodeIdentity.js";
 import { capture, buildSourceWorld, fillFrom } from "./stampedWorld.js";
+import { markIfOtherProcess } from "./stampedEnding.js";
 import { admit, bundleFor, makeRng, markWorld, peerOf, peerStateOf, take, withClockAhead, writeFor, type Peer } from "./stampedBundleWorld.js";
 import { readHave } from "../../spine/stampedBundle.js";
 import { admitSyncNode } from "../../spine/stampedImport.js";
@@ -63,6 +64,7 @@ const commands: Record<string, (args: any) => Promise<unknown>> = {
   },
   async apply(args) {
     const { applyChangeBundle } = await import("../../spine/stampedImport.js");
+    markIfOtherProcess("bundle");
     const run = () => applyChangeBundle(world!.ws, args.bundle);
     try {
       const report = await (args.aheadMs ? withClockAhead(args.aheadMs, run) : run());

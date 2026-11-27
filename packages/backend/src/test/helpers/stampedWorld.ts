@@ -29,6 +29,7 @@ import { persistActor } from "./persistActor.js";
 import { makeSpace } from "./spaceFixtures.js";
 import { seedQ } from "./seedQ.js";
 import { RealNode, onNode } from "./distSim/realNode.js";
+import { markIfOtherProcess } from "./stampedEnding.js";
 
 /** A node of its own: a database from the template with a node id no other has (the template carries one shared id). */
 export async function openNode(name: string): Promise<RealNode> {
@@ -178,6 +179,7 @@ export function capture(node: RealNode | null, world: Pick<SourceWorld, "ws" | "
 
 /** Fill the empty database `node` from a capture, the way the service does (start, every page, finish). */
 export function fillFrom(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">, cap: Capture, options: { localLogin?: string | null } = {}): Promise<void> {
+  markIfOtherProcess("join");
   return onNode(node, async () => {
     await startJoin({ workspaceId: world.ws, sourceNode: cap.summary.source, cutSeq: cap.summary.cut, personActorId: world.owner.id, former: cap.summary.former, brought: cap.summary.brought });
     try {

@@ -18,7 +18,7 @@
 // JSON units (`key:…`), and any decision on who may write; the caller (the changes pack, later) owns those.
 
 import { deferredColumnsOf, snapshotRows, type RowMatch } from "../snapshotSql.js";
-import { RETIRED_STAMP_LABELS } from "../snapshotTables.js";
+import { DERIVED_HOWS, DERIVED_PER_NODE_COLUMNS, RETIRED_STAMP_LABELS, type DerivedColumns } from "../snapshotTables.js";
 import { type Cell, type Json, type MergeResult, type SkewGate, type Stamp, type Unit, DEFAULT_MAX_SKEW_MS, GENESIS_STAMP_ORIGIN, canonical, genesisName, isGenesis, maximalHeads, mergeUnit } from "./unit.js";
 import { type StoreMerge, type UnitAddress, STAR } from "./store.js";
 import { chooseAnchorHead, parseAnchorUnit } from "./anchorUnit.js";
@@ -269,6 +269,29 @@ export const UPDATED_AT_OF_STAMPS: Readonly<Record<string, string | null>> = {
   content_nodes: "content_nodes.tag_schema", node_attributes: null, node_positions: null, block_nodes: null, function_refs: "function_refs.config", actor_module_settings: null,
 };
 
+/** The columns of a row of `src` its stamps replicate: every unit's column, the row key, the workspace and the JSON columns whose keys travel. What a merge
+ *  never takes from another creation of the row (dbRows.ts storeTable: their own merge decides them) and what the list of columns derived on each node may
+ *  not name (derivedColumnProblems). */
+export const replicatedColumnsOf = (src: RowSource): ReadonlySet<string> => new Set([...Object.values(src.fields).flatMap((c) => c.split("+")),
+  ...src.key.map((k) => k.column), "workspace_id", ...jsonSourcesOf(src).map((j) => j.column)]);
+
+/** What is wrong with a list of columns declared derived on each node (spine/snapshotTables.ts DERIVED_PER_NODE_COLUMNS, or a list a check is handed): a table that
+ *  does not travel, a column that is replicated — a unit's column, the row key, the workspace, a JSON column whose keys travel —, or a way of comparing it that is
+ *  not one of DERIVED_HOWS. Empty = every listed column may be compared as it says. Run on the one list when this module loads: a replicated column put on it
+ *  stops the backend (and every test) from starting, it never makes a check quiet (test/derivedColumnsRefused.test.ts). */
+function derivedColumnProblems(list: DerivedColumns): string[] {
+  const out: string[] = [];
+  for (const [table, how] of Object.entries(list)) {
+    const cols = Object.keys(how);
+    for (const [c, h] of Object.entries(how)) if (!DERIVED_HOWS.includes(h)) out.push(`${table}.${c}: "${String(h)}" is not a way a derived column is compared`);
+    const src = UNIT_SOURCES.find((s) => s.table === table);
+    if (!src) { out.push(`${table} is not a table whose rows travel`); continue; }
+    const replicated = replicatedColumnsOf(src);
+    for (const c of cols) if (replicated.has(c)) out.push(`${table}.${c} is replicated (a unit's column, the key or a JSON column whose keys travel)`);
+  }
+  return out;
+}
+
 export const sourceOf = (label: string): RowSource => {
   const s = UNIT_SOURCES.find((u) => u.label === label);
   if (!s) throw new Error(`units of ${label} are not read from the database here`);
@@ -321,6 +344,8 @@ export const rowMatchOf = (src: RowSource, rows: readonly string[]): RowMatch =>
 });
 /** The JSON sources whose column a row of `src` holds. */
 export const jsonSourcesOf = (src: RowSource): JsonSource[] => JSON_SOURCES.filter((j) => j.of === src.label);
+// the one list of columns derived on each node names no replicated column (a mistake there would only make the checks quiet)
+for (const p of derivedColumnProblems(DERIVED_PER_NODE_COLUMNS)) throw new Error(`snapshotTables.ts DERIVED_PER_NODE_COLUMNS (snapshotTables.json "derived"): ${p}`);
 /** Every label the stamps of a row of `src` are filed under: its own and its JSON columns'. */
 export const labelsOf = (src: RowSource): string[] => [src.label, ...jsonSourcesOf(src).map((j) => j.label)];
 /** The name a unit of a row is known by in a row's state (dbRows.ts, rows.ts): its field for the row's own label, `<label>:<field>` for a key of a JSON column. */

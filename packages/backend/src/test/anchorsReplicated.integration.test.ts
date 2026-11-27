@@ -11,7 +11,7 @@ import { sha256Hex } from "../utils.js";
 import { derivedId } from "../services/derivedIds.js";
 import { derivedIdName } from "@onden/markdown";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
+import { asCompared, buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
 import { admit, exchange, makeRng, markWorld, peerOf, resendAll, take, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { seedQ } from "./helpers/seedQ.js";
@@ -46,7 +46,8 @@ async function threeNodes(seed: number): Promise<{ a: Peer; b: Peer; c: Peer; wo
 type Replicated = { anchors: string[]; rows: string[]; tags: string[]; tasks: string[] };
 /** Everything a body write replicates of one note, as text that compares byte for byte. Not compared, because they are not replicated (spine/syncClasses.json block_nodes):
  *  a paragraph row's label, text_cache, kind, parent and hidden state are worked out from the body and its anchors by each write, and a receiver works them out only at its
- *  own next save (batch 2b-2b; "nested paragraphs" below pins the parent); an anchor's moved_how / moved_at are this node's own record. */
+ *  own next save (batch 2b-2b; "nested paragraphs" below pins the parent); an anchor's moved_how / moved_at are this node's own record (derived on each node,
+ *  "left out": spine/snapshotTables.ts DERIVED_PER_NODE_COLUMNS). */
 const replicated = (p: Peer, note: string): Promise<Replicated> => onNode(p.node, async () => ({
   anchors: (await q<{ r: string }>(
     `SELECT jsonb_build_object('id', anchor_id, 'note', note_id, 'from', from_utf16, 'to', to_utf16, 'hash', at_body_hash, 'quote', quote, 'prefix', quote_prefix, 'suffix', quote_suffix,
@@ -1140,7 +1141,7 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     await exchange(a, b); await exchange(b, a);
     const card = (p: Peer) => onNode(p.node, async () => (await q<{ cards: number; hidden: boolean | null; status: string | null }>(
       `SELECT (SELECT count(*)::int FROM function_refs r JOIN block_nodes b ON b.id = r.holder_block_id WHERE b.note_id = $1 AND r.function_id = 'review') AS cards,
-              (SELECT b.hidden_at IS NOT NULL FROM block_nodes b JOIN block_anchors x ON x.anchor_id = b.anchor_id AND x.workspace_id = b.workspace_id
+              (SELECT ${asCompared("block_nodes", "hidden_at", "b.hidden_at")} FROM block_nodes b JOIN block_anchors x ON x.anchor_id = b.anchor_id AND x.workspace_id = b.workspace_id
                 WHERE b.note_id = $1 AND x.quote = 'A new paragraph only A writes {plan}') AS hidden,
               (SELECT x.status FROM block_anchors x WHERE x.note_id = $1 AND x.quote = 'A new paragraph only A writes {plan}') AS status`, [note])).rows[0]!);
     const exchanged = [await card(a), await card(b)];
@@ -1149,7 +1150,8 @@ describe.skipIf(!isTestDb)("a body write's anchors, paragraph rows and task note
     await write(a, note, "First paragraph stays {plan}\n\nSecond paragraph stays, B edited it, A saved\n");
     await exchange(a, b); await exchange(b, a);
     const saved = [await card(a), await card(b)];
-    // the card stays, on a hidden paragraph row on both (hidden_at is derived, not replicated: before batch 4a B hid it only at its own next save)
+    // the card stays, on a hidden paragraph row on both (hidden_at is derived on each node, only whether it is set compared: DERIVED_PER_NODE_COLUMNS; before
+    // batch 4a B hid it only at its own next save)
     expect(saved).toEqual([{ cards: 1, hidden: true, status: "lost" }, { cards: 1, hidden: true, status: "lost" }]);
   }, 600_000);
 

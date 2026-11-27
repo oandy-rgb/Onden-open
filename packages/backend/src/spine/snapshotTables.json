@@ -172,6 +172,7 @@
   ]
  },
  "node_attributes": {
+  "derived": { "updated_at": "left out" },
   "pk": [
    "id"
   ],
@@ -218,6 +219,7 @@
   ]
  },
  "node_positions": {
+  "derived": { "updated_at": "left out" },
   "pk": [
    "node_id",
    "surface"
@@ -235,6 +237,7 @@
   ]
  },
  "block_nodes": {
+  "derived": { "updated_at": "left out", "hidden_at": "set or not" },
   "pk": [
    "id"
   ],
@@ -270,6 +273,7 @@
   ]
  },
  "function_refs": {
+  "derived": { "updated_at": "left out" },
   "pk": [
    "id"
   ],
@@ -289,6 +293,7 @@
   ]
  },
  "actor_module_settings": {
+  "derived": { "updated_at": "left out" },
   "pk": [
    "actor_id",
    "tag_id"
@@ -435,6 +440,7 @@
   ]
  },
  "block_anchors": {
+  "derived": { "moved_how": "left out", "moved_at": "left out" },
   "pk": [
    "workspace_id",
    "anchor_id"

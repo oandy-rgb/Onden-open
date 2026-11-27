@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { q } from "../db.js";
 import { withEventTransaction } from "../spine/eventTransaction.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
+import { asCompared, buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
 import { admit, exchange, markWorld, peerOf, resendAll, writeFor, makeRng, type Peer } from "./helpers/stampedBundleWorld.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
 import { registerShippedModules } from "./helpers/registerShippedModules.js";
@@ -90,8 +90,8 @@ const DERIVED: Record<string, string> = {
   linkIndex: `SELECT note_id::text, link_lc, link_slug, stale FROM note_link_index WHERE workspace_id = $1 AND note_id = ANY($2::uuid[]) ORDER BY 1`,
   // the anchor id index of the block-link fallback (note_block_refs)
   blockRefs: `SELECT note_id::text, block_ref FROM note_block_refs WHERE workspace_id = $1 AND note_id = ANY($2::uuid[]) ORDER BY 1, 2`,
-  // the display columns of the paragraph rows (no unit: dbUnits.ts fields of block_nodes)
-  blockDisplay: `SELECT id::text, block_ref, kind, label, text_cache, parent_block_id::text, hidden_at IS NOT NULL AS hidden FROM block_nodes WHERE workspace_id = $1 AND note_id = ANY($2::uuid[]) ORDER BY 1`,
+  // the display columns of the paragraph rows (no unit: dbUnits.ts fields of block_nodes); hidden_at as the one list compares it (only whether it is set)
+  blockDisplay: `SELECT id::text, block_ref, kind, label, text_cache, parent_block_id::text, ${asCompared("block_nodes", "hidden_at", "hidden_at")} AS hidden FROM block_nodes WHERE workspace_id = $1 AND note_id = ANY($2::uuid[]) ORDER BY 1`,
   // slug and the space a note is in (derived from the tree, migration 218)
   placeAndSlug: `SELECT id::text, slug, space_id::text, deleted_at IS NOT NULL AS deleted FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[]) ORDER BY 1`,
   // every attribute of the notes: the values their text gives (units since migration 223) and the derived ones (`_block_autotag` on a tag a block save made), with type and source

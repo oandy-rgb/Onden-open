@@ -589,11 +589,16 @@ describe.skipIf(!isTestDb)("what a node records of a bundle it took (batch 4b)",
     const pointersBefore = await pointersAt();
     let pointedOnly = new Set<string>();
     const comparable = (m: Awaited<ReturnType<typeof mirrorOf>>) => ({ ...m, edges: m.edges.filter((e) => !lackedAtJoin.has(e)), nodeDeletes: m.nodeDeletes.filter((id) => before.has(id)),
+      // a task is a note: the same for a task the run made and removed (seed 546235826: Probe trashed with its task line; A's tab is told the task is gone, B took it gone)
+      taskDeletes: m.taskDeletes.filter((id) => before.has(id)),
       attributeDeletes: m.attributeDeletes.filter((k) => valuesBefore.has(k)), nodes: m.nodes.filter((n) => !pointedOnly.has(JSON.parse(n).id)) });
     const n = await note(a, "Probe", "");
     await note(a, "Target Note");
     await write(a, "PATCH", `/api/nodes/${n}`, { markdown: BODY });
     await writeFor(a, makeRng(SEED + 41), 24, { weights: { attr: 6, unattr: 2, tagMake: 2, tag: 5, untag: 2, point: 4, unpoint: 2, schemaKey: 3, row: 8 } });
+    // a task line the random writes cannot reach: the ending's pinned finding (ENDING_FAILS, TASK_COPY) is on every run, also when a seed purges Probe (which takes
+    // Probe's paragraph rows and that finding with it)
+    await write(a, "PATCH", `/api/nodes/${await note(a, "Kept Task")}`, { markdown: "- [ ] kept {task}" });
     await exchange(a, b);
     const pointersAfter = await pointersAt();
     const eventsOnA = await onNode(a.node, async () => (await q<{ target_id: string; kinds: string[] }>(

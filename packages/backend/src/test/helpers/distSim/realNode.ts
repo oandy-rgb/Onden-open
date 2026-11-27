@@ -32,6 +32,20 @@ export class RealNode {
   /** A new node: from `copyOf` (a copy of that node's database right now: "two copies of one server"), else from the migrated template
    *  (or from `tarFile`, another PGlite dump such as the browser's packaged database). */
   static async open(name: string, copyOf?: RealNode, tarFile?: string): Promise<RealNode> {
+    const node = await RealNode.openUnlisted(name, copyOf, tarFile);
+    OPEN_NODES.add(node);
+    const g = globalThis as { __ondenNodeSerial?: number };
+    node.serial = g.__ondenNodeSerial = (g.__ondenNodeSerial ?? 0) + 1;
+    return node;
+  }
+
+  /** The order nodes were opened in, in this process (test/stampedEndingSetup.ts notes where each test begins: a node opened earlier is shared by the file's tests). */
+  serial = 0;
+
+  /** The nodes open in this process (the ending of the bundle tests looks a sender up among them: helpers/stampedEnding.ts). */
+  static openNodes(): RealNode[] { return [...OPEN_NODES]; }
+
+  private static async openUnlisted(name: string, copyOf?: RealNode, tarFile?: string): Promise<RealNode> {
     if (dbDriver === "postgres") {
       if (tarFile) throw new Error("a PGlite tar is the starting point of a PGlite node only");
       return new RealNode(name, null, await createNodeDatabase(copyOf?.database ?? undefined));
@@ -56,12 +70,16 @@ export class RealNode {
 
   /** Also when the test failed: a PGlite is closed, a database is dropped (connections and all). */
   async close(): Promise<void> {
+    OPEN_NODES.delete(this);
     if (this.database) await dropNodeDatabase(this.database);
     else if (this.pg && !this.pg.closed) await this.pg.close();
   }
 }
 
+const OPEN_NODES = new Set<RealNode>();
 const current = new AsyncLocalStorage<RealNode>();
+/** The node whose database the running code is on (inside `onNode`), or null: the database this process has. */
+export const currentNode = (): RealNode | null => { const s = current.getStore(); return !s || s === PROCESS_OWN ? null : s; };
 /** Stands in for "the database this process was started with" while it holds the lock (real Postgres only). */
 const PROCESS_OWN = { name: "(this process's own database)", database: null, pg: null } as unknown as RealNode;
 let tail: Promise<unknown> = Promise.resolve();

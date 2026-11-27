@@ -17,10 +17,15 @@ import { setModulesOn } from "./setModulesOn.js";
 import { localNodeId, stampTransaction } from "../../spine/stamps.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
 import { CARRIED_LABELS } from "../../spine/stampedMerge/dbUnits.js";
+import { exchanged, knownPeer, markIfOtherProcess } from "./stampedEnding.js";
 
 export type Peer = { name: string; node: RealNode | null; ws: string; owner: ActorCtx; space: string; call: ReturnType<typeof makeCaller> };
 
-export const peerOf = (name: string, node: RealNode | null, world: { ws: string; owner: ActorCtx; spaceA: string }): Peer => ({ name, node, ws: world.ws, owner: world.owner, space: world.spaceA, call: makeCaller(world.owner) });
+export const peerOf = (name: string, node: RealNode | null, world: { ws: string; owner: ActorCtx; spaceA: string }): Peer => {
+  const p: Peer = { name, node, ws: world.ws, owner: world.owner, space: world.spaceA, call: makeCaller(world.owner) };
+  knownPeer(p); // the ending names a node by the peer a test made for it (helpers/stampedEnding.ts)
+  return p;
+};
 
 type Note = { id: string; parent_id: string | null; deleted: boolean; order_key: string | null; markdown: string };
 
@@ -280,6 +285,7 @@ export async function threePeers(open: RealNode[]): Promise<Peer[] & { secretNot
 
 /** A bundle from `from` for `to`: what `to` holds is asked of `to`, the bundle is read on `from`, and goes through JSON as it would on the wire. */
 export async function bundleFor(from: Peer, to: Peer, options: { pageBytes?: number } = {}): Promise<ChangeBundle> {
+  await exchanged(from, to);
   const have = await onNode(to.node, () => readHave(to.ws));
   const pages = await onNode(from.node, () => readChangeBundle(from.owner, from.ws, have, options));
   return bundleOf(JSON.parse(JSON.stringify(pages)));
@@ -287,11 +293,12 @@ export async function bundleFor(from: Peer, to: Peer, options: { pageBytes?: num
 
 /** Everything `from` holds, sent again as if `to` held nothing (`have` empty), through JSON: what a node that exchanged to the end must take without a change or a refusal. */
 export async function resendAll(from: Peer, to: Peer) {
+  await exchanged(from, to);
   return take(to, bundleOf(JSON.parse(JSON.stringify(await onNode(from.node, () => readChangeBundle(from.owner, from.ws, {}))))));
 }
 
 /** Take a bundle at `to`. */
-export const take = (to: Peer, bundle: ChangeBundle) => onNode(to.node, () => applyChangeBundle(to.ws, bundle));
+export const take = async (to: Peer, bundle: ChangeBundle) => { await exchanged(null, to); markIfOtherProcess("bundle"); return onNode(to.node, () => applyChangeBundle(to.ws, bundle)); };
 
 /** `to` takes everything `from` has that it lacks. */
 export async function exchange(from: Peer, to: Peer, options: { pageBytes?: number } = {}) {

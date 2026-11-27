@@ -54,7 +54,8 @@ export default defineConfig({
       expected: { pglite: PGLITE_SKIPS, postgres: POSTGRES_SKIPS },
     })],
     // Report-only: ONDEN_REPORT_CORE_WRITES=<file> lists core writes outside mutate()/withEventTransaction().
-    setupFiles: ["src/test/reportCoreWrites.ts"],
+    // stampedEndingSetup.ts: every bundle, join and unit merge a test makes is recorded for the ending every such test has (src/test/helpers/stampedEnding.ts).
+    setupFiles: ["src/test/reportCoreWrites.ts", "src/test/stampedEndingSetup.ts"],
     // Files run one at a time already; this caps the pool too (7 GB RAM, 16
     // cores; see frontend vitest.config.ts). Widen with --maxWorkers=N.
     maxWorkers: 2,

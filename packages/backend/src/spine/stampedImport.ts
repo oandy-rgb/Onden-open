@@ -27,7 +27,7 @@
 // (a membership epoch, an invitation, a sealed address); a row of another workspace; a person that signs in through the
 // snapshot; a page whose number was applied with other content. The page is written in one savepoint: a refusal leaves nothing.
 
-import { discardUnfinishedJoins, ensureShellWorkspace, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
+import { discardUnfinishedJoins, ensureShellWorkspace, planThisTransactionForTablesAsTheyAre, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
 import { nativeBypassEnabled } from "../nativeBypass.js";
 import { isUuid } from "@onden/markdown";
 import { CodedStatusError } from "../statusError.js";
@@ -572,10 +572,9 @@ export async function cancelJoin(workspaceId: string): Promise<void> {
 /** The one place the stamp triggers stand aside for a merge (the counted exception, sync_clock.merge_batches). A workspace with no clock yet, or one that is being joined, takes nothing. */
 async function openMerge(workspaceId: string): Promise<void> {
   await standAsideForImport(workspaceId, "merge");
-  // A merge looks every row up by its key, while the rows of the bundle grow the tables inside ONE transaction. A plan cached while a table was small (the check of a foreign
-  // key pointing at it, a trigger's lookup) stays a read of the whole table however large the table grows: every note made read every note (quadratic in the rows read,
-  // stampedBundleScale.integration.test.ts counts them). For this transaction only, every statement is planned for the table as it is now.
-  await snapshotRows(`SELECT set_config('plan_cache_mode', 'force_custom_plan', true)`);
+  // A merge looks every row up by its key, while the rows of the bundle grow the tables inside ONE transaction: every statement of it is planned for the tables
+  // as they are now (db.ts; stampedBundleScale.integration.test.ts counts the rows).
+  await planThisTransactionForTablesAsTheyAre();
   const active = (await snapshotRows<{ on: boolean }>(`SELECT sync_import_active($1::uuid) AS on`, [workspaceId])).rows[0]!.on;
   if (!active) throw refuse("merge_not_open", "this workspace does not take merged units now (it has no clock yet, or it is being joined)", 409);
 }

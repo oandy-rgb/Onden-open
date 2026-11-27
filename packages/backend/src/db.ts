@@ -15,7 +15,7 @@ import { nativeBypassEnabled } from "./nativeBypass.js";
 import { SYSTEM_EXTERNAL_ID_SQL } from "./spine/systemActor.js";
 import { config } from "./config.js";
 import { DERIVED_ID_NAMESPACE, derivedIdName } from "@onden/markdown";
-import { uuidV5 } from "./utils.js";
+import { atDoubling, uuidV5 } from "./utils.js";
 import { coreTableWritten, refusedOutsideTransaction, stampedTableWritten } from "./coreWriteSql.js";
 
 const { Pool } = pg;
@@ -228,7 +228,55 @@ export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   // work commits or rolls back as one unit with its caller.
   if (txStorage.getStore()) return fn();
 
-  return runTransaction("BEGIN", fn);
+  const bulk = bulkWrites.getStore();
+  if (!bulk) return runTransaction("BEGIN", fn);
+  bulk.transactions += 1;
+  return runTransaction(`BEGIN; ${PLAN_FOR_TABLES_AS_THEY_ARE}${atDoubling(bulk.transactions, 32) ? `; ${ANALYZE_TABLES_OF_LARGE_WRITE}` : ""}`, fn);
+}
+
+// ── Writes that make many rows ──────────────────────────────────────────────
+// A generic plan this pooled connection cached while a table was small (a trigger's lookup, the check of a foreign key, a deferred check at COMMIT)
+// stays a read of the whole table however large the table grows: a transaction that made N notes read N × N rows at its COMMIT, and so did N
+// one-note imports on one connection (issue #2001; versionCommitCost.integration.test.ts counts them). A large write plans each statement for the
+// tables as they are now (plan_cache_mode = force_custom_plan). Not every write: on PGlite (the desktop and the browser) planning every statement
+// of an ordinary save cost about 5 % of its time, so ordinary saves keep the cached plans. Three ways in, one setting:
+//   * withBulkWrites(fn): every write transaction fn begins, and the one it runs in (the import route, a backup restore);
+//   * planThisTransactionForTablesAsTheyAre(): the rest of the current transaction (a merge, spine/stampedImport.ts openMerge; a transaction that has
+//     minted many versions, spine/noteVersions.ts recordVersion);
+//   * migrate(): each migration's transaction (a data step may fill a table row by row).
+// A plan made for the tables as they are still reads them as the statistics describe them: a table its statistics saw nearly empty can make the
+// planner pick an index that reads every row (a note's read check on content_nodes_space_idx instead of the key). So a large write also brings the
+// statistics of the tables a note write fills up to date, at a doubling (the 32nd, 64th, 128th … transaction of withBulkWrites; the 100th, 200th,
+// 400th … version of one transaction, analyzeTablesOfLargeWrite): log₂ of the write's size times, each one a sample of at most 30,000 rows a table,
+// as the merge does (spine/stampedMerge/dbRows.ts). ANALYZE in a transaction counts its own new rows, needs no more than the write's own role (a role
+// that does not own a table gets a WARNING and the old statistics), and holds its lock (SHARE UPDATE EXCLUSIVE, which only another ANALYZE or VACUUM
+// waits for) until the transaction ends. So it skips a table another transaction holds (SKIP_LOCKED): that one is analyzing it, the statistics are
+// about to be new, and waiting would make a second large write wait for the first's COMMIT, or the merge's table-by-table ANALYZE and this list
+// wait for each other (largeWrites.integration.test.ts).
+const PLAN_FOR_TABLES_AS_THEY_ARE = "SET LOCAL plan_cache_mode = force_custom_plan";
+const ANALYZE_TABLES_OF_LARGE_WRITE = "ANALYZE (SKIP_LOCKED) content_nodes, node_attributes, note_link_index, node_edges, domain_events, note_versions, note_version_positions, note_version_events, sync_stamps";
+const bulkWrites = createContextSlot<{ transactions: number }>();
+
+/** Bring the statistics of the tables a note write fills up to date, inside the current transaction (see above). */
+export async function analyzeTablesOfLargeWrite(): Promise<void> {
+  requireTransaction("analyzeTablesOfLargeWrite");
+  await q(ANALYZE_TABLES_OF_LARGE_WRITE);
+}
+
+/** The rest of the current transaction, its COMMIT included, plans each statement for the tables as they are now (see above). */
+export async function planThisTransactionForTablesAsTheyAre(): Promise<void> {
+  requireTransaction("planThisTransactionForTablesAsTheyAre");
+  await q(PLAN_FOR_TABLES_AS_THEY_ARE);
+}
+
+/** Every write transaction `fn` begins (in the BEGIN's own round trip: a simple query, two statements), and the one it runs in if any, plans each
+ *  statement for the tables as they are now (see above). For a write that makes many rows over many transactions. Example:
+ *  withBulkWrites(() => importFiles(files)). */
+export function withBulkWrites<T>(fn: () => Promise<T>): Promise<T> {
+  return Promise.resolve(bulkWrites.run({ transactions: 0 }, async () => {
+    if (txStorage.getStore()) await q(PLAN_FOR_TABLES_AS_THEY_ARE);
+    return fn();
+  }));
 }
 
 /** One read-only database snapshot for all q() calls in fn, including helpers.
@@ -400,6 +448,8 @@ export async function migrate({ seedNativeActor = nativeBypassEnabled() }: { see
         await client.query("BEGIN");
         // A backfill over a large table may outlast a request's timeout; LOCAL ends with this transaction.
         await client.query("SET LOCAL statement_timeout = 0");
+        // A data step may fill a table row by row: each statement is planned for the tables as they are (see withBulkWrites).
+        await client.query(PLAN_FOR_TABLES_AS_THEY_ARE);
         // A migration's data step runs on every node by itself: it mints no version (each node would mint a different `s:`), and the
         // commit check of migration 220 stands aside (docs/agents/migrations.md rule 8; history-replication proposal §4.4 point 11).
         await client.query("SELECT set_config('onden.no_versions', 'on', true)");

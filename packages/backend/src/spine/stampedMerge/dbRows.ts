@@ -615,7 +615,8 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
   // A bundle that made many rows of a table leaves the planner's statistics describing the table as it was (no autovacuum runs inside a transaction, and PGlite has none):
   // the writes that follow, which look one row up by its key, were planned on the workspace's index and read every row of the workspace (quadratic in the rows read,
   // stampedBundleScale.integration.test.ts counts them). So the table is analyzed once here, inside the transaction. This node's own bookkeeping: it writes no row.
-  if (report.created >= ANALYZE_AFTER_ROWS) await snapshotRows(`ANALYZE ${quote(src.table)}`);
+  // SKIP_LOCKED: the lock is held until the transaction ends, and a table another transaction is analyzing is about to have new statistics (db.ts large writes).
+  if (report.created >= ANALYZE_AFTER_ROWS) await snapshotRows(`ANALYZE (SKIP_LOCKED) ${quote(src.table)}`);
   for (const { i, l, m } of merged) {
     if (went.has(i.row)) continue;
     const win = m.star[0]!;

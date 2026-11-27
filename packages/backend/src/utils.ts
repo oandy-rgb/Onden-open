@@ -170,3 +170,6 @@ export function extractFrontmatterAttributes(markdown: string): Record<string, s
   }
   return out;
 }
+
+/** `n` is `first` times a power of two (first, 2·first, 4·first …): a schedule whose total work stays linear in `n` (db.ts large writes). */
+export const atDoubling = (n: number, first: number): boolean => n >= first && n % first === 0 && ((n / first) & (n / first - 1)) === 0;

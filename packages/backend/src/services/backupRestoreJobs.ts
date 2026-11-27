@@ -25,7 +25,7 @@
 import { isUuid } from "@onden/markdown";
 import { randomUUID } from "node:crypto";
 import { sql } from "kysely";
-import { q } from "../db.js";
+import { q, withBulkWrites } from "../db.js";
 import { db } from "../dbKysely.js";
 import { log } from "../logger.js";
 import type { ActorCtx } from "../types.js";
@@ -117,7 +117,8 @@ export async function startRestoreJob(
   }
   const job: RestoreJob = { ...row, retryable: false };
   holdUpload(uploadId);
-  void runJob(job.id, actor, workspaceId, reader, uploadId, spaceId, mode, parentNote);
+  // A restore makes every note of the backup, one transaction after another (db.ts withBulkWrites).
+  void withBulkWrites(() => runJob(job.id, actor, workspaceId, reader, uploadId, spaceId, mode, parentNote));
   return { job, started: true };
 }
 

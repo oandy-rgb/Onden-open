@@ -23,6 +23,7 @@ export const PGLITE_SKIPS: Readonly<Record<string, number>> = {
   "src/test/eventTransaction.integration.test.ts": 2,
   "src/test/genesisStampsMigration.integration.test.ts": 1, // a write on a second connection while the migration is open; runs on real Postgres
   "src/test/idempotencyRollback.integration.test.ts": 1,
+  "src/test/largeWrites.integration.test.ts": 1, // two transactions holding ANALYZE's lock at once need two connections; runs on real Postgres
   "src/test/migration.integration.test.ts": 1,
   "src/test/nodeEventMeta.integration.test.ts": 1,
   "src/test/outbox.integration.test.ts": 1,

@@ -27,7 +27,7 @@ PGlite 只有一條連線，而後端假設「握著交易的 client 之外，�
 
 3. `end()` 之後，`query()`／`connect()`／`database()`（含已取得的 client）一律拒絕，與 `pg` 的 `Cannot use a pool after calling end on the pool` 同義；以前會悄悄開第二個資料庫（`memory://` 是空的）。重新開始必須是新的 `PglitePool`，產品裡沒有這條路（桌面關閉、`admin.ts`、建置腳本都是 `end()` 後離開）。 **界線**：這只保護「有呼叫 `end()`」的關閉；瀏覽器版的 worker 從不 `end()`，被瀏覽器終止（分頁關閉、bfcache 淘汰）時沒有任何事件，「結束後丟錯」不涵蓋那條路（那是存檔與 #1877 處理的另一類）。建置腳本（`prepareSnapshot.ts`、`makeOldCopy.ts`）在傾印前 `awaitAllDispatchers()`，結束走 `pool.end()`（先排空），不直接 `pglite.end()`。
 
-另外對齊 `pg` 的行為：`bigint`／`numeric` 回字串（事件游標、`parseBigintId` 依賴）；沒有參數的字串走簡單協定（可含多個語句，遷移檔需要）；對已中止的交易 `COMMIT` 回 `command: "ROLLBACK"`（`db.ts` 因此把它判為失敗，不是成功）。
+另外對齊 `pg` 的行為：`bigint`／`numeric` 回字串（事件游標、`parseBigintId` 依賴）；沒有參數的字串走簡單協定（可含多個語句，遷移檔需要；大量寫入（`db.ts` `withBulkWrites`）的交易開頭也靠它，把 `BEGIN` 與交易內的規劃設定放在同一趟）；對已中止的交易 `COMMIT` 回 `command: "ROLLBACK"`（`db.ts` 因此把它判為失敗，不是成功）。
 
 ### 1.2 Node 專屬清單與處理狀態
 

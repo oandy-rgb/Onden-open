@@ -28,7 +28,7 @@ import { type SpaceTreeRow, cutParents, notesOnLoops, spacesOfTree } from "./rul
 import { type MergedRef, mergeDuplicateRefs } from "./rules/functionRefs.js";
 import { type Cell, type Json, type Rejection, type Stamp, type Unit, GENESIS_STAMP_ORIGIN, canonical, compareStamps, stampKey } from "./unit.js";
 import {
-  NOT_AN_EDIT_FIELDS, STAMP_COLS, STAR_PRESENT, UNIT_SOURCES, UPDATED_AT_OF_STAMPS, addressOfUnit, cellMetaOf, jsonSourceOf, jsonSourcesOf, labelsOf, quote, rowMatchOf, sourceOf, stampOf, storeUnit, unitName, unitTextsSql,
+  NOT_AN_EDIT_FIELDS, STAMP_COLS, STAR_PRESENT, UNIT_SOURCES, UPDATED_AT_OF_STAMPS, addressOfUnit, cellMetaOf, jsonSourceOf, jsonSourcesOf, labelsOf, quote, replicatedColumnsOf, rowMatchOf, sourceOf, stampOf, storeUnit, unitName, unitTextsSql,
   clearMissingRefs, clearedOf, headValue, stampValue, type HeadRow, type KeptValue, type RowSource, type StampRow,
 } from "./dbUnits.js";
 import { STAR, type StoreEvent } from "./store.js";
@@ -536,8 +536,6 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
   const notes = src.label === NOTES;
   const address = (row: string, name: string) => addressOfUnit(src, row, name);
   const match = (row: string) => rowMatchOf(src, [row]);
-  const json = jsonSourcesOf(src);
-  const jsonColumns = json.map((j) => j.column);
   const isJson = (name: string) => address("x", name).table !== src.label;
   const lines: StructureLine[] = [];
   /** The units of a row's own table other than its `*` (not the keys of its JSON columns: other labels), gone: what a row that is not on this node keeps of its
@@ -645,7 +643,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
       if (!l.state || m.starChanged) { await storeUnit(workspaceId, address(i.row, STAR), m.star, undefined, fresh); report.stored++; }
       // the same row made twice (two nodes made the same id, or this node still holds a row that another deleted and made again): the creation that wins is the row, on every node
       const from = carriedFrom(src, { i, l, m });
-      if (from.overwrite) await overwriteCarriedColumns(src.table, workspaceId, match(i.row), i.values!, [...Object.values(src.fields).flatMap((c) => c.split("+")), ...src.key.map((k) => k.column), ...jsonColumns, ...(notes ? ["order_stamp", "slug"] : [])]);
+      if (from.overwrite) await overwriteCarriedColumns(src.table, workspaceId, match(i.row), i.values!, [...replicatedColumnsOf(src), ...(notes ? ["order_stamp", "slug"] : [])]);
       // what this node stored of such a row before (a field unit written by an older version of this rule) goes, with no unit written in its place
       if (l.state && [...l.state.own.keys()].some(followsStar)) await dropFieldUnits(i.row);
       for (const f of new Set([...m.fields.keys(), ...m.before.keys()])) {

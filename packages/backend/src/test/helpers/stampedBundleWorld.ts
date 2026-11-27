@@ -12,7 +12,8 @@ import { compareDigests, type ChangeBundle, type TableDigest } from "../../spine
 import type { ActorCtx } from "../../types.js";
 import { onNode, type RealNode } from "./distSim/realNode.js";
 import { makeRng, type Rng } from "./distSim/rng.js";
-import { buildSourceWorld, capture, digestAs, fillFrom, headsOfWorkspace, makeCaller, openNode, outOfScopeIds, stampsOfWorkspace } from "./stampedWorld.js";
+import { buildSourceWorld, capture, fillFrom, replicatedDigestAs, headsOfWorkspace, makeCaller, openNode, outOfScopeIds, stampsOfWorkspace } from "./stampedWorld.js";
+import { DERIVED_PER_NODE_COLUMNS, comparedSql, type DerivedColumns } from "../../spine/snapshotTables.js";
 import { setModulesOn } from "./setModulesOn.js";
 import { localNodeId, stampTransaction } from "../../spine/stamps.js";
 import { withEventTransaction } from "../../spine/eventTransaction.js";
@@ -309,8 +310,9 @@ export const nodeIdOf = (p: Peer): Promise<string> => onNode(p.node, () => local
 export const admit = (centre: Peer, other: Peer): Promise<void> => nodeIdOf(other).then((id) => onNode(centre.node, () => admitSyncNode(centre.ws, id)));
 
 /** What a peer holds of the workspace, in the terms two databases can be compared in: the digest (rows and stamps with saw and meta and the other heads), and the stamps and heads as they are. */
-export async function peerStateOf(p: Peer): Promise<{ digest: TableDigest[]; stamps: unknown; heads: unknown; conflicts: string[] }> {
-  const digest = await digestAs(p.node, p.ws, p.owner);
+/** `derived`: the columns derived on each node, compared as it says — the one list (spine/snapshotTables.ts DERIVED_PER_NODE_COLUMNS) unless a test hands another (a negative control). */
+export async function peerStateOf(p: Peer, derived: DerivedColumns = DERIVED_PER_NODE_COLUMNS): Promise<{ digest: TableDigest[]; stamps: unknown; heads: unknown; conflicts: string[] }> {
+  const digest = await replicatedDigestAs(p.node, p.ws, p.owner, derived);
   const carried = new Set<string>(CARRIED_LABELS);
   const stamps = (await stampsOfWorkspace(p.node, p, await outOfScopeIds(p.node, p))).filter((s) => carried.has(String(s.table_name))).map((s) => ({ ...s }));
   const heads = (await headsOfWorkspace(p.node, p)).filter((h) => carried.has(String(h.table_name)));
@@ -318,14 +320,18 @@ export async function peerStateOf(p: Peer): Promise<{ digest: TableDigest[]; sta
   return { digest, stamps, heads, conflicts };
 }
 
-export async function expectSame(a: Peer, b: Peer, label = ""): Promise<{ a: Awaited<ReturnType<typeof peerStateOf>>; b: Awaited<ReturnType<typeof peerStateOf>> }> {
-  const [sa, sb] = [await peerStateOf(a), await peerStateOf(b)];
+/** Two peers hold the same replicated data: rows (the columns derived on each node compared as `derived` says), stamps and other heads. */
+export async function expectSame(a: Peer, b: Peer, label = "", derived: DerivedColumns = DERIVED_PER_NODE_COLUMNS): Promise<{ a: Awaited<ReturnType<typeof peerStateOf>>; b: Awaited<ReturnType<typeof peerStateOf>> }> {
+  const [sa, sb] = [await peerStateOf(a, derived), await peerStateOf(b, derived)];
   const diff = compareDigests(sa.digest, sb.digest);
   if (diff.length) {
     // name what differs: the rows (columns) and the stamps of the tables that differ, a few of each
     const detail: Record<string, unknown> = {};
     for (const t of [...new Set(diff.map((d) => d.table))]) {
-      const rowsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: unknown }>(`SELECT to_jsonb(t) - 'updated_at_unused' AS r FROM "${t}" t ${t === "content_nodes" || t === "node_attributes" || t === "note_pointers" ? "WHERE t.workspace_id = $1" : "WHERE $1::uuid IS NOT NULL"}`, [p.ws])).rows.map((x) => JSON.stringify(x.r)));
+      // each row as the digest compared it: a derived column taken off, and put back as compared (comparedSql: only whether it is set) where it is
+      const how = derived[t] ?? {};
+      const putBack = Object.entries(how).map(([c, h]) => [c, comparedSql(h, `t."${c}"`)] as const).filter(([, v]) => v !== null).map(([c, v]) => ` || jsonb_build_object('${c}', ${v})`).join("");
+      const rowsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: unknown }>(`SELECT (to_jsonb(t) - $2::text[])${putBack} AS r FROM "${t}" t ${t === "content_nodes" || t === "node_attributes" || t === "note_pointers" ? "WHERE t.workspace_id = $1" : "WHERE $1::uuid IS NOT NULL"}`, [p.ws, Object.keys(how)])).rows.map((x) => JSON.stringify(x.r)));
       const stampsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: unknown }>(`SELECT to_jsonb(s) AS r FROM sync_stamps s WHERE workspace_id = $1 AND split_part(table_name, '.', 1) = $2`, [p.ws, t])).rows.map((x) => JSON.stringify(x.r)));
       const [ra, rb, sa2, sb2] = [await rowsOf(a), await rowsOf(b), await stampsOf(a), await stampsOf(b)];
       const only = (x: string[], y: string[]) => { const ys = new Set(y); return x.filter((v) => !ys.has(v)).slice(0, 2); };

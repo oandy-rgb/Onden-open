@@ -6,7 +6,11 @@
 //       written again by a statement that leaves it alone, and the other order; (c) two keys of a JSON column, one written each way: only the key a statement that
 //       left the column alone wrote is quiet;
 //   T2  a statement that moves `updated_at` without changing any unit moves it as on main (a paragraph row's text worked out again, an attribute saved as it was;
-//       on one server a derived attribute's change and a card put down where it was too); such a write is not carried (pinned);
+//       on one server a derived attribute's change and a card put down where it was too); such a write is not carried, and the node that takes the bundle keeps
+//       its own value: `updated_at` of these tables is derived on each node (decision 甲, issue #2020), left out of every check of "the same" (negative controls);
+//       a paragraph row's hidden_at, set to each node's own now() when the body loses the paragraph, is compared only for whether it is set (negative
+//       controls: shown on one node and hidden on the other is red, and would pass were it left out whole);
+//       a note touched the same way is a gap of its own, pinned (a note's updated_at replicates and people see it);
 //   T3  every table of the rule: a paragraph row (its task), a function reference (its config keys), a person's module settings (its key "<actor>/<tag>").
 // SAFETY: node databases (a PGlite each, or a database of the test server on a real Postgres), dropped after each test.
 
@@ -20,6 +24,7 @@ import { seedQ } from "./helpers/seedQ.js";
 import { setNodeAttribute } from "../services/attributeWrites.js";
 import { buildSourceWorld, capture, fillFrom, openNode } from "./helpers/stampedWorld.js";
 import { admit, exchange, expectSame, peerOf, type Peer } from "./helpers/stampedBundleWorld.js";
+import { DERIVED_PER_NODE_COLUMNS } from "../spine/snapshotTables.js";
 
 const open: RealNode[] = [];
 afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(() => undefined); });
@@ -144,8 +149,9 @@ describe.skipIf(!isTestDatabase())("updated_at follows the stamps (migration 232
   }, 300_000);
 
   // A statement that moves the column and changes no unit (a value no stamp covers) leaves what it wrote, as on main: the single server's readers need it
-  // (services/attributeWrites.ts, services/boardWrites.ts, migration 231). Such a write is not carried, so the node that takes the bundle keeps the time it had:
-  // the gap is pinned below (README 「接上傳輸前必須完成」, PR #1994 round 3).
+  // (services/attributeWrites.ts, services/boardWrites.ts, migration 231). Such a write is not carried: for these tables `updated_at` is derived on each node
+  // (owner's decision 甲, issue #2020; spine/snapshotTables.ts DERIVED_PER_NODE_COLUMNS), so the node that takes the bundle keeps its own value, and every
+  // check of "the same on both" leaves exactly these columns out.
   async function movedWithoutAUnit() {
     const { a, b } = await twoNodes();
     const { note, at } = await attribute(a, b);
@@ -153,23 +159,93 @@ describe.skipIf(!isTestDatabase())("updated_at follows the stamps (migration 232
     await exchange(b, a);
     const blockAt = (p: Peer) => valueOf<string>(p, `SELECT updated_at::text AS v FROM block_nodes WHERE id = $1`, [block]);
     const before = { attr: await at(b), block: await blockAt(b) };
+    const beforeOnA = { attr: await at(a), block: await blockAt(a) };
     await pause();
     await inOneTransaction(b, [
       [`UPDATE node_attributes SET value = value, updated_at = now() WHERE node_id = $1 AND key = 'status'`, [note]],
-      [`UPDATE block_nodes SET text_cache = 'worked out again', updated_at = now() WHERE id = $1`, [block]],
+      // the text worked out again from the same body is the same text (services/blockNodes.ts syncBlockNodes rewrites the row with what it holds)
+      [`UPDATE block_nodes SET text_cache = text_cache, updated_at = now() WHERE id = $1`, [block]],
     ]);
     const onB = { attr: await at(b), block: await blockAt(b) };
-    await exchange(b, a);
-    return { before, onB, onA: { attr: await at(a), block: await blockAt(a) } };
+    expect((await exchange(b, a)).rejected).toEqual([]);
+    return { a, b, before, beforeOnA, onB, onA: { attr: await at(a), block: await blockAt(a) } };
   }
   it("T2: a statement that moves the column without changing a unit moves it, as on main (an attribute saved as it was, a paragraph row's text worked out again)", async () => {
     const { before, onB } = await movedWithoutAUnit();
     expect(onB.attr, "the attribute saved as it was").not.toBe(before.attr);
     expect(onB.block, "the paragraph row's text worked out again").not.toBe(before.block);
   }, 300_000);
-  it.fails("T2, pinned: such a write reaches the node that takes the bundle: both hold the same updated_at", async () => {
-    const { onB, onA } = await movedWithoutAUnit();
-    expect(onA).toEqual(onB);
+  it("T2: the node that takes the bundle keeps its own updated_at (derived on each node), and nothing that replicates differs", async () => {
+    const { a, b, beforeOnA, onB, onA } = await movedWithoutAUnit();
+    expect(onA, "A keeps what it held: the write carried nothing").toEqual(beforeOnA);
+    expect(onA.attr, "so the two nodes hold different values in a derived column").not.toBe(onB.attr);
+    await expectSame(a, b, "after T2"); // DERIVED_PER_NODE_COLUMNS left out, everything else compared
+  }, 300_000);
+  // A replicated column put on the list (or a table whose rows do not travel) is refused when the backend loads: test/derivedColumnsRefused.test.ts.
+  it("T2, negative control: with nothing declared derived the same two nodes differ", async () => {
+    const { a, b } = await movedWithoutAUnit();
+    await expect(expectSame(a, b, "nothing derived", {}), "the list is what lets the check pass").rejects.toThrow(/differ/);
+  }, 300_000);
+
+  // A paragraph row's hidden_at is the same class (review of PR #2022, round 1, point 1): when the body no longer has the paragraph, the writer's save and the
+  // node that takes the body (services/receivedDerivation.ts -> bodyDerivation.ts -> blockNodes.ts deriveBlockRows) each set it to their own now(). Whether it
+  // is set is worked out from replicated state and must be the same; its time is each node's own: "set or not" on the one list. The save also moves the
+  // remaining anchor (moved_how / moved_at, the writer's own record, "left out").
+  async function paragraphDeleted() {
+    const { a, b } = await twoNodes();
+    const note = await noteOf(a, "Two paragraphs");
+    await onNode(a.node, () => a.call("PATCH", `/api/nodes/${note}`, { markdown: "First {plan}\n\nSecond {plan}\n" }));
+    expect((await exchange(a, b)).rejected).toEqual([]);
+    await pause();
+    await onNode(a.node, () => a.call("PATCH", `/api/nodes/${note}`, { markdown: "First {plan}\n" }));
+    expect((await exchange(a, b)).rejected).toEqual([]);
+    const rows = (p: Peer) => onNode(p.node, async () => (await q<{ ref: string; label: string; hidden_at: string | null }>(
+      `SELECT block_ref AS ref, label, hidden_at::text FROM block_nodes WHERE note_id = $1 ORDER BY block_ref`, [note])).rows);
+    return { a, b, note, onA: await rows(a), onB: await rows(b) };
+  }
+  it("T2, hidden_at: A deletes the second of two paragraphs and B takes it: hidden on both, each at its own time, and nothing that replicates differs", async () => {
+    const { a, b, onA, onB } = await paragraphDeleted();
+    const shown = (rows: typeof onA) => rows.map((r) => [r.label, r.hidden_at === null]);
+    expect(shown(onA).sort()).toEqual([["First", true], ["Second", false]]);
+    expect(shown(onB)).toEqual(shown(onA));
+    const hiddenAt = (rows: typeof onA) => rows.find((r) => r.label === "Second")!.hidden_at;
+    expect(hiddenAt(onB), "each node hid it at its own time: the two values differ").not.toBe(hiddenAt(onA));
+    await expectSame(a, b, "a paragraph deleted");
+  }, 300_000);
+  it("T2, hidden_at, negative controls: without the list the same two nodes differ; one node hidden and the other shown is red, and would pass were hidden_at left out whole", async () => {
+    const { a, b, note } = await paragraphDeleted();
+    await expect(expectSame(a, b, "nothing derived", {}), "the list is what lets the check pass").rejects.toThrow(/differ/);
+    // B shows the paragraph again, A keeps it hidden: a real difference
+    await onNode(b.node, () => seedQ(`UPDATE block_nodes SET hidden_at = NULL WHERE note_id = $1 AND label = 'Second'`, [note]));
+    await expect(expectSame(a, b, "shown on B, hidden on A"), "whether it is set is compared").rejects.toThrow(/block_nodes/);
+    const leftOutWhole = { ...DERIVED_PER_NODE_COLUMNS, block_nodes: { updated_at: "left out", hidden_at: "left out" } } as const;
+    await expectSame(a, b, "hidden_at left out whole", leftOutWhole); // why it is "set or not": left out, the difference would pass in silence
+  }, 300_000);
+
+  // A NOTE's updated_at is replicated (a function of its stamps, migration 206) and people see it (the canvas list, "recently changed", exports). Three writes
+  // touch a note's updated_at without a unit, the same gap as T2 (issue #2020, found while answering it; services/canvasNodes.ts updateCanvas without a title,
+  // services/boardWrites.ts when cards move, services/functionRefs.ts touchTag). The decision 甲 does not cover notes (nothing else gives a note's time), so it is
+  // pinned until the owner decides (README of stampedMerge 「接上傳輸前必須完成」).
+  async function noteTouchedOnly() {
+    const { a, b } = await twoNodes();
+    const canvas = await onNode(b.node, async () => (await b.call("POST", "/api/canvases", { title: "Its board", space_id: b.space })).id as string);
+    await exchange(b, a);
+    const at = (p: Peer) => valueOf<string>(p, `SELECT updated_at::text AS v FROM content_nodes WHERE id = $1`, [canvas]);
+    const before = await at(b);
+    await pause();
+    await onNode(b.node, () => b.call("PATCH", `/api/canvases/${canvas}`, {})); // "just its updated_at so the canvas list re-sorts"
+    expect((await exchange(b, a)).rejected).toEqual([]);
+    return { a, b, before, onB: await at(b), onA: await at(a) };
+  }
+  it("a note touched without a unit (a canvas PATCH with no title): it moves on the writer, as on main, and the note carries no new stamp", async () => {
+    const { before, onB, onA } = await noteTouchedOnly();
+    expect(onB, "moved on B").not.toBe(before);
+    expect(onA, "today A keeps the time it had").toBe(before);
+  }, 300_000);
+  it.fails("a note touched without a unit, pinned: both nodes hold the same updated_at of the note (a column that replicates and people see)", async () => {
+    const { a, b, onB, onA } = await noteTouchedOnly();
+    expect(onA).toBe(onB);
+    await expectSame(a, b, "a touched note");
   }, 300_000);
 
   it("a derived attribute whose value changes, on one server: updated_at moves, and a person's later write that had not seen it is recorded as a conflict", async () => {

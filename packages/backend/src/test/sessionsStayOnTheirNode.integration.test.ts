@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, digestAs, fillFrom, makeCaller, openNode } from "./helpers/stampedWorld.js";
+import { buildSourceWorld, capture, fillFrom, replicatedDigestAs, makeCaller, openNode } from "./helpers/stampedWorld.js";
 import { compareDigests } from "../spine/snapshotSql.js";
 import { admit, bundleFor, peerOf, take, type Peer } from "./helpers/stampedBundleWorld.js";
 import { ticketWithoutEvidence } from "./helpers/freshProofTicket.js";
@@ -111,7 +111,7 @@ describe.skipIf(!isTestDb)("nothing of a temporary session leaves the node it wa
     expect(withoutAuthors(pages)).not.toContain(made.actorId);
     expect(JSON.stringify(bundle)).toContain(made.actorId); // control: the note's stamps do carry it, as their author
     // the digest counts the same stamps on both nodes: the tombstone of the session's membership is on A only, and A does not count it
-    const [digestA, digestB] = [await onNode(a.node, () => digestAs(a.node, a.ws, a.owner)), await onNode(b.node, () => digestAs(b.node, b.ws, b.owner))];
+    const [digestA, digestB] = [await onNode(a.node, () => replicatedDigestAs(a.node, a.ws, a.owner)), await onNode(b.node, () => replicatedDigestAs(b.node, b.ws, b.owner))];
     expect(compareDigests(digestA, digestB)).toEqual([]);
   }, 300_000);
 

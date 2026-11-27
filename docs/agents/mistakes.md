@@ -1366,6 +1366,20 @@
 - **類別**：守門的字串規則撞上第三方的原封檔案。
 - **機制**：〔第 1 層〕`scripts/browserReleaseScan.mjs` 的 `VENDORED`＋`isVendoredCopy`：發布路徑對應到套件原檔，和已安裝的原檔逐位元組相同才不掃，差一個位元組就照常掃；`browserRelease.guard.test.ts` 兩則（假原檔相同不報、改一個位元組全報、同內容換路徑照掃；真的 `public/pdf.worker.min.mjs` 與安裝的 pdfjs-dist 相同）。〔第 1 層〕每個 PR 的 CI（`ci.yml` 三宿主對照工作，必要工作之一）建好瀏覽器版後跑同一個掃描，真的建置結果不再只在部署時掃。
 - **還沒擋住的**：無。
+### 2026-11-24　「沒改單位卻移動 updated_at」的缺口只列了五張表，筆記也有（issue #2020，分支 fix/merge-derived-updated-at-not-compared）
+- **發生了什麼**：#1994 在 README 記下這個缺口時寫「今天只有段落列會在日常碰到」，範圍是筆記以外的五張表。回答 #2020 時從程式推導清單，發現筆記也一樣：白板 PATCH 不帶標題（`services/canvasNodes.ts` `updateCanvas`）、搬卡片時碰白板筆記（`services/boardWrites.ts`）、改功能引用時碰標籤（`services/functionRefs.ts` `touchTag`）都只把筆記的 `updated_at` 移到 now()，沒有標記；收的那台留著舊值。筆記的時間有人看（白板清單的順序、「最近修改」、匯出），不能照甲宣告為衍生。
+- **證據**：`updatedAtFollowsStamps`「a note touched without a unit」（寫的那台移動、收的那台不動）與它的 `it.fails`（兩台相同）。
+- **發現者**：本批（從程式推導清單，而不是照 README 的列表）。
+- **為什麼沒擋到**：缺口是照「這次改到的表」列的，不是照「哪些寫入會移動這一欄」從程式找的；`expectSame` 的隨機寫入沒有只碰筆記時間的那種寫入。
+- **類別**：清單照手上的範圍寫，沒有從程式推導。
+- **機制**：〔第 1 層〕`derivedPerNodeColumns.integration.test.ts`：每張跟著包走、有 `updated_at` 的表（讀資料庫目錄）必須是「由標記複製」或在衍生清單上，否則紅（負向對照：埋一張表、拿掉一張表）。〔尚無機制〕「宣告為由標記複製的表沒有只碰時間的寫入」還沒有守門：筆記那一則用 `it.fails` 釘住，等擁有者決定。
+### 2026-11-26　推導「每台自己的時間」的清單時只看了 `updated_at`，漏了 `hidden_at` 與錨點的 `moved_*`（PR #2022 第 1 輪審查）
+- **發生了什麼**：#2022 把五張表的 `updated_at` 宣告為每台自己的衍生值，清單是照「有 `updated_at` 的表」推導的。同一類的欄位還有段落列的 `hidden_at`（寫的那台存檔、收的那台收包各用自己的 `now()` 寫）與錨點的 `moved_how`／`moved_at`（只有寫的那台存檔時改）。三個測試各自手寫「只比 `hidden_at IS NOT NULL`」，正是 issue 說不要的第二份清單。
+- **證據**：`updatedAtFollowsStamps`「T2, hidden_at」：A 存兩段、交換、刪掉第二段、再交換；改之前 `expectSame` 在 block_nodes（`hidden_at`）與 block_anchors（`moved_how`／`moved_at`）紅。
+- **發現者**：審查（note-d7）找到 `hidden_at`；接手時跑同一個情境找到 `moved_*`。
+- **為什麼沒擋到**：守門只問「有 `updated_at` 的表」，不問「哪些欄位是用本機時鐘寫的」；隨機的交換測試沒有刪掉段落的存檔。
+- **類別**：清單照手上的範圍寫，沒有從程式推導（同上一則）。
+- **機制**：〔第 1 層〕`derivedPerNodeColumns.integration.test.ts` 改成問每張跟著走的表**每一個帶著走的時間欄位**：複製的、建立時的值、每台照同一條規則算出的、或在清單上，否則紅（負向對照：埋一欄、從清單拿掉 `hidden_at`、拿掉錨點那一項）。清單可以寫「只比有沒有值」（`DerivedHow` 的 set or not），三個測試改讀同一份清單（`asCompared`）。〔尚無機制〕不是時間的每台自己的欄位（`moved_how` 這種）守門抓不到，只靠兩台的比對。
 
 ### 2026-11-24　新的整合測試在共用測試資料庫上建「同一個世界」，和另一個檔撞同一個唯一鍵（#2004）
 - **發生了什麼**：#2004 新加的 `largeWrites.integration.test.ts` 在共用測試資料庫上呼叫 `buildSourceWorld(null)`。那個世界的邀請用固定的電子郵件（`friend@example.test`），`actors_pending_invite_email_uq` 一個資料庫只容一筆；`placeIsOneWriteMigration.integration.test.ts` 也在同一個資料庫上建同一個世界（它的註解寫明「people and invitations are unique per database」）。兩個檔排在同一個分片、它排在後面時，它的 `beforeAll` 失敗：公開 CI run 45300444583 真 Postgres 3/4。單獨跑、或我本機的順序都是綠的。

@@ -6,8 +6,8 @@ import { sql } from "kysely";
 import { inTransaction } from "../db.js";
 import { db } from "../dbKysely.js";
 import { sha256Hex } from "../utils.js";
-import type { Scope, SnapshotSpec } from "./snapshotTables.js";
-import { SNAPSHOT_SPECS, stampMayLeaveSql } from "./snapshotTables.js";
+import type { DerivedColumns, DerivedHow, Scope, SnapshotSpec } from "./snapshotTables.js";
+import { DERIVED_PER_NODE_COLUMNS, SNAPSHOT_SPECS, comparedSql, stampMayLeaveSql } from "./snapshotTables.js";
 
 export type ScopeFactory = (params: unknown[]) => Scope;
 
@@ -35,10 +35,12 @@ export async function carriedColumns(spec: SnapshotSpec): Promise<string[]> {
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
-/** `jsonb_build_object` of the carried columns of row `t`, each as the value to carry. */
-export function valueSql(spec: SnapshotSpec, cols: string[], scope: Scope): string {
+/** `jsonb_build_object` of the carried columns of row `t`, each as the value to carry; with `derived` (a table's entry of DERIVED_PER_NODE_COLUMNS), each as a
+ *  check of "two nodes hold the same" compares it (snapshotTables.ts comparedSql: a "left out" column is not in it). */
+export function valueSql(spec: SnapshotSpec, cols: string[], scope: Scope, derived: Readonly<Record<string, DerivedHow>> = {}): string {
   const override = spec.override?.(scope) ?? {};
-  return `jsonb_build_object(${cols.map((c) => `${literal(c)}, ${override[c] ?? `t.${quote(c)}`}`).join(", ")})`;
+  const pairs = cols.map((c) => [c, comparedSql(derived[c], override[c] ?? `t.${quote(c)}`)] as const).filter((p): p is readonly [string, string] => p[1] !== null);
+  return `jsonb_build_object(${pairs.map(([c, v]) => `${literal(c)}, ${v}`).join(", ")})`;
 }
 
 const typeCache = new Map<string, string[]>();
@@ -131,7 +133,10 @@ export async function insertCarriedRow(table: string, workspaceId: string, value
  */
 export async function overwriteCarriedColumns(table: string, workspaceId: string, row: RowMatch, values: Record<string, unknown>, keep: readonly string[]): Promise<void> {
   const spec = snapshotSpecOf(table);
-  const skip = new Set(["workspace_id", ...(spec.deferred ?? []), ...keep]);
+  // a column derived on each node and "left out" (DERIVED_PER_NODE_COLUMNS) is this node's own: the carried value only starts a row made here. A "set or not"
+  // one is written with the other display columns: whether it is set is the winning creation's, as on the node that made it
+  const derived = Object.entries(DERIVED_PER_NODE_COLUMNS[table] ?? {}).filter(([, how]) => how === "left out").map(([c]) => c);
+  const skip = new Set(["workspace_id", ...(spec.deferred ?? []), ...derived, ...keep]);
   const cols = (await carriedColumns(spec)).filter((c) => !skip.has(c));
   if (cols.length === 0) return;
   const params: unknown[] = [JSON.stringify(values), workspaceId];
@@ -305,8 +310,10 @@ const hashOf = (aggregate: string) => sha256Hex(aggregate);
 /** The digest of every carried table of `workspaceId` under `scopeOf`. Run it inside one transaction (a read snapshot on the
  *  source, any transaction on the receiver): the rows and the stamps of a table must be read at one moment, and timestamps are
  *  written as text in UTC here so that two databases with different time zones agree. The columns a snapshot does not carry
- *  are not in it. */
-export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeFactory): Promise<TableDigest[]> {
+ *  are not in it. `derived` compares the columns it names as it says (spine/snapshotTables.ts DerivedHow: left out, or only whether set): a check of "two nodes
+ *  hold the same replicated data" after an exchange passes DERIVED_PER_NODE_COLUMNS; a snapshot's own check passes nothing, as a snapshot is an exact copy (and
+ *  the source's digest travels in it). */
+export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeFactory, derived: DerivedColumns = {}): Promise<TableDigest[]> {
   if (!inTransaction()) throw new Error("computeSnapshotDigest must run inside a transaction");
   await snapshotRows(`SELECT set_config('TimeZone', 'UTC', true)`);
   const out: TableDigest[] = [];
@@ -316,7 +323,7 @@ export async function computeSnapshotDigest(workspaceId: string, scopeOf: ScopeF
     const cols = await carriedColumns(spec);
     const rows = (await snapshotRows<{ n: number; agg: string }>(
       `SELECT count(*)::int AS n, COALESCE(string_agg(r.h, ',' ORDER BY r.k COLLATE "C"), '') AS agg FROM (
-         SELECT concat_ws(chr(31), ${spec.order.join(", ")}) AS k, encode(sha256(convert_to((${valueSql(spec, cols, scope)})::text, 'UTF8')), 'hex') AS h
+         SELECT concat_ws(chr(31), ${spec.order.join(", ")}) AS k, encode(sha256(convert_to((${valueSql(spec, cols, scope, derived[spec.table])})::text, 'UTF8')), 'hex') AS h
            FROM ${quote(spec.table)} t WHERE ${spec.where(scope)}) r`, params)).rows[0]!;
     let stamps = 0;
     let stampAgg = "";

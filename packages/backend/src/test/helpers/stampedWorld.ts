@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { apiOnError } from "../../httpError.js";
 import { getWorkspaceId, q } from "../../db.js";
-import { SNAPSHOT_SPECS } from "../../spine/snapshotTables.js";
+import { DERIVED_PER_NODE_COLUMNS, SNAPSHOT_SPECS, comparedSql, type DerivedColumns } from "../../spine/snapshotTables.js";
 import stampedSnapshotRouter from "../../routes/stampedSnapshot.js";
 import { setSiteConfig } from "./siteConfigFixture.js";
 import { snapshotScope, snapshotScopeFor } from "../../services/readPolicy.js";
@@ -240,9 +240,18 @@ export function headsOfWorkspace(node: RealNode | null, world: Pick<SourceWorld,
 }
 
 /** The digest of the workspace as `person` reads it on `node`: what the receiver holds, in the terms the source's digest was made in. */
-export function digestAs(node: RealNode | null, ws: string, person: ActorCtx) {
-  return onNode(node, () => withActorReadSnapshot(person, ws, async (actor) => computeSnapshotDigest(ws, await snapshotScopeFor(actor))));
+export function digestAs(node: RealNode | null, ws: string, person: ActorCtx, derived: DerivedColumns = {}) {
+  return onNode(node, () => withActorReadSnapshot(person, ws, async (actor) => computeSnapshotDigest(ws, await snapshotScopeFor(actor), derived)));
 }
+/** The digest of what REPLICATES: the columns derived on each node (spine/snapshotTables.ts DERIVED_PER_NODE_COLUMNS, the one list) compared as it says. What two nodes
+ *  compare after an exchange; a snapshot is checked against its source with `digestAs` (an exact copy). Another list is a negative control's: the one list
+ *  naming a replicated column stops the backend from loading (stampedMerge/dbUnits.ts; test/derivedColumnsRefused.test.ts). */
+export function replicatedDigestAs(node: RealNode | null, ws: string, person: ActorCtx, derived: DerivedColumns = DERIVED_PER_NODE_COLUMNS) {
+  return digestAs(node, ws, person, derived);
+}
+/** Column `column` of `table` in a test's own projection of what two nodes must hold alike, as the one list compares it (spine/snapshotTables.ts
+ *  DERIVED_PER_NODE_COLUMNS through comparedSql): `expr` itself, whether it is set ("set or not"), or NULL ("left out"). No test writes its own rule for it. */
+export const asCompared = (table: string, column: string, expr: string): string => comparedSql(DERIVED_PER_NODE_COLUMNS[table]?.[column], expr) ?? "NULL";
 
 /** Rows of the world's database that the owner's snapshot leaves out ON PURPOSE (and why), as SQL over alias `t` of each table: what the
  *  source has and the receiver does not, and may not. Everything else a table holds must arrive: stampedSnapshotTwoProcess compares WHOLE

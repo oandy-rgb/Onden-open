@@ -10,7 +10,7 @@ import { keyBetween } from "@onden/markdown/contract";
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
-import { buildSourceWorld, capture, fillFrom, openNode, type SourceWorld } from "./helpers/stampedWorld.js";
+import { asCompared, buildSourceWorld, capture, fillFrom, openNode, type SourceWorld } from "./helpers/stampedWorld.js";
 import { ALL_TABLES, admit, bundleFor, expectSame, exchange, heldAt, makeRng, markWorld, nodeIdOf, peerOf, peerStateOf, take, withClockAhead, withOriginAt, writeEachOp, writeEachRowKind, writeFor, type Peer } from "./helpers/stampedBundleWorld.js";
 import { withTransaction } from "../db.js";
 import { addFunction } from "../services/functionRefs.js";
@@ -581,7 +581,7 @@ describe.skipIf(!isTestDb)("what a body written on one node derives there, and w
     // [[links]]: services/linkIndex (note_link_index): what the note links to, by lower-cased title and by slug
     links: `SELECT link_lc, link_slug, stale FROM note_link_index WHERE note_id = $1`,
     // block nodes: the blocks of the text, with their kind, label and text
-    blocks: `SELECT block_ref, kind, label, text_cache, hidden_at IS NOT NULL AS hidden FROM block_nodes WHERE note_id = $1 ORDER BY block_ref`,
+    blocks: `SELECT block_ref, kind, label, text_cache, ${asCompared("block_nodes", "hidden_at", "hidden_at")} AS hidden FROM block_nodes WHERE note_id = $1 ORDER BY block_ref`,
     blockRefs: `SELECT block_ref FROM note_block_refs WHERE note_id = $1 ORDER BY block_ref`,
     // anchors: ranges and blocks other notes point at
     anchors: `SELECT anchor_id, kind, from_utf16, to_utf16, status, quote FROM block_anchors WHERE note_id = $1 ORDER BY anchor_id`,

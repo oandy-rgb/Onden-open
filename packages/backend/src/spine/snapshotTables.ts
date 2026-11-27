@@ -43,6 +43,7 @@ type Entry = {
   pk: string[]; order: string[]; where: string; /** Rows of the table that NEVER leave this node (see `stampMayLeaveSql`): the classification says which in syncClasses.json (`neverLeaves`), this is how to tell. */ neverLeaves?: string;
   exclude?: string[]; placeholders?: Record<string, string>;
   override?: Record<string, string>; deferred?: string[]; stamps?: StampDef[]; note?: string;
+  /** Columns derived on each node and how a check of "the same" compares them: DERIVED_PER_NODE_COLUMNS below. */ derived?: Record<string, DerivedHow>;
 };
 
 export type SnapshotSpec = {
@@ -79,6 +80,39 @@ export const SHELL_EMPTY_CHECKS: { code: string; sql: string }[] = (data as unkn
  *                                      a unit of its own that travels; two kinds of unit over one piece of data made two nodes with the same boards differ.
  */
 export const RETIRED_STAMP_LABELS: readonly string[] = ["node_attributes._canvas_sections"];
+
+/**
+ * Carried columns whose value is DERIVED on each node, not replicated (owner's decision 甲, 2026-11-24, issue #2020): a write moves them on the node that writes, as on
+ * one server, and carries no stamp for them; a node that takes the write works out its own (or keeps what it had). So two nodes holding the same writes may hold
+ * different values here, and that is not a difference. How a check of "two nodes hold the same" treats each one (`DerivedHow`):
+ *   "left out"    not compared at all. The five `updated_at` of the tables other than notes: a write that moves it without changing any unit (a paragraph row's text
+ *                 worked out again at every save, a card put down where it was, an attribute saved as it was) moves it on the writer only. An anchor's
+ *                 `moved_how` / `moved_at` (migration 215: this node's own record of how its own save moved it; the receiver's expansion does not write them).
+ *   "set or not"  only whether it holds a value is compared: the value is this node's clock, whether there is one is worked out from replicated state the same
+ *                 way on every node. A paragraph row's `hidden_at` (services/blockNodes.ts deriveBlockRows: `now()` when the body no longer has the
+ *                 paragraph, on the writer and on the receiver alike). Leaving it out whole would let "shown on one node, hidden on the other" pass.
+ *   - A snapshot carries them (an exact copy: the digest a snapshot is checked by still counts them) and a change bundle carries them (the wire is unchanged). A
+ *     "left out" column is taken only as the starting value of a row the receiver makes, never onto a row it holds (snapshotSql.ts overwriteCarriedColumns); a
+ *     "set or not" column is written with the other display columns of the winning creation, so the two nodes agree on it even where nothing works it out again.
+ *   - Every check of "two nodes hold the same" after an exchange compares them as said here (computeSnapshotDigest `derived`, through `comparedSql`); nothing a
+ *     person sees reads their values (README of stampedMerge, 「衍生的欄位」). A column a unit writes, a key or a JSON column may not be here
+ *     (stampedMerge/dbUnits.ts derivedColumnProblems).
+ * The one list, declared per table in snapshotTables.json (`derived`, next to `exclude` and `deferred`); product and tests read it from here. A value that is
+ * not one of DERIVED_HOWS is refused when stampedMerge/dbUnits.ts loads (derivedColumnProblems).
+ */
+export type DerivedHow = "left out" | "set or not";
+export type DerivedColumns = Readonly<Record<string, Readonly<Record<string, DerivedHow>>>>;
+export const DERIVED_PER_NODE_COLUMNS: DerivedColumns = Object.fromEntries(Object.entries(data as unknown as Record<string, Entry>)
+  .filter(([table, e]) => !table.startsWith("$") && e.derived !== undefined).map(([table, e]) => [table, e.derived!]));
+export const DERIVED_HOWS: readonly DerivedHow[] = ["left out", "set or not"];
+
+/** The SQL a check of "two nodes hold the same" compares a column by, `expr` being its value: the value itself when the column replicates (`how` undefined),
+ *  whether it is set for "set or not", nothing (null) for "left out". The one reading of DERIVED_PER_NODE_COLUMNS's `DerivedHow`. */
+export function comparedSql(how: DerivedHow | undefined, expr: string): string | null {
+  if (how === undefined) return expr;
+  if (how === "set or not") return `(${expr} IS NOT NULL)`;
+  return null;
+}
 
 export const SNAPSHOT_SPECS: SnapshotSpec[] = Object.entries(data as unknown as Record<string, Entry>).filter(([table]) => !table.startsWith("$")).map(([table, e]) => ({
   table, pk: e.pk, order: e.order, where: (s) => e.neverLeaves ? `(${fill(e.where, s)}) AND NOT (${e.neverLeaves})` : fill(e.where, s), neverLeaves: e.neverLeaves, exclude: e.exclude, placeholders: e.placeholders, deferred: e.deferred, stamps: e.stamps,

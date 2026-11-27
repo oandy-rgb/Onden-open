@@ -8,6 +8,8 @@ import { pool, q } from "../db.js";
 let ws = "";
 vi.mock("../db.js", async (original) => ({ ...await original<typeof import("../db.js")>(), getWorkspaceId: async () => ws }));
 import { createNote } from "../services/noteCreate.js";
+import { listNoteVersions } from "../services/history/noteVersions.js";
+import { updateNode } from "../services/nodeUpdate.js";
 import { derivedId } from "../services/derivedIds.js";
 import { restoreEvent } from "../services/eventRestore/restore.js";
 import { moveToSpace } from "../services/spaces.js";
@@ -50,6 +52,8 @@ describe.skipIf(!isTestDatabase())("undoing history that was written before migr
     other = await makeSpace(ws, `Other ${tag}`, [{ id: owner.id, permission: "edit" }]);
     await seedQ(`INSERT INTO content_nodes (id, workspace_id, source_type, node_type, title, slug, markdown, tag_schema) VALUES ($1, $2, 'manual', 'class_tag', $3, $4, '', $5::jsonb)`,
       [oldCapture, ws, `收件匣${tag}`, `module-${oldCapture}`, JSON.stringify({ module: "capture" })]);
+    // its description saved once (a tag has versions since migration 231): a version, its position and the event mapped to it, under the old id
+    await updateNode(ws, oldCapture, { markdown: `what lands here ${tag}\n` }, { actor: owner });
 
     const made = await createNote({ actor: owner, workspaceId: ws, title: `Captured ${tag}`, markdown: "x\n", spaceId: oldDefault, event: { uiContext: "test" } });
     note = made.node.id;
@@ -76,6 +80,12 @@ describe.skipIf(!isTestDatabase())("undoing history that was written before migr
       [oldCapture]: derivedId(derivedIdName.moduleTag(ws, "capture")),
       [oldDefault]: derivedId(derivedIdName.defaultSpace(ws)),
     });
+  });
+
+  it("the tag's saved description is still in its history, under its new id", async () => {
+    const versions = await listNoteVersions(ws, owner, derivedId(derivedIdName.moduleTag(ws, "capture")), { raw: true });
+    expect(versions?.length, JSON.stringify(versions)).toBe(1);
+    expect(await listNoteVersions(ws, owner, oldCapture, { raw: true })).toBeNull(); // nothing is left under the old one
   });
 
   it("undoing an earlier space move puts the note back in the space as it is now (under its new id)", async () => {

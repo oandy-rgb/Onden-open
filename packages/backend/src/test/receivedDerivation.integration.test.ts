@@ -31,6 +31,20 @@ import { receivedDerivation, setReceivedDerivation } from "../spine/receivedDeri
 type ReceivedDerivation = NonNullable<ReturnType<typeof receivedDerivation>>;
 import { syncBlockNodes } from "../services/blockNodes.js";
 import { PROPS_SEED } from "./helpers/propsConfig.js";
+import { buildSyncDelta } from "../services/sync/index.js";
+import { listNoteVersions } from "../services/history/index.js";
+import { restoreEvent } from "../services/eventRestore/restore.js";
+import { collectOrphanBlobs } from "../services/maintenance/prune.js";
+import { seedQ } from "./helpers/seedQ.js";
+import { INK_CHUNK_THRESHOLD, readChunkedValues } from "../services/inkChunks.js";
+import { appendReceivedEvents } from "../spine/receivedEvents.js";
+import { event } from "../db.js";
+import { inboxQueue } from "../services/inboxQueue.js";
+import { Hono } from "hono";
+import { apiOnError } from "../httpError.js";
+import tasksRouter, { addTaskUnderNote } from "../modules/tasks/routes.js";
+import nodesRouter from "../routes/nodes.js";
+import type { ActorCtx } from "../types.js";
 
 /** A new seed each run unless PROPS_SEED names one (helpers/propsConfig.ts; its default is fixed, so it is used only when set). */
 const SEED = process.env.PROPS_SEED ? PROPS_SEED : 1 + Math.floor(Math.random() * 2 ** 30);
@@ -527,5 +541,351 @@ describe.skipIf(!isTestDb)("what a node derives from a bundle it took (batch 4a)
     expect(await rowOn(b, "new_flip")).toEqual([{ value: "y", source: "dispatcher" }]);
     // run again: nothing left to revive
     expect(await onNode(a.node, () => withEventTransaction(a.ws, async () => (await q<{ n: string }>(`SELECT sync_revive_text_attribute_rows()::text AS n`)).rows[0]!.n))).toBe("0");
+  }, 600_000);
+});
+
+// Batch 4b (own-node-transport §2.12.5, "證明 4b"): what a node records in ITS OWN event log of a bundle it took (services/receivedEvents.ts, spine/receivedEvents.ts).
+// The same writes done on A and taken by B: a mirror client of each node, from the moment before the writes, is told the same things by /api/sync; History lists a
+// received save at the time it was written; "undo this one" of a received save is refused; the blob of a received text is not taken for an orphan; nothing is minted.
+// P1 (the wrapper above) holds for every bundle here too: the events write no unit.
+describe.skipIf(!isTestDb)("what a node records of a bundle it took (batch 4b)", () => {
+  /** The [[link]] edges a node holds (derived: each node has its own ids), by their ends and kind. */
+  const linksOf = (p: Peer): Promise<string[]> => onNode(p.node, async () => (await q<{ k: string }>(
+    `SELECT source_node_id::text || '>' || target_node_id::text || ':' || edge_type || ':' || status AS k FROM node_edges WHERE workspace_id = $1 AND origin = 'wikilink' ORDER BY 1`, [p.ws])).rows.map((r) => r.k));
+  /** Where each node's event log ends now: a mirror client's cursor. */
+  const headOf = (p: Peer): Promise<number> => onNode(p.node, async () => Number((await q<{ n: string }>(`SELECT COALESCE(MAX(id), 0)::text AS n FROM domain_events WHERE workspace_id = $1`, [p.ws])).rows[0]!.n));
+  /** What /api/sync tells a mirror client of `p` (the owner, holding nothing) that read up to `since`, as data two nodes can be compared by. Ids that each node makes
+   *  for itself (a derived edge's) are not compared, nor the columns the local log alone gives (who touched a note last, and when). */
+  const mirrorOf = (p: Peer, since: number) => onNode(p.node, async () => {
+    const d = await buildSyncDelta(p.owner, p.ws, { since, known: [] });
+    const sorted = (xs: Iterable<string>) => [...xs].sort();
+    return {
+      nodes: d.nodes.upsert.map((n) => JSON.stringify({ id: n.id, title: n.title, markdown: n.markdown, parent_id: n.parent_id, hidden: n.hidden })).sort(),
+      nodeDeletes: sorted(d.nodes.delete),
+      edges: sorted(d.edges.upsert.map((e) => `${e.source_node_id}>${e.target_node_id}:${e.edge_type}:${e.status}`)),
+      edgeDeletes: d.edges.delete.length,
+      tasks: sorted(d.tasks.upsert.map((t) => t.id)),
+      taskDeletes: sorted(d.tasks.delete),
+      attributes: sorted(d.attributes.upsert.map((a) => `${a.node_id}/${a.key}=${a.value}`)),
+      attributeDeletes: sorted(d.attributes.delete.map((a) => `${a.node_id}/${a.key}`)),
+      // with the counts: a paragraph's tag leaving or coming back moves only them (review of PR #1997, round 1, point 5)
+      tags: d.tags ? sorted(d.tags.map((t) => `${t.id}:${String(t.title ?? t.name ?? "")}:${String(t.usage_count ?? "")}:${String(t.block_usage_count ?? "")}`)) : null,
+      workspace: d.workspace !== null,
+    };
+  });
+
+  it("a mirror client is told the same by the node that wrote and by the node that took the writes (random writes of every table, a tagged paragraph, a task line)", async () => {
+    const { a, b } = await pair(40);
+    const [sinceA, sinceB] = [await headOf(a), await headOf(b)];
+    // what the run is compared on: not the links B lacks since it joined (pinned below), nor a delete of a note the run made and removed (no client held it)
+    const [linksA, linksB] = [await linksOf(a), await linksOf(b)];
+    const lackedAtJoin = new Set(linksA.filter((l) => !linksB.includes(l)));
+    const before = new Set(await onNode(a.node, async () => (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1`, [a.ws])).rows.map((r) => r.id)));
+    const valuesBefore = new Set(await onNode(b.node, async () => (await q<{ k: string }>(`SELECT node_id::text || '/' || key AS k FROM node_attributes WHERE workspace_id = $1`, [b.ws])).rows.map((r) => r.k)));
+    // a removal is compared where a client could hold what was removed (a value the run set and removed again was never sent to anyone)
+    // nor a note A's tab is sent again only for pointers the run made and removed (nothing of it changed; B cannot name it: the test below this one)
+    const pointersAt = () => onNode(a.node, async () => new Map((await q<{ target_id: string; ids: string }>(
+      `SELECT target_id::text, string_agg(id::text, ',' ORDER BY id) AS ids FROM note_pointers WHERE workspace_id = $1 GROUP BY target_id`, [a.ws])).rows.map((r) => [r.target_id, r.ids] as const)));
+    const pointersBefore = await pointersAt();
+    let pointedOnly = new Set<string>();
+    const comparable = (m: Awaited<ReturnType<typeof mirrorOf>>) => ({ ...m, edges: m.edges.filter((e) => !lackedAtJoin.has(e)), nodeDeletes: m.nodeDeletes.filter((id) => before.has(id)),
+      attributeDeletes: m.attributeDeletes.filter((k) => valuesBefore.has(k)), nodes: m.nodes.filter((n) => !pointedOnly.has(JSON.parse(n).id)) });
+    const n = await note(a, "Probe", "");
+    await note(a, "Target Note");
+    await write(a, "PATCH", `/api/nodes/${n}`, { markdown: BODY });
+    await writeFor(a, makeRng(SEED + 41), 24, { weights: { attr: 6, unattr: 2, tagMake: 2, tag: 5, untag: 2, point: 4, unpoint: 2, schemaKey: 3, row: 8 } });
+    await exchange(a, b);
+    const pointersAfter = await pointersAt();
+    const eventsOnA = await onNode(a.node, async () => (await q<{ target_id: string; kinds: string[] }>(
+      `SELECT target_id::text, array_agg(DISTINCT event_type) AS kinds FROM domain_events WHERE workspace_id = $1 AND id > $2 AND target_type = 'node' GROUP BY target_id`, [a.ws, sinceA])).rows);
+    pointedOnly = new Set(eventsOnA.filter((e) => e.kinds.every((k) => k === "POINTER_CREATED" || k === "POINTER_DELETED") && pointersBefore.get(e.target_id) === pointersAfter.get(e.target_id))
+      .map((e) => e.target_id));
+    const [ma, mb] = [await mirrorOf(a, sinceA), await mirrorOf(b, sinceB)];
+    expect(ma.nodes.length, "the writes reach a mirror client of the writer").toBeGreaterThan(0);
+    // leftover of 4a: the paragraph tag the body made moves the tag catalog (and the task words with it) on the node that took it too
+    expect(ma.tags, "the writer's client is sent the tag catalog").not.toBeNull();
+    expect(comparable(mb)).toEqual(comparable(ma));
+  }, 600_000);
+
+  // Found by the test above (seed 745433883), a difference of what the writer's own log tells, not a gap: a pointer made and removed on A records
+  // POINTER_CREATED and POINTER_DELETED on the note it pointed at, so A's tab is sent that note again. B never held the pointer, so its removal names no note
+  // there (services/receivedEvents.ts names a removed pointer's note from the row read before the merge), and nothing of the note changed on either node:
+  // B's tab already holds what A's tab is sent again. The test above does not compare such a note.
+  it("a pointer made and removed on A before B heard of it: A's tab is sent the note it pointed at again, which changed on neither node", async () => {
+    const { a, b } = await pair(57);
+    const holder = await note(a, "Holder"), x = await note(a, "Pointed at");
+    await exchange(a, b);
+    const rowOf = (p: Peer) => onNode(p.node, async () => (await q(`SELECT title, markdown, parent_id, hidden, deleted_at, space_id, updated_at FROM content_nodes WHERE id = $1`, [x])).rows[0]);
+    const rows = [await rowOf(a), await rowOf(b)];
+    expect(rows[1], "B holds the note as A does").toEqual(rows[0]);
+    const sinceA = await headOf(a);
+    const pointer = await write(a, "POST", "/api/pointers", { target_id: x, parent_id: holder });
+    await write(a, "DELETE", `/api/pointers/${pointer.id}`);
+    await exchange(a, b);
+    expect((await mirrorOf(a, sinceA)).nodes.map((n) => JSON.parse(n).id), "the writer's tab is sent the note again (its two writes)").toContain(x);
+    expect([await rowOf(a), await rowOf(b)], "nothing of the note changed on either node").toEqual(rows);
+  }, 600_000);
+
+  // Found by the test above (a deterministic difference, not a seed's): a snapshot carries the hand-made edges only (snapshotTables.json node_edges `origin =
+  // 'manual'`), and joining derives none, so a node that joined holds no [[link]] edge of a note it took until that note is saved again. README 「接上傳輸前必須完成」.
+  it.fails("a node that joined by snapshot holds the [[link]] edges of the notes it took, as its source does", async () => {
+    const { a, b } = await pair(44);
+    await exchange(a, b); // and a bundle taken since changes nothing of it (P1 watches it)
+    expect(await linksOf(b)).toEqual(await linksOf(a));
+  }, 600_000);
+
+  /** A tag's description saved on A after B has the tag, taken by B later than it was written: what B's log and version list say of it. */
+  const receivedDescription = async (seed: number) => {
+    const { a, b } = await pair(seed);
+    const tag = (await write(a, "POST", "/api/tags", { name: "described-tag" })).id as string;
+    await exchange(a, b);
+    await write(a, "PATCH", `/api/nodes/${tag}`, { markdown: "what this tag is for" });
+    const writtenAt = await onNode(a.node, async () => new Date((await q<{ at: Date }>(`SELECT created_at AS at FROM domain_events WHERE target_id = $1 AND payload ? 'body_hash' ORDER BY id DESC LIMIT 1`, [tag])).rows[0]!.at).getTime());
+    await new Promise((r) => setTimeout(r, 1500)); // taken later than it was written
+    const versionsBefore = await onNode(b.node, async () => (await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_versions WHERE workspace_id = $1`, [b.ws])).rows[0]!.n);
+    await exchange(a, b);
+    return { a, b, tag, writtenAt, versionsBefore };
+  };
+
+  it("a received save is marked as received (the time it was written, its base not known), mints no version here, and undoing it alone is refused; the text stays", async () => {
+    const { b, tag, versionsBefore } = await receivedDescription(42);
+    expect(await onNode(b.node, async () => (await q<{ n: string }>(`SELECT count(*)::text AS n FROM note_versions WHERE workspace_id = $1`, [b.ws])).rows[0]!.n), "nothing is minted").toBe(versionsBefore);
+    const received = await onNode(b.node, async () => (await q<{ id: string; meta: Record<string, unknown>; base: string | null; actor: string }>(
+      `SELECT id, tx_meta AS meta, base_hash AS base, actor_type AS actor FROM domain_events WHERE target_id = $1 AND payload ? 'body_hash' ORDER BY id DESC LIMIT 1`, [tag])).rows[0]!);
+    expect(received.meta).toMatchObject({ received: true, base_unknown: true });
+    expect(typeof received.meta.written_at, "the time it was written").toBe("string");
+    expect(received.actor, "the owner wrote it").toBe("user");
+    expect(received.base, "the writer's base is not known here: none, not this node's previous text").toBeNull();
+    const undo = await onNode(b.node, () => restoreEvent(String(received.id), { actor: b.owner, workspaceId: b.ws }));
+    expect((undo as { code?: string }).code, "a change made on another device is not undone alone").toBe("made_elsewhere");
+    expect(await onNode(b.node, async () => (await q<{ markdown: string }>(`SELECT markdown FROM content_nodes WHERE id = $1`, [tag])).rows[0]!.markdown)).toBe("what this tag is for");
+  }, 600_000);
+
+  // Since history batch 8 (migration 231) a tag's description has versions, and its list reads them; a bundle mints none (the versions are the writer's and
+  // travel with history batch 4), so the received save is not in B's list yet. README 「接上傳輸前必須完成」.
+  it.fails("History on the node that took it lists a received save, at the time it was written and by who wrote it (waits for versions to travel: history batch 4)", async () => {
+    const { b, tag, writtenAt } = await receivedDescription(53);
+    const first = (await onNode(b.node, () => listNoteVersions(b.ws, b.owner, tag, { raw: true })))![0]!;
+    expect(first.markdown).toBe("what this tag is for");
+    expect(Math.abs(new Date(first.changed_at as string).getTime() - writtenAt), "the time it was written, not the time it arrived").toBeLessThan(1000);
+    expect(first.actor_kind, "the owner wrote it").toBe("human");
+  }, 600_000);
+
+  /** The task routes as the owner (the world's caller has the notes' routes only). */
+  const tasksOf = (p: Peer) => {
+    const app = new Hono<{ Variables: { actor: ActorCtx | null } }>();
+    app.onError(apiOnError);
+    app.use("*", async (c, next) => { c.set("actor", p.owner); await next(); });
+    app.route("/api/tasks", tasksRouter);
+    app.post("/api/nodes/:id/tasks", addTaskUnderNote);
+    app.route("/api/nodes", nodesRouter);
+    return async (method: string, path: string, body?: unknown) => {
+      const res = await app.request(path, { method, headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      if (res.status >= 300) throw new Error(`${method} ${path} → ${res.status}: ${await res.text()}`);
+      await awaitAllDispatchers();
+      return res.json() as Promise<any>;
+    };
+  };
+
+  // The owner's decision (2026-11-23, review of PR #1997, round 1, point 2): deleting the next occurrence for good does not end the series; finishing
+  // the task again makes it anew (main's behaviour, asserted on A above). Between two nodes: one finish made on both makes ONE next occurrence.
+  it("the same recurring task finished on A and on B before either heard of the other: one next occurrence, the same id on both", async () => {
+    const { a, b } = await pair(51);
+    const host = await note(a, "Shared weekly host");
+    const task = (await onNode(a.node, () => tasksOf(a)("POST", `/api/nodes/${host}/tasks`, { title: "shared weekly chore", due_date: new Date().toISOString().slice(0, 10), recur: "1w" }))).id as string;
+    await exchange(a, b);
+    for (const p of [a, b]) await onNode(p.node, () => tasksOf(p)("PATCH", `/api/tasks/${task}`, { status: "done" }));
+    const nextOf = (p: Peer) => onNode(p.node, async () => (await q<{ id: string }>(
+      `SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND title = 'shared weekly chore' AND id <> $2 ORDER BY id`, [p.ws, task])).rows.map((r) => r.id));
+    const [madeOnA, madeOnB] = [await nextOf(a), await nextOf(b)];
+    expect(madeOnA, "each node made its own next occurrence").toHaveLength(1);
+    expect(madeOnB, "derived from the task's id: the same id").toEqual(madeOnA);
+    await exchange(a, b); await exchange(b, a);
+    expect(await nextOf(a), "after exchanging both ways: one").toEqual(madeOnA);
+    expect(await nextOf(b)).toEqual(madeOnA);
+  }, 600_000);
+
+  // Decided by the owner (2026-11-23, review of PR #1997, round 1, point 2): as on main, a next occurrence deleted for good is made anew when the task is
+  // finished again (deleting one occurrence does not end the series). The node that took the purge by bundle does the same, from the same state.
+  it("a recurring task finished on A, whose next occurrence A then deleted for good: finished again, it is made anew on A (as on main) and on B (which took both)", async () => {
+    const { a, b } = await pair(45);
+    const host = await note(a, "Weekly host");
+    const task = (await onNode(a.node, () => tasksOf(a)("POST", `/api/nodes/${host}/tasks`, { title: "weekly chore", due_date: new Date().toISOString().slice(0, 10), recur: "1w" }))).id as string;
+    await onNode(a.node, () => tasksOf(a)("PATCH", `/api/tasks/${task}`, { status: "done" }));
+    const next = await onNode(a.node, async () => (await q<{ id: string }>(`SELECT target_id AS id FROM domain_events WHERE event_type = 'NODE_CREATED' AND payload->>'rolled_from' = $1`, [task])).rows[0]!.id);
+    await write(a, "DELETE", `/api/nodes/${next}`);
+    const preview = await write(a, "GET", `/api/nodes/${next}/purge-preview`);
+    await write(a, "POST", `/api/nodes/${next}/purge`, { expected_ids: (preview.ids ?? preview.notes?.map((x: { id: string }) => x.id) ?? [next]) as string[] });
+    await exchange(a, b);
+    expect(await onNode(b.node, async () => (await q(`SELECT 1 FROM content_nodes WHERE id = $1`, [next])).rows.length), "B took the delete").toBe(0);
+    const tombstone = await onNode(a.node, async () => (await q(`SELECT 1 FROM sync_stamps WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = '*' AND deleted`, [a.ws, next])).rows.length);
+    const again = async (p: Peer) => {
+      await onNode(p.node, () => tasksOf(p)("PATCH", `/api/tasks/${task}`, { status: "todo" }));
+      await onNode(p.node, () => tasksOf(p)("PATCH", `/api/tasks/${task}`, { status: "done" }));
+      return onNode(p.node, async () => (await q(`SELECT 1 FROM content_nodes WHERE id = $1`, [next])).rows.length);
+    };
+    const [onA, onB] = [await again(a), await again(b)];
+    console.log(`[recurring] after a purge of the next occurrence: tombstone kept on the writer: ${tombstone === 1}; finished again, made anew on A: ${onA === 1}, on B: ${onB === 1}`);
+    expect(onA, "the writer keeps main's behaviour: the occurrence is made anew").toBe(1);
+    expect(onB, "the node that took the purge does the same").toBe(onA);
+  }, 600_000);
+
+  it("a note renamed and then put in the trash on A, taken in one bundle: a tab of B is told it is gone, as a tab of A is (the delete is written last)", async () => {
+    const { a, b } = await pair(47);
+    const x = await note(a, "Going soon");
+    await exchange(a, b);
+    const [sinceA, sinceB] = [await headOf(a), await headOf(b)];
+    await write(a, "PATCH", `/api/nodes/${x}`, { title: "Renamed, then trashed" });
+    await write(a, "DELETE", `/api/nodes/${x}`);
+    await exchange(a, b);
+    const [ma, mb] = [await mirrorOf(a, sinceA), await mirrorOf(b, sinceB)];
+    expect(ma.nodeDeletes).toContain(x);
+    expect({ nodes: mb.nodes, nodeDeletes: mb.nodeDeletes }).toEqual({ nodes: ma.nodes, nodeDeletes: ma.nodeDeletes });
+  }, 600_000);
+
+  // Found by the random test above (seed 380206382): a note put in the trash and taken out again on A is told again to A's tab (NODE_DELETED, NODE_UNDELETED), while
+  // on B the bundle writes its `deleted` unit back to what B had (live), so no trash and no restore was seen and nothing was recorded: B's tab was never told the note,
+  // whose row did change (its `updated_at` follows the stamps, migration 232). Every note unit a bundle writes records an event, whether or not it moved the
+  // note's state (services/receivedEvents.ts, the notes).
+  it("a note put in the trash and taken out again on A, taken in one bundle: a tab of B is told the note again, as a tab of A is", async () => {
+    const { a, b } = await pair(56);
+    const x = await note(a, "Out and back");
+    await exchange(a, b);
+    const editedAt = (p: Peer) => onNode(p.node, async () => (await q<{ u: string }>(`SELECT updated_at::text AS u FROM content_nodes WHERE id = $1`, [x])).rows[0]!.u);
+    const heldByB = await editedAt(b);
+    const [sinceA, sinceB] = [await headOf(a), await headOf(b)];
+    await write(a, "DELETE", `/api/nodes/${x}`);
+    await write(a, "POST", `/api/nodes/${x}/undelete`);
+    await exchange(a, b);
+    expect(await editedAt(b), "the row changed on B too: the time it was last written, as on A").toBe(await editedAt(a));
+    expect(await editedAt(b), "not the row B's tab held").not.toBe(heldByB);
+    const [ma, mb] = [await mirrorOf(a, sinceA), await mirrorOf(b, sinceB)];
+    expect(ma.nodes.map((n) => JSON.parse(n).id), "the writer's tab is told the note again").toEqual([x]);
+    expect({ nodes: mb.nodes, nodeDeletes: mb.nodeDeletes }).toEqual({ nodes: ma.nodes, nodeDeletes: ma.nodeDeletes });
+  }, 600_000);
+
+  it("a tagged paragraph taken out of the text on A, and put back: B's tab is sent the tag catalog with the same counts as A's tab each time", async () => {
+    const { a, b } = await pair(48);
+    const text = "# Counted\n\nfirst paragraph {counted-tag}\n\nsecond paragraph\n";
+    const n = await note(a, "Counted", text);
+    await exchange(a, b);
+    for (const markdown of ["# Counted\n\nsecond paragraph\n", text]) {
+      const [sinceA, sinceB] = [await headOf(a), await headOf(b)];
+      await write(a, "PATCH", `/api/nodes/${n}`, { markdown });
+      await exchange(a, b);
+      const [ma, mb] = [await mirrorOf(a, sinceA), await mirrorOf(b, sinceB)];
+      expect(ma.tags, "the writer's tab is sent the catalog").not.toBeNull();
+      expect(mb.tags, markdown.includes("{counted-tag}") ? "put back" : "taken out").toEqual(ma.tags);
+    }
+  }, 600_000);
+
+  it("a bundle taken again writes no event, so no tab is told anything new", async () => {
+    const { a, b } = await pair(49);
+    await note(a, "Sent twice", "some text");
+    await exchange(a, b);
+    const head = await headOf(b);
+    await resendAll(a, b);
+    expect(await headOf(b)).toBe(head);
+  }, 600_000);
+
+  it("an AI's change taken by bundle is not put in this node's review list again; the AI's own changes here are", async () => {
+    const { a, b } = await pair(50);
+    const target = await note(a, "Reviewed where it was made");
+    await exchange(a, b);
+    const listed = await onNode(b.node, async () => {
+      const agent = (await seedQ<{ id: string }>(`INSERT INTO actors (workspace_id, name, type) VALUES ($1, 'Helper AI', 'agent') RETURNING id::text`, [b.ws])).rows[0]!.id;
+      const origin = (await q<{ o: string }>(`SELECT node_id AS o FROM sync_node`)).rows[0]!.o;
+      const stamp = { origin, seq: 1, wall: Date.now(), counter: 0, author: agent, device: null };
+      const received = await withEventTransaction(b.ws, () => appendReceivedEvents(b.ws, [{ type: "NODE_UPDATED", targetType: "node", targetId: target, payload: { fields: ["title"] }, stamp }]));
+      expect(received).toBe(1);
+      const local = await withEventTransaction(b.ws, () => event(b.ws, "NODE_UPDATED", "node", target, { fields: ["title"] }, "ai_agent", agent));
+      const queue = await inboxQueue(b.owner, b.ws, { limit: 50, actorId: null, eventType: null, since: null });
+      return { ids: queue.events.map((e) => String(e.id)), local };
+    });
+    expect(listed.ids).toEqual([listed.local]);
+  }, 600_000);
+
+  // Found by stampedSawThreeNodes (seed 171997, real Postgres): the purge's sweep deleted a blob row in the bundle's transaction, and storing the same text
+  // for a received note's event then waited on its own connection for that transaction (a statement timeout); on PGlite the text was lost instead.
+  it("one bundle deletes a note for good and brings another with the same text: taken, and the text the received note's event names is stored", async () => {
+    const { a, b } = await pair(52);
+    const same = "a text two notes share, one of them deleted for good";
+    const going = await note(a, "Going for good", same);
+    await exchange(a, b);
+    await write(a, "DELETE", `/api/nodes/${going}`);
+    const preview = await write(a, "GET", `/api/nodes/${going}/purge-preview`);
+    await write(a, "POST", `/api/nodes/${going}/purge`, { expected_ids: (preview.ids ?? preview.notes?.map((x: { id: string }) => x.id) ?? [going]) as string[] });
+    const staying = await note(a, "Staying", same);
+    await exchange(a, b);
+    const named = await onNode(b.node, async () => (await q<{ h: string; stored: boolean }>(
+      `SELECT e.body_hash AS h, EXISTS (SELECT 1 FROM blobs WHERE hash = e.body_hash) AS stored FROM domain_events e WHERE e.target_id = $1 AND e.event_type = 'NODE_CREATED'`, [staying])).rows[0]);
+    expect(named?.h, "the received creation names its text").toBeTruthy();
+    expect(named?.stored, "and that text is stored").toBe(true);
+  }, 600_000);
+
+  // The same for a drawing (review of PR #1997, confirming round, point 1): its event's snapshot stores the drawing (encodeSnapshot: putBlob on its own
+  // connection), which waited for the bundle's transaction once the purge's sweep had deleted the same blob.
+  it("one bundle deletes a note for good and brings another with the same drawing: taken, and the drawing the received value's event names is stored", async () => {
+    const { a, b } = await pair(54);
+    const drawing = JSON.stringify({ v: 1, strokes: [{ id: "s1", points: [[0, 0], [4, 4]] }, { id: "s2", points: [[1, 1], [5, 5]] }] });
+    const going = await note(a, "Drawing going for good");
+    await write(a, "PUT", `/api/nodes/${going}/attributes/ink_data`, { value: drawing });
+    await exchange(a, b);
+    await write(a, "DELETE", `/api/nodes/${going}`);
+    const preview = await write(a, "GET", `/api/nodes/${going}/purge-preview`);
+    await write(a, "POST", `/api/nodes/${going}/purge`, { expected_ids: (preview.ids ?? preview.notes?.map((x: { id: string }) => x.id) ?? [going]) as string[] });
+    const staying = await note(a, "Drawing staying");
+    await write(a, "PUT", `/api/nodes/${staying}/attributes/ink_data`, { value: drawing });
+    await exchange(a, b);
+    const named = await onNode(b.node, async () => (await q<{ h: string | null; stored: boolean }>(
+      `SELECT e.payload->>'value_ref' AS h, EXISTS (SELECT 1 FROM blobs WHERE hash = e.payload->>'value_ref') AS stored FROM domain_events e
+        WHERE e.target_id = $1 AND e.event_type = 'ATTRIBUTE_SET' AND e.payload->>'key' = 'ink_data'`, [staying])).rows[0]);
+    expect(named?.h, "the received value names its drawing").toBeTruthy();
+    expect(named?.stored, "and that drawing is stored").toBe(true);
+  }, 600_000);
+
+  // A drawing over INK_CHUNK_THRESHOLD is stored as chunks of the note that holds it (services/inkChunks.ts putInkChunks: in the bundle's own transaction,
+  // keyed by that note), not as one blob (review of PR #1997, after the confirming round).
+  it("one bundle deletes a note for good and brings another with the same LARGE drawing (stored as chunks): taken, and every chunk the event names is there", async () => {
+    const { a, b } = await pair(55);
+    const strokes = Array.from({ length: 3000 }, (_, i) => ({ id: `s${i}`, points: Array.from({ length: 6 }, (_, j) => [i + j * 1.25, i * 0.5 + j]) }));
+    const drawing = JSON.stringify({ v: 1, strokes });
+    expect(drawing.length, "over the chunk threshold").toBeGreaterThan(INK_CHUNK_THRESHOLD);
+    const going = await note(a, "Large drawing going for good");
+    await write(a, "PUT", `/api/nodes/${going}/attributes/ink_data`, { value: drawing });
+    await exchange(a, b);
+    await write(a, "DELETE", `/api/nodes/${going}`);
+    const preview = await write(a, "GET", `/api/nodes/${going}/purge-preview`);
+    await write(a, "POST", `/api/nodes/${going}/purge`, { expected_ids: (preview.ids ?? preview.notes?.map((x: { id: string }) => x.id) ?? [going]) as string[] });
+    const staying = await note(a, "Large drawing staying");
+    await write(a, "PUT", `/api/nodes/${staying}/attributes/ink_data`, { value: drawing });
+    await exchange(a, b);
+    const stored = await onNode(b.node, async () => {
+      const ref = (await q<{ h: string | null }>(`SELECT payload->>'value_ref' AS h FROM domain_events WHERE target_id = $1 AND event_type = 'ATTRIBUTE_SET' AND payload->>'key' = 'ink_data'`, [staying])).rows[0]?.h ?? null;
+      const chunks = Number((await q<{ n: string }>(`SELECT count(*)::text AS n FROM ink_chunks WHERE node_id = $1`, [staying])).rows[0]!.n);
+      // the drawing the event names, rebuilt from its chunks as History reads it
+      const rebuilt = ref ? (await readChunkedValues(b.ws, staying, [ref])).get(ref) : undefined;
+      return { ref, chunks, rebuilt };
+    });
+    expect(stored.ref, "the received value names its drawing").toBeTruthy();
+    expect(stored.chunks, "stored as chunks of the note that holds it").toBeGreaterThan(1);
+    expect(stored.rebuilt, "every chunk is there: the drawing is whole").toBe(drawing);
+  }, 600_000);
+
+  it("the blob of a received text is named by its event: the orphan sweep keeps it (else the received version's text is lost)", async () => {
+    const { a, b } = await pair(43);
+    const n = await note(a, "Kept text", "a text that only came by bundle");
+    await exchange(a, b);
+    const hash = await onNode(b.node, async () => (await q<{ h: string }>(`SELECT body_hash AS h FROM domain_events WHERE target_id = $1 AND body_hash IS NOT NULL ORDER BY id DESC LIMIT 1`, [n])).rows[0]?.h);
+    expect(hash, "the received creation names its text").toBeTruthy();
+    // undoing the received creation alone would put the note in the trash here: refused, the note stays (review of PR #1997, round 1, point 3)
+    const created = await onNode(b.node, async () => String((await q<{ id: string }>(`SELECT id FROM domain_events WHERE target_id = $1 AND event_type = 'NODE_CREATED'`, [n])).rows[0]!.id));
+    expect(((await onNode(b.node, () => restoreEvent(created, { actor: b.owner, workspaceId: b.ws }))) as { code?: string }).code).toBe("made_elsewhere");
+    expect(await onNode(b.node, async () => (await q<{ d: boolean }>(`SELECT deleted_at IS NOT NULL AS d FROM content_nodes WHERE id = $1`, [n])).rows[0]!.d)).toBe(false);
+    await onNode(b.node, async () => {
+      await seedQ(`UPDATE blobs SET created_at = now() - interval '30 days' WHERE hash = $1`, [hash]);
+      await collectOrphanBlobs();
+      expect((await q(`SELECT 1 FROM blobs WHERE hash = $1`, [hash])).rows.length).toBe(1);
+    });
   }, 600_000);
 });

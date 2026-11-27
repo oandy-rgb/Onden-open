@@ -443,6 +443,9 @@ export type BodyMove = {
  * to that event (triggered_by), so undoing the edit neither lists nor undoes them: the restore moves the
  * anchors itself. The event log's list leaves them out (services/eventQuery.ts).
  */
+/** The label the merge core gives this module's table (spine/stampedMerge/dbUnits.ts UNIT_SOURCES): a reader of received changes names it through here. */
+export const ANCHOR_ROWS_LABEL = "block_anchors";
+
 export const ANCHOR_EVENTS = {
   created: "BLOCK_ANCHOR_CREATED",
   confirmed: "BLOCK_ANCHOR_CONFIRMED",

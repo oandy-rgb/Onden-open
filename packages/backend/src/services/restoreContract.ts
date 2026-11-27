@@ -46,6 +46,8 @@ export type RestoreError =
   | { code: "unsupported"; status: 422; detail: string }
   /** A version carried in from another workspace (spine/importedHistory.ts): the person restores that version instead. */
   | { code: "imported_history"; status: 409; detail: string; force_available: false }
+  /** A change another device made, taken by bundle (spine/receivedEvents.ts): the person restores a version instead. */
+  | { code: "made_elsewhere"; status: 409; detail: string; force_available: false }
   /** The inverse would trash a reserved tag (services/reservedTags.ts). */
   | { code: "reserved_tag"; status: 409; detail: string }
   /** The inverse would trash a module's own tag while the module is on (reservedTags.assertTagDefinitionChange). */
@@ -137,7 +139,7 @@ export const LEGACY_NODE_EVENT_TYPES: Readonly<Record<string, string>> = {
  *    snapshots, publish markers, edges, tokens, …);
  *  - imported_history: a version carried in by a backup or workspace move; it was never an edit here, so it has no inverse
  *    (its created kind would otherwise trash the live note). The person restores that version from the version list. */
-export type RestoreBlockedReason = "external" | "irreversible" | "history_incomplete" | "unsupported" | "imported_history";
+export type RestoreBlockedReason = "external" | "irreversible" | "history_incomplete" | "unsupported" | "imported_history" | "made_elsewhere";
 
 export type RestoreClassifiable = {
   event_type: string;
@@ -160,6 +162,9 @@ export function restoreBlockedReason(e: RestoreClassifiable): RestoreBlockedReas
   if (type === "NODE_PURGED" || type === "NODES_PURGED") return "irreversible";
   // An event of a note deleted for good, its content erased (migration 118).
   if ((e.tx_meta as { purged?: unknown } | null | undefined)?.purged === true) return "irreversible";
+  // A change another node made, taken by bundle (spine/receivedEvents.ts): its inverse was never recorded here, whatever its kind (a creation, a trash,
+  // a move, a body). Undone alone it would act on what this node did not write; a person restores a version instead (a new local write).
+  if ((e.tx_meta as { received?: unknown } | null | undefined)?.received === true) return "made_elsewhere";
   // One rule for every kind of an imported version, the created one included (checked before the per-type rules below).
   if ((e.tx_meta as { history_import?: unknown } | null | undefined)?.history_import != null) return "imported_history";
   // DOMAIN_RESTORED_EVENT_TYPES answers before the registrants have loaded
@@ -193,6 +198,9 @@ export function restoreBlockedError(e: RestoreClassifiable): RestoreError | null
     case "imported_history":
       return { code: "imported_history", status: 409, force_available: false,
         detail: "this version came from a backup or workspace move; restore that version from the version list instead" };
+    case "made_elsewhere":
+      return { code: "made_elsewhere", status: 409, force_available: false,
+        detail: "this change was made on another device; restore a version of the note instead" };
     case "unsupported":
       return { code: "unsupported", status: 422, detail: `restore not implemented for event_type=${e.event_type}` };
   }

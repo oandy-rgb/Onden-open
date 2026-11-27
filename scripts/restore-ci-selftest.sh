@@ -48,11 +48,13 @@ tar -C "$work" -cf "$work/manual-1/content.tar" .env
 backup_id=$(nodeid)
 write; write # the server goes on after the backup
 
-word=$(q onden "SELECT split_part(title, ' ', 1) FROM content_nodes WHERE deleted_at IS NULL AND title <> '' ORDER BY id LIMIT 1")
+# the word comes from a note `write` never touches (it changes the first by id): the backup and the live database hold the same title for it. Taken from the
+# written one, a one-word title (a tag, the board; ids are random) became "task.." on the live database only, and the restored one could not find it
+word=$(q onden "SELECT split_part(title, ' ', 1) FROM content_nodes WHERE deleted_at IS NULL AND title <> '' ORDER BY id DESC LIMIT 1")
 search() { q onden "SELECT count(*) FROM content_nodes WHERE title &@~ '${word//\'/\'\'}'"; }
 search_check() { # <what>
   if [[ $has_pgroonga != 1 ]]; then echo "SKIP  $1 (no pgroonga here)"; return; fi
-  [[ $(search) -gt 0 ]] && ok "$1" || bad "$1"
+  [[ $(search) -gt 0 ]] && ok "$1" || bad "$1 (searched for \"$word\")"
 }
 
 # ── a cut archive and a changed one: refused before anything is touched

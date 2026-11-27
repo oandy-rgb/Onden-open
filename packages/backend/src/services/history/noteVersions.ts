@@ -15,7 +15,7 @@ import { sqlInt } from "../../sqlText.js";
 import type { ActorCtx } from "../../types.js";
 import { canReadNode } from "../readPolicy.js";
 import { hasVersionList } from "../../spine/noteVersions.js";
-import { bodyEventSql, versionActorTypeSql } from "./bodyEvents.js";
+import { bodyEventSql, EVENT_WRITTEN_AT_SQL, versionActorTypeSql } from "./bodyEvents.js";
 import { authorColumns, keepVersionStatisticsCurrent, listBodySessions, listBodyVersions } from "./storedVersions.js";
 import { alignParagraphs, paragraphSample, sameTextIgnoringIds, splitParagraphs, summarizeAlignment, summarizeChange, type Alignment, type ChangeSummary } from "@onden/markdown";
 
@@ -243,13 +243,13 @@ type RawEventSave = {
 async function listEventSaves(workspaceId: string, nodeId: string, limit: number) {
   const raw = await q<RawEventSave & { imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
     `SELECT e.id, (e.payload->>'title') AS title, b.content AS markdown,
-            e.created_at AS changed_at, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, ${versionActorTypeSql("e")} AS actor_type
+            ${EVENT_WRITTEN_AT_SQL} AS changed_at, (e.tx_meta ? 'history_import') AS imported, e.tx_meta->'history_import'->>'actor_name' AS import_name, a.name AS row_name, a.type AS row_type, ${versionActorTypeSql("e")} AS actor_type
        FROM domain_events e
        JOIN blobs b ON b.hash = e.payload->>'body_hash'
   LEFT JOIN actors a ON a.id::text = e.actor_id
       WHERE e.target_id = $1 AND e.workspace_id = $2
         AND ${bodyEventSql("e")}
-        ORDER BY e.created_at DESC, e.id DESC LIMIT ${sqlInt(limit)}`,
+        ORDER BY changed_at DESC, e.id DESC LIMIT ${sqlInt(limit)}`,
     [nodeId, workspaceId],
   );
   return raw.rows.map(({ imported, import_name, row_name, row_type, ...r }) => {
@@ -262,7 +262,7 @@ async function listEventSaves(workspaceId: string, nodeId: string, limit: number
 async function listEventSessions(workspaceId: string, nodeId: string, limit: number): Promise<VersionRow[]> {
   const result = await q<Omit<VersionRow, "restored_at" | "actor_name" | "author_row_type"> & { restored_at: Date | null; imported: boolean; import_name: string | null; row_name: string | null; row_type: string | null }>(
     `WITH saves AS (
-       SELECT e.id, e.actor_id, ${versionActorTypeSql("e")} AS actor_type, e.created_at,
+       SELECT e.id, e.actor_id, ${versionActorTypeSql("e")} AS actor_type, ${EVENT_WRITTEN_AT_SQL} AS created_at,
               (e.payload->>'title') AS title, e.payload->>'body_hash' AS body_hash,
               e.event_type, e.tx_meta->'history_import'->>'actor_name' AS import_actor, (e.tx_meta ? 'history_import') AS imported,
               -- 還原：NODE_RESTORED（版本還原）或 eventRestore 寫的 NODE_UPDATED（tx_meta.restored_from）
@@ -275,7 +275,7 @@ async function listEventSessions(workspaceId: string, nodeId: string, limit: num
          FROM domain_events e
         WHERE e.target_id = $1 AND e.workspace_id = $2
           AND ${bodyEventSql("e")}
-       WINDOW w AS (ORDER BY e.created_at ASC, e.id ASC)
+       WINDOW w AS (ORDER BY ${EVENT_WRITTEN_AT_SQL} ASC, e.id ASC)
      ),
      -- 被併掉的事件算在它前面留下的那一筆（還原指向它時，仍找得到那一列）
      anchored AS (

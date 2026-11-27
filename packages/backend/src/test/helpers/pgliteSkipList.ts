@@ -51,7 +51,7 @@ export const PGLITE_SKIPS: Readonly<Record<string, number>> = {
 // ratchet:list postgres-skips
 export const POSTGRES_SKIPS: Readonly<Record<string, number>> = {
   "src/test/browserBringNotes.integration.test.ts": 1, // the browser version's own database is PGlite: the file it takes in is only that copy's (#1756)
-  "src/test/distributedSyncCapture.integration.test.ts": 3, // PGlite-only by its own condition since 2026-11-06
+  "src/test/distributedSyncCapture.integration.test.ts": 4, // PGlite-only by its own condition since 2026-11-06 (the step-2a capture cluster, as the other distributedSync* files); the 4th (#1997) checks capture passes over a received event, a check on tx_meta alone that no second connection bears on
   "src/test/distributedSyncOff.test.ts": 1,
   "src/test/distributedSyncReal.integration.test.ts": 7, // two in-process PGlite backends; no second real server
   "src/test/distributedSyncRealSim.integration.test.ts": 4, // the same two PGlite backends under random activity

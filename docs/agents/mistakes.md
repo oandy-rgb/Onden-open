@@ -75,6 +75,7 @@
 | 只在一台裝置上驗過觸控 | 觸控、螢幕鍵盤的修正只在一台裝置（或一次瞬間的模擬鍵盤）上驗過，業主的另一台裝置照樣壞 |
 | 環境差異靠各處各自猜 | 同一份程式跑在不同環境（有伺服器、只在這個瀏覽器），每個畫面各自從別的東西（有沒有登入、網址）猜自己在哪裡，沒有一個地方回答「這裡有沒有這件事」 |
 | 沒有被收下的東西被當成伺服器有的 | 只在這台的記憶體、佇列或投影裡、伺服器沒有確認（甚至拒絕）的值，被當成「伺服器現在存著的」來用：當合併的 base、當成已存好而丟掉救回副本 |
+| 交易裡用另一條連線寫同一張表 | 交易進行中，用另一條連線（`putBlob`、`queryOnSeparateConnection`）寫這個交易已經鎖住或刪掉的列：在真 Postgres 上自己等自己到逾時，在只有一條連線的 PGlite 上看不出來 |
 | 儲存失敗被吞掉 | 一個儲存步驟（寫本機副本、清佇列、倒回游標、寫使用者的資料夾）失敗時，程式用空的 `catch` 繼續，好像什麼都沒發生；使用者以為存好了，或後面的步驟依賴的不變條件悄悄破掉 |
 
 ## 紀錄
@@ -1258,6 +1259,7 @@
 - **類別**：驗證範圍比改動的影響小（同 2026-11-22 那一條）。
 - **機制**：〔第 1 層〕改寫入、刪除或交易邊界的提交，推之前在 packages/backend 跑一次 `npm run test:no-db`（所有不需資料庫的測試，含這兩張清單），再跑 `scripts/guard-lane.sh`。尚無自動機制擋「只跑了一部分」。
 - 2026-11-23 再一次（PR #1989，公開 CI run 45164436079）：`nodeTrash.ts` 不再讀事件，`readGuard.test.ts` 的 `EVENT_READS` 清單還列著它；我跑了 `src/test/guards/` 與改到的檔，沒有跑 `npm run test:no-db`，而這則守門不在 guards 資料夾。機制已寫在上一行，這次是沒照做；「只跑 guards 資料夾」不夠，這一條仍尚無自動機制。
+- 2026-11-27 再一次（PR #1997，公開 CI run 45756997015，發現者：CI）：在只在 PGlite 跑的檔（`distributedSyncCapture.integration.test.ts`）加了一則測試，`POSTGRES_SKIPS` 的數字沒跟上，真 Postgres 1/4 結尾的略過檢查紅（`4 skipped, 3 listed`）；只在 PGlite 跑了改到的檔，而這個數字只有真 Postgres 的工作會數。清單改成 4（附理由與 `ratchet-override`）。在 PGlite 上預先數「這個檔在真 Postgres 會略過幾則」：尚無機制。
 ### 2026-11-23　合併核心的說明寫「兩台標記相同」，其實不同（「round 10, 4」，分支 fix/sync-valueless-heads-follow-row）
 - **發生了什麼**：`spine/stampedMerge/README.md` 對「外鍵清空的欄位，被指的那一列之後以同一個 id 再建」寫「兩台標記相同，只有位置不同」。釘住的測試只比位置，沒有比標記。三台隨機測試的種子 989453 紅在這個情境：清空的那一台留著子筆記 `parent` 的一列標記（帶著被刪父層的 id），之後才建出子筆記的那一台沒有。
 - **證據**：`anchorsReplicated.integration.test.ts`「round 10, 4 (stamps)」兩則（一則斷言今天的差別、一則 `it.fails` 斷言相同）；修正前與修正後的程式都重現。
@@ -1275,6 +1277,13 @@
 - **機制**：〔第 1 層〕`lib/hostCapabilities.ts` 的 `hostCan`（依殼在掛上 app 前的 `declareLocalOnlyHost`），閘門唯一的開關 `appStore.ts` `setMembershipGated` 與兩處登出都問它；`hostCapabilities.test.tsx`、`serverRolledBack.test.tsx` 的對照組、瀏覽器版功能腳本 `localEditionNoGate.mjs`（`run-all.mjs` 跑）。
 - **還沒擋住的**：成員、邀請、推播、伺服器網址、AI 連線碼等畫面還沒接上 `hostCan`（清單在 `docs/architecture/browser-app.md` §19）；成員確認在什麼情況下會永遠做不完，尚無重現，也尚無機制。
 
+### 2026-11-23　收包時在交易裡用另一條連線存內文，等的是自己的交易（PR #1997）
+- **發生了什麼**：收包寫事件時用 `putBlob`（自己的連線）存收進來的內文。同一包裡有一則被永久刪除、文字相同時，收尾先在包的交易裡刪了那一列 blob，`putBlob` 的連線就等這個交易，直到逾時，整包被拒（`bundle_derivation_failed`）；在 PGlite 上不逾時，但那段文字會被當成孤兒刪掉。
+- **證據**：公開 CI 的真 Postgres `stampedSawThreeNodes` 種子 171997（分支紅、main 綠）；`receivedDerivation.integration`「one bundle deletes a note for good and brings another with the same text」在真 Postgres 上修前逾時、修後通過。
+- **發現者**：測試（公開 CI 的新種子；擁有者轉告）。
+- **為什麼沒擋到**：本機只在 PGlite 上跑全套，真 Postgres 只跑了受影響的 9 個檔，沒包含三台隨機的 `stampedSawThreeNodes`；PGlite 只有一條連線，不會等。
+- **類別**：交易裡用另一條連線寫同一張表。
+- **機制**：〔第 1 層〕那則測試（兩種資料庫都跑）。〔第 2 層〕「在交易裡呼叫會開另一條連線的寫入（`putBlob`、`queryOnSeparateConnection`）之前，這個交易不能已經碰過同一張表」：尚無機制，靠審查；改收包的 PR 在真 Postgres 上至少跑一次 `stampedSawThreeNodes`。
 ### 2026-11-23　標籤頁白板的舊手寫版本在 main 上看不到（歷史第 2 批 #1948 的最後審查放過，由歷史第 8 批 #1982 的審查找到）
 - **發生了什麼**：第 2 批把手寫歷史清單改成只讀 `note_versions` 之後，標籤頁白板（`board_ink`）的舊存檔在 main 上就不在清單裡了：標籤當時不在版本範圍內，遷移 220 沒有替標籤補版本。對照測試（舊的事件讀取對新的版本讀取）只拿筆記與白板當樣本，沒有標籤。第 8 批把標籤納入範圍時，原本的設計只補說明、不補白板手寫，審查者指出缺口。**這是審查者的疏漏，不是第 8 批作者的。**
 - **證據**：PR #1982 審查第 1 輪第 1 點（留言 7094790542）；修正：migration 231 的 `tag_versions_backfill` 補標籤的手寫，`noteVersionsTags.integration.test.ts`（含標籤白板的舊資料庫拷貝與「只有事件的伺服器」兩條路，用 `historyReadersProof.ts` 的舊讀取器逐列對照）。
@@ -1290,6 +1299,23 @@
 - **為什麼沒擋到**：#1938 為 220 加這個測試時只斷言時間，而且 5,000 則在本機只要一兩秒；平方要到更大的量或忙的機器才看得出來，看出來時又被說成 CI 慢。
 - **類別**：成本只看時間、不看做了多少事。
 - **機制**：〔第 1 層〕`versionCommitCost` 改成數列數（`test/helpers/statisticsOfEveryConnection.ts` 等齊計數），「線性」那則釘成 `it.fails`，修好時翻成 `it`；15 秒只在 bench 單獨量（`scripts/bench/run.ts` `backend.commit_5000_notes`）。延後檢查成本的修正另一批（動 migration 與匯入的交易）：尚未修。〔第 2 層〕新的成本測試一律數列數、不斷言時間：尚無機制，靠審查。
+### 2026-11-23　重跑 migration 201 的測試偶爾紅：標籤有了版本之後，版本的位置與事件對照沒有跟著換 id（#2006）
+- **發生了什麼**：歷史第 8 批（#1982，migration 231）讓標籤也有版本之後，`derivedIdsHistory`「undoing history that was written before migration 201」在公開 CI 偶爾因 `note_version_positions` 的外鍵失敗。原因：201 的改寫從 `pg_constraint` 找出「指向筆記或空間的外鍵」並更新，`note_versions.note_id` 在其中；但 `note_version_positions`、`note_version_events` 是經 `note_versions` 的複合鍵指到 id，不在其中，也沒有延後檢查，於是版本列換了 id、位置還指著舊的。201 重跑會改寫**整個共用測試資料庫**裡每個工作區的候選列，所以只有在同一個分片裡，先前的測試檔恰好留下「id 不是推導值、又存過內容」的候選列時才紅，跟檔案順序有關。產品不受影響：正式升級時 201 一定在 220 之前跑，那時這兩張表還不存在；執行中也沒有任何路徑會改筆記或空間的 id。
+- **證據**：#2006；修前輸出（兩個測試檔各在建置時存一次舊 id 標籤的說明，未修的 201 必失敗）：`update or delete on table "note_versions" violates foreign key constraint "note_version_events_note_id_unit_version_key_fkey"`；修正後真 Postgres 上兩檔連跑 50 次、每次新種子。
+- **發現者**：測試（CI 偶發紅）。
+- **為什麼沒擋到**：「每個引用都跟著 id 走」的守門是掃全部資料表找舊 id 字串，這點是從 schema 推出來的，但它只找得到夾具裡有資料的表：夾具沒有替被改寫的標籤或筆記存過內容，所以版本表從來沒有列可以被找到。
+- **類別**：對照的樣本沒有涵蓋每一種持有者。
+- **機制**：〔第 1 層〕201 的改寫改為沿著外鍵鏈找（指到「指向筆記或空間的欄位」的外鍵，任意深度），延後檢查並更新它們；`derivedIdsMigration` 的夾具替被改寫的標籤與任務筆記各存一次內容，並檢查版本、位置、事件對照都換到新 id；所有外鍵事後都回到不可延後。〔第 2 層〕同檔新增從 schema 讀出「名稱是筆記／標籤／空間 id、卻沒有外鍵」的欄位，必須是 201 跟著改的，或列在 `derived-ids-not-a-reference`（附理由）；新的這類欄位一出現就失敗。
+- **還沒擋住的**：名稱不像 id 的欄位（例如 `target_id`）、以及 JSON 裡的 id，仍靠 201 的手寫清單與審查。
+- 2026-11-23（#2009 審查）：之後再加一張「經別的表的鍵指到筆記 id」的表，201 的改寫要跟著——已由外鍵鏈查找（`m201_fk_via`）與同檔守門擋住；`m201_other` 的清單由守門從 migration 內文讀，不再手抄；鏈上「ON UPDATE CASCADE 後面還接 NO ACTION」的形狀會被漏掉，守門斷言它不存在，出現就紅。
+
+### 2026-11-23　同一類第二次：收包時手寫的值也在另一條連線上存（PR #1997 確認審查）
+- **發生了什麼**：修掉內文那一處（上一筆）之後，收進來的屬性事件仍呼叫 `encodeSnapshot`，它對手寫的值用 `putBlob`（自己的連線）存，而且在永久刪除的清理之後。一包裡永久刪除一則、又帶來另一則相同手寫時，同樣自己等自己到逾時。
+- **證據**：`receivedDerivation.integration`「one bundle deletes a note for good and brings another with the same drawing」：真 Postgres 上修前 `canceling statement due to statement timeout`、修後通過。
+- **發現者**：審查。
+- **為什麼沒擋到**：上一次只修了看到的那一個呼叫（內文），沒有找同一個交易裡其他會開另一條連線的呼叫。
+- **類別**：交易裡用另一條連線寫同一張表；只擋了一個案例、沒擋整類。
+- **機制**：〔第 1 層〕那則測試。收包的收尾現在把「存內容」集中在清理之前的一步（`services/receivedDerivation.ts` 第 0 步：內文與屬性的快照），事件只用已存好的雜湊。〔第 2 層〕尚無機制擋「交易裡新加一個開另一條連線的寫入」，靠審查。
 - **2026-11-23 原因查到、已修（issue #2001）**：不是交易開始前的統計，是**連線上快取的計畫**。`auto_explain` 在 COMMIT 裡抓到的計畫：`Seq Scan on note_versions (cost=0.00..1.38 rows=1)` 實際濾掉 905 列，`note_version_positions`、`note_version_events`、`content_nodes`（migration 093 的空間檢查）同樣是成本 1–4 的整表讀，外鍵檢查（`SELECT 1 FROM ONLY note_versions x …`）也是。這些計畫是表還幾乎是空的時候在同一條連線上做好、存起來的（PostgreSQL 執行五次之後改用存起來的通用計畫，只有 `ANALYZE` 或改表會讓它失效），之後表長大了還照舊整表讀；一筆一則的匯入在同一條連線上也一樣。修法（審查第 2 輪後）：**大量寫入**照表的現況規劃（`plan_cache_mode = force_custom_plan`），並在倍數點 `ANALYZE` 筆記寫入會填的表（`db.ts`）：匯入路由與備份還原用 `withBulkWrites`（其中每一筆寫入交易；第 32、64、128… 筆時分析）；一筆交易鑄到第 100 個版本時自己變成大量寫入（`spine/noteVersions.ts` `recordVersion`，計數放在它原本那一句裡；第 100、200、400… 個時分析）；合併（`openMerge`）與每個 migration 的交易也是。一般存檔**不變**：第一版讓每一筆寫入都重新規劃，PGlite 上單次存檔中位數慢約 5 %（200 次、各兩輪：32.5／33.8 → 35.2／34.6 ms），依審查改成只有大量寫入。修後 COMMIT 起讀的列線性（500 → 2,000 則 260,500 → 296,120），手寫的列鎖選錯索引那一項也因為分析而線性了。機制換成〔第 1 層〕`versionCommitCost` 的線性與每則上限斷言（`it`）。
 - **同一次量測找到、還沒修的（都在 `versionCommitCost.integration.test.ts` 釘成 `it.fails`，寫明讀的是什麼；擋住它們的機制：尚無）**：
   1. 交易內的連結檢查（`services/wikilinkEdges.ts` `relinkBatch`：每建一則就讀這筆交易裡之前建的每一則）——4a 的範圍，另派。
@@ -1345,3 +1371,12 @@
 - **類別**：已知缺陷用會隨環境翻面的條件釘住。
 - **機制**：〔第 1 層〕`sanitize.ts`：`endWithoutUnfinishedTag`（最後一個 `>` 之後的 `<` 不可能結束）、`replaceTagBlocks`（共用同一個 `>` 的開頭只找一次、不存在的收尾標籤每種只找一次；script 等區塊、自閉合、YouTube 嵌入三條規則都用它）、`withoutComments`（只在最後一個 `-->` 之前找註解）；`sanitizeFeedHtml` 回傳前再走一次 `endWithoutUnfinishedTag`（清理兩次結果相同），`htmlToText` 也從它進；`htmlToMarkdown` 的 `parse` 從它進，最後一個 `-->`／`]]>` 之後的開頭（不分大小寫）當文字；`articleExtract.ts` 數字數時去標籤不跨過 `<`。`rssSanitize.property.test.ts`：原本 17 種平方輸入改成必須線性（`it`），另加「後面再接標籤」的 13 種；`sanitize.test.ts` 點名的行為例子。〔第 2 層〕「已知缺陷不用計時的 `it.fails` 釘住」：尚無機制。
 - **還沒擋住的**：深層巢狀讓 `htmlToMarkdown` 遞迴爆堆疊（同一檔的 DEEP 清單，加上這次發現的 `<iframe>`、`<object>` 重複），仍是已知、未修。
+
+### 2026-11-27　收包的事件只記「這一台的狀態有動」的寫入：丟進垃圾桶又拿出來的筆記，收的一方的分頁沒被告知（PR #1997，公開 CI 的新種子）
+- **發生了什麼**：A 把一則筆記丟進垃圾桶又拿出來，B 收這一包：`deleted` 寫回 B 本來的值（活的），沒有丟、也沒有復原，而 `receivedEventsOf` 只為 title／body／parent／sort 記 `NODE_UPDATED`，什麼都沒記。那則筆記的 `updated_at`（跟著標記走，migration 232）在兩台都往前了：A 的分頁收到新的一列，B 的分頁留著舊的。修完再跑新種子時另找到一個差別（種子 745433883），不是缺口：A 做了又刪掉的指標讓 A 的分頁重收被指的那則筆記；B 從沒有那個指標、沒有筆記可說，那則筆記在兩台都沒變。
+- **證據**：公開 CI run 45756997015 真 Postgres 2/4（種子 380206382：`nodes` 10 對 11），PGlite 上同種子修前紅、修後綠；決定性測試「a note put in the trash and taken out again on A, taken in one bundle…」修前紅（B 的分頁 `nodes: []`）、修後綠；「a pointer made and removed on A before B heard of it…」斷言那則筆記在兩台都沒變（含 `updated_at`），隨機測試因此不比這種筆記。
+- **發現者**：測試（公開 CI 的新種子）。
+- **為什麼沒擋到**：事件依「這一台的狀態有沒有動」決定記什麼，沒有對照「列有沒有變」（標記與 `updated_at` 也是列的一部分）；隨機測試的舊種子沒走到「同一包裡來回」那一格。
+- **類別**：邊界沒走到。
+- **機制**：〔第 1 層〕`services/receivedEvents.ts`：筆記每個寫下的欄位都記事件（狀態有動用它自己的種類，沒動就列在 `NODE_UPDATED` 的 `fields`；在垃圾桶裡的筆記再告知一次已刪）；上面兩則決定性測試；隨機測試每次新種子。
+- **還沒擋住的**：其他表（屬性、標籤、指標）「在 A 做了又撤、B 從沒收到」的寫入，收的一方都不記事件；是否每一種都像指標一樣沒有東西可說（列沒變），沒有逐表證明：尚無機制。

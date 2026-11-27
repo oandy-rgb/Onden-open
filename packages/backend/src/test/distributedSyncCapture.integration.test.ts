@@ -9,6 +9,8 @@ import { createNote } from "../services/noteCreate.js";
 import { updateNode } from "../services/nodeUpdate.js";
 import type { ActorCtx } from "../types.js";
 import { RealCluster } from "./helpers/distSim/realCluster.js";
+import { withEventTransaction } from "../spine/eventTransaction.js";
+import { appendReceivedEvents } from "../spine/receivedEvents.js";
 
 vi.setConfig({ testTimeout: 300_000 });
 const enabled = process.env.ONDEN_DB_DRIVER === "pglite" && isTestDatabase();
@@ -64,6 +66,24 @@ describe.skipIf(!enabled)("capture", () => {
     // the next round trip adds nothing either
     const before = (await cluster.ops("A")).length;
     await cluster.quiesce();
+    expect((await cluster.ops("A")).length).toBe(before);
+  });
+
+  // A change another node made and this one took by change bundle (own-node-transport batch 4b, spine/receivedEvents.ts) is in this node's log too: it is
+  // not this node's own write, so it is never turned into an op to send (review of PR #1997, confirming round, point 3).
+  it("an event recording a change taken by bundle is never sent", async () => {
+    cluster = await RealCluster.create(["A", "B"], seedWorld);
+    const a = cluster.node("A").replica;
+    await cluster.on("A", () => a.capture());
+    const before = (await cluster.ops("A")).length;
+    const report = await cluster.on("A", async () => {
+      const origin = (await q<{ o: string }>("SELECT node_id AS o FROM sync_node")).rows[0]!.o;
+      const stamp = { origin, seq: 1, wall: Date.now(), counter: 0, author: alice.id, device: null };
+      await withEventTransaction(ws, () => appendReceivedEvents(ws, [{ type: "NODE_UPDATED", targetType: "node", targetId: plan, payload: { fields: ["title"] }, stamp }]));
+      return a.capture();
+    });
+    expect(report.skippedRemote, "the received event is seen and passed over").toBe(1);
+    expect(report.ops).toBe(0);
     expect((await cluster.ops("A")).length).toBe(before);
   });
 

@@ -6,7 +6,7 @@
 import { extname } from "node:path";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { getWorkspaceId } from "../../../db.js";
+import { getWorkspaceId, withBulkWrites } from "../../../db.js";
 import { requireActor } from "../../../spine/mutate.js";
 import { assertAuthority } from "../../../spine/authority.js";
 import type { ActorCtx } from "../../../types.js";
@@ -84,7 +84,12 @@ export type ObsidianImportRequest = z.infer<typeof obsidianImportSchema>;
 /** Import a batch of vault files for `authenticated`. `readInput` reads and
  *  validates the request body; it runs only after the write check, so a
  *  viewer is refused before anything is parsed or written to disk. */
-export async function importObsidian(authenticated: ActorCtx | null, readInput: () => Promise<ObsidianImportRequest>) {
+export function importObsidian(authenticated: ActorCtx | null, readInput: () => Promise<ObsidianImportRequest>) {
+  // An import makes every file a note, one transaction after another (db.ts withBulkWrites).
+  return withBulkWrites(() => importFiles(authenticated, readInput));
+}
+
+async function importFiles(authenticated: ActorCtx | null, readInput: () => Promise<ObsidianImportRequest>) {
   // Authority FIRST — before any DB work, body parse, or the Phase-1 image loop
   // that writes attacker-controlled bytes to MEDIA_DIR. A read-only viewer (who
   // can't create nodes) must be rejected before ANYTHING lands on disk. Throws

@@ -582,6 +582,7 @@ ROLLBACK;
 - `trash_groups` 移到第 5 批，也就是讀它的那一批。
 - 範圍＝筆記與白板：`note_version_in_scope` 是節點種類 `content`、`canvas`，而且不是系統筆記（migration 220）。標籤不在內。
 - 復原手寫事件還沒鑄版本（計數），由第 1b 批補。
+- **成本修正已做（issue #2001）**：一筆交易建很多則筆記時，COMMIT 的延後檢查每一則都整表讀（第 4.4 節第 1 點「成本有上界」沒守住：2,000 → 5,000 則讀 4,042,000 → 25,105,000 列）。原因是連線上存起來的計畫（表還空的時候做的），不是缺索引；所以照任務文字預備的 migration 238 沒有做：沒有函式、觸發器或索引要改。大量寫入（匯入、還原、一筆交易鑄到第 100 個版本之後、合併、migration；`db.ts`）照表的現況規劃、並在倍數點分析寫過的表，一般存檔不變；從 COMMIT 起讀的列變成線性，手寫、儲存點、原始 SQL、匯入與還原的版本表、快照加入同樣是線性，由 `versionCommitCost.integration.test.ts` 斷言；同一次量到、不屬於版本機制的成長釘成 `it.fails`，清單在 `docs/agents/mistakes.md` 2026-11-23 那一筆。
 
 **第 5 批和本文不同的地方**（以程式為準：`services/nodeTrash.ts` 的 `deletedTogether`，migration 230）：
 - **要 migration**（230）。表格寫「無（表在第 1 批建好）」，但 `trash_groups` 移到了這一批（上面第 1 批的第三點），所以由這批建表、寫舊分組。

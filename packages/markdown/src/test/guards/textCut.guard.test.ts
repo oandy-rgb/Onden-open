@@ -15,6 +15,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { overBaseline } from "./sources";
 
 const PACKAGES = fileURLToPath(new URL("../../../../", import.meta.url));
 const BASELINE = fileURLToPath(new URL("./textCut.baseline.json", import.meta.url));
@@ -48,7 +49,7 @@ describe("text is cut with graphemes.ts, not String#slice", () => {
   const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as Record<string, number>;
 
   it("no file has more raw cuts than its baseline", () => {
-    const over = Object.entries(found).filter(([file, n]) => n > (baseline[file] ?? 0)).map(([file, n]) => `${file}: ${n} (baseline ${baseline[file] ?? 0})`);
+    const over = overBaseline(found, baseline);
     expect(over, "cut a person's text with cutToUnits / cutToGraphemes / cutToBytes / ellipsize (@onden/markdown); if this is an id, a date or a list, raise the baseline").toEqual([]);
   });
 

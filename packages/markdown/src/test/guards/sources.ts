@@ -1,7 +1,9 @@
 // Shared by the cross-package guards: every non-test source of markdown, site,
 // backend and frontend, comments dropped, and the one rule shape they use —
 // "only the owner may do X; anything else fails; an exception says why, and an
-// exception that no longer matches fails too, so the list only shrinks".
+// exception that no longer matches fails too, so the list only shrinks". Also the
+// one walk over a package's source (sourceFiles) and the per-file baseline
+// comparison of the counting guards (overBaseline, belowBaseline).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,13 +13,43 @@ const PACKAGES = fileURLToPath(new URL("../../../../", import.meta.url));
 
 export type SourceFile = { path: string; text: string };
 
-function sourceFiles(dir: string): string[] {
+/** Which files a walk keeps: these extensions, and folders with these names skipped on top of the usual ones. */
+export type SourceWalk = { extensions?: string[]; skipDirs?: string[] };
+
+const SKIPPED_DIRS = ["node_modules", "dist", "test", "fixtures", "__snapshots__", "migrations"];
+
+/**
+ * The absolute paths of the non-test source files under `dir`: `.ts`/`.tsx` unless `walk.extensions` says otherwise,
+ * no `*.test.*`, `*.spec.*` or `*.testing.*` file, and nothing under a folder named node_modules, dist, test, fixtures,
+ * __snapshots__, migrations or one of `walk.skipDirs`. A missing `dir` is an error (readdirSync throws).
+ *   sourceFiles(join(PACKAGES, "desktop", "src"), { extensions: ["mjs", "cjs"] }) → [".../desktop/src/main.mjs", ...]
+ */
+export function sourceFiles(dir: string, walk: SourceWalk = {}): string[] {
+  const extensions = walk.extensions ?? ["ts", "tsx"];
+  const skipped = [...SKIPPED_DIRS, ...(walk.skipDirs ?? [])];
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return ["node_modules", "dist", "test", "fixtures", "__snapshots__", "migrations"].includes(entry.name) ? [] : sourceFiles(path);
-    return /\.(ts|tsx)$/.test(entry.name) && !/\.(test|spec|testing)\./.test(entry.name) ? [path] : [];
+    if (entry.isDirectory()) return skipped.includes(entry.name) ? [] : sourceFiles(path, walk);
+    const ext = entry.name.slice(entry.name.lastIndexOf(".") + 1);
+    return entry.name.includes(".") && extensions.includes(ext) && !/\.(test|spec|testing)\./.test(entry.name) ? [path] : [];
   });
 }
+
+/**
+ * The lines of a per-file count that went over its baseline (a file not in the baseline allows none), as
+ * "path: found (baseline n)". For guards whose baseline only ratchets down.
+ *   overBaseline({ "a.ts": 3, "b.ts": 1 }, { "a.ts": 2, "b.ts": 1 }) → ["a.ts: 3 (baseline 2)"]
+ */
+export const overBaseline = (found: Record<string, number>, baseline: Record<string, number>): string[] =>
+  Object.entries(found).filter(([file, n]) => n > (baseline[file] ?? 0)).map(([file, n]) => `${file}: ${n} (baseline ${baseline[file] ?? 0})`);
+
+/**
+ * The other direction: baseline entries the files are now under (a file no longer found counts 0), same format. A guard
+ * that fails on these makes the baseline follow every removal, so a removed hit cannot be traded for a new one later.
+ *   belowBaseline({ "a.ts": 1 }, { "a.ts": 2, "b.ts": 1 }) → ["a.ts: 1 (baseline 2)", "b.ts: 0 (baseline 1)"]
+ */
+export const belowBaseline = (found: Record<string, number>, baseline: Record<string, number>): string[] =>
+  Object.entries(baseline).filter(([file, n]) => (found[file] ?? 0) < n).map(([file, n]) => `${file}: ${found[file] ?? 0} (baseline ${n})`);
 
 /** `text` without whole-line comments (prose that names a thing is not a use of it). */
 export const code = (text: string) => text.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");

@@ -5,3 +5,4 @@ export function jsonGroups(file: string, text: string): Map<string, Map<string, 
 export function tsGroups(file: string, text: string): Map<string, Map<string, number>>;
 export function resolveBase(cwd: string, mainRef?: string): { base: string } | { fail: string };
 export const OVERRIDE: RegExp;
+export const JSON_FILES: RegExp[];

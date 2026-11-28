@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { overBaseline } from "./sources";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -87,7 +88,7 @@ describe("the workspace's day, not the device's", () => {
   });
 
   it("no file reads the device's calendar for a day beyond its baseline", () => {
-    const over = Object.entries(deviceDays).filter(([file, n]) => n > (baseline[file] ?? 0)).map(([file, n]) => `${file}: ${n} (baseline ${baseline[file] ?? 0})`);
+    const over = overBaseline(deviceDays, baseline);
     expect(over, "ask the workspace clock (lib/localDate todayId / dateIdAt, backend localDayId) or calendar.ts; raising the baseline needs a reason").toEqual([]);
   });
 

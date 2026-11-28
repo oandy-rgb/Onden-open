@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FILES } from "./sources";
+import { FILES, overBaseline } from "./sources";
 
 const BASELINE = fileURLToPath(new URL("./nodeKind.baseline.json", import.meta.url));
 const OWNERS = ["backend/src/spine/nodeSql.ts"];
@@ -33,7 +33,7 @@ describe("the node kind and the live predicate have one owner", () => {
   const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as Record<string, number>;
 
   it("no file spells them out more often than its baseline", () => {
-    const over = Object.entries(found).filter(([file, n]) => n > (baseline[file] ?? 0)).map(([file, n]) => `${file}: ${n} (baseline ${baseline[file] ?? 0})`);
+    const over = overBaseline(found, baseline);
     expect(over, "use isTag / isNote / isCanvas / NODE_TYPE (@onden/markdown/contract) or liveNodeSql / tagNodeSql / notTagNodeSql (backend spine/nodeSql.ts)").toEqual([]);
   });
 

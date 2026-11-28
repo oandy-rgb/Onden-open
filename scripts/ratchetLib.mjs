@@ -3,6 +3,7 @@
 // 把工作樹和 `git merge-base HEAD origin/main` 那一版比較：
 //   失敗：既有鍵的計數變大、既有規則（群組）下多了鍵、例外清單多了項目
 //   允許：整組新規則（新的頂層鍵／新的 `// ratchet:list` 標籤）、刪除、改理由文字
+//   JSON 檔頂層的數值與字串屬於 `(根)` 這一組；根是物件時這組一定在（清空成 `{}` 也是，見 jsonGroups），所以多一個頂層數值算新增項目
 // 逃生門：merge-base..HEAD 的任一 commit 訊息有 `ratchet-override: <原因>` 這一行。
 //
 // TS 例外清單的標記格式（選它而不是搬到 JSON 的理由見 PR 說明）：
@@ -47,10 +48,17 @@ function flattenJson(value, path, out) {
   else out.push([path, typeof value === "number" ? value : 1]);
 }
 
+/**
+ * 一份 JSON 基準檔的群組：頂層是物件的鍵各自一組（`檔名::鍵`），頂層的數值與字串放在 `檔名::(根)` 這一組。
+ * 根是物件時 `(根)` 一定在，空檔 `{}` 也是：基準清空之後這組照樣比，下一張 PR 再加一筆會算新增項目，
+ * 不會被當成整組新規則放行。
+ *   jsonGroups("x.json", "{}") → Map { "x.json::(根)" → Map {} }
+ */
 export function jsonGroups(file, text) {
   const groups = new Map();
   let root;
   try { root = JSON.parse(text); } catch { return groups; }
+  if (typeof root === "object" && root !== null && !Array.isArray(root)) groups.set(`${file}::(根)`, new Map());
   for (const [top, value] of Object.entries(root)) {
     if (typeof value !== "object" || value === null) { entry(groups, `${file}::(根)`, top, typeof value === "number" ? value : 1); continue; }
     groups.set(`${file}::${top}`, new Map());

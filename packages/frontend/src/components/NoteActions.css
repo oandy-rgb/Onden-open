@@ -19,7 +19,7 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  border: 1px solid var(--ac-line);
+  border: 1px solid transparent;
   border-radius: var(--ac-radius-md);
   background: transparent;
   color: var(--ac-muted);

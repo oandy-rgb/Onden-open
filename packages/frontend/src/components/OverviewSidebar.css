@@ -157,8 +157,10 @@
   padding: 0 9px;
   margin: 0;
   border-radius: var(--ac-radius-md);
-  border: 1px solid var(--ac-line);
-  background: var(--ac-surface);
+  /* Quiet at rest like the shared icon/ghost buttons (appearance rules §4.8): the
+     line stays for layout but draws nothing; hover and "on" are the only paint. */
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--ac-muted);
   font-size: var(--ac-fs-xs);
   font-weight: 500;
@@ -168,8 +170,9 @@
   transition: background 0.1s, border-color 0.1s, color 0.1s;
   white-space: nowrap;
 }
-.sb-bar-btn:hover { background: var(--ac-overlay-hover); border-color: color-mix(in srgb, var(--ac-accent) 50%, var(--ac-line)); color: var(--ac-ink); }
-.sb-bar-btn.active { background: color-mix(in srgb, var(--ac-accent) 10%, transparent); border-color: color-mix(in srgb, var(--ac-accent) 40%, var(--ac-line)); color: var(--ac-accent); font-weight: 600; }
+.sb-bar-btn:hover { background: var(--ac-overlay-hover); color: var(--ac-ink); }
+/* Its menu is open (＋, 排序, phone ⋯): the frame used to say so; now the soft accent fill does. */
+.sb-bar-btn[aria-expanded="true"] { background: var(--ac-accent-soft); color: var(--ac-accent); }
 .sb-bar-btn:disabled { opacity: 0.4; cursor: default; }
 .sb-bar-btn--icon {
   display: inline-flex;
@@ -182,7 +185,6 @@
 }
 .sb-bar-btn--icon:hover:not(:disabled) {
   background: var(--ac-overlay-hover);
-  border-color: color-mix(in srgb, var(--ac-accent) 50%, var(--ac-line));
   color: var(--ac-accent);
 }
 .sb-rename-input {

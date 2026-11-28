@@ -272,7 +272,10 @@ body:has([data-keyboard-bar]) .ui-sheet-dock, .ui-sheet-dock[data-typing] { --ui
 .ui-btn:disabled { opacity: 0.5; cursor: default; }
 .ui-btn--sm { padding: 3px 10px; border-radius: var(--ac-radius-sm); font-size: var(--ac-fs-caption); }
 
-.ui-btn--secondary:hover:not(:disabled) { background: var(--ac-overlay-hover); border-color: var(--ac-faint); }
+/* A secondary button is a soft wash with no line around it (appearance rules §4.8): see-through ink,
+   so it shows on the page, a side panel or a card alike; hover darkens the same wash. */
+.ui-btn--secondary { border-color: transparent; background: var(--ac-overlay-hover); }
+.ui-btn--secondary:hover:not(:disabled) { background: var(--ac-overlay-selected); }
 
 .ui-btn--primary { border-color: var(--ac-accent); background: var(--ac-accent); color: var(--ac-accent-ink); }
 .ui-btn--primary:hover:not(:disabled) { border-color: var(--ac-accent-hover); background: var(--ac-accent-hover); }

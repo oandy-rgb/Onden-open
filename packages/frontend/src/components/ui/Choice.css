@@ -13,15 +13,18 @@
 .ui-choice-card[aria-checked="true"] .ui-choice-sample { border-color: var(--ac-accent); }
 .ui-choice-label { text-align: center; }
 
+/* No box around the group (appearance rules §4.8); the chosen segment wears the selected wash,
+   a hover the lighter one, the same two states the icon buttons use. */
 .ui-segmented {
-  display: flex; padding: 2px; gap: 2px; border: 1px solid var(--ac-line); border-radius: var(--ac-radius-lg); background: var(--ac-surface);
+  display: flex; padding: 2px; gap: 2px; border: 1px solid transparent; border-radius: var(--ac-radius-lg); background: transparent;
 }
 .ui-segment {
   flex: 1; min-width: 0; min-height: 32px; padding: 4px 10px; border-radius: var(--ac-radius-md);
   text-align: center; font-size: var(--ac-fs-small); color: var(--ac-muted);
 }
 .ui-segment--icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 30px; padding: 0; }
-.ui-segment[aria-checked="true"] { background: var(--ac-bg); color: var(--ac-ink); font-weight: 600; }
+.ui-segment:hover:not([aria-checked="true"]) { background: var(--ac-overlay-hover); }
+.ui-segment[aria-checked="true"] { background: var(--ac-overlay-selected); color: var(--ac-ink); font-weight: 600; }
 
 .ui-preview-block {
   position: relative; padding: 16px; overflow: hidden;

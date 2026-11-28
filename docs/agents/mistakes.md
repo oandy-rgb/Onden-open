@@ -1415,6 +1415,14 @@
 - **機制**：〔第 1 層〕`test/stampedEndingSetup.ts` afterAll：每個跑過的檔，`ENDING_FAILS`／`ENDING_SKIPPED`／`ENDING_LONG_SETTLE` 裡屬於這個檔的鍵都要對得到它的一則測試（`helpers/stampedEndingNames.ts` `keysNamingNothing`，含被略過、被濾掉的測試）；`guards/stampedEndingReach.guard.test.ts`：每個鍵的檔名都是一個存在的測試檔，以及 `keysNamingNothing` 的對照。
 - **還沒擋住的**：一個整檔都被略過的檔（例如沒有資料庫時）不跑 afterAll，它的鍵只在有資料庫的那一輪被查。
 
+### 2026-11-28　兩台的鏡像比對把「只因指標做了又撤才再送的筆記」拿掉，卻留著跟它一起送的連結（#2032，公開 CI 的新種子）
+- **發生了什麼**：`receivedDerivation.integration.test.ts` 的隨機鏡像比對，早先（種子 745433883）認定「A 上做了又撤的指標，讓 A 的分頁再收到那則筆記一次；B 從沒收到指標，什麼都不說」是兩台日誌該有的差別，只把那則筆記從比對拿掉。`/api/sync` 送一則筆記時也送碰到它的每條連結（`services/sync/delta.ts` `edgeRowsTouching`），那些連結沒被拿掉。種子 98440707 的指標落在世界裡有 `related` 連結的筆記上，A 多送一條連結，比對紅。產品沒有錯：連結在兩台都沒變。
+- **證據**：公開 CI run 46138658927（真 Postgres 2/4）；新的決定性測試「a pointer made and removed on a note with an edge…」在沒有這次修正時紅出同一個形狀（只有 A 有那條連結，筆記相同），修正後綠。
+- **發現者**：測試（公開 CI）。
+- **為什麼沒擋到**：當時的修正只看筆記這一欄，沒有列出「再送一則筆記」還會帶出哪些欄。
+- **類別**：測試量不到它要擋的東西。
+- **機制**：〔第 1 層〕比對收進同一個 `mirrorsAfter`：只因做了又撤的指標而再送的筆記，連同只為它送的連結一起不比；另一端是有比的筆記的連結照比（同一則測試的第二段）。
+- **還沒擋住的**：這個種子在本機 PGlite 與真 Postgres 都重播不出來：`unpoint`、`tag` 依 `ORDER BY id` 挑，指標和標籤的 id 是伺服器隨機給的，世界筆記的 id 也是；同一個 `PROPS_SEED` 不保證同一串寫入。尚無機制。
 ### 2026-11-28　「其他表的連鎖都寫了墓碑」「資料形狀不變」兩句沒有查證就寫進 README 與 PR（PR #2024，審查發現）
 - **發生了什麼**：#2024 的再送規則只讓「跟著筆記走的三張表」裡刪的人看過的列跟著刪除走，README 寫「其他表的列不必：刪的人握有的那些，刪除時連鎖寫了墓碑」。但標記觸發器找不到工作區時直接返回（migration 205），個人的模組設定、兩端一起刪的筆記標籤因此沒有墓碑，刪的人看過的列會被握有者再送、在每一台復活。「看過沒有」又只看筆記自己的單位，在自己的交易裡寫的列（補找錨點寫的錨點單位）判成沒看過。PR 同時說 `meta.resent` 不改資料形狀，但它改了 `meta` 的意思（形狀 8 的節點照時鐘排，會把別台刪掉的卡片顯示回來）。
 - **證據**：PR #2024 第 1 輪審查（note-d7，第 1–3 點）；`stampedRowsOnRemadeNote`「a delete the deleter had seen is never sent back to life」三則：把規則限回三張表，模組設定與筆記標籤兩則紅；拿掉 migration 240 的進度，三則都紅（錨點那則：錨點單位留在握有者）。

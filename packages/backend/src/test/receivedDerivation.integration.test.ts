@@ -574,48 +574,123 @@ describe.skipIf(!isTestDb)("what a node records of a bundle it took (batch 4b)",
     };
   });
 
-  it("a mirror client is told the same by the node that wrote and by the node that took the writes (random writes of every table, a tagged paragraph, a task line)", async () => {
-    const { a, b } = await pair(40);
+  /**
+   * Runs `writes` on A, sends everything to B, and returns what a mirror client of each node is told from just before the writes (mirrorOf), raw and as compared: with
+   * what the two logs rightly tell differently left out. Those are the links B lacks since it joined (pinned by "a node that joined by snapshot holds the [[link]] edges of the notes it took"), a removal of a note or value no client
+   * could hold (the run made and removed it), and a note A's tab is sent again only for pointers made and removed in the run ("a pointer made and removed on A before B heard of it"), with the edges it is
+   * told only because that note is sent: an edge whose other end is not compared either and that A's node_edges holds unchanged across the run. A new or changed
+   * edge at such a note is compared.
+   * Example: const { ma, compared } = await mirrorsAfter(a, b, async () => { await note(a, "New"); }); expect(compared.b).toEqual(compared.a);
+   */
+  const mirrorsAfter = async (a: Peer, b: Peer, writes: () => Promise<void>) => {
     const [sinceA, sinceB] = [await headOf(a), await headOf(b)];
-    // what the run is compared on: not the links B lacks since it joined (pinned below), nor a delete of a note the run made and removed (no client held it)
     const [linksA, linksB] = [await linksOf(a), await linksOf(b)];
     const lackedAtJoin = new Set(linksA.filter((l) => !linksB.includes(l)));
     const before = new Set(await onNode(a.node, async () => (await q<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1`, [a.ws])).rows.map((r) => r.id)));
     const valuesBefore = new Set(await onNode(b.node, async () => (await q<{ k: string }>(`SELECT node_id::text || '/' || key AS k FROM node_attributes WHERE workspace_id = $1`, [b.ws])).rows.map((r) => r.k)));
-    // a removal is compared where a client could hold what was removed (a value the run set and removed again was never sent to anyone)
-    // nor a note A's tab is sent again only for pointers the run made and removed (nothing of it changed; B cannot name it: the test below this one)
     const pointersAt = () => onNode(a.node, async () => new Map((await q<{ target_id: string; ids: string }>(
       `SELECT target_id::text, string_agg(id::text, ',' ORDER BY id) AS ids FROM note_pointers WHERE workspace_id = $1 GROUP BY target_id`, [a.ws])).rows.map((r) => [r.target_id, r.ids] as const)));
-    const pointersBefore = await pointersAt();
-    let pointedOnly = new Set<string>();
-    const comparable = (m: Awaited<ReturnType<typeof mirrorOf>>) => ({ ...m, edges: m.edges.filter((e) => !lackedAtJoin.has(e)), nodeDeletes: m.nodeDeletes.filter((id) => before.has(id)),
-      // a task is a note: the same for a task the run made and removed (seed 546235826: Probe trashed with its task line; A's tab is told the task is gone, B took it gone)
-      taskDeletes: m.taskDeletes.filter((id) => before.has(id)),
-      attributeDeletes: m.attributeDeletes.filter((k) => valuesBefore.has(k)), nodes: m.nodes.filter((n) => !pointedOnly.has(JSON.parse(n).id)) });
-    const n = await note(a, "Probe", "");
-    await note(a, "Target Note");
-    await write(a, "PATCH", `/api/nodes/${n}`, { markdown: BODY });
-    await writeFor(a, makeRng(SEED + 41), 24, { weights: { attr: 6, unattr: 2, tagMake: 2, tag: 5, untag: 2, point: 4, unpoint: 2, schemaKey: 3, row: 8 } });
-    // a task line the random writes cannot reach: the ending's pinned finding (ENDING_FAILS, TASK_COPY) is on every run, also when a seed purges Probe (which takes
-    // Probe's paragraph rows and that finding with it)
-    await write(a, "PATCH", `/api/nodes/${await note(a, "Kept Task")}`, { markdown: "- [ ] kept {task}" });
+    // A's edges by what a tab is told of one (ends, kind, status), each with the ids and origins of its rows. Read from the table, not from A's log: the
+    // comparison checks what the logs tell, so which edges the run changed is not taken from a log, and a write that changed an edge without an EDGE_* event
+    // still counts as a change.
+    const edgesAt = () => onNode(a.node, async () => new Map((await q<{ k: string; rows: string }>(
+      `SELECT source_node_id::text || '>' || target_node_id::text || ':' || edge_type || ':' || status AS k, string_agg(id::text || '/' || origin, ',' ORDER BY id) AS rows
+         FROM node_edges WHERE workspace_id = $1 GROUP BY 1`, [a.ws])).rows.map((r) => [r.k, r.rows] as const)));
+    const [pointersBefore, edgesBefore] = [await pointersAt(), await edgesAt()];
+    await writes();
     await exchange(a, b);
-    const pointersAfter = await pointersAt();
+    const [pointersAfter, edgesAfter] = [await pointersAt(), await edgesAt()];
+    const unchangedOnA = (e: string) => edgesBefore.has(e) && edgesBefore.get(e) === edgesAfter.get(e);
     const eventsOnA = await onNode(a.node, async () => (await q<{ target_id: string; kinds: string[] }>(
       `SELECT target_id::text, array_agg(DISTINCT event_type) AS kinds FROM domain_events WHERE workspace_id = $1 AND id > $2 AND target_type = 'node' GROUP BY target_id`, [a.ws, sinceA])).rows);
-    pointedOnly = new Set(eventsOnA.filter((e) => e.kinds.every((k) => k === "POINTER_CREATED" || k === "POINTER_DELETED") && pointersBefore.get(e.target_id) === pointersAfter.get(e.target_id))
+    const pointedOnly = new Set(eventsOnA.filter((e) => e.kinds.every((k) => k === "POINTER_CREATED" || k === "POINTER_DELETED") && pointersBefore.get(e.target_id) === pointersAfter.get(e.target_id))
       .map((e) => e.target_id));
+    const comparable = (m: Awaited<ReturnType<typeof mirrorOf>>) => {
+      const nodes = m.nodes.filter((n) => !pointedOnly.has(JSON.parse(n).id));
+      const compared = new Set(nodes.map((n) => JSON.parse(n).id as string));
+      // an edge is told with the notes at its ends (services/sync/delta.ts edgeRowsTouching): one at a pointed-only note is left out only when its other end is not
+      // compared either and the run left it alone on A; a new or changed one is told by its own event on A and must reach B's tab too
+      const ends = (e: string) => e.slice(0, e.indexOf(":")).split(">");
+      const toldForPointedOnly = (e: string) => ends(e).some((id) => pointedOnly.has(id)) && !ends(e).some((id) => compared.has(id)) && unchangedOnA(e);
+      return { ...m, nodes, edges: m.edges.filter((e) => !lackedAtJoin.has(e) && !toldForPointedOnly(e)), nodeDeletes: m.nodeDeletes.filter((id) => before.has(id)),
+        // a task is a note: the same for a task the run made and removed (seed 546235826: Probe trashed with its task line; A's tab is told the task is gone, B took it gone)
+        taskDeletes: m.taskDeletes.filter((id) => before.has(id)),
+        attributeDeletes: m.attributeDeletes.filter((k) => valuesBefore.has(k)) };
+    };
     const [ma, mb] = [await mirrorOf(a, sinceA), await mirrorOf(b, sinceB)];
+    return { ma, mb, compared: { a: comparable(ma), b: comparable(mb) } };
+  };
+
+  it("a mirror client is told the same by the node that wrote and by the node that took the writes (random writes of every table, a tagged paragraph, a task line)", async () => {
+    const { a, b } = await pair(40);
+    const { ma, compared } = await mirrorsAfter(a, b, async () => {
+      const n = await note(a, "Probe", "");
+      await note(a, "Target Note");
+      await write(a, "PATCH", `/api/nodes/${n}`, { markdown: BODY });
+      await writeFor(a, makeRng(SEED + 41), 24, { weights: { attr: 6, unattr: 2, tagMake: 2, tag: 5, untag: 2, point: 4, unpoint: 2, schemaKey: 3, row: 8 } });
+      // a task line the random writes cannot reach: the ending's pinned finding (ENDING_FAILS, TASK_COPY) is on every run, also when a seed purges Probe (which takes
+      // Probe's paragraph rows and that finding with it)
+      await write(a, "PATCH", `/api/nodes/${await note(a, "Kept Task")}`, { markdown: "- [ ] kept {task}" });
+    });
     expect(ma.nodes.length, "the writes reach a mirror client of the writer").toBeGreaterThan(0);
     // leftover of 4a: the paragraph tag the body made moves the tag catalog (and the task words with it) on the node that took it too
     expect(ma.tags, "the writer's client is sent the tag catalog").not.toBeNull();
-    expect(comparable(mb)).toEqual(comparable(ma));
+    expect(compared.b).toEqual(compared.a);
   }, 600_000);
 
-  // Found by the test above (seed 745433883), a difference of what the writer's own log tells, not a gap: a pointer made and removed on A records
+  // Found by "a mirror client is told the same by the node that wrote and by the node that took the writes" (seed 98440707 on real Postgres; the seed does not replay it, since which pointer `unpoint` takes follows the pointers' random
+  // ids): a pointer made and removed on a note that has an edge. A's tab is sent the note again ("a pointer made and removed on A before B heard of it"), and with it every edge at the note;
+  // B's tab is told neither. The edge changed on neither node, so it is not compared, as the note is not; an edge at a note the run did change is.
+  it("a pointer made and removed on a note with an edge: the edge A's tab is told only with that note is not compared; one at a note the run changed is", async () => {
+    const { a, b } = await pair(58);
+    const [x, y] = [await note(a, "Pointed at"), await note(a, "Other end")];
+    const holder = await note(a, "Holder");
+    await write(a, "POST", "/api/edges", { source_node_id: y, target_node_id: x, edge_type: "related" });
+    await exchange(a, b);
+    const edge = `${y}>${x}:related:active`;
+    const { ma, mb, compared } = await mirrorsAfter(a, b, async () => {
+      const pointer = await write(a, "POST", "/api/pointers", { target_id: x, parent_id: holder });
+      await write(a, "DELETE", `/api/pointers/${pointer.id}`);
+    });
+    expect(ma.edges, "A's tab is told the edge with the note it sends again").toContain(edge);
+    expect(mb.edges, "B's tab is told neither").not.toContain(edge);
+    expect(compared.b).toEqual(compared.a);
+    // the same edge with its other end changed in the run: told on both, and compared
+    const again = await mirrorsAfter(a, b, async () => {
+      const pointer = await write(a, "POST", "/api/pointers", { target_id: x, parent_id: holder });
+      await write(a, "DELETE", `/api/pointers/${pointer.id}`);
+      await write(a, "PATCH", `/api/nodes/${y}`, { title: "Other end (renamed)" });
+    });
+    expect(again.compared.a.edges, "an edge at a note the run changed is compared").toContain(edge);
+    expect(again.compared.b).toEqual(again.compared.a);
+  }, 600_000);
+
+  // The other side of "a pointer made and removed on a note with an edge": the run makes the edge. Neither end is compared (x is pointed-only, w unchanged), but
+  // the edge is new on A, so A's tab is told it by its own event and B's tab must be told it too: a B that missed it would show here, so it is compared.
+  it("a pointer made and removed on a note while a new edge from it is made: the new edge is compared, though neither end is", async () => {
+    const { a, b } = await pair(59);
+    const [x, w] = [await note(a, "Pointed at"), await note(a, "Linked to")];
+    const holder = await note(a, "Holder");
+    await exchange(a, b);
+    const edge = `${x}>${w}:related:active`;
+    const { ma, mb, compared } = await mirrorsAfter(a, b, async () => {
+      const pointer = await write(a, "POST", "/api/pointers", { target_id: x, parent_id: holder });
+      await write(a, "DELETE", `/api/pointers/${pointer.id}`);
+      await write(a, "POST", "/api/edges", { source_node_id: x, target_node_id: w, edge_type: "related" });
+    });
+    const ids = (nodes: string[]) => nodes.map((n) => JSON.parse(n).id as string);
+    expect(ids(compared.a.nodes), "x is pointed-only: not compared").not.toContain(x);
+    expect(ids(compared.a.nodes), "w is unchanged: not compared").not.toContain(w);
+    expect(ma.edges, "A's tab is told the new edge").toContain(edge);
+    expect(mb.edges, "B's tab is told it too").toContain(edge);
+    expect(compared.a.edges, "the new edge is compared").toContain(edge);
+    expect(compared.b).toEqual(compared.a);
+  }, 600_000);
+
+  // Found by "a mirror client is told the same by the node that wrote and by the node that took the writes" (seed 745433883), a difference of what the writer's own log tells, not a gap: a pointer made and removed on A records
   // POINTER_CREATED and POINTER_DELETED on the note it pointed at, so A's tab is sent that note again. B never held the pointer, so its removal names no note
   // there (services/receivedEvents.ts names a removed pointer's note from the row read before the merge), and nothing of the note changed on either node:
-  // B's tab already holds what A's tab is sent again. The test above does not compare such a note.
+  // B's tab already holds what A's tab is sent again. mirrorsAfter does not compare such a note.
   it("a pointer made and removed on A before B heard of it: A's tab is sent the note it pointed at again, which changed on neither node", async () => {
     const { a, b } = await pair(57);
     const holder = await note(a, "Holder"), x = await note(a, "Pointed at");
@@ -631,7 +706,7 @@ describe.skipIf(!isTestDb)("what a node records of a bundle it took (batch 4b)",
     expect([await rowOf(a), await rowOf(b)], "nothing of the note changed on either node").toEqual(rows);
   }, 600_000);
 
-  // Found by the test above (a deterministic difference, not a seed's): a snapshot carries the hand-made edges only (snapshotTables.json node_edges `origin =
+  // Found by "a mirror client is told the same by the node that wrote and by the node that took the writes" (a deterministic difference, not a seed's): a snapshot carries the hand-made edges only (snapshotTables.json node_edges `origin =
   // 'manual'`), and joining derives none, so a node that joined holds no [[link]] edge of a note it took until that note is saved again. README 「接上傳輸前必須完成」.
   it.fails("a node that joined by snapshot holds the [[link]] edges of the notes it took, as its source does", async () => {
     const { a, b } = await pair(44);
@@ -748,7 +823,7 @@ describe.skipIf(!isTestDb)("what a node records of a bundle it took (batch 4b)",
     expect({ nodes: mb.nodes, nodeDeletes: mb.nodeDeletes }).toEqual({ nodes: ma.nodes, nodeDeletes: ma.nodeDeletes });
   }, 600_000);
 
-  // Found by the random test above (seed 380206382): a note put in the trash and taken out again on A is told again to A's tab (NODE_DELETED, NODE_UNDELETED), while
+  // Found by "a mirror client is told the same by the node that wrote and by the node that took the writes" (seed 380206382): a note put in the trash and taken out again on A is told again to A's tab (NODE_DELETED, NODE_UNDELETED), while
   // on B the bundle writes its `deleted` unit back to what B had (live), so no trash and no restore was seen and nothing was recorded: B's tab was never told the note,
   // whose row did change (its `updated_at` follows the stamps, migration 232). Every note unit a bundle writes records an event, whether or not it moved the
   // note's state (services/receivedEvents.ts, the notes).

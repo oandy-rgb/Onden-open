@@ -18,7 +18,7 @@
 import { slugify } from "@onden/markdown";
 import { isCanvas, isTag } from "@onden/markdown/contract";
 import { snapshotRows } from "./snapshotSql.js";
-import { liveNodeSql } from "./nodeSql.js";
+import { NO_SPACE, liveNodeSql } from "./nodeSql.js";
 import { compareOps } from "../hlc.js";
 
 /** What slugFor needs to know about a node: its kind and, for the kinds whose
@@ -41,18 +41,17 @@ export async function freeSlug(workspaceId: string, base: string, opts: { exclud
   let slug = base;
   let i = 2;
   for (;;) {
-    // the statement services/nodes.ts uniqueSlug ran before it moved here, word for word
+    // the statement services/nodes.ts uniqueSlug ran before it moved here; the space compared as the unique slug index keys it (COALESCE to NO_SPACE), which is
+    // `IS NOT DISTINCT FROM` for every space id, so that index answers it: as `space_id IS NOT DISTINCT FROM $n` a real Postgres read every live note of the
+    // workspace for each slug tried, three times a note made (issue #2021)
     const params: unknown[] = [workspaceId, slug];
     let where = `workspace_id = $1 AND slug = $2 AND ${liveNodeSql()}`;
     if (opts.excludeId) where += ` AND id <> $${params.push(opts.excludeId)}`;
-    if (opts.spaceId !== undefined) where += ` AND space_id IS NOT DISTINCT FROM $${params.push(opts.spaceId)}::uuid`;
+    if (opts.spaceId !== undefined) where += ` AND COALESCE(space_id, '${NO_SPACE}'::uuid) = COALESCE($${params.push(opts.spaceId)}::uuid, '${NO_SPACE}'::uuid)`;
     if ((await snapshotRows(`SELECT id FROM content_nodes WHERE ${where}`, params)).rows.length === 0) return slug;
     slug = `${base}-${i++}`;
   }
 }
-
-/** The space a note without one counts as in the unique slug index (migration 099 content_nodes_space_slug_uq). */
-const NO_SPACE = "00000000-0000-0000-0000-000000000000";
 
 /** A claim: the stamp in the order every node agrees on (hlc.ts compareOps, which stampedMerge/unit.ts compareStamps is), and whether it is a name. */
 type Claim = { hlc: { wall: number; counter: number }; origin: string; seq: number; named: boolean };

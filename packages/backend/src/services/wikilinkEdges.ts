@@ -10,10 +10,11 @@
 import { q, requireTransaction } from "../db.js";
 import { db } from "../dbKysely.js";
 import { linkIndexLookup, type LinkIndexRow } from "./linkIndexLookup.js";
-import { sql } from "kysely";
+import { sql, type RawBuilder, type Selectable } from "kysely";
 import { extractWikilinks } from "../utils.js";
-import { NODE_REF_PREFIX, linkSlug, normalizeText } from "@onden/markdown";
-import { liveNodeSql, tagNodeSql } from "../spine/nodeSql.js";
+import { NODE_REF_PREFIX, isUuid, linkSlug, normalizeText } from "@onden/markdown";
+import { NO_SPACE, liveNodeSql, tagNodeSql } from "../spine/nodeSql.js";
+import type { ContentNodes } from "../dbSchema.generated.js";
 
 /** The one rule a `[[link]]` names a node by, as SQL over the candidate
  *  target `n` and the linking note `s` (both content_nodes rows). `linksLc`
@@ -42,22 +43,67 @@ function linkMatchesNodeSql(n: string, s: string, linksLc: string, linkSlugs: st
       -- often a shared title). Hidden nodes count; the reader's own
       -- read check applies where the edge is read, as for any link.
       OR '${NODE_REF_PREFIX}' || ${n}.id::text = ANY(${linksLc})
-      OR EXISTS (
-        SELECT 1 FROM node_attributes a
-         WHERE a.node_id = ${n}.id AND a.key = 'aliases'
-           AND (
-             -- Aliases are stored as a JSON array string (frontmatter import);
-             -- match any element case-insensitively against the link targets.
-             -- A non-array/scalar value (a single bare alias) is matched whole.
-             (a.value LIKE '[%' AND EXISTS (
-               SELECT 1 FROM jsonb_array_elements_text(a.value::jsonb) alias
-                WHERE lower(normalize(alias, NFC)) = ANY(${linksLc})
-             ))
-             OR (a.value NOT LIKE '[%' AND lower(normalize(a.value, NFC)) = ANY(${linksLc}))
-           )
-      )
+      OR EXISTS (SELECT 1 FROM node_attributes a WHERE a.node_id = ${n}.id AND a.key = 'aliases' AND ${aliasNamedSql("a", linksLc)})
     ))`;
 }
+
+/** The `aliases` attribute row `a` holds one of the link targets `linksLc` (linkMatchesNodeSql's alias rule). Aliases are stored as a JSON array string
+ *  (frontmatter import): any element matches, case-insensitively in NFC; a non-array value (a single bare alias) is matched whole. */
+function aliasNamedSql(a: string, linksLc: string): string {
+  return `((${a}.value LIKE '[%' AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(${a}.value::jsonb) alias WHERE lower(normalize(alias, NFC)) = ANY(${linksLc})))
+           OR (${a}.value NOT LIKE '[%' AND lower(normalize(${a}.value, NFC)) = ANY(${linksLc})))`;
+}
+
+/** The columns of a note the link look-ups read, and all notesWithIdsSql gives (never a row a client gets). */
+const NOTE_COLUMNS = "id, workspace_id, title, slug, markdown, space_id, node_type, deleted_at, hidden";
+type NoteColumns = Pick<Selectable<ContentNodes>, "id" | "workspace_id" | "title" | "slug" | "markdown" | "space_id" | "node_type" | "deleted_at" | "hidden">;
+
+/** The notes whose id is in the SQL uuid[] expression `ids` (each once; NOTE_COLUMNS), as a FROM item read by the primary key, one look-up an id, whatever else
+ *  the query says and whatever the planner thinks of the table's size. An id list next to other conditions (`workspace_id = … AND id = ANY(…)`) was planned as a
+ *  read of every note of the workspace whenever the planner judged the table small (a few thousand rows, statistics new or not: issue #2021), and so was
+ *  `id = ANY(…)` alone for a list of a few hundred ids (it costs a scan below that many look-ups). Here each id is its own look-up (a LATERAL subquery that
+ *  OFFSET 0 keeps from being merged into a join), so the only plans left are a key look-up an id or, for a table of a page or two, a read of it an id; conditions
+ *  written outside are applied to the rows found, never pushed into the look-up. */
+function notesWithIdsSql(ids: string): string {
+  return `${NOTES_WITH_IDS_BEFORE}${ids}${NOTES_WITH_IDS_AFTER}`;
+}
+/** notesWithIdsSql for a kysely query, `ids` as one parameter. Example: db.selectFrom(notesWithIds(ids).as("n")).select(["n.id", "n.title"]). Also the
+ *  received derivation's read of the notes a bundle names (receivedDerivation.ts notesAsTheyAre). */
+export function notesWithIds(ids: readonly string[]): RawBuilder<NoteColumns> {
+  return sql<NoteColumns>`${sql.raw(NOTES_WITH_IDS_BEFORE)}${[...ids]}::uuid[]${sql.raw(NOTES_WITH_IDS_AFTER)}`;
+}
+/** The one text of notesWithIdsSql, before and after the uuid[] it reads: both spellings put their ids between (a SQL expression, notesWithIdsSql; a kysely
+ *  parameter, notesWithIds). */
+const NOTES_WITH_IDS_BEFORE = "(SELECT c.* FROM (SELECT DISTINCT unnest(";
+const NOTES_WITH_IDS_AFTER = `) AS id) k CROSS JOIN LATERAL (SELECT ${NOTE_COLUMNS} FROM content_nodes WHERE id = k.id OFFSET 0) c)`;
+
+/** How many characters of a title, lower-cased in NFC, its index key holds (migration 241 content_nodes_title_key_idx; the migration says why it is cut). */
+const TITLE_KEY_CHARS = 500;
+/** The key of the title index over the SQL text expression `lowered` (a title or a link target, lower-cased in NFC): spelled as the index is, so it answers it. */
+const titleKeySql = (lowered: string): string => `left(${lowered}, ${TITLE_KEY_CHARS})`;
+
+/** The live nodes that may be what a link of `linksLc` / `linkSlugs` names (SQL text[] expressions, as linkMatchesNodeSql takes them), written in a
+ *  note of the space `sourceSpace` (a SQL uuid expression), as a FROM item (notesWithIdsSql); `refIds` (SQL uuid[]): the ids its `onden://node/<id>` links spell (nodeRefIds). Each
+ *  rule of linkMatchesNodeSql through an index, so what is read grows with the nodes the links name, never with the workspace (issue #2021: as one join with
+ *  the rule every live note of the workspace was read for each note saved with a link, each file imported with links, each note moved or restored):
+ *    a title:  the title index (migration 241), on its cut key: equal titles have equal keys, so every title the rule accepts is found;
+ *    a slug:   the unique slug index (its key `COALESCE(space_id, NO_SPACE)`), in the source's space or in none: the rule's "its space, or a tag" (a tag
+ *              has no space: content_nodes_derive_space);
+ *    an id:    the ids themselves (the exact rule below drops one that is no live node of the workspace);
+ *    an alias: the `aliases` attributes of the workspace (node_attributes_key_idx): the nodes that have aliases, not all of them.
+ *  A superset: the caller applies linkMatchesNodeSql to these (through notesWithIdsSql), which decides. */
+function linkCandidatesSql(ws: string, sourceSpace: string, linksLc: string, linkSlugs: string, refIds: string): string {
+  return notesWithIdsSql(`ARRAY(SELECT c.id FROM content_nodes c WHERE c.workspace_id = ${ws} AND ${liveNodeSql("c")}
+            AND ${titleKeySql("lower(normalize(c.title, NFC))")} = ANY(ARRAY(SELECT ${titleKeySql("x")} FROM unnest(${linksLc}) x))
+    UNION SELECT c.id FROM content_nodes c WHERE c.workspace_id = ${ws} AND ${liveNodeSql("c")}
+            AND COALESCE(c.space_id, '${NO_SPACE}'::uuid) = ANY(ARRAY[COALESCE(${sourceSpace}, '${NO_SPACE}'::uuid), '${NO_SPACE}'::uuid]) AND c.slug = ANY(${linkSlugs})
+    UNION SELECT unnest(${refIds})
+    UNION SELECT a.node_id FROM node_attributes a WHERE a.workspace_id = ${ws} AND a.key = 'aliases' AND ${aliasNamedSql("a", linksLc)})`);
+}
+
+/** The ids the `onden://node/<id>` links among `linksLc` (lower-cased link targets) spell: what linkMatchesNodeSql's id rule can accept. */
+const nodeRefIds = (linksLc: readonly string[]): string[] =>
+  [...new Set(linksLc.filter((l) => l.startsWith(NODE_REF_PREFIX)).map((l) => l.slice(NODE_REF_PREFIX.length)).filter(isUuid))];
 
 const UPSERT_WIKILINK_EDGE = `INSERT INTO node_edges (workspace_id, source_node_id, target_node_id, edge_type, status, origin)
        VALUES ($1, $2, $3, 'knowledge_link', 'active', 'wikilink')
@@ -121,17 +167,14 @@ export async function syncWikilinkEdges(workspaceId: string, sourceNodeId: strin
     return [];
   }
 
+  const linksLc = links.map((link) => link.toLowerCase());
   const targets = await q<{ id: string; title: string; slug: string }>(
     `SELECT n.id, n.title, n.slug
-       FROM content_nodes n, content_nodes s
+       FROM ${linkCandidatesSql("$1", "(SELECT space_id FROM content_nodes WHERE id = $2)", "$3::text[]", "$4::text[]", "$5::uuid[]")} n,
+            content_nodes s
       WHERE s.id = $2 AND n.workspace_id = $1
         AND ${linkMatchesNodeSql("n", "s", "$3::text[]", "$4::text[]")}`,
-    [
-      workspaceId,
-      sourceNodeId,
-      links.map((link) => link.toLowerCase()),
-      links.map((link) => linkSlug(link)),
-    ],
+    [workspaceId, sourceNodeId, linksLc, links.map((link) => linkSlug(link)), nodeRefIds(linksLc)],
   );
 
   // Keep surviving links' rows (and ids): sync clients identify edges by id, so
@@ -157,13 +200,15 @@ export async function syncWikilinkEdges(workspaceId: string, sourceNodeId: strin
 export async function wikilinkTargets(workspaceId: string, sourceNodeId: string, targets: string[]): Promise<Map<string, string[]>> {
   const named = new Map<string, string[]>();
   if (targets.length === 0) return named;
+  const targetsLc = targets.map((t) => t.toLowerCase());
   const rows = await q<{ link: string; id: string }>(
     `SELECT l.link, n.id::text AS id
        FROM unnest($3::text[], $4::text[], $5::text[]) AS l(link, link_lc, link_slug)
        JOIN content_nodes s ON s.workspace_id = $1 AND s.id = $2
-       JOIN content_nodes n ON n.workspace_id = $1
+       JOIN ${linkCandidatesSql("$1", "(SELECT space_id FROM content_nodes WHERE id = $2)", "$4::text[]", "$5::text[]", "$6::uuid[]")} n
+         ON n.workspace_id = $1
       WHERE ${linkMatchesNodeSql("n", "s", "ARRAY[l.link_lc]", "ARRAY[l.link_slug]")}`,
-    [workspaceId, sourceNodeId, targets, targets.map((t) => t.toLowerCase()), targets.map((t) => linkSlug(t))],
+    [workspaceId, sourceNodeId, targets, targetsLc, targets.map((t) => linkSlug(t)), nodeRefIds(targetsLc)],
   );
   for (const row of rows.rows) named.set(row.link, [...(named.get(row.link) ?? []), row.id]);
   return named;
@@ -179,8 +224,8 @@ async function relinkTargets(workspaceId: string, nodeIds: readonly string[]): P
     `SELECT n.id::text, n.title, n.slug, ${nodeAliasesSql("n")} AS aliases, n.space_id::text, ${tagNodeSql("n")} AS tag,
             ARRAY[lower(normalize(n.title, NFC)), '${NODE_REF_PREFIX}' || n.id::text]
               || ARRAY(SELECT lower(normalize(x, NFC)) FROM unnest(${nodeAliasesSql("n")}) x) AS lc
-       FROM content_nodes n
-      WHERE n.workspace_id = $1 AND n.id = ANY($2::uuid[]) AND ${liveNodeSql("n")}
+       FROM ${notesWithIdsSql("$2::uuid[]")} n
+      WHERE n.workspace_id = $1 AND ${liveNodeSql("n")}
       ORDER BY n.id`,
     [workspaceId, [...nodeIds]],
   )).rows;
@@ -190,9 +235,20 @@ async function relinkTargets(workspaceId: string, nodeIds: readonly string[]): P
  *  it (a join of the index with the keys was planned as a scan of every row of the index and of the notes, for every batch: PR #1941 CI, anchorSaveCost). */
 async function indexRowsNaming(workspaceId: string, targets: readonly RelinkTarget[]): Promise<LinkIndexRow[]> {
   if (targets.length === 0) return [];
-  return db.selectFrom("note_link_index").select(["note_id", "link_lc", "link_slug"]).where("workspace_id", "=", workspaceId).where("stale", "=", false)
+  // Sorted here, not by an ORDER BY: one was planned as a walk of the whole primary key, every row of the index, to save a sort (issue #2021).
+  return (await db.selectFrom("note_link_index").select(["note_id", "link_lc", "link_slug"]).where("workspace_id", "=", workspaceId).where("stale", "=", false)
     .where(sql<boolean>`(link_lc && ${[...new Set(targets.flatMap((t) => t.lc))]}::text[] OR link_slug && ${[...new Set(targets.map((t) => t.slug))]}::text[])`)
-    .orderBy("note_id").execute();
+    .execute()).sort((x, y) => (x.note_id < y.note_id ? -1 : x.note_id > y.note_id ? 1 : 0));
+}
+
+/** The live notes whose link index row is stale and whose text holds a `[[`: the ones relinkTarget looks for a name in by their text. The stale rows first
+ *  (their partial index), then those notes by id: one join of the two was planned as a read of every live note of the workspace (issue #2021). */
+async function staleNotesWithLinks(workspaceId: string): Promise<string[]> {
+  const stale = (await db.selectFrom("note_link_index").select("note_id").where("workspace_id", "=", workspaceId).where("stale", "=", true).execute()).map((r) => r.note_id);
+  if (stale.length === 0) return [];
+  // one array, not a parameter a note: every note is stale after migration 146 until the start-up pass indexes it, more than a statement takes parameters
+  return (await db.selectFrom(notesWithIds(stale).as("s")).select("s.id")
+    .where(sql<boolean>`${sql.raw(liveNodeSql("s"))} AND strpos(s.markdown, '[[') > 0`).orderBy("s.id").execute()).map((r) => r.id);
 }
 
 /** How many targets relinkTarget works out in one statement. */
@@ -251,32 +307,43 @@ export async function relinkTarget(workspaceId: string, nodeIds: string[]): Prom
   // Each target's edges are worked out on their own, so many targets are taken a batch at a time: with thousands in one statement (a change bundle that made
   // them, services/receivedDerivation.ts) the candidate query was planned over the whole array and ran past the statement timeout on a real Postgres
   // (stampedBundleScale.integration.test.ts). What does not depend on the batch is read ONCE for all of them: the targets themselves, the notes whose index row is stale (only
-  // those that hold a `[[`), and the index rows that name any of the targets. A look-up of the index per batch was a scan of the whole index each time whenever the
-  // planner judged the table small (it does at a few thousand rows, statistics or not), so the rows read grew with the square of the bundle (PR #1941 CI,
-  // stampedBundleScale on a real Postgres).
+  // those that hold a `[[`), the index rows that name any of the targets, and the wikilink edges into them. A look-up of the index, or of the edges, per batch was a
+  // scan of the whole table each time whenever the planner judged it small (it does at a few thousand rows, statistics or not: rightly, for one look-up), so the
+  // rows read grew with the square of the bundle (PR #1941 CI, stampedBundleScale on a real Postgres; the edges: issue #2021, receivedRelinkCost). A batch only
+  // writes the edges into its own targets, so what was read before the first batch is still what each later one finds.
   // Every other caller passes a handful and runs as one batch, as before.
   if (nodeIds.length > RELINK_BATCH) {
-    const unread = (await db.selectFrom("note_link_index as i").innerJoin("content_nodes as s", "s.id", "i.note_id").select("i.note_id as id")
-      .where("i.workspace_id", "=", workspaceId).where("i.stale", "=", true)
-      .where(sql<boolean>`${sql.raw(liveNodeSql("s"))} AND strpos(s.markdown, '[[') > 0`).orderBy("i.note_id").execute()).map((r) => r.id);
+    const unread = await staleNotesWithLinks(workspaceId);
     // In id order (relinkTargets), so the batches are the same on every node that takes the same bundle.
     const all = await relinkTargets(workspaceId, nodeIds);
     const index = linkIndexLookup(await indexRowsNaming(workspaceId, all));
+    const into = await edgesInto(workspaceId, all.map((t) => t.id));
     for (let i = 0; i < all.length; i += RELINK_BATCH) {
       const targets = all.slice(i, i + RELINK_BATCH);
-      await relinkBatch(workspaceId, targets, index.notesNaming(targets), unread);
+      const ids = new Set(targets.map((t) => t.id));
+      await relinkBatch(workspaceId, targets, index.notesNaming(targets), unread, into.filter((e) => ids.has(e.target_node_id)));
     }
     return;
   }
   const targets = await relinkTargets(workspaceId, nodeIds);
   if (targets.length === 0) return;
-  await relinkBatch(workspaceId, targets, (await indexRowsNaming(workspaceId, targets)).map((row) => row.note_id));
+  await relinkBatch(workspaceId, targets, (await indexRowsNaming(workspaceId, targets)).map((row) => row.note_id), await staleNotesWithLinks(workspaceId),
+    await edgesInto(workspaceId, targets.map((t) => t.id)));
+}
+
+type EdgeInto = { id: string; source_node_id: string; target_node_id: string };
+/** The wikilink edges into `targetIds` (migration 241 node_edges_wikilink_target_idx answers it). */
+async function edgesInto(workspaceId: string, targetIds: readonly string[]): Promise<EdgeInto[]> {
+  if (targetIds.length === 0) return [];
+  // one array, not a parameter a target: a folder move or a bundle can name more targets than a statement takes parameters (65,535)
+  return db.selectFrom("node_edges").select(["id", "source_node_id", "target_node_id"]).where("workspace_id", "=", workspaceId).where("origin", "=", "wikilink")
+    .where(sql<boolean>`target_node_id = ANY(${[...targetIds]}::uuid[])`).execute();
 }
 
 /** relinkTarget for one batch of targets. `indexed`: the notes whose up-to-date index row names one of them (a superset is fine: what each candidate really links to is
- *  matched exactly below: linkMatchesNodeSql, the space, the liveness, the name). `unread`: the notes whose index row is stale and that hold a `[[`, when read once
- *  for every batch; absent, they are read here. */
-async function relinkBatch(workspaceId: string, targets: readonly RelinkTarget[], indexed: readonly string[], unread?: readonly string[]): Promise<void> {
+ *  matched exactly below: linkMatchesNodeSql, the space, the liveness, the name). `unread`: the live notes whose index row is stale and that hold a `[[`
+ *  (staleNotesWithLinks; read once for all the batches of one call). `into`: the wikilink edges into the batch's targets now (edgesInto). */
+async function relinkBatch(workspaceId: string, targets: readonly RelinkTarget[], indexed: readonly string[], unread: readonly string[], into: readonly EdgeInto[]): Promise<void> {
   requireTransaction("relinkBatch");
   const targetIds = targets.map((t) => t.id);
 
@@ -296,14 +363,8 @@ async function relinkBatch(workspaceId: string, targets: readonly RelinkTarget[]
     }
   }
   const found = await q<{ id: string }>(
-    `WITH unindexed AS MATERIALIZED (
-       SELECT i.note_id AS id FROM note_link_index i JOIN content_nodes s ON s.id = i.note_id
-        WHERE $7::uuid[] IS NULL AND i.workspace_id = $1 AND i.stale AND ${liveNodeSql("s")}
-       UNION ALL SELECT unnest($7::uuid[])
-     )
-     -- Notes that link to a target now: they may have to lose the edge.
-     SELECT e.source_node_id::text AS id FROM node_edges e
-      WHERE e.workspace_id = $1 AND e.origin = 'wikilink' AND e.target_node_id = ANY($2::uuid[])
+    `     -- Notes that link to a target now: they may have to lose the edge.
+     SELECT unnest($1::uuid[])::text AS id
      UNION
      -- Indexed notes: the index says which names their text links to.
      SELECT unnest($8::uuid[])::text
@@ -312,21 +373,24 @@ async function relinkBatch(workspaceId: string, targets: readonly RelinkTarget[]
      -- strpos, not LIKE '%[[%': the planner may answer a LIKE through the
      -- pgroonga text index, whose tokenizer reads "![[" as one token, so an
      -- embed-only note ("see ![[Name]]") was dropped whenever that plan won.
-     SELECT s.id::text FROM unindexed u JOIN content_nodes s ON s.id = u.id
-      WHERE strpos(s.markdown, '[[') > 0 AND EXISTS (
+     -- Those notes are given (staleNotesWithLinks), not joined here: a join of the stale rows with the notes was planned as a read of every live note (issue #2021).
+     SELECT s.id::text FROM ${notesWithIdsSql("$7::uuid[]")} s
+      WHERE EXISTS (
         SELECT 1 FROM unnest($2::uuid[], $9::uuid[], $10::boolean[]) t(id, space_id, tag)
          WHERE t.id <> s.id AND (t.tag OR t.space_id IS NOT DISTINCT FROM s.space_id)
            AND (EXISTS (SELECT 1 FROM unnest($3::uuid[], $4::text[]) k(target_id, name)
-                         WHERE k.target_id = t.id AND strpos(lower(s.markdown), lower(k.name)) > 0)
+                         -- CASE: the text is searched only for this target's names (Postgres put the search before the cheap check: every name of the batch searched)
+                         WHERE CASE WHEN k.target_id = t.id THEN strpos(lower(s.markdown), lower(k.name)) > 0 ELSE false END)
                 OR EXISTS (SELECT 1 FROM unnest($5::uuid[], $6::text[]) k(target_id, pattern)
-                            WHERE k.target_id = t.id AND s.markdown ~* k.pattern)
+                            WHERE CASE WHEN k.target_id = t.id THEN s.markdown ~* k.pattern ELSE false END)
                 OR strpos(lower(s.markdown), '${NODE_REF_PREFIX}' || t.id::text) > 0))`,
-    [workspaceId, targetIds, names.map(([id]) => id), names.map(([, name]) => name),
-      patterns.map(([id]) => id), patterns.map(([, pattern]) => pattern), unread ?? null, indexed,
+    [[...new Set(into.map((e) => e.source_node_id))], targetIds, names.map(([id]) => id), names.map(([, name]) => name),
+      patterns.map(([id]) => id), patterns.map(([, pattern]) => pattern), unread, indexed,
       targets.map((t) => t.space_id), targets.map((t) => t.tag)],
   );
-  const candidates = { rows: found.rows.length === 0 ? [] : await db.selectFrom("content_nodes").select(["id", "markdown"])
-    .where("workspace_id", "=", workspaceId).where("id", "in", found.rows.map((r) => r.id)).execute() };
+  // by the primary key only (notesWithIdsSql says why)
+  const candidates = { rows: found.rows.length === 0 ? [] : await db.selectFrom(notesWithIds(found.rows.map((r) => r.id)).as("c"))
+    .select(["c.id", "c.markdown"]).where("c.workspace_id", "=", workspaceId).execute() };
 
   const linkSource: string[] = [];
   const linkLc: string[] = [];
@@ -341,20 +405,16 @@ async function relinkBatch(workspaceId: string, targets: readonly RelinkTarget[]
   const named = await q<{ source_id: string; target_id: string; live: boolean }>(
     `SELECT DISTINCT s.id::text AS source_id, n.id::text AS target_id, ${liveNodeSql("s")} AS live
        FROM unnest($2::uuid[], $3::text[], $4::text[]) AS l(source_id, link_lc, link_slug)
-       JOIN content_nodes s ON s.id = l.source_id
-       JOIN content_nodes n ON n.workspace_id = $1 AND n.id = ANY($5::uuid[])
+       JOIN ${notesWithIdsSql("$2::uuid[]")} s ON s.id = l.source_id
+       JOIN ${notesWithIdsSql("$5::uuid[]")} n ON n.workspace_id = $1
       WHERE ${linkMatchesNodeSql("n", "s", "ARRAY[l.link_lc]", "ARRAY[l.link_slug]")}`,
     [workspaceId, linkSource, linkLc, linkSlugs, targetIds],
   );
 
-  // Drop what no longer names its target; surviving rows keep their ids.
-  await q(
-    `DELETE FROM node_edges e
-      WHERE e.workspace_id = $1 AND e.origin = 'wikilink' AND e.target_node_id = ANY($2::uuid[])
-        AND NOT EXISTS (SELECT 1 FROM unnest($3::uuid[], $4::uuid[]) k(source_id, target_id)
-                         WHERE k.source_id = e.source_node_id AND k.target_id = e.target_node_id)`,
-    [workspaceId, targetIds, named.rows.map((r) => r.source_id), named.rows.map((r) => r.target_id)],
-  );
+  // Drop what no longer names its target (by id: the edges into the batch were read with it); surviving rows keep their ids.
+  const kept = new Set(named.rows.map((r) => `${r.source_id}/${r.target_id}`));
+  const dropped = into.filter((e) => !kept.has(`${e.source_node_id}/${e.target_node_id}`)).map((e) => e.id);
+  if (dropped.length) await q(`DELETE FROM node_edges WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, dropped]);
   // A trashed source keeps the edges it still has and gains none; its own
   // syncWikilinkEdges runs when it comes back.
   for (const row of named.rows) {

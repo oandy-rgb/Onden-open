@@ -22,3 +22,8 @@ export function notTagNodeSql(alias?: string): string {
 export function liveTagNodeSql(alias?: string): string {
   return `${tagNodeSql(alias)} AND ${liveNodeSql(alias)}`;
 }
+
+/** The space a node without one counts as in the unique slug index (migration 099 content_nodes_space_slug_uq keys `COALESCE(space_id, NO_SPACE)`; a tag has
+ *  no space: content_nodes_derive_space). A query spells that expression with this constant to be answered by the index (spine/noteSlugs.ts freeSlug,
+ *  services/wikilinkEdges.ts linkCandidatesSql; issue #2021: as `space_id IS NOT DISTINCT FROM $n` it read every live note of the workspace). */
+export const NO_SPACE = "00000000-0000-0000-0000-000000000000";

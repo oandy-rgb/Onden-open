@@ -3938,6 +3938,7 @@ INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT 
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('232_updated_at_follows_stamps') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('240_note_delete_sees_what_hangs_on_it') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('241_link_lookup_indexes') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -8081,3 +8082,8 @@ BEGIN
     author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta;
 END;
 $$ LANGUAGE plpgsql;
+-- 241: the wikilink edges into a note, the notes a [[title]] names and the link index rows naming a note are found by index (db/migrations/241_link_lookup_indexes.sql)
+CREATE INDEX IF NOT EXISTS node_edges_wikilink_target_idx ON node_edges (workspace_id, target_node_id) WHERE origin = 'wikilink';
+CREATE INDEX IF NOT EXISTS content_nodes_title_key_idx ON content_nodes (workspace_id, left(lower(normalize(title, NFC)), 500)) WHERE deleted_at IS NULL;
+ALTER INDEX note_link_index_lc_idx SET (fastupdate = off);
+ALTER INDEX note_link_index_slug_idx SET (fastupdate = off);

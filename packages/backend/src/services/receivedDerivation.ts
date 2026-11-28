@@ -32,7 +32,7 @@ import { isUuid } from "@onden/markdown";
 import { isTag } from "@onden/markdown/contract";
 import type { ActorCtx, ActorType } from "../types.js";
 import { deriveFromBody } from "./bodyDerivation.js";
-import { relinkTarget } from "./wikilinkEdges.js";
+import { notesWithIds, relinkTarget } from "./wikilinkEdges.js";
 import { relinkAfterMove } from "./spaces.js";
 import { markReceivedAutoTags, notesOfBlockRows } from "./blockNodes.js";
 import { retypeGoverned } from "./attributeChange.js";
@@ -58,8 +58,10 @@ const rowKeyOf = (item: BundleItem): string | undefined =>
 
 async function notesAsTheyAre(workspaceId: string, ids: readonly string[]): Promise<Map<string, NoteState>> {
   if (ids.length === 0) return new Map();
-  const rows = await db.selectFrom("content_nodes").select(["id", "deleted_at", "space_id", "hidden", "title", "slug", "node_type", "markdown"])
-    .where("workspace_id", "=", workspaceId).where("id", "in", [...ids]).execute();
+  // by the primary key, one look-up a note (wikilinkEdges.ts notesWithIdsSql): `workspace_id = … AND id IN (…)` was a read of every note of the workspace on a
+  // real Postgres, twice a bundle (issue #2021; review of PR #2023, round 1, point 1)
+  const rows = await db.selectFrom(notesWithIds(ids).as("n")).select(["n.id", "n.deleted_at", "n.space_id", "n.hidden", "n.title", "n.slug", "n.node_type", "n.markdown"])
+    .where("n.workspace_id", "=", workspaceId).execute();
   return new Map(rows.map((r) => [r.id, { live: r.deleted_at === null, space: r.space_id, hidden: r.hidden, title: r.title, slug: r.slug, tag: isTag(r), markdown: r.markdown ?? "" }] as const));
 }
 

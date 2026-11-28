@@ -35,7 +35,7 @@ import { sha256Hex } from "../utils.js";
 import { withEventTransaction } from "./eventTransaction.js";
 import { liveNodeSql, notTagNodeSql } from "./nodeSql.js";
 import { assertForeignClockWithinBound, advanceClockFor, localNodeId, standAsideForImport, type ClockReading } from "./stamps.js";
-import { CARRIED_LABELS, UNIT_SOURCES, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
+import { CARRIED_LABELS, UNIT_SOURCES, resendRowsOnRemadeNotes, storeMergedRows, storeMergedUnits, type IncomingUnit, type RowsReport, type SkewGate, type UnitMergeReport } from "./stampedMerge/index.js";
 import { BUNDLE_SCOPE, MAX_BROUGHT_ORIGINS, broughtBound, bundleRefused, haveAt, haveOfAll, normalizeHave, originsOf, type Have } from "./stampedBundle.js";
 import { carriedColumns, compareDigests, computeSnapshotDigest, snapshotRows, type ChangeBundle, type DigestDifference, type SnapshotItem, type StampedPage, type TableDigest, type WireStamp } from "./snapshotSql.js";
 import { SHELL_EMPTY_CHECKS, SNAPSHOT_SPECS, snapshotSpec, wholeWorkspace, type SnapshotSpec } from "./snapshotTables.js";
@@ -269,12 +269,19 @@ const isNoteIdText = (v: unknown): boolean => v === null || (typeof v === "strin
 const isMeta = (m: unknown): boolean => m === undefined || m === null || (isObject(m)
   && (!Object.hasOwn(m, "from") || isNoteIdText(m.from)) && (!Object.hasOwn(m, "space") || isNoteIdText(m.space))
   && (!Object.hasOwn(m, "seen") || (m.seen !== undefined && isSaw(m.seen)))
-  && (!Object.hasOwn(m, "quiet") || typeof m.quiet === "boolean"));
+  && (!Object.hasOwn(m, "quiet") || typeof m.quiet === "boolean")
+  && (!Object.hasOwn(m, "resent") || m.resent === true));
 const isWireHead = (h: unknown): boolean => isObject(h) && (h.value === undefined || isText(h.value))
   && (h.valueless === undefined || h.valueless === false || (h.valueless === true && (h.value ?? null) === null)) && isSaw(h.saw) && isMeta(h.meta);
 const isKept = (k: unknown): boolean => k === undefined || k === null || (isObject(k) && Object.keys(k).length === 1 && ((Object.hasOwn(k, "text") && isText(k.text)) || k.none === true));
+/** A re-send (`meta.resent`, stampedMerge/unit.ts isResent) where an honest node writes one (review of PR #2024, round 1, point 4): only on a row's `*`, never as its
+ *  winner (it ranks below every head that is not one, so a `*` whose winner is a re-send holds nothing but re-sends: no creation, no delete), never a tombstone, and
+ *  covering nothing (an empty `saw`). Anything else would let a sender add a head nobody can write (a field "in conflict" for ever) or make a row out of nothing. */
+const isResentMark = (w: Record<string, unknown>): boolean => isObject(w.meta) && Object.hasOwn(w.meta, "resent");
+const resentInItsPlace = (st: Record<string, unknown>, heads: Record<string, unknown>[]): boolean => (!heads.some(isResentMark) && !isResentMark(st))
+  || (st.field === "*" && !isResentMark(st) && heads.every((h) => !isResentMark(h) || (h.deleted !== true && isObject(h.saw) && Object.keys(h.saw).length === 0)));
 const isWireStamp = (st: unknown): boolean => isObject(st) && typeof st.rowKey === "string" && st.rowKey.length > 0 && typeof st.field === "string" && st.field.length > 0
-  && isSaw(st.saw) && isMeta(st.meta) && isKept(st.kept) && Array.isArray(st.heads) && st.heads.every(isWireHead);
+  && isSaw(st.saw) && isMeta(st.meta) && isKept(st.kept) && Array.isArray(st.heads) && st.heads.every(isWireHead) && resentInItsPlace(st, st.heads as Record<string, unknown>[]);
 /**
  * A value a stamp says it kept, at the door (a snapshot and a change bundle alike; review of PR #1853, rounds 9 and 10): kept only where a value may be kept (a table
  * whose rows go with their note, a unit a foreign key empties: what migration 215's CHECK says, refused here with a code), an emptied id an id of the key it names
@@ -595,6 +602,9 @@ export async function mergeUnitsIntoWorkspace(workspaceId: string, incoming: rea
 /** What taking a bundle did. */
 type BundleReport = RowsReport & {
   sender: string;
+  /** How many rows this node sent again (a note it held alive was made again over a delete it had not seen: stampedMerge/dbRows.ts resendRowsOnRemadeNotes). Written while
+   *  taking this bundle, so they reach the sender in the next exchange. */
+  resent: number;
   /** For each label and origin the receiver now holds further than before (or knew nothing of): the number it holds now (a Have). */
   advanced: Record<string, Record<string, number>>;
 };
@@ -758,6 +768,8 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     }
     const readings = bundle.items.flatMap((item) => (item.kind === "row" ? item.stamps : [item.stamp]).flatMap((s) => [s, ...s.heads].filter((w) => w.origin !== local).map((w) => ({ wall: w.wall, counter: w.counter }))));
     await advanceClockFor(workspaceId, readings);
-    return { ...report, sender: bundle.sender, advanced };
+    // a note this node held alive all along was made again over a delete it had not seen: what hangs on it here is sent again (README 「筆記以同一個 id 重建時」)
+    const again = await resendRowsOnRemadeNotes(workspaceId, report.remade);
+    return { ...report, ...again, sender: bundle.sender, advanced };
   });
 }

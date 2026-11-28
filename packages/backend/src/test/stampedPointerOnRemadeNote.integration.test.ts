@@ -3,7 +3,8 @@
 // 回不來」 (PR #1965, issue #1974 item 3: which node sends the row again, and when, is the owner's decision), here with a pointer (`note_pointers`) instead of a card:
 // A points at note N while B has deleted N for good. The pointer reaches B as stamps only (B has no N to hang it on); B then makes N again under the same id. B's
 // re-creation reaches A as a creation over the old one, so A's N is written over, not removed, and A keeps the pointer. The pointer's write is under B's `have` of A,
-// so no exchange sends it again: A holds the pointer, B never does, and a full resend from A makes it on B. Not fixed here (the issue's rule 4); pinned both ways.
+// so no exchange sent it again: A held the pointer, B never did, and a full resend from A made it on B. Issue #1974 item 3 (the owner chose 甲; issue #2019): A, which
+// holds the pointer and had not seen the delete, sends it again when B's new creation of N reaches it (README 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」).
 import { afterEach, describe, expect, it } from "vitest";
 import { q } from "../db.js";
 import { RealNode, onNode } from "./helpers/distSim/realNode.js";
@@ -40,18 +41,16 @@ async function pointerOnRemadeNote(): Promise<{ a: Peer; b: Peer; note: string; 
 }
 
 describe.skipIf(!isTestDb)("a pointer at a note one node deleted for good and made again under its id", () => {
-  it("what differs today: A holds the pointer, B only its stamps; one more round stores nothing, a full resend from A makes it on B", async () => {
+  it("A sends the pointer again when B's new N reaches it: B makes it; one more round stores nothing", async () => {
     const { a, b, note, pointer } = await pointerOnRemadeNote();
     for (const p of [a, b]) expect(await onNode(p.node, async () => (await q(`SELECT 1 FROM content_nodes WHERE id = $1`, [note])).rows.length), `${p.name} holds N`).toBe(1);
     expect(await pointersAt(a, note), "A: the pointer").toEqual([pointer]);
-    expect(await pointersAt(b, note), "B: no pointer").toEqual([]);
+    expect(await pointersAt(b, note), "B: the pointer").toEqual([pointer]);
     const again = await exchange(a, b);
     expect({ stored: again.stored, created: again.created }, "one more round sends nothing").toEqual({ stored: 0, created: 0 });
-    const all = await resendAll(a, b);
-    expect({ created: all.created, removed: all.removed }, "a full resend makes the pointer").toEqual({ created: 1, removed: 0 });
   }, 600_000);
 
-  it.fails("the property of issue #2012: after the nodes settle, a full resend changes no row (A and B hold the same pointer)", async () => {
+  it("the property of issue #2012: after the nodes settle, a full resend changes no row (A and B hold the same pointer)", async () => {
     const { a, b, note } = await pointerOnRemadeNote();
     expect(await pointersAt(b, note)).toEqual(await pointersAt(a, note));
     const all = await resendAll(a, b);

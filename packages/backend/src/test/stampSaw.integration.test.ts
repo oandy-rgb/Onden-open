@@ -110,6 +110,34 @@ describe.skipIf(!isTestDb)("what a stamp says its writer had seen", () => {
       expect((await stamps(id)).get("title")!.saw).toEqual(core); // the database says the same
       expect((await q(`SELECT 1 FROM sync_stamp_heads WHERE workspace_id = $1 AND row_key = $2 AND field = '*'`, [ws, id])).rows).toHaveLength(1); // they are the creation's heads: they stay
     });
+    // Review of PR #2024, round 3, point 1: a holder's re-send of `*` (meta.resent) is no creation, nothing follows it (dbUnits.ts readUnit, rows.ts fieldsOf), so a
+    // person's write to a field that follows `*` has not seen it, in the core and in the database (migration 240: sync_stamp_put_over and sync_stamp_put_beside).
+    const resendBeside = (id: string) => seedQ(
+      `INSERT INTO sync_stamp_heads (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, meta) VALUES ($1, 'content_nodes', $2, '*', 'peer-node', 7, $3, 0, '{"resent": true}'::jsonb)`, [ws, id, Date.now()]);
+    const coreSaw = async (id: string, field: string) =>
+      writeUnit(await readUnit(ws, { table: "content_nodes", row: id, field }), { origin: "me", seq: 99, wall: Date.now(), counter: 0, author: null, device: null }, { value: "x" })[0]!.saw;
+    it("a re-send of the row's creation beside it: the field does not follow it, and a person's write has not seen it, as the core says", async () => {
+      const id = await create("re-sent creation");
+      await resendBeside(id);
+      expect((await stamps(id)).has("title"), "the title follows the creation").toBe(false);
+      const core = await coreSaw(id, "title");
+      expect(core, "the core: only the creation is seen").not.toHaveProperty(["peer-node"]);
+      await call("PATCH", `/api/nodes/${id}`, { title: "written beside a re-send" });
+      expect((await stamps(id)).get("title")!.saw).toEqual(core); // the database says the same (sync_stamp_put_over)
+      expect(await heads(id, "*"), "the re-send is the creation's head, not this field's: it stays").toHaveLength(1);
+    });
+    it("the same for a place written beside its other heads (a top note moved to another space): the move has not seen the re-send, as the core says", async () => {
+      const id = await create("re-sent creation, moved");
+      const space2 = await makeSpace(ws, `saw moved ${Date.now()}`, [{ id: owner.id, permission: "edit" }]);
+      await resendBeside(id);
+      expect((await stamps(id)).has("parent"), "the parent follows the creation").toBe(false);
+      expect((await stamps(id)).has("sort"), "the order key follows the creation").toBe(false);
+      const core = { parent: await coreSaw(id, "parent"), sort: await coreSaw(id, "sort") };
+      expect(core.parent, "the core: only the creation is seen").not.toHaveProperty(["peer-node"]);
+      await seedQ(`UPDATE content_nodes SET space_id = $2 WHERE id = $1`, [id, space2]); // the move stamps parent and sort beside their heads (migration 218, 5)
+      const after = await stamps(id);
+      expect({ parent: after.get("parent")!.saw, sort: after.get("sort")!.saw }).toEqual(core); // the database says the same (sync_stamp_put_beside)
+    });
   });
 
   describe("a genesis value is named the same in SQL and in the core, for every kind of column", () => {

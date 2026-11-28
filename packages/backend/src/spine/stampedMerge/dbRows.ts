@@ -26,12 +26,13 @@ import { type RowState, mergeRow } from "./rows.js";
 import type { ParentLink } from "./rules/moveCycle.js";
 import { type SpaceTreeRow, cutParents, notesOnLoops, spacesOfTree } from "./rules/space.js";
 import { type MergedRef, mergeDuplicateRefs } from "./rules/functionRefs.js";
-import { type Cell, type Json, type Rejection, type Stamp, type Unit, GENESIS_STAMP_ORIGIN, canonical, compareStamps, stampKey } from "./unit.js";
+import { type Cell, type Json, type Rejection, type Stamp, type Unit, GENESIS_STAMP_ORIGIN, canonical, compareStamps, inWinnerOrder, isGenesis, isResent, maximalHeads, stampKey } from "./unit.js";
 import {
   NOT_AN_EDIT_FIELDS, STAMP_COLS, STAR_PRESENT, UNIT_SOURCES, UPDATED_AT_OF_STAMPS, addressOfUnit, cellMetaOf, jsonSourceOf, jsonSourcesOf, labelsOf, quote, replicatedColumnsOf, rowMatchOf, sourceOf, stampOf, storeUnit, unitName, unitTextsSql,
-  clearMissingRefs, clearedOf, headValue, stampValue, type HeadRow, type KeptValue, type RowSource, type StampRow,
+  clearMissingRefs, clearedOf, headValue, readUnit, stampValue, type HeadRow, type KeptValue, type RowSource, type StampRow,
 } from "./dbUnits.js";
-import { STAR, type StoreEvent } from "./store.js";
+import { STAR, seenByDelete, type StoreEvent } from "./store.js";
+import { allocateMergeStamp } from "../stamps.js";
 
 const NOTES = "content_nodes";
 // A note's slug follows the write that set it (a title); a restore wants the one its title gives, a move the one it had; two live notes of a space that want one
@@ -66,6 +67,9 @@ export type RowsReport = {
   /** Spaces whose deletion is written and that are shown all the same, because a live note is in them that came by a write the deleter had not seen (4.9 for a
    *  space): the deletion stays written, a head its author can see, and takes effect once the space is empty. A view, REPORTED. */
   keptSpaces: string[];
+  /** Notes this node held alive that a bundle wrote over with a creation made over a permanent delete this node had not seen (`meta.seen`, not a re-send): what
+   *  hangs on them here is sent again once the bundle is in (`resendRowsOnRemadeNotes`, called by applyChangeBundle). */
+  remade: string[];
   created: number;
   removed: number;
   /** How many units were written. */
@@ -116,7 +120,7 @@ function incomingOf(src: RowSource, rowKey: string, items: readonly BundleItem[]
   if (star.length === 0) return null;
   const creation = new Map<string, string | null>();
   if (rowItem) for (const f of fields) if (!hasOwn.has(f) && Object.hasOwn(texts, f)) creation.set(f, texts[f] ?? null);
-  return { row: rowKey, values: rowItem?.values, state: { star: [...star].sort((a, b) => compareStamps(b.stamp, a.stamp)), own, creation } };
+  return { row: rowKey, values: rowItem?.values, state: { star: inWinnerOrder(star), own, creation } };
 }
 
 type LocalRow = { exists: boolean; state: RowState | undefined };
@@ -160,7 +164,7 @@ async function loadLocal(workspaceId: string, src: RowSource, rows: string[]): P
     }
     const creation = new Map<string, string | null>();
     if (t) for (const f of fields) if (!hasOwn.has(f)) creation.set(f, t[f] ?? null);
-    out.set(row, { exists: !!t, state: star.length ? { star: [...star].sort((a, b) => compareStamps(b.stamp, a.stamp)), own, creation } : undefined });
+    out.set(row, { exists: !!t, state: star.length ? { star: inWinnerOrder(star), own, creation } : undefined });
   }
   return out;
 }
@@ -180,7 +184,10 @@ async function writeStructureLines(workspaceId: string, lines: readonly Structur
   await snapshotRows(`SELECT set_config('onden.merge_structure_line', '', true)`);
 }
 
-type Merged = { i: Incoming; l: LocalRow; m: Extract<ReturnType<typeof mergeRow>, { exists: boolean }> };
+/** `went`: a row that goes with its note although the note is here, because the note was made again over a delete that had seen all of it (goneWithTheDelete).
+ *  `cascaded`: a row of another table that hangs on such a note, all of it seen by the delete: removed as the deleter's cascade removed it (`carried`: the bundle
+ *  carries it, and what it brings is merged as for a row that is not here; else its stamps stay as they are). */
+type Merged = { i: Incoming; l: LocalRow; m: Extract<ReturnType<typeof mergeRow>, { exists: boolean }>; went?: true; cascaded?: { carried: boolean } };
 
 /** What of a row that exists here is taken from the bundle's copy besides the units: the creation columns (the creation that won is another than ours) and the columns that follow a unit that came from the bundle. */
 function carriedFrom(src: RowSource, { i, l, m }: Merged): { overwrite: boolean; copy: string[] } {
@@ -192,9 +199,10 @@ function carriedFrom(src: RowSource, { i, l, m }: Merged): { overwrite: boolean;
 }
 
 const textOf = (u: Unit | undefined): string | null => (u ? (u[0]!.value as string | null) : null);
+
 /** The unit's writes as copies without their values (a tombstone stays a tombstone): what a node keeps of a row it does not hold, outside the tables that go with a note. */
 const withoutValues = (u: Unit): Unit => u.map((c) => (c.deleted ? c : { ...c, value: null, valueless: true as const }));
-const emptyReport = (): RowsReport => ({ events: [], rejected: [], lateEdits: [], orphaned: [], hanging: [], duplicateRefs: [], duplicateRows: [], notices: [], followedSpaces: [], keptSpaces: [], created: 0, removed: 0, stored: 0, structureLines: 0 });
+const emptyReport = (): RowsReport => ({ events: [], rejected: [], lateEdits: [], orphaned: [], hanging: [], duplicateRefs: [], duplicateRows: [], notices: [], followedSpaces: [], keptSpaces: [], remade: [], created: 0, removed: 0, stored: 0, structureLines: 0 });
 /** What the notes' table hands to the step after every table is in: the notes whose space is derived again, those made here, and the slug each must end with. */
 type TreeWork = { seeds: string[]; made: Set<string>; slugs: Map<string, string> };
 
@@ -234,7 +242,20 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
   if (!report.rejected.length) report.rejected.push(...await checkReceived(workspaceId, items, plans));
   if (report.rejected.length) return report;
   const tree: TreeWork = { seeds: [], made: new Set(), slugs: new Map() };
-  for (const { src, merged } of plans) {
+  let taken = false;
+  for (const src of UNIT_SOURCES) {
+    // what the delete of a note made again takes here (goneWithTheDelete), written as rows of the bundle, once: the notes come first in UNIT_SOURCES (report.remade is
+    // known once they are in), what goes with them after
+    if (!taken && report.remade.length) {
+      taken = true;
+      for (const [s, extra] of await goneWithTheDelete(workspaceId, report.remade, plans)) {
+        const plan = plans.find((p) => p.src === s) ?? (plans.push({ src: s, merged: [] }), plans[plans.length - 1]!);
+        plan.merged = [...plan.merged.filter((x) => !extra.some((y) => y.i.row === x.i.row)), ...extra];
+      }
+    }
+    const plan = plans.find((p) => p.src === src);
+    if (!plan) continue;
+    const { merged } = plan;
     // a unit written into an existing row can still clash on a unique key (a task line's task, a paragraph's anchor): the bundle is refused with a code, not a database error
     const r = await storeTable(workspaceId, src, merged, tree).catch((e: unknown) => {
       const code = (e as { code?: string })?.code;
@@ -243,7 +264,7 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
       if (code && MALFORMED_CODES.has(code)) throw bundleRefused("bundle_malformed", `a row of ${src.label} has a value this database does not hold`, 422);
       throw e;
     });
-    for (const k of ["events", "lateEdits", "orphaned", "hanging", "duplicateRefs", "duplicateRows", "notices"] as const) (report[k] as unknown[]).push(...r[k]);
+    for (const k of ["events", "lateEdits", "orphaned", "hanging", "duplicateRefs", "duplicateRows", "notices", "remade"] as const) (report[k] as unknown[]).push(...r[k]);
     for (const k of ["created", "removed", "stored", "structureLines"] as const) report[k] += r[k];
   }
   // LAST: the space each note is in follows its tree (rules/space.ts), for every note the bundle bears on and every note under them, so the deferred
@@ -271,6 +292,175 @@ export async function storeMergedRows(workspaceId: string, items: readonly Bundl
   await checkDeferredNow();
   return report;
 }
+/**
+ * A head of a note's `*` that came in a bundle and says the note was made again over a permanent delete: a creation (not a re-send) carrying `meta.seen` (migration
+ * 206 and createRow put what the deleter had seen there), that this node did not hold before. The caller asks it only of a note this node holds alive: it may hold
+ * rows the nodes that took the delete dropped (README 「筆記以同一個 id 重建時」). It does NOT ask whether this node had seen that delete: a node that took the delete
+ * and made the note again itself also sends its rows again when another node's creation comes (nothing wrong, one more batch of heads with the same content;
+ * review of PR #2024, round 2).
+ */
+function remadeOverUnseenDelete(local: RowState | undefined, star: Unit): boolean {
+  const held = new Set((local?.star ?? []).map((h) => stampKey(h.stamp)));
+  return star.some((h) => !h.deleted && !isResent(h) && !held.has(stampKey(h.stamp))
+    && typeof (h.meta as { seen?: unknown } | undefined)?.seen === "object" && (h.meta as { seen?: unknown }).seen !== null);
+}
+
+/** A cascading foreign key between two carried tables: a row of `src` hangs on the row of `on` its `column` names (by `onColumn`), and goes when that row goes. */
+type HangEdge = { src: RowSource; column: string; type: string; on: string; onColumn: string };
+let hangEdgesCache: HangEdge[] | undefined;
+/** The carried tables whose rows hang on a note, and on each other, read from the database's own catalog (ON DELETE CASCADE, one column): not a list kept by hand,
+ *  so a new carried table that hangs on a note is sent again with the others. A note's own children are not among them: a note is a row of its own (its parent is
+ *  emptied, not deleted, when its parent goes). */
+async function hangEdges(): Promise<HangEdge[]> {
+  if (hangEdgesCache) return hangEdgesCache;
+  const sources = UNIT_SOURCES.filter((x) => x.rows && x.label !== NOTES);
+  const r = await snapshotRows<{ t: string; col: string; type: string; ref: string; refcol: string }>(
+    `SELECT c.conrelid::regclass::text AS t, a.attname::text AS col, format_type(b.atttypid, b.atttypmod) AS type, c.confrelid::regclass::text AS ref, b.attname::text AS refcol
+       FROM pg_constraint c
+       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+       JOIN pg_attribute b ON b.attrelid = c.confrelid AND b.attnum = c.confkey[1]
+      WHERE c.contype = 'f' AND c.confdeltype = 'c' AND array_length(c.conkey, 1) = 1 AND c.conrelid = ANY($1::regclass[])
+      ORDER BY 1, 2`, [sources.map((x) => quote(x.table))]);
+  const tables = new Set([NOTES, ...sources.map((x) => x.table)]);
+  hangEdgesCache = r.rows.filter((e) => tables.has(e.ref)).map((e) => ({ src: sources.find((x) => x.table === e.t)!, column: e.col, type: e.type, on: e.ref, onColumn: e.refcol }));
+  return hangEdgesCache;
+}
+
+type HeldOnNote = { src: RowSource; row: string; parents: Set<string> };
+const rowId = (table: string, row: string) => `${table}\u0000${row}`;
+/** Every row of a carried table that hangs on one of `notes` here, directly or through rows that hang on them (a paragraph's tags hang on its paragraph row, which hangs
+ *  on its note), with the rows it hangs on (`parents`, by `rowId`). */
+async function rowsHangingOn(workspaceId: string, notes: readonly string[]): Promise<Map<string, HeldOnNote>> {
+  const edges = await hangEdges();
+  const found = new Map<string, HeldOnNote>();
+  // (table, column) → value → the row (rowId) that holds it: what the next step looks rows up by
+  const values = new Map<string, Map<string, string>>([[`${NOTES}.id`, new Map(notes.map((n) => [n, rowId(NOTES, n)]))]]);
+  for (let fresh = true, depth = 0; fresh && depth < UNIT_SOURCES.length; depth++) {
+    fresh = false;
+    for (const e of edges) {
+      const on = values.get(`${e.on}.${e.onColumn}`);
+      if (!on?.size) continue;
+      const wanted = [...new Set(edges.filter((x) => x.on === e.src.table).map((x) => x.onColumn))];
+      const match = rowMatchOf(e.src, []);
+      const params: unknown[] = [workspaceId, [...on.keys()]];
+      const hits = (await snapshotRows<{ row: string; parent: string; refs: Record<string, string | null> }>(
+        `SELECT ${match.idSql("t")} AS row, t.${quote(e.column)}::text AS parent, jsonb_build_object(${wanted.map((c) => `'${c}', t.${quote(c)}::text`).join(", ") || "'_', NULL"}) AS refs
+           FROM ${quote(e.src.table)} t WHERE t.${quote(e.column)} = ANY($2::${e.type}[]) AND ${match.workspace("t", "$1")}${e.src.where ? ` AND ${e.src.where}` : ""}`, params)).rows;
+      for (const h of hits) {
+        const id = rowId(e.src.table, h.row);
+        const was = found.get(id);
+        if (was) { was.parents.add(on.get(h.parent)!); continue; }
+        found.set(id, { src: e.src, row: h.row, parents: new Set([on.get(h.parent)!]) });
+        fresh = true;
+        for (const c of wanted) if (h.refs[c] !== null && h.refs[c] !== undefined) (values.get(`${e.src.table}.${c}`) ?? values.set(`${e.src.table}.${c}`, new Map()).get(`${e.src.table}.${c}`)!).set(h.refs[c]!, id);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * What the delete of a note made again over a delete this node had not seen takes here, as it took it on every node that took the delete (README 「筆記以同一個 id
+ * 重建時」): rows of the bundle for `storeTable`, the one place a merge removes rows. ONE rule for every row that hangs on one of `notes` (rowsHangingOn: every carried
+ * table with a cascading key to the note, through rows that hang on rows), judged by what the deleter had SEEN: the `meta.seen` of the note's creation, which carries
+ * the tombstone's, and which since migration 240 covers this node's progress of every origin when it deleted, so the writes of the rows that hang on the note,
+ * made in transactions of their own (an anchor recovery, a module setting), are in it (store.ts seenByDelete). A row in a chain is judged by the note at its root.
+ *   - a row all of whose writes the delete had seen (every head of every unit, this node's and the bundle's) goes with it, as the cascade took it on the deleter:
+ *     a row that goes with its note (anchors, paragraph rows, the anchors unit: RowSource.goesWithNote) is `went` (rowsThatGo removes it and its stamps, as for a row
+ *     whose note is not here); a row of any other table is `cascaded` (removed; its stamps stay as the deleter's cascade left them, or, when the bundle carries the row,
+ *     are merged as for a row that is not here). What hangs on a row that goes, goes with it (the database's cascade), judged as for a row that is not here;
+ *   - of a row that goes with its note and stays (a write of it the delete had not seen), the field writes the delete had seen go, as `droppedBySeen` drops them from the
+ *     note's own fields (the deleter cleared every stamp of it, so no node keeps them);
+ *   - a row the bundle removes anyway (a tombstone it carries: a table whose cascade writes one) is left to the bundle.
+ * So a delete the deleter had seen is never sent back to life by `resendRowsOnRemadeNotes`, which runs after this and sends only the rows still here.
+ */
+async function goneWithTheDelete(workspaceId: string, notes: readonly string[], plans: readonly { src: RowSource; merged: Merged[] }[]): Promise<Map<RowSource, Merged[]>> {
+  const out = new Map<RowSource, Merged[]>();
+  if (notes.length === 0) return out;
+  const seenOf = new Map<string, Record<string, number>>();
+  for (const n of notes) seenOf.set(rowId(NOTES, n), seenByDelete(await readUnit(workspaceId, { table: NOTES, row: n, field: STAR })));
+  const hanging = await rowsHangingOn(workspaceId, notes);
+  const bySource = new Map<RowSource, HeldOnNote[]>();
+  for (const h of hanging.values()) (bySource.get(h.src) ?? bySource.set(h.src, []).get(h.src)!).push(h);
+  const local = new Map<string, LocalRow>();
+  for (const [src, hs] of bySource) for (const [row, l] of await loadLocal(workspaceId, src, hs.map((h) => h.row))) local.set(rowId(src.table, row), l);
+  const inBundle = (src: RowSource, row: string) => plans.find((p) => p.src === src)?.merged.find((x) => x.i.row === row);
+  const add = (src: RowSource, x: Merged) => (out.get(src) ?? out.set(src, []).get(src)!).push(x);
+  // the delete a row is judged by: its note's, or, in a chain, the note's at its root (`parents` are rows found before it)
+  const seenAt = (id: string, depth = 0): Record<string, number> | undefined => {
+    for (const p of hanging.get(id)?.parents ?? []) { const s = seenOf.get(p) ?? (depth < UNIT_SOURCES.length ? seenAt(p, depth + 1) : undefined); if (s) return s; }
+    return undefined;
+  };
+  const went = new Set<string>();
+  for (const [id, h] of hanging) {
+    // a row hanging on one that goes goes with it (below; a row that goes with its note is judged by its note)
+    if (!h.src.goesWithNote && [...h.parents].some((p) => went.has(p))) continue;
+    const l = local.get(id), seen = seenAt(id);
+    if (!seen || !l?.state?.star?.length) continue;
+    const covered = (c: Cell) => isGenesis(c) || c.stamp.seq <= (seen[c.stamp.origin] ?? -1);
+    const carried = inBundle(h.src, h.row);
+    if (carried && !carried.m.exists) continue;
+    const own = (s: RowState) => [s.star ?? [], ...s.own.values()];
+    if ([...own(l.state), ...(carried ? own(carried.i.state) : [])].every((u) => u.every(covered))) {
+      went.add(id);
+      const m = carried?.m ?? mergeRow(l.state, l.state, clearedOf(h.src));
+      if ("rejected" in m) continue;
+      const i = carried?.i ?? { row: h.row, values: undefined, state: l.state };
+      add(h.src, h.src.goesWithNote ? { i, l, m, went: true } : { i, l, m, cascaded: { carried: !!carried } });
+      continue;
+    }
+    if (!h.src.goesWithNote || ![...l.state.own.values()].some((u) => u.some(covered))) continue;
+    const kept: RowState = { ...l.state, own: new Map([...l.state.own].map(([f, u]) => [f, u.filter((c) => !covered(c))] as const).filter(([, u]) => u.length > 0)) };
+    const m = mergeRow(kept, carried?.i.state ?? kept, clearedOf(h.src)), before = mergeRow(l.state, l.state, clearedOf(h.src));
+    if ("rejected" in m || "rejected" in before) continue;
+    add(h.src, { i: carried?.i ?? { row: h.row, values: undefined, state: kept }, l, m: { ...m, before: before.before } });
+  }
+  for (const [id, h] of hanging) {
+    if (went.has(id) || h.src.goesWithNote || ![...h.parents].some((p) => went.has(p))) continue;
+    const l = local.get(id);
+    if (!l?.state) continue;
+    // gone by the cascade before its table is written: what the bundle brings of it (a delete its deleter wrote, say) is merged as for any row that is not here
+    const carried = inBundle(h.src, h.row);
+    if (carried) { add(h.src, { ...carried, l: { exists: false, state: carried.l.state } }); continue; }
+    const m = mergeRow(l.state, l.state, clearedOf(h.src));
+    if (!("rejected" in m)) add(h.src, { i: { row: h.row, values: undefined, state: l.state }, l: { exists: false, state: l.state }, m });
+  }
+  return out;
+}
+
+/**
+ * The holder's half of a note made again over a permanent delete it had not seen (README 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」).
+ * PRECONDITION: inside `applyChangeBundle`, after the bundle's rows are in (what the delete took here is gone: `goneWithTheDelete`) and its clock readings taken.
+ * The note itself and every row that hangs on it here (rowsHangingOn: the catalog's cascading keys, through rows that hang on rows) is SENT AGAIN: one new stamp of
+ * this node beside the heads of its `*` (unit.ts isResent: it covers nothing, ranks below every other head, nothing follows it). The stamp is above what any node
+ * holds of this one, so the next exchange carries the whole row (its units, their heads and values), and a node that dropped those values (it had no note when they
+ * came) makes the row, or keeps the heads of the note's own fields it dropped. Nothing of the row changes here or anywhere: what is shown, what a field follows, who
+ * made the row are the other heads'. A re-send makes no node send anything: only a creation that is not a re-send says a note was made again, so two holders do not
+ * answer each other. Writes only through `storeUnit`.
+ */
+export async function resendRowsOnRemadeNotes(workspaceId: string, notes: readonly string[]): Promise<{ resent: number }> {
+  if (notes.length === 0) return { resent: 0 };
+  const hanging = [...(await rowsHangingOn(workspaceId, notes)).values()];
+  // the clock reading of the re-send: the latest creation it answers (a function of the replicated state, the same on every node that takes the same bundles)
+  const stars = await Promise.all(notes.map((n) => readUnit(workspaceId, { table: NOTES, row: n, field: STAR })));
+  const answered = stars.flatMap((u) => (u ?? []).filter((c) => !c.deleted && !isResent(c) && typeof (c.meta as { seen?: unknown } | undefined)?.seen === "object"));
+  const latest = answered.reduce<Stamp | null>((a, c) => (!a || compareStamps(c.stamp, a) > 0 ? c.stamp : a), null);
+  const stamp = await allocateMergeStamp(workspaceId, latest ?? { wall: 0, counter: 0 });
+  const copy: Cell = { stamp, saw: {}, deleted: false, value: STAR_PRESENT, meta: { resent: true } };
+  let resent = 0;
+  const again = async (src: RowSource, row: string, star: Unit | undefined) => {
+    if (!star?.length || star[0]!.deleted) return;
+    await storeUnit(workspaceId, addressOfUnit(src, row, STAR), maximalHeads([...star, copy]));
+    resent++;
+  };
+  // the note itself: the writes to its own fields a node dropped while it had no note come back with the row (README, the item of seed 977753)
+  for (const n of notes) await again(sourceOf(NOTES), n, await readUnit(workspaceId, { table: NOTES, row: n, field: STAR }));
+  const bySource = new Map<RowSource, string[]>();
+  for (const h of hanging) (bySource.get(h.src) ?? bySource.set(h.src, []).get(h.src)!).push(h.row);
+  for (const [src, rows] of bySource) for (const [row, l] of await loadLocal(workspaceId, src, rows)) await again(src, row, l.state?.star);
+  return { resent };
+}
+
 /**
  * The checks the database runs at COMMIT (DEFERRED constraint triggers: a note in its parent's space, an anchors unit that is its rows), run NOW, so that a
  * bundle they refuse is refused with a code and a plain reason like every other refusal, and nothing of it is written (the caller's transaction rolls back).
@@ -520,7 +710,7 @@ async function rowsThatGo(workspaceId: string, src: RowSource, merged: readonly 
   const live = merged.filter((x) => x.m.exists);
   const named = [...new Set(live.map(noteOf).filter((n): n is string => n !== null && isUuid(n)))];
   const held = new Set((await snapshotRows<{ id: string }>(`SELECT id::text FROM content_nodes WHERE workspace_id = $1 AND id = ANY($2::uuid[])`, [workspaceId, named])).rows.map((r) => r.id));
-  return live.filter((x) => { const note = noteOf(x); return note === null || !held.has(note); }).map((x) => {
+  return live.filter((x) => { const note = noteOf(x); return x.went || note === null || !held.has(note); }).map((x) => {
     const { i, l, m } = x;
     // a row this node already holds only as its stamps, and the merge changes none of them: nothing to write (a bundle sent again changes nothing, round 9, point 5 d)
     const changed = l.exists || !l.state || m.starChanged || ![...new Set([...m.fields.keys(), ...m.before.keys()])].every((f) => canonical(m.fields.get(f) ?? null) === canonical(m.before.get(f) ?? null));
@@ -531,11 +721,20 @@ async function rowsThatGo(workspaceId: string, src: RowSource, merged: readonly 
 /** A failure of the database that says a row names a row this node does not hold (a foreign key). */
 const isMissingReference = (e: unknown): boolean => (e as { code?: string })?.code === "23503";
 
-async function storeTable(workspaceId: string, src: RowSource, merged: readonly Merged[], tree: TreeWork): Promise<RowsReport> {
+async function storeTable(workspaceId: string, src: RowSource, given: readonly Merged[], tree: TreeWork): Promise<RowsReport> {
   const report = emptyReport();
   const notes = src.label === NOTES;
   const address = (row: string, name: string) => addressOfUnit(src, row, name);
   const match = (row: string) => rowMatchOf(src, [row]);
+  // a row the delete of a note made again had seen all of (goneWithTheDelete `cascaded`) is removed as the deleter's cascade removed it, before anything else; what the
+  // bundle carries of it is then merged as for a row that is not here, and a row it does not carry keeps its stamps as they are (as on the deleter)
+  const cascaded = new Set(given.filter((x) => x.cascaded).map((x) => x.i.row));
+  for (const { i, l } of given.filter((x) => x.cascaded && x.l.exists)) {
+    const params: unknown[] = [workspaceId];
+    await snapshotRows(`DELETE FROM ${quote(src.table)} t WHERE ${match(i.row).match("t", params)} AND ${match(i.row).workspace("t", "$1")}`, params);
+    report.removed++;
+  }
+  const merged = given.filter((x) => !x.cascaded || x.cascaded.carried).map((x) => (x.cascaded ? { ...x, l: { exists: false, state: x.l.state } } : x));
   const isJson = (name: string) => address("x", name).table !== src.label;
   const lines: StructureLine[] = [];
   /** The units of a row's own table other than its `*` (not the keys of its JSON columns: other labels), gone: what a row that is not on this node keeps of its
@@ -595,7 +794,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
     }
   }
   for (const { i, l, m } of merged) {
-    if (went.has(i.row)) continue;
+    if (went.has(i.row) || cascaded.has(i.row)) continue;
     if (m.exists && !l.exists && src.rows) {
       // the sender does not hold the row either (it hangs on a note deleted for good there): only its stamps travelled, and only they are kept
       if (!i.values) continue;
@@ -641,6 +840,7 @@ async function storeTable(workspaceId: string, src: RowSource, merged: readonly 
         && after.some((c) => (c.meta as { quiet?: boolean } | undefined)?.quiet !== true && c.stamp.origin !== GENESIS_STAMP_ORIGIN
           && !(prior ?? []).some((p) => stampKey(p.stamp) === stampKey(c.stamp)));
       if (!l.state || m.starChanged) { await storeUnit(workspaceId, address(i.row, STAR), m.star, undefined, fresh); report.stored++; }
+      if (notes && l.exists && remadeOverUnseenDelete(l.state, m.star)) report.remade.push(i.row);
       // the same row made twice (two nodes made the same id, or this node still holds a row that another deleted and made again): the creation that wins is the row, on every node
       const from = carriedFrom(src, { i, l, m });
       if (from.overwrite) await overwriteCarriedColumns(src.table, workspaceId, match(i.row), i.values!, [...replicatedColumnsOf(src), ...(notes ? ["order_stamp", "slug"] : [])]);

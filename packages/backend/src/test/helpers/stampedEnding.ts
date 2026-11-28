@@ -255,7 +255,7 @@ async function endGroups(rec: Record_, node: RealNode | null | undefined): Promi
       const at = (x: Peer) => peers[g.peers.indexOf(x)]!;
       const pairs = g.pairs.map(([x, y]) => [at(x), at(y)] as const);
       const claimed = claimedQuiet(g), exercised = new Set(g.events.map((e) => direction(g.peers, e.from!, e.to!)));
-      const { settleRounds, differences } = await runEnding(peers, pairs, claimed, exercised);
+      const { settleRounds, differences, resent } = await runEnding(peers, pairs, claimed, exercised);
       rec.settled.push(settleRounds);
       if (skippedWhy !== undefined) {
         // a skipped test must still need it: its ending finds something (or, below, a call of it came from no node); test/stampedEndingSetup.ts turns a skipped test
@@ -263,7 +263,7 @@ async function endGroups(rec: Record_, node: RealNode | null | undefined): Promi
         if (differences.length) skippedNeeded.add(rec.name);
         continue;
       }
-      const allowed = allowedRounds(peers, pairs), long = exceptionEntryFor(ENDING_LONG_SETTLE, rec.name);
+      const allowed = allowedRounds(peers, pairs, resent), long = exceptionEntryFor(ENDING_LONG_SETTLE, rec.name);
       if (settleRounds > allowed && long === undefined) {
         rec.error = new Error(`the ending needed ${settleRounds} exchange rounds to settle, more than the ${allowed} a group of ${peers.length} nodes needs to deliver what was written (one pair a round, then a round that stores nothing): a merge answered its own merge. Find out why, or give the test an entry in ENDING_LONG_SETTLE (stampedEndingExceptions.ts) saying why`);
         continue;
@@ -317,8 +317,11 @@ function claimedQuiet(g: Group): Map<string, string> | null {
   return claimed;
 }
 /** How many rounds a group may take to settle: a write crosses one pair a round, so it reaches every node within the group's widest gap (the longest of the shortest
- *  paths between two of its nodes, over the pairs that exchanged), and one more round stores nothing. Two nodes: 2. */
-function allowedRounds(peers: Peer[], pairs: readonly (readonly [Peer, Peer])[]): number {
+ *  paths between two of its nodes, over the pairs that exchanged), and one more round stores nothing. Two nodes: 2. A holder's re-send (`resent`: a node took a note
+ *  made again over a delete it had not seen, and sent what hangs on it again, README of spine/stampedMerge 「筆記以同一個 id 重建時」) is a write made while taking a
+ *  bundle: it leaves the latest within the first wave and crosses the group in a second one, and makes no node send anything (only a creation that is not a re-send
+ *  does), so a group with one takes at most twice the widest gap, and one more round. More than that is still a merge answering its own merge. */
+function allowedRounds(peers: Peer[], pairs: readonly (readonly [Peer, Peer])[], resent = false): number {
   let widest = 0;
   for (const start of peers) {
     const dist = new Map<Peer, number>([[start, 0]]);
@@ -328,7 +331,7 @@ function allowedRounds(peers: Peer[], pairs: readonly (readonly [Peer, Peer])[])
     }
     widest = Math.max(widest, ...dist.values());
   }
-  return widest + 1;
+  return (resent ? 2 * widest : widest) + 1;
 }
 
 /** A direction of a group, by the peers' places in it (two peers of one group can have the same name). */
@@ -353,10 +356,11 @@ async function finish(rec: Record_): Promise<void> {
 /** The ending itself, for `peers` connected by `pairs` (default every pair, both ways); `claimed`: the test's own last exchanges were quiet (see `claimedQuiet`).
  *  Every step runs and every node is compared, whatever an earlier one found: what it returns is every difference (helpers/stampedEndingNames.ts `Difference`).
  *  It throws only when a step cannot go on (a refusal, a group that does not settle). */
-async function runEnding(peers: Peer[], pairs: (readonly [Peer, Peer])[], claimed: Map<string, string> | null, exercised: ReadonlySet<string>): Promise<{ settleRounds: number; differences: Difference[] }> {
+async function runEnding(peers: Peer[], pairs: (readonly [Peer, Peer])[], claimed: Map<string, string> | null, exercised: ReadonlySet<string>): Promise<{ settleRounds: number; differences: Difference[]; resent: boolean }> {
   ending = true;
   try {
     const differences: Difference[] = [];
+    let resent = false;
     const refusal = (what: string, x: Peer, y: Peer, e: unknown) => new Error(`${what}: ${x.name} → ${y.name} refused (${(e as { code?: string }).code ?? (e as Error).message})`, { cause: e });
     /** The units a take stored, as differences of `step` (a report that says more than it names: the rest without a unit). */
     const storedBy = (step: StoredStep, y: Peer, report: TakeReport): Difference[] => {
@@ -370,6 +374,7 @@ async function runEnding(peers: Peer[], pairs: (readonly [Peer, Peer])[], claime
         let report: TakeReport;
         try { report = await send(x, y); } catch (e) { throw refusal(what, x, y, e); }
         stored += report.stored;
+        if (report.resent) resent = true;
         if (as) differences.push(...storedBy(as, y, report));
       }
       return stored;
@@ -385,6 +390,7 @@ async function runEnding(peers: Peer[], pairs: (readonly [Peer, Peer])[], claime
       let report: TakeReport;
       try { report = await take(y, bundle); } catch (e) { throw refusal("settling", x, y, e); }
       stored += report.stored;
+      if (report.resent) resent = true;
       if (stillClaimed) differences.push(...storedBy("claimed quiet", y, report));
     }
     // the rounds until one stores nothing, that one included (a test that left the nodes quiet: 1)
@@ -408,12 +414,13 @@ async function runEnding(peers: Peer[], pairs: (readonly [Peer, Peer])[], claime
     });
     differences.push(...(await differencesBetween(peers)));
     groupsEnded++;
-    return { settleRounds, differences };
+    return { settleRounds, differences, resent };
   } finally {
     ending = false;
   }
 }
-type TakeReport = { stored: number; events?: { address: { table: string; row: string; field: string } }[] };
+/** `resent`: rows the receiver sent again while taking it (a note made again over a delete it had not seen: stampedMerge/dbRows.ts resendRowsOnRemadeNotes). */
+type TakeReport = { stored: number; resent?: number; events?: { address: { table: string; row: string; field: string } }[] };
 type StoredStep = "claimed quiet" | "one more round" | "full resend";
 /** The tables holding the stamps and other heads of a unit (`table_name` = the unit's label, `row_key` = its row). */
 const STAMP_TABLES = new Set(["sync_stamps", "sync_stamp_heads"]);

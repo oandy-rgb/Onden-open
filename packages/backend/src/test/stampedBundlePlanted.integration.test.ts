@@ -55,6 +55,9 @@ async function writeAndExchange(seed: number): Promise<string | null> {
       await writeFor(a, rng, 25); await writeFor(b, rng, 25);
       const ab = await exchange(a, b), ba = await exchange(b, a);
       if (ab.rejected.length || ba.rejected.length) return `round ${round}: a write was rejected`;
+      // a node that took a note made again over a delete it had not seen sends what it holds on it again (README 「筆記以同一個 id 重建時」): when A did so while
+      // taking B's bundle, its re-send goes to B in one more leg
+      if (ba.resent) await exchange(a, b);
       await expectSame(a, b, `round ${round}`);
     }
     return null;
@@ -150,7 +153,7 @@ describe.skipIf(!isTestDb)("trust line layer 1 on the receive side (docs/decisio
 // trashed; each takes it out of the trash without having seen the other's (two heads of `deleted`, on both after an exchange both ways); A trashes it again (a person's
 // write: it settles both heads), purges it and makes it again under the same id; they exchange both ways, twice. Every write goes through the routes, nothing is random.
 // Inference, not traced into the code: A's trash saw B's undo and settled it, the purge took X's stamps with it, and the creation's `meta.seen` names A's writes only, so
-// on B nothing drops B's head; B does not send it again, A's `have` already covers it. Main and this branch, both engines.
+// on B nothing drops B's head; B did not send it again, A's `have` already covered it. Pinned until issue #2019, which has B send X again.
 describe.skipIf(!isTestDb)("a note purged and made again under its id on A, after A and B each undid its trash", () => {
   type Scene = { a: Peer; b: Peer; x: string; refused: string[]; conflictBefore: number; deletedHeads: { a: string[]; b: string[] } };
   /** The scene, and what each node holds of X's `deleted` unit beside its winner (origin:seq/value of each other head). Throws if a route or an exchange throws. */
@@ -189,20 +192,18 @@ describe.skipIf(!isTestDb)("a note purged and made again under its id on A, afte
     `SELECT origin || ':' || seq || '/' || coalesce(value, 'null') AS h FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = 'content_nodes' AND row_key = $2 AND field = 'deleted' ORDER BY 1`,
     [p.ws, x])).rows.map((r) => r.h));
 
-  it("what the two nodes hold now (the finding, named): every exchange taken, none refused, and B keeps its undo as a head of X's `deleted` that A does not hold", async () => {
+  // Issue #2019: B held X alive and had not seen A's purge, so when A's new X reaches it, B sends X again (README 「筆記以同一個 id 重建時」): its undo travels with the row.
+  it("B sends X again when A's new X reaches it: every exchange taken, none refused, and both hold the same heads of X's `deleted` (B's undo too)", async () => {
     const s = await scene();
     expect(s.refused, "an exchange was refused").toEqual([]);
     expect(s.conflictBefore, "before A trashes X again, A holds the two undos as two heads of X's deleted").toBeGreaterThan(0);
-    const onlyB = s.deletedHeads.b.filter((h) => !s.deletedHeads.a.includes(h));
     console.info(`[purged and made again] deleted heads: A ${JSON.stringify(s.deletedHeads.a)}, B ${JSON.stringify(s.deletedHeads.b)}`);
-    expect(onlyB.length, "B holds a head of X's deleted unit that A does not (when this is 0, the finding is fixed: turn the it.fails below into an it)").toBeGreaterThan(0);
+    expect(s.deletedHeads.b, "the same heads of X's deleted on both").toEqual(s.deletedHeads.a);
   }, 300_000);
 
-  it.fails("PINNED (README 接上傳輸前必須完成): after the exchanges both nodes hold the same rows, stamps and heads", async () => {
-    // only the difference may make this fail: a throw of the scene or a refused exchange returns, and an it.fails that returns is red ("expected to fail")
-    let s: Scene;
-    try { s = await scene(); } catch { return; }
-    if (s.refused.length || s.conflictBefore === 0) return;
+  it("after the exchanges both nodes hold the same rows, stamps and heads", async () => {
+    const s = await scene();
+    expect(s.refused).toEqual([]);
     await expectSame(s.a, s.b, "after two rounds");
   }, 300_000);
 });

@@ -91,12 +91,6 @@ export const ENDING_FAILS: Record<string, PinnedFinding> = {
     TASK_COPY,
   "stampedBundle.integration.test.ts > what a body written on one node derives there, and what a node that takes it by bundle derives (item by item; equal ones are plain tests, differing ones are it.fails: links and block refs turned around in batch 4a, domain events in batch 4b) > *":
     { ...TASK_COPY, why: `${TASK_COPY.why}; the describe builds one world in whichever of its tests runs first (a module-level memo, \`probe\`): that test has the ending` },
-  "stampedBundlePlanted.integration.test.ts > a note purged and made again under its id on A, after A and B each undid its trash > what the two nodes hold now (the finding, named): every exchange taken, none refused, and B keeps its undo as a head of X's `deleted` that A does not hold":
-    { why: "README 接上傳輸前必須完成: 永久刪除後以同一個 id 再建，對上另一台已被結掉的 `deleted` 頭 (a full resend stores it)", allows: (d) => resendStored(d, "content_nodes", "deleted") },
-  "stampedRecreatedOverDroppedWrite.integration.test.ts > a note made again under its id over a field write the maker dropped > what differs today: the same title on both; A keeps A's title write as another head, B holds no such head":
-    { why: "README 接上傳輸前必須完成: 重建的列在收件那台多一個欄位標記, 永遠送不到的那一步 (A's dropped title write reaches B only in a full resend, which stores it)", allows: (d) => resendStored(d, "content_nodes", "title") },
-  "stampedCardTwiceOnPurgedNote.integration.test.ts > a card two nodes placed on their own, on a note a third deleted for good > a day's note made again under its id: what differs today (A and C hold D without the card, B with it and its field unit)":
-    { why: "README 接上傳輸前必須完成: 筆記以同一個 id 重建時，掛在它上面的列在沒握有它的節點永遠回不來 (only a full resend sends the card)", allows: (d) => resendStored(d, "node_positions") },
   "stampedFieldCopyOfCreation.integration.test.ts > a paragraph row made with its task in one transaction: the writer keeps a copy of the creation stamp for `task`, the receiver does not > what differs today: A holds `*` and `task` under one (origin, number), B only `*`; the full resend stores nothing":
     { ...TASK_COPY, why: `${TASK_COPY.why}; this test asserts that difference itself` },
 };

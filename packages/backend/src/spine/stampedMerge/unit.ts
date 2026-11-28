@@ -111,11 +111,23 @@ export function rejectReason(c: Cell): Rejection | null {
   if (c.deleted && c.value !== null) return "malformed";
   if (c.valueless && (c.deleted || c.value !== null || isGenesis(c))) return "malformed"; // a tombstone and a genesis value say what they are
   if (c.saw[s.origin] !== undefined && c.saw[s.origin]! >= s.seq && !isGenesis(c)) return "malformed"; // a write cannot have seen itself or a later write of its own node
+  // a re-send is a creation's copy beside the heads (never a tombstone, never genesis) and covers nothing: it settles nothing, so it can never take a head's place
+  if (isResent(c) && (c.deleted || isGenesis(c) || Object.keys(c.saw).length > 0)) return "malformed";
   return null;
 }
 
-/** Largest first; equal stamps (only genesis against genesis) fall back to the content so the order is still total. */
-const byWinner = (a: Cell, b: Cell): number => compareStamps(b.stamp, a.stamp) || (cellText(a) < cellText(b) ? 1 : -1);
+/**
+ * A row's `*` sent again by a node that holds the row (README 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」): a new stamp of the holder whose only job
+ * is to make the row travel whole again (a stamp above what any node holds of the holder). It sits BESIDE the heads of `*` (its `saw` is empty: it covers nothing,
+ * rejectReason) and says nothing of its own: it ranks below every head that is not a re-send (byWinner), so it is never the row's creation, never shown over a
+ * delete, and nothing follows it (a field without a unit of its own follows the creations: rows.ts fieldsOf, dbUnits.ts readUnit).
+ */
+export const isResent = (c: Cell): boolean => (c.meta as { resent?: unknown } | null | undefined)?.resent === true;
+/** Largest first; equal stamps (only genesis against genesis) fall back to the content so the order is still total. A re-send ranks below every head that is not one
+ *  (isResent): a delete another node wrote after one holder's re-send is not undone by a second holder's later re-send. */
+const byWinner = (a: Cell, b: Cell): number => Number(isResent(a)) - Number(isResent(b)) || compareStamps(b.stamp, a.stamp) || (cellText(a) < cellText(b) ? 1 : -1);
+/** Heads in the order a unit holds them (the winner first): for a caller that has the heads already (stored or carried) and only orders them. */
+export const inWinnerOrder = (cells: readonly Cell[]): Cell[] => [...cells].sort(byWinner);
 
 /** The heads of a set of writes: duplicates removed, everything a later write had seen dropped. Throws nothing; the caller checked `rejectReason`. */
 export function maximalHeads(cells: readonly Cell[]): Cell[] {
@@ -145,10 +157,15 @@ export type MergeResult = {
   deferred: Cell[];
 };
 
-/** Content of the heads that differ from the winner's: what a person sees as "the other values". A copy without a value is no value to see. */
+/**
+ * Content of the heads that differ from the winner's: what keeps a system write off the unit (writeUnit). No screen shows a person the other heads yet (none reads
+ * sync_stamp_heads, README 「接上傳輸前必須完成」); a future conflict screen must use this, so that what it shows as "the other values" is what refuses a system
+ * write. A copy without a value is no value, and neither is a holder's re-send (isResent): a copy of a creation that says nothing of its own, also beside a later
+ * delete of the row (review of PR #2024, round 2, point 1). Migration 240 sync_stamp_put_over skips the same two in the database's refusal of a system write.
+ */
 export function conflictsOf(unit: Unit): Cell[] {
   const win = unit[0]!;
-  return unit.filter((c) => c !== win && !c.valueless && (win.valueless || !sameContent(c, win)));
+  return unit.filter((c) => c !== win && !c.valueless && !isResent(c) && (win.valueless || !sameContent(c, win)));
 }
 export const winnerOf = (unit: Unit): Cell => unit[0]!;
 

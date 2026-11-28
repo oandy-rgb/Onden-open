@@ -19,7 +19,7 @@
 
 import { deferredColumnsOf, snapshotRows, type RowMatch } from "../snapshotSql.js";
 import { DERIVED_HOWS, DERIVED_PER_NODE_COLUMNS, RETIRED_STAMP_LABELS, type DerivedColumns } from "../snapshotTables.js";
-import { type Cell, type Json, type MergeResult, type SkewGate, type Stamp, type Unit, DEFAULT_MAX_SKEW_MS, GENESIS_STAMP_ORIGIN, canonical, genesisName, isGenesis, maximalHeads, mergeUnit } from "./unit.js";
+import { type Cell, type Json, type MergeResult, type SkewGate, type Stamp, type Unit, DEFAULT_MAX_SKEW_MS, GENESIS_STAMP_ORIGIN, canonical, genesisName, isResent, isGenesis, maximalHeads, mergeUnit } from "./unit.js";
 import { type StoreMerge, type UnitAddress, STAR } from "./store.js";
 import { chooseAnchorHead, parseAnchorUnit } from "./anchorUnit.js";
 import { BLOCK_ID, NODE_MARKDOWN_MAX, TAG_NAME_MAX, hasLoneSurrogate, isUuid } from "@onden/markdown";
@@ -428,8 +428,9 @@ export async function readUnit(workspaceId: string, a: UnitAddress): Promise<Uni
         if (star) cells.push({ stamp: stampOf(star), saw: {}, deleted: false, value: value.v });
       }
       // the field follows EVERY head of its row's creation (two nodes made the same derived id), as store.ts `derived` does
+      // (a re-send of `*` is no creation: nothing follows it, unit.ts isResent)
       for (const h of (await snapshotRows<StampRow>(`SELECT ${STAMP_COLS} FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = $2 AND row_key = $3 AND field = '*' AND NOT deleted`, [workspaceId, a.table, a.row])).rows) {
-        if (!own) cells.push({ stamp: stampOf(h), saw: {}, deleted: false, value: value.v });
+        if (!own && !isResent({ stamp: stampOf(h), saw: h.saw, deleted: false, value: null, ...cellMetaOf(h) })) cells.push({ stamp: stampOf(h), saw: {}, deleted: false, value: value.v });
       }
     }
     for (const h of heads) cells.push({ stamp: stampOf(h), saw: h.saw, deleted: h.deleted, ...headValue(h), ...cellMetaOf(h) });

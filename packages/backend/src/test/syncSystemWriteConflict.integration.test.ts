@@ -98,5 +98,37 @@ describe.skipIf(!isTestDb)("a system write beside a conflict", () => {
     expect(await heads()).toBe(0);
     await systemWrites("recalculated"); // a unit without other heads: as before
     expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [note])).rows[0]!.title).toBe("recalculated");
+
+    // migration 240 (review of PR #2024, round 1, point 5): a conflict is a head whose CONTENT differs (unit.ts conflictsOf); a head that says what the winner says (a
+    // holder's re-send beside a row's creation, two nodes that wrote the same value) is none, so a system or AI write beside it is written. The control is the test above:
+    // the same write beside a head with another value is refused.
+    // (in this test: the file's ending skips it by name, helpers/stampedEndingExceptions.ts, as it merges units from no node)
+    {
+      const space = (await q<{ s: string }>(`SELECT space_id::text AS s FROM content_nodes WHERE id = $1`, [note])).rows[0]!.s;
+      const mine = (await makeCaller(owner)("POST", "/api/nodes", { id: randomUUID(), title: "Same", markdown: "", space_id: space })).id as string;
+      // an earlier clock reading than the note's creation: the head is kept beside the winner, not in its place (a winner's creation value equal to it would not be stored)
+      const other = (s: number) => ({ origin: "another-node", seq: s, wall: 1_000, counter: 0, author: null, device: null });
+      const merged = await mergeUnitsIntoWorkspace(WS, [{ address: { table: "content_nodes", row: mine, field: "title" }, unit: [{ stamp: other(70), saw: {}, deleted: false, value: "Same" }] }]);
+      expect(merged.events.map((e) => e.result.outcome), "the same value: no conflict in the core").not.toContain("conflict");
+      const titleHeads = async () => (await q(`SELECT 1 FROM sync_stamp_heads WHERE workspace_id = $1 AND row_key = $2 AND field = 'title'`, [WS, mine])).rows.length;
+      expect(await titleHeads(), "the head is kept").toBe(1);
+      expect(conflictsOf((await readUnit(WS, { table: "content_nodes", row: mine, field: "title" }))!)).toHaveLength(0);
+      await mutate({ actor: scheduler, workspaceId: WS, authority: { kind: "system" }, event: { type: "TASK_OCCURRENCE_MISSED", targetType: "node", targetId: mine },
+        apply: async () => { await q(`UPDATE content_nodes SET title = 'recalculated beside the same' WHERE id = $1`, [mine]); } });
+      expect((await q<{ title: string }>(`SELECT title FROM content_nodes WHERE id = $1`, [mine])).rows[0]!.title).toBe("recalculated beside the same");
+      expect(await titleHeads(), "the system's write had seen it").toBe(0);
+      // a row's `*`: a second creation head (what a holder's re-send or a second maker of a derived id leaves), and a system write that deletes the row
+      const tagged = (await makeCaller(owner)("POST", "/api/nodes", { id: randomUUID(), title: "Tagged", markdown: "", space_id: space })).id as string;
+      const tag = (await makeCaller(owner)("POST", "/api/tags", { name: `same-${Date.now()}` })) as { id: string };
+      await makeCaller(owner)("PUT", `/api/nodes/${tagged}/tags/${tag.id}`);
+      const key = `${tagged}/${tag.id}`;
+      await mergeUnitsIntoWorkspace(WS, [{ address: { table: "node_tags", row: key, field: "*" }, unit: [{ stamp: other(71), saw: {}, deleted: false, value: {}, meta: { resent: true } }] }]);
+      const starHeads = async () => (await q(`SELECT 1 FROM sync_stamp_heads WHERE workspace_id = $1 AND table_name = 'node_tags' AND row_key = $2 AND field = '*'`, [WS, key])).rows.length;
+      expect(await starHeads(), "the row's `*` holds a second head").toBe(1);
+      await mutate({ actor: scheduler, workspaceId: WS, authority: { kind: "system" }, event: { type: "TASK_OCCURRENCE_MISSED", targetType: "node", targetId: tagged },
+        apply: async () => { await q(`DELETE FROM node_tags WHERE node_id = $1 AND tag_id = $2`, [tagged, tag.id]); } });
+      expect((await q(`SELECT 1 FROM node_tags WHERE node_id = $1 AND tag_id = $2`, [tagged, tag.id])).rows, "the system removed the tag").toHaveLength(0);
+      expect(await starHeads(), "its delete had seen both").toBe(0);
+    }
   });
 });

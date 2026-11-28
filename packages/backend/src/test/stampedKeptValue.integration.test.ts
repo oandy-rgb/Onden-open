@@ -92,6 +92,16 @@ describe.skipIf(!isTestDb)("a write's value, or the mark that a copy has none, i
       for (const item of page.items) if (item.kind === "row") for (const w of item.stamps) if (w.label === label && w.rowKey === at.rowKey && w.field === at.field) change(w);
       return page;
     };
+    // a note's `*` (the finder above takes a field)
+    const spoilStar = (change: (w: WireStamp) => void): StampedPage => {
+      for (const [n, p] of cap.pages.entries()) for (const item of p.items) if (item.kind === "row" && item.table === "content_nodes" && item.stamps.some((x) => x.field === "*" && !x.deleted)) {
+        const page = JSON.parse(JSON.stringify(cap.pages[n])) as StampedPage;
+        const key = item.stamps.find((x) => x.field === "*")!.rowKey;
+        for (const it of page.items) if (it.kind === "row") for (const w of it.stamps) if (w.label === "content_nodes" && w.rowKey === key && w.field === "*") change(w);
+        return page;
+      }
+      throw new Error("no note's `*`");
+    };
     const cases: Array<[string, StampedPage]> = [
       ["a kept value that is a number", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).kept = { text: 5 }; })],
       ["a kept value that is an empty object", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).kept = {}; })],
@@ -106,6 +116,12 @@ describe.skipIf(!isTestDb)("a write's value, or the mark that a copy has none, i
       ["a meta.from that is not a note id", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).meta = { from: "not-a-note" }; })],
       ["a meta.from in capitals", spoil("content_nodes", (w) => { (w as unknown as Record<string, unknown>).meta = { from: randomUUID().toUpperCase() }; })],
       ["a head whose meta.seen is not whole numbers", spoil("content_nodes", (w) => { w.heads = [{ ...(w as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: w.seq + 100, value: "x", meta: { seen: { n: -1 } } } as never]; })],
+      // review of PR #2024, round 1, point 4: a re-send only where an honest node writes one (stampedImport.ts resentInItsPlace), on a snapshot as on a bundle (a
+      // number within the cut: each is refused for this and nothing else)
+      ["a re-send on a unit that is not a row's `*`", spoil("content_nodes", (w) => { w.heads = [{ ...(w as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: Math.max(1, w.seq - 1), value: "x", saw: {}, meta: { resent: true } } as never]; })],
+      ["a row's `*` whose winner is a re-send", spoilStar((w) => { (w as unknown as Record<string, unknown>).meta = { resent: true }; })],
+      ["a re-send that covers what it saw", spoilStar((w) => { w.heads = [{ ...(w as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: Math.max(1, w.seq - 1), value: null, saw: { [w.origin]: w.seq }, meta: { resent: true } } as never]; })],
+      ["a re-send that deletes the row", spoilStar((w) => { w.heads = [{ ...(w as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: Math.max(1, w.seq - 1), value: null, saw: {}, deleted: true, meta: { resent: true } } as never]; })],
     ];
     for (const [what, page] of cases) {
       const shell = await openNode(`shell-${cases.findIndex((c) => c[0] === what)}`);

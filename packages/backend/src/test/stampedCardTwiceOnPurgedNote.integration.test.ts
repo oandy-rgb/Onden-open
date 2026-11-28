@@ -133,8 +133,8 @@ describe.skipIf(!isTestDb)("a card two nodes placed on their own, on a note a th
   // D's card and moves it. B's writes reach A while A has no D (A keeps only the card's `*`); C's new D reaches B as a creation that wins over B's D, so B's D is
   // overwritten, not removed, and B keeps its card. When D reaches A, nothing makes the card there: its writes are below A's `have` and no exchange sends them again.
   // C takes the card from A, as stamps without values (A does not hold it), before B could send it whole, and is where A is. So A and C hold D without the card, B
-  // with it (the VALUES differed before this fix too; now the card's field unit does as well). Pinned (README
-  // 「接上傳輸前必須完成」): the direction is round 10, 4's, a row that is made later fills in what hangs on it.
+  // with it (the values differed, and the card's field unit too). Issue #2019 (#1974 item 3, the owner chose 甲): B, the node that holds the card, sends it again
+  // when D's new creation reaches it, so A and C make it (README 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」).
   async function dayMadeAgain(): Promise<{ a: Peer; b: Peer; c: Peer; note: string; names: Map<string, string> }> {
     const [a, b, c] = await threePeers(open);
     const names = new Map<string, string>();
@@ -157,18 +157,19 @@ describe.skipIf(!isTestDb)("a card two nodes placed on their own, on a note a th
   }
   const heldNote = (p: Peer, note: string) => onNode(p.node, async () => (await q(`SELECT 1 FROM content_nodes WHERE id = $1`, [note])).rows.length);
 
-  it("a day's note made again under its id: what differs today (A and C hold D without the card, B with it and its field unit)", async () => {
+  // Issue #1974 item 3 (the owner chose 甲): B, which holds the card and had not seen the delete, sends the card again when D's new creation reaches it (one stamp of
+  // its own on the card's `*`, standing for the creation it covers: README 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」). Before, A and C held D
+  // without the card and B with it (the values differed), and no exchange sent it again.
+  it("a day's note made again under its id: B sends the card again; A and C make it where B moved it", async () => {
     const { a, b, c, note, names } = await dayMadeAgain();
     for (const p of [a, b, c]) expect(await heldNote(p, note), `${p.name} holds D`).toBe(1);
-    for (const p of [a, c]) {
-      expect(await cardRow(p, note), `${p.name}: no card`).toEqual([]);
-      expect(await cardUnits(p, note, names), `${p.name}: only the card's \`*\``).toEqual(["*: stamp B saw {}"]);
-    }
-    expect(await cardRow(b, note), "B: the card where it moved it").toEqual([{ x: 500, y: 90 }]);
-    expect(await cardUnits(b, note, names), "B: the card's `*` and its moved field").toEqual(["*: stamp B saw {}", `position: stamp B saw {"B":2}`]);
+    for (const p of [a, b, c]) expect(await cardRow(p, note), `${p.name}: the card where B moved it`).toEqual([{ x: 500, y: 90 }]);
+    const ub = await cardUnits(b, note, names);
+    expect(ub.filter((u) => u.startsWith("*")), "B: the card's creation, and its re-send beside it").toEqual(["*: head B saw {} value null", "*: stamp B saw {}"]);
+    expect(ub, "B: the moved field is still B's move").toContain(`position: stamp B saw {"B":2}`);
   }, 600_000);
 
-  it.fails("a day's note made again under its id: A, B and C hold the same card, with the same units", async () => {
+  it("a day's note made again under its id: A, B and C hold the same card, with the same units", async () => {
     const { a, b, c, note, names } = await dayMadeAgain();
     expect(await cardRow(a, note)).toEqual(await cardRow(b, note));
     expect(await cardUnits(a, note, names)).toEqual(await cardUnits(b, note, names));
@@ -187,10 +188,10 @@ describe.skipIf(!isTestDb)("a card two nodes placed on their own, on a note a th
     expect(await cardUnits(c, note, names), "C against B").toEqual(ub);
   }, 600_000);
 
-  // Review of PR #1965, round 2, point 3: the same, through a snapshot first (the kind of P3 in snapshotBrought). D joins from C's snapshot while C holds only the
-  // card's `*` (C dropped nothing it had a value of: it never held the card), then exchanges with all three; B moves the card once more and every pair exchanges.
+  // Review of PR #1965, round 2, point 3: the same, through a snapshot first (the kind of P3 in snapshotBrought). D joins from C's snapshot (before issue #2019 C held
+  // only the card's `*` here; now it holds the card B sent again), then exchanges with all three; B moves the card once more and every pair exchanges.
   // D ends with B's card, value and units: a value a node holds and does not delete reaches every node, through a snapshot chain too.
-  it("the same, with a fourth node joined from a snapshot of a node that holds only the card's `*`: after B moves the card again, all four hold the same card and units", async () => {
+  it("the same, with a fourth node joined from a snapshot of C: after B moves the card again, all four hold the same card and units", async () => {
     const { a, b, c, note, names } = await dayMadeAgain();
     const nd = await openNode("d"); open.push(nd);
     await fillFrom(nd, c, await capture(c.node, c, 12_000));
@@ -198,7 +199,9 @@ describe.skipIf(!isTestDb)("a card two nodes placed on their own, on a note a th
     names.set(await nodeIdOf(d), "D");
     for (const p of [a, b, c]) { await admit(p, d); await admit(d, p); }
     await onNode(d.node, () => setModulesOn(d.ws, null));
-    expect(await cardUnits(d, note, names), "D, from C's snapshot: only the card's `*`").toEqual(["*: stamp B saw {}"]);
+    // (C holds the card now: B sent it again when D's new creation reached B)
+    expect(await cardUnits(d, note, names), "D, from C's snapshot: the card as C holds it").toEqual(await cardUnits(c, note, names));
+    expect(await cardRow(d, note), "D, from C's snapshot: the card").toEqual([{ x: 500, y: 90 }]);
     await onNode(b.node, () => writeAsOwner(b, `UPDATE node_positions SET x = 600, y = 95 WHERE node_id = $1 AND surface = $2`, [note, BOARD]));
     for (let r = 0; r < 3; r++) for (const x of [a, b, c, d]) for (const y of [a, b, c, d]) if (x !== y) await exchange(x, y);
     const ub = await cardUnits(b, note, names);

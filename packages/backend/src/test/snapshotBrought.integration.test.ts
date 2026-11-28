@@ -50,10 +50,9 @@ afterEach(async () => { for (const n of open.splice(0)) await n.close().catch(()
 const codeOf = (p: Promise<unknown>) => p.then(() => null, (e: { code?: string }) => e.code ?? String(e));
 const rows = <T,>(p: Peer | RealNode, text: string, params: unknown[] = []) => onNode("node" in p ? p.node : p, async () => (await q(text, params)).rows as T[]);
 /** Writes that leave tombstones (trash, purge) and the writes of the other tables, besides notes: what a third node's bundle brings. */
-/** `recreate` (the same id made again after it was deleted for good) is off: with it, a seed can hit the merge core's open defect (README「接上傳輸前必須完成」, "重建的列在收件那台多一個
- *  欄位標記") and P2/P3 go red for a reason that is not this batch's; there is no deterministic reproduction yet to pin it with it.fails (review round 1, A3). Turn it back
- *  on when that is fixed. */
-const MIXED = { create: 18, title: 16, body: 12, move: 10, trash: 8, purge: 6, attr: 8, unattr: 3, tagMake: 2, tag: 6, point: 4, row: 6, recreate: 0 };
+/** `recreate` (the same id made again after it was deleted for good) was off while it could hit the merge core's open defect (README "重建的列在收件那台多一個欄位標記",
+ *  review round 1, A3); issue #2019 fixed that class (the node that held the note alive sends it again, and what hangs on it), so it is on again. */
+const MIXED = { create: 18, title: 16, body: 12, move: 10, trash: 8, purge: 6, attr: 8, unattr: 3, tagMake: 2, tag: 6, point: 4, row: 6, recreate: 4 };
 
 /**
  * EVERY stamp and other head of the workspace, every column (saw, meta, kept_value, the value of a head and whether it has none), of every label (a snapshot also carries
@@ -205,6 +204,9 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     expect(fromSource.rejected).toEqual([]);
     expect(changedUnits(cBefore, await everyStamp(c))).toEqual(changedUnits(aBefore, await everyStamp(a)));
     expect(fromSource.stored).toBeGreaterThan(0);
+    // a note made again over a delete C had not seen (C joined while A held it alive): C sends again what it holds on it while taking the bundle (README 「筆記以同一個 id
+    // 重建時」), so its re-send reaches A one round later (seed 971300 of this file: compared before it, A lacked C's re-send head); A takes bundles from C once it admits it
+    if (fromSource.resent) { await admit(a, c); await exchange(c, a); }
     await expectSame(a, c, "A and C after one bundle from A");
     expect((await resendAll(a, c)).stored, "a full re-send from the source stores nothing").toBe(0);
 
@@ -221,6 +223,7 @@ describe.skipIf(!isTestDb)("a node that holds other nodes' writes is the source 
     const fromThird = await exchange(b, c);
     expect(fromThird.rejected).toEqual([]);
     expect(changedUnits(cBefore2, await everyStamp(c))).toEqual(changedUnits(bBefore, await everyStamp(b)));
+    if (fromThird.resent) { await admit(b, c); await exchange(c, b); } // as above
     await expectSame(b, c, "B and C after one bundle from B");
     expect((await resendAll(b, c)).stored, "a full re-send from the third node stores nothing").toBe(0);
     expect((await resendAll(a, c)).stored).toBe(0);

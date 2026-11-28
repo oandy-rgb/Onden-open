@@ -5,6 +5,6 @@
 export type { IncomingUnit, UnitMergeReport } from "./dbUnits.js";
 export { storeMergedUnits, UNIT_SOURCES, CARRIED_LABELS, labelsOf, rowMatchOf, unitTextsSql } from "./dbUnits.js";
 export type { RowsReport } from "./dbRows.js";
-export { notesMovedWith, storeMergedRows } from "./dbRows.js";
+export { notesMovedWith, resendRowsOnRemadeNotes, storeMergedRows } from "./dbRows.js";
 export type { SkewGate, Stamp } from "./unit.js";
 export { GENESIS_STAMP_ORIGIN } from "./unit.js";

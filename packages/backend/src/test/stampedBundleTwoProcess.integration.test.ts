@@ -113,6 +113,9 @@ describe.skipIf(!isTestDatabase())("change bundles between three processes", () 
       await give(b, a); await give(c, a);
       await give(a, b); await give(a, c);
     }
+    // a node that took a note made again over a delete it had not seen sends what it holds on it again (README 「筆記以同一個 id 重建時」): the re-sends B and C wrote
+    // while taking the last round go to A, and from A to the other
+    await give(b, a); await give(c, a);
     await give(a, b); await give(a, c);
     await sameState(a, b); await sameState(a, c);
 

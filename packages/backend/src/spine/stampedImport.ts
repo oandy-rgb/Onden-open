@@ -27,6 +27,7 @@
 // (a membership epoch, an invitation, a sealed address); a row of another workspace; a person that signs in through the
 // snapshot; a page whose number was applied with other content. The page is written in one savepoint: a refusal leaves nothing.
 
+import { assertActorsFromTheCentre } from "./actorsInBundles.js";
 import { discardUnfinishedJoins, ensureShellWorkspace, planThisTransactionForTablesAsTheyAre, restoreShellPerson, withTransaction, type ShellPerson } from "../db.js";
 import { nativeBypassEnabled } from "../nativeBypass.js";
 import { isUuid } from "@onden/markdown";
@@ -731,6 +732,10 @@ export async function applyChangeBundle(workspaceId: string, bundle: ChangeBundl
     // what follows from the rows written here (spine/receivedDerivation.ts): never a bundle without it
     const derivation = receivedDerivation();
     if (!derivation) throw bundleRefused("bundle_no_derivation", "this node cannot work out what follows from received rows (services/receivedDerivation.ts is not loaded): nothing was taken");
+    // people and AI operators arrive only as the main server wrote them (migration 237): checked here, the merge's triggers stand aside. Every way in checks it before
+    // anything is written: a bundle taken in parts (#1987 receiveChangeBundle, which does not pass through here) must call it in checkBundleAgainstNode, on the whole
+    // bundle before its first part, with a test of its own that a part-wise receive refuses (spine/stampedMerge/README.md 接上傳輸前必須完成)
+    await assertActorsFromTheCentre(workspaceId, bundle);
     const prepared = await derivation.before(workspaceId, bundle.items);
     const report = await storeMergedRows(workspaceId, bundle.items);
     if (report.rejected.length) {

@@ -33,7 +33,7 @@ import { CodedStatusError } from "../statusError.js";
 import { requirePerson } from "../spine/authority.js";
 import { stampUnstampedRowsAsGenesis } from "../spine/stamps.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
-import { MAX_BROUGHT_ORIGINS, broughtBound, heldOfFormer, originsOf, type Have } from "../spine/stampedBundle.js";
+import { MAX_BROUGHT_ORIGINS, broughtBound, formerIdsOf, heldOfFormer, originsOf, type Have } from "../spine/stampedBundle.js";
 import { CARRIED_LABELS } from "../spine/stampedMerge/index.js";
 import { withActorReadSnapshot } from "./actorReadSnapshot.js";
 import { snapshotScopeFor } from "./readPolicy.js";
@@ -108,13 +108,6 @@ export async function snapshotSourceNode(workspaceId: string): Promise<string> {
 
 const originRows = async (workspaceId: string): Promise<OriginRow[]> =>
   (await snapshotRows<OriginRow>(`SELECT origin, vouched_by, have FROM sync_origins WHERE workspace_id = $1 ORDER BY origin`, [workspaceId])).rows;
-
-/** The ids this node had before it was restored (sync_origins vouched 'self-restore'), each held up to the number migration 213 wrote for the labels its row names
- *  (spine/stampedBundle.ts heldOfFormer: a label carried since is absent there, and is not 0). What a page names as `former`. */
-async function formerIdsOf(workspaceId: string): Promise<Record<string, number>> {
-  const rows = (await originRows(workspaceId)).filter((r) => r.vouched_by === "self-restore");
-  return Object.fromEntries(rows.map((r) => [r.origin, heldOfFormer(r.have)]));
-}
 
 /** Every other origin of `rows` (not a former id), per carried label, as far as this node holds it: what a page names as `brought`. A label an origin's row does not
  *  name is left out (it is 0, and the joiner reads it so). */

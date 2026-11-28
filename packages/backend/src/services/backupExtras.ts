@@ -24,6 +24,7 @@
 
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { sql } from "kysely";
 import { db } from "../dbKysely.js";
 import { carriedActorId } from "../spine/authority.js";
 import type { ActorCtx } from "../types.js";
@@ -172,7 +173,8 @@ export async function importExtras(
   for (const r of extras.review) {
     const nodeId = mapped(r.node_id);
     if (!nodeId || !Number.isFinite(Date.parse(r.updated_at))) continue;
-    await db.insertInto("review_states").values({ workspace_id: workspaceId, node_id: nodeId, actor_id: actorId, state: r.state, previous_state: r.previous_state, updated_at: r.updated_at })
+    // the row's id comes from the card and the person (migration 236 review_state_id): the same row on every node that makes it
+    await db.insertInto("review_states").values({ id: sql<string>`review_state_id(${nodeId}::uuid, ${actorId})`, workspace_id: workspaceId, node_id: nodeId, actor_id: actorId, state: r.state, previous_state: r.previous_state, updated_at: r.updated_at })
       .onConflict((c) => c.columns(["node_id", "actor_id"]).doUpdateSet({ state: r.state, previous_state: r.previous_state, updated_at: r.updated_at })).execute();
     done.review++;
   }
@@ -200,7 +202,7 @@ export async function importExtras(
     const checked = parsePref(r.key, r.value);
     if (!checked.ok) continue;
     const value = JSON.stringify(checked.value);
-    await db.insertInto("actor_prefs").values({ actor_id: actorId, key: r.key, value, edited_at: new Date().toISOString() })
+    await db.insertInto("actor_prefs").values({ actor_id: actorId, workspace_id: workspaceId, key: r.key, value, edited_at: new Date().toISOString() })
       .onConflict((c) => c.columns(["actor_id", "key"]).doUpdateSet({ value, updated_at: new Date().toISOString(), edited_at: new Date().toISOString() })).execute();
     done.prefs++;
   }

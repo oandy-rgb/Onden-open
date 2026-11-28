@@ -211,14 +211,16 @@ export function rowsOf(node: RealNode | null, world: Pick<SourceWorld, "ws" | "o
 
 export type StampRow = { table_name: string; row_key: string; field: string; origin: string; seq: string; hlc_wall: string; hlc_counter: number; author: string | null; device: string | null; deleted: boolean; saw: Record<string, number>; meta: unknown };
 
-/** The ids of notes and spaces of the workspace that `world.owner` cannot read (their stamps are not in the owner's snapshot). */
+/** The ids of notes, spaces and other people of the workspace whose rows `world.owner` cannot read (their stamps are not in the owner's snapshot). */
 export function outOfScopeIds(node: RealNode | null, world: Pick<SourceWorld, "ws" | "owner">): Promise<string[]> {
   return onNode(node, async () => {
     const noteParams: unknown[] = [world.ws];
     const notes = await q<{ id: string }>(`SELECT t.id::text FROM content_nodes t WHERE t.workspace_id = $1 AND NOT (${snapshotScope(world.owner, noteParams, true).nodeRow("t")})`, noteParams);
     const spaceParams: unknown[] = [world.ws];
     const spaces = await q<{ id: string }>(`SELECT t.id::text FROM spaces t WHERE t.workspace_id = $1 AND NOT (${snapshotScope(world.owner, spaceParams, true).space("t.id")})`, spaceParams);
-    return [...notes.rows, ...spaces.rows].map((r) => r.id);
+    // another person: their own rows (preferences, keyed by the person) are no one else's to read (snapshotTables.json `{person:…}`), so their stamps are not carried either
+    const people = await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'human' AND id <> $2`, [world.ws, world.owner.id]);
+    return [...notes.rows, ...spaces.rows, ...people.rows].map((r) => r.id);
   });
 }
 
@@ -268,7 +270,6 @@ export function notCarriedOnPurpose(world: Pick<SourceWorld, "secretNote" | "sec
     node_attributes: `t.source NOT IN ('ui', 'explicit', 'dispatcher') OR t.node_id::text = '${world.secretNote}'`,
     node_edges: `t.origin <> 'manual'`,
     actor_prefs: `t.actor_id::text = ${friend}`,
-    // a suggestion that was decided has nothing left to merge
-    ai_edit_suggestion_items: `t.status <> 'pending'`,
+    // (a decided suggestion item is carried since migration 236: its decision travels by bundle)
   };
 }

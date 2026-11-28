@@ -148,7 +148,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
     const missing = Object.fromEntries(comparison.filter((c) => c.missing > 0).map((c) => [c.table, c.missing]));
     // (spaces: the friend's own space, the space only they are in, and — only on a database whose migrations ran from the start, not one built from db/schema.sql — the install's restricted space nobody is in)
     const { spaces, ...others } = missing;
-    expect(others).toEqual({ actor_prefs: 1, ai_edit_suggestion_items: 1, content_nodes: 1, node_edges: 1, space_members: 2 });
+    expect(others).toEqual({ actor_prefs: 1, content_nodes: 1, node_edges: 1, space_members: 2 }); // a decided suggestion item travels since migration 236
     expect([2, 3]).toContain(spaces);
     // and the system space and the Site Config note are NOT among the missing ones
     const lacking = (table: string) => Object.entries(source.wholeTables[table]!).filter(([key]) => !(key in receiver.wholeTables[table]!));
@@ -206,7 +206,7 @@ describe.skipIf(!onPglite && !isTestDatabase())("a snapshot copied between two d
       expect(lines.length).toBeGreaterThan(2);
       for (const line of lines) expect(line.startsWith('{"kind":"'), line.slice(0, 60)).toBe(true);
       expect(JSON.parse(lines[0]!)).toMatchObject({ kind: "hello", dataShape: SYNC_DATA_SHAPE_VERSION });
-      expect(SYNC_DATA_SHAPE_VERSION).toBe(8); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived), 6 since migration 222 (`have` per label; a snapshot brings the other origins its source holds), 7 with no migration (a row that is not on a node keeps only its `*`), 8 since migration 223 (text-made attribute values are units): spine/syncDataShape.ts
+      expect(SYNC_DATA_SHAPE_VERSION).toBe(10); // 2 since batch 2b-2a (a change bundle carries every stamped table), 3 since migration 214 (a page names the former ids of a restored source), 4 since migration 215 (anchors and paragraph rows are stamped tables), 5 since migration 218 (`space` is the written space; space_id is derived), 6 since migration 222 (`have` per label; a snapshot brings the other origins its source holds), 7 with no migration (a row that is not on a node keeps only its `*`), 8 since migration 223 (text-made attribute values are units), 9 for the history batch 3, 10 since migration 235 (the slug is a unit; the tables of batch 5 travel): spine/syncDataShape.ts
     });
 
     it("an importer refuses a file whose first line has no data shape, or another one, with join_data_shape, before a join starts; the empty database is still ready", () => {

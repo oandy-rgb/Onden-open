@@ -1278,6 +1278,13 @@
 - **為什麼沒擋到**：說明裡的結論比測試多一步（「標記相同」沒有被任何斷言檢查）。
 - **類別**：文件的結論沒有測試支撐。
 - **機制**：〔第 1 層〕那個情境現在多了比對標記的釘住測試。〔第 2 層〕「釘住的情境寫進 README 時，每一句結論都要有一個斷言」：尚無機制，靠審查。
+### 2026-11-23　PR 自己把一筆加進只准減少的基準（PR #1992，公開 CI 的 ratchet）
+- **發生了什麼**：A6 的檢查（`spine/carriedTables.ts`）現在只有測試在用，`unusedCode.guard` 紅了；我把它登記進 `scripts/unused-code-baseline.json` 的 `intentional.files`，引用擁有者先前對別的同步入口的同意。任務說明寫明「基準必須變大時不要改，在 PR 寫出檔名」。
+- **證據**：公開 run 45243721881，`ratchet:check` 指出 `intentional.files` 多了一筆。
+- **發現者**：擁有者（公開 CI）。
+- **為什麼沒擋到**：把一則舊的、對別的檔案的同意當成這次也適用；本機沒有對 `origin/main` 跑 `npm run ratchet:check` 就推。
+- **類別**：放寬基準不經擁有者。
+- **機制**：〔第 1 層〕`npm run ratchet:check`（公開 CI 會跑）。〔第 2 層〕推之前在根目錄跑一次 `npm run ratchet:check`；基準要變大只在 PR 說明寫檔名與理由，由擁有者用 `ratchet-override` 加。本機跑不跑仍尚無自動機制。
 - 2026-11-23 再一次（PR #1994 第 2 輪，發現者：審查）：migration 232 改了五張表的觸發器之後只重跑檔名含 stamp／sync 的 88 個檔，`graphPositionEvent`「a move after the burst has ended is a new event」紅在完整測試（白板 5 秒視窗被調早的 `updated_at` 撥回去）。這一輪起：改到觸發器或 migration 的每一輪，推之前重跑完整的 `npm run test:pglite`。仍尚無自動機制。
 ### 2026-11-23　瀏覽器版沿用正式版前端，沒有「這個環境能做什麼」的機制：登出之後工作區永久卡在成員確認（擁有者在正式的瀏覽器版）
 - **發生了什麼**：瀏覽器版（一個人、沒有伺服器）照樣顯示正式版的「登出」，也照樣在開機時升起成員確認閘門。擁有者按了登出之後，每次重新整理都在幾秒內被擋回「正在確認工作區資料⋯ → 同步尚未完成」，「重新檢查」永遠無效，筆記進不去。
@@ -1388,6 +1395,7 @@
 - **為什麼沒擋到**：我只單獨跑新檔，和它同一分片的鄰居沒有一起跑；`buildSourceWorld(null)` 用在共用資料庫上是否安全，只寫在另一個檔的註解裡。
 - **類別**：測試共用資料庫的順序相依。
 - **機制**：〔第 1 層〕`largeWrites` 用自己的資料庫。〔第 2 層〕「共用測試資料庫上只能有一個檔建 `buildSourceWorld(null)`」：尚無機制，靠審查。
+- 2026-11-28 同一類第二次（PR #1992，公開 CI run 46137021934 真 Postgres 3/4）：新的 `slugUnitMigration.integration.test.ts` 在共用資料庫上 `buildSourceWorld(null)`，和 `placeIsOneWriteMigration` 撞 `actors_pending_invite_email_uq`（同一個邀請 email）；PGlite 每檔一個新庫，本機看不到。改成 `openNode` 自己的資料庫。第 2 層的機制仍沒有：下一次再犯就該做成守門（掃測試檔裡 `buildSourceWorld(null)` 的個數）。
 ### 2026-11-24　RSS 文章擷取對沒有收尾的標籤是平方時間，CI 的必跑工作時好時壞（分支 fix/article-extract-linear）
 - **發生了什麼**：`sanitizeFeedHtml`（伺服器每次更新訂閱、每一則都跑）、`extractArticleHtml`、`htmlToMarkdown` 用正規表示式找標籤的 `>` 和收尾標籤，從每一個開頭（`<script `、`<iframe `、`<img `、`<!--`、`<`…）一路掃到文件尾才放棄：100 KB 的 `<` 在筆電上要 12.5 秒，`<script ` 重複再接一個 `>`，300 KB 要 9 秒。`rssSanitize.property.test.ts` 早就把其中幾種列成「已知平方」的 `it.fails`，但那是計時比例：機器忙的時候平方的比例量起來偶爾低於 ×40，`it.fails` 反而「意外通過」而紅，2026-11-23 晚上公開庫連三次必跑工作「Backend — real Postgres (1/4)」紅在這裡。
 - **證據**：修正前 `extract "<" 90.6 ms → 12478.1 ms`（10 KB → 100 KB）；修正後 `9.7 ms → 35.3 ms`。原本列為平方的 17 種輸入、以及同樣的輸入後面再接標籤的 13 種，全部通過「×10 輸入少於 ×40 時間」；拿掉修正，後者的 `<!--`、`<embed `、`<form `、`<iframe ` 都是 ×88～×128。`sanitizeFeedHtml` 在兩萬個隨機輸入上和 main 的規則（先套上同樣的結尾處理）輸出相同；`htmlToMarkdown` 只差在沒收尾的 `<!--` 之後那段本來就看不到的字。
@@ -1414,3 +1422,22 @@
 - **類別**：測試量不到它要擋的東西。
 - **機制**：〔第 1 層〕`test/stampedEndingSetup.ts` afterAll：每個跑過的檔，`ENDING_FAILS`／`ENDING_SKIPPED`／`ENDING_LONG_SETTLE` 裡屬於這個檔的鍵都要對得到它的一則測試（`helpers/stampedEndingNames.ts` `keysNamingNothing`，含被略過、被濾掉的測試）；`guards/stampedEndingReach.guard.test.ts`：每個鍵的檔名都是一個存在的測試檔，以及 `keysNamingNothing` 的對照。
 - **還沒擋住的**：一個整檔都被略過的檔（例如沒有資料庫時）不跑 afterAll，它的鍵只在有資料庫的那一輪被查。
+
+### 2026-11-28　遷移的唯讀預覽有一行是定值，看起來像量出來的（PR #1992 第 1 輪第 3 點、第 2 輪第 4 點：同一類兩次）
+- **發生了什麼**：235 的預覽第一版寫「slug 會變的筆記 = 0」是常數 `0`；改成查詢之後，第三行是 `WHERE slug IS DISTINCT FROM slug`（自己和自己比），仍恆為 0。236 的預覽最後一行 `'notes whose slug or text this migration changes (must be 0)', 0` 也是常數。業主部署前在正式站跑預覽，常數的「0」讓人以為量過。
+- **證據**：PR #1992 第 2 輪審查第 4 點；`test/slugUnitMigration.integration.test.ts`：把舊的第三行放回去，兩則都紅（行名不符、找不到 `~` 那一行）；放上新的一行（`slug` 以 `~` 開頭的筆記），在交易裡把一則筆記的 slug 改成 `~…`，那一行多 1。
+- **發現者**：審查。
+- **為什麼沒擋到**：235 的預覽沒有測試跑它；寫的人以為「用 SQL 寫出來」就等於量了，沒有一個輸入讓那一行的數字變。
+- **類別**：測試量不到它要擋的東西。
+- **機制**：〔第 1 層〕`slugUnitMigration.integration.test.ts`：235 的預覽在唯讀交易裡跑，每一行是數字、第一行等於 UPDATE 會寫的列數，`~` 那一行會隨資料變；236 的常數那一行拿掉（這個遷移不寫筆記，那是說明，不是量測）。
+- **還沒擋住的**：其他遷移的預覽沒有通用的守門（「每一行至少有一筆資料能讓它變」）：尚無機制，靠審查。
+- 2026-11-28 同一類第三次（PR #1992 第 3 輪應該改第 1 點）：修過之後還剩三行結構上一定是 0——235「同一個空間要同一個名字的活筆記」（和唯一索引 `content_nodes_space_slug_uq` 同一個式子）、236「人不在的偏好」（外鍵 CASCADE）與「同時兩筆進行中的專注」（被取代的唯一索引）。三行都拿掉，改在預覽上方的說明寫為什麼不是一行；`slugUnitMigration` 的行名清單跟著改。機制照舊是那則測試（只管 235）；通用守門仍沒有。
+
+### 2026-11-28　程式註解說「有測試對照這兩份清單」，那則測試不存在（PR #1992 第 2 輪，接手時發現）
+- **發生了什麼**：`spine/noteSlugs.ts` 的 `SLUG_CLAIM_FIELDS` 註解寫「a test compares them」（和 SQL 函式 `content_nodes_settle_slugs` 的欄位清單），但沒有任何測試讀那個函式；第 2 輪第 2 點把 `title` 從宣稱拿掉時，兩份清單要一起改，只靠人記得。
+- **證據**：`grep -rn "settle_slugs\|CLAIM_FIELDS" src/test` 修前只有 `receivedDerivation.integration` 的說明文字；修後同一檔「the note that holds a name gets a title that gives the same slug」讀 `pg_get_functiondef` 對照常數。
+- **發現者**：審查（接手的工作階段）。
+- **為什麼沒擋到**：註解裡的「有測試」沒有人查；同一類的 `NOT_AN_EDIT_FIELDS` 確實有對照（`stampedBundle.integration`），寫的人照抄了那句話。
+- **類別**：未查證就回報。
+- **機制**：〔第 1 層〕上面那則測試的對照。〔第 2 層〕「註解說有測試，就要點名那則測試」：尚無機制。
+- **還沒擋住的**：程式裡其他「a test compares …」沒有點名測試的註解：尚無機制。

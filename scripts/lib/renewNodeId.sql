@@ -69,9 +69,9 @@ END;
 $$ LANGUAGE plpgsql;$onden_def$;
     END IF;
     IF to_regprocedure('sync_carried_labels()') IS NULL THEN
-      -- 215_block_anchors_replicated.sql
+      -- 237_actors_travel.sql
       EXECUTE $onden_def$CREATE OR REPLACE FUNCTION sync_carried_labels() RETURNS text[] AS $$
-  SELECT ARRAY['workspaces', 'spaces', 'space_members', 'content_nodes', 'node_attributes', 'node_tags', 'node_edges', 'note_pointers', 'node_positions', 'note_anchor_places', 'block_anchors', 'block_nodes', 'block_node_tags', 'function_refs', 'rss_subscriptions', 'rss_mutes', 'external_calendars', 'actor_module_settings', 'content_nodes.tag_schema', 'spaces.capabilities', 'function_refs.config', 'workspaces.modules_off', 'workspaces.modules_confirmed']::text[];
+  SELECT ARRAY['workspaces', 'actors', 'spaces', 'space_members', 'content_nodes', 'node_attributes', 'node_tags', 'node_edges', 'note_pointers', 'node_positions', 'note_anchor_places', 'block_anchors', 'block_nodes', 'block_node_tags', 'function_refs', 'rss_subscriptions', 'rss_mutes', 'external_calendars', 'actor_module_settings', 'ai_edit_suggestions', 'ai_edit_suggestion_items', 'actor_prefs', 'review_states', 'focus_sessions', 'block_link_bindings', 'content_nodes.tag_schema', 'spaces.capabilities', 'function_refs.config', 'workspaces.modules_off', 'workspaces.modules_confirmed']::text[];
 $$ LANGUAGE sql IMMUTABLE;$onden_def$;
     END IF;
     -- 215_block_anchors_replicated.sql

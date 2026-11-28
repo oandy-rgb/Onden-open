@@ -41,6 +41,7 @@ import { withActorReadSnapshot } from "../../services/actorReadSnapshot.js";
 import type { ActorCtx } from "../../types.js";
 import { RealNode, currentNode, onNode } from "./distSim/realNode.js";
 import { admit, bundleFor, peerStateOf, resendAll, take, type Peer } from "./stampedBundleWorld.js";
+import { formerIdsOf } from "../../spine/stampedBundle.js";
 import { makeCaller } from "./stampedWorld.js";
 import { ENDING_FAILS, ENDING_LONG_SETTLE, ENDING_SKIPPED } from "./stampedEndingExceptions.js";
 import { exceptionEntryFor, fullName, type Difference, type Test } from "./stampedEndingNames.js";
@@ -184,6 +185,13 @@ async function groupsOf(rec: Record_): Promise<{ groups: Group[]; orphans: Event
   const nodes: (RealNode | null)[] = [...RealNode.openNodes(), ...(live.some((e) => e.receiver === null) ? [null] : [])];
   const byId = new Map<string, RealNode | null>();
   for (const n of nodes) byId.set(await onNode(n, () => localNodeId()), n);
+  // and by the ids a node had before it was renewed (sync_origins vouched 'self-restore', migration 213): a call it made under its old id is still its own; not when
+  // another open node has that id now (a copy of a database restored beside its original: the original is the one that sends under it)
+  const workspaces = [...new Set(live.map((e) => e.ws))];
+  for (const n of nodes) {
+    const former = await onNode(n, async () => (await Promise.all(workspaces.map((ws) => formerIdsOf(ws)))).flatMap((ids) => Object.keys(ids)));
+    for (const id of former) if (!byId.has(id)) byId.set(id, n);
+  }
   const peers = new Map<string, Peer>();
   const key = (n: RealNode | null, ws: string) => `${n ? n.name + "#" + RealNode.openNodes().indexOf(n) : "own"}|${ws}`;
   const peerOf = async (n: RealNode | null, ws: string): Promise<Peer> => {

@@ -113,6 +113,14 @@ export function heldOfFormer(have: Readonly<Record<string, number>>): number {
   const named = CARRIED_LABELS.filter((l) => Object.hasOwn(have, l));
   return named.length === 0 ? 0 : Math.min(...named.map((l) => have[l]!));
 }
+/** The ids this node had before it was restored and renewed (the `self-restore` rows of sync_origins, migration 213; written by scripts/lib/renewNodeId.sql only), each
+ *  held as heldOfFormer says: the one reader of them. What a snapshot names as `former` (services/stampedSnapshot.ts); the main server's own ids besides its id now
+ *  (spine/actorsInBundles.ts); the test ending's former ids of a node (test/helpers/stampedEnding.ts). */
+export async function formerIdsOf(workspaceId: string): Promise<Record<string, number>> {
+  const rows = (await snapshotRows<{ origin: string; have: Record<string, number> }>(
+    `SELECT origin, have FROM sync_origins WHERE workspace_id = $1 AND vouched_by = 'self-restore' ORDER BY origin`, [workspaceId])).rows;
+  return Object.fromEntries(rows.map((r) => [r.origin, heldOfFormer(r.have)]));
+}
 /** The `sync_origins.have` of an origin held up to `n` for every label a bundle carries. */
 export const haveOfAll = (n: number): Record<string, number> => Object.fromEntries(CARRIED_LABELS.map((l) => [l, n]));
 

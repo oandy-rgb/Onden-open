@@ -3937,6 +3937,9 @@ INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key'
 INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('232_updated_at_follows_stamps') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('235_slug_is_a_unit') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('236_snapshot_tables_travel') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('237_actors_travel') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -7923,3 +7926,398 @@ BEGIN
   RETURN QUERY SELECT v_versions, v_baselines, v_aside, v_s0;
 END;
 $$ LANGUAGE plpgsql;
+-- 235: a note's slug is a unit that travels (written_slug); the slug a node shows is settled from the units (db/migrations/235_slug_is_a_unit.sql)
+ALTER TABLE content_nodes ADD COLUMN IF NOT EXISTS written_slug text;
+-- (only while no trigger watches the new column, i.e. on the first run, as 218 did for written_space_id)
+UPDATE content_nodes SET written_slug = slug WHERE written_slug IS DISTINCT FROM slug
+   AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'content_nodes_written_slug' AND tgrelid = 'content_nodes'::regclass);
+
+CREATE INDEX IF NOT EXISTS content_nodes_written_slug_idx ON content_nodes (workspace_id, written_slug);
+CREATE INDEX IF NOT EXISTS content_nodes_slug_losers ON content_nodes (workspace_id, written_slug) WHERE slug IS DISTINCT FROM written_slug;
+
+CREATE OR REPLACE FUNCTION content_nodes_written_slug() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(NEW.workspace_id) OR current_setting('onden.slug_settle', true) = 'on' THEN RETURN NEW; END IF;
+  -- `~<id>` is the name a note holds only while slugs are given (spine/noteSlugs.ts settleSlugs): no write chose it, so a move that gives a note its own slug
+  -- back writes nothing of it (a subtree move stamps its root only, migration 218)
+  IF TG_OP = 'UPDATE' AND left(NEW.slug, 1) = '~' THEN RETURN NEW; END IF;
+  NEW.written_slug := NEW.slug;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER content_nodes_written_slug BEFORE INSERT OR UPDATE OF slug ON content_nodes FOR EACH ROW EXECUTE FUNCTION content_nodes_written_slug();
+
+-- The one rule (header). p_ids: notes whose slug is to be given again (a bundle's notes; they may hold `~<id>` meanwhile); p_names: names whose groups are settled
+-- again besides those of p_ids (the names a bundle's notes had before it). In the caller's transaction; the slug writes are no person's (onden.slug_settle).
+CREATE OR REPLACE FUNCTION content_nodes_settle_slugs(p_ws uuid, p_ids uuid[], p_names text[]) RETURNS void AS $$
+DECLARE r record; v_names text[]; v_want text; v_ids uuid[] := '{}'; v_wants text[] := '{}'; i int;
+BEGIN
+  PERFORM set_config('onden.slug_settle', 'on', true);
+  SELECT array_agg(DISTINCT n) INTO v_names FROM (SELECT unnest(COALESCE(p_names, '{}')) AS n
+                                                  UNION SELECT written_slug FROM content_nodes WHERE workspace_id = p_ws AND id = ANY(COALESCE(p_ids, '{}'))) x WHERE n IS NOT NULL;
+  -- a note in the trash has its name (no unique slug among the trash)
+  UPDATE content_nodes SET slug = written_slug WHERE workspace_id = p_ws AND id = ANY(COALESCE(p_ids, '{}')) AND deleted_at IS NOT NULL AND slug IS DISTINCT FROM written_slug;
+  FOR r IN
+    SELECT c.id, c.slug, c.written_slug AS w,
+           row_number() OVER (PARTITION BY COALESCE(c.space_id, '00000000-0000-0000-0000-000000000000'::uuid), c.written_slug
+                              ORDER BY COALESCE(cl.wall, 0), COALESCE(cl.counter, 0), cl.origin COLLATE "C" NULLS FIRST, COALESCE(cl.seq, 0), c.id::text COLLATE "C") AS rank
+      FROM content_nodes c
+      LEFT JOIN LATERAL (SELECT s.hlc_wall AS wall, s.hlc_counter AS counter, s.origin, s.seq FROM sync_stamps s
+                          WHERE s.workspace_id = p_ws AND s.table_name = 'content_nodes' AND s.row_key = c.id::text AND s.field IN ('*', 'slug', 'deleted', 'space')
+                          ORDER BY s.hlc_wall DESC, s.hlc_counter DESC, s.origin COLLATE "C" DESC, s.seq DESC LIMIT 1) cl ON true
+     WHERE c.workspace_id = p_ws AND c.written_slug = ANY(COALESCE(v_names, '{}')) AND c.deleted_at IS NULL
+  LOOP
+    v_want := CASE WHEN r.rank = 1 THEN r.w ELSE r.w || '-' || split_part(r.id::text, '-', 1) END;
+    IF r.slug IS DISTINCT FROM v_want THEN v_ids := v_ids || r.id; v_wants := v_wants || v_want; END IF;
+  END LOOP;
+  IF cardinality(v_ids) = 0 THEN PERFORM set_config('onden.slug_settle', '', true); RETURN; END IF;
+  -- every note that changes lets go of its slug first, so none of them stands in another's way (a slug is unique among the live notes of a space)
+  UPDATE content_nodes SET slug = '~' || id::text WHERE workspace_id = p_ws AND id = ANY(v_ids);
+  FOR i IN 1 .. cardinality(v_ids) LOOP
+    v_want := v_wants[i];
+    -- a name taken by a note outside the group (only a title that is another note's `<name>-<eight>`): the whole id, which no other note's name is
+    IF EXISTS (SELECT 1 FROM content_nodes o, content_nodes c WHERE c.id = v_ids[i] AND o.workspace_id = p_ws AND o.slug = v_want AND o.deleted_at IS NULL AND o.id <> c.id
+                  AND COALESCE(o.space_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE(c.space_id, '00000000-0000-0000-0000-000000000000'::uuid)) THEN
+      v_want := (SELECT c.written_slug || '-' || c.id::text FROM content_nodes c WHERE c.id = v_ids[i]);
+    END IF;
+    UPDATE content_nodes SET slug = v_want WHERE workspace_id = p_ws AND id = v_ids[i];
+  END LOOP;
+  PERFORM set_config('onden.slug_settle', '', true);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION content_nodes_slug_group_left() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(OLD.workspace_id) OR current_setting('onden.slug_settle', true) = 'on' OR OLD.written_slug IS NULL THEN RETURN NULL; END IF;
+  -- a note that holds `~<id>` is in the middle of a move here (spine/noteSlugs.ts settleSlugs): its slug is given by that move, and the write that gives it comes here again
+  IF TG_OP = 'UPDATE' AND left(NEW.slug, 1) = '~' THEN RETURN NULL; END IF;
+  -- one probe of an index that holds only the notes that gave way (none on a single server); one that holds `~<id>` did not give way, it is being moved
+  IF EXISTS (SELECT 1 FROM content_nodes c WHERE c.workspace_id = OLD.workspace_id AND c.written_slug = OLD.written_slug AND c.slug IS DISTINCT FROM c.written_slug
+                AND left(c.slug, 1) <> '~') THEN
+    PERFORM content_nodes_settle_slugs(OLD.workspace_id, '{}', ARRAY[OLD.written_slug]);
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+-- named to run AFTER the stamp triggers of content_nodes (AFTER row triggers run in name order: `then` after `sync_stamp_*` and `tag_schema_*`), so the group is settled
+-- with the claim this very write makes (review of PR #1992, round 1, point 4: before it, the writer settled with the old claim and the receiver with the new one)
+CREATE OR REPLACE TRIGGER content_nodes_then_settle_slug_group AFTER UPDATE OF slug, written_slug, written_space_id, space_id, deleted_at ON content_nodes FOR EACH ROW
+  WHEN (OLD.deleted_at IS NULL) EXECUTE FUNCTION content_nodes_slug_group_left();
+CREATE OR REPLACE TRIGGER content_nodes_then_settle_slug_group_delete AFTER DELETE ON content_nodes FOR EACH ROW
+  WHEN (OLD.deleted_at IS NULL) EXECUTE FUNCTION content_nodes_slug_group_left();
+
+-- The unit `slug` (written_slug) in the stamp trigger of content_nodes: migration 218's three triggers with one field more.
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_insert AFTER INSERT ON content_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=written_space_id,deleted=deleted_at,slug=written_slug',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_update AFTER UPDATE ON content_nodes FOR EACH ROW
+  WHEN (OLD.title IS DISTINCT FROM NEW.title OR OLD.markdown IS DISTINCT FROM NEW.markdown
+     OR OLD.parent_id IS DISTINCT FROM NEW.parent_id OR OLD.order_key IS DISTINCT FROM NEW.order_key
+     OR OLD.hidden IS DISTINCT FROM NEW.hidden OR OLD.space_id IS DISTINCT FROM NEW.space_id
+     OR OLD.written_space_id IS DISTINCT FROM NEW.written_space_id
+     OR (OLD.deleted_at IS NULL) IS DISTINCT FROM (NEW.deleted_at IS NULL)
+     OR OLD.written_slug IS DISTINCT FROM NEW.written_slug)
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=written_space_id,deleted=deleted_at,slug=written_slug',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+CREATE OR REPLACE TRIGGER content_nodes_sync_stamp_delete AFTER DELETE ON content_nodes FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('content_nodes', 'id', 'workspace_id',
+    'title=title,body=markdown,parent=parent_id,sort=order_key,hidden=hidden,space=written_space_id,deleted=deleted_at,slug=written_slug',
+    'parent=parent_id,sort=order_key,space=space_id,deleted=deleted_at');
+
+-- A note's `updated_at` (232 sync_updated_at_wall, the one place that says which stamps count; the node that writes and the merge both read it): the slug's stamp
+-- is not an edit of the note (a move that has to take `-2`, a group settled again), as its position is not. 232's text but for 'slug' beside '*' and 'sort'.
+CREATE OR REPLACE FUNCTION sync_updated_at_wall(p_ws uuid, p_table text, p_key text) RETURNS bigint AS $$
+  WITH l AS (SELECT CASE p_table WHEN 'content_nodes' THEN ARRAY['content_nodes', 'content_nodes.tag_schema'] WHEN 'function_refs' THEN ARRAY['function_refs', 'function_refs.config']
+                                  ELSE ARRAY[p_table] END AS labels)
+  SELECT max(w) FROM (
+    SELECT hlc_wall AS w FROM sync_stamps, l WHERE workspace_id = p_ws AND table_name = ANY(l.labels) AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort', 'slug')
+       AND COALESCE(meta->>'quiet', '') <> 'true'
+    UNION ALL SELECT hlc_wall FROM sync_stamp_heads, l WHERE workspace_id = p_ws AND table_name = ANY(l.labels) AND row_key = p_key AND origin <> 'genesis' AND field NOT IN ('*', 'sort', 'slug')
+       AND COALESCE(meta->>'quiet', '') <> 'true') x
+$$ LANGUAGE sql STABLE;
+
+-- ... and the stamp write itself (206 sync_stamp_put_over, word for word but for 'slug' beside '*' and 'sort'): a slug's stamp does not even CALL it. The function
+-- above is not enough alone: called, it writes the stamps' time, which is earlier than one a board's or a canvas's own write moved forward without a stamp, so a
+-- note that a move gives `-2` would go back in time (review of PR #1992, round 1, point 1; syncStamps.integration "a move to another space leaves every moved
+-- descendant's updated_at as it was"). The two lists are compared with spine/stampedMerge/dbUnits.ts NOT_AN_EDIT_FIELDS (stampedBundle.integration).
+CREATE OR REPLACE FUNCTION sync_stamp_put_over(p_ws uuid, p_table text, p_key text, p_field text, p_deleted boolean, s jsonb, p_old text, p_old_known boolean, p_meta jsonb DEFAULT NULL) RETURNS void AS $$
+DECLARE
+  v_origin text := s->>'origin';
+  v_seq bigint := (s->>'seq')::bigint;
+  d record;
+  h record;
+  v_saw jsonb := '{}'::jsonb;
+  v_meta jsonb;
+  v_again boolean := false;
+  v_prev_seen jsonb;
+  v_quiet boolean := p_field <> '*' AND COALESCE(current_setting('onden.stamp_quiet', true), '') = 'on'; -- this write is housekeeping: it does not count for `updated_at`
+BEGIN
+  IF sync_import_active(p_ws) THEN RETURN; END IF;
+  SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = p_field;
+  IF FOUND THEN
+    v_prev_seen := d.meta -> 'seen'; -- what a delete of this row had seen, carried by a creation that covers it
+    IF d.origin = v_origin AND d.seq = v_seq THEN
+      v_again := true; v_saw := d.saw; v_meta := d.meta; -- this transaction wrote the unit already: it has not seen itself
+    ELSIF d.origin = 'genesis' THEN
+      IF p_field = '*' THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash('j:{}'), 0);
+      ELSIF p_old_known THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0); END IF;
+    ELSE
+      v_saw := sync_saw_merge(d.saw, jsonb_build_object(d.origin, d.seq));
+    END IF;
+  ELSIF p_field <> '*' THEN
+    -- no stamp of its own: the field was written together with its row and follows its creation
+    SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = '*';
+    IF FOUND AND NOT (d.origin = v_origin AND d.seq = v_seq) THEN
+      IF d.origin = 'genesis' THEN
+        IF p_old_known THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0); END IF;
+      ELSE
+        -- what the creation gives a field has no saw of its own (the creation's saw speaks about the creation unit, README "跟著 `*` 的欄位"), only its stamp:
+        -- the same state sawOf of the core is given (src/test/stampSaw.integration.test.ts compares the two)
+        v_saw := jsonb_build_object(d.origin, d.seq);
+      END IF;
+    END IF;
+    -- the row's creation can have other heads (two nodes made the same derived id): the field follows each of them, so a person's write has seen all of them.
+    -- They are the creation's heads, not this field's: they stay.
+    FOR h IN SELECT * FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = '*' AND origin <> 'genesis' LOOP
+      IF NOT (h.origin = v_origin AND h.seq = v_seq) THEN v_saw := sync_saw_merge(v_saw, jsonb_build_object(h.origin, h.seq)); END IF;
+    END LOOP;
+  END IF;
+  -- a system job does not resolve a conflict nobody has looked at: its write has seen only the head the unit shows, and a `saw` cannot say that
+  IF COALESCE(s->>'system', '') = 'true' AND NOT v_again
+     AND EXISTS (SELECT 1 FROM sync_stamp_heads x WHERE x.workspace_id = p_ws AND x.table_name = p_table AND x.row_key = p_key AND x.field = p_field) THEN
+    RAISE EXCEPTION 'sync_unit_in_conflict' USING ERRCODE = 'ON001';
+  END IF;
+  -- a write by this node has seen every head the unit had: they are replaced
+  FOR h IN DELETE FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = p_field RETURNING * LOOP
+    IF h.origin = 'genesis' THEN v_saw := sync_saw_merge(v_saw, jsonb_build_object('genesis:' || h.content_hash, 0));
+    ELSIF NOT (h.origin = v_origin AND h.seq = v_seq) THEN v_saw := sync_saw_merge(v_saw, sync_saw_merge(h.saw, jsonb_build_object(h.origin, h.seq)));
+    END IF;
+  END LOOP;
+  IF p_meta IS NOT NULL THEN v_meta := p_meta;
+  ELSIF NOT v_again AND p_table = 'content_nodes' AND p_field = 'parent' AND p_old_known THEN v_meta := jsonb_build_object('from', p_old);
+  ELSIF NOT v_again AND p_field = '*' AND NOT p_deleted AND v_prev_seen IS NOT NULL THEN v_meta := jsonb_build_object('seen', v_prev_seen); END IF;
+  IF v_quiet THEN v_meta := COALESCE(v_meta, '{}'::jsonb) || '{"quiet": true}'::jsonb;
+  ELSIF v_meta ? 'quiet' THEN v_meta := NULLIF(v_meta - 'quiet', '{}'::jsonb); END IF;
+  INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
+  VALUES (p_ws, p_table, p_key, p_field, v_origin, v_seq, (s->>'wall')::bigint, (s->>'counter')::int,
+          s->>'author', NULLIF(s->>'device', '')::uuid, p_deleted, v_saw, v_meta)
+  ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
+    origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter,
+    author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta;
+  IF p_table = 'content_nodes' AND NOT p_deleted AND NOT v_quiet AND p_field NOT IN ('*', 'sort', 'slug') THEN PERFORM sync_touch_updated_at(p_ws, p_key); END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- 236: six tables a snapshot carried with genesis stamps only travel by change bundle (db/migrations/236_snapshot_tables_travel.sql)
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS workspace_id uuid REFERENCES workspaces(id) ON DELETE CASCADE;
+UPDATE ai_edit_suggestion_items i SET workspace_id = s.workspace_id FROM ai_edit_suggestions s WHERE s.id = i.suggestion_id AND i.workspace_id IS NULL;
+ALTER TABLE ai_edit_suggestion_items ALTER COLUMN workspace_id SET NOT NULL;
+CREATE OR REPLACE FUNCTION ai_edit_suggestion_items_workspace() RETURNS trigger AS $$
+BEGIN
+  IF NEW.workspace_id IS NULL THEN SELECT s.workspace_id INTO NEW.workspace_id FROM ai_edit_suggestions s WHERE s.id = NEW.suggestion_id; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER ai_edit_suggestion_items_workspace BEFORE INSERT ON ai_edit_suggestion_items FOR EACH ROW EXECUTE FUNCTION ai_edit_suggestion_items_workspace();
+
+-- An accepted suggestion stays accepted (the owner's decision of 2026-11-23, PR #1992): its text is in the note, so the state says so, whatever another node decided
+-- without seeing the acceptance. The decision a write made is the unit `decision` (written_status, written_decided_by, written_decided_at); the acceptance is a unit of its
+-- own, `accepted` (accepted, accepted_at, accepted_by), written once, by the write that accepts; what every reader uses (status, decided_by, decided_at) is the acceptance when there
+-- is one, else the written decision (ai_edit_suggestion_items_settle; a node that takes a bundle settles the items it bears on, stampedMerge/dbUnits.ts `expand`). On
+-- the node that writes, the shown columns are what the write path wrote and the written ones copy them (ai_edit_suggestion_items_written), so a single server sees no
+-- change. The written ids are ids as a stamp keeps them (no foreign key: the shown decided_by keeps it and is emptied when its actor goes).
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS written_status text;
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS written_decided_by uuid;
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS written_decided_at timestamptz;
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS accepted boolean NOT NULL DEFAULT false;
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS accepted_at timestamptz;
+ALTER TABLE ai_edit_suggestion_items ADD COLUMN IF NOT EXISTS accepted_by uuid;
+UPDATE ai_edit_suggestion_items SET written_status = status, written_decided_by = decided_by, written_decided_at = decided_at,
+       accepted = (status = 'accepted'), accepted_at = CASE WHEN status = 'accepted' THEN decided_at END, accepted_by = CASE WHEN status = 'accepted' THEN decided_by END
+ WHERE written_status IS NULL;
+ALTER TABLE ai_edit_suggestion_items ALTER COLUMN written_status SET NOT NULL;
+ALTER TABLE ai_edit_suggestion_items DROP CONSTRAINT IF EXISTS ai_edit_suggestion_items_written_status_check;
+ALTER TABLE ai_edit_suggestion_items ADD CONSTRAINT ai_edit_suggestion_items_written_status_check
+  CHECK (written_status IN ('pending', 'accepted', 'rejected', 'stale', 'void', 'replaced'));
+CREATE OR REPLACE FUNCTION ai_edit_suggestion_items_written() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(NEW.workspace_id) OR current_setting('onden.decision_settle', true) = 'on' THEN RETURN NEW; END IF;
+  -- the foreign key emptied the shown decided_by (the actor who decided is deleted): no write of the decision, so the written one keeps the id, as a stamp keeps an id
+  -- a foreign key empties (215's rule: the row it named is gone); review of PR #1992, round 2, point 8
+  IF TG_OP = 'UPDATE' AND OLD.decided_by IS NOT NULL AND NEW.decided_by IS NULL AND NEW.status IS NOT DISTINCT FROM OLD.status
+     AND NEW.decided_at IS NOT DISTINCT FROM OLD.decided_at AND NOT EXISTS (SELECT 1 FROM actors a WHERE a.id = OLD.decided_by) THEN
+    RETURN NEW;
+  END IF;
+  NEW.written_status := NEW.status; NEW.written_decided_by := NEW.decided_by; NEW.written_decided_at := NEW.decided_at;
+  IF NEW.status = 'accepted' AND NOT NEW.accepted THEN NEW.accepted := true; NEW.accepted_at := NEW.decided_at; NEW.accepted_by := NEW.decided_by; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER ai_edit_suggestion_items_written BEFORE INSERT OR UPDATE OF status, decided_by, decided_at ON ai_edit_suggestion_items FOR EACH ROW
+  EXECUTE FUNCTION ai_edit_suggestion_items_written();
+-- the shown decision of the items given, from their units: accepted when an acceptance is there, else the written decision (an id of an actor not here is shown as none)
+CREATE OR REPLACE FUNCTION ai_edit_suggestion_items_settle(p_ws uuid, p_ids uuid[]) RETURNS void AS $$
+BEGIN
+  PERFORM set_config('onden.decision_settle', 'on', true);
+  UPDATE ai_edit_suggestion_items i SET status = v.status, decided_by = v.by, decided_at = v.at
+    FROM (SELECT x.id,
+                 CASE WHEN x.accepted THEN 'accepted' ELSE x.written_status END AS status,
+                 (SELECT a.id FROM actors a WHERE a.id = CASE WHEN x.accepted THEN x.accepted_by ELSE x.written_decided_by END) AS by,
+                 CASE WHEN x.accepted THEN x.accepted_at ELSE x.written_decided_at END AS at
+            FROM ai_edit_suggestion_items x WHERE x.workspace_id = p_ws AND x.id = ANY(p_ids)) v
+   WHERE i.id = v.id AND (i.status, i.decided_by, i.decided_at) IS DISTINCT FROM (v.status, v.by, v.at);
+  PERFORM set_config('onden.decision_settle', '', true);
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER TABLE actor_prefs ADD COLUMN IF NOT EXISTS workspace_id uuid REFERENCES workspaces(id) ON DELETE CASCADE;
+UPDATE actor_prefs p SET workspace_id = a.workspace_id FROM actors a WHERE a.id = p.actor_id AND p.workspace_id IS NULL;
+ALTER TABLE actor_prefs ALTER COLUMN workspace_id SET NOT NULL;
+CREATE OR REPLACE FUNCTION actor_prefs_workspace() RETURNS trigger AS $$
+BEGIN
+  IF NEW.workspace_id IS NULL THEN SELECT a.workspace_id INTO NEW.workspace_id FROM actors a WHERE a.id = NEW.actor_id; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER actor_prefs_workspace BEFORE INSERT ON actor_prefs FOR EACH ROW EXECUTE FUNCTION actor_prefs_workspace();
+
+-- the id of a person's progress on a card: the same on every node that makes it (namespace and name: packages/markdown sharedContract.ts DERIVED_ID_NAMESPACE)
+CREATE OR REPLACE FUNCTION review_state_id(p_card uuid, p_actor text) RETURNS uuid AS $$
+  SELECT onden_uuid5('c3a1f0d2-7b64-4e19-8d35-5a0e9b2f6c47'::uuid, 'review-state/' || p_card::text || '/' || p_actor);
+$$ LANGUAGE sql IMMUTABLE;
+ALTER TABLE review_states ADD COLUMN IF NOT EXISTS id uuid;
+UPDATE review_states SET id = review_state_id(COALESCE(node_id, block_id), actor_id) WHERE id IS NULL;
+ALTER TABLE review_states ALTER COLUMN id SET NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'review_states_pkey' AND conrelid = 'review_states'::regclass) THEN
+    ALTER TABLE review_states ADD CONSTRAINT review_states_pkey PRIMARY KEY (id);
+  END IF;
+END $$;
+CREATE OR REPLACE FUNCTION review_states_id() RETURNS trigger AS $$
+BEGIN
+  IF NEW.id IS NULL THEN NEW.id := review_state_id(COALESCE(NEW.node_id, NEW.block_id), NEW.actor_id); END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER review_states_id BEFORE INSERT ON review_states FOR EACH ROW EXECUTE FUNCTION review_states_id();
+
+-- 2. one running focus record per person, on the write path only ---------------------------------------------------------------------------------------
+DROP INDEX IF EXISTS focus_sessions_one_running_uq;
+CREATE INDEX IF NOT EXISTS focus_sessions_running_idx ON focus_sessions (actor_id) WHERE ended_at IS NULL;
+-- the write path (modules/tasks/focus.ts) asks first under the workspace event lock and answers 409 focus_running; this is the line behind it, as the index was
+-- (the same SQLSTATE). A merge keeps what the other node made (decision 4.4: both stay; rules/focus.ts shows the earlier one ended when the next began).
+CREATE OR REPLACE FUNCTION focus_sessions_one_running() RETURNS trigger AS $$
+BEGIN
+  IF sync_import_active(NEW.workspace_id) THEN RETURN NEW; END IF;
+  IF EXISTS (SELECT 1 FROM focus_sessions f WHERE f.actor_id = NEW.actor_id AND f.ended_at IS NULL AND f.id <> NEW.id) THEN
+    RAISE EXCEPTION 'a person has one running focus record' USING ERRCODE = 'unique_violation', CONSTRAINT = 'focus_sessions_one_running';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER focus_sessions_one_running BEFORE INSERT OR UPDATE OF ended_at, actor_id ON focus_sessions FOR EACH ROW
+  WHEN (NEW.ended_at IS NULL) EXECUTE FUNCTION focus_sessions_one_running();
+
+-- 3. where a stamp may keep the id a foreign key emptied (215): the two new units that hold one --------------------------------------------------------
+CREATE OR REPLACE FUNCTION sync_stamp_may_keep_value(p_label text, p_field text) RETURNS boolean AS $$
+  SELECT p_label IN ('block_anchors', 'block_nodes', 'note_anchor_places')
+      OR (p_label, p_field) IN (('content_nodes', 'parent'), ('spaces', 'owner'), ('rss_subscriptions', 'auto_tag'), ('rss_subscriptions', 'default_parent'),
+                                ('focus_sessions', 'session'));
+$$ LANGUAGE sql IMMUTABLE;
+
+-- 4. the stamp triggers ---------------------------------------------------------------------------------------------------------------------------------
+-- A person's own rows of a temporary session's actor (a preference, a review, a focus record) are never stamped, so nothing of them leaves the node the session lives
+-- on (the trust line, second layer: no bundle names its actor id but as the author of a stamp; review of PR #1992, round 2, point 7). As actors' WHEN (237) and
+-- syncClasses.json neverLeaves. The genesis pass reads the same WHEN.
+CREATE OR REPLACE FUNCTION sync_actor_is_session(p_actor text) RETURNS boolean AS $$
+  SELECT p_actor ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND EXISTS (SELECT 1 FROM actors a WHERE a.id = p_actor::uuid AND a.type = 'session');
+$$ LANGUAGE sql STABLE;
+CREATE OR REPLACE TRIGGER ai_edit_suggestions_sync_stamp_insert AFTER INSERT ON ai_edit_suggestions FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('ai_edit_suggestions', 'id', 'workspace_id', '', '');
+CREATE OR REPLACE TRIGGER ai_edit_suggestions_sync_stamp_delete AFTER DELETE ON ai_edit_suggestions FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('ai_edit_suggestions', 'id', 'workspace_id', '', '');
+
+CREATE OR REPLACE TRIGGER ai_edit_suggestion_items_sync_stamp_insert AFTER INSERT ON ai_edit_suggestion_items FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('ai_edit_suggestion_items', 'id', 'workspace_id', 'decision=written_status+written_decided_by+written_decided_at,accepted=accepted+accepted_at+accepted_by', '');
+CREATE OR REPLACE TRIGGER ai_edit_suggestion_items_sync_stamp_update AFTER UPDATE ON ai_edit_suggestion_items FOR EACH ROW
+  WHEN (OLD.written_status IS DISTINCT FROM NEW.written_status OR OLD.written_decided_by IS DISTINCT FROM NEW.written_decided_by OR OLD.written_decided_at IS DISTINCT FROM NEW.written_decided_at
+     OR OLD.accepted IS DISTINCT FROM NEW.accepted OR OLD.accepted_at IS DISTINCT FROM NEW.accepted_at OR OLD.accepted_by IS DISTINCT FROM NEW.accepted_by)
+  EXECUTE FUNCTION sync_stamp_trigger('ai_edit_suggestion_items', 'id', 'workspace_id', 'decision=written_status+written_decided_by+written_decided_at,accepted=accepted+accepted_at+accepted_by', '');
+CREATE OR REPLACE TRIGGER ai_edit_suggestion_items_sync_stamp_delete AFTER DELETE ON ai_edit_suggestion_items FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('ai_edit_suggestion_items', 'id', 'workspace_id', 'decision=written_status+written_decided_by+written_decided_at,accepted=accepted+accepted_at+accepted_by', '');
+
+CREATE OR REPLACE TRIGGER actor_prefs_sync_stamp_insert AFTER INSERT ON actor_prefs FOR EACH ROW WHEN (NOT sync_actor_is_session(NEW.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('actor_prefs', 'actor_id,key', 'workspace_id', 'value=value+order_key+edited_at+updated_at', '');
+CREATE OR REPLACE TRIGGER actor_prefs_sync_stamp_update AFTER UPDATE ON actor_prefs FOR EACH ROW
+  WHEN (NOT sync_actor_is_session(NEW.actor_id::text) AND (OLD.value IS DISTINCT FROM NEW.value OR OLD.order_key IS DISTINCT FROM NEW.order_key OR OLD.edited_at IS DISTINCT FROM NEW.edited_at OR OLD.updated_at IS DISTINCT FROM NEW.updated_at))
+  EXECUTE FUNCTION sync_stamp_trigger('actor_prefs', 'actor_id,key', 'workspace_id', 'value=value+order_key+edited_at+updated_at', '');
+CREATE OR REPLACE TRIGGER actor_prefs_sync_stamp_delete AFTER DELETE ON actor_prefs FOR EACH ROW WHEN (NOT sync_actor_is_session(OLD.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('actor_prefs', 'actor_id,key', 'workspace_id', 'value=value+order_key+edited_at+updated_at', '');
+
+CREATE OR REPLACE TRIGGER review_states_sync_stamp_insert AFTER INSERT ON review_states FOR EACH ROW WHEN (NOT sync_actor_is_session(NEW.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('review_states', 'id', 'workspace_id', 'progress=state+previous_state+updated_at', '');
+CREATE OR REPLACE TRIGGER review_states_sync_stamp_update AFTER UPDATE ON review_states FOR EACH ROW
+  WHEN (NOT sync_actor_is_session(NEW.actor_id::text) AND (OLD.state IS DISTINCT FROM NEW.state OR OLD.previous_state IS DISTINCT FROM NEW.previous_state OR OLD.updated_at IS DISTINCT FROM NEW.updated_at))
+  EXECUTE FUNCTION sync_stamp_trigger('review_states', 'id', 'workspace_id', 'progress=state+previous_state+updated_at', '');
+CREATE OR REPLACE TRIGGER review_states_sync_stamp_delete AFTER DELETE ON review_states FOR EACH ROW WHEN (NOT sync_actor_is_session(OLD.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('review_states', 'id', 'workspace_id', 'progress=state+previous_state+updated_at', '');
+
+CREATE OR REPLACE TRIGGER focus_sessions_sync_stamp_insert AFTER INSERT ON focus_sessions FOR EACH ROW WHEN (NOT sync_actor_is_session(NEW.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('focus_sessions', 'id', 'workspace_id', 'session=task_id+started_at+ended_at+note+updated_at', '');
+CREATE OR REPLACE TRIGGER focus_sessions_sync_stamp_update AFTER UPDATE ON focus_sessions FOR EACH ROW
+  WHEN (NOT sync_actor_is_session(NEW.actor_id::text) AND (OLD.task_id IS DISTINCT FROM NEW.task_id OR OLD.started_at IS DISTINCT FROM NEW.started_at OR OLD.ended_at IS DISTINCT FROM NEW.ended_at OR OLD.note IS DISTINCT FROM NEW.note
+     OR OLD.updated_at IS DISTINCT FROM NEW.updated_at))
+  EXECUTE FUNCTION sync_stamp_trigger('focus_sessions', 'id', 'workspace_id', 'session=task_id+started_at+ended_at+note+updated_at', '');
+CREATE OR REPLACE TRIGGER focus_sessions_sync_stamp_delete AFTER DELETE ON focus_sessions FOR EACH ROW WHEN (NOT sync_actor_is_session(OLD.actor_id::text))
+  EXECUTE FUNCTION sync_stamp_trigger('focus_sessions', 'id', 'workspace_id', 'session=task_id+started_at+ended_at+note+updated_at', '');
+CREATE OR REPLACE TRIGGER focus_sessions_keep_emptied_id AFTER UPDATE OF task_id ON focus_sessions FOR EACH ROW
+  WHEN (OLD.task_id IS NOT NULL AND NEW.task_id IS NULL AND NOT sync_actor_is_session(NEW.actor_id::text))
+  EXECUTE FUNCTION sync_keep_emptied_id('focus_sessions', 'id', 'workspace_id', '', 'session:task_id:task_id+started_at+ended_at+note+updated_at:content_nodes:id');
+
+CREATE OR REPLACE TRIGGER block_link_bindings_sync_stamp_insert AFTER INSERT ON block_link_bindings FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('block_link_bindings', 'note_id,link_text', 'workspace_id', 'anchor=anchor_id', '');
+CREATE OR REPLACE TRIGGER block_link_bindings_sync_stamp_update AFTER UPDATE ON block_link_bindings FOR EACH ROW
+  WHEN (OLD.anchor_id IS DISTINCT FROM NEW.anchor_id)
+  EXECUTE FUNCTION sync_stamp_trigger('block_link_bindings', 'note_id,link_text', 'workspace_id', 'anchor=anchor_id', '');
+CREATE OR REPLACE TRIGGER block_link_bindings_sync_stamp_delete AFTER DELETE ON block_link_bindings FOR EACH ROW
+  EXECUTE FUNCTION sync_stamp_trigger('block_link_bindings', 'note_id,link_text', 'workspace_id', 'anchor=anchor_id', '');
+
+-- 5. the rows already there: genesis stamps, the same on every node (migration 202's pass reads the triggers above)
+SELECT * FROM sync_genesis_pass();
+
+-- 237: people and AI operators travel by change bundle and are written on the main server only (db/migrations/237_actors_travel.sql)
+CREATE OR REPLACE FUNCTION actors_written_on_the_centre() RETURNS trigger AS $$
+DECLARE r actors%ROWTYPE;
+BEGIN
+  IF TG_OP = 'DELETE' THEN r := OLD; ELSE r := NEW; END IF;
+  IF sync_import_active(r.workspace_id) OR r.type = 'session' OR (TG_OP = 'UPDATE' AND OLD.type = 'session') THEN RETURN COALESCE(NEW, OLD); END IF;
+  IF TG_OP = 'UPDATE' AND OLD.name IS NOT DISTINCT FROM NEW.name AND OLD.type IS NOT DISTINCT FROM NEW.type AND OLD.write_mode IS NOT DISTINCT FROM NEW.write_mode
+     AND OLD.id IS NOT DISTINCT FROM NEW.id AND OLD.workspace_id IS NOT DISTINCT FROM NEW.workspace_id THEN
+    RETURN NEW;
+  END IF;
+  IF EXISTS (SELECT 1 FROM sync_join j WHERE j.workspace_id = r.workspace_id AND j.state = 'done') THEN
+    RAISE EXCEPTION 'the people and AI operators of this workspace are written on the main server' USING ERRCODE = 'ON237';
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE TRIGGER actors_written_on_the_centre BEFORE INSERT OR UPDATE OR DELETE ON actors FOR EACH ROW EXECUTE FUNCTION actors_written_on_the_centre();
+
+CREATE OR REPLACE TRIGGER actors_sync_stamp_insert AFTER INSERT ON actors FOR EACH ROW WHEN (NEW.type <> 'session')
+  EXECUTE FUNCTION sync_stamp_trigger('actors', 'id', 'workspace_id', 'name=name,write=write_mode', '');
+CREATE OR REPLACE TRIGGER actors_sync_stamp_update AFTER UPDATE ON actors FOR EACH ROW
+  WHEN (NEW.type <> 'session' AND (OLD.name IS DISTINCT FROM NEW.name OR OLD.write_mode IS DISTINCT FROM NEW.write_mode))
+  EXECUTE FUNCTION sync_stamp_trigger('actors', 'id', 'workspace_id', 'name=name,write=write_mode', '');
+CREATE OR REPLACE TRIGGER actors_sync_stamp_delete AFTER DELETE ON actors FOR EACH ROW WHEN (OLD.type <> 'session')
+  EXECUTE FUNCTION sync_stamp_trigger('actors', 'id', 'workspace_id', 'name=name,write=write_mode', '');
+
+-- The labels a change bundle carries, for a restored server's renewal (migration 215 sync_carried_labels; it holds its old id up to its last number for each): the
+-- seven of migrations 236 and 237 added, in the order of spine/stampedMerge/dbUnits.ts CARRIED_LABELS (guards/restoreRenewsNodeId.guard.test.ts compares them).
+CREATE OR REPLACE FUNCTION sync_carried_labels() RETURNS text[] AS $$
+  SELECT ARRAY['workspaces', 'actors', 'spaces', 'space_members', 'content_nodes', 'node_attributes', 'node_tags', 'node_edges', 'note_pointers', 'node_positions', 'note_anchor_places', 'block_anchors', 'block_nodes', 'block_node_tags', 'function_refs', 'rss_subscriptions', 'rss_mutes', 'external_calendars', 'actor_module_settings', 'ai_edit_suggestions', 'ai_edit_suggestion_items', 'actor_prefs', 'review_states', 'focus_sessions', 'block_link_bindings', 'content_nodes.tag_schema', 'spaces.capabilities', 'function_refs.config', 'workspaces.modules_off', 'workspaces.modules_confirmed']::text[];
+$$ LANGUAGE sql IMMUTABLE;
+
+SELECT * FROM sync_genesis_pass();

@@ -584,11 +584,11 @@
 | # | 項目 | 為什麼 | 哪一批 |
 | --- | --- | --- | --- |
 | N1 | 收進來的修改看得到（2b-2b） | 第 2.12 節 | 第 4 批 |
-| N2 | 快照帶、包不帶的 9 張表 | 第 2.11 節 | 第 5 批 |
-| N3 | 每個標籤自己的進度 | 第 2.2 節 | 第 5 批 |
+| N2 | 快照帶、包不帶的 9 張表 | 第 2.11 節 | 第 5 批（七張已做；`rss_seen` 還沒有） |
+| N3 | 每個標籤自己的進度 | 第 2.2 節 | 第 2 批已做（`have` 逐標籤）；之後加標籤的「整份對齊」還沒做 |
 | N4 | 時鐘差太多的出口（兩個方向） | 第 2.5 節 | 第 9 批 |
 | N5 | 分身偵測 | 第 3.7 節 | 第 9 批 |
-| N6 | `actors` 跟著包走（臨時工作階段除外） | 第 2.11 節第一列 | 第 5 批 |
+| N6 | `actors` 跟著包走（臨時工作階段除外） | 第 2.11 節第一列 | 第 5 批，**已做**（migration 237） |
 | N7 | 包要有上界（先存好整包，再分段收） | 第 2.10 節 | 第 6 批 |
 | N8 | 「只做一次」的工作屬於指名的值班節點，連不到中心時可以移 | 第 2.13 節 | 第 9、10 批 |
 | N9 | 重新加入（整份留下、清空、換新編號、列出不同的筆記） | 第 3.5 節 | 第 10 批 |
@@ -712,7 +712,7 @@
 | 4a | 衍生（第 2.12.1–2.12.4、2.12.6 節）：先定屬性規則（第 8 節第 12 題，建議 (b)）；拆出 `deriveFromBody` 共用（只含分割表的「衍生」）；內文以外的衍生（連結、型別、**網站重建**、永久刪除的清理、成員 epoch）；slug 後綴 | `services/bodySideEffects.ts`、`services/blockNodes.ts`、`services/wikilinkEdges.ts`、`services/nodeTrash.ts`、`modules/website/index.ts`、`services/attributeChange.ts`、`spine/stampedMerge/dbUnits.ts`、`dbRows.ts` | 要（`markdown`／`frontmatter` 來源的標記觸發器） | 第 2.12 節「證明 4a」；收包後每張帶標記的表 0 列寫入 | 同上 |
 | 4b | **已做大部分**（#1997；和上文不同的地方在第 2.12.5 節末「4b 做了什麼」）。**做了**：事件（第 2.12.5 節）：收包事件與它的守門、`received`／`written_at`／`NO_INVERSE_PATCH`、收進來的事件一律不准單獨復原；表裡讀本機事件的各列已有答案（垃圾桶由歷史第 5 批做、週期任務維持 main）。**沒做**（進 `spine/stampedMerge/README.md`「接上傳輸前必須完成」）：`base_hash` 的 `meta`、匯入身分改成帶標記的來源、`tagPacks` 的 `via_approval` | `spine/stampedImport.ts`、`db.ts` 的事件寫入、`services/tasksStore.ts`、`services/nodeTrash.ts`、`modules/importers/shared/identity.ts`、`services/tagPacks.ts` | 可能（內文寫入 `meta` 的基底；匯入身分的來源） | 第 2.12 節「證明 4b」；`stampedBundle.integration.test.ts:603` 的事件 `it.fails` 翻轉；blob 清理不刪收進來的內文 | 同上 |
 | 4c | 段落裡的任務（第 2.14 節） | `modules/tasks/blockTasks.ts`、編輯器、匯出、網站的讀出 | 否【推論】 | 第 2.14 節的證明 | 第 13 題已決定（甲）；排在 4b 之後 |
-| 5 | 8 張表跟著包走、`rss_staging` 宣告為衍生（N2、N6；`block_link_bindings` 第 8 節第 10 題已決定：先回答 5.3 第 4 題）＋逐標籤進度（N3）＋A6 的檢查與守門＋之後加標籤的「整份對齊」 | `dbUnits.ts` `UNIT_SOURCES`、各表的觸發器、`spine/stampedBundle.ts` `readHave`／`normalizeHave`、`spine/syncClasses.json` | 要（觸發器；`sync_labels`；`SYNC_DATA_SHAPE_VERSION` 升版） | 每張表的單位、合併、自然鍵、收件檢查各有測試；守門：快照帶的表＝包帶的表＋衍生清單；中心沒接好的表就拒絕加入（A6）；整份對齊：起始對起始相同不算衝突、不同留成衝突、多出來的列列出來；複習進度在兩台相同；AI 操作者的成員列到得了；裝置上建操作者被拒 | 同上 |
+| 5 | **大部分已做**（PR「同步第 5 批」，migration 235–237；和下面的文字不同處見本列最後）：8 張表跟著包走、`rss_staging` 宣告為衍生（N2、N6；`block_link_bindings` 第 8 節第 10 題已決定：先回答 5.3 第 4 題）＋逐標籤進度（N3）＋A6 的檢查與守門＋之後加標籤的「整份對齊」 | `dbUnits.ts` `UNIT_SOURCES`、各表的觸發器、`spine/stampedBundle.ts` `readHave`／`normalizeHave`、`spine/syncClasses.json` | 要（觸發器；`sync_labels`；`SYNC_DATA_SHAPE_VERSION` 升版） | 每張表的單位、合併、自然鍵、收件檢查各有測試；守門：快照帶的表＝包帶的表＋衍生清單；中心沒接好的表就拒絕加入（A6）；整份對齊：起始對起始相同不算衝突、不同留成衝突、多出來的列列出來；複習進度在兩台相同；AI 操作者的成員列到得了；裝置上建操作者被拒 | 同上。**和文字不同的地方**：七張表跟著走（AI 建議與項目、個人偏好、複習進度、專注紀錄、段落連結的對應、成員與 AI 助手）；**`rss_seen` 還沒有**（記號掛在每台自己抓的文章上，記號先到時建不起來、文章到時也沒有東西補：要先定存法），所以 A6 的檢查（傳輸接上之前在 `test/carriedTables.integration.test.ts`，由那一批搬進產品碼）今天照實拒絕加入，守門把它列在只准減少的清單裡；逐標籤進度第 2 批已做，這一批沒有再改 `have`；**「整份對齊」沒做**（七張表都在第一台加入之前接上，用不到）；**§2.12.4 的筆記欄位（N11）沒做**。另外：slug 成為單位（`written_slug`，§2.12.6），收包的一台讓位的一律是 `-<id 前八碼>`；成員只在中心寫，用「這台是從別台加入的」判斷（`sync_join` 完成）；專注紀錄的唯一索引換成只管本機寫入的觸發器；複習進度加了由（卡、人）算出的 id。 |
 | 6 | 分段收包（N7；第 5、6、21 項）：`sync_inbox` 收件匣、計畫（分段與 slug）、啟動時接著做、收尾 | `spine/stampedImport.ts`、`dbRows.ts`、啟動流程 | 要（`sync_inbox`，`node-local`） | 第 2.10 節的證明（任一段後殺掉收件那台、寄件那台不再回來，仍自己做完且逐位元相同；slug 跨段；收件匣不空時回 `peer_busy`）；第 5、6、21 項與收尾的數字在業主大小的資料上量 | 同上 |
 | 7 | 第 4、24、26、27 項（衝突的最小畫面、4.9 讀取、空間檢視重算、卡住的筆記） | `rules/trash.ts`、讀取、前端一個清單 | 可能 | 兩台情境＋手機鏡像看到正確結果；畫面桌面與手機尺寸 | 畫面只在有衝突時出現 |
 | 8 | `sync_peers`、`PeerCtx`、配對、加入（快照的門二選一）、`joined_cut`；桌面版先 | `routes/peer.ts`、`app.ts`、`services/peerAdmission.ts`、`services/stampedSnapshotStream.ts`、`services/freshProof.ts`、前端確認頁、桌面版加入畫面 | 要（`sync_peers`、`sync_peer_requests`） | 路由矩陣：每種憑證打每條路由，只有該准的准；`PeerCtx` 打一般 API 一律 401；配對、加入、中途斷線重來；QR 被拍到但沒有 `S` 領不到；`collect` 回應丟了可重領、用過後不行；六位數不同不能確認；請求 10 分鐘到期 | 開關 `ONDEN_PEER_TRANSPORT` 關；業主打開才出現「加入我的裝置」 |

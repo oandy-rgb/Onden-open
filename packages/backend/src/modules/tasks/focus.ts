@@ -231,7 +231,8 @@ export async function focusOfDay(authenticated: ActorCtx | null, input: z.infer<
   const day = input.day ?? localDayId();
   const found = (await q<FocusRow>(
     `SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ${sqlLocalDay("started_at")} = $2 ORDER BY started_at, id`, [owner, day])).rows;
-  const runningRow = (await q<FocusRow>(`SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ended_at IS NULL`, [owner])).rows[0];
+  // the later running record where a merge kept two (decision 4.4: the earlier one counts as ended when the next began; migration 236); on one node there is one
+  const runningRow = (await q<FocusRow>(`SELECT ${COLUMNS} FROM focus_sessions WHERE actor_id = $1 AND ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1`, [owner])).rows[0];
   let rows = found;
   let running: FocusRow | undefined = runningRow;
   if (isTemporarySessionActor(actor)) {

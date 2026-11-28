@@ -3,6 +3,7 @@
 // with the owner of the shared workspace and the routes a person writes through. The generator is seeded and writes through the REAL routes (creates, titles, bodies,
 // moves that may close a cycle once two nodes have made theirs, reorders, trash, undelete, permanent delete, the same id made again), so what is exchanged is what the triggers
 // stamped. (The pure simulator's generators, helpers/stampedSim/, speak units, not routes; they cannot drive a database.)
+import { randomUUID } from "node:crypto";
 import { keyBetween } from "@onden/markdown/contract";
 import { q, withTransaction } from "../../db.js";
 import { readChangeBundle } from "../../services/stampedBundle.js";
@@ -199,7 +200,9 @@ export async function writeEachRowKind(peer: Peer, rng: Rng): Promise<string[]> 
   });
 }
 
-const ROW_KINDS = ["position", "spaceName", "capability", "member", "feed", "mute", "calendar", "moduleSettings", "config", "moduleSwitch"] as const;
+const ROW_KINDS = ["position", "spaceName", "capability", "member", "feed", "mute", "calendar", "moduleSettings", "config", "moduleSwitch",
+  // the tables a snapshot carried with genesis stamps only (migrations 236, 237)
+  "pref", "review", "focus", "suggestion", "binding", "operator"] as const;
 const ROW_TURNS = new Map<string, number>();
 /** Forget whose turn each row kind is (ROW_TURNS is kept per peer NAME, across tests): a test that calls this first draws the same writes for a seed whatever ran before it
  *  in its file (the shuffled order otherwise changes them: review of the snapshot-source batch, round 1, A3). */
@@ -263,6 +266,51 @@ async function writeOtherRow(peer: Peer, rng: Rng, mine: string[], only?: (typeo
     case "moduleSwitch": {
       const id = rng.pick(["rss", "website", "calendar", "canvas"]);
       return (await one(`UPDATE workspaces SET modules_off = CASE WHEN modules_off ? $2 THEN modules_off - $2 ELSE modules_off || to_jsonb($2::text) END WHERE id = $1`, [peer.ws, id])) > 0;
+    }
+    case "pref": return (await one(`INSERT INTO actor_prefs (actor_id, key, value) VALUES ($1, $2, $3::jsonb) ON CONFLICT (actor_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+      [owner, rng.pick(["navLayout", "theme", "palette"]), JSON.stringify(`${peer.name}-${n}`)])) > 0;
+    case "review": {
+      if (!mine.length) return false;
+      return (await one(`INSERT INTO review_states (workspace_id, node_id, actor_id, state) VALUES ($1, $2, $3, $4)
+                         ON CONFLICT (node_id, actor_id) DO UPDATE SET previous_state = review_states.state, state = EXCLUDED.state, updated_at = now()`,
+        [peer.ws, rng.pick(mine), owner, JSON.stringify({ due: `2026-12-${String(1 + rng.int(28)).padStart(2, "0")}`, by: peer.name, reps: n })])) > 0;
+    }
+    case "focus": {
+      const running = (await q<{ id: string }>(`SELECT id::text FROM focus_sessions WHERE actor_id = $1 AND ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1`, [owner])).rows[0];
+      if (running) return (await one(`UPDATE focus_sessions SET ended_at = now(), note = $2, updated_at = now() WHERE id = $1`, [running.id, `${peer.name} focus ${n}`])) > 0;
+      return (await one(`INSERT INTO focus_sessions (id, workspace_id, actor_id, task_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now() - interval '10 minutes')`,
+        [peer.ws, owner, mine.length ? rng.pick(mine) : null])) > 0;
+    }
+    case "suggestion": {
+      const pending = (await q<{ id: string }>(`SELECT i.id::text FROM ai_edit_suggestion_items i JOIN ai_edit_suggestions s ON s.id = i.suggestion_id WHERE s.workspace_id = $1 AND i.status = 'pending' ORDER BY i.id`, [peer.ws])).rows;
+      if (pending.length && rng.chance(0.6)) return (await one(`UPDATE ai_edit_suggestion_items SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1`, [rng.pick(pending).id, rng.pick(["accepted", "rejected"]), owner])) > 0;
+      const agent = (await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'agent' ORDER BY id LIMIT 1`, [peer.ws])).rows[0];
+      if (!agent || !mine.length) return false;
+      const sug = randomUUID(), note = rng.pick(mine);
+      await one(`INSERT INTO ai_edit_suggestions (id, workspace_id, space_id, node_id, agent_actor_id, base_markdown, base_title, proposal_hash)
+                 SELECT $1, $2, space_id, id, $4, markdown, title, $5 FROM content_nodes WHERE id = $3`, [sug, peer.ws, note, agent.id, `${peer.name}-${n}`]);
+      return (await one(`INSERT INTO ai_edit_suggestion_items (suggestion_id, seq, kind, base_text, new_text) VALUES ($1, 0, 'replace', 'a', $2), ($1, 1, 'comment', '', $2)`, [sug, `${peer.name} ${n}`])) > 0;
+    }
+    case "binding": {
+      if (!mine.length) return false;
+      return (await one(`INSERT INTO block_link_bindings (workspace_id, note_id, link_text, anchor_id) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+        [peer.ws, rng.pick(mine), `words ${rng.int(6)}`, `anc-${peer.name}-${n}`])) > 0;
+    }
+    case "operator": {
+      // a person or AI operator is written on the main server only (migration 237): the node that never joined makes or renames one; a device changes what an AI
+      // operator may do in its space (its membership, a table of its own)
+      const joined = (await q(`SELECT 1 FROM sync_join WHERE workspace_id = $1 AND state = 'done'`, [peer.ws])).rows.length > 0;
+      const agents = (await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'agent' AND name LIKE 'Helper %' ORDER BY id`, [peer.ws])).rows;
+      if (!joined) {
+        if (agents.length && rng.chance(0.5)) return (await one(`UPDATE actors SET name = $2, write_mode = $3 WHERE id = $1`, [rng.pick(agents).id, `Helper ${peer.name} ${n}`, rng.pick(["suggest", "apply"])])) > 0;
+        const id = randomUUID();
+        await one(`INSERT INTO actors (id, workspace_id, name, type, write_mode) VALUES ($1, $2, $3, 'agent', 'suggest')`, [id, peer.ws, `Helper ${peer.name} ${n}`]);
+        return (await one(`INSERT INTO space_members (space_id, actor_id, permission) VALUES ($1, $2, 'suggest')`, [peer.space, id])) > 0;
+      }
+      const anyAgent = agents.length ? agents : (await q<{ id: string }>(`SELECT id::text FROM actors WHERE workspace_id = $1 AND type = 'agent' ORDER BY id`, [peer.ws])).rows;
+      if (!anyAgent.length) return false;
+      return (await one(`INSERT INTO space_members (space_id, actor_id, permission) VALUES ($1, $2, $3) ON CONFLICT (space_id, actor_id) DO UPDATE SET permission = EXCLUDED.permission`,
+        [peer.space, rng.pick(anyAgent).id, rng.pick(["view", "suggest", "edit"])])) > 0;
     }
   }
 }

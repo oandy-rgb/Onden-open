@@ -72,7 +72,7 @@
    "t.id::text"
   ],
   "where": "t.workspace_id = $1",
-  "neverLeaves": "t.type = 'session'",
+  "neverLeaves": "t.id::text IN (SELECT x.id::text FROM actors x WHERE x.type = 'session')",
   "exclude": [
    "invite_email",
    "invite_token_hash",
@@ -82,7 +82,13 @@
   "override": {
    "external_id": "CASE WHEN t.type = 'human' THEN NULL ELSE t.external_id END"
   },
-  "note": "only the System account's link (external_id) travels; a person's link to a sign-in is this node's own"
+  "note": "only the System account's link (external_id) travels; a person's link to a sign-in is this node's own. A session's row is told by its key: it is never deleted and keeps its type (migration 217)",
+  "stamps": [
+   {
+    "label": "actors",
+    "rowKey": "t.id::text"
+   }
+  ]
  },
  "spaces": {
   "pk": [
@@ -396,13 +402,19 @@
   ]
  },
  "review_states": {
-  "pk": [],
-  "order": [
-   "COALESCE(t.node_id::text, '')",
-   "t.actor_id",
-   "COALESCE(t.block_id::text, '')"
+  "pk": [
+   "id"
   ],
-  "where": "t.workspace_id = $1 AND {person:t.actor_id} AND ((t.node_id IS NOT NULL AND {node:t.node_id}) OR (t.block_id IS NOT NULL AND t.block_id IN (SELECT b.id FROM block_nodes b WHERE b.workspace_id = $1 AND {node:b.note_id})))"
+  "order": [
+   "t.id::text"
+  ],
+  "where": "t.workspace_id = $1 AND {person:t.actor_id} AND ((t.node_id IS NOT NULL AND {node:t.node_id}) OR (t.block_id IS NOT NULL AND t.block_id IN (SELECT b.id FROM block_nodes b WHERE b.workspace_id = $1 AND {node:b.note_id})))",
+  "stamps": [
+   {
+    "label": "review_states",
+    "rowKey": "t.id::text"
+   }
+  ]
  },
  "actor_prefs": {
   "pk": [
@@ -413,7 +425,13 @@
    "t.actor_id::text",
    "t.key"
   ],
-  "where": "{person:t.actor_id} AND t.actor_id IN (SELECT a.id FROM actors a WHERE a.workspace_id = $1)"
+  "where": "t.workspace_id = $1 AND {person:t.actor_id}",
+  "stamps": [
+   {
+    "label": "actor_prefs",
+    "rowKey": "t.actor_id::text || '/' || t.key"
+   }
+  ]
  },
  "focus_sessions": {
   "pk": [
@@ -422,7 +440,13 @@
   "order": [
    "t.id::text"
   ],
-  "where": "t.workspace_id = $1 AND {person:t.actor_id}"
+  "where": "t.workspace_id = $1 AND {person:t.actor_id}",
+  "stamps": [
+   {
+    "label": "focus_sessions",
+    "rowKey": "t.id::text"
+   }
+  ]
  },
  "note_anchor_places": {
   "pk": [
@@ -466,7 +490,13 @@
    "t.note_id::text",
    "t.link_text"
   ],
-  "where": "t.workspace_id = $1 AND {node:t.note_id}"
+  "where": "t.workspace_id = $1 AND {node:t.note_id}",
+  "stamps": [
+   {
+    "label": "block_link_bindings",
+    "rowKey": "t.note_id::text || '/' || t.link_text"
+   }
+  ]
  },
  "ai_edit_suggestions": {
   "pk": [
@@ -475,12 +505,18 @@
   "order": [
    "t.id::text"
   ],
-  "where": "t.workspace_id = $1 AND {node:t.node_id} AND EXISTS (SELECT 1 FROM ai_edit_suggestion_items i WHERE i.suggestion_id = t.id AND i.status = 'pending')",
+  "where": "t.workspace_id = $1 AND {node:t.node_id}",
   "exclude": [
    "session_id",
    "created_event_id"
   ],
-  "note": "only the suggestions still waiting for a decision: a decided one has nothing left to merge"
+  "note": "every suggestion of a note in scope, decided or not: a decision travels by bundle (migration 236); the AI session and the event that made it are this node's own",
+  "stamps": [
+   {
+    "label": "ai_edit_suggestions",
+    "rowKey": "t.id::text"
+   }
+  ]
  },
  "ai_edit_suggestion_items": {
   "pk": [
@@ -489,9 +525,15 @@
   "order": [
    "t.id::text"
   ],
-  "where": "t.status = 'pending' AND t.suggestion_id IN (SELECT g.id FROM ai_edit_suggestions g WHERE g.workspace_id = $1 AND {node:g.node_id})",
+  "where": "t.workspace_id = $1 AND t.suggestion_id IN (SELECT g.id FROM ai_edit_suggestions g WHERE g.workspace_id = $1 AND {node:g.node_id})",
   "exclude": [
    "decided_event_id"
+  ],
+  "stamps": [
+   {
+    "label": "ai_edit_suggestion_items",
+    "rowKey": "t.id::text"
+   }
   ]
  }
 }

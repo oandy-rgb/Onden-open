@@ -23,6 +23,7 @@ const byStamps = Object.keys(UPDATED_AT_OF_STAMPS).filter((t) => DERIVED_PER_NOD
  *  (this is not a list of what is left out: a wrong entry here only lets this guard miss a column, which every two-node check still compares). */
 const ALIKE: Readonly<Record<string, string>> = {
   "spaces.deleted_at": "migration 218 spaces_show_deleted: the written deletion (written_deleted_at, the `deleted` unit) unless a live note is in the space",
+  "ai_edit_suggestion_items.decided_at": "migration 236 ai_edit_suggestion_items_settle: the acceptance's time (accepted_at, the `accepted` unit) when there is one, else the written decision's (written_decided_at, the `decision` unit)",
 };
 
 /** Whether `column` of `table` replicates (a unit's column, the key, the workspace, a JSON column whose keys travel): dbUnits.ts replicatedColumnsOf, the

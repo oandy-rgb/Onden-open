@@ -57,6 +57,16 @@ const RECEIVED_EVENTS: Readonly<Record<string, Reach>> = {
   rss_mutes: { notThroughSync: "a feed's muted words are read by the feed routes, never by /api/sync (a local change records no event either)" },
   external_calendars: { notThroughSync: "calendars are read by their own routes, never by /api/sync (a local change records no event either)" },
   actor_module_settings: { notThroughSync: "a person's settings of a module, read by the module's own routes (a local change records no event either)" },
+  // batch 5 (migration 236, 237): what each of the tables that travel since then records
+  actor_prefs: { notThroughSync: "a person's preferences, read by /api/me/prefs, never by /api/sync (a local change records no event either: services/actorPrefs.ts)" },
+  review_states: { notThroughSync: "a person's review schedule, read by the review routes, never by /api/sync (a grade or a hold records no event either: modules/review/service.ts)" },
+  focus_sessions: { notThroughSync: "focus records are read by the tasks module's routes (the day page, the focus clock), never by /api/sync; the writer's FOCUS_* events are its own History of what was done there" },
+  actors: { notThroughSync: "people and AI agents are read by the members routes (/api/actors), never by /api/sync; the writer's ACTOR_* events are its own History of what was done there" },
+  // History lists a suggestion by its AI_SUGGESTION_CREATED event, a received one as a local one (the inbox leaves a received AI change out: it is reviewed where the AI worked)
+  ai_edit_suggestions: { events: ["AI_SUGGESTION_CREATED"] },
+  ai_edit_suggestion_items: { notThroughSync: "a decision is read from the items themselves (the note's suggestion bar, the inbox's filter of suggestions still waiting, services/inboxQueue.ts), never by /api/sync; the text an accept wrote arrives as the note's body, whose NODE_UPDATED re-ships it" },
+  // a link's binding ships with the note it is written in (delta.ts note_link_bindings, for every re-shipped note): BLOCK_ANCHOR_LINKED on that note re-ships it, as a local link does
+  block_link_bindings: { events: ["BLOCK_ANCHOR_LINKED"] },
 };
 
 // The map covers exactly what a bundle carries: a label without an entry would be taken silently (its rows written, no client told), an entry of a label
@@ -311,6 +321,35 @@ export async function receivedEventsOf(workspaceId: string, units: Units, notes:
     const was = before.blocks.get(id);
     if (named.has(id) || !was || was.hidden === now.hidden || !held(now.note)) continue;
     add(now.hidden ? "BLOCK_NODE_REMOVED" : "BLOCK_NODE_RESTORED", "node", now.note, { block_node_id: id, kept: true }, noteRows.get(now.note)?.stamp);
+  }
+
+  // a suggestion made on another node: History lists it by this event (services/aiSuggestions.ts writes the same payload)
+  const suggestionIds = [...rows("ai_edit_suggestions")].filter(([, x]) => x.fields.has("*") && !x.removed).map(([id]) => id).filter(isUuid).sort();
+  const suggestions = suggestionIds.length === 0 ? [] : await db.selectFrom("ai_edit_suggestions as s")
+    .leftJoin("ai_edit_suggestion_items as i", "i.suggestion_id", "s.id")
+    .select(["s.id", "s.node_id", "s.agent_actor_id", "s.session_id", "i.kind"])
+    .where("s.workspace_id", "=", workspaceId).where("s.id", "in", suggestionIds).execute();
+  for (const id of suggestionIds) {
+    const of = suggestions.filter((r) => r.id === id), s = of[0];
+    if (!s || !held(s.node_id)) continue;
+    const kinds: Record<string, number> = {};
+    for (const r of of) if (r.kind) kinds[r.kind] = (kinds[r.kind] ?? 0) + 1;
+    add("AI_SUGGESTION_CREATED", "node", s.node_id, {
+      suggestion_id: id, agent_actor_id: s.agent_actor_id, ...(s.session_id ? { session_id: s.session_id } : {}), item_count: Object.values(kinds).reduce((n, k) => n + k, 0), kinds,
+    }, rows("ai_edit_suggestions").get(id)!.stamp);
+  }
+
+  // a link's binding: about the note it is written in (services/blockAnchors recordLinkBound writes the same payload). A binding goes only with its note
+  // (no local write removes one otherwise): a removed one is told by its note's own events.
+  const bindingRows = [...rows("block_link_bindings")].filter(([, x]) => !x.removed).map(([row, x]) => ({ x, note: row.slice(0, row.indexOf(SEP)), text: row.slice(row.indexOf(SEP) + 1) }))
+    .filter((b) => held(b.note));
+  const bindings = bindingRows.length === 0 ? [] : await db.selectFrom("block_link_bindings").select(["note_id", "link_text", "anchor_id"])
+    .where("workspace_id", "=", workspaceId).where("note_id", "in", [...new Set(bindingRows.map((b) => b.note))]).execute();
+  const boundAnchor = new Map(bindings.map((b) => [`${b.note_id}${SEP}${b.link_text}`, b.anchor_id] as const));
+  const linkedAnchors = await anchorsByIds(workspaceId, [...new Set([...boundAnchor.values()].filter((a): a is string => !!a))]);
+  for (const b of bindingRows) {
+    const anchor = boundAnchor.get(`${b.note}${SEP}${b.text}`);
+    if (anchor) add("BLOCK_ANCHOR_LINKED", "node", b.note, { anchor_id: anchor, target_note_id: linkedAnchors.get(anchor)?.noteId ?? null }, b.x.stamp);
   }
 
   // function references (a review card, a view): about the note that holds them

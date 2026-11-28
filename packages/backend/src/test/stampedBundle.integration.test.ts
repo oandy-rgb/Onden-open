@@ -426,7 +426,10 @@ describe.skipIf(!isTestDb)("updated_at is a function of the stamps", () => {
     const def = await onNode(a.node, async () => (await q<{ d: string }>(`SELECT pg_get_functiondef('sync_updated_at_wall(uuid, text, text)'::regprocedure) AS d`)).rows[0]!.d);
     expect(def).toContain(`field NOT IN (${NOT_AN_EDIT_FIELDS.map((f) => `'${f}'`).join(", ")})`);
     expect(def).toContain("meta->>'quiet'");
-    expect(NOT_AN_EDIT_FIELDS).toEqual(["*", "sort"]);
+    expect(NOT_AN_EDIT_FIELDS).toEqual(["*", "sort", "slug"]);
+    // the stamp write does not even call the function for those units (235: a slug's stamp must not put back a time moved forward without a stamp)
+    const putOver = await onNode(a.node, async () => (await q<{ d: string }>(`SELECT pg_get_functiondef('sync_stamp_put_over(uuid, text, text, text, boolean, jsonb, text, boolean, jsonb)'::regprocedure) AS d`)).rows[0]!.d);
+    expect(putOver).toContain(`p_field NOT IN (${NOT_AN_EDIT_FIELDS.map((f) => `'${f}'`).join(", ")}) THEN PERFORM sync_touch_updated_at`);
   }, 300_000);
   it("a position change and a housekeeping rewrite do not count; an ordinary edit does; after the exchange both nodes hold the same updated_at for each of them", async () => {
     const { a, b } = await cluster(15);

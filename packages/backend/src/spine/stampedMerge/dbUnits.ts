@@ -82,6 +82,9 @@ export type RowSource = {
    * such column of every source is declared (guard: stampedBundleSources.integration.test.ts reads the foreign keys from the catalog).
    */
   clearedOnDelete?: Readonly<Record<string, readonly string[]>>;
+  /** Carried columns of a row that are this node's own: when the same row was made twice and the other creation wins, its carried values replace the row's creation
+   *  columns but never these (spine/snapshotSql.ts overwriteCarriedColumns `keep`; the units' columns are kept anyway, their own merge decides them). */
+  ownColumns?: readonly string[];
 };
 /** How a merge compares two copies of one write of each unit a source declares `clearedOnDelete` (rows.ts mergeRow). */
 export const clearedOf = (src: RowSource): ReadonlyMap<string, { composite: boolean; columns: readonly string[] }> =>
@@ -190,7 +193,60 @@ function checkOrderKey(r: ReceivedRow): string | null {
   const key = r.texts.sort;
   return key !== undefined && key !== null && !isValidOrderKey(key) ? "an order key that is not one keyBetween accepts" : null;
 }
-const noteRules = textsAreText("title", "body");
+/** The longest slug a received write may name: slugify cuts at SLUG_MAX (@onden/markdown slug.ts), but a slug stored before that cap is as long as its title was, and a
+ *  title had no cap before 2026-10-17; so far past any honest one, and still a bound on what one unit makes a node hold (review of PR #1992, round 1, point 5). */
+const SLUG_UNIT_MAX = 100_000;
+/** A slug the write path chose: text a database can keep (noteRules), a slug at all (a note's written slug is never NULL: migration 235 fills it and every write
+ *  sets it; NULL would leave the note on the `~<id>` it holds while slugs are given), not longer than SLUG_UNIT_MAX, and never the name a note holds while a merge
+ *  or a move gives slugs (`~` and its id, spine/noteSlugs.ts): no writer's slug starts with `~` (slugify drops it). A slug that starts with `_` names a system row
+ *  (the Site Config note) and is NOT refused: the full row of that note travels with its creation's texts, and refusing it would refuse every full resend. */
+function checkSlug(r: ReceivedRow): string | null {
+  if (!("slug" in r.texts)) return null;
+  const s = r.texts.slug;
+  if (s === null) return "a note without a slug";
+  if (s.length > SLUG_UNIT_MAX) return "a slug longer than any a writer stores";
+  return s.startsWith("~") ? "a slug that is the name a note holds only while slugs are given" : null;
+}
+const noteRules = textsAreText("title", "body", "slug");
+/** A received person or AI operator: never a temporary session (its row never leaves the node it was opened on: syncClasses.json neverLeaves), and a name a database keeps. */
+function checkActor(r: ReceivedRow): string | null {
+  const type = r.values?.type;
+  if (type !== undefined && type !== "human" && type !== "agent") return "an actor that is not a person or an AI operator";
+  return textsAreText("name")(r);
+}
+/** The longest preference value a writer stores, as the text of its unit (value, forward order and edit time): every key's shape is small (services/actorPrefs.ts
+ *  parsePref; the longest is a list of pinned places), so a million characters is far past any honest value and still bounds what one row may make a node hold. */
+const PREF_UNIT_MAX = 1_000_000;
+function checkPref(r: ReceivedRow): string | null {
+  const t = r.texts.value;
+  return typeof t === "string" && t.length > PREF_UNIT_MAX ? "a preference longer than any a writer stores" : null;
+}
+/** The shown decision of the suggestion items a bundle bears on, from their units (migration 236 ai_edit_suggestion_items_settle: accepted whenever accepted). */
+async function settleDecisions(workspaceId: string, rows: readonly { row: string }[]): Promise<void> {
+  if (rows.length) await snapshotRows(`SELECT ai_edit_suggestion_items_settle($1::uuid, $2::uuid[])`, [workspaceId, rows.map((r) => r.row)]);
+}
+/** The longest copy of a note a suggestion keeps (the text and title it was proposed against): bounded as an anchors unit is (anchorUnit.ts), far past any honest
+ *  note, so one row cannot make a node hold an unbounded text (review of PR #1992, round 1, point 5). A body has no writer cap a received check may hold to (above). */
+const SUGGESTION_BASE_MAX = 16_000_000;
+/** A row whose texts (carried with its creation) are each at most SUGGESTION_BASE_MAX long; else the refusal of the first column that is not. */
+const textsUnderSuggestionMax = (refusals: Readonly<Record<string, string>>) => (r: ReceivedRow): string | null => {
+  for (const [c, refusal] of Object.entries(refusals)) { const v = r.values?.[c]; if (typeof v === "string" && v.length > SUGGESTION_BASE_MAX) return refusal; }
+  return null;
+};
+const NOTE_COPY = "a suggestion's copy of its note longer than any note";
+const checkSuggestion = textsUnderSuggestionMax({ base_markdown: NOTE_COPY, base_title: NOTE_COPY });
+/** An item's text it would replace and its new text: bounded as the suggestion's copy of the note is (review of PR #1992, round 2, point 3). */
+const checkSuggestionItem = textsUnderSuggestionMax({ base_text: "a suggestion's text to replace longer than any note", new_text: "a suggestion's new text longer than any note" });
+/** A person's progress on a card: the text of its three columns, the state a text. NOT the form of a state (today modules/review/state.ts writes empty or a JSON object;
+ *  rows of an older version hold a word, as test worlds do), nor a range of its numbers: a check stricter than what an honest node may hold refuses for ever. */
+function checkReview(r: ReceivedRow): string | null {
+  const t = r.texts.progress;
+  if (typeof t !== "string") return null;
+  let unit: { state?: unknown; previous_state?: unknown };
+  try { unit = JSON.parse(t) as typeof unit; } catch { return "a review's progress that is not the text of its columns"; }
+  if (typeof unit.state !== "string") return "a review state that is not text";
+  return unit.previous_state === null || unit.previous_state === undefined || typeof unit.previous_state === "string" ? null : "a review's step before that is not text";
+}
 const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
 /**
  * The tables whose units this file reads and writes, in the order a bundle writes them (a row's parents first: a space before its members, a note before what hangs on it).
@@ -199,14 +255,27 @@ const uuidKey = (column = "id"): KeyPart[] => [{ column, type: "uuid" }];
  */
 export const UNIT_SOURCES: readonly RowSource[] = [
   { label: "workspaces", table: "workspaces", key: uuidKey(), workspace: ws("id"), fields: { time_zone: "time_zone", day_start: "day_start_hour" }, rows: false, check: NO_RULES_OF_ITS_OWN },
+  // the people and AI operators, written on the main server only (migration 237); a temporary session's row never leaves its node (`where`; syncClasses.json neverLeaves).
+  // Before every table that names an actor (a space's owner, a member, a suggestion's AI).
+  // A person's sign-in link (external_id) is this node's own: a snapshot sends a person's as NULL (snapshotTables.json override), so a carried creation never empties
+  // it (`ownColumns`; review of PR #1992, round 3, point 3). Its unique keys besides the row key, none of them a natural key a bundle settles: a bundle never makes a
+  // person, never sets a sign-in link and carries no invitation (spine/actorsInBundles.ts refuses the first two, the invitation columns are `exclude`d), so
+  //   actors_workspace_id_external_id_key   (workspace, sign-in link): only a link this node set, never one a bundle carried
+  //   actors_pending_invite_email_uq        (an invitation's email): an invitation is this node's own, never carried
+  //   actors_invite_token_hash_uq           (an invitation's token): the same
+  { label: "actors", table: "actors", key: uuidKey(), workspace: ws(), fields: { name: "name", write: "write_mode" }, where: "t.type <> 'session'", rows: true, check: { row: checkActor },
+    ownColumns: ["external_id"] },
   // `deleted` is the deletion a person WROTE (migration 218); deleted_at, what every read uses, is derived after the write-back (spaces_show_deleted) and is no unit
   { label: "spaces", table: "spaces", key: uuidKey(), workspace: ws(), fields: { name: "name", kind: "kind", owner: "owner_actor_id", deleted: "written_deleted_at" }, rows: true,
     clearedOnDelete: { owner: ["owner_actor_id"] }, check: { row: textsAreText("name") } },
   { label: "space_members", table: "space_members", key: [{ column: "space_id", type: "uuid" }, { column: "actor_id", type: "uuid" }], workspace: { viaSpace: "space_id" }, fields: { permission: "permission" }, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "content_nodes", table: "content_nodes", key: uuidKey(), workspace: ws(),
     // `space` is the space a person WROTE (migration 218); space_id, the space the note is in, is derived after the write-back (dbRows.ts deriveNoteSpaces) and is no unit
-    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "written_space_id", deleted: "deleted_at" }, rows: true,
-    bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] }, check: { row: (r) => noteRules(r) ?? checkOrderKey(r) } },
+    // `slug` is the slug the write chose (migration 235); slug, the one the note has, is settled after the write-back (spine/noteSlugs.ts settleReceivedSlugs) and is no unit
+    fields: { title: "title", body: "markdown", parent: "parent_id", sort: "order_key", hidden: "hidden", space: "written_space_id", deleted: "deleted_at", slug: "written_slug" }, rows: true,
+    bearsOn: { on: "note_anchor_places" }, clearedOnDelete: { parent: ["parent_id"] }, check: { row: (r) => noteRules(r) ?? checkOrderKey(r) ?? checkSlug(r) },
+    // the slug a node shows is settled after the write-back (above); order_stamp follows the `sort` unit (the clock of the write that set the order key), not the creation
+    ownColumns: ["order_stamp", "slug"] },
   { label: "node_attributes", table: "node_attributes", key: [{ column: "node_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(),
     fields: { value: "value", type: "value_type", inheritable: "is_inheritable" }, where: stampedAttributeSourceSql("t"), rows: true, check: { row: checkAttribute } },
   { label: "node_tags", table: "node_tags", key: [{ column: "node_id", type: "uuid" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "node_id" }, fields: {}, rows: true, check: NO_RULES_OF_ITS_OWN },
@@ -248,6 +317,26 @@ export const UNIT_SOURCES: readonly RowSource[] = [
   { label: "external_calendars", table: "external_calendars", key: uuidKey(), workspace: ws(), fields: { name: "name", color: "color", enabled: "enabled" }, rows: true, check: NO_RULES_OF_ITS_OWN },
   { label: "actor_module_settings", table: "actor_module_settings", key: [{ column: "actor_id", type: "text" }, { column: "tag_id", type: "uuid" }], workspace: { viaNode: "tag_id" },
     fields: { settings: "settings" }, rows: true, check: NO_RULES_OF_ITS_OWN },
+  // The tables a snapshot carried with genesis stamps only (migration 236; own-node transport §2.11). Each unit is ONE write of the product: merging its parts would
+  // make a state nobody wrote (a review half from each node, a decision without who made it).
+  { label: "ai_edit_suggestions", table: "ai_edit_suggestions", key: uuidKey(), workspace: ws(), fields: {}, rows: true, check: { row: checkSuggestion } },
+  // the decision a write made, and the acceptance on its own (written once): the shown status is accepted whenever an acceptance is there (the owner's decision of
+  // 2026-11-23, PR #1992), worked out after every table is in (`expand`: migration 236 ai_edit_suggestion_items_settle)
+  { label: "ai_edit_suggestion_items", table: "ai_edit_suggestion_items", key: uuidKey(), workspace: ws(),
+    fields: { decision: "written_status+written_decided_by+written_decided_at", accepted: "accepted+accepted_at+accepted_by" }, rows: true,
+    naturalKeys: [{ name: "ai_edit_suggestion_items_suggestion_id_seq_key", columns: ["{t}.suggestion_id", "{t}.seq"] }], check: { row: checkSuggestionItem },
+    expand: settleDecisions },
+  { label: "actor_prefs", table: "actor_prefs", key: [{ column: "actor_id", type: "uuid" }, { column: "key", type: "text" }], workspace: ws(), fields: { value: "value+order_key+edited_at+updated_at" }, rows: true,
+    check: { row: checkPref } },
+  // keyed by an id derived from (card, person) (migration 236 review_state_id), so two nodes that each grade a card first make one row; rows made before that rule by
+  // two nodes for one card and person are settled by the natural keys
+  { label: "review_states", table: "review_states", key: uuidKey(), workspace: ws(), fields: { progress: "state+previous_state+updated_at" }, rows: true,
+    naturalKeys: [{ name: "review_states_node_actor", columns: ["{t}.node_id", "{t}.actor_id"] }, { name: "review_states_block_actor", columns: ["{t}.block_id", "{t}.actor_id"] }],
+    check: { row: checkReview } },
+  { label: "focus_sessions", table: "focus_sessions", key: uuidKey(), workspace: ws(), fields: { session: "task_id+started_at+ended_at+note+updated_at" }, rows: true,
+    clearedOnDelete: { session: ["task_id"] }, check: NO_RULES_OF_ITS_OWN },
+  { label: "block_link_bindings", table: "block_link_bindings", key: [{ column: "note_id", type: "uuid" }, { column: "link_text", type: "text" }], workspace: ws(), fields: { anchor: "anchor_id" },
+    rows: true, check: NO_RULES_OF_ITS_OWN },
 ];
 
 /** The JSON columns whose keys travel one by one with their row: an object (a unit per key, its value the key's value) or a set (an array of strings: a unit per element,
@@ -261,8 +350,8 @@ const JSON_SOURCES: readonly JsonSource[] = [
 ];
 
 
-/** The units of a note whose stamps do NOT count for its `updated_at` (migration 206 sync_touch_updated_at; a stamp with `meta.quiet` does not count either). Today's write path (services/nodeUpdate.ts applyNodeColumns) keeps `updated_at` for a position among siblings only; a creation's value is carried as a column. A test compares this list with the function in the database. */
-export const NOT_AN_EDIT_FIELDS: readonly string[] = ["*", "sort"];
+/** The units of a note whose stamps do NOT count for its `updated_at` (migration 232 sync_updated_at_wall, the one place: 235 adds the slug; a stamp with `meta.quiet` does not count either). Today's write path (services/nodeUpdate.ts applyNodeColumns) keeps `updated_at` for a position among siblings only, and a slug moves with a rename (counted by the title) or a move (counted by the place); a creation's value is carried as a column. A test compares this list with the function in the database. */
+export const NOT_AN_EDIT_FIELDS: readonly string[] = ["*", "sort", "slug"];
 /** The stamped tables whose `updated_at` is a function of the row's counting stamps (migration 232 sync_updated_at_wall; notes since 206), with the JSON column whose keys count
  *  too. The node that writes sets it by the stamp triggers; a merge sets it after it wrote a counting unit of a row that was here (dbRows.ts). */
 export const UPDATED_AT_OF_STAMPS: Readonly<Record<string, string | null>> = {

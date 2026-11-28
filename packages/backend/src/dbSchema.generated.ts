@@ -37,6 +37,7 @@ export interface ActorPrefs {
   order_key: number | null;
   updated_at: Generated<Timestamp>;
   value: Json | null;
+  workspace_id: string;
 }
 
 export interface Actors {
@@ -157,6 +158,9 @@ export interface AiCredentials {
 }
 
 export interface AiEditSuggestionItems {
+  accepted: Generated<boolean>;
+  accepted_at: Timestamp | null;
+  accepted_by: string | null;
   base_occurrence: Generated<number>;
   base_text: string;
   decided_at: Timestamp | null;
@@ -168,6 +172,10 @@ export interface AiEditSuggestionItems {
   seq: number;
   status: Generated<string>;
   suggestion_id: string;
+  workspace_id: string;
+  written_decided_at: Timestamp | null;
+  written_decided_by: string | null;
+  written_status: string;
 }
 
 export interface AiEditSuggestions {
@@ -364,6 +372,7 @@ export interface ContentNodes {
   title: string;
   updated_at: Generated<Timestamp>;
   workspace_id: string;
+  written_slug: string | null;
   written_space_id: string | null;
 }
 
@@ -831,6 +840,7 @@ export interface ReadLaterDoneRemoved192 {
 export interface ReviewStates {
   actor_id: string;
   block_id: string | null;
+  id: string;
   node_id: string | null;
   previous_state: string | null;
   state: string;

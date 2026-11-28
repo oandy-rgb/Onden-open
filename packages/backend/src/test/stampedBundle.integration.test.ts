@@ -15,7 +15,7 @@ import { ALL_TABLES, admit, bundleFor, expectSame, exchange, heldAt, makeRng, ma
 import { withTransaction } from "../db.js";
 import { addFunction } from "../services/functionRefs.js";
 import { registerStandInFunction } from "./helpers/registerStandInFunction.js";
-import { compareDigests, type ChangeBundle } from "../spine/snapshotSql.js";
+import { compareDigests, type ChangeBundle, type WireStamp } from "../spine/snapshotSql.js";
 import { readHave, readUnsendable } from "../spine/stampedBundle.js";
 import { SYNC_DATA_SHAPE_VERSION } from "../spine/syncDataShape.js";
 import { setModulesOn } from "./helpers/setModulesOn.js";
@@ -57,6 +57,9 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
       const ab = await exchange(a, b), ba = await exchange(b, a);
       expect(ab.rejected).toEqual([]);
       expect(ba.rejected).toEqual([]);
+      // a node that took a note made again over a delete it had not seen sends what it holds on it again (README of stampedMerge 「筆記以同一個 id 重建時」): when A
+      // did so while taking B's bundle, the re-send goes to B in one more leg
+      if (ba.resent) await exchange(a, b);
       await expectSame(a, b, `round ${round}`);
     }
     const before = await peerStateOf(b);
@@ -79,12 +82,15 @@ describe.skipIf(!isTestDb)("change bundles between two nodes", () => {
     open.push(a2n, b2n);
     const a2 = { ...a, node: a2n, name: "A2" } as Peer, b2 = { ...b, node: b2n, name: "B2" } as Peer;
     const [ab, ba] = [await bundleFor(a, b), await bundleFor(b, a)];
-    await take(b, ab); await take(a, ba); // A→B, then B→A (both read before either was taken)
+    const taken = [await take(b, ab), await take(a, ba)]; // A→B, then B→A (both read before either was taken)
     const [ba2, ab2] = [await bundleFor(b2, a2), await bundleFor(a2, b2)];
     await take(a2, ba2); await take(b2, ab2); // B→A first
-    await expectSame(a, b, "A and B");
+    // (a re-send written while taking a bundle, README of stampedMerge 「筆記以同一個 id 重建時」, carries a stamp its inputs give: the same in both orders)
     await expectSame(a, a2, "the order of delivery");
     await expectSame(b, b2, "the order of delivery (B)");
+    // and it reaches the other node in one more leg
+    if (taken.some((r) => r.resent)) { await exchange(a, b); await exchange(b, a); }
+    await expectSame(a, b, "A and B");
   }, 300_000);
 
   it("a third node that only exchanges with the first (star): after A↔B and A↔C rounds all three are the same", async () => {
@@ -187,6 +193,29 @@ describe.skipIf(!isTestDb)("what a bundle refuses, whole, with nothing written",
       const r = bad.items.find((i) => i.kind === "row")!;
       if (r.kind === "row") { const st = r.stamps[0]!; st.heads = [{ ...(st as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: st.seq, value: "x", meta: { from: "not-a-note" } } as never]; }
       expect(await refusal(take(a, bad)), "a head's meta").toMatchObject({ code: "bundle_malformed", status: 422 });
+    }
+    // review of PR #2024, round 1, point 4: a re-send (`meta.resent`) only where an honest node writes one: beside a head of a row's `*` that is not one, never a
+    // tombstone, covering nothing (stampedImport.ts resentInItsPlace). Each spoils one stamp of the honest bundle.
+    {
+      // a note B makes now: a row A does not hold yet, so nothing else about its `*` can be refused (the same (origin, seq) as a held one would be a clash)
+      const made = String((await onNode(b.node, () => b.call("POST", "/api/nodes", { title: "Made for the door", markdown: "", space_id: b.space }))).id);
+      const fresh = await bundleFor(b, a);
+      const spoil = (pick: (st: WireStamp) => boolean, change: (st: WireStamp, texts: Record<string, string | null>) => void): ChangeBundle => {
+        const bad = JSON.parse(JSON.stringify(fresh)) as ChangeBundle;
+        for (const item of bad.items) if (item.kind === "row") { const st = item.stamps.find(pick); if (st) { change(st, item.texts as Record<string, string | null>); return bad; } }
+        throw new Error("no such stamp in the bundle");
+      };
+      // (a number below the stamp's own, within the cut: each case is refused for this and nothing else)
+      const resent = (st: WireStamp, extra: Record<string, unknown> = {}) => ({ ...(st as unknown as Record<string, unknown>), heads: undefined, contentHash: "", seq: Math.max(1, st.seq - 1), value: null, saw: {}, deleted: false, meta: { resent: true }, ...extra }) as never;
+      const madeBySender = (st: WireStamp) => st.label === "content_nodes" && st.rowKey === made && st.field === "*";
+      const cases: Array<[string, ChangeBundle]> = [
+        // (the head says the value the unit shows: a value its column holds)
+        ["a re-send on a unit that is not a row's `*`", spoil((st) => st.field !== "*" && !st.deleted && !st.field.includes(":"), (st, texts) => { st.heads = [resent(st, { value: texts[st.field] ?? null })]; })],
+        ["a row's `*` whose winner is a re-send (nothing but re-sends)", spoil(madeBySender, (st) => { (st as { meta: unknown }).meta = { resent: true }; })],
+        ["a re-send that covers what it saw", spoil(madeBySender, (st) => { st.heads = [resent(st, { saw: { [st.origin]: 0 } })]; })],
+        ["a re-send that deletes the row", spoil(madeBySender, (st) => { st.heads = [resent(st, { deleted: true })]; })],
+      ];
+      for (const [what, bad] of cases) expect(await refusal(take(a, bad)), what).toMatchObject({ code: "bundle_malformed", status: 422 });
     }
     expect(await refusal(take(a, { ...fine, workspaceId: "00000000-0000-4000-8000-000000000001" }))).toMatchObject({ code: "bundle_wrong_workspace" });
     expect(await refusal(take(a, { ...fine, scope: "node_tags" as never }))).toMatchObject({ code: "bundle_scope" });
@@ -297,6 +326,9 @@ describe.skipIf(!isTestDb)("the rules of the merge, on a database", () => {
     await exchange(a, c); // C never heard of the delete
     for (const p of [a, c]) { expect(await titleOf(p, id)).toBe("made again by B"); expect(await titleHeads(p, id)).toEqual([]); }
     await exchange(a, b); await exchange(c, a);
+    // C held the note alive and had not seen the delete: it sent the note again when the new creation reached it (README of stampedMerge 「筆記以同一個 id 重建時」);
+    // that re-send reaches B through A in one more leg
+    await exchange(a, b);
     await expectSame(a, c, "A and C"); await expectSame(a, b, "A and B");
   }, 400_000);
 
@@ -306,6 +338,8 @@ describe.skipIf(!isTestDb)("the rules of the merge, on a database", () => {
     await purgeAndRemake(b, id, "made again by B"); // B deletes without anyone's edit
     await edit(c, id, "edited by C meanwhile"); // C writes the title without having seen the delete
     await exchange(b, a); await exchange(c, a); await exchange(a, b); await exchange(a, c);
+    // C held the note alive and had not seen the delete: it sends the note again (README of stampedMerge 「筆記以同一個 id 重建時」), to A and through A to B
+    await exchange(c, a); await exchange(a, b);
     await expectSame(a, b, "A and B"); await expectSame(a, c, "A and C");
     const winner = await titleOf(a, id), others = await titleHeads(a, id);
     expect([winner, ...others].sort()).toEqual(["edited by C meanwhile", "made again by B"]);
@@ -721,10 +755,13 @@ describe.skipIf(!isTestDb)("every stamped table travels (batch 2b-2a: attributes
     open.push(a2n, b2n);
     const a2 = { ...a, node: a2n, name: "A2" } as Peer, b2 = { ...b, node: b2n, name: "B2" } as Peer;
     const [ab, ba] = [await bundleFor(a, b), await bundleFor(b, a)];
-    await take(b, ab); await take(a, ba);
+    const taken = [await take(b, ab), await take(a, ba)];
     const [ba2, ab2] = [await bundleFor(b2, a2), await bundleFor(a2, b2)];
     await take(a2, ba2); await take(b2, ab2);
-    await expectSame(a, a2, "A, both orders"); await expectSame(b, b2, "B, both orders"); await expectSame(a, b, "A and B");
+    await expectSame(a, a2, "A, both orders"); await expectSame(b, b2, "B, both orders");
+    // a re-send written while taking a bundle (README of stampedMerge 「筆記以同一個 id 重建時」) reaches the other node in one more leg
+    if (taken.some((r) => r.resent)) { await exchange(a, b); await exchange(b, a); }
+    await expectSame(a, b, "A and B");
   }, 400_000);
 
   it("a row made on two nodes with the same derived id is one row: the same pointer made on A and on B", async () => {
@@ -898,6 +935,8 @@ describe.skipIf(!isTestDb)("a note's place is one write (rules/place.ts, migrati
     await onNode(b.node, () => b.call("PATCH", `/api/nodes/${n}`, { order_key: keyBetween(sibKey, null) })); // a reorder under p0, made later than A's move
     await onNode(c.node, () => c.call("PATCH", `/api/nodes/${n}`, { parent_id: p2 }));
     await exchange(b, a); await exchange(c, a); await exchange(a, b); await exchange(a, c);
+    // C held the note alive and had not seen the delete: it sends the note again (README of stampedMerge 「筆記以同一個 id 重建時」), to A and through A to B
+    await exchange(c, a); await exchange(a, b);
     await expectSame(a, b, "A and B"); await expectSame(a, c, "A and C");
     for (const x of [a, b, c]) expect(oneWrite(await placeOf(x, n)), x.name).toBe(true);
   }, 400_000);

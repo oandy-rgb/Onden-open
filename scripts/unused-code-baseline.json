@@ -29,7 +29,6 @@
       "packages/backend/src/spine/stampedImport.ts#admitSyncNode": "擁有者把一個節點收進來（中心在收它第一個包之前要點名）；畫面那批呼叫。到期 2026-12-15：傳輸接上之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意：分散式在傳輸接上之前的同步入口比照登記）。",
       "packages/backend/src/spine/stampedImport.ts#applyChangeBundle": "套用修改包的唯一入口；刻意還沒有產品呼叫者（guards/stampedMergeCallers 釘住），傳輸那批接上。到期 2026-12-15：傳輸接上之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意：分散式在傳輸接上之前的同步入口比照登記）。",
       "packages/backend/src/spine/stampedMerge/store.ts#*": "列層的純函式儲存（模擬器與核心測試的對象）；資料庫端目前只接單位層。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
-      "packages/backend/src/spine/stampedMerge/dbUnits.ts#readUnit": "把資料庫的一個單位讀成核心的輸入；2b 的修改包套用會用到，現在由測試使用。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
       "packages/backend/src/spine/stampedMerge/unit.ts#conflictsOf": "單位目前的衝突；畫面顯示衝突那批才有產品呼叫者。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
       "packages/backend/src/spine/stampedMerge/unit.ts#winnerOf": "單位目前顯示的頭；同上。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",
       "packages/backend/src/spine/stampedImport.ts#mergeUnitsIntoWorkspace": "把合併結果寫回工作區的唯一入口；刻意還沒有產品呼叫者（guards/stampedMergeCallers 釘住：接傳輸前要先擋系統寫入）。到期 2026-12-15：修改包（2b）與規則接線之後還沒有產品呼叫者的就刪（擁有者 2026-11-16 同意登記）。",

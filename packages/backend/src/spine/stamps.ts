@@ -114,6 +114,20 @@ export async function stampTransaction(workspaceId: string, authorId: string, op
 }
 
 /**
+ * A stamp of this node for the one write a merge makes of its own: a holder sending again the rows it holds on a note made again over a delete it had not seen
+ * (stampedMerge/dbRows.ts resendRowsOnRemadeNotes). The merge's transaction carries a placeholder stamp (standAsideForImport), so `stampTransaction` cannot give one.
+ * It takes the next sequence number; its clock reading is `reading`, worked out by the caller from what it answers (the latest of those creations), not this
+ * machine's clock: a write a merge derives must carry a stamp its inputs give (README of stampedMerge 「跨列規則是「視圖」」), so two nodes that took the same bundles
+ * in either order hold the same stamp. The clock does not move (`advanceClockFor` already took the bundle's readings past it). No author, no device: nobody wrote it.
+ */
+export async function allocateMergeStamp(workspaceId: string, reading: ClockReading): Promise<{ origin: string; seq: number; wall: number; counter: number; author: null; device: null }> {
+  const node = await lockClock(workspaceId);
+  const seq = Number(node.next_seq);
+  await sql`UPDATE sync_clock SET next_seq = ${seq + 1} WHERE workspace_id = ${workspaceId}::uuid`.execute(db);
+  return { origin: node.node_id, seq, wall: reading.wall, counter: reading.counter, author: null, device: null };
+}
+
+/**
  * The writes `fn` makes are housekeeping, not an edit: the stamps they write carry `meta.quiet`, which `updated_at` (migration 206 sync_touch_updated_at) does not count. Only the writer knows
  * that, so it is said in the stamp, where every node reads it. The one place that sets the switch (`onden.stamp_quiet`, local to the transaction); call inside the transaction.
  * A failed write rolls the setting back with its transaction or savepoint.

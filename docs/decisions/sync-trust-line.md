@@ -1,6 +1,6 @@
 # 同步的信任界線：收到的一律檢查；不被信任的電腦只當工作階段；不防「已接納的節點說謊」
 
-> 狀態：現行（最後確認 2026-11-22）
+> 狀態：現行（最後確認 2026-11-28）
 > 涵蓋：packages/backend/src/spine/stampedImport.ts, packages/backend/src/services/stampedSnapshot.ts
 
 | 項目 | 內容 |
@@ -47,6 +47,8 @@
   來源自己的標記不得超過切點（`join_stamp_beyond_cut`）；來源那一端在讀之前先確認自己擔保得了握有的每一個標記（`snapshot_foreign_origin`、`snapshot_source_unsettled`、`snapshot_source_joining`、`snapshot_too_many_origins`）。
   `have` 與包頭的 `base`／`upTo`／`holds` 改成每個標籤一個，舊形狀以 `bundle_have_per_origin` 拒收。每一種拒絕在 `snapshotBrought.integration.test.ts` 有測試，拒絕後資料庫沒有變。
   同步 4a 批（2026-11-22）起：收下的列寫完之後、同一個交易裡，由 `spine/receivedDerivation.ts` 這個插槽（`services/receivedDerivation.ts` 填）算出衍生資料（連結、段落列的顯示欄位、永久刪除的清理、空間與 slug、型別、網站重建、成員 epoch），它不寫任何單位；插槽是空的就整包拒收（`bundle_no_derivation`），所以收包永遠不會只寫了列、沒有衍生。
+  issue #2019（2026-11-24）起：`meta` 多一個鍵 `resent`（握有者再送一列的 `*`，[stampedMerge README](../../packages/backend/src/spine/stampedMerge/README.md)「筆記以同一個 id 重建時」；資料形狀 9）：門口只收 `true`（`stampedImport.ts` `isMeta`），而且只收在誠實的節點會寫的地方（`stampedImport.ts` `resentInItsPlace`，快照與包共用 `isWireStamp`；PR #2024 第 1 輪審查第 4 點）：只在一列的 `*`、不是那個單位的贏家（所以不會有一個 `*` 只有再送、沒有建立或刪除）、不是墓碑、什麼都不蓋（`saw` 是空的）。其他的整包拒收（`bundle_malformed`，快照 `join_stamp_shape`）。核心也拒收蓋了任何頭、是墓碑或創世的再送（`unit.ts` `rejectReason`，`stampedResend.test.ts`）。每一種拒絕各一則測試，拒絕後資料庫沒有變（包：`stampedBundle.integration`「a gap, another data shape…」；快照：`stampedKeptValue.integration`「a snapshot whose stamp keeps…」）。
+  再送排在每個不是再送的頭後面、沒有欄位跟著它，所以送來的一方用它改不了任何一台顯示的東西；它也不擋系統與 AI 的寫入，和之後的刪除並排時也不擋（migration 240：只算內容不同的頭，再送的頭不算；核心的 `conflictsOf` 同一條）。
 - 第二層：臨時工作階段的後端核心 `packages/backend/src/services/participantSessions.ts`（PR #1800，2026-11-17 合併）。「工作階段的任何東西不離開這一台」（PR #1856）現在檢查的：
   工作階段的 `actors` 與 `space_members` 列、它們的標記與墓碑不進快照、修改包與摘要（`snapshotTables.ts` `stampMayLeaveSql`；兩節點測試 `sessionsStayOnTheirNode.integration.test.ts`）；
   判斷所靠的工作階段 `actors` 列，在它的工作區還在時，**資料庫**拒絕刪除與改 id、工作區、種類（migration 217 的觸發器；`sessionActorKept.integration.test.ts`），`removeActor` 也拒絕；

@@ -1414,3 +1414,13 @@
 - **類別**：測試量不到它要擋的東西。
 - **機制**：〔第 1 層〕`test/stampedEndingSetup.ts` afterAll：每個跑過的檔，`ENDING_FAILS`／`ENDING_SKIPPED`／`ENDING_LONG_SETTLE` 裡屬於這個檔的鍵都要對得到它的一則測試（`helpers/stampedEndingNames.ts` `keysNamingNothing`，含被略過、被濾掉的測試）；`guards/stampedEndingReach.guard.test.ts`：每個鍵的檔名都是一個存在的測試檔，以及 `keysNamingNothing` 的對照。
 - **還沒擋住的**：一個整檔都被略過的檔（例如沒有資料庫時）不跑 afterAll，它的鍵只在有資料庫的那一輪被查。
+
+### 2026-11-28　「其他表的連鎖都寫了墓碑」「資料形狀不變」兩句沒有查證就寫進 README 與 PR（PR #2024，審查發現）
+- **發生了什麼**：#2024 的再送規則只讓「跟著筆記走的三張表」裡刪的人看過的列跟著刪除走，README 寫「其他表的列不必：刪的人握有的那些，刪除時連鎖寫了墓碑」。但標記觸發器找不到工作區時直接返回（migration 205），個人的模組設定、兩端一起刪的筆記標籤因此沒有墓碑，刪的人看過的列會被握有者再送、在每一台復活。「看過沒有」又只看筆記自己的單位，在自己的交易裡寫的列（補找錨點寫的錨點單位）判成沒看過。PR 同時說 `meta.resent` 不改資料形狀，但它改了 `meta` 的意思（形狀 8 的節點照時鐘排，會把別台刪掉的卡片顯示回來）。
+- **證據**：PR #2024 第 1 輪審查（note-d7，第 1–3 點）；`stampedRowsOnRemadeNote`「a delete the deleter had seen is never sent back to life」三則：把規則限回三張表，模組設定與筆記標籤兩則紅；拿掉 migration 240 的進度，三則都紅（錨點那則：錨點單位留在握有者）。
+- **發現者**：審查。
+- **為什麼沒擋到**：「每一張表的連鎖都寫墓碑」沒有對照每一個觸發器的參數（`via:` 的表）；決定性測試只用了有工作區欄的表；形狀版本的規則（`syncDataShape.ts` 檔頭）只靠寫的人自己判斷。
+- **類別**：未查證就回報；只擋了一個案例、沒擋整類。
+- **機制**：〔第 1 層〕一條規則對每一張掛在筆記上的表（`dbRows.ts` `goneWithTheDelete`，表從資料庫目錄讀），刪的人看過什麼由 migration 240 的進度決定；上面三則決定性測試。〔第 4 層〕資料形狀：`syncDataShape.ts` 檔頭的規則（`meta` 的意思一變就升）。
+- **還沒擋住的**：`meta` 或 `saw` 的意思改了卻沒升形狀，沒有機器能看出來：尚無機制。
+- 2026-11-28 同一類第二次：README 與 `sync-trust-line.md` 寫「再送不擋系統與 AI 的寫入」，但只對再送放在建立旁邊的情形查過；再送和之後的刪除並排時，系統寫入那一列一直被拒（PR #2024 第 2 輪審查第 1 點）。修法是一條規則：`unit.ts` `conflictsOf` 與 migration 240 的拒絕都不把再送的頭算成衝突；決定性測試 `stampedRowsOnRemadeNote`「a system write (not a person's) to the row whose `*` holds a re-send beside a later delete」與 `stampedResend.test.ts` 的對照。

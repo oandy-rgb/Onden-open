@@ -11,7 +11,7 @@
 
 import { droppedBySeen } from "./store.js";
 import { placedSort } from "./rules/place.js";
-import { type Cell, type Json, type Rejection, type Unit, type MergeResult, GENESIS_STAMP_ORIGIN, canonical, describeUnitChange, mergeUnit, maximalHeads, stampKey, rejectReason } from "./unit.js";
+import { type Cell, type Json, type Rejection, type Unit, type MergeResult, GENESIS_STAMP_ORIGIN, canonical, describeUnitChange, isResent, mergeUnit, maximalHeads, stampKey, rejectReason } from "./unit.js";
 
 /** The units whose column (or columns of a composite) a foreign key empties when the row it names is deleted (dbUnits.ts `clearedOnDelete`). */
 export type Cleared = ReadonlyMap<string, { composite: boolean; columns: readonly string[] }>;
@@ -72,7 +72,8 @@ const creationKeyOf = (star: Unit | undefined) => new Set((star ?? []).map((h) =
 /** The fields of a row as the state shows them: the creation's value for a field that has none of its own, and the own units beside it. */
 function fieldsOf(star: Unit | undefined, own: ReadonlyMap<string, Unit>, valueOf: (head: Cell, field: string) => string | null | undefined, names: Iterable<string>): Map<string, Unit> {
   const out = new Map<string, Unit>();
-  const alive = (star ?? []).filter((h) => !h.deleted);
+  // (a re-send of `*` is no creation: nothing follows it, unit.ts isResent)
+  const alive = (star ?? []).filter((h) => !h.deleted && !isResent(h));
   const row = star && !star[0]!.deleted;
   if (!row) return out;
   const aliveKeys = new Set(alive.map((h) => stampKey(h.stamp)));

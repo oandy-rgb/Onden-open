@@ -1,10 +1,12 @@
-// A note deleted for good on B and made again there under the same id, while A, which had not seen the delete, changed its title (pinned before the transport:
-// README of spine/stampedMerge 「接上傳輸前必須完成」, 「重建的列在收件那台多一個欄位標記」). Found by stampedSawThreeNodes, seed 977753 (base 977753), shrunk to this:
+// A note deleted for good on B and made again there under the same id, while A, which had not seen the delete, changed its title (README of spine/stampedMerge,
+// 「重建的列在收件那台多一個欄位標記」 in 「接上傳輸前必須完成」 until issue #2019). Found by stampedSawThreeNodes, seed 977753 (base 977753), shrunk to this:
 //   1. A makes N; B takes it.            2. B deletes N for good.        3. A, not knowing, changes N's title.
 //   4. A's title reaches B: B holds no row N, so it keeps no field unit of it (dbRows.ts dropFieldUnits, 「沒有那一列的欄位跟著 `*`」): the write is dropped.
 //   5. B makes N again under its id (the creation's saw covers what B held of N: not A's title write).
 //   6. The creation reaches A: A's title write is not covered by it, so A keeps it as another head (and a stamp row for the field, as every unit with a head).
-// No exchange sends A's title write to B again (it is below B's `have`), so the two hold different heads for ever. The values are the same.
+// No exchange sent A's title write to B again (it is below B's `have`), so the two held different heads for ever (the values were the same). Issue #2019 (#1974 item
+// 3, the owner chose 甲): A held N alive and had not seen the delete, so when B's new creation reaches it, A sends N again (a re-send of its `*`, README
+// 「筆記以同一個 id 重建時，握有掛在它上面的列的節點把它們再送出」): the whole row travels and B keeps A's title write as a head too.
 // SAFETY: node databases (a PGlite each, or a database of the test server on a real Postgres), dropped after each test.
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -47,14 +49,13 @@ const unitsOf = (p: Peer) => onNode(p.node, async () => (await q<{ r: string }>(
 const titleOf = (p: Peer) => onNode(p.node, async () => (await q<{ t: string }>(`SELECT title AS t FROM content_nodes WHERE id = $1`, [NOTE])).rows[0]?.t);
 
 describe.skipIf(!isTestDatabase())("a note made again under its id over a field write the maker dropped", () => {
-  it("what differs today: the same title on both; A keeps A's title write as another head, B holds no such head", async () => {
+  it("A sends N again: the same title on both, and B holds A's title write as another head as A does", async () => {
     const { a, b } = await recreatedOverADroppedTitle();
     expect(await titleOf(a)).toBe(await titleOf(b));
     const [onA, onB] = [await unitsOf(a), await unitsOf(b)];
-    expect(onA.some((u) => u.startsWith("h title") && u.includes("Changed on A")), "A keeps its title write as a head").toBe(true);
-    expect(onB.some((u) => u.startsWith("h title")), "B holds no head of the title").toBe(false);
+    for (const [name, on] of [["A", onA], ["B", onB]] as const) expect(on.some((u) => u.startsWith("h title") && u.includes("Changed on A")), `${name} keeps A's title write as a head`).toBe(true);
   }, 300_000);
-  it.fails("A and B hold the same stamps and heads of N", async () => {
+  it("A and B hold the same stamps and heads of N", async () => {
     const { a, b } = await recreatedOverADroppedTitle();
     expect(await unitsOf(b)).toEqual(await unitsOf(a));
   }, 300_000);

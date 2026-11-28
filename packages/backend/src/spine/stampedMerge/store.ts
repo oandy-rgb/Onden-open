@@ -41,7 +41,7 @@ function derived(star: Unit | undefined, field: string): Cell[] {
 }
 
 /** What the deleter of a row had seen of its units, carried by a creation that covers the delete (meta.seen, written by migration 206's trigger and by `createRow`). */
-function seenByDelete(star: Unit | undefined, includeDeletes = false): Record<string, number> {
+export function seenByDelete(star: Unit | undefined, includeDeletes = false): Record<string, number> {
   const seen: Record<string, number> = {};
   for (const h of star ?? []) {
     const s = h.deleted && !includeDeletes ? undefined : (h.meta as { seen?: unknown } | undefined)?.seen;

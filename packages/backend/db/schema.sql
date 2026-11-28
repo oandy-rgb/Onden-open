@@ -3937,6 +3937,7 @@ INSERT INTO schema_migrations (version) VALUES ('226_stamp_triggers_use_the_key'
 INSERT INTO schema_migrations (version) VALUES ('230_trash_groups') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('231_tag_description_versions') ON CONFLICT (version) DO NOTHING;
 INSERT INTO schema_migrations (version) VALUES ('232_updated_at_follows_stamps') ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_migrations (version) VALUES ('240_note_delete_sees_what_hangs_on_it') ON CONFLICT (version) DO NOTHING;
 
 --
 -- Name: block_anchors; Type: TABLE; Schema: public; Owner: -
@@ -7921,5 +7922,162 @@ BEGIN
        AND NOT EXISTS (SELECT 1 FROM note_version_positions p WHERE p.note_id = v.note_id AND p.unit = v.unit AND p.version_key = v.version_key);
   END IF;
   RETURN QUERY SELECT v_versions, v_baselines, v_aside, v_s0;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 240: a note's permanent delete says what it had seen of every row it took; a system write is refused only beside a head whose content differs; nothing follows a re-send (db/migrations/240_note_delete_sees_what_hangs_on_it.sql)
+-- What this node had seen of every origin when it writes `s` (1): its own writes before this transaction, and of each other origin the least over every carried
+-- label of what it holds without a gap (a label it holds nothing of counts 0). Origin -> number, only the origins it has seen something of.
+CREATE OR REPLACE FUNCTION sync_progress_seen(p_ws uuid, s jsonb) RETURNS jsonb AS $$
+  SELECT COALESCE(jsonb_object_agg(origin, n), '{}'::jsonb) FROM (
+    SELECT s->>'origin' AS origin, (s->>'seq')::bigint - 1 AS n WHERE s IS NOT NULL AND (s->>'seq')::bigint > 1
+    UNION ALL
+    SELECT o.origin, (SELECT min(COALESCE((o.have ->> l)::bigint, 0)) FROM unnest(sync_carried_labels()) l)
+      FROM sync_origins o WHERE o.workspace_id = p_ws AND o.origin IS DISTINCT FROM s->>'origin' AND o.origin <> 'genesis') x
+   WHERE n > 0;
+$$ LANGUAGE sql STABLE;
+
+-- Migration 205's sync_row_seen, with (1): for a note, `seen` is widened by this node's progress (the stamp of this transaction is the one the stamp trigger
+-- took a moment before: sync_stamp_current set it).
+CREATE OR REPLACE FUNCTION sync_row_seen(p_ws uuid, p_table text, p_key text) RETURNS jsonb AS $$
+  WITH u AS (
+    SELECT field, origin, seq FROM sync_stamps WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND origin <> 'genesis'
+    UNION SELECT field, origin, seq FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND origin <> 'genesis'),
+  progress AS (
+    SELECT key AS origin, value::text::bigint AS seq FROM jsonb_each(CASE WHEN p_table = 'content_nodes'
+      THEN sync_progress_seen(p_ws, NULLIF(current_setting(sync_stamp_setting(p_ws), true), '')::jsonb) ELSE '{}'::jsonb END)),
+  seen AS (SELECT origin, seq FROM u UNION ALL SELECT origin, seq FROM progress)
+  SELECT jsonb_build_object(
+    'seen', COALESCE((SELECT jsonb_object_agg(origin, m) FROM (SELECT origin, max(seq) AS m FROM seen GROUP BY origin) x), '{}'::jsonb),
+    'heads', COALESCE((SELECT jsonb_object_agg(field, hs) FROM (SELECT field, jsonb_agg(jsonb_build_array(origin, seq) ORDER BY origin, seq) AS hs FROM u GROUP BY field) y), '{}'::jsonb));
+$$ LANGUAGE sql STABLE;
+
+-- Migration 205's sync_stamp_put_row, with (2): a system write to a unit that has other heads reads the old value, so the refusal can tell a head that says the
+-- same from one that does not.
+CREATE OR REPLACE FUNCTION sync_stamp_put_row(p_ws uuid, p_table text, p_key text, p_field text, p_deleted boolean, s jsonb, p_old_row anyelement, p_column text) RETURNS void AS $$
+DECLARE
+  v_old text;
+  v_known boolean := false;
+BEGIN
+  IF (p_table = 'content_nodes' AND p_field = 'parent') OR sync_unit_at_genesis(p_ws, p_table, p_key, p_field)
+     OR (COALESCE(s->>'system', '') = 'true'
+         AND EXISTS (SELECT 1 FROM sync_stamp_heads x WHERE x.workspace_id = p_ws AND x.table_name = p_table AND x.row_key = p_key AND x.field = p_field)) THEN
+    v_old := sync_logged_value(p_old_row, p_field, p_column); v_known := true;
+  END IF;
+  PERFORM sync_stamp_put_over(p_ws, p_table, p_key, p_field, p_deleted, s, v_old, v_known);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Migration 206's sync_stamp_put_over, with (2) in the refusal of a system write and (3) in the heads of the creation a field follows; everything else as it was.
+CREATE OR REPLACE FUNCTION sync_stamp_put_over(p_ws uuid, p_table text, p_key text, p_field text, p_deleted boolean, s jsonb, p_old text, p_old_known boolean, p_meta jsonb DEFAULT NULL) RETURNS void AS $$
+DECLARE
+  v_origin text := s->>'origin';
+  v_seq bigint := (s->>'seq')::bigint;
+  d record;
+  h record;
+  v_saw jsonb := '{}'::jsonb;
+  v_meta jsonb;
+  v_again boolean := false;
+  v_prev_seen jsonb;
+  v_win_deleted boolean := false;
+  v_quiet boolean := p_field <> '*' AND COALESCE(current_setting('onden.stamp_quiet', true), '') = 'on'; -- this write is housekeeping: it does not count for `updated_at`
+BEGIN
+  IF sync_import_active(p_ws) THEN RETURN; END IF;
+  SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = p_field;
+  IF FOUND THEN
+    v_win_deleted := d.deleted;
+    v_prev_seen := d.meta -> 'seen'; -- what a delete of this row had seen, carried by a creation that covers it
+    IF d.origin = v_origin AND d.seq = v_seq THEN
+      v_again := true; v_saw := d.saw; v_meta := d.meta; -- this transaction wrote the unit already: it has not seen itself
+    ELSIF d.origin = 'genesis' THEN
+      IF p_field = '*' THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash('j:{}'), 0);
+      ELSIF p_old_known THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0); END IF;
+    ELSE
+      v_saw := sync_saw_merge(d.saw, jsonb_build_object(d.origin, d.seq));
+    END IF;
+  ELSIF p_field <> '*' THEN
+    -- no stamp of its own: the field was written together with its row and follows its creation
+    SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = '*';
+    IF FOUND AND NOT (d.origin = v_origin AND d.seq = v_seq) THEN
+      IF d.origin = 'genesis' THEN
+        IF p_old_known THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0); END IF;
+      ELSE
+        -- what the creation gives a field has no saw of its own (the creation's saw speaks about the creation unit, README "跟著 `*` 的欄位"), only its stamp:
+        -- the same state sawOf of the core is given (src/test/stampSaw.integration.test.ts compares the two)
+        v_saw := jsonb_build_object(d.origin, d.seq);
+      END IF;
+    END IF;
+    -- the row's creation can have other heads (two nodes made the same derived id): the field follows each of them, so a person's write has seen all of them.
+    -- They are the creation's heads, not this field's: they stay. A holder's re-send (meta.resent) is no creation: nothing follows it, so it is not seen here
+    -- (dbUnits.ts readUnit and rows.ts fieldsOf skip isResent the same way; stampSaw.integration.test.ts compares the two).
+    FOR h IN SELECT * FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = '*' AND origin <> 'genesis'
+                AND COALESCE(meta->>'resent', '') <> 'true' LOOP
+      IF NOT (h.origin = v_origin AND h.seq = v_seq) THEN v_saw := sync_saw_merge(v_saw, jsonb_build_object(h.origin, h.seq)); END IF;
+    END LOOP;
+  END IF;
+  -- a system job does not resolve a conflict nobody has looked at: its write has seen only the head the unit shows, and a `saw` cannot say that. A conflict is a
+  -- head whose content differs from the winner's (unit.ts conflictsOf): a tombstone against a value, or another value; a head without its value is none. Where the
+  -- write does not know the field's old value, every head with a value counts. A holder's re-send (meta.resent) is a copy of a creation that says nothing of its own:
+  -- never one (unit.ts conflictsOf skips isResent the same way).
+  IF COALESCE(s->>'system', '') = 'true' AND NOT v_again
+     AND EXISTS (SELECT 1 FROM sync_stamp_heads x WHERE x.workspace_id = p_ws AND x.table_name = p_table AND x.row_key = p_key AND x.field = p_field AND NOT x.valueless
+                   AND COALESCE(x.meta->>'resent', '') <> 'true'
+                   AND (x.deleted IS DISTINCT FROM v_win_deleted
+                        OR (p_field <> '*' AND NOT x.deleted AND (NOT p_old_known OR x.value IS DISTINCT FROM p_old)))) THEN
+    RAISE EXCEPTION 'sync_unit_in_conflict' USING ERRCODE = 'ON001';
+  END IF;
+  -- a write by this node has seen every head the unit had: they are replaced
+  FOR h IN DELETE FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = p_table AND row_key = p_key AND field = p_field RETURNING * LOOP
+    IF h.origin = 'genesis' THEN v_saw := sync_saw_merge(v_saw, jsonb_build_object('genesis:' || h.content_hash, 0));
+    ELSIF NOT (h.origin = v_origin AND h.seq = v_seq) THEN v_saw := sync_saw_merge(v_saw, sync_saw_merge(h.saw, jsonb_build_object(h.origin, h.seq)));
+    END IF;
+  END LOOP;
+  IF p_meta IS NOT NULL THEN v_meta := p_meta;
+  ELSIF NOT v_again AND p_table = 'content_nodes' AND p_field = 'parent' AND p_old_known THEN v_meta := jsonb_build_object('from', p_old);
+  ELSIF NOT v_again AND p_field = '*' AND NOT p_deleted AND v_prev_seen IS NOT NULL THEN v_meta := jsonb_build_object('seen', v_prev_seen); END IF;
+  IF v_quiet THEN v_meta := COALESCE(v_meta, '{}'::jsonb) || '{"quiet": true}'::jsonb;
+  ELSIF v_meta ? 'quiet' THEN v_meta := NULLIF(v_meta - 'quiet', '{}'::jsonb); END IF;
+  INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
+  VALUES (p_ws, p_table, p_key, p_field, v_origin, v_seq, (s->>'wall')::bigint, (s->>'counter')::int,
+          s->>'author', NULLIF(s->>'device', '')::uuid, p_deleted, v_saw, v_meta)
+  ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
+    origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter,
+    author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta;
+  IF p_table = 'content_nodes' AND NOT p_deleted AND NOT v_quiet AND p_field NOT IN ('*', 'sort') THEN PERFORM sync_touch_updated_at(p_ws, p_key); END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Migration 218's sync_stamp_put_beside, with (3): a unit that follows its row's creation has seen every head of
+-- that creation except a holder's re-send (meta.resent): nothing follows a re-send (as sync_stamp_put_over above, dbUnits.ts readUnit, rows.ts fieldsOf).
+-- Everything else as it was.
+CREATE OR REPLACE FUNCTION sync_stamp_put_beside(p_ws uuid, p_key text, p_field text, s jsonb, p_old text) RETURNS void AS $$
+DECLARE d record; h record; v_saw jsonb := '{}'::jsonb; v_meta jsonb;
+BEGIN
+  IF sync_import_active(p_ws) THEN RETURN; END IF;
+  SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = 'content_nodes' AND row_key = p_key AND field = p_field;
+  IF FOUND THEN
+    IF d.origin = s->>'origin' AND d.seq = (s->>'seq')::bigint THEN RETURN; END IF; -- this transaction wrote the unit already
+    IF d.origin = 'genesis' THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0);
+    ELSE v_saw := sync_saw_merge(d.saw, jsonb_build_object(d.origin, d.seq)); END IF;
+  ELSE
+    -- the field follows its row's creation (README "跟著 `*` 的欄位"), as sync_stamp_put_over reads it, with every head of that creation but a re-send
+    SELECT * INTO d FROM sync_stamps WHERE workspace_id = p_ws AND table_name = 'content_nodes' AND row_key = p_key AND field = '*';
+    IF FOUND AND d.origin = 'genesis' THEN v_saw := jsonb_build_object('genesis:' || sync_genesis_hash(sync_content_text(p_old)), 0);
+    ELSIF FOUND AND NOT (d.origin = s->>'origin' AND d.seq = (s->>'seq')::bigint) THEN v_saw := jsonb_build_object(d.origin, d.seq); END IF;
+    FOR h IN SELECT * FROM sync_stamp_heads WHERE workspace_id = p_ws AND table_name = 'content_nodes' AND row_key = p_key AND field = '*' AND origin <> 'genesis'
+                AND COALESCE(meta->>'resent', '') <> 'true' LOOP
+      IF NOT (h.origin = s->>'origin' AND h.seq = (s->>'seq')::bigint) THEN v_saw := sync_saw_merge(v_saw, jsonb_build_object(h.origin, h.seq)); END IF;
+    END LOOP;
+  END IF;
+  -- the heads this `saw` covers are gone on every node that takes the stamp (covers: a genesis head by its name, any other by seq <= saw[origin]): gone here too
+  DELETE FROM sync_stamp_heads x WHERE x.workspace_id = p_ws AND x.table_name = 'content_nodes' AND x.row_key = p_key AND x.field = p_field
+     AND CASE WHEN x.origin = 'genesis' THEN v_saw ? ('genesis:' || x.content_hash) ELSE x.seq <= COALESCE((v_saw->>x.origin)::bigint, -1) END;
+  IF p_field = 'parent' THEN v_meta := jsonb_build_object('from', p_old); END IF;
+  INSERT INTO sync_stamps (workspace_id, table_name, row_key, field, origin, seq, hlc_wall, hlc_counter, author, device, deleted, saw, meta)
+  VALUES (p_ws, 'content_nodes', p_key, p_field, s->>'origin', (s->>'seq')::bigint, (s->>'wall')::bigint, (s->>'counter')::int,
+          s->>'author', NULLIF(s->>'device', '')::uuid, false, v_saw, v_meta)
+  ON CONFLICT (workspace_id, table_name, row_key, field) DO UPDATE SET
+    origin = EXCLUDED.origin, seq = EXCLUDED.seq, hlc_wall = EXCLUDED.hlc_wall, hlc_counter = EXCLUDED.hlc_counter,
+    author = EXCLUDED.author, device = EXCLUDED.device, deleted = EXCLUDED.deleted, saw = EXCLUDED.saw, meta = EXCLUDED.meta;
 END;
 $$ LANGUAGE plpgsql;

@@ -9,6 +9,8 @@
   gap: 6px;
 }
 .board-view-controls .ui-btn { background: var(--ac-surface); }
+/* Floating on the board keeps its fill; a toggle that is on (full screen) still wears the pressed look. */
+.board-view-controls .ui-btn[aria-pressed="true"] { background: var(--ac-accent-soft); }
 
 .board-view-panel { display: flex; flex-direction: column; gap: 4px; min-width: 260px; padding: 10px 12px; }
 .board-view-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 40px; font-size: var(--ac-fs-small); }

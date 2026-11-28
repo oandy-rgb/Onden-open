@@ -36,6 +36,7 @@ function pairs(p: Palette): Pair[] {
   add("ink on selected", p.ink, p.selected);
   add("ink on selection", p.ink, p.selection);
   add("link on accent-soft (tag chip)", p.link, p["accent-soft"]);
+  add("accent on accent-soft (icon toggle that is on)", p.accent, p["accent-soft"]);
   add("accent-ink on accent (filled button)", p["accent-ink"], p.accent);
   add("accent-ink on accent-hover (filled button, hovered)", p["accent-ink"], mix(p.accent, 85, p.ink));
   for (const colour of ["yellow", "red", "green", "blue", "purple", "orange"]) add(`ink on highlight ${colour}`, p.ink, p[`hl-${colour}`]);

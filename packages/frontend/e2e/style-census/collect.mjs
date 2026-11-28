@@ -207,7 +207,8 @@ export const CENSUS_SOURCE = String.raw`
       // borders
       const sides = SIDES.filter((s) => {
         const U = s[0].toUpperCase() + s.slice(1);
-        return cs['border' + U + 'Style'] !== 'none' && cs['border' + U + 'Style'] !== 'hidden' && pxv(cs['border' + U + 'Width']) > 0;
+        // A transparent line takes room but draws nothing, so it is not a frame.
+        return cs['border' + U + 'Style'] !== 'none' && cs['border' + U + 'Style'] !== 'hidden' && pxv(cs['border' + U + 'Width']) > 0 && alpha(cs['border' + U + 'Color']) > 0;
       });
       if (sides.length) {
         const styles = new Set();

@@ -32,7 +32,8 @@ await page.setContent(`<style>
   :root { --ac-ink: rgb(10, 20, 30); }
   .t { font-size: 17px; font-weight: 500; line-height: 1.7; padding: 6px 10px; color: var(--ac-ink); }
   .b { border: 1px solid rgb(200,200,200); border-radius: 6px; height: 34px; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-</style><p class="t">字</p><button class="b">按鈕</button><svg width="15" height="15" stroke="black" stroke-width="2"><circle r="3"/></svg>`);
+  .q { border: 1px solid transparent; }
+</style><p class="t">字</p><button class="b">按鈕</button><button class="q">安靜</button><svg width="15" height="15" stroke="black" stroke-width="2"><circle r="3"/></svg>`);
 await page.evaluate(INPAGE_SOURCE); await page.evaluate(CENSUS_SOURCE);
 const data = await page.evaluate(() => window.__census.collect({ colourPriority: [] }));
 const has = (kind, value) => !!data.values[kind]?.[value];
@@ -41,6 +42,7 @@ check("a weight of 500 is measured", has("font-weight", "500"));
 check("line height is a ratio to the font size", has("line-height", "1.7"));
 check("padding is measured per side", has("spacing", "6px") && has("spacing", "10px"));
 check("a framed button is found", has("border-where", "off:按鈕外面一圈框"));
+check("a transparent border is not a frame", data.values["border-where"]?.["off:按鈕外面一圈框"]?.n === 1);
 check("radius 6px is measured", has("radius", "6px"));
 check("an untokened shadow is raw", Object.keys(data.values.shadow ?? {}).some((v) => v.startsWith("raw:")));
 check("icon size and stroke are measured", has("icon-size", "15px") && has("icon-stroke", "2"));

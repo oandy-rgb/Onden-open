@@ -6,6 +6,8 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { scopedCss, styleVars, type PuckData, type SchemeMode, type SiteScheme, type SiteStyle } from "@onden/site";
 import "@onden/site/react/siteParts.css";
 import "./SiteScope.css";
+// The 「class 名稱」 vocabulary a part may carry; the app itself never loads it.
+import "../../../styles/site-utilities.css";
 import { useAppSchemeMode } from "../../../hooks/useAppSchemeMode";
 
 /** The scheme a site shows by default: its own when it fixes one, else Onden's. */

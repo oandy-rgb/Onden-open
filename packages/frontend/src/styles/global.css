@@ -1,19 +1,10 @@
-@import "tailwindcss";
-
-/* Site-builder custom classes: users type Tailwind utilities into a block's
- * Style panel; those strings live in the DB, so build-time scanning never sees
- * them. Pre-generate the common customization vocabulary so typed classes
- * actually resolve on the published site. Curated, not exhaustive — arbitrary
- * values (w-[37px]) and exotic utilities still need a source-code usage. */
-@source inline("{p,px,py,pt,pb,m,mx,my,mt,mb}-{0,1,2,3,4,6,8,10,12,16}");
-@source inline("text-{xs,sm,base,lg,xl,2xl,3xl,4xl} font-{normal,medium,semibold,bold} italic underline text-{left,center,right}");
-@source inline("{text,bg,border}-{white,black,transparent}");
-@source inline("{text,bg,border}-{gray,stone,red,amber,emerald,sky,indigo,rose}-{50,100,200,300,500,700,900}");
-@source inline("flex inline-flex grid block inline-block hidden flex-col flex-row flex-wrap");
-@source inline("items-{start,center,end} justify-{start,center,between,end} gap-{1,2,3,4,6,8}");
-@source inline("w-full h-full max-w-{md,lg,xl,2xl,prose} mx-auto grow shrink-0");
-@source inline("border border-0 border-2 rounded rounded-{sm,md,lg,xl,2xl,full} shadow shadow-{sm,md,lg,xl,none}");
-@source inline("opacity-{25,50,75,100} overflow-hidden truncate leading-{tight,normal,relaxed} tracking-{tight,wide}");
+/* Tailwind's theme variables and its reset. The app's own CSS is built on the reset
+ * (every element starts with border: 0 solid, box-sizing: border-box) and reads a few
+ * theme variables (--font-sans). The utility classes (p-4, text-lg …) are not here:
+ * only the site studio and published sites use them (styles/site-utilities.css). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 
 @import "highlight.js/styles/github.css";
 @import "./syntax-highlight.css";

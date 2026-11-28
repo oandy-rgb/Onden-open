@@ -1,0 +1,22 @@
+/* The class vocabulary of the site studio's 「class 名稱」 field (fields.tsx `cls`):
+ * users type Tailwind utilities into a part; those strings live in the DB, so
+ * build-time scanning never sees them. Pre-generate the common customization
+ * vocabulary so typed classes resolve on the published site and in the studio.
+ * Curated, not exhaustive: arbitrary values (w-[37px]) and other utilities are
+ * not generated. Loaded only by the published site's frame (SiteLayout.astro)
+ * and by studio/SiteScope.tsx, the frame of every in-app drawing of a site (both
+ * studios, the publish preview, the setup canvas), never by the app itself;
+ * source(none) keeps the app's own source text from adding utilities by accident. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source inline("{p,px,py,pt,pb,m,mx,my,mt,mb}-{0,1,2,3,4,6,8,10,12,16}");
+@source inline("text-{xs,sm,base,lg,xl,2xl,3xl,4xl} font-{normal,medium,semibold,bold} italic underline text-{left,center,right}");
+@source inline("{text,bg,border}-{white,black,transparent}");
+@source inline("{text,bg,border}-{gray,stone,red,amber,emerald,sky,indigo,rose}-{50,100,200,300,500,700,900}");
+@source inline("flex inline-flex grid block inline-block hidden flex-col flex-row flex-wrap");
+@source inline("items-{start,center,end} justify-{start,center,between,end} gap-{1,2,3,4,6,8}");
+@source inline("w-full h-full max-w-{md,lg,xl,2xl,prose} mx-auto grow shrink-0");
+@source inline("border border-0 border-2 rounded rounded-{sm,md,lg,xl,2xl,full} shadow shadow-{sm,md,lg,xl,none}");
+@source inline("opacity-{25,50,75,100} overflow-hidden truncate leading-{tight,normal,relaxed} tracking-{tight,wide}");
